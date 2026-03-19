@@ -1,32 +1,38 @@
-# SDX: DiT + xformers + AR + PixAI — incredible on your dataset
+# SDX: DiT + xformers + AR + ViT upgrades — incredible on your dataset
 
-Text-conditioned **DiT** with **xformers**, **block-wise AR** (ACDiT-style), and **[PixAI](https://pixai.art/en/generator/image)-style prompt adherence**: T5 + cross-attention, tag emphasis, structured captions, fast training. **No reference image** — the model excels on the dataset you give it.
+Text-conditioned **DiT** with **xformers**, **block-wise AR** (ACDiT-style), and training/sampling upgrades (ViT-Gen tokens, REPA, AdaGen/PBFM). **No reference image** — the model excels on the dataset you give it.
 
 ## Features
 
 - **Block-wise AR (ACDiT-style)**: Optional **autoregressive** self-attention over spatial blocks (`--num-ar-blocks 2` or `4`). See [docs/AR.md](docs/AR.md) for 0 vs 2 vs 4 and usage.
 - **Strong prompt adherence**: Long/complex captions, T5-XXL + full-sequence cross-attention; excels on the dataset you provide.
-- **[PixAI](https://pixai.art/en/generator/image)-style**: **Tag-based prompts**, **(tag)** / **((tag))** emphasis and **[tag]** de-emphasis in captions, subject-first tag order for best adherence (inspired by [PixAI.art](https://pixai.art/en/generator/image) AI Art Generator).
+- **Tag emphasis & structured captions**: **(tag)** / **((tag))** emphasis and **[tag]** de-emphasis in captions, with subject-first tag order for stable adherence.
 - **Negative prompt**: Model **listens to negative prompt** and tries **really hard not to add** those features (positive − weight×negative).
 - **Quality tags**: `masterpiece`, `best quality`, `highres` etc. are **boosted** so they improve output quality (10x-style).
 - **No character blending / correct count**: Multi-person prompts get **anti-blending** tags and negative terms so **distinct characters** and **right number of people** (not bare minimum).
 - **Fix imperfections during generation**: Model is trained to **fix near-clean images** (refinement: small-*t* samples) so at inference you can run an optional **refinement pass** after generation. If the user wants the raw/fucked look, set **allow_imperfect_output=True** (or `--allow-imperfect` at inference) to skip refinement.
 - **Training length: passes, not raw steps/epochs**: Say **how many full passes** over the dataset (e.g. `--passes 3`); trainer converts to steps automatically. **Cosine LR** and **save best** checkpoint so quality keeps improving without the usual “too many epochs = weird/overfit” — optional `--max-steps` caps total steps.
 - **Speed & scale**: **xformers** memory-efficient attention (self + cross), `torch.compile`, bf16, gradient checkpointing, TF32, multi-worker DataLoader, DDP.
-- **Data**: Folder of images + `.txt`/`.caption`, or JSONL manifest; captions are auto-processed with [PixAI](https://pixai.art/en/generator/image)-style emphasis and tag order.
+- **ViT-Gen tokens**: `--num-register-tokens N` adds learnable register tokens; improves global “scratchpad” behavior.
+- **RoPE positional embeddings**: `--use-rope --rope-base ...` gives better long-range token geometry.
+- **Hierarchical KV pooling**: `--kv-merge-factor K` merges/pools patch KV for faster attention at high resolution.
+- **Token routing (detail vs background)**: `--token-routing-enabled --token-routing-strength ...` gates residual contributions per token.
+- **Hybrid SSM-Transformer mixer**: `--ssm-every-n N --ssm-kernel-size ...` replaces every Nth self-attention block with an SSM-like mixer.
+- **REPA (Representation Alignment)**: `--repa-weight W` aligns DiT internal features to a frozen vision encoder (DINOv2/CLIP).
+- **AdaGen early exit (sampling)**: `--ada-early-exit ...` can stop sampling early when latent changes are small.
+- **PBFM edge drift (sampling)**: `--pbfm-edge-boost ... --pbfm-edge-kernel ...` adds an edge/high-pass guidance term during sampling.
+- **MDM masked diffusion (training + inpaint coherence)**: `--mdm-mask-ratio`, optional `--mdm-mask-schedule`, and `--mdm-patch-size` teach masked denoising; sampling can use `--inpaint-mode mdm`.
+- **MoE DiT experts (selective compute)**: `--moe-num-experts`, `--moe-top-k`, and optional router balance loss make the FFN conditional on token difficulty.
+- **Data**: Folder of images + `.txt`/`.caption`, or JSONL manifest; captions are auto-processed with tag emphasis/de-emphasis and subject-first tag order.
 
-### Inspired by [PixAI.art](https://pixai.art/en/generator/image) models
+### Model presets & caption formatting
 
-SDX takes inspiration from the [PixAI.art](https://pixai.art/en/generator/image) generator and its model lineup. Their site offers **PixAI XL** and **PixAI DiT** families plus named model lines (Haruka, Tsubaki, Hoshino, Nagi, Crystalize, Eternal, Otome, Hinata, Serin, etc.). We mirror that spirit:
+SDX exposes a set of transformer variants via `--model` and uses caption formatting helpers (tag emphasis, de-emphasis, and subject-first ordering) to make training more consistent.
 
-| Our `--model` | Inspiration |
-|---------------|-------------|
-| `DiT-XL/2-Text` | PixAI DiT-style (Tsubaki / Serin family) |
-| `DiT-P/2-Text` | PixAI DiT-style large (Tsubaki.2-style), QK-norm + SwiGLU |
-| `DiT-P-L/2-Text` | PixAI DiT-style XL with QK-norm/SwiGLU |
-| `DiT-L/2-Text`, `DiT-B/2-Text` | Smaller DiT-style bases |
-
-Reference model lines from the site (for naming/preset consistency) are listed in `config/pixai_reference.py` (e.g. Haruka v2, Tsubaki.2, Tsubaki, Hoshino v2, Hoshino, Nagi, Crystalize, Eternal, Otome v2, Tsubaki Flash, Hinata v2, Serin). Training logs show the corresponding PixAI.art-style label for the chosen model.
+The main behavior knobs live in:
+- `config/model_presets.py` (what gets enabled for each named `--model`)
+- `config/prompt_domains.py` (recommended style/domain prompts and their negatives)
+- `data/t2i_dataset.py` (caption pre-processing pipeline)
 
 ## Setup
 
@@ -67,9 +73,9 @@ This clones **DiT**, **ControlNet**, **flux**, and **Stability-AI/generative-mod
 - One JSON object per line: `{"image_path": "/path/to/img.png", "caption": "your caption"}`.
 - Use `--manifest-jsonl /path/to/manifest.jsonl` and leave `--data-path` empty.
 
-**Caption tips ([PixAI](https://pixai.art/en/generator/image)-style)**
+**Caption tips (tag emphasis)**
 
-- **Tag-style**: comma-separated, e.g. `1girl, long hair, outdoors, sunset`. Dataset applies **PixAI.art-style emphasis**: `(tag)` and `((tag))` are expanded for stronger focus; `[tag]` for de-emphasis. Subject (e.g. 1girl) is moved to the front when possible.
+- **Tag-style**: comma-separated, e.g. `1girl, long hair, outdoors, sunset`. Dataset applies **tag emphasis**: `(tag)` and `((tag))` are expanded for stronger focus; `[tag]` for de-emphasis. Subject (e.g. 1girl) is moved to the front when possible.
 - **Quality tags**: Use tags like `masterpiece`, `best quality`, `highres`, `8k` — they are **boosted** (repeated) so the model strongly improves output quality (10x-style).
 - **Negative prompt**: In JSONL use `"negative_caption"` or `"negative_prompt"`; in .txt put the negative on the **second line**. The model is trained to **try really hard not to add** those features.
 - **No character blending / correct count**: For multi-person prompts (e.g. `2girls`, `room full of people`), the dataset auto-adds **anti-blending** tags and negative terms so the model learns distinct characters and the right number of people (not the bare minimum).
@@ -230,7 +236,7 @@ Optional OCR text repair: `--expected-text "OPEN" --ocr-fix` (uses pytesseract t
 
 ### Tools, repos, and inspiration
 
-See **[docs/INSPIRATION.md](docs/INSPIRATION.md)** for the full list of reference repos and the [PixAI.art](https://pixai.art/en/generator/image) (website) model lineup.
+See **[docs/INSPIRATION.md](docs/INSPIRATION.md)** for the full list of reference repos and the named style presets used in this project.
 
 ### Features for better images and user control
 
@@ -243,7 +249,7 @@ See **[docs/INSPIRATION.md](docs/INSPIRATION.md)** for the full list of referenc
 
 ### Styles, ControlNet, LoRA (no sloppy blending)
 
-- **Style**: Train with `--style-embed-dim 4096` (same as T5-XXL) and a `style` field in JSONL. At inference use `--style "your style text" --style-strength 0.7`, or use `--auto-style-from-prompt` to extract style/artist from the prompt (e.g. "by X", "style of X", artist tags from PixAI/Danbooru). See `config/style_artists.py` and [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md). Style is added to text conditioning with a fixed strength so it doesn’t overpower the prompt.
+- **Style**: Train with `--style-embed-dim 4096` (same as T5-XXL) and a `style` field in JSONL. At inference use `--style "your style text" --style-strength 0.7`, or use `--auto-style-from-prompt` to extract style/artist from the prompt (e.g. "by X", "style of X", artist tags from common tag sources). See `config/style_artists.py` and [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md). Style is added to text conditioning with a fixed strength so it doesn’t overpower the prompt.
 - **ControlNet**: Train with `--control-cond-dim 1` and a `control_image` path in JSONL. At inference use `--control-image path.png --control-scale 0.85`. Control features are added to the latent patch grid with a scale so structure is followed without making the image messy.
 - **LoRA**: At inference only: `--lora path.pt path.safetensors path2.pt:0.6`. Supports `.pt` and `.safetensors`; each LoRA can have its own scale (default 0.8). Use `--lora-trigger "trigger word"` to prepend the LoRA’s trigger to the prompt. Use moderate scales (e.g. 0.5–0.8) so multiple LoRAs don’t conflict.
 - **Blending**: Keep style_strength and control_scale in the recommended ranges (0.6–0.8 and 0.7–1.0). Don’t stack too many LoRAs at high scale; 0.5–0.8 per LoRA keeps output clean.
@@ -309,6 +315,11 @@ Sampling uses a fixed DDIM-style loop with cond/uncond. Use `sample.py --prompt 
 | **REPA (Representation Alignment)** | Optional training auxiliary loss aligning DiT representations to a frozen vision encoder (DINOv2/CLIP): `--repa-weight W` plus `--repa-encoder-model`, `--repa-out-dim`. |
 | **AdaGen early exit (sampling)** | Faster sampling by exiting when latent deltas get small: `sample.py --ada-early-exit --ada-exit-delta-threshold ... --ada-exit-patience ... --ada-exit-min-steps ...`. |
 | **PBFM edge/high-pass drift (sampling)** | Heuristic edge guidance: `sample.py --pbfm-edge-boost 0.1 --pbfm-edge-kernel 3` (tune boost). |
+| **MoE DiT (Mixture-of-Experts FFNs)** | Conditional compute per token: `--moe-num-experts N` (0=off), `--moe-top-k K`, and `--moe-balance-loss-weight` to keep expert usage healthy. |
+| **MDM masked diffusion (state-dependent masking)** | Learn robust masked denoising: `--mdm-mask-ratio` (0=off), optional `--mdm-mask-schedule`, plus `--mdm-patch-size` and `--mdm-min-mask-patches`. |
+| **OCR text repair loop** | Validate rendered text with Tesseract and iterate inpainting until it matches: `--expected-text "OPEN" --ocr-fix --ocr-iters ... --ocr-threshold ...` (uses `--inpaint-mode mdm`). |
+| **Character controls (gender / proportions / custom spec)** | Prompt-time controls: `--gender-swap`, `--anatomy-scale`, `--object-scale`, `--scene-scale`, and `--character-sheet path.json` to keep your generated character consistent. |
+| **Book / manga workflow (multi-image anchoring)** | Multi-page generation with coherence: run `scripts/book/generate_book.py` and optionally `--anchor-face`, `--edge-anchor`, and `--anchor-speech-bubbles` (plus `--speech-bubble-anchor-*` dilations). |
 | **T5 + Autoencoder (VAE/RAE) + CLIP + LLM** | **Better generation and understanding:** `python scripts/download/download_models.py --all` downloads T5-XXL, T5-XL, T5-Large (prompt understanding), SD VAE checkpoints (decode quality), CLIP ViT-L/14 (optional dual-encoder), and SmolLM + Qwen2.5-7B (prompt expansion) into `model/`. Use `--t5`, `--vae`, `--clip`, `--llm`, `--llm-best` to pick. Train/sample with `--text_encoder model/T5-XXL` (best) or `model/T5-XL` / `model/T5-Large` (lighter). For RAE, set `--autoencoder-type rae` and point `--vae-model` to a diffusers RAE checkpoint. |
 | **Prompt LLM only** | Or use `python scripts/download/download_llm.py` (360M) / `python scripts/download/download_llm.py --best` (Qwen2.5-7B) with `--local-dir model/SmolLM2-360M-Instruct` etc.; files go under `model/` (in .gitignore). |
 | **Runnable sampler** | `python sample.py --ckpt results/.../best.pt --prompt "your prompt" --steps 50 --width 256 --height 256 --out out.png`; optional `--tags "tag1, tag2"` or `--tags-file path` (subject-first), `--lora path.safetensors` / `--lora-trigger "word"`, `--cfg-scale`, `--cfg-rescale`, `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, `--style`, `--control-image`, img2img/inpainting, `--sharpen`, `--contrast`, `--no-neg-filter`, `--boost-quality`, `--preset`, `--op-mode`, `--originality`. By default `sample.py` runs a small **refinement pass**; disable with `--no-refine` (or tune with `--refine-t`). Empty negative uses Civitai-style default. For **text in image**: "sign that says OPEN" and `--text-in-image`. See [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md). |
@@ -322,13 +333,13 @@ Sampling uses a fixed DDIM-style loop with cond/uncond. Use `sample.py --prompt 
 sdx/
 ├── config/
 │   ├── train_config.py   # TrainConfig (incl. num_ar_blocks, use_xformers)
-│   └── pixai_reference.py # [PixAI.art](https://pixai.art/en/generator/image) model lines & style labels
+│   └── model_presets.py # named model presets (what each `--model` enables)
 ├── docs/
 │   ├── CIVITAI_QUALITY_TIPS.md  # Oversaturation, blur, bad hands, resolution (Civitai-style)
 │   └── INSPIRATION.md    # Tools, repos, and features for better images
 ├── data/
-│   ├── t2i_dataset.py    # Text2ImageDataset + PixAI.art-style emphasis/tag order
-│   └── caption_utils.py # apply_pixai_emphasis, normalize_tag_order
+│   ├── t2i_dataset.py    # Text2ImageDataset + caption emphasis/tag normalization
+│   └── caption_utils.py # tag emphasis/de-emphasis + tag normalization
 ├── diffusion/
 │   └── gaussian_diffusion.py
 ├── model/                # Downloaded models (scripts/download/download_models.py --all); in .gitignore
@@ -361,5 +372,4 @@ sdx/
 - ControlNet: [lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet) — structural conditioning; `external/ControlNet`
 - FLUX: [black-forest-labs/flux](https://github.com/black-forest-labs/flux) — modern diffusion reference; `external/flux`
 - Stability: [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models) — SD3 reference; `external/generative-models`
-- **PixAI.art**: [PixAI.art](https://pixai.art/en/generator/image) — AI art generator **website** (not a GitHub repo). We take tag-style prompts and emphasis from it; it is unrelated to PixArt-alpha (a separate T5+DiT research repo).
 - Strong prompt adherence on your dataset (long/complex captions)
