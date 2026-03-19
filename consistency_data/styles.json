@@ -1,0 +1,19 @@
+{
+  "test_style": {
+    "name": "test_style",
+    "style_description": "anime style with vibrant colors and clean lines",
+    "color_palette": [],
+    "artistic_elements": [],
+    "technical_parameters": {},
+    "reference_prompts": [
+      "anime style artwork"
+    ],
+    "consistency_keywords": [
+      "consistent style",
+      "unified aesthetic",
+      "coherent design",
+      "anime style",
+      "cel shading"
+    ]
+  }
+}

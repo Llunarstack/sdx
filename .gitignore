@@ -1,0 +1,28 @@
+# Reference repos (optional clone)
+external/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+
+# Env / IDE
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+
+# Outputs
+*.pt
+*.png
+*.jpg
+results/
+output*.png
+
+# Downloaded LLMs (heavy)
+model/
