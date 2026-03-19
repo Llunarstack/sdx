@@ -1,0 +1,30 @@
+{
+  "test_character": {
+    "name": "test_character",
+    "description": "a young woman with blonde hair and blue eyes, wearing a red dress",
+    "physical_features": {
+      "hair_color": "blonde",
+      "eye_color": "blue"
+    },
+    "clothing": {
+      "dress": "dress",
+      "primary_color": "red"
+    },
+    "style_tags": [],
+    "reference_images": [],
+    "generation_history": [
+      "portrait of a young woman"
+    ],
+    "consistency_score": 1.0
+  },
+  "test_char": {
+    "name": "test_char",
+    "description": "a warrior with armor",
+    "physical_features": {},
+    "clothing": {},
+    "style_tags": [],
+    "reference_images": [],
+    "generation_history": [],
+    "consistency_score": 1.0
+  }
+}
