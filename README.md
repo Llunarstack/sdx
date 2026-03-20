@@ -24,7 +24,7 @@ No reference image required — quality comes from **the dataset and captions yo
 | | |
 |:---|:---|
 | **Start here** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflows** | [Pipeline showcase](#pipeline-showcase) · [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Workflows** | [Pipeline showcase](#pipeline-showcase) (repo map · `model/` · diagrams) · [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [CLI options](#train-cli-quick-reference) · [SD/XL-style features](#sd--sdxl-style-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
 
@@ -41,74 +41,204 @@ No reference image required — quality comes from **the dataset and captions yo
 
 ### Pipeline showcase
 
-**High level** — data → text + image latents → DiT training → checkpoint → prompt → sample → decode.
+**End-to-end:** `data/` + manifest → **`train.py`** (`config/` + **`diffusion/`** + **`models/`** + **`utils/`**) → checkpoint → **`sample.py`** → image. Weights live under **`model/`** (gitignored) and resolve via **`utils/model_paths.py`**.
 
-```mermaid
-flowchart LR
-  subgraph Data
-    D[(Images + captions)]
-  end
-  subgraph Train
-    T[T5 encode]
-    V[VAE / RAE latents]
-    M[DiT + diffusion loss]
-  end
-  subgraph Sample
-    S[Prompt → T5]
-    L[Diffusion loop]
-    I[Decode → image]
-  end
-  D --> T
-  D --> V
-  T --> M
-  V --> M
-  M -->|checkpoint| S
-  S --> L
-  L --> I
-```
+#### Repository map (runtime)
 
-**Detailed** — optional paths you can enable (see [docs/MODEL_STACK.md](docs/MODEL_STACK.md) for local `model/` layout).
+| Area | Role | Consumed by |
+|:-----|:-----|:------------|
+| **`config/`** | `TrainConfig`, `get_dit_build_kwargs`, presets | `train.py`, `sample.py`, checkpoints |
+| **`data/`** | `Text2ImageDataset`, captions | `train.py` |
+| **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, respacing | `train.py`, `sample.py` |
+| **`models/`** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
+| **`utils/`** | Checkpoint load, text-encoder bundle, REPA helpers, QC, **pick-best**, metrics | `train.py`, `sample.py`, scripts |
+| **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator) | CLI, optional dataset QA |
+| **`scripts/`** | Downloads, tools, Cascade stub | Ops & CI |
+| **`native/`** | Fast JSONL helpers (Rust, Go, …) | Optional; not imported by training by default |
+| **`model/`** | Downloaded HF weights | Paths via `utils/model_paths.py` |
+
+Full file-level index: **[docs/FILES.md](docs/FILES.md)**.
+
+#### Local weights (`model/`)
+
+| Role | Typical folder / fallback |
+|:-----|:--------------------------|
+| T5-XXL | `model/T5-XXL` or `google/t5-v1_1-xxl` |
+| CLIP (L + bigG) | `model/CLIP-ViT-L-14`, `model/CLIP-ViT-bigG-14` or HF ids |
+| DINOv2 (REPA) | `model/DINOv2-Large` or `facebook/dinov2-large` |
+| Qwen LLM | `model/Qwen2.5-14B-Instruct` (optional prompt expansion) |
+| Stable Cascade | `model/StableCascade-Prior`, `model/StableCascade-Decoder` (optional; **not** DiT) |
+
+Details & download commands: **[docs/MODEL_STACK.md](docs/MODEL_STACK.md)** · `scripts/download/download_models.py` · `scripts/download/download_revolutionary_stack.py`.
+
+---
+
+#### Who’s who (vision / transformer names)
+
+SDX combines several **roles** that are easy to mix up:
+
+| Name | What it is | Where |
+|:-----|:-----------|:------|
+| **DiT** | **Diffusion Transformer** — the **generator**: patchifies latents, predicts noise/ε (or v), cross-attends to **text** | `models/dit_text.py`, `train.py`, `sample.py` |
+| **ViT-style blocks inside DiT** | **ViT-Gen** options: register tokens, RoPE, KV-merge, optional SSM mixer — still **one DiT model** | Flags like `--num-register-tokens`, `--use-rope` |
+| **REPA vision encoder** | **Frozen** DINOv2 or CLIP **image** encoder — aligns DiT internals to real images (aux loss) | `--repa-weight`, `--repa-encoder-model` |
+| **`ViT/` package** | **Separate** timm ViT heads for **dataset QA** (quality + adherence scores), ranking, embeddings — does **not** replace DiT | `ViT/train.py`, `ViT/infer.py` |
+| **Text triple (T5 + CLIP)** | **Text** encoders (T5 sequence + two CLIP text towers fused) → conditions **DiT** | `--text-encoder-mode triple` |
+
+---
+
+**1) End-to-end — how everything hooks together**
 
 ```mermaid
 flowchart TB
-  subgraph Encoders
-    T5[T5-XXL → seq 4096-d]
-    CLIP2[CLIP ViT-L + ViT-bigG → pooled]
-    FUSE[Trainable fusion → +2 tokens]
-    T5 --> FUSE
-    CLIP2 --> FUSE
+  subgraph Weights["model/ + utils/model_paths.py"]
+    W[T5 · VAE · CLIP · DINOv2 · Qwen · Cascade weights]
   end
-  subgraph Latent
-    VAE[VAE 4ch latents]
-    RAE[RAE latents]
-    BR[RAELatentBridge C→4]
-    RAE --> BR
+
+  subgraph DataLayer["Data & optional QA"]
+    DS[(JSONL / folders)]
+    PL[prompt_lint · utils]
+    NT[optional native/ JSONL tools]
+    VITI[ViT/ infer → scores]
+    VITR[ViT/ rank → filter]
+    DS --> PL
+    DS --> NT
+    DS --> VITI
+    VITI --> VITR
+    VITR --> DS2[Cleaner or weighted dataset]
+    DS --> DS2
   end
-  subgraph Core
-    DiT[DiT-Text cross-attn]
-    DIFF[Gaussian diffusion]
-    DiT --> DIFF
+
+  subgraph TrainPath["train.py — DiT training"]
+    TE[T5 or T5+CLIP fusion]
+    VA[VAE or RAE latents]
+    REP[Optional REPA: frozen DINOv2 or CLIP vision]
+    DIT[DiT-Text + diffusion loss]
+    W --> TE
+    W --> VA
+    W -.-> REP
+    TE --> DIT
+    VA --> DIT
+    REP -.->|aux alignment| DIT
+    DIT --> CKPT[(checkpoint: DiT EMA + config + optional fusion + RAE bridge)]
   end
-  subgraph Out
-    DEC[Decode]
-    PNG[(PNG)]
+
+  subgraph SamplePath["sample.py — generation"]
+    TE2[Same text stack as ckpt]
+    DIT2[DiT denoise loop]
+    DEC[Decode latents]
+    PB[Optional pick-best: CLIP / edge / OCR]
+    W --> TE2
+    TE2 --> DIT2
+    DIT2 --> DEC
+    DEC --> PB
+    PB --> IMG[(images)]
   end
-  FUSE --> DiT
-  VAE --> DiT
-  BR --> DiT
-  DIFF -->|trained weights| CKPT[(best.pt)]
-  CKPT --> SAM[sample.py]
-  SAM --> DEC
-  DEC --> PNG
+
+  subgraph Side["Optional side systems"]
+    QW[Qwen LLM — expand prompts]
+    CAS[Stable Cascade — scripts/cascade_generate.py]
+  end
+
+  DS2 --> TrainPath
+  CKPT --> SamplePath
+  QW -.->|before encode| TE2
+  W -.-> QW
+  CAS -.->|weights| W
 ```
+
+---
+
+**2) Inside the DiT training path (text + latent + loss)**
+
+```mermaid
+flowchart TB
+  subgraph TextCond["Text conditioning"]
+    T5[T5-XXL seq]
+    C1[CLIP-L text]
+    C2[CLIP-bigG text]
+    FU[Fusion +2 tokens]
+    T5 --> FU
+    C1 --> FU
+    C2 --> FU
+    FU --> TXT[encoder_hidden_states]
+  end
+
+  subgraph LatentIn["Latent tensor"]
+    VAE[VAE 4ch]
+    RAE2[RAE]
+    BR[RAE bridge to 4ch]
+    RAE2 --> BR
+    VAE --> LAT[Latent x]
+    BR --> LAT
+  end
+
+  subgraph DiTCore["DiT-Text"]
+    LAT --> PE[patch embed + pos]
+    SA[self-attn + ViT-Gen opts]
+    CA[cross-attn to text]
+    PE --> SA
+    TXT --> CA
+    SA --> CA
+    CA --> OUT[eps or v prediction]
+  end
+
+  subgraph Aux["Optional REPA"]
+    IMG[Real images]
+    VIS[Frozen DINOv2 or CLIP vision]
+    IMG --> VIS
+    VIS -.->|align| OUT
+  end
+```
+
+---
+
+**3) `ViT/` vs DiT — two different jobs**
+
+```mermaid
+flowchart TB
+  subgraph DiTGen["Generation DiT train.py / sample.py"]
+    A[Pixel / latent diffusion objective]
+    B[Billions-scale image generation]
+  end
+
+  subgraph ViTPack["ViT/ folder — tooling & QA"]
+    C[timm ViT quality + adherence]
+    D[Manifest scoring & rank]
+    E[prompt_system Nannano-style]
+    F[Embeddings for retrieval]
+  end
+
+  DiTGen -.->|improves model| CKPT2[DiT checkpoint]
+  ViTPack -.->|filters / weights data| DS3[dataset before train]
+  ViTPack -.->|optional rerank| N[best-of-N candidates]
+```
+
+---
+
+**4) Quick reference**
 
 | Stage | What runs |
 |:------|:----------|
-| **Text** | Default: T5 only. **Triple mode** (`--text-encoder-mode triple`): T5 sequence + CLIP-L + CLIP-bigG → fused conditioning (checkpoint stores `text_encoder_fusion`). |
-| **Image latents** | **VAE** (`AutoencoderKL`) or **RAE** + optional `rae_latent_bridge` for non-4ch latents. |
-| **Core** | DiT blocks + diffusion objective; optional REPA (DINOv2/CLIP vision), MDM masks, MoE, size embed, patch-SE. |
-| **Sample** | `sample.py` loads config + `ema` weights + optional fusion/RAE bridge; CFG; schedulers; decode. |
-| **Extras** | **ViT/** quality & prompt tools; optional **Stable Cascade** script; **Qwen** helper in `utils/llm_client.py` for prompt expansion. |
+| **Config** | **`config/train_config.py`**: `TrainConfig` + **`get_dit_build_kwargs`** → DiT build args (text mode, CLIP paths, RAE/REPA, …). |
+| **Data** | **`data/t2i_dataset.py`**: folders or JSONL, caption emphasis, latent cache. |
+| **Diffusion** | **`diffusion/`**: `GaussianDiffusion`, beta schedules, **DDIM** sampling, CFG rescale, **`respace`**, loss weighting. |
+| **Text → DiT** | Default: **T5** only. **Triple**: T5 + CLIP-L + CLIP-bigG → **`text_encoder_fusion`** (saved in ckpt; load via **`utils/checkpoint_loading.py`**). |
+| **Image → latent** | **VAE** or **RAE**; **`RAELatentBridge`** if RAE channels ≠ 4. |
+| **DiT core** | **`models/dit_text.py`** (+ **`dit_predecessor`**, **`pixart_blocks`**, …): patch embed, **self-attn**, **cross-attn** to text; optional **ViT-Gen** (registers, RoPE, KV-merge), **MoE**, **MDM** masks. |
+| **REPA** | Frozen **vision** encoder (e.g. DINOv2) — extra loss aligning DiT features to image semantics. |
+| **`ViT/` tools** | Train/infer **scoring ViT** on manifests; **prompt** decomposition; **rank**; not the same module as DiT. |
+| **Sample** | **`sample.py`**: ckpt + encoders + optional fusion/bridge; **CFG**; decode; optional **`utils/test_time_pick`** (**pick-best**). |
+| **Programmatic API** | **`inference.py`**: load checkpoint + config for code-driven sampling. |
+| **Other** | **Qwen** (`utils/llm_client.py`); **Stable Cascade** (`scripts/cascade_generate.py`) — **separate** Diffusers stack, not mixed into DiT forward. |
+
+**Optional scaffolds (not the default `train.py` loop):** `diffusion/cascaded_multimodal_pipeline.py`, **`models/cascaded_multimodal_diffusion.py`**, **`models/native_multimodal_transformer.py`** — experimental / staged designs; see **[docs/FILES.md](docs/FILES.md)**.
+
+| See also | |
+|:---------|:--|
+| **Weights & paths** | **[docs/MODEL_STACK.md](docs/MODEL_STACK.md)** |
+| **Every file & script** | **[docs/FILES.md](docs/FILES.md)** |
+| **Config ↔ checkpoint ↔ sample** | **[docs/CONNECTIONS.md](docs/CONNECTIONS.md)** |
 
 ---
 
@@ -205,7 +335,7 @@ Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `
 
 ```bash
 # Windows (PowerShell)
-.\scripts\clone_repos.ps1
+.\scripts\setup\clone_repos.ps1
 
 # Linux / macOS
 ./scripts/setup/clone_repos.sh
