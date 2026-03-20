@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Parser, Debug)]
 #[command(name = "sdx-jsonl-tools", version, about = "SDX JSONL manifest validate / stats")]
@@ -30,6 +31,20 @@ enum SubCmd {
         #[arg(long, default_value_t = 0)]
         max_caption_len: usize,
     },
+    /// Lint captions for prompt adherence issues: empty captions, pos/neg overlap, token length.
+    /// Exits non-zero if `--fail-on-overlap` and any row has pos/neg token overlap.
+    PromptLint {
+        #[arg(value_name = "FILE")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 0)]
+        min_caption_len_chars: usize,
+        #[arg(long, default_value_t = 0)]
+        max_caption_tokens: usize,
+        #[arg(long, default_value_t = 10)]
+        top_overlap_tokens: usize,
+        #[arg(long, default_value_t = false)]
+        fail_on_overlap: bool,
+    },
 }
 
 fn image_key(v: &Value) -> Option<String> {
@@ -47,6 +62,159 @@ fn caption_key(v: &Value) -> Option<String> {
         return Some(s.trim().to_string());
     }
     v.get("text").and_then(|x| x.as_str()).map(|s| s.trim().to_string())
+}
+
+fn negative_caption_key(v: &Value) -> Option<String> {
+    if let Some(s) = v.get("negative_caption").and_then(|x| x.as_str()) {
+        return Some(s.trim().to_string());
+    }
+    if let Some(s) = v.get("negative_prompt").and_then(|x| x.as_str()) {
+        return Some(s.trim().to_string());
+    }
+    if let Some(s) = v.get("negative_text").and_then(|x| x.as_str()) {
+        return Some(s.trim().to_string());
+    }
+    None
+}
+
+fn tokenize_normalized(text: &str) -> Vec<String> {
+    // Lightweight tokenizer: keep alnum only, lowercased, treat everything else as delimiter.
+    // This is good enough for overlap/conflict detection and token count heuristics.
+    let mut cur = String::new();
+    let mut out: Vec<String> = Vec::new();
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            cur.push(ch.to_ascii_lowercase());
+        } else {
+            if !cur.is_empty() {
+                out.push(cur.clone());
+                cur.clear();
+            }
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn cmd_prompt_lint(
+    path: &PathBuf,
+    min_caption_len_chars: usize,
+    max_caption_tokens: usize,
+    top_overlap_tokens: usize,
+    fail_on_overlap: bool,
+) -> io::Result<i32> {
+    let mut total_lines = 0u64;
+    let mut parse_err = 0u64;
+    let mut empty_caption_rows = 0u64;
+    let mut rows_over_max_tokens = 0u64;
+
+    let mut ok_rows = 0u64;
+    let mut caption_tokens_sum = 0u64;
+    let mut caption_tokens_min = u64::MAX;
+    let mut caption_tokens_max = 0u64;
+
+    let mut overlap_rows = 0u64;
+    let mut max_overlap_token_count = 0u64;
+    let mut overlap_token_counts: HashMap<String, u64> = HashMap::new();
+
+    for line in read_lines(path)? {
+        let line = line?;
+        total_lines += 1;
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let v: Value = match serde_json::from_str(t) {
+            Ok(x) => x,
+            Err(_) => {
+                parse_err += 1;
+                continue;
+            }
+        };
+
+        let cap = match caption_key(&v) {
+            Some(c) => c,
+            None => continue,
+        };
+        if cap.is_empty() || (min_caption_len_chars > 0 && cap.len() < min_caption_len_chars) {
+            empty_caption_rows += 1;
+            continue;
+        }
+
+        let neg = negative_caption_key(&v).unwrap_or_else(|| "".to_string());
+        // If negative is missing/empty, we still count token stats, but overlap is not checked.
+        let tokens_pos = tokenize_normalized(&cap);
+        let tokens_neg = tokenize_normalized(&neg);
+
+        let pos_set: HashSet<String> = tokens_pos.into_iter().collect();
+        let neg_set: HashSet<String> = tokens_neg.into_iter().collect();
+
+        let caption_tok_len = pos_set.len() as u64;
+        ok_rows += 1;
+        caption_tokens_sum += caption_tok_len;
+        caption_tokens_min = caption_tokens_min.min(caption_tok_len);
+        caption_tokens_max = caption_tok_len.max(caption_tokens_max);
+
+        if max_caption_tokens > 0 && caption_tok_len > max_caption_tokens as u64 {
+            rows_over_max_tokens += 1;
+        }
+
+        if !pos_set.is_empty() && !neg_set.is_empty() {
+            let overlap: Vec<&String> = pos_set.intersection(&neg_set).collect();
+            if !overlap.is_empty() {
+                overlap_rows += 1;
+                let n = overlap.len() as u64;
+                max_overlap_token_count = max_overlap_token_count.max(n);
+                for tok in overlap {
+                    if top_overlap_tokens == 0 {
+                        continue;
+                    }
+                    *overlap_token_counts.entry(tok.clone()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    let mut overlap_items: Vec<(String, u64)> = overlap_token_counts.into_iter().collect();
+    overlap_items.sort_by(|a, b| b.1.cmp(&a.1));
+    if overlap_items.len() > top_overlap_tokens && top_overlap_tokens > 0 {
+        overlap_items.truncate(top_overlap_tokens);
+    }
+
+    println!("promptlint: file {}", path.display());
+    println!("lines_total: {}", total_lines);
+    println!("json_parse_errors: {}", parse_err);
+    println!("empty_caption_rows: {}", empty_caption_rows);
+    println!("rows_over_max_tokens: {}", rows_over_max_tokens);
+    println!("rows_ok: {}", ok_rows);
+    if ok_rows > 0 {
+        let avg = caption_tokens_sum as f64 / ok_rows as f64;
+        println!(
+            "caption_token_count(set_size): avg={:.2} min={} max={}",
+            avg,
+            caption_tokens_min,
+            caption_tokens_max
+        );
+    }
+    println!("pos_neg_overlap_rows: {}", overlap_rows);
+    println!("pos_neg_overlap_max_distinct_tokens: {}", max_overlap_token_count);
+    if !overlap_items.is_empty() {
+        print!("top_overlap_tokens: ");
+        for (i, (tok, cnt)) in overlap_items.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}({})", tok, cnt);
+        }
+        println!();
+    }
+
+    if fail_on_overlap && overlap_rows > 0 {
+        return Ok(1);
+    }
+    Ok(0)
 }
 
 fn read_lines(path: &PathBuf) -> io::Result<Box<dyn Iterator<Item = io::Result<String>>>> {
@@ -172,6 +340,23 @@ fn main() {
             max_caption_len,
         } => cmd_validate(&path, min_caption_len, max_caption_len).unwrap_or_else(|e| {
             eprintln!("validate: {e}");
+            2
+        }),
+        SubCmd::PromptLint {
+            path,
+            min_caption_len_chars,
+            max_caption_tokens,
+            top_overlap_tokens,
+            fail_on_overlap,
+        } => cmd_prompt_lint(
+            &path,
+            min_caption_len_chars,
+            max_caption_tokens,
+            top_overlap_tokens,
+            fail_on_overlap,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("promptlint: {e}");
             2
         }),
     };

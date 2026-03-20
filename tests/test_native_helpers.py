@@ -56,6 +56,23 @@ def test_rust_jsonl_tools_stats(sample_jsonl: Path) -> None:
     assert "rows_ok: 2" in r.stdout
 
 
+def test_rust_jsonl_promptlint_runs(sample_jsonl: Path) -> None:
+    exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools.exe"
+    if sys.platform != "win32":
+        exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools"
+    if not exe.is_file():
+        pytest.skip("build Rust first: cd native/rust/sdx-jsonl-tools && cargo build --release")
+    r = subprocess.run(
+        [str(exe), "prompt-lint", str(sample_jsonl)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "promptlint:" in r.stdout
+    assert "rows_ok: 2" in r.stdout
+
+
 def test_cpp_sdx_latent_dll_exists() -> None:
     candidates = [
         ROOT / "native" / "cpp" / "build" / "Debug" / "sdx_latent.dll",
@@ -66,3 +83,21 @@ def test_cpp_sdx_latent_dll_exists() -> None:
         pytest.skip("build C++ first: native/cpp (cmake --build build)")
     dll = next(p for p in candidates if p.is_file())
     assert dll.stat().st_size > 0
+
+
+def test_node_promptlint_runs(sample_jsonl: Path) -> None:
+    script = ROOT / "native" / "js" / "sdx-promptlint.mjs"
+    if not script.is_file():
+        pytest.skip("native/js/sdx-promptlint.mjs missing")
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    r = subprocess.run(
+        [node, str(script), str(sample_jsonl)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "promptlint:" in r.stdout
+    assert "rows_ok: 2" in r.stdout
