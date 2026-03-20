@@ -8,13 +8,29 @@ All **SDX project files** (what we run and edit) and **key files in external rep
 
 Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` are on the path.
 
+### How the tree fits together (runtime)
+
+| Area | Role | Consumed by |
+|:-----|:-----|:------------|
+| **config/** | `TrainConfig`, `get_dit_build_kwargs`, presets | `train.py`, `sample.py`, checkpoints |
+| **data/** | `Text2ImageDataset`, captions | `train.py` |
+| **diffusion/** | `GaussianDiffusion`, schedules, loss weights | `train.py`, `sample.py` |
+| **models/** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
+| **utils/** | Checkpoint load, text-encoder bundle, REPA helpers, QC, metrics | `train.py`, `sample.py`, scripts |
+| **ViT/** | Standalone ViT scoring / prompt tools (**not** the DiT generator) | CLI + optional dataset QA |
+| **scripts/** | Download, tools, cascade stub | Ops & CI |
+| **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md` |
+| **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/model_paths.py` |
+
+End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + diffusion) → checkpoint → sample.py → image**. See [README § Pipeline showcase](../README.md#pipeline-showcase).
+
 ### Root
 
 | File | Description |
 |------|-------------|
 | [README.md](../README.md) | Project overview, setup, data format, training, options. |
 | [requirements.txt](../requirements.txt) | Pip dependencies (torch, transformers, diffusers, xformers, etc.). |
-| [train.py](../train.py) | Training script: DiT + T5, passes/epochs/steps, val split, early stopping, DDP; **--crop-mode**, **--caption-dropout-schedule**, **--save-polyak**, **--wandb-project**, **--tensorboard-dir**, **--dry-run**. |
+| [train.py](../train.py) | Training: DiT + T5 (optional **triple** CLIP fusion via `--text-encoder-mode triple`), VAE/RAE, REPA, passes/epochs, val, DDP; **--crop-mode**, **--caption-dropout-schedule**, **--save-polyak**, **--wandb-project**, **--tensorboard-dir**, **--dry-run**. |
 | [inference.py](../inference.py) | Load checkpoint and config for programmatic inference. |
 | [sample.py](../sample.py) | CLI sampling: prompt, negative prompt, steps, width, height; **--cfg-scale**, **--num N** (batch), **--grid**, **--vae-tiling**, **--cfg-rescale**, **--deterministic** (reproducible); style, control, lora, img2img, sharpen, contrast. High CFG auto-enables rescale/threshold. |
 
@@ -23,7 +39,7 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | File | Description |
 |------|-------------|
 | [config/__init__.py](../config/__init__.py) | Exports `TrainConfig`. |
-| [config/train_config.py](../config/train_config.py) | TrainConfig + get_dit_build_kwargs(cfg): single place for DiT build args (used by train, sample, inference, self_improve). |
+| [config/train_config.py](../config/train_config.py) | TrainConfig + `get_dit_build_kwargs(cfg)`: DiT build args; **`text_encoder_mode`**, **`clip_text_encoder_*`**, RAE/REPA fields. |
 | [config/pixai_reference.py](../config/pixai_reference.py) | PixAI.art-style model labels for logs (Haruka, Tsubaki, etc.). |
 | [config/prompt_domains.py](../config/prompt_domains.py) | Recommended prompts/negatives for 3D, realistic, interior, exterior. |
 
@@ -41,31 +57,62 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 |------|-------------|
 | [diffusion/__init__.py](../diffusion/__init__.py) | Exports `create_diffusion`, `GaussianDiffusion`. |
 | [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) | Diffusion: beta schedule, training losses (min-SNR, v/epsilon), DDIM sampling, CFG rescale, dynamic threshold. |
+| [diffusion/respace.py](../diffusion/respace.py) | Timestep respacing for sampling. |
+| [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) | Thresholding helpers. |
+| [diffusion/loss_weighting.py](../diffusion/loss_weighting.py) | EDM / v / eps loss weights. |
+| [diffusion/cascaded_multimodal_pipeline.py](../diffusion/cascaded_multimodal_pipeline.py) | Optional **cascaded** stage-1 → stage-2 forward + optional RAE bridge (scaffold; not wired into default `train.py` loop). |
 
 ### Models
 
 | File | Description |
 |------|-------------|
-| [models/__init__.py](../models/__init__.py) | Exports DiT models (XL/2-Text, P/2-Text, P-L/2-Text). |
+| [models/__init__.py](../models/__init__.py) | Exports DiT registry, `DiT_XL_2_Text`, EnhancedDiT, **RAELatentBridge**, **NativeMultimodalTransformer**, **CascadedMultimodalDiffusion**. |
 | [models/dit.py](../models/dit.py) | Base DiT (patch embed, timestep embed, adaLN blocks); from Meta DiT. |
-| [models/dit_text.py](../models/dit_text.py) | T5-conditioned DiT (cross-attention, caption). |
-| [models/dit_predecessor.py](../models/dit_predecessor.py) | DiT-P: QK-norm, SwiGLU, AdaLN-Zero (PixAI-style predecessor). |
+| [models/dit_text.py](../models/dit_text.py) | T5-conditioned DiT (cross-attention, caption); ViT-Gen options (RoPE, registers, KV-merge). |
+| [models/dit_predecessor.py](../models/dit_predecessor.py) | DiT-P / Supreme variants; QK-norm, SwiGLU, AdaLN-Zero; REPA projector when enabled. |
+| [models/pixart_blocks.py](../models/pixart_blocks.py) | SizeEmbedder, ZeroInitPatchChannelGate, etc. |
+| [models/rae_latent_bridge.py](../models/rae_latent_bridge.py) | RAE ↔ 4ch DiT latent **1×1** bridge + cycle loss. |
+| [models/native_multimodal_transformer.py](../models/native_multimodal_transformer.py) | Vision + text token fusion (experimental scaffold). |
+| [models/cascaded_multimodal_diffusion.py](../models/cascaded_multimodal_diffusion.py) | Two-stage DiT + optional bridge wrapper. |
 | [models/attention.py](../models/attention.py) | Attention with xformers / SDPA fallback. |
 | [models/controlnet.py](../models/controlnet.py) | ControlNet conditioning (control image + scale). |
 | [models/lora.py](../models/lora.py) | LoRA layers (optional). |
+| [models/moe.py](../models/moe.py) | MoE FFN / routing (optional). |
+| [models/enhanced_dit.py](../models/enhanced_dit.py) | EnhancedDiT variants (large). |
 
 ### Utils
 
 | File | Description |
 |------|-------------|
-| [utils/__init__.py](../utils/__init__.py) | Package init. |
-| [utils/quality.py](../utils/quality.py) | Post-process: sharpen (unsharp mask), contrast. |
+| [utils/__init__.py](../utils/__init__.py) | Re-exports `quality` helpers. |
+| [utils/checkpoint_loading.py](../utils/checkpoint_loading.py) | `load_dit_text_checkpoint`: DiT + config + RAE bridge + **`text_encoder_fusion`** state. |
+| [utils/model_paths.py](../utils/model_paths.py) | Resolve `model/` local paths vs HF ids (`default_t5_path`, CLIP, DINOv2, Qwen, Cascade). |
+| [utils/text_encoder_bundle.py](../utils/text_encoder_bundle.py) | **Triple** text stack: T5 + CLIP-L + CLIP-bigG + trainable fusion. |
+| [utils/llm_client.py](../utils/llm_client.py) | Optional Qwen (or HF causal LM) for prompt expansion. |
+| [utils/quality.py](../utils/quality.py) | Post-process: sharpen (unsharp mask), contrast; **naturalize** (human-art style). |
 | [utils/prompt_lint.py](../utils/prompt_lint.py) | Prompt adherence linting for SDX JSONL (pos/neg overlap + caption heuristics). |
 | [utils/image_quality_metrics.py](../utils/image_quality_metrics.py) | Pure-PIL/numpy image QC metrics (sharpness + contrast). |
+| [utils/config_validator.py](../utils/config_validator.py) | Train config validation. |
+| [utils/checkpoint_manager.py](../utils/checkpoint_manager.py) | Checkpoint rotation / save helpers. |
+| [utils/metrics.py](../utils/metrics.py) | FLOPs / logging helpers. |
+| [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
+| *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
+
+### ViT (`ViT/`)
+
+| File | Description |
+|------|-------------|
+| [ViT/README.md](../ViT/README.md) | ViT quality + adherence; train / infer / rank / embeddings / prompt system. |
+| [ViT/train.py](../ViT/train.py), [ViT/infer.py](../ViT/infer.py) | Train or score JSONL (**separate** from repo-root DiT `train.py`). |
+| [ViT/prompt_system.py](../ViT/prompt_system.py), [ViT/prompt_tool.py](../ViT/prompt_tool.py) | “Negative inside positive” prompt decomposition. |
+
+### Native (`native/`)
+
+Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imported by Python training by default. See [native/README.md](../native/README.md).
 
 ### Scripts
 
-Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/LLM), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test).
+Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **root** (e.g. Stable Cascade stub).
 
 | File | Description |
 |------|-------------|
@@ -73,6 +120,8 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/setup/clone_repos.sh](../scripts/setup/clone_repos.sh) | Linux/macOS: same clones. |
 | [scripts/download/download_models.py](../scripts/download/download_models.py) | Download best HF models: T5-XXL (text encoder), VAEs (sd-vae-ft-mse, sdxl-vae, sdxl-vae-fp16-fix), LLMs (SmolLM, Qwen2.5-7B). Use `--all` or `--t5` / `--vae` / `--llm` / `--llm-best`. |
 | [scripts/download/download_llm.py](../scripts/download/download_llm.py) | Download a single LLM for prompt expansion (SmolLM2-360M or Qwen2.5-7B with `--best`). |
+| [scripts/download/download_revolutionary_stack.py](../scripts/download/download_revolutionary_stack.py) | Bulk HF snapshot downloads for extended stacks (see `docs/MODEL_STACK.md`). |
+| [scripts/cascade_generate.py](../scripts/cascade_generate.py) | **Stable Cascade** (diffusers) sampling — optional path; uses `model/StableCascade-*` via `utils/model_paths`. |
 | [scripts/training/self_improve.py](../scripts/training/self_improve.py) | Self-improvement loop (8.6): generate images, caption with VLM, write manifest.jsonl. |
 | [scripts/training/precompute_latents.py](../scripts/training/precompute_latents.py) | Precompute VAE latents for faster training. |
 | [scripts/tools/ckpt_info.py](../scripts/tools/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
@@ -104,6 +153,7 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [docs/CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect: TrainConfig → checkpoint → sample/inference; get_dit_build_kwargs; data flow. |
 | [docs/HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | How generation works: prompt → T5 → diffusion loop → DiT denoising → VAE decode → image. |
 | [docs/DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior: how we handle hard-to-generate domains. |
+| [docs/MODEL_STACK.md](MODEL_STACK.md) | What lives under **`model/`** (T5, CLIP, DINOv2, Cascade, …) and how it maps to training vs `ViT/`. |
 | [docs/FILES.md](FILES.md) | This file: project file map and external reference links. |
 
 ---
@@ -210,4 +260,5 @@ Cloned into `external/` by [scripts/setup/clone_repos.ps1](../scripts/setup/clon
 - **Diffusion:** [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) · [diffusion/respace.py](../diffusion/respace.py) · [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) · [diffusion/loss_weighting.py](../diffusion/loss_weighting.py)
 - **Models:** [models/dit_text.py](../models/dit_text.py) · [models/dit_predecessor.py](../models/dit_predecessor.py) · [models/pixart_blocks.py](../models/pixart_blocks.py) (SizeEmbedder, ported from PixArt)
 - **Data:** [data/t2i_dataset.py](../data/t2i_dataset.py) · [data/caption_utils.py](../data/caption_utils.py)
-- **Docs:** [README](../README.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
+- **Docs:** [README](../README.md) · [MODEL_STACK](MODEL_STACK.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
+- **Weights / paths:** [docs/MODEL_STACK.md](MODEL_STACK.md) · [utils/model_paths.py](../utils/model_paths.py)
