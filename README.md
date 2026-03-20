@@ -451,6 +451,12 @@ Local clones: `external/` after running the clone scripts.
 
 ---
 
+## License
+
+Licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
+
+---
+
 <div align="center">
 
 **SDX** — train once on your data, sample with the stack you choose.
