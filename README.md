@@ -24,7 +24,7 @@ No reference image required — quality comes from **the dataset and captions yo
 | | |
 |:---|:---|
 | **Start here** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflows** | [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Workflows** | [Pipeline showcase](#pipeline-showcase) · [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [CLI options](#train-cli-quick-reference) · [SD/XL-style features](#sd--sdxl-style-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
 
