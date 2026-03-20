@@ -14,11 +14,11 @@ def load_dit_text_checkpoint(
     device: str = "cuda",
     *,
     reject_enhanced: bool = False,
-) -> Tuple[torch.nn.Module, object, Optional[RAELatentBridge], str]:
+) -> Tuple[torch.nn.Module, object, Optional[RAELatentBridge], str, Optional[dict]]:
     """
     Load a DiT-Text checkpoint and optional RAE latent bridge.
 
-    Returns: (model, config, rae_bridge_or_none, model_name)
+    Returns: (model, config, rae_bridge_or_none, model_name, text_encoder_fusion_sd_or_none)
     """
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = ckpt.get("config")
@@ -48,4 +48,7 @@ def load_dit_text_checkpoint(
         rae_bridge.load_state_dict(sd_b, strict=True)
         rae_bridge = rae_bridge.to(device).eval()
 
-    return model, cfg, rae_bridge, str(model_name)
+    fusion_sd = ckpt.get("text_encoder_fusion")
+    if not isinstance(fusion_sd, dict):
+        fusion_sd = None
+    return model, cfg, rae_bridge, str(model_name), fusion_sd

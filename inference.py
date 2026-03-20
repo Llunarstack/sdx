@@ -15,7 +15,9 @@ from utils.checkpoint_loading import load_dit_text_checkpoint
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    model, cfg, rae_bridge, _ = load_dit_text_checkpoint(ckpt_path, device=device, reject_enhanced=False)
+    model, cfg, rae_bridge, _, _fusion_sd = load_dit_text_checkpoint(
+        ckpt_path, device=device, reject_enhanced=False
+    )
     return model, cfg, rae_bridge
 
 

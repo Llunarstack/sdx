@@ -37,7 +37,7 @@ def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    model, cfg, rae_bridge, model_name = load_dit_text_checkpoint(
+    model, cfg, rae_bridge, model_name, fusion_sd = load_dit_text_checkpoint(
         ckpt_path,
         device=device,
         reject_enhanced=True,
@@ -50,7 +50,7 @@ def load_model_from_ckpt(ckpt_path, device="cuda"):
     if rae_bridge is not None:
         rae_c = int(rae_bridge.to_dit.weight.shape[1])
         print(f"Loaded RAELatentBridge: rae_channels={rae_c} -> 4 (DiT latent space)")
-    return model, cfg, rae_bridge
+    return model, cfg, rae_bridge, fusion_sd
 
 
 # T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
@@ -367,7 +367,23 @@ def _token_weights_from_segments(cleaned: str, segments: list, tokenizer, max_le
 
 
 @torch.no_grad()
-def encode_text(captions, tokenizer, text_encoder, device, max_length=300, dtype=torch.float32):
+def encode_text(
+    captions,
+    tokenizer,
+    text_encoder,
+    device,
+    max_length=300,
+    dtype=torch.float32,
+    text_bundle=None,
+):
+    if text_bundle is not None:
+        return text_bundle.encode(
+            captions,
+            device,
+            max_length=max_length,
+            dtype=dtype,
+            train_fusion=False,
+        )
     tok = tokenizer(captions, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt")
     input_ids = tok.input_ids.to(device)
     attention_mask = tok.attention_mask.to(device)
@@ -645,7 +661,7 @@ def main():
                 pass
 
     print("Loading checkpoint and encoders...")
-    model, cfg, rae_bridge = load_model_from_ckpt(args.ckpt, device)
+    model, cfg, rae_bridge, fusion_sd = load_model_from_ckpt(args.ckpt, device)
 
     # Apply LoRAs
     if args.lora:
@@ -662,8 +678,21 @@ def main():
 
     from transformers import AutoTokenizer, T5EncoderModel
     from diffusers import AutoencoderKL, AutoencoderRAE
+    from utils.text_encoder_bundle import attach_fusion_weights, load_text_encoder_bundle
 
-    tokenizer = AutoTokenizer.from_pretrained(cfg.text_encoder)
+    text_bundle = None
+    if str(getattr(cfg, "text_encoder_mode", "t5") or "t5").lower() == "triple":
+        text_bundle = load_text_encoder_bundle(cfg, device)
+        if text_bundle is None:
+            raise RuntimeError("Checkpoint config requests triple text encoders but bundle failed to load.")
+        if fusion_sd is not None:
+            attach_fusion_weights(text_bundle, fusion_sd)
+        tokenizer = text_bundle.tokenizer
+        text_encoder = text_bundle.text_encoder
+        print("Triple text encoder (T5 + CLIP-L + CLIP-bigG) loaded.")
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(cfg.text_encoder)
+        text_encoder = T5EncoderModel.from_pretrained(cfg.text_encoder).to(device).eval()
     # Warn if prompt is very long (T5 truncates at max_length; important content may be lost)
     try:
         tok_out = tokenizer(args.prompt, return_tensors="pt", truncation=False)
@@ -672,7 +701,6 @@ def main():
             print(f"Note: prompt has {n_tok} tokens; T5 truncates at 300. Put key elements first for best adherence.", file=sys.stderr)
     except Exception:
         pass
-    text_encoder = T5EncoderModel.from_pretrained(cfg.text_encoder).to(device).eval()
     ae_type = getattr(cfg, "autoencoder_type", "kl")
     if ae_type == "rae":
         vae = AutoencoderRAE.from_pretrained(cfg.vae_model).to(device).eval()
@@ -831,11 +859,17 @@ def main():
             style_emb_cached = style_emb_cached.to(device)
         print("T5 cache hit.")
     else:
-        cond_emb = encode_text([prompt_to_encode], tokenizer, text_encoder, device)
-        uncond_emb = encode_text([negative_text], tokenizer, text_encoder, device)
+        cond_emb = encode_text(
+            [prompt_to_encode], tokenizer, text_encoder, device, text_bundle=text_bundle
+        )
+        uncond_emb = encode_text(
+            [negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle
+        )
         style_emb_cached = None
         if effective_style and getattr(cfg, "style_embed_dim", 0):
-            style_emb_cached = encode_text([effective_style], tokenizer, text_encoder, device).mean(dim=1)
+            style_emb_cached = encode_text(
+                [effective_style], tokenizer, text_encoder, device, text_bundle=text_bundle
+            ).mean(dim=1)
         if cache_key is not None:
             while len(_t5_cache) >= _T5_CACHE_MAX:
                 _t5_cache.pop(next(iter(_t5_cache)))

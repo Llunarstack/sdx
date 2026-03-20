@@ -37,6 +37,8 @@ from utils.error_handling import setup_logging, log_gpu_memory, get_model_info
 from utils.config_validator import validate_train_config, estimate_memory_usage
 from utils.metrics import MetricsTracker, log_system_info
 from utils.model_viz import print_model_summary
+from utils.model_paths import default_t5_path
+from utils.text_encoder_bundle import load_text_encoder_bundle
 
 # Enable TF32 on Ampere+ for speed
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -99,21 +101,38 @@ def get_t5_and_vae(device, cfg: TrainConfig):
     return tokenizer, text_encoder, ae
 
 
-@torch.no_grad()
-def encode_text(captions, tokenizer, text_encoder, device, max_length=300, dtype=torch.bfloat16):
-    """Encode captions to T5 hidden states (B, L, 4096)."""
-    tok = tokenizer(
-        captions,
-        padding="max_length",
-        max_length=max_length,
-        truncation=True,
-        return_tensors="pt",
-    )
-    input_ids = tok.input_ids.to(device)
-    attention_mask = tok.attention_mask.to(device)
-    out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
-    hidden = out.last_hidden_state
-    return hidden.to(dtype)
+def encode_text(
+    captions,
+    tokenizer,
+    text_encoder,
+    device,
+    max_length=300,
+    dtype=torch.bfloat16,
+    text_bundle=None,
+    train_fusion: bool = False,
+):
+    """Encode captions to hidden states (B, L, text_dim). Triple mode appends two CLIP tokens (train fusion when train_fusion=True)."""
+    if text_bundle is not None:
+        return text_bundle.encode(
+            captions,
+            device,
+            max_length=max_length,
+            dtype=dtype,
+            train_fusion=train_fusion,
+        )
+    with torch.no_grad():
+        tok = tokenizer(
+            captions,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        input_ids = tok.input_ids.to(device)
+        attention_mask = tok.attention_mask.to(device)
+        out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+        hidden = out.last_hidden_state
+        return hidden.to(dtype)
 
 
 @torch.no_grad()
@@ -418,9 +437,12 @@ def eval_val_loss(
     max_batches=None,
     rae_bridge=None,
     latent_scale=1.0,
+    text_bundle=None,
 ):
     """Average loss over validation set (EMA model, no backward). Used for early stopping and best-by-val checkpoint."""
     ema_model.eval()
+    if text_bundle is not None and text_bundle.fusion is not None:
+        text_bundle.fusion.eval()
     total_loss = 0.0
     n_batches = 0
     for batch in val_loader:
@@ -439,19 +461,38 @@ def eval_val_loss(
             if rae_bridge is not None and latents.shape[1] != 4:
                 latents = rae_bridge.rae_to_dit(latents)
             encoder_hidden = encode_text(
-                captions, tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len
+                captions,
+                tokenizer,
+                text_encoder,
+                device,
+                dtype=torch.bfloat16,
+                max_length=max_caption_len,
+                text_bundle=text_bundle,
+                train_fusion=False,
             )
             encoder_hidden_neg = None
             if any(n and n.strip() for n in negative_captions):
                 encoder_hidden_neg = encode_text(
                     [n or "" for n in negative_captions],
-                    tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len,
+                    tokenizer,
+                    text_encoder,
+                    device,
+                    dtype=torch.bfloat16,
+                    max_length=max_caption_len,
+                    text_bundle=text_bundle,
+                    train_fusion=False,
                 )
             style_embedding = None
             if getattr(cfg, "style_embed_dim", 0) and any(s and s.strip() for s in styles):
                 style_embedding = encode_text(
                     [s or "" for s in styles],
-                    tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len,
+                    tokenizer,
+                    text_encoder,
+                    device,
+                    dtype=torch.bfloat16,
+                    max_length=max_caption_len,
+                    text_bundle=text_bundle,
+                    train_fusion=False,
                 )
                 style_embedding = style_embedding.mean(dim=1)
             t = torch.randint(0, diffusion.num_timesteps, (latents.shape[0],), device=device)
@@ -514,6 +555,8 @@ def eval_val_loss(
             total_loss += loss_dict["loss"].mean().item()
         n_batches += 1
     ema_model.train()
+    if text_bundle is not None and text_bundle.fusion is not None:
+        text_bundle.fusion.train()
     return total_loss / max(1, n_batches)
 
 
@@ -584,12 +627,33 @@ def get_scheduled_caption_dropout(step: int, schedule) -> float:
     return float(schedule[-1][1])
 
 
-def _log_sample_image(ema_model, diffusion, tokenizer, text_encoder, vae, device, cfg, steps, tb_writer, rae_bridge=None):
+def _log_sample_image(
+    ema_model,
+    diffusion,
+    tokenizer,
+    text_encoder,
+    vae,
+    device,
+    cfg,
+    steps,
+    tb_writer,
+    rae_bridge=None,
+    text_bundle=None,
+):
     """Generate one sample with EMA and log to TensorBoard/WandB (IMPROVEMENTS 5.1)."""
     ema_model.eval()
     demo_prompt = getattr(cfg, "log_images_prompt", "a photo of a cat")
     with torch.no_grad():
-        enc = encode_text([demo_prompt], tokenizer, text_encoder, device, max_length=77, dtype=torch.bfloat16)
+        enc = encode_text(
+            [demo_prompt],
+            tokenizer,
+            text_encoder,
+            device,
+            max_length=77,
+            dtype=torch.bfloat16,
+            text_bundle=text_bundle,
+            train_fusion=False,
+        )
         ae_type = getattr(cfg, "autoencoder_type", "kl")
         latent_scale = getattr(cfg, "latent_scale", 0.18215) if ae_type == "kl" else 1.0
         image_size = getattr(cfg, "image_size", 256)
@@ -723,6 +787,9 @@ def main(cfg: TrainConfig):
     # T5 + Autoencoder (frozen)
     logger.info("Loading T5 and autoencoder...")
     tokenizer, text_encoder, vae = get_t5_and_vae(device, cfg)
+    text_bundle = load_text_encoder_bundle(cfg, device)
+    if text_bundle is not None:
+        logger.info("Triple text encoder enabled: T5 + CLIP-L + CLIP-bigG (fusion layers trained with DiT).")
 
     ae_type = getattr(cfg, "autoencoder_type", "kl")
     effective_latent_scale = getattr(cfg, "latent_scale", 0.18215) if ae_type == "kl" else 1.0
@@ -803,6 +870,8 @@ def main(cfg: TrainConfig):
     opt_params = list(model.parameters())
     if rae_bridge is not None:
         opt_params += list(rae_bridge.parameters())
+    if text_bundle is not None and text_bundle.fusion is not None:
+        opt_params += list(text_bundle.fusion.parameters())
     opt = torch.optim.AdamW(
         opt_params,
         lr=cfg.lr,
@@ -835,6 +904,16 @@ def main(cfg: TrainConfig):
                     logger.info("Loaded rae_latent_bridge from checkpoint.")
                 except Exception as e:
                     logger.warning(f"Could not load rae_latent_bridge: {e}")
+            if (
+                text_bundle is not None
+                and text_bundle.fusion is not None
+                and ckpt.get("text_encoder_fusion")
+            ):
+                try:
+                    text_bundle.fusion.load_state_dict(ckpt["text_encoder_fusion"], strict=True)
+                    logger.info("Loaded text_encoder_fusion from checkpoint.")
+                except Exception as e:
+                    logger.warning(f"Could not load text_encoder_fusion: {e}")
             logger.info(f"Resumed from {resume_path} at step {start_step}")
 
     # Data
@@ -1000,7 +1079,14 @@ def main(cfg: TrainConfig):
                             init_latents = encode_images_vae(init_pixel_values.to(device, non_blocking=True), vae, effective_latent_scale)
                             latents = torch.where(use_init.view(-1, 1, 1, 1).expand_as(latents), init_latents, latents)
                     encoder_hidden = encode_text(
-                        captions, tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len
+                        captions,
+                        tokenizer,
+                        text_encoder,
+                        device,
+                        dtype=torch.bfloat16,
+                        max_length=max_caption_len,
+                        text_bundle=text_bundle,
+                        train_fusion=True,
                     )
                     # IMPROVEMENTS 1.3: scheduled caption dropout (replace with empty with prob p); only when schedule set
                     cap_drop_schedule = getattr(cfg, "caption_dropout_schedule", None)
@@ -1010,7 +1096,14 @@ def main(cfg: TrainConfig):
                             B = encoder_hidden.shape[0]
                             if max_caption_len not in empty_embed_cache:
                                 empty_embed_cache[max_caption_len] = encode_text(
-                                    [""], tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len
+                                    [""],
+                                    tokenizer,
+                                    text_encoder,
+                                    device,
+                                    dtype=torch.bfloat16,
+                                    max_length=max_caption_len,
+                                    text_bundle=text_bundle,
+                                    train_fusion=True,
                                 )
                             empty_embed = empty_embed_cache[max_caption_len].expand(B, -1, -1)
                             mask = (torch.rand(B, device=device, dtype=torch.bfloat16) < current_cap_dropout).view(B, 1, 1)
@@ -1020,14 +1113,26 @@ def main(cfg: TrainConfig):
                     if any(n and n.strip() for n in negative_captions):
                         encoder_hidden_neg = encode_text(
                             [n or "" for n in negative_captions],
-                            tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len,
+                            tokenizer,
+                            text_encoder,
+                            device,
+                            dtype=torch.bfloat16,
+                            max_length=max_caption_len,
+                            text_bundle=text_bundle,
+                            train_fusion=True,
                         )
                     # Style conditioning (T5-encoded style text, blended with strength)
                     style_embedding = None
                     if getattr(cfg, "style_embed_dim", 0) and any(s and s.strip() for s in styles):
                         style_embedding = encode_text(
                             [s or "" for s in styles],
-                            tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len,
+                            tokenizer,
+                            text_encoder,
+                            device,
+                            dtype=torch.bfloat16,
+                            max_length=max_caption_len,
+                            text_bundle=text_bundle,
+                            train_fusion=True,
                         )
                         style_embedding = style_embedding.mean(dim=1)
                 latents_raw = latents
@@ -1192,7 +1297,19 @@ def main(cfg: TrainConfig):
                 log_images_every = getattr(cfg, "log_images_every", 0)
                 if rank == 0 and log_images_every > 0 and steps > 0 and steps % log_images_every == 0 and (tb_writer is not None or getattr(cfg, "wandb_project", None)):
                     try:
-                        _log_sample_image(ema, diffusion, tokenizer, text_encoder, vae, device, cfg, steps, tb_writer, rae_bridge=rae_bridge)
+                        _log_sample_image(
+                            ema,
+                            diffusion,
+                            tokenizer,
+                            text_encoder,
+                            vae,
+                            device,
+                            cfg,
+                            steps,
+                            tb_writer,
+                            rae_bridge=rae_bridge,
+                            text_bundle=text_bundle,
+                        )
                     except Exception as e:
                         logger.warning(f"Log sample image failed: {e}")
                 # Save best by train loss only when not using validation (when using val, best is by val loss)
@@ -1209,6 +1326,8 @@ def main(cfg: TrainConfig):
                     }
                     if rae_bridge is not None:
                         ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
+                    if text_bundle is not None and text_bundle.fusion is not None:
+                        ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
                     logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
@@ -1227,6 +1346,8 @@ def main(cfg: TrainConfig):
                 }
                 if rae_bridge is not None:
                     ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
+                if text_bundle is not None and text_bundle.fusion is not None:
+                    ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                 path = ckpt_dir / f"{steps:07d}.pt"
                 torch.save(ckpt, path)
                 logger.info(f"Checkpoint saved: {path}")
@@ -1254,6 +1375,7 @@ def main(cfg: TrainConfig):
                     max_batches=getattr(cfg, "val_max_batches", None),
                     rae_bridge=rae_bridge,
                     latent_scale=effective_latent_scale,
+                    text_bundle=text_bundle,
                 )
                 logger.info(f"Val loss @ step {steps}: {val_loss:.4f}")
                 if val_loss < best_val_loss:
@@ -1270,6 +1392,8 @@ def main(cfg: TrainConfig):
                     }
                     if rae_bridge is not None:
                         ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
+                    if text_bundle is not None and text_bundle.fusion is not None:
+                        ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
                     logger.info(f"Best checkpoint saved: {path} (val loss={best_val_loss:.4f})")
@@ -1302,6 +1426,31 @@ if __name__ == "__main__":
     parser.add_argument("--manifest-jsonl", type=str, default=None)
     parser.add_argument("--results-dir", type=str, default="results")
     parser.add_argument("--model", type=str, default="DiT-XL/2-Text")
+    parser.add_argument(
+        "--text-encoder",
+        type=str,
+        default="",
+        help="T5 encoder path or HF id (empty = use model/T5-XXL if present else google/t5-v1_1-xxl)",
+    )
+    parser.add_argument(
+        "--text-encoder-mode",
+        type=str,
+        default="t5",
+        choices=["t5", "triple"],
+        help="t5=T5 only; triple=T5+CLIP-L+CLIP-bigG with trainable fusion (match downloaded model/ stack)",
+    )
+    parser.add_argument(
+        "--clip-text-encoder-l",
+        type=str,
+        default="",
+        help="CLIP-ViT-L/14 folder or HF id (triple mode; empty = default)",
+    )
+    parser.add_argument(
+        "--clip-text-encoder-bigg",
+        type=str,
+        default="",
+        help="CLIP-ViT-bigG/14 folder or HF id (triple mode; empty = default)",
+    )
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse", help="Autoencoder model id/path (VAE=AutoencoderKL or RAE=AutoencoderRAE)")
     parser.add_argument("--autoencoder-type", type=str, default="kl", choices=["kl", "rae"], help="Autoencoder type: kl=AutoencoderKL, rae=AutoencoderRAE")
     parser.add_argument("--no-rae-latent-bridge", action="store_true", help="When using RAE with C!=4, error out instead of training RAELatentBridge")
@@ -1400,6 +1549,10 @@ if __name__ == "__main__":
         manifest_jsonl=args.manifest_jsonl,
         results_dir=args.results_dir,
         model_name=args.model,
+        text_encoder=(args.text_encoder or default_t5_path()),
+        text_encoder_mode=str(getattr(args, "text_encoder_mode", "t5")),
+        clip_text_encoder_l=str(getattr(args, "clip_text_encoder_l", "") or ""),
+        clip_text_encoder_bigg=str(getattr(args, "clip_text_encoder_bigg", "") or ""),
         image_size=args.image_size,
         vae_model=args.vae_model,
         autoencoder_type=args.autoencoder_type,
