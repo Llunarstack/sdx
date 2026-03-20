@@ -60,6 +60,8 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 |------|-------------|
 | [utils/__init__.py](../utils/__init__.py) | Package init. |
 | [utils/quality.py](../utils/quality.py) | Post-process: sharpen (unsharp mask), contrast. |
+| [utils/prompt_lint.py](../utils/prompt_lint.py) | Prompt adherence linting for SDX JSONL (pos/neg overlap + caption heuristics). |
+| [utils/image_quality_metrics.py](../utils/image_quality_metrics.py) | Pure-PIL/numpy image QC metrics (sharpness + contrast). |
 
 ### Scripts
 
@@ -75,6 +77,7 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/training/precompute_latents.py](../scripts/training/precompute_latents.py) | Precompute VAE latents for faster training. |
 | [scripts/tools/ckpt_info.py](../scripts/tools/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
 | [scripts/tools/data_quality.py](../scripts/tools/data_quality.py) | Filter/dedup JSONL or folder: `--dedup phash|md5`, `--min-caption-len`, `--bad-words`, `--min-weight` (IMPROVEMENTS 1.6). |
+| [scripts/tools/prompt_lint.py](../scripts/tools/prompt_lint.py) | Prompt adherence lint for SDX JSONL (empty captions, token heuristics, pos/neg overlap). |
 | [scripts/tools/tag_coverage.py](../scripts/tools/tag_coverage.py) | Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage. |
 | [scripts/tools/spatial_coverage.py](../scripts/tools/spatial_coverage.py) | Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...). |
 | [scripts/tools/op_preflight.py](../scripts/tools/op_preflight.py) | One-shot “coverage + thresholds” gate (PASS/FAIL) before training. |
@@ -84,6 +87,7 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/tools/export_onnx.py](../scripts/tools/export_onnx.py) | Export DiT from .pt to ONNX for deployment (optional `--dynamic-batch`). |
 | [scripts/tools/export_safetensors.py](../scripts/tools/export_safetensors.py) | Export .pt checkpoint DiT weights to .safetensors (ComfyUI/A1111); optional `--metadata` for config JSON. |
 | [scripts/tools/quick_test.py](../scripts/tools/quick_test.py) | Smoke test: one DiT forward pass to verify env. |
+| [scripts/tools/image_quality_qc.py](../scripts/tools/image_quality_qc.py) | Image QC for JSONL: Laplacian sharpness + grayscale contrast; optional fail thresholds. |
 
 ### Docs
 
