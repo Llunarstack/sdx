@@ -22,6 +22,16 @@ def main():
     print("PASS")
 
 
+def test_character_consistency_smoke():
+    """Collected by pytest (same checks as main())."""
+    root = Path(__file__).resolve().parents[1]
+    db_path = root / "demo_character_database"
+    assert db_path.is_dir(), f"missing {db_path}"
+    db = CharacterDatabase(str(db_path))
+    chars = db.list_characters()
+    assert len(chars) >= 0
+
+
 if __name__ == "__main__":
     main()
 

@@ -2,15 +2,10 @@
 Style Harmonization System - Handles mixed styles to prevent weird-looking images.
 Manages conflicts between 2D/3D styles, multiple LoRAs, and conflicting prompts.
 """
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from typing import Dict, List, Optional, Tuple, Any, Union
-import numpy as np
+from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 import re
-import json
 
 
 class StyleType(Enum):
@@ -523,7 +518,6 @@ class StyleHarmonizer:
         changes_made = []
         
         # Get user preferences
-        harmonization_mode = user_preferences.get("harmonization_mode", "balanced")  # balanced, preserve_dominant, blend_all
         max_strength_reduction = user_preferences.get("max_strength_reduction", 0.5)
         allow_prompt_modification = user_preferences.get("allow_prompt_modification", True)
         

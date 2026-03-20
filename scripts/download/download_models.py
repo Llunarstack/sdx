@@ -107,7 +107,7 @@ def main():
     do_llm_best = args.llm_best or args.all
 
     try:
-        from huggingface_hub import snapshot_download
+        import huggingface_hub  # noqa: F401
     except ImportError:
         print("Install: pip install huggingface_hub", file=sys.stderr)
         return 1

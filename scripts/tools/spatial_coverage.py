@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable
 
 
 def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:

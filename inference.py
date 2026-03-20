@@ -10,23 +10,13 @@ import torch
 # Run from repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config import get_dit_build_kwargs
 from diffusion import create_diffusion
-from models import DiT_models_text
+from utils.checkpoint_loading import load_dit_text_checkpoint
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = ckpt.get("config")
-    if cfg is None:
-        raise ValueError("Checkpoint must contain config")
-    model_name = getattr(cfg, "model_name", "DiT-XL/2-Text")
-    model_fn = DiT_models_text.get(model_name) or DiT_models_text["DiT-XL/2-Text"]
-    model = model_fn(**get_dit_build_kwargs(cfg, class_dropout_prob=0.0))
-    state = ckpt.get("ema") or ckpt.get("model")
-    model.load_state_dict(state, strict=True)
-    model = model.to(device).eval()
-    return model, cfg
+    model, cfg, rae_bridge, _ = load_dit_text_checkpoint(ckpt_path, device=device, reject_enhanced=False)
+    return model, cfg, rae_bridge
 
 
 def refine_latent_once(diffusion, model, x_0_latent, encoder_hidden_states, t_refine=50, device="cuda"):
@@ -50,7 +40,12 @@ def refine_latent_once(diffusion, model, x_0_latent, encoder_hidden_states, t_re
 def main():
     parser = argparse.ArgumentParser(description="Load checkpoint and run one sample (refinement optional)")
     parser.add_argument("--ckpt", type=str, required=True, help="Path to checkpoint (e.g. results/.../best.pt)")
-    parser.add_argument("--refine-output", action="store_true", default=True, help="Run one refinement pass to fix imperfections (default: True)")
+    parser.add_argument(
+        "--refine-output",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable/disable one refinement pass to fix imperfections (default: enabled)",
+    )
     parser.add_argument("--allow-imperfect", action="store_true", help="Skip refinement; output raw result (user wants fucked look)")
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
@@ -58,8 +53,10 @@ def main():
     refine = args.refine_output and not args.allow_imperfect
     print(f"Refinement pass: {'enabled (fix imperfections)' if refine else 'disabled (allow imperfect output)'}")
 
-    model, cfg = load_model_from_ckpt(args.ckpt, args.device)
-    diffusion = create_diffusion(
+    model, cfg, rae_bridge = load_model_from_ckpt(args.ckpt, args.device)
+    if rae_bridge is not None:
+        print("Loaded RAELatentBridge from checkpoint (RAE sampling).")
+    create_diffusion(
         timestep_respacing=getattr(cfg, "timestep_respacing", ""),
         num_timesteps=getattr(cfg, "num_timesteps", 1000),
         beta_schedule=getattr(cfg, "beta_schedule", "linear"),

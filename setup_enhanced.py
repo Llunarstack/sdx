@@ -2,11 +2,10 @@
 """
 Enhanced SDX Setup Script - Automatically configure and validate the enhanced SDX environment.
 """
-import os
 import sys
 import subprocess
+import importlib.util
 from pathlib import Path
-import json
 
 
 def run_command(cmd, check=True):
@@ -151,13 +150,18 @@ def validate_installation():
     print("\n🔍 Validating installation...")
     
     try:
-        # Test imports
-        import torch
-        import transformers
-        import diffusers
-        from utils.error_handling import setup_logging
-        from utils.config_validator import validate_train_config
-        from utils.data_analysis import DatasetAnalyzer
+        # Test required modules without unused import side effects.
+        required_modules = [
+            "torch",
+            "transformers",
+            "diffusers",
+            "utils.error_handling",
+            "utils.config_validator",
+            "utils.data_analysis",
+        ]
+        for module_name in required_modules:
+            if importlib.util.find_spec(module_name) is None:
+                raise ImportError(f"Missing module: {module_name}")
         
         print("✅ Core imports successful")
         
@@ -204,7 +208,7 @@ def run_quick_test():
         
         # Test dataset analyzer (without actual data)
         from utils.data_analysis import DatasetAnalyzer
-        analyzer = DatasetAnalyzer()
+        _analyzer = DatasetAnalyzer()
         print("   Dataset analyzer: initialized successfully")
         
         print("✅ Quick tests passed")

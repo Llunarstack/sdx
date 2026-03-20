@@ -5,7 +5,7 @@ Includes specialized loss functions and training procedures for advanced feature
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 import numpy as np
 from dataclasses import dataclass
 
@@ -18,7 +18,7 @@ from utils.enhanced_utils import (
 )
 from utils.character_consistency import CharacterDatabase, CharacterProfile, FaceEncoder, BodyEncoder
 from utils.consistency_losses import ConsistencyLossManager
-from utils.style_harmonization import StyleHarmonizer, create_style_harmonization_system
+from utils.style_harmonization import create_style_harmonization_system
 
 
 @dataclass
@@ -155,7 +155,6 @@ class AnatomyAwareLoss(nn.Module):
         hand_loss = 0.0
         if anatomy_keypoints is not None:
             # Focus on hand regions - would need more sophisticated implementation
-            hand_regions = anatomy_keypoints  # Simplified
             # Apply additional loss weighting to hand regions
             hand_loss = 0.1 * F.mse_loss(predicted_noise, target_noise)
         

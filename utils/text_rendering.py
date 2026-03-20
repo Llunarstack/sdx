@@ -3,12 +3,9 @@ Advanced text rendering system inspired by Ideogram and Google Imagen.
 Handles typography, text placement, and style integration in generated images.
 """
 import re
-import json
-from typing import Dict, List, Optional, Tuple, Any, Union
-from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Any
 import torch
-import torch.nn.functional as F
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 import numpy as np
 import difflib
 
@@ -225,7 +222,7 @@ class TextRenderingEngine:
                 validation_results["readability_score"] = readability
                 
                 # Identify issues
-                if accuracy < 0.5:
+                if validation_results["accuracy_score"] < 0.5:
                     validation_results["issues"].append("Low text accuracy")
                 if readability < 0.6:
                     validation_results["issues"].append("Poor readability")

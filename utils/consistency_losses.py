@@ -5,8 +5,7 @@ Integrates with the Enhanced DiT training pipeline to enforce character identity
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Optional, Tuple, Any
-import numpy as np
+from typing import Dict, List, Optional, Any
 from .character_consistency import CharacterProfile, FaceEncoder, BodyEncoder
 
 
@@ -52,7 +51,6 @@ class CharacterConsistencyLoss(nn.Module):
         Returns:
             Dictionary of loss components
         """
-        batch_size = generated_images.size(0)
         device = generated_images.device
         
         losses = {}
@@ -97,7 +95,6 @@ class CharacterConsistencyLoss(nn.Module):
                                        generated_images: torch.Tensor,
                                        character_profiles: List[CharacterProfile]) -> torch.Tensor:
         """Compute facial feature consistency loss."""
-        batch_size = generated_images.size(0)
         device = generated_images.device
         
         if not character_profiles or character_profiles[0].face_embedding is None:
@@ -136,7 +133,6 @@ class CharacterConsistencyLoss(nn.Module):
                                      generated_images: torch.Tensor,
                                      character_profiles: List[CharacterProfile]) -> torch.Tensor:
         """Compute body consistency loss."""
-        batch_size = generated_images.size(0)
         device = generated_images.device
         
         if not character_profiles or character_profiles[0].body_embedding is None:
@@ -179,7 +175,6 @@ class CharacterConsistencyLoss(nn.Module):
                                       generated_images: torch.Tensor,
                                       character_profiles: List[CharacterProfile]) -> torch.Tensor:
         """Compute color palette consistency loss."""
-        batch_size = generated_images.size(0)
         device = generated_images.device
         
         total_loss = torch.tensor(0.0, device=device)

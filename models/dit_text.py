@@ -2,7 +2,6 @@
 # Blends style + control + prompt without sloppy output.
 import torch
 import torch.nn as nn
-import numpy as np
 from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
 from .attention import (
     memory_efficient_attention,
@@ -13,6 +12,7 @@ from .attention import (
 from .controlnet import ControlNetEncoder
 from timm.models.vision_transformer import PatchEmbed, Mlp
 from .moe import MoEFeedForward, MoERouter
+from .pixart_blocks import SizeEmbedder, ZeroInitPatchChannelGate
 
 
 def modulate(x, shift, scale):
@@ -305,6 +305,8 @@ class DiT_Text(nn.Module):
         control_cond_dim=0,
         creativity_embed_dim=0,
         size_embed_dim=0,
+        patch_se: bool = False,
+        patch_se_reduction: int = 8,
         moe_num_experts: int = 0,
         moe_top_k: int = 2,
         # REPA (Representation Alignment)
@@ -334,6 +336,7 @@ class DiT_Text(nn.Module):
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
         self.creativity_embed_dim = creativity_embed_dim
+        self.size_embed_dim = int(size_embed_dim) if size_embed_dim is not None else 0
         self._moe_num_experts = int(moe_num_experts) if moe_num_experts is not None else 0
         self._moe_top_k = int(moe_top_k) if moe_top_k is not None else 2
 
@@ -379,6 +382,15 @@ class DiT_Text(nn.Module):
             )
         else:
             self.creativity_proj = None
+        if self.size_embed_dim > 0:
+            self.size_embedder = SizeEmbedder(self.size_embed_dim, concat_dims=False)
+            self.size_proj = nn.Linear(self.size_embed_dim, hidden_size)
+        else:
+            self.size_embedder = None
+            self.size_proj = None
+        self.patch_se = None
+        if patch_se:
+            self.patch_se = ZeroInitPatchChannelGate(hidden_size, reduction=max(2, int(patch_se_reduction)))
         if control_cond_dim > 0:
             self.control_encoder = ControlNetEncoder(
                 control_size=input_size, patch_size=patch_size, in_channels=3, hidden_size=hidden_size
@@ -448,6 +460,9 @@ class DiT_Text(nn.Module):
         if self.style_proj is not None:
             nn.init.normal_(self.style_proj.weight, std=0.02)
             nn.init.zeros_(self.style_proj.bias)
+        if self.size_proj is not None:
+            nn.init.normal_(self.size_proj.weight, std=0.02)
+            nn.init.zeros_(self.size_proj.bias)
         if self.control_encoder is not None:
             nn.init.xavier_uniform_(self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1))
             nn.init.zeros_(self.control_encoder.proj.bias)
@@ -500,6 +515,7 @@ class DiT_Text(nn.Module):
         if encoder_hidden_states is None:
             encoder_hidden_states = kwargs.get("y_embed")
         assert encoder_hidden_states is not None, "encoder_hidden_states required"
+        _b, _c_in, h_lat, w_lat = x.shape[0], x.shape[1], int(x.shape[2]), int(x.shape[3])
         x_patches = self.x_embedder(x)
         if not self.use_rope:
             x_patches = x_patches + self.pos_embed
@@ -513,6 +529,8 @@ class DiT_Text(nn.Module):
             control_feat = self.control_encoder(control_image)
             if control_feat.shape[1] == x.shape[1]:
                 x = x + control_scale * control_feat
+        if self.patch_se is not None:
+            x = self.patch_se(x)
         t_emb = self.t_embedder(t)
         text_emb = self.text_embedder(encoder_hidden_states, train=self.training)
         if conditioning_scale != 1.0:
@@ -533,6 +551,20 @@ class DiT_Text(nn.Module):
                 style_emb = style_emb.unsqueeze(1).expand(-1, text_emb.size(1), -1)
             text_emb = text_emb + style_strength * style_emb
         c = t_emb
+        size_embed = kwargs.get("size_embed")
+        if size_embed is None and self.size_embedder is not None and self.size_proj is not None:
+            # Default: latent grid (H, W) from input x before patchify (supports non-square later).
+            size_embed = torch.stack(
+                [
+                    torch.full((_b,), float(h_lat), device=x.device, dtype=torch.float32),
+                    torch.full((_b,), float(w_lat), device=x.device, dtype=torch.float32),
+                ],
+                dim=1,
+            )
+        if size_embed is not None and self.size_embedder is not None and self.size_proj is not None:
+            bs = x.shape[0]
+            size_emb = self.size_embedder(size_embed.to(device=x.device, dtype=torch.float32), bs)
+            c = c + self.size_proj(size_emb.to(dtype=c.dtype))
         creativity = kwargs.get("creativity")
         if creativity is not None and self.creativity_proj is not None:
             # creativity: (B,) in [0, 1]; add to conditioning

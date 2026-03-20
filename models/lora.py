@@ -3,7 +3,7 @@
 # Loads .safetensors or .pt; optional trigger words for tag-style LoRAs.
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from pathlib import Path
 
 

@@ -27,7 +27,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 
 def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
@@ -481,24 +481,6 @@ def main() -> None:
         "art_styles": "Add explicit art-style tokens (anime/manga/manhwa/oil painting/cyberpunk/noir/etc.) early in captions.",
     }
 
-    sug_zh: Dict[str, str] = {
-        "nsfw_descriptors": "如果你希望模型学到 NSFW 主题，请在数据集中保持 NSFW 描述词一致，并在 caption 里尽量靠前出现。",
-        "weird_strange": "加入更多超现实/怪诞/离奇描述，让模型稳定学到非标准画面风格。",
-        "clothes_wardrobe": "补充服装与配饰细节（服装类型、材质、配件），让穿搭更稳定。",
-        "anatomy_details": "加入解剖细节微词（纹身/疤痕/雀斑/穿孔等）提升特异性与一致性。",
-        "weapons_props": "明确写出武器/道具词，并可配合 'holding/gripping' 这类动作词。",
-        "food_drink": "补充具体食物/饮品词，并根据需要加上食用/摆盘语境。",
-        "text_in_image": "需要图中文字时，加入 'legible/clear/readable text' 以及拼写相关描述。",
-        "foreground_framing": "加入前景构图线索（foreground bokeh、近处物体）并尽量靠前。",
-        "background_framing": "加入背景构图线索（detailed background、backdrop、sky/horizon）。",
-        "fine_details": "加入纹理与细节描述（intricate、stitched、weathered、particles、micro details）。",
-        "hands_fingers": "如果手部失败，持续加入 'correct hands'、'five fingers'、'hand focus'。",
-        "pose_actions": "加入明确的姿势/动作词（standing/walking + holding/gripping/carrying 这类动词），避免场景塌缩。",
-        "character_scene": "如果要学多角色场景，请稳定加入群体/队伍词（group/crowd/team/room full of people）。",
-        "clothes_materials": "加入服装材质词（leather/silk/latex/denim/wool/cotton），让穿搭更稳定一致。",
-        "art_styles": "加入明确的艺术风格词（anime/manga/manhwa/oil painting/cyberpunk/noir 等），尽量前置。",
-    }
-
     lang = str(args.lang or "en").strip()
 
     def _load_suggestions(path_str: str) -> Dict[str, Dict[str, str]]:
@@ -520,7 +502,6 @@ def main() -> None:
         custom_suggestions = _load_suggestions(args.suggestions_json)
 
     normalized_lang = lang.lower()
-    is_zh = normalized_lang in ("zh", "cn", "zh-cn", "zh_cn", "中文")
     is_en = normalized_lang in ("en", "eng", "english")
 
     # Choose best available suggestion per category.

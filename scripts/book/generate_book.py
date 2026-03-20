@@ -16,11 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -443,7 +440,6 @@ def _try_ocr_fix(
 
 
 def main() -> None:
-    repo_root = _repo_root()
     sample_py_path = _sample_py()
     if not sample_py_path.exists():
         raise SystemExit(f"sample.py not found at {sample_py_path}")

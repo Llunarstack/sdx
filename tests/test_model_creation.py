@@ -74,7 +74,7 @@ def test_model_creation():
         )
 
     print("Forward pass OK.")
-    return model
+    assert _output is not None
 
 
 if __name__ == "__main__":

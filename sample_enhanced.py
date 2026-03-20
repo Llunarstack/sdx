@@ -4,7 +4,6 @@ Enhanced Inference Script for Advanced DiT Models
 Generate images using models with built-in precision control, anatomy awareness, text rendering, and consistency.
 """
 import argparse
-import os
 import sys
 from pathlib import Path
 import torch
@@ -59,8 +58,8 @@ def prepare_enhanced_inputs(prompt: str, args, device: str = "cuda"):
     # Initialize feature processors
     text_engine = SimpleTextEngine()
     scene_composer = SimpleSceneComposer()
-    anatomy_validator = SimpleAnatomyValidator()
-    consistency_manager = SimpleConsistencyManager()
+    _anatomy_validator = SimpleAnatomyValidator()
+    _consistency_manager = SimpleConsistencyManager()
     
     # Process spatial control
     if args.enable_spatial_control:
@@ -268,7 +267,7 @@ def main():
     print("Preparing enhanced features...")
     enhanced_inputs = prepare_enhanced_inputs(args.prompt, args, device)
     
-    print(f"Enhanced features enabled:")
+    print("Enhanced features enabled:")
     for feature, tensor in enhanced_inputs.items():
         print(f"  {feature}: {tensor.shape}")
     
@@ -301,7 +300,7 @@ def main():
     print(f"✅ Enhanced image saved to {args.output}")
     
     # Print feature summary
-    print(f"\n🎨 Generation Summary:")
+    print("\n🎨 Generation Summary:")
     print(f"  Model: {config.model_name}")
     print(f"  Prompt: {args.prompt}")
     print(f"  Enhanced features used: {len(enhanced_inputs)}")

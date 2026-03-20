@@ -2,15 +2,8 @@
 Anatomy & Pose Correction System - Address anatomical accuracy and complex pose generation.
 Implements pose validation, hand correction, and multi-person interaction handling.
 """
-import json
-import math
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
-from pathlib import Path
-import torch
-import numpy as np
-from PIL import Image, ImageDraw
-import cv2
 
 
 @dataclass

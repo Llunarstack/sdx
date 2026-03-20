@@ -9,18 +9,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import torch  # noqa: E402
-import numpy as np  # noqa: E402
 
-from models.enhanced_dit import EnhancedDiT_models, EnhancedDiT_XL_2  # noqa: E402
-from training.enhanced_trainer import EnhancedTrainingBatch, create_enhanced_trainer  # noqa: E402
-from data.enhanced_dataset import collate_enhanced_batch  # noqa: E402
-from utils.enhanced_utils import (  # noqa: E402
-    create_precision_control_system,
-    create_anatomy_correction_system,
-    create_text_rendering_pipeline,
-    create_consistency_system,
-)
+from models.enhanced_dit import EnhancedDiT_XL_2  # noqa: E402
 
 
 def test_enhanced_model_creation():
@@ -37,7 +27,7 @@ def test_enhanced_model_creation():
 
     print(f"Model created: {type(model).__name__}")
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
-    return True
+    assert model is not None
 
 
 def main():

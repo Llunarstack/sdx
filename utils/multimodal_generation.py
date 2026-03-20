@@ -2,13 +2,9 @@
 Multimodal Generation System - Comprehensive image generation with all advanced features integrated.
 Combines precision control, anatomy correction, consistency management, text rendering, and advanced prompting.
 """
-import json
 import asyncio
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
-from pathlib import Path
-import torch
-import numpy as np
 from PIL import Image
 import logging
 
