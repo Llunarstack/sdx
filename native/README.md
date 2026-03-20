@@ -4,11 +4,12 @@ Small **high-throughput utilities** around the Python training stack. They are *
 
 | Component | Role |
 |-----------|------|
-| **Rust** `rust/sdx-jsonl-tools` | Stream a manifest JSONL: validate JSON, require `image_path`/`caption` (or aliases), stats, optional filters. |
+| **Rust** `rust/sdx-jsonl-tools` | Stream a manifest JSONL: validate JSON, require `image_path`/`caption` (or aliases), stats, prompt lint. |
 | **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over lines (detect manifest changes without loading Python). |
 | **C++** `cpp/` | `libsdx_latent` — DiT/VAE **latent grid** helpers (`image_size`, `vae_scale`, `patch_size`) with **C ABI** for ctypes / other FFI. |
 | **Go** `go/sdx-manifest` | Merge multiple JSONL files; optional dedupe by image path (first wins). |
 | **Node** `js/sdx-jsonl-stat.mjs` | Zero-build manifest stats if you already have **Node 18+** (no Rust install). |
+| **Node** `js/sdx-promptlint.mjs` | Zero-build prompt adherence lint for JSONL (pos/neg overlap, empty captions, token heuristics). |
 
 ## Build (quick)
 
@@ -43,6 +44,7 @@ go build -o sdx-manifest .
 ### Node (optional)
 ```bash
 node native/js/sdx-jsonl-stat.mjs data/manifest.jsonl
+node native/js/sdx-promptlint.mjs data/manifest.jsonl
 ```
 
 ## Use with SDX manifests
@@ -57,6 +59,7 @@ Same conventions as `data/t2i_dataset.py` and `scripts/tools/data_quality.py`.
 ```bash
 native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools stats data/manifest.jsonl
 native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools validate --min-caption-len 5 data/manifest.jsonl
+native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools prompt-lint --max-caption-tokens 250 data/manifest.jsonl
 ```
 
 ### Example: Zig fingerprint (pipe or file)
