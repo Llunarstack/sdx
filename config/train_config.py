@@ -19,7 +19,11 @@ class TrainConfig:
 
     # Model
     model_name: str = "DiT-XL/2-Text"
-    text_encoder: str = "google/t5-v1_1-xxl"  # T5-XXL like PixArt/ReVe
+    text_encoder: str = "google/t5-v1_1-xxl"  # T5-XXL like PixArt/ReVe (or local path, e.g. model/T5-XXL)
+    # "t5" = T5 only (default). "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused (see utils/text_encoder_bundle.py).
+    text_encoder_mode: str = "t5"
+    clip_text_encoder_l: str = ""  # empty = use utils/model_paths default (local CLIP-ViT-L-14 or HF id)
+    clip_text_encoder_bigg: str = ""  # empty = default CLIP-ViT-bigG-14
     vae_model: str = "stabilityai/sd-vae-ft-mse"
     # Autoencoder type:
     # - "kl": AutoencoderKL (classic Stable Diffusion VAE)
@@ -37,7 +41,7 @@ class TrainConfig:
     # Recommended: one of:
     # - "facebook/dinov2-base" (768-dim)
     # - "openai/clip-vit-large-patch14" (768-dim)
-    repa_encoder_model: str = "facebook/dinov2-base"
+    repa_encoder_model: str = "facebook/dinov2-base"  # or local model/DINOv2-Large
     # The model's projection head output dim (must match the frozen encoder embedding dim).
     # For common models: CLIP ViT-L/14 -> 768, DINOv2 base -> 768, DINOv2 large -> 1024.
     repa_out_dim: int = 768
