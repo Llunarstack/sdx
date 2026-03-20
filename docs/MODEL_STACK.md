@@ -1,6 +1,6 @@
 # Local model stack (`model/`)
 
-When folders exist under `model/`, paths resolve automatically (see `utils/model_paths.py`).
+When folders exist under `model/`, paths resolve automatically (see `utils/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Pipeline showcase](../README.md#pipeline-showcase)** and **[FILES.md](FILES.md)**.
 
 | Role | Folder / default |
 |------|------------------|
@@ -11,6 +11,12 @@ When folders exist under `model/`, paths resolve automatically (see `utils/model
 | SigLIP | `model/SigLIP-SO400M` |
 | Qwen LLM | `model/Qwen2.5-14B-Instruct` |
 | Stable Cascade | `model/StableCascade-Prior`, `model/StableCascade-Decoder` |
+
+## How this maps to the SDX pipeline
+
+- **DiT generation** uses **text** encoders (T5, optionally + CLIP fusion) and **image latents** from VAE/RAE — see the main **[README § Pipeline showcase](../README.md#pipeline-showcase)** for full diagrams (DiT vs `ViT/` QA tools vs REPA).
+- **`ViT/`** in this repo is a **separate** scoring/ranking stack (timm ViT on manifests), not the same module as the DiT generator.
+- **REPA** uses a **frozen vision** model (often DINOv2) to align DiT **internal** features during training.
 
 ## Training
 
@@ -28,4 +34,4 @@ When folders exist under `model/`, paths resolve automatically (see `utils/model
 ## Other
 
 - **Qwen prompt expansion:** `utils/llm_client.py` (`load_qwen_causal_lm`, `expand_prompt_qwen`).
-- **Stable Cascade (Diffusers):** `python scripts/cascade_generate.py --prompt "..."` (separate from DiT).
+- **Stable Cascade (Diffusers):** `python scripts/cascade_generate.py --prompt "..."` — separate from DiT; does not share the DiT forward pass.
