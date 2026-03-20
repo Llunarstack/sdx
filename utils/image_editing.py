@@ -2,12 +2,8 @@
 Advanced image editing system inspired by DALL-E 3 and ReVe.
 Supports inpainting, outpainting, object manipulation, and style transfer.
 """
-import json
 from typing import Dict, List, Optional, Tuple, Any, Union
-from pathlib import Path
-import torch
-import torch.nn.functional as F
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
+from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
 import cv2
 
@@ -134,8 +130,6 @@ class InpaintingEngine:
                            edit_instruction: str,
                            edit_type: str = "replace") -> str:
         """Generate optimized prompt for inpainting."""
-        edit_context = self.edit_types.get(edit_type, "Edit the selected area")
-        
         # Construct inpainting prompt
         if edit_type == "remove":
             prompt = f"{base_prompt}, remove {edit_instruction}, seamless background, natural lighting"

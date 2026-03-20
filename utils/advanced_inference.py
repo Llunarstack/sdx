@@ -5,19 +5,11 @@ Integrated with precision control, anatomy correction, consistency management, a
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any, Union
-import torch
-import torch.nn.functional as F
+from typing import Dict, List, Optional, Any
 from PIL import Image, ImageEnhance, ImageFilter
 import numpy as np
 
 # Import the new advanced systems
-from .precision_control import create_precision_control_system
-from .anatomy_correction import create_anatomy_correction_system
-from .consistency_system import create_consistency_system
-from .advanced_prompting import create_advanced_prompting_system
-from .text_rendering import create_text_rendering_pipeline
-from .image_editing import create_editing_pipeline
 
 
 class PromptOptimizer:
@@ -348,16 +340,14 @@ class QualityAnalyzer:
             "compression_score": 0.0
         }
         
-        # Convert to numpy array
-        img_array = np.array(image)
-        
         # Blur detection (inverse of sharpness)
         sharpness = QualityAnalyzer.calculate_sharpness(image)
         artifacts["blur_score"] = max(0, 1.0 - sharpness / 1000.0)  # Normalize
         
         # Noise detection (high frequency content)
         gray = np.array(image.convert('L'))
-        noise_estimate = np.std(gray - ndimage.median_filter(gray, size=3))
+        median = np.array(image.convert("L").filter(ImageFilter.MedianFilter(size=3)))
+        noise_estimate = np.std(gray - median)
         artifacts["noise_score"] = min(1.0, noise_estimate / 50.0)  # Normalize
         
         # Compression artifacts (simplified detection)

@@ -20,23 +20,27 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
 
-# Enable TF32 on Ampere+ for speed
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-
 # Project imports (run from repo root: python train.py ...)
 from config.train_config import TrainConfig, get_dit_build_kwargs
 try:
     from config.pixai_reference import get_pixai_style_label
 except ImportError:
-    get_pixai_style_label = lambda m: "PixAI.art-style"
+    def get_pixai_style_label(_model_name):
+        return "PixAI.art-style"
 from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.loss_weighting import get_loss_weight
 from models import DiT_models_text
-from utils.error_handling import setup_logging, log_gpu_memory, retry_on_cuda_oom, validate_checkpoint, get_model_info
-from utils.config_validator import validate_train_config, estimate_memory_usage, suggest_optimizations
-from utils.metrics import MetricsTracker, TrainingMetrics, ProgressBar, log_system_info
+from models.rae_latent_bridge import RAELatentBridge
+from utils.checkpoint_manager import CheckpointManager
+from utils.error_handling import setup_logging, log_gpu_memory, get_model_info
+from utils.config_validator import validate_train_config, estimate_memory_usage
+from utils.metrics import MetricsTracker, log_system_info
+from utils.model_viz import print_model_summary
+
+# Enable TF32 on Ampere+ for speed
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 # Lazy heavy imports (T5, VAE) to speed up startup when only parsing args
 _transformers = None
@@ -49,6 +53,18 @@ def get_rule_loss(batch, pixel_values, vae, device, cfg):
     out = torch.zeros(B, device=device, dtype=pixel_values.dtype)
     # Optional: add real rules, e.g. "no text" via OCR on decoded image (decode pixel_values or use batch["path"] with PIL)
     return out
+
+
+def _size_embed_from_latents(latents: torch.Tensor, device, dtype=torch.float32) -> torch.Tensor:
+    """(B, 2) latent grid (H, W) for PixArt-style SizeEmbedder."""
+    b, _, h, w = latents.shape
+    return torch.stack(
+        [
+            torch.full((b,), float(h), device=device, dtype=dtype),
+            torch.full((b,), float(w), device=device, dtype=dtype),
+        ],
+        dim=1,
+    )
 
 
 def get_t5_and_vae(device, cfg: TrainConfig):
@@ -272,27 +288,32 @@ def compute_mdm_training_loss(
 
     ph = H // mdm_patch_size
     pw = W // mdm_patch_size
+    sched = sorted(((int(ts), float(r)) for ts, r in mdm_mask_schedule), key=lambda x: x[0]) if mdm_mask_schedule else []
+    if sched:
+        first_t, first_r = sched[0]
+        last_t, last_r = sched[-1]
+        first_r_t = torch.tensor(first_r, device=device, dtype=torch.float32)
+        last_r_t = torch.tensor(last_r, device=device, dtype=torch.float32)
+    else:
+        first_t = first_r_t = last_t = last_r_t = None
+
     def _scheduled_ratio_for_t(t_steps: torch.Tensor):
-        if not mdm_mask_schedule:
+        if not sched:
             return torch.full_like(t_steps, float(mdm_mask_ratio), dtype=torch.float32, device=device)
-        # schedule: list[(t_step:int, mask_ratio:float)]
-        sched = sorted([(int(ts), float(r)) for ts, r in mdm_mask_schedule], key=lambda x: x[0])
         t_i = t_steps.to(torch.int64)
         default_r = float(mdm_mask_ratio)
         out = torch.full_like(t_steps, default_r, dtype=torch.float32, device=device)
 
         # Clamp ends to first/last schedule values.
         if len(sched) >= 1:
-            first_t, first_r = sched[0]
-            last_t, last_r = sched[-1]
             out = torch.where(
                 t_i <= int(first_t),
-                torch.tensor(float(first_r), device=device, dtype=torch.float32),
+                first_r_t,
                 out,
             )
             out = torch.where(
                 t_i >= int(last_t),
-                torch.tensor(float(last_r), device=device, dtype=torch.float32),
+                last_r_t,
                 out,
             )
 
@@ -395,6 +416,8 @@ def eval_val_loss(
     refinement_max_t=150,
     max_caption_len=300,
     max_batches=None,
+    rae_bridge=None,
+    latent_scale=1.0,
 ):
     """Average loss over validation set (EMA model, no backward). Used for early stopping and best-by-val checkpoint."""
     ema_model.eval()
@@ -412,7 +435,9 @@ def eval_val_loss(
             if "latent_values" in batch:
                 latents = batch["latent_values"].to(device, non_blocking=True).to(torch.bfloat16)
             else:
-                latents = encode_images_vae(pixel_values, vae, effective_latent_scale)
+                latents = encode_images_vae(pixel_values, vae, latent_scale)
+            if rae_bridge is not None and latents.shape[1] != 4:
+                latents = rae_bridge.rae_to_dit(latents)
             encoder_hidden = encode_text(
                 captions, tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len
             )
@@ -444,6 +469,8 @@ def eval_val_loss(
             if getattr(cfg, "creativity_embed_dim", 0) > 0:
                 creativity_max = getattr(cfg, "creativity_max", 1.0)
                 model_kwargs["creativity"] = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+            if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
+                model_kwargs["size_embed"] = _size_embed_from_latents(latents, device)
             sample_weights = batch.get("sample_weights")
             if sample_weights is not None:
                 sample_weights = sample_weights.to(device)
@@ -557,7 +584,7 @@ def get_scheduled_caption_dropout(step: int, schedule) -> float:
     return float(schedule[-1][1])
 
 
-def _log_sample_image(ema_model, diffusion, tokenizer, text_encoder, vae, device, cfg, steps, tb_writer):
+def _log_sample_image(ema_model, diffusion, tokenizer, text_encoder, vae, device, cfg, steps, tb_writer, rae_bridge=None):
     """Generate one sample with EMA and log to TensorBoard/WandB (IMPROVEMENTS 5.1)."""
     ema_model.eval()
     demo_prompt = getattr(cfg, "log_images_prompt", "a photo of a cat")
@@ -569,9 +596,14 @@ def _log_sample_image(ema_model, diffusion, tokenizer, text_encoder, vae, device
         latent_size = image_size // 8
         shape = (1, 4, latent_size, latent_size)
         sample_steps = min(20, getattr(cfg, "num_timesteps", 1000) // 25)
+        mk_cond = {"encoder_hidden_states": enc}
+        if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
+            mk_cond["size_embed"] = torch.tensor(
+                [[float(latent_size), float(latent_size)]], device=device, dtype=torch.float32
+            )
         x0 = diffusion.sample_loop(
             ema_model, shape,
-            model_kwargs_cond={"encoder_hidden_states": enc},
+            model_kwargs_cond=mk_cond,
             model_kwargs_uncond=None,
             cfg_scale=7.5,
             num_inference_steps=sample_steps,
@@ -581,6 +613,8 @@ def _log_sample_image(ema_model, diffusion, tokenizer, text_encoder, vae, device
         )
         if ae_type == "kl":
             x0 = x0 / latent_scale
+        elif ae_type == "rae" and rae_bridge is not None:
+            x0 = rae_bridge.dit_to_rae(x0)
         img = vae.decode(x0).sample
         img = (img * 0.5 + 0.5).clamp(0, 1)
         img = img[0].permute(1, 2, 0).cpu().numpy()
@@ -591,7 +625,6 @@ def _log_sample_image(ema_model, diffusion, tokenizer, text_encoder, vae, device
     if getattr(cfg, "wandb_project", None):
         try:
             import wandb
-            import numpy as np
             wandb.log({"sample": wandb.Image(img)}, step=steps)
         except Exception:
             pass
@@ -675,17 +708,13 @@ def main(cfg: TrainConfig):
         ckpt_dir = exp_dir / "checkpoints"
         ckpt_dir.mkdir(exist_ok=True)
         
-        # Initialize enhanced checkpoint manager
-        checkpoint_manager = CheckpointManager(str(ckpt_dir))
-        
-        # Initialize metrics tracker
-        metrics_tracker = MetricsTracker(str(exp_dir))
+        # Initialize enhanced utilities
+        _checkpoint_manager = CheckpointManager(str(ckpt_dir))
+        _metrics_tracker = MetricsTracker(str(exp_dir))
         
         logger = create_logger(str(exp_dir))
     else:
         exp_dir = Path(cfg.results_dir) / "run"
-        checkpoint_manager = None
-        metrics_tracker = None
         logger = create_logger(None)
 
     # Log GPU memory before loading models
@@ -703,6 +732,7 @@ def main(cfg: TrainConfig):
     # - spatial downsample factor = 8 (latent_hw = image_size // 8)
     # Representation Autoencoders (RAE) typically produce different latent channel sizes (e.g. 768),
     # so we fail fast with a clear message instead of crashing later in the diffusion loop.
+    rae_bridge = None
     if ae_type == "rae":
         latent_hw_expected = int(cfg.image_size) // 8
         latent_channels_expected = 4
@@ -718,19 +748,25 @@ def main(cfg: TrainConfig):
                 latent_hw_rae = None
 
         if latent_channels_rae is not None and int(latent_channels_rae) != latent_channels_expected:
-            raise ValueError(
-                "AutoencoderRAE selected, but this repo's DiT expects 4-channel SD latents. "
-                f"RAE encoder_hidden_size={latent_channels_rae}, expected={latent_channels_expected}. "
-                "To use RAE properly, you must update the DiT/diffusion latent channel dimensions (in_channels) "
-                "and the latent spatial resolution assumptions."
-            )
+            if getattr(cfg, "rae_use_latent_bridge", True):
+                rae_bridge = RAELatentBridge(int(latent_channels_rae), latent_channels_expected).to(device)
+                logger.info(
+                    f"RAE encoder_hidden_size={latent_channels_rae} -> DiT 4ch via RAELatentBridge "
+                    f"(cycle loss weight={getattr(cfg, 'rae_bridge_cycle_weight', 0.0)})."
+                )
+            else:
+                raise ValueError(
+                    "AutoencoderRAE selected, but this repo's DiT expects 4-channel SD latents. "
+                    f"RAE encoder_hidden_size={latent_channels_rae}, expected={latent_channels_expected}. "
+                    "Use default --rae-use-latent-bridge (omit --no-rae-latent-bridge) or change autoencoder."
+                )
         if latent_hw_rae is not None and int(latent_hw_rae) != latent_hw_expected:
             raise ValueError(
                 "AutoencoderRAE selected, but the RAE latent spatial size doesn't match this repo's assumptions. "
                 f"RAE latent_hw={latent_hw_rae}, expected={latent_hw_expected} (image_size//8). "
-                "To use RAE properly, update the DiT/diffusion latent spatial assumptions."
+                "Resize training --image-size or use an RAE matching latent_hw = image_size//8."
             )
-    
+
     # DiT text model (build from cfg via get_dit_build_kwargs)
     model_fn = DiT_models_text.get(cfg.model_name)
     if model_fn is None:
@@ -764,8 +800,11 @@ def main(cfg: TrainConfig):
         prediction_type=getattr(cfg, "prediction_type", "epsilon"),
     )
 
+    opt_params = list(model.parameters())
+    if rae_bridge is not None:
+        opt_params += list(rae_bridge.parameters())
     opt = torch.optim.AdamW(
-        model.parameters(),
+        opt_params,
         lr=cfg.lr,
         weight_decay=cfg.weight_decay,
         betas=(0.9, 0.999),
@@ -790,6 +829,12 @@ def main(cfg: TrainConfig):
                     pass
             start_step = ckpt.get("steps", 0)
             best_loss = ckpt.get("best_loss", float("inf"))
+            if rae_bridge is not None and ckpt.get("rae_latent_bridge"):
+                try:
+                    rae_bridge.load_state_dict(ckpt["rae_latent_bridge"], strict=True)
+                    logger.info("Loaded rae_latent_bridge from checkpoint.")
+                except Exception as e:
+                    logger.warning(f"Could not load rae_latent_bridge: {e}")
             logger.info(f"Resumed from {resume_path} at step {start_step}")
 
     # Data
@@ -985,6 +1030,12 @@ def main(cfg: TrainConfig):
                             tokenizer, text_encoder, device, dtype=torch.bfloat16, max_length=max_caption_len,
                         )
                         style_embedding = style_embedding.mean(dim=1)
+                latents_raw = latents
+                if rae_bridge is not None and latents_raw.shape[1] != 4:
+                    latents = rae_bridge.rae_to_dit(latents_raw)
+                    z_cycle = latents_raw.detach()
+                else:
+                    z_cycle = None
                 t = torch.randint(0, diffusion.num_timesteps, (latents.shape[0],), device=device)
                 model_kwargs = {
                     "encoder_hidden_states": encoder_hidden,
@@ -1000,6 +1051,8 @@ def main(cfg: TrainConfig):
                 if getattr(cfg, "creativity_embed_dim", 0) > 0:
                     creativity_max = getattr(cfg, "creativity_max", 1.0)
                     model_kwargs["creativity"] = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+                if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
+                    model_kwargs["size_embed"] = _size_embed_from_latents(latents, device)
                 sample_weights = batch.get("sample_weights")
                 if sample_weights is not None:
                     sample_weights = sample_weights.to(device)
@@ -1070,6 +1123,10 @@ def main(cfg: TrainConfig):
                         repa_target = _repa_features(pixel_values, device=device, cfg=cfg).to(dtype=repa_pred.dtype)
                         repa_loss = torch.nn.functional.mse_loss(repa_pred, repa_target)
                         loss = loss + repa_w * repa_loss
+                if rae_bridge is not None and z_cycle is not None:
+                    cw = float(getattr(cfg, "rae_bridge_cycle_weight", 0.0))
+                    if cw > 0:
+                        loss = loss + cw * rae_bridge.cycle_loss(z_cycle)
                 rule_loss_weight = getattr(cfg, "rule_loss_weight", 0.0)
                 if rule_loss_weight > 0:
                     rule_loss = get_rule_loss(batch, pixel_values, vae, device, cfg)
@@ -1082,7 +1139,10 @@ def main(cfg: TrainConfig):
             if (steps + 1) % cfg.grad_accum_steps == 0:
                 if cfg.max_grad_norm > 0:
                     scaler.unscale_(opt)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
+                    _gparams = list(model.parameters())
+                    if rae_bridge is not None:
+                        _gparams += list(rae_bridge.parameters())
+                    torch.nn.utils.clip_grad_norm_(_gparams, cfg.max_grad_norm)
                 scaler.step(opt)
                 scaler.update()
                 opt.zero_grad()
@@ -1132,7 +1192,7 @@ def main(cfg: TrainConfig):
                 log_images_every = getattr(cfg, "log_images_every", 0)
                 if rank == 0 and log_images_every > 0 and steps > 0 and steps % log_images_every == 0 and (tb_writer is not None or getattr(cfg, "wandb_project", None)):
                     try:
-                        _log_sample_image(ema, diffusion, tokenizer, text_encoder, vae, device, cfg, steps, tb_writer)
+                        _log_sample_image(ema, diffusion, tokenizer, text_encoder, vae, device, cfg, steps, tb_writer, rae_bridge=rae_bridge)
                     except Exception as e:
                         logger.warning(f"Log sample image failed: {e}")
                 # Save best by train loss only when not using validation (when using val, best is by val loss)
@@ -1147,6 +1207,8 @@ def main(cfg: TrainConfig):
                         "best_loss": best_loss,
                         "config": cfg,
                     }
+                    if rae_bridge is not None:
+                        ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
                     logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
@@ -1163,6 +1225,8 @@ def main(cfg: TrainConfig):
                     "steps": steps,
                     "config": cfg,
                 }
+                if rae_bridge is not None:
+                    ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
                 path = ckpt_dir / f"{steps:07d}.pt"
                 torch.save(ckpt, path)
                 logger.info(f"Checkpoint saved: {path}")
@@ -1188,6 +1252,8 @@ def main(cfg: TrainConfig):
                     refinement_max_t=refinement_max_t,
                     max_caption_len=curriculum_lengths[-1] if curriculum_lengths else 300,
                     max_batches=getattr(cfg, "val_max_batches", None),
+                    rae_bridge=rae_bridge,
+                    latent_scale=effective_latent_scale,
                 )
                 logger.info(f"Val loss @ step {steps}: {val_loss:.4f}")
                 if val_loss < best_val_loss:
@@ -1202,6 +1268,8 @@ def main(cfg: TrainConfig):
                         "best_loss": best_val_loss,
                         "config": cfg,
                     }
+                    if rae_bridge is not None:
+                        ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
                     logger.info(f"Best checkpoint saved: {path} (val loss={best_val_loss:.4f})")
@@ -1236,6 +1304,8 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="DiT-XL/2-Text")
     parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse", help="Autoencoder model id/path (VAE=AutoencoderKL or RAE=AutoencoderRAE)")
     parser.add_argument("--autoencoder-type", type=str, default="kl", choices=["kl", "rae"], help="Autoencoder type: kl=AutoencoderKL, rae=AutoencoderRAE")
+    parser.add_argument("--no-rae-latent-bridge", action="store_true", help="When using RAE with C!=4, error out instead of training RAELatentBridge")
+    parser.add_argument("--rae-bridge-cycle-weight", type=float, default=0.01, help="Cycle loss weight for RAELatentBridge (0=off)")
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--global-batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=100)
@@ -1278,7 +1348,9 @@ if __name__ == "__main__":
     parser.add_argument("--control-scale", type=float, default=0.85, help="ControlNet strength in training (0.7-1.0)")
     parser.add_argument("--creativity-embed-dim", type=int, default=0, help="Creativity/diversity knob (0=off; e.g. 64)")
     parser.add_argument("--creativity-max", type=float, default=1.0, help="Training: sample creativity in [0, this]")
-    parser.add_argument("--size-embed-dim", type=int, default=0, help="Supreme: (h,w) conditioning dim for multi-res (0=off)")
+    parser.add_argument("--size-embed-dim", type=int, default=0, dest="size_embed_dim", help="PixArt-style latent (H,W) -> timestep embed dim (0=off; DiT still sees native res via pos embed)")
+    parser.add_argument("--patch-se", action="store_true", dest="patch_se", help="Zero-init patch channel gate after patch embed (identity at init)")
+    parser.add_argument("--patch-se-reduction", type=int, default=8, dest="patch_se_reduction", help="Bottleneck divisor for patch SE MLP")
     parser.add_argument("--curriculum-difficulty-steps", type=str, default=None, help="Comma-sep steps for difficulty curriculum (e.g. 0,5000,10000); use with JSONL 'difficulty' 0-1")
     parser.add_argument("--no-difficulty-easy-first", action="store_true", help="If set, late steps prefer easy (default: early=easy)")
     parser.add_argument("--rule-loss-weight", type=float, default=0.0, help="Constitutional/rule auxiliary loss weight (0=off)")
@@ -1331,6 +1403,8 @@ if __name__ == "__main__":
         image_size=args.image_size,
         vae_model=args.vae_model,
         autoencoder_type=args.autoencoder_type,
+        rae_use_latent_bridge=not getattr(args, "no_rae_latent_bridge", False),
+        rae_bridge_cycle_weight=float(getattr(args, "rae_bridge_cycle_weight", 0.01)),
         global_batch_size=args.global_batch_size,
         epochs=args.epochs,
         lr=args.lr,
@@ -1367,6 +1441,8 @@ if __name__ == "__main__":
         creativity_embed_dim=args.creativity_embed_dim,
         creativity_max=args.creativity_max,
         size_embed_dim=getattr(args, "size_embed_dim", 0),
+        patch_se=getattr(args, "patch_se", False),
+        patch_se_reduction=getattr(args, "patch_se_reduction", 8),
         curriculum_difficulty_steps=[int(x.strip()) for x in args.curriculum_difficulty_steps.split(",") if x.strip()] if (getattr(args, "curriculum_difficulty_steps", None) and str(args.curriculum_difficulty_steps).strip()) else None,
         curriculum_difficulty_easy_first=not getattr(args, "no_difficulty_easy_first", False),
         rule_loss_weight=args.rule_loss_weight,

@@ -2,10 +2,8 @@
 Enhanced utilities for advanced DiT training and inference.
 Provides simplified versions of advanced features for integration.
 """
-import torch
-import torch.nn.functional as F
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from PIL import Image
 
 

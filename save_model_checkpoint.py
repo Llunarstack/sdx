@@ -79,13 +79,13 @@ def save_model_checkpoint():
     # Get file size
     file_size_gb = checkpoint_path.stat().st_size / 1024**3
     
-    print(f"✅ Checkpoint saved successfully!")
+    print("✅ Checkpoint saved successfully!")
     print(f"📁 File: {checkpoint_path}")
     print(f"📊 Size: {file_size_gb:.2f} GB")
     print(f"🎯 Parameters: {total_params:,} ({total_params/1e9:.1f}B)")
     
     # Test loading
-    print(f"\n🧪 Testing checkpoint loading...")
+    print("\n🧪 Testing checkpoint loading...")
     loaded_checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     
     # Create new model and load weights
@@ -99,15 +99,15 @@ def save_model_checkpoint():
     
     test_model.load_state_dict(loaded_checkpoint["model"])
     
-    print(f"✅ Checkpoint loaded successfully!")
+    print("✅ Checkpoint loaded successfully!")
     print(f"📋 Loaded config: {loaded_checkpoint['config'].model_name}")
     print(f"🔧 Enhanced features: {loaded_checkpoint['enhanced_features']}")
     
-    print(f"\n🎉 Success! You now have a 3B parameter Enhanced DiT model!")
-    print(f"📝 Usage:")
-    print(f"   - Use this checkpoint for inference")
-    print(f"   - Continue training from this checkpoint")
-    print(f"   - Fine-tune on your specific dataset")
+    print("\n🎉 Success! You now have a 3B parameter Enhanced DiT model!")
+    print("📝 Usage:")
+    print("   - Use this checkpoint for inference")
+    print("   - Continue training from this checkpoint")
+    print("   - Fine-tune on your specific dataset")
     
     return checkpoint_path
 

@@ -26,6 +26,9 @@ class TrainConfig:
     # - "rae": AutoencoderRAE (Representation Autoencoder; diffusion works on its encode()/decode() latents)
     autoencoder_type: str = "kl"
     latent_scale: float = 0.18215
+    # When RAE latent channels != 4: train a 1x1 bridge (RAELatentBridge) to/from DiT latents (see models/rae_latent_bridge.py).
+    rae_use_latent_bridge: bool = True
+    rae_bridge_cycle_weight: float = 0.01  # Auxiliary cycle loss z ≈ to_rae(to_dit(z)); 0=off
 
     # --- REPA (Representation Alignment) ---
     # Optional auxiliary loss to align DiT internal features with a frozen vision encoder
@@ -71,7 +74,10 @@ class TrainConfig:
     # Creativity/diversity knob (IMPROVEMENTS 8.7): 0 = off; else hidden dim for scalar conditioning (e.g. 64)
     creativity_embed_dim: int = 0
     creativity_max: float = 1.0  # Training: sample creativity in [0, creativity_max]
-    size_embed_dim: int = 0  # Supreme: (h, w) conditioning for multi-res; 0 = off
+    size_embed_dim: int = 0  # PixArt-style (h, w) latent grid -> timestep conditioning; 0 = off (still can infer H,W from x)
+    # Optional channel gate on patch tokens after embed (zero-init = identity at start).
+    patch_se: bool = False
+    patch_se_reduction: int = 8
 
     # Diffusion (SD/SDXL-style options)
     num_timesteps: int = 1000
@@ -200,6 +206,8 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
         "control_cond_dim": getattr(cfg, "control_cond_dim", 0),
         "creativity_embed_dim": getattr(cfg, "creativity_embed_dim", 0),
         "size_embed_dim": getattr(cfg, "size_embed_dim", 0),
+        "patch_se": bool(getattr(cfg, "patch_se", False)),
+        "patch_se_reduction": int(getattr(cfg, "patch_se_reduction", 8)),
     }
 
     # REPA (Representation Alignment) upgrade:

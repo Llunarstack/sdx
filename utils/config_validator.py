@@ -1,9 +1,8 @@
 """
 Configuration validation utilities for SDX training and inference.
 """
-import os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 import torch
 from config.train_config import TrainConfig
 

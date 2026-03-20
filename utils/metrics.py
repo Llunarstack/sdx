@@ -177,8 +177,6 @@ class ProgressBar:
 
 def calculate_model_flops(model: torch.nn.Module, input_shape: tuple) -> int:
     """Estimate FLOPs for model forward pass (rough approximation)."""
-    total_params = sum(p.numel() for p in model.parameters())
-    
     # Very rough FLOP estimation for transformer models
     # This is a simplified calculation and may not be accurate
     batch_size, seq_len, hidden_dim = input_shape

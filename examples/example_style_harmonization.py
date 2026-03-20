@@ -3,15 +3,13 @@
 Style Harmonization System Example
 Demonstrates how to handle mixed styles to prevent weird-looking images.
 """
-import os
 import sys
-import json
 from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.style_harmonization import create_style_harmonization_system, StyleType  # noqa: E402
+from utils.style_harmonization import create_style_harmonization_system  # noqa: E402
 
 
 def demonstrate_style_conflict_detection():
@@ -79,12 +77,12 @@ def demonstrate_style_harmonization():
         print(f"    - {change}")
 
     print("  Original LoRAs:")
-    for l in loras:
-        print(f"    - {l['name']}: {l['strength']}")
+    for lora_cfg in loras:
+        print(f"    - {lora_cfg['name']}: {lora_cfg['strength']}")
 
     print("  Harmonized LoRAs:")
-    for l in result["harmonized_loras"]:
-        print(f"    - {l['name']}: {l['strength']}")
+    for lora_cfg in result["harmonized_loras"]:
+        print(f"    - {lora_cfg['name']}: {lora_cfg['strength']}")
 
     print()
 

@@ -2,7 +2,6 @@
 # Keeps structure (edges, depth, pose) without making the image sloppy.
 import torch
 import torch.nn as nn
-from timm.models.vision_transformer import PatchEmbed
 
 
 class ControlNetEncoder(nn.Module):

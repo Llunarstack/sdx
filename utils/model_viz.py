@@ -4,7 +4,6 @@ Model architecture visualization and analysis utilities.
 import torch
 import torch.nn as nn
 from typing import Dict, List, Tuple, Any
-from pathlib import Path
 import json
 
 
@@ -85,7 +84,7 @@ def print_model_summary(model: nn.Module, input_shape: Tuple[int, ...] = None):
             memory_per_sample = 1  # Rough estimate in MB
             total_memory = batch_size * memory_per_sample + analysis['model_size_mb']
             print(f"Estimated Memory Usage: {total_memory:.2f} MB")
-        except:
+        except Exception:
             pass
     
     print("=" * 80)

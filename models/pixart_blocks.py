@@ -58,3 +58,26 @@ class SizeEmbedder(nn.Module):
         if not self.concat_dims:
             s_emb = s_emb.mean(dim=1, keepdim=True).expand(-1, self.hidden_size)
         return s_emb
+
+
+class ZeroInitPatchChannelGate(nn.Module):
+    """
+    Lightweight channel-wise gate on patch tokens (SE-style).
+    Last layer is zero-initialized so forward starts as identity: x + x * tanh(0) = x.
+    Helps the model learn resolution- and content-dependent channel scaling without
+    disturbing a pretrained checkpoint at step 0.
+    """
+
+    def __init__(self, dim: int, reduction: int = 8):
+        super().__init__()
+        mid = max(dim // max(1, reduction), 32)
+        self.norm = nn.LayerNorm(dim, elementwise_affine=True, eps=1e-6)
+        self.fc1 = nn.Linear(dim, mid)
+        self.fc2 = nn.Linear(mid, dim)
+        nn.init.zeros_(self.fc2.weight)
+        nn.init.zeros_(self.fc2.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, N, D)
+        g = self.fc2(torch.nn.functional.gelu(self.fc1(self.norm(x.mean(dim=1)))))
+        return x + x * torch.tanh(g).unsqueeze(1)

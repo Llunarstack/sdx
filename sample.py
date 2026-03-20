@@ -22,36 +22,35 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config import get_dit_build_kwargs
 from config.model_presets import apply_op_mode_to_args, apply_preset_to_args
 from diffusion import create_diffusion
-from models import DiT_models_text
+from utils.checkpoint_loading import load_dit_text_checkpoint
+
+
+def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
+    """Map RAE latent (B,C,h,w) to DiT 4-channel space when checkpoint includes RAELatentBridge."""
+    if z is None or ae_type != "rae" or rae_bridge is None:
+        return z
+    if z.shape[1] == 4:
+        return z
+    return rae_bridge.rae_to_dit(z)
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = ckpt.get("config")
-    if cfg is None:
-        raise ValueError("Checkpoint must contain config")
-    model_name = getattr(cfg, "model_name", "DiT-XL/2-Text")
-    if str(model_name).startswith("EnhancedDiT"):
-        raise ValueError(
-            "This checkpoint is an EnhancedDiT model, which is not compatible with sample.py (DiT-Text/T5 sampler).\n"
-            "Use sample_enhanced.py instead:\n"
-            "  python sample_enhanced.py \"<prompt>\" --checkpoint <path_to_ckpt> --output out.png\n"
-            "Or train a DiT-*-Text checkpoint with train.py to use sample.py."
-        )
-    model_fn = DiT_models_text.get(model_name) or DiT_models_text["DiT-XL/2-Text"]
-    model = model_fn(**get_dit_build_kwargs(cfg, class_dropout_prob=0.0))
-    state = ckpt.get("ema") or ckpt.get("model")
-    model.load_state_dict(state, strict=True)
-    model = model.to(device).eval()
+    model, cfg, rae_bridge, model_name = load_dit_text_checkpoint(
+        ckpt_path,
+        device=device,
+        reject_enhanced=True,
+    )
     try:
         from config.pixai_reference import get_pixai_style_label
         print(f"Model: {model_name} — {get_pixai_style_label(model_name)}")
     except ImportError:
         pass
-    return model, cfg
+    if rae_bridge is not None:
+        rae_c = int(rae_bridge.to_dit.weight.shape[1])
+        print(f"Loaded RAELatentBridge: rae_channels={rae_c} -> 4 (DiT latent space)")
+    return model, cfg, rae_bridge
 
 
 # T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
@@ -377,7 +376,7 @@ def encode_text(captions, tokenizer, text_encoder, device, max_length=300, dtype
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate image: prompt, negative prompt, steps, width, height (no CFG/sampler/scheduler).")
+    parser = argparse.ArgumentParser(description="Generate image: prompt, negative prompt, steps, width, height, CFG, and scheduler.")
     parser.add_argument("--ckpt", type=str, required=True, help="Checkpoint path (e.g. results/.../best.pt)")
     parser.add_argument("--prompt", type=str, default="", help="Positive prompt (optional if --tags or --tags-file provided)")
     parser.add_argument("--negative-prompt", type=str, default="", help="Negative prompt (what to avoid)")
@@ -429,6 +428,21 @@ def main():
     # PBFM-style guidance (lightweight edge/high-pass drift in latent update)
     parser.add_argument("--pbfm-edge-boost", type=float, default=0.0, help="PBFM heuristic: add high-pass drift to x0_pred (0=off).")
     parser.add_argument("--pbfm-edge-kernel", type=int, default=3, help="PBFM high-pass kernel size (odd >=3).")
+    # Test-time scaling: generate N candidates (--num) and keep the best (§11.3 IMPROVEMENTS.md)
+    parser.add_argument(
+        "--pick-best",
+        type=str,
+        default="none",
+        choices=["none", "clip", "edge", "ocr", "combo"],
+        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo)",
+    )
+    parser.add_argument("--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best")
+    parser.add_argument(
+        "--pick-clip-model",
+        type=str,
+        default="openai/clip-vit-base-patch32",
+        help="HF model id for --pick-best clip/combo",
+    )
     parser.add_argument("--vae-tiling", action="store_true", help="Enable VAE tiling for decode (lower VRAM for large output)")
     parser.add_argument("--grid", action="store_true", help="When --num > 1, also save a single N-up grid image (e.g. 2x2 for 4)")
     parser.add_argument("--deterministic", action="store_true", help="Reproducible decode: cudnn deterministic + benchmark off (same seed -> same image when supported)")
@@ -631,7 +645,7 @@ def main():
                 pass
 
     print("Loading checkpoint and encoders...")
-    model, cfg = load_model_from_ckpt(args.ckpt, device)
+    model, cfg, rae_bridge = load_model_from_ckpt(args.ckpt, device)
 
     # Apply LoRAs
     if args.lora:
@@ -684,12 +698,12 @@ def main():
                 latent_hw_rae = None
 
         if latent_channels_rae is not None and int(latent_channels_rae) != latent_channels_expected:
-            raise ValueError(
-                "AutoencoderRAE selected, but this repo's DiT expects 4-channel SD latents. "
-                f"RAE encoder_hidden_size={latent_channels_rae}, expected={latent_channels_expected}. "
-                "To use RAE properly, update the DiT/diffusion latent channel dimensions (in_channels) "
-                "and latent spatial assumptions."
-            )
+            if rae_bridge is None:
+                raise ValueError(
+                    "AutoencoderRAE latent channels != 4 but checkpoint has no rae_latent_bridge. "
+                    f"encoder_hidden_size={latent_channels_rae}. Train with "
+                    "`train.py --autoencoder-type rae` (bridge is created automatically) and sample this checkpoint."
+                )
         if latent_hw_rae is not None and int(latent_hw_rae) != latent_hw_expected:
             raise ValueError(
                 "AutoencoderRAE selected, but the RAE latent spatial size doesn't match this repo's assumptions. "
@@ -716,6 +730,8 @@ def main():
 
     # Encode prompts (cond = positive, uncond = negative; default negative when empty)
     num_gen = max(1, getattr(args, "num", 1))
+    if num_gen < 2 and str(getattr(args, "pick_best", "none")).lower() not in ("none", ""):
+        print("Note: --pick-best only applies with --num >= 2; ignoring.", file=sys.stderr)
     # Resolve emphasis (word)/[word] first so we have prompt_to_encode for conflict filter
     if "(" in args.prompt or "[" in args.prompt:
         prompt_to_encode, _emphasis_segments = _parse_prompt_emphasis(args.prompt)
@@ -829,6 +845,13 @@ def main():
         uncond_emb = uncond_emb.expand(num_gen, -1, -1)
     model_kwargs_cond = {"encoder_hidden_states": cond_emb}
     model_kwargs_uncond = {"encoder_hidden_states": uncond_emb}
+    if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
+        lh = max(1, image_size // 8)
+        lw = max(1, image_size // 8)
+        bsz = cond_emb.shape[0]
+        sz = torch.tensor([[float(lh), float(lw)]], device=device, dtype=torch.float32).expand(bsz, -1)
+        model_kwargs_cond["size_embed"] = sz
+        model_kwargs_uncond["size_embed"] = sz
     if style_emb_cached is not None:
         if num_gen > 1:
             style_emb_cached = style_emb_cached.expand(num_gen, -1)
@@ -869,6 +892,7 @@ def main():
         if z.dim() == 3:
             z = z.unsqueeze(0)
         x_init = z.to(device=device, dtype=torch.float32)
+        x_init = _maybe_rae_to_dit(x_init, ae_type, rae_bridge)
         start_timestep = int(args.strength * num_timesteps)
         start_timestep = min(max(1, start_timestep), num_timesteps - 1)
         x_init = diffusion.q_sample(x_init, torch.tensor([start_timestep], device=device).expand(x_init.shape[0]))
@@ -886,6 +910,7 @@ def main():
                 z0 = enc.latent_dist.sample() * latent_scale
             else:
                 z0 = enc.latent
+            z0 = _maybe_rae_to_dit(z0, ae_type, rae_bridge)
         start_timestep = int(args.strength * num_timesteps)
         start_timestep = min(max(1, start_timestep), num_timesteps - 1)
         if args.mask:
@@ -998,9 +1023,11 @@ def main():
         else:
             print("Model does not support --save-attn (e.g. DiT-P); skipping.", file=sys.stderr)
 
-    # Decode with VAE
+    # Decode with VAE / RAE
     if ae_type == "kl":
         x0 = x0 / latent_scale
+    elif ae_type == "rae" and rae_bridge is not None:
+        x0 = rae_bridge.dit_to_rae(x0)
     image = vae.decode(x0).sample
     image = (image * 0.5 + 0.5).clamp(0, 1)
     out_h, out_w = image_size, image_size
@@ -1018,6 +1045,7 @@ def main():
     stem, ext = out_path.stem, out_path.suffix or ".png"
     saved_imgs = []
 
+    processed = []
     for i in range(num_gen):
         img_np = image[i].permute(1, 2, 0).cpu().numpy()
         img_np = (img_np * 255).round().astype("uint8")
@@ -1038,13 +1066,44 @@ def main():
                 img_np = naturalize(img_np, grain_amount=grain, micro_contrast=1.02, seed=args.seed + i)
             except Exception:
                 pass
-        saved_imgs.append(img_np)
-        if num_gen == 1:
-            save_path = out_path
-        else:
+        processed.append(img_np)
+    saved_imgs = processed
+
+    pick_m = (getattr(args, "pick_best", None) or "none").lower()
+    best_idx = 0
+    if num_gen > 1 and pick_m != "none":
+        from utils.test_time_pick import pick_best_indices
+
+        exp_ocr = ""
+        if isinstance(expected_texts, list) and expected_texts:
+            exp_ocr = str(expected_texts[0])
+        best_idx, scores = pick_best_indices(
+            processed,
+            prompt_to_encode,
+            pick_m,
+            str(device),
+            exp_ocr,
+            getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32"),
+        )
+        print(f"pick-best ({pick_m}): scores={scores} -> best index {best_idx}")
+
+    if getattr(args, "pick_save_all", False) and num_gen > 1:
+        for i in range(num_gen):
+            cand_path = out_path.parent / f"{stem}_cand{i}{ext}"
+            Image.fromarray(processed[i]).save(cand_path)
+            print(f"Saved candidate: {cand_path}")
+
+    if num_gen == 1:
+        Image.fromarray(processed[0]).save(out_path)
+        print(f"Saved: {out_path}")
+    elif pick_m != "none":
+        Image.fromarray(processed[best_idx]).save(out_path)
+        print(f"Saved best ({pick_m}): {out_path}")
+    else:
+        for i in range(num_gen):
             save_path = out_path.parent / f"{stem}_{i}{ext}"
-        Image.fromarray(img_np).save(save_path)
-        print(f"Saved: {save_path}")
+            Image.fromarray(processed[i]).save(save_path)
+            print(f"Saved: {save_path}")
 
     # Optional: write prompt/seed/steps sidecar for reproducibility
     if getattr(args, "save_prompt", False):

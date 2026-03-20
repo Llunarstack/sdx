@@ -3,14 +3,10 @@ Consistency & Memory System - Address the lack of memory and consistency across 
 Implements character consistency, style memory, and scene continuity.
 """
 import json
-import hashlib
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from pathlib import Path
-import torch
-import numpy as np
 from PIL import Image
-import pickle
 
 
 @dataclass

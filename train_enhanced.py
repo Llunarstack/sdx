@@ -5,14 +5,11 @@ Trains models with built-in precision control, anatomy awareness, text rendering
 """
 import argparse
 import glob
-import logging
-import math
 import os
 import sys
 from copy import deepcopy
 from pathlib import Path
 from time import time
-from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -73,21 +70,6 @@ class ProgressBar:
     def close(self):
         """Close progress bar."""
         print()  # New line
-from torch.utils.data.distributed import DistributedSampler
-
-# Enable TF32 on Ampere+ for speed
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-
-# Project imports
-from config.train_config import TrainConfig
-from models.enhanced_dit import EnhancedDiT_models
-from training.enhanced_trainer import create_enhanced_trainer
-from data.enhanced_dataset import EnhancedT2IDataset, collate_enhanced_batch
-from diffusion import create_diffusion
-from utils.error_handling import setup_logging, log_gpu_memory
-from utils.metrics import MetricsTracker, TrainingMetrics, ProgressBar
-
 
 def get_enhanced_config():
     """Get enhanced training configuration."""
@@ -219,7 +201,7 @@ def main():
     
     # Create diffusion
     logger.info("Creating diffusion...")
-    diffusion = create_diffusion(
+    create_diffusion(
         timestep_respacing=cfg.timestep_respacing,
         beta_schedule=cfg.beta_schedule,
     )

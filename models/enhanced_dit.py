@@ -5,11 +5,10 @@ Enhanced DiT Architecture with Built-in Advanced Features
 - Text rendering specialized layers
 - Consistency embedding systems
 """
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional
 import numpy as np
 
 from .dit import DiTBlock, TimestepEmbedder, LabelEmbedder, get_2d_sincos_pos_embed
@@ -69,7 +68,7 @@ class SpatialControlModule(nn.Module):
             x = x + 0.3 * x_attended
             
             # Apply counting constraints
-            count_weights = self.count_constraint(spatial_features.mean(dim=1))  # [B, num_objects]
+            _count_weights = self.count_constraint(spatial_features.mean(dim=1))  # [B, num_objects]
             # Use count_weights to modulate attention (implementation detail)
         
         return x

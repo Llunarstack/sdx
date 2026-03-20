@@ -7,12 +7,19 @@ import argparse
 import sys
 from pathlib import Path
 import json
+import torch
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from utils.master_integration import create_sdx_master, quick_generate, quick_optimize_prompt, quick_analyze_dataset
-from utils.multimodal_generation import GenerationRequest
+from utils.master_integration import create_sdx_master, quick_generate
+from config.train_config import TrainConfig
+from utils.config_validator import validate_train_config, estimate_memory_usage, suggest_optimizations
+from utils.checkpoint_manager import CheckpointManager, analyze_checkpoint_differences, merge_checkpoints
+from utils.data_analysis import DatasetAnalyzer
+from utils.advanced_inference import PromptOptimizer
+from utils.model_viz import analyze_model_architecture, print_model_summary
+from utils.error_handling import validate_checkpoint
 
 
 def cmd_analyze_dataset(args):
@@ -62,7 +69,7 @@ def cmd_validate_config(args):
     # Memory estimation
     if args.estimate_memory:
         memory_est = estimate_memory_usage(cfg)
-        print(f"\n💾 Memory Estimation:")
+        print("\n💾 Memory Estimation:")
         print(f"  Model Memory: {memory_est['model_memory_gb']:.1f} GB")
         print(f"  Batch Memory: {memory_est['batch_memory_gb']:.1f} GB")
         print(f"  Total Estimated: {memory_est['total_estimated_gb']:.1f} GB")
@@ -72,7 +79,7 @@ def cmd_validate_config(args):
     if args.suggest_optimizations:
         suggestions = suggest_optimizations(cfg)
         if suggestions:
-            print(f"\n💡 Optimization Suggestions:")
+            print("\n💡 Optimization Suggestions:")
             for suggestion in suggestions:
                 print(f"  - {suggestion}")
 
@@ -103,7 +110,7 @@ def cmd_manage_checkpoints(args):
             return
         
         comparison = manager.compare_checkpoints(args.checkpoints[0], args.checkpoints[1])
-        print(f"📊 Checkpoint Comparison:")
+        print("📊 Checkpoint Comparison:")
         print(f"  Checkpoint 1: {comparison['checkpoint1']}")
         print(f"  Checkpoint 2: {comparison['checkpoint2']}")
         print(f"  Step Difference: {comparison['step_diff']}")
@@ -117,7 +124,7 @@ def cmd_manage_checkpoints(args):
         
         analysis = analyze_checkpoint_differences(args.checkpoints[0], args.checkpoints[1])
         
-        print(f"🔬 Detailed Checkpoint Analysis:")
+        print("🔬 Detailed Checkpoint Analysis:")
         print(f"  Total Parameters: {analysis['statistics']['total_parameters']:,}")
         print(f"  Average Difference: {analysis['statistics']['average_difference']:.8f}")
         print(f"  Max Difference: {analysis['statistics']['max_difference']:.8f}")
@@ -396,7 +403,7 @@ def cmd_generate_image(args):
                 db = CharacterDatabase()
                 consistency_scores = db.validate_consistency(image_tensor, character_profile.character_id)
                 
-                print(f"🎭 Character Consistency Results:")
+                print("🎭 Character Consistency Results:")
                 print(f"   Overall Score: {consistency_scores['overall_consistency']:.3f}")
                 print(f"   Level: {consistency_scores['consistency_level']}")
                 
@@ -487,7 +494,7 @@ def cmd_create_character_profile(args):
             style_preferences=style_preferences
         )
         
-        print(f"✅ Character profile created successfully!")
+        print("✅ Character profile created successfully!")
         print(f"   Character ID: {profile.character_id}")
         print(f"   Name: {profile.name}")
         print(f"   Reference Images: {len(profile.reference_images)}")
@@ -593,7 +600,7 @@ def cmd_update_character(args):
         # Update character
         updated_profile = db.update_character(args.character_id, updates)
         
-        print(f"✅ Character updated successfully!")
+        print("✅ Character updated successfully!")
         print(f"   Character ID: {updated_profile.character_id}")
         print(f"   Name: {updated_profile.name}")
         print(f"   Last Updated: {updated_profile.last_updated}")
@@ -631,11 +638,10 @@ def cmd_delete_character(args):
 def cmd_validate_character_consistency(args):
     """Validate character consistency in an image."""
     from utils.character_consistency import CharacterDatabase
-    import torch
     from PIL import Image
     import torchvision.transforms as transforms
     
-    print(f"🔍 Validating character consistency:")
+    print("🔍 Validating character consistency:")
     print(f"   Character ID: {args.character_id}")
     print(f"   Image: {args.image}")
     
@@ -654,7 +660,7 @@ def cmd_validate_character_consistency(args):
         # Validate consistency
         scores = db.validate_consistency(image_tensor, args.character_id)
         
-        print(f"\n📊 Consistency Results:")
+        print("\n📊 Consistency Results:")
         print(f"   Face Similarity: {scores['face_similarity']:.3f}")
         print(f"   Body Similarity: {scores['body_similarity']:.3f}")
         print(f"   Color Consistency: {scores['color_consistency']:.3f}")
@@ -727,12 +733,12 @@ def cmd_character_statistics(args):
             hair_colors[char.physical_features.hair_color] = hair_colors.get(char.physical_features.hair_color, 0) + 1
     
     if face_shapes:
-        print(f"\n   Face Shape Distribution:")
+        print("\n   Face Shape Distribution:")
         for shape, count in sorted(face_shapes.items()):
             print(f"     {shape}: {count}")
     
     if eye_colors:
-        print(f"\n   Eye Color Distribution:")
+        print("\n   Eye Color Distribution:")
         for color, count in sorted(eye_colors.items()):
             print(f"     {color}: {count}")
     
@@ -768,7 +774,7 @@ def cmd_analyze_styles(args):
     """Analyze style conflicts in prompt and LoRAs."""
     from utils.style_harmonization import create_style_harmonization_system
     
-    print(f"🎨 Analyzing style conflicts:")
+    print("🎨 Analyzing style conflicts:")
     print(f"   Prompt: {args.prompt}")
     
     # Parse LoRA configurations
@@ -811,33 +817,33 @@ def cmd_analyze_styles(args):
             user_preferences={"harmonization_mode": "analyze_only"}
         )
         
-        print(f"\n📊 Style Analysis Results:")
+        print("\n📊 Style Analysis Results:")
         print(f"   Dominant Style: {result['style_analysis']['dominant_style']}")
         print(f"   Conflict Level: {result['style_analysis']['conflict_level']}")
         print(f"   Number of Conflicts: {result['style_analysis']['num_conflicts']}")
         print(f"   Harmonization Needed: {'Yes' if result['style_analysis']['harmonization_applied'] else 'No'}")
         
         if result['detected_styles']:
-            print(f"\n🎭 Detected Styles:")
+            print("\n🎭 Detected Styles:")
             for style in result['detected_styles']:
                 print(f"     {style['name']} ({style['source']}): {style['type']} (strength: {style['strength']:.2f})")
         
         if result['conflicts']:
-            print(f"\n⚠️  Style Conflicts:")
+            print("\n⚠️  Style Conflicts:")
             for conflict in result['conflicts']:
                 print(f"     {conflict['style1']} ↔ {conflict['style2']}: {conflict['severity']} "
                       f"(score: {conflict['conflict_score']:.2f})")
         
         # Provide recommendations
         if result['style_analysis']['conflict_level'] != 'none':
-            print(f"\n💡 Recommendations:")
-            print(f"   - Consider using style harmonization to resolve conflicts")
+            print("\n💡 Recommendations:")
+            print("   - Consider using style harmonization to resolve conflicts")
             print(f"   - Focus on the dominant {result['style_analysis']['dominant_style']} style")
             if result['style_analysis']['conflict_level'] in ['severe', 'incompatible']:
-                print(f"   - Remove or reduce conflicting style elements")
-                print(f"   - Use bridging terms to blend compatible styles")
+                print("   - Remove or reduce conflicting style elements")
+                print("   - Use bridging terms to blend compatible styles")
         else:
-            print(f"\n✅ No conflicts detected - styles work well together!")
+            print("\n✅ No conflicts detected - styles work well together!")
         
         # Save results if specified
         if args.output:
@@ -854,7 +860,7 @@ def cmd_harmonize_styles(args):
     """Harmonize conflicting styles."""
     from utils.style_harmonization import create_style_harmonization_system
     
-    print(f"🎨 Harmonizing styles:")
+    print("🎨 Harmonizing styles:")
     print(f"   Original Prompt: {args.prompt}")
     
     # Parse configurations (same as analyze)
@@ -904,28 +910,28 @@ def cmd_harmonize_styles(args):
             user_preferences=user_preferences
         )
         
-        print(f"\n✨ Harmonization Results:")
+        print("\n✨ Harmonization Results:")
         print(f"   Harmonized Prompt: {result['harmonized_prompt']}")
         
         if result['changes_made']:
-            print(f"\n🔧 Changes Made:")
+            print("\n🔧 Changes Made:")
             for change in result['changes_made']:
                 print(f"     - {change}")
         else:
-            print(f"\n✅ No changes needed - styles already harmonious!")
+            print("\n✅ No changes needed - styles already harmonious!")
         
         # Show adjusted LoRAs
         if result['adjusted_loras'] != lora_configs:
-            print(f"\n🎛️  Adjusted LoRAs:")
+            print("\n🎛️  Adjusted LoRAs:")
             for lora in result['adjusted_loras']:
-                original_lora = next((l for l in lora_configs if l['name'] == lora['name']), None)
+                original_lora = next((item for item in lora_configs if item['name'] == lora['name']), None)
                 if original_lora and original_lora['strength'] != lora['strength']:
                     print(f"     {lora['name']}: {original_lora['strength']:.2f} → {lora['strength']:.2f}")
                 else:
                     print(f"     {lora['name']}: {lora['strength']:.2f}")
         
         # Show style analysis
-        print(f"\n📊 Style Analysis:")
+        print("\n📊 Style Analysis:")
         print(f"   Conflict Level: {result['style_analysis']['conflict_level']}")
         print(f"   Dominant Style: {result['style_analysis']['dominant_style']}")
         
@@ -944,7 +950,7 @@ def cmd_check_style_compatibility(args):
     """Check compatibility between different style types."""
     from utils.style_harmonization import StyleCompatibilityMatrix, StyleType
     
-    print(f"🔍 Checking style compatibility:")
+    print("🔍 Checking style compatibility:")
     
     # Parse style types
     style_types = []
@@ -964,7 +970,7 @@ def cmd_check_style_compatibility(args):
     try:
         compatibility_matrix = StyleCompatibilityMatrix()
         
-        print(f"\n📊 Compatibility Matrix:")
+        print("\n📊 Compatibility Matrix:")
         print(f"{'Style 1':<15} {'Style 2':<15} {'Compatibility':<12} {'Status'}")
         print("-" * 60)
         
@@ -995,17 +1001,17 @@ def cmd_check_style_compatibility(args):
                 })
         
         # Provide recommendations
-        print(f"\n💡 Recommendations:")
+        print("\n💡 Recommendations:")
         excellent_pairs = [r for r in compatibility_results if r["compatibility"] >= 0.8]
         poor_pairs = [r for r in compatibility_results if r["compatibility"] < 0.3]
         
         if excellent_pairs:
-            print(f"   ✅ Highly compatible combinations:")
+            print("   ✅ Highly compatible combinations:")
             for pair in excellent_pairs:
                 print(f"     - {pair['style1']} + {pair['style2']}")
         
         if poor_pairs:
-            print(f"   ⚠️  Avoid these combinations:")
+            print("   ⚠️  Avoid these combinations:")
             for pair in poor_pairs:
                 print(f"     - {pair['style1']} + {pair['style2']} (use harmonization)")
         
@@ -1125,13 +1131,13 @@ def cmd_get_statistics(args):
         print(f"GPU count: {system_info.get('gpu_count', 0)}")
         
         if stats.get('model_info'):
-            print(f"\n🤖 Model Information:")
+            print("\n🤖 Model Information:")
             model_info = stats['model_info']
             print(f"Total parameters: {model_info.get('total_parameters', 0):,}")
             print(f"Model size: {model_info.get('model_size_mb', 0):.1f} MB")
         
         if stats.get('generation_stats'):
-            print(f"\n🎨 Generation Statistics:")
+            print("\n🎨 Generation Statistics:")
             gen_stats = stats['generation_stats']
             print(f"Total generations: {gen_stats.get('total_generations', 0)}")
             print(f"Successful generations: {gen_stats.get('successful_generations', 0)}")

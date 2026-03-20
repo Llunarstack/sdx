@@ -2,15 +2,11 @@
 Precision Control System - Address the core limitation of AI image models lacking true spatial reasoning.
 Implements scene composition, object placement validation, and multi-stage generation for exact control.
 """
-import json
 import math
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
-from pathlib import Path
-import torch
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-import cv2
+from PIL import Image, ImageDraw
 
 
 @dataclass

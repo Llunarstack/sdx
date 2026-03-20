@@ -1,0 +1,142 @@
+"""
+Test-time scaling: score candidate RGB images (uint8 HWC) to pick the best sample.
+Used by sample.py --pick-best (§11.3 IMPROVEMENTS.md).
+"""
+from __future__ import annotations
+
+import re
+from typing import List, Sequence, Tuple
+
+import numpy as np
+
+_clip_model = None
+_clip_processor = None
+_clip_model_id = None
+
+
+def _norm01(scores: Sequence[float]) -> List[float]:
+    s = list(scores)
+    if not s:
+        return []
+    lo, hi = min(s), max(s)
+    if hi - lo < 1e-8:
+        return [0.5] * len(s)
+    return [(x - lo) / (hi - lo) for x in s]
+
+
+def score_edge_sharpness(rgb_uint8: np.ndarray) -> float:
+    """Higher = sharper (Laplacian variance on grayscale)."""
+    try:
+        import cv2
+    except ImportError:
+        return float(np.std(rgb_uint8.astype(np.float32)))
+    if rgb_uint8.ndim != 3 or rgb_uint8.shape[2] < 3:
+        g = rgb_uint8.astype(np.float32)
+    else:
+        g = cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2GRAY)
+    return float(cv2.Laplacian(g, cv2.CV_64F).var())
+
+
+def score_ocr_match(rgb_uint8: np.ndarray, expected: str) -> float:
+    """
+    Rough [0,1] score: ratio of expected alphanumeric chars found in OCR string.
+    Higher = better match to expected text.
+    """
+    if not expected or not str(expected).strip():
+        return 0.5
+    try:
+        from PIL import Image
+        import pytesseract
+    except ImportError:
+        return 0.5
+    pil = Image.fromarray(rgb_uint8, mode="RGB")
+    try:
+        txt = pytesseract.image_to_string(pil) or ""
+    except Exception:
+        return 0.0
+    exp = re.sub(r"\s+", "", str(expected).upper())
+    got = re.sub(r"\s+", "", txt.upper())
+    if not exp:
+        return 0.5
+    hit = sum(1 for c in exp if c in got)
+    return hit / max(1, len(exp))
+
+
+def score_clip_similarity(
+    rgb_uint8_list: List[np.ndarray],
+    prompt: str,
+    device: str,
+    model_id: str = "openai/clip-vit-base-patch32",
+) -> List[float]:
+    """Per-image CLIP image-text similarity (higher = better prompt alignment)."""
+    global _clip_model, _clip_processor, _clip_model_id
+    if not prompt or not str(prompt).strip():
+        return [0.5] * len(rgb_uint8_list)
+    try:
+        from PIL import Image
+        import torch
+        from transformers import CLIPModel, CLIPProcessor
+    except ImportError:
+        return [0.5] * len(rgb_uint8_list)
+
+    if _clip_model is None or _clip_model_id != model_id:
+        _clip_processor = CLIPProcessor.from_pretrained(model_id)
+        _clip_model = CLIPModel.from_pretrained(model_id).to(device)
+        _clip_model.eval()
+        _clip_model_id = model_id
+
+    pil_images = [Image.fromarray(im, mode="RGB") for im in rgb_uint8_list]
+    proc = _clip_processor(text=[prompt], images=pil_images, return_tensors="pt", padding=True)
+    proc = {k: v.to(device) for k, v in proc.items()}
+    with torch.no_grad():
+        out = _clip_model(**proc)
+        logits = out.logits_per_image  # (N, 1) when one text duplicated
+        if logits.shape[-1] == 1:
+            scores = logits[:, 0].float().cpu().numpy().tolist()
+        else:
+            scores = logits.diag().float().cpu().numpy().tolist()
+    return [float(s) for s in scores]
+
+
+def pick_best_indices(
+    rgb_images: List[np.ndarray],
+    prompt: str,
+    metric: str,
+    device: str,
+    expected_text: str = "",
+    clip_model_id: str = "openai/clip-vit-base-patch32",
+) -> Tuple[int, List[float]]:
+    """
+    Return (best_index, raw_scores_one_per_image).
+    metric: none|clip|edge|ocr|combo
+    """
+    metric = (metric or "none").lower().strip()
+    n = len(rgb_images)
+    if n == 0:
+        return 0, []
+    if metric in ("none", ""):
+        return 0, [0.0] * n
+
+    if metric == "edge":
+        scores = [score_edge_sharpness(im) for im in rgb_images]
+        return int(np.argmax(scores)), scores
+
+    if metric == "ocr":
+        scores = [score_ocr_match(im, expected_text) for im in rgb_images]
+        return int(np.argmax(scores)), scores
+
+    if metric == "clip":
+        scores = score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id)
+        return int(np.argmax(scores)), scores
+
+    if metric == "combo":
+        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
+        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
+        if expected_text and str(expected_text).strip():
+            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
+            combined = [0.5 * c + 0.35 * e + 0.15 * o for c, e, o in zip(s_clip, s_edge, s_ocr)]
+        else:
+            combined = [0.65 * c + 0.35 * e for c, e in zip(s_clip, s_edge)]
+        return int(np.argmax(combined)), combined
+
+    return 0, [0.0] * n

@@ -3,12 +3,11 @@ Data quality analysis and dataset statistics utilities.
 """
 import json
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Optional, Any
 import numpy as np
 from PIL import Image
-import torch
 
 
 class DatasetAnalyzer:
@@ -53,7 +52,7 @@ class DatasetAnalyzer:
                     image_stats["sizes_mb"].append(size_mb)
                     image_stats["total_images"] += 1
                     
-            except Exception as e:
+            except Exception:
                 image_stats["corrupted_images"].append(str(img_path))
         
         # Calculate statistics
@@ -207,17 +206,17 @@ class DatasetAnalyzer:
         # Image statistics
         img_stats = quality_check.get("image_stats", {})
         if img_stats:
-            report.append(f"\n📸 IMAGE STATISTICS:")
+            report.append("\n📸 IMAGE STATISTICS:")
             report.append(f"  Total Images: {img_stats['total_images']:,}")
             report.append(f"  Average Size: {img_stats.get('avg_size_mb', 0):.2f} MB")
             report.append(f"  Total Dataset Size: {img_stats.get('total_size_gb', 0):.2f} GB")
             
-            report.append(f"\n  Top Resolutions:")
+            report.append("\n  Top Resolutions:")
             for res, count in img_stats["resolutions"].most_common(5):
                 percentage = (count / img_stats["total_images"]) * 100
                 report.append(f"    {res}: {count:,} ({percentage:.1f}%)")
             
-            report.append(f"\n  Top Aspect Ratios:")
+            report.append("\n  Top Aspect Ratios:")
             for ratio, count in img_stats["aspect_ratios"].most_common(5):
                 percentage = (count / img_stats["total_images"]) * 100
                 report.append(f"    {ratio}: {count:,} ({percentage:.1f}%)")
@@ -225,7 +224,7 @@ class DatasetAnalyzer:
         # Caption statistics
         cap_stats = quality_check.get("caption_stats", {})
         if cap_stats:
-            report.append(f"\n📝 CAPTION STATISTICS:")
+            report.append("\n📝 CAPTION STATISTICS:")
             report.append(f"  Total Captions: {cap_stats['total_captions']:,}")
             report.append(f"  Average Length: {cap_stats.get('avg_length', 0):.1f} characters")
             report.append(f"  Average Words: {cap_stats.get('avg_word_count', 0):.1f}")
@@ -233,7 +232,7 @@ class DatasetAnalyzer:
             report.append(f"  Has Emphasis: {cap_stats['has_emphasis']:,} ({cap_stats['has_emphasis']/cap_stats['total_captions']*100:.1f}%)")
             report.append(f"  Has Quality Tags: {cap_stats['has_quality_tags']:,} ({cap_stats['has_quality_tags']/cap_stats['total_captions']*100:.1f}%)")
             
-            report.append(f"\n  Most Common Tags:")
+            report.append("\n  Most Common Tags:")
             for tag, count in cap_stats["common_tags"].most_common(10):
                 percentage = (count / cap_stats["total_captions"]) * 100
                 report.append(f"    {tag}: {count:,} ({percentage:.1f}%)")
@@ -302,7 +301,7 @@ class DatasetAnalyzer:
                                 caption = f.read().strip()
                                 captions.append(caption)
                             break
-                        except:
+                        except Exception:
                             captions.append("")
                     else:
                         captions.append("")

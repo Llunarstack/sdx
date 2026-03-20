@@ -122,6 +122,13 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 - **Idea:** DiT uses 2D sinusoidal or learned pos for patches. RoPE (rotary) is used in FLUX/LLMs and can improve length/resolution generalization.
 - **Add:** Experimental: replace or augment patch pos with RoPE in the DiT block; compare at 256 vs 512.
 
+### 3.5 Latent size conditioning + patch channel gate — **coded (DiT-Text)**
+
+- **Idea (PixArt-style):** Encode latent grid height/width into the timestep conditioning vector so the denoiser knows absolute scale (helps multi-res finetunes and resolution extrapolation).
+- **Coded:** `TrainConfig.size_embed_dim` + `--size-embed-dim`; `SizeEmbedder` in `models/pixart_blocks.py` wired in `models/dit_text.py`. Training and `sample.py` pass `size_embed` `(B,2)` = latent `H,W` when `size_embed_dim > 0`. If `size_embed_dim > 0` but `size_embed` is omitted, the model infers `(H,W)` from the input latent tensor.
+- **Idea (lightweight quality):** A channel-wise gate on patch tokens (SE-style) with **zero-init last layer** so training starts from identity and can learn calibration.
+- **Coded:** `patch_se` / `--patch-se` and `patch_se_reduction` / `--patch-se-reduction` on `TrainConfig`; `ZeroInitPatchChannelGate` after patch/control fusion in `DiT_Text`.
+
 ---
 
 ## 4. Data and scaling
@@ -251,6 +258,7 @@ Ideas that are uncommon or absent in mainstream DiT/SD/FLUX pipelines—worth ex
 - **Medium effort:** Multi-resolution or aspect bucketing (1.1); data quality script (1.6); WandB/TensorBoard (5.1); export safetensors/ONNX (5.2).
 - **Larger projects:** Dual encoder (3.1); inpainting training (3.3); WebDataset (4.1); second scheduler (2.1); SAG / cross-attn control (2.2).
 - **Novel / research:** RLHF or rule-based loss (8.1, 8.2); RAG for style (8.4); creativity knob (8.7); self-improvement loop (8.6).
+- **Push quality toward “insane”:** Read **§11** — flow/EDM objectives, few-step distillation, best-of-N + quality gates, layout/box conditioning, multi-anchor REPA, RAE adapter + decode refine, VLM data flywheel.
 
 ---
 
@@ -287,3 +295,72 @@ Things commonly expected in production or in ComfyUI/A1111 that we don’t have 
 | **WebDataset** | Tar-based streaming for 10M+ images | §4.1 | Medium |
 
 Use this doc as a roadmap: pick items that match your goals (quality vs speed vs scale) and implement in small steps, then validate with the same dataset and metrics (e.g. val loss, visual samples).
+
+---
+
+## 11. Next-tier: “insane” image quality (research → practical SDX hooks)
+
+High-impact ideas from recent text-to-image / DiT / flow work. Many compose with what SDX already has (**REPA, MoE, MDM, AdaGen/PBFM, register tokens, RoPE, KV-merge, token routing, OCR/book pipelines**).
+
+### 11.1 Training objective upgrades (often > raw architecture for “wow”)
+
+| Idea | Why it helps | SDX angle |
+|------|----------------|-----------|
+| **Rectified flow / flow matching** | Straighter noise→data paths; often **fewer steps** and **calmer** optimization than vanilla epsilon prediction on some setups. | Add optional **velocity / flow** training target (you already have `prediction-type` and loss weighting knobs—extend toward RF-style schedules and sampling). |
+| **EDM / preconditioning end-to-end** | Cleaner scaling of \( \sigma \), better high-frequency detail when tuned. | You have `loss_weighting` hints; document an **EDM-first** preset and match **sampler** to the same preconditioning. |
+| **Multi-scale x0 consistency** | Forces the net to be self-consistent across noise levels; reduces “mushy” midsteps. | Auxiliary loss on decoded previews: **LPIPS / SSIM** vs EMA teacher \(\hat x_0\) (expensive—cap batch or low-res decode). |
+| **Beyond REPA: multi-anchor alignment** | One frozen encoder misses texture or typography; multi-encoders catch different failure modes. | **REPA stack**: e.g. **DINOv2 (structure)** + **SigLIP/CLIP (semantic)** with **small fused projector** and schedule (warm-start REPA weight). |
+
+### 11.2 Few-step generation (where “insane” meets “instant”)
+
+| Idea | Why it helps | SDX angle |
+|------|----------------|-----------|
+| **Consistency / distillation (LCM, SDXL-Turbo, Hyper-SD spirit)** | **4–8 step** quality usable in prod. | Stage-2 script: student DiT with **consistency loss** against a frozen teacher + your latents; export a separate `*-fast.pt`. |
+| **Guidance distillation** | Reduces **CFG blowout** and can remove **two-forward** cost. | Train a student that absorbs **_CFG + negative_** into weights (pairwise synthetic data or distillation loss). |
+| **Step-wise adversarial / discriminator refine** | Sharper micro-detail (texture, eyes, lettering edges) without wrecking diversity if regularized. | Light **PatchGAN** on **short decode crops** + tiny weight; or **stage-only** after main training (see §8.11). |
+
+### 11.3 Inference-time scaling (cheap code, big perceived quality)
+
+| Idea | Why it helps | SDX angle |
+|------|----------------|-----------|
+| **Best-of-N with a cheap judge** | Pick the winner from **K** samples; huge win for **hands / faces / text**. | `sample.py --num K` + **pick**: **CLIPScore**, **aesthetic head**, **OCR match** (you already have OCR repair—use score before repair). |
+| **Test-time x0 refinement loop** | One or two **extra denoise** passes at low noise fixes artifacts. | You have **refinement**; add a **quality gate**: only refine if **blur/edge** heuristic or **small CLIP margin** fails. |
+| **Dynamic schedule** | Allocate steps where the latent **changes most** (related to AdaGen). | Generalize AdaGen to **per-step budget**: more steps when \(\Delta z\) large; fewer when flat (full “adaptive schedule” vs early-exit only). |
+
+### 11.4 Conditioning & layout (prompt adherence without bigger DiT)
+
+| Idea | Why it helps | SDX angle |
+|------|----------------|-----------|
+| **Box / sketch / layout tokens (GLIGEN-style)** | **Composition** beats raw scale for multi-object scenes. | Extra cross-attn tokens from **bounding boxes** + **class** embeddings in JSONL (`layout` field). |
+| **Segmentation or depth as first-class control** | Reduces **wrong object boundaries** and **merged bodies**. | Beyond edges: **sky/ground/character** maps as **control_cond** channels (you have control conditioning—extend channel semantics). |
+| **Token-level routing from saliency** | Spend compute on **subject** not **sky**. | **Token routing** exists; feed a **cheap saliency prior** (blur map, face box, text mask) to **bias** `token_router` inputs at inference. |
+
+### 11.5 Data Engine (often beats a 10% wider model)
+
+| Idea | Why it helps | SDX angle |
+|------|----------------|-----------|
+| **VLM re-caption + filter** | Fixes **wrong associations** and improves **rare concepts**. | Batch: **describe → filter by confidence → dedupe**; mix at **5–15%** with real captions. |
+| **Synthetic hard negatives** | Teaches **what not to merge** (two faces, six fingers). | Generate **failure cases** on purpose; label with **negative_caption**; small weight in JSONL. |
+| **Difficulty-aware mixing** | You have **curriculum difficulty**—pair with **MoE load balancing** so hard samples route to **“detail experts.”** | Joint schedule: **curriculum ↑** + **moe balance loss** tuned together. |
+
+### 11.6 Autoencoder / latent space (ceiling on “insane”)
+
+| Idea | Why it helps | SDX angle |
+|------|----------------|-----------|
+| **RAE + learned adapter to DiT** | RAE latents are **high-dim**; a **linear or tiny conv adapter** aligns channels to your **4×h×w** DiT without rewriting the world. | Document + implement **explicit adapter** when `autoencoder_type=rae` (currently guarded). |
+| **Decoder refinement net** | Fixes **VAE mush** on text and fine lines. | Tiny U-Net on **RGB residual** after VAE (train frozen DiT, only refine decode—fast iteration). |
+
+### 11.7 Suggested “insane mode” stacks (preset combos)
+
+1. **Quality ceiling (slow, best pixels):** REPA (multi-anchor) + MDM + high-step sampler + best-of-4 + optional PBFM + refinement gate.  
+2. **Speed ceiling (fast, still strong):** Distilled student + RF-style sampler + AdaGen + KV-merge + token routing + **no CFG** (if guidance-distilled).  
+3. **Book / comic ceiling:** Face + bubble anchoring + OCR loop + layout tokens (when added) + edge control.
+
+When you implement anything from §11, add a **one-line “wired in” note** here (like §1.2) so the roadmap stays honest.
+
+### 11.8 Wired in (this repo)
+
+| Idea | Where |
+|------|--------|
+| **RAE ↔ DiT latent bridge** | `models/rae_latent_bridge.py`; `train.py` creates the bridge when RAE `encoder_hidden_size != 4`, adds optional `--rae-bridge-cycle-weight`, saves `rae_latent_bridge` in checkpoints; `sample.py` / `inference.py` load it and run `dit_to_rae` before decode. |
+| **Test-time best-of-N** | `sample.py --num N --pick-best clip\|edge\|ocr\|combo` (+ `--pick-save-all`, `--pick-clip-model`); scores in `utils/test_time_pick.py`. |
