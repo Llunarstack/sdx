@@ -42,6 +42,8 @@ def naturalize(
     """
     if grain_amount <= 0 and abs(micro_contrast - 1.0) < 1e-6:
         return image
+
+    # Work in float to safely apply multiple non-linear transforms.
     out = image
     if abs(micro_contrast - 1.0) >= 1e-6:
         out = contrast(out, factor=micro_contrast)
@@ -51,6 +53,74 @@ def naturalize(
             out = out.astype(np.uint8)
     if grain_amount > 0:
         out = add_film_grain(out, amount=grain_amount, seed=seed)
+        out = np.clip(out, 0, 255)
+
+    # Additional "human art" cosmetics:
+    # - Paper texture (low-frequency luminance noise)
+    # - Mild warmth (tint)
+    # - Soft vignette
+    # - Very slight edge softness blend
+    # These are intentionally subtle and only apply when grain_amount > 0.
+    strength = float(max(0.0, grain_amount)) / 0.015  # normalize so default=1.0
+    strength = min(max(strength, 0.0), 2.0)
+    if strength > 0:
+        from PIL import Image
+
+        rng = np.random.default_rng(seed)
+        is_uint = out.dtype == np.uint8
+        img = out.astype(np.float32, copy=False)
+        h, w, c = img.shape
+
+        # Paper texture: low-frequency noise blended into luminance.
+        # Use downsample/upsample to avoid high-frequency speckle.
+        small_h = max(8, h // 8)
+        small_w = max(8, w // 8)
+        tex_small = rng.normal(0.0, 1.0, size=(small_h, small_w)).astype(np.float32)
+        tex_img = Image.fromarray(
+            (np.clip((tex_small - tex_small.min()) / (tex_small.ptp() + 1e-8), 0.0, 1.0) * 255.0).astype(
+                np.uint8
+            )
+        )
+        tex = np.array(tex_img.resize((w, h), resample=Image.BILINEAR), dtype=np.float32)
+        tex = (tex / 255.0 - 0.5)  # centered [-0.5, 0.5]
+        paper_amt = 0.035 * strength  # in luminance units
+        lum = img[:, :, 0] * 0.299 + img[:, :, 1] * 0.587 + img[:, :, 2] * 0.114
+        lum = np.clip(lum + lum * tex * paper_amt, 0.0, 255.0)
+
+        # Re-scale channels to preserve chroma roughly.
+        chroma = (img + 1e-6) / (img.mean(axis=2, keepdims=True) + 1e-6)
+        img = chroma * lum[:, :, None] / (chroma.mean(axis=2, keepdims=True) + 1e-6)
+
+        # Warm tint: bias red up slightly, blue down slightly.
+        warm = 0.018 * strength
+        img[:, :, 0] = img[:, :, 0] * (1.0 + warm)
+        img[:, :, 2] = img[:, :, 2] * (1.0 - warm)
+
+        # Vignette: subtle radial attenuation.
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        cy, cx = (h - 1) / 2.0, (w - 1) / 2.0
+        rr = ((yy - cy) ** 2 + (xx - cx) ** 2) ** 0.5
+        rr = rr / (rr.max() + 1e-6)
+        vig = 1.0 - (0.10 * strength) * (rr**2)
+        img = img * vig[:, :, None]
+
+        # Edge softness: blend with a lightly blurred version (PIL blur).
+        try:
+            from PIL import ImageFilter
+
+            pil = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), mode="RGB")
+            blurred = pil.filter(ImageFilter.GaussianBlur(radius=0.6))
+            blended = Image.blend(pil, blurred, alpha=min(0.12 * strength, 0.20))
+            img = np.array(blended, dtype=np.float32)
+        except Exception:
+            # If PIL blur fails for any reason, keep paper/warm/vignette only.
+            pass
+
+        img = np.clip(img, 0, 255)
+        if is_uint:
+            return img.astype(np.uint8)
+        return img
+
     return out
 
 
