@@ -5,11 +5,9 @@ Processes images with spatial layouts, anatomy annotations, text content, and co
 import json
 import torch
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 from torch.utils.data import Dataset
-from typing import Dict, List, Optional, Tuple, Any
-import cv2
-import re
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 from training.enhanced_trainer import EnhancedTrainingBatch
@@ -75,8 +73,6 @@ class EnhancedT2IDataset(Dataset):
             # Scan directory structure
             for img_path in self.data_path.rglob("*.jpg"):
                 # Look for corresponding annotation files
-                base_name = img_path.stem
-                
                 # Caption file
                 caption_file = img_path.with_suffix('.txt')
                 caption = ""

@@ -95,7 +95,7 @@ def _examples_to_string(examples: List[str], limit: int = 6) -> str:
 
 
 def generic_suggestion(category: str, examples: List[str], lang: str) -> str:
-    l = normalize_lang_code(lang)
+    lang_code = normalize_lang_code(lang)
     ex = _examples_to_string(examples)
     ex_part = f" (e.g., {ex})" if ex else ""
 
@@ -123,7 +123,7 @@ def generic_suggestion(category: str, examples: List[str], lang: str) -> str:
         "la": "Ad '{category}' roborandum, adde vocabula coniuncta primo in captione et eadem manere per totam tuam materiam." + ex_part,
     }
 
-    return ascii_templates.get(l, ascii_templates["en"]).format(category=category)
+    return ascii_templates.get(lang_code, ascii_templates["en"]).format(category=category)
 
     templates = {
         "en": "Add related keyword terms for '{category}' early in the caption and keep it consistent across the dataset." + ex_part,
@@ -147,5 +147,5 @@ def generic_suggestion(category: str, examples: List[str], lang: str) -> str:
         "la": "Ad '{category}' roborandum, adde vocabula coniuncta primo in captione et eadem manere per totam tuam materiam." + ex_part,
     }
 
-    return templates.get(l, templates["en"]).format(category=category)
+    return templates.get(lang_code, templates["en"]).format(category=category)
 

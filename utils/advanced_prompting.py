@@ -3,11 +3,8 @@ Advanced Prompt Engineering System - Address over-specification and prompt optim
 Implements intelligent prompt structuring, priority weighting, and adaptive prompting.
 """
 import re
-import json
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
-from pathlib import Path
-import numpy as np
 
 
 @dataclass
@@ -183,7 +180,6 @@ class PromptAnalyzer:
     def _categorize_elements(self, elements: List[Tuple[str, float]]) -> Dict[str, List[PromptElement]]:
         """Categorize prompt elements by type."""
         categorized = {category: [] for category in self.categories.keys()}
-        uncategorized = []
         
         for element_text, emphasis in elements:
             element_lower = element_text.lower()

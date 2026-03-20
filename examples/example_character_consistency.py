@@ -6,7 +6,6 @@ Demonstrates how to use the character consistency features for maintaining chara
 import os
 import sys
 import torch
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import json
 from pathlib import Path
@@ -16,10 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.character_consistency import (  # noqa: E402
     CharacterDatabase,
-    CharacterProfile,
     PhysicalFeatures,
     StylePreferences,
-    create_character_consistency_system,
 )
 from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
 from models.enhanced_dit import EnhancedDiT  # noqa: E402
@@ -279,7 +276,6 @@ def main():
     """Run the complete character consistency demonstration."""
     try:
         db, elena_profile, _marcus_profile = demonstrate_character_creation()
-        characters = [elena_profile]
         validation_scores = demonstrate_consistency_validation(db, elena_profile)
         demonstrate_training_integration()
         all_characters = demonstrate_character_management(db)

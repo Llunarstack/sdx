@@ -5,7 +5,7 @@ Provides character profile management, consistency validation, and training inte
 import json
 import uuid
 from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import numpy as np
 import torch
@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 import cv2
-import hashlib
 from datetime import datetime
 
 try:
@@ -380,7 +379,7 @@ class ConsistencyValidator:
                 face_region = cv2.resize(face_region, (224, 224))
                 face_tensor = torch.from_numpy(face_region).permute(2, 0, 1).float() / 255.0
                 return face_tensor
-        except Exception as e:
+        except Exception:
             # If face detection fails, use center crop as fallback
             h, w = image.shape[1], image.shape[2]
             center_h, center_w = h // 2, w // 2

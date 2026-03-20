@@ -32,7 +32,7 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
-| [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas, “ideas to add next”. |
+| [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** (flow/distillation/test-time scaling/layout/data engine). |
 | [INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos. |
 | [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy‑paste prompt recipes using presets, op‑modes, hard styles, and all the quality flags. |
 

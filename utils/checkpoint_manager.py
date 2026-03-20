@@ -2,9 +2,8 @@
 Checkpoint management, model comparison, and model merging utilities.
 """
 import json
-import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 import torch
 import torch.nn as nn
 from datetime import datetime
@@ -377,7 +376,7 @@ def analyze_checkpoint_differences(checkpoint1_path: str, checkpoint2_path: str)
                         "checkpoint1": val1,
                         "checkpoint2": val2
                     }
-        except:
+        except Exception:
             analysis["config_differences"] = {"error": "Could not compare configs"}
     
     return analysis

@@ -26,3 +26,12 @@ output*.png
 
 # Downloaded LLMs (heavy)
 model/
+
+# Native builds (Rust / Zig / C++)
+native/rust/**/target/
+native/zig/**/.zig-cache/
+native/zig/**/zig-out/
+native/cpp/build/
+native/cpp/cmake-build-*/
+native/go/**/sdx-manifest
+native/go/**/sdx-manifest.exe

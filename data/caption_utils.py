@@ -1,7 +1,6 @@
 # PixAI-style emphasis and ReVe-style caption normalization for strong prompt adherence.
 # Quality tags (10x boost), anti-blending, count-aware.
 import re
-import random
 from typing import List, Optional, Tuple
 
 # Quality tags that should strongly improve output when present (repeat/boost in caption)

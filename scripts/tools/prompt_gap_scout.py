@@ -24,9 +24,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict
 
 from scripts.tools.prompt_i18n import generic_suggestion
 
@@ -290,8 +289,6 @@ def main() -> None:
     present = [name for name, ok in sorted(found.items(), key=lambda kv: kv[0]) if ok]
 
     suggestions_en: Dict[str, str] = {name: categories[name].get("suggest_en", "") for name in categories.keys() if name in categories}
-    suggestions_zh: Dict[str, str] = {name: categories[name].get("suggest_zh", "") for name in categories.keys() if name in categories}
-
     out: Dict[str, Any] = {
         "prompt": prompt,
         "present_categories": present,
@@ -314,7 +311,6 @@ def main() -> None:
 
     lang = str(args.lang or "en").strip()
     normalized_lang = lang.lower()
-    is_zh = normalized_lang in ("zh", "cn", "zh-cn", "zh_cn", "中文")
     is_en = normalized_lang in ("en", "eng", "english")
 
     custom_suggestions: Dict[str, Dict[str, str]] = {}

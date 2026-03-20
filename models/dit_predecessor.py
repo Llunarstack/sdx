@@ -3,7 +3,6 @@
 # Same text conditioning interface as DiT_Text (style, control, negative prompt).
 import torch
 import torch.nn as nn
-import numpy as np
 from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
 from .attention import memory_efficient_attention, create_block_causal_mask_2d, SSMTokenMixer
 from .controlnet import ControlNetEncoder
