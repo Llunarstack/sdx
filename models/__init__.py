@@ -10,6 +10,9 @@ from .dit_predecessor import (
     DiT_Supreme_L_2_Text,
 )
 from .enhanced_dit import EnhancedDiT_models, EnhancedDiT_XL_2, EnhancedDiT_L_2, EnhancedDiT_B_2
+from .cascaded_multimodal_diffusion import CascadedMultimodalDiffusion, CascadedSchedule
+from .native_multimodal_transformer import NativeMultimodalTransformer
+from .rae_latent_bridge import RAELatentBridge
 
 DiT_models_text = {
     **dit_text.DiT_models_text,
@@ -38,4 +41,8 @@ __all__ = [
     "EnhancedDiT_XL_2",
     "EnhancedDiT_L_2", 
     "EnhancedDiT_B_2",
+    "NativeMultimodalTransformer",
+    "CascadedMultimodalDiffusion",
+    "CascadedSchedule",
+    "RAELatentBridge",
 ]

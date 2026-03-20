@@ -34,12 +34,14 @@ No reference image required — quality comes from **the dataset and captions yo
 
 | | What you get |
 |:---|:---|
-| **Model** | Text-conditioned DiT with cross-attention (T5), optional AR blocks, variants up to **Supreme** / **Predecessor** |
+| **Model** | Text-conditioned DiT with cross-attention (**T5**; optional **triple**: T5 + CLIP-L + CLIP-bigG fusion), optional AR blocks, variants up to **Supreme** / **Predecessor** |
 | **Training** | Passes-based schedule, EMA, best checkpoint, val + early stopping, bf16, compile, DDP |
 | **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, ControlNet-style conditioning, refinement, pick-best |
 | **Data** | Folders + `.txt` / `.caption` or **JSONL** manifest; caption emphasis & domain boosts |
 
-### Pipeline (high level)
+### Pipeline showcase
+
+**High level** — data → text + image latents → DiT training → checkpoint → prompt → sample → decode.
 
 ```mermaid
 flowchart LR
@@ -64,6 +66,49 @@ flowchart LR
   S --> L
   L --> I
 ```
+
+**Detailed** — optional paths you can enable (see [docs/MODEL_STACK.md](docs/MODEL_STACK.md) for local `model/` layout).
+
+```mermaid
+flowchart TB
+  subgraph Encoders
+    T5[T5-XXL → seq 4096-d]
+    CLIP2[CLIP ViT-L + ViT-bigG → pooled]
+    FUSE[Trainable fusion → +2 tokens]
+    T5 --> FUSE
+    CLIP2 --> FUSE
+  end
+  subgraph Latent
+    VAE[VAE 4ch latents]
+    RAE[RAE latents]
+    BR[RAELatentBridge C→4]
+    RAE --> BR
+  end
+  subgraph Core
+    DiT[DiT-Text cross-attn]
+    DIFF[Gaussian diffusion]
+    DiT --> DIFF
+  end
+  subgraph Out
+    DEC[Decode]
+    PNG[(PNG)]
+  end
+  FUSE --> DiT
+  VAE --> DiT
+  BR --> DiT
+  DIFF -->|trained weights| CKPT[(best.pt)]
+  CKPT --> SAM[sample.py]
+  SAM --> DEC
+  DEC --> PNG
+```
+
+| Stage | What runs |
+|:------|:----------|
+| **Text** | Default: T5 only. **Triple mode** (`--text-encoder-mode triple`): T5 sequence + CLIP-L + CLIP-bigG → fused conditioning (checkpoint stores `text_encoder_fusion`). |
+| **Image latents** | **VAE** (`AutoencoderKL`) or **RAE** + optional `rae_latent_bridge` for non-4ch latents. |
+| **Core** | DiT blocks + diffusion objective; optional REPA (DINOv2/CLIP vision), MDM masks, MoE, size embed, patch-SE. |
+| **Sample** | `sample.py` loads config + `ema` weights + optional fusion/RAE bridge; CFG; schedulers; decode. |
+| **Extras** | **ViT/** quality & prompt tools; optional **Stable Cascade** script; **Qwen** helper in `utils/llm_client.py` for prompt expansion. |
 
 ---
 
@@ -153,6 +198,7 @@ Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `
 | **Hardware & storage** (VRAM tiers, huge booru-scale data) | [docs/HARDWARE.md](docs/HARDWARE.md) |
 | **HF gated models** | Copy `.env.example` → `.env`, set `HF_TOKEN` |
 | **Download weights** (T5, VAE, optional CLIP/LLM) | `python scripts/download/download_models.py --all` → `model/` |
+| **Curated stack** (T5 + CLIP + DINOv2 + Qwen + Cascade, optional) | `python scripts/download/download_revolutionary_stack.py` — see [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
 | **Optional native tools** (Rust/Zig/C++/Go/Node) | [native/README.md](native/README.md) |
 
 **Clone reference repos** (optional, for reading upstream code):
@@ -182,6 +228,7 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 | [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md) | Style / artist extraction |
 | [docs/INSPIRATION.md](docs/INSPIRATION.md) | Upstream repos & ideas |
 | [docs/FILES.md](docs/FILES.md) | File map |
+| [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Stable Cascade |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds & determinism |
 
 ---
@@ -230,6 +277,14 @@ python train.py --data-path /path/to/data --passes 3
 
 - **`--model DiT-P/2-Text`** — QK-norm, SwiGLU, AdaLN-Zero, larger default width/depth.
 - **`--model DiT-Supreme/2-Text`** — RMSNorm, QK-norm in self+cross, SwiGLU, optional `--size-embed-dim`.
+
+**Triple text encoders** (T5 + CLIP-L + CLIP-bigG with trainable fusion — matches a full `model/` download):
+
+```bash
+python train.py --data-path /path/to/data --text-encoder-mode triple
+```
+
+Use **`--text-encoder`**, **`--clip-text-encoder-l`**, **`--clip-text-encoder-bigg`** to override paths; empty defaults use `utils/model_paths.py` (local folders first).
 
 **Avoid overtraining** — use val loss as the quality signal:
 
@@ -340,6 +395,10 @@ For `.txt`: line 1 = positive, line 2 = negative.
 | `--moe-num-experts` | 0 | MoE experts |
 | `--moe-top-k` | 2 | MoE top-k |
 | `--moe-balance-loss-weight` | 0 | Router balance loss |
+| `--text-encoder` | auto | T5 path or HF id; empty → `model/T5-XXL` if present |
+| `--text-encoder-mode` | t5 | `t5` or `triple` (T5 + CLIP-L + CLIP-bigG fusion) |
+| `--clip-text-encoder-l` | "" | CLIP-L path (triple mode) |
+| `--clip-text-encoder-bigg` | "" | CLIP-bigG path (triple mode) |
 
 </details>
 
@@ -419,7 +478,8 @@ sdx/
 ├── diffusion/        # gaussian_diffusion, schedules
 ├── docs/             # All markdown docs
 ├── model/            # Downloaded weights (gitignored)
-├── models/           # dit_text, attention, controlnet, moe, …
+├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
+├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking tools
 ├── native/           # Optional Rust/Zig/C++/Go helpers
 ├── scripts/
 │   ├── setup/        # clone external refs
