@@ -12,8 +12,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO_ROOT))
 
 from diffusion import create_diffusion
 from models.enhanced_dit import EnhancedDiT_models

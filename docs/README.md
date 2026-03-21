@@ -12,8 +12,11 @@ Quick links to all project docs, grouped by purpose.
 | [SMOKE_TRAINING.md](SMOKE_TRAINING.md) | Minimal `train.py` run: synthetic data + small DiT + `--dry-run`. |
 | [DANBOORU_HF.md](DANBOORU_HF.md) | Hugging Face Danbooru-style data → JSONL + `train.py`; one-shot `hf_download_and_train.py`. |
 | [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
+| [CODEBASE_ORGANIZATION.md](CODEBASE_ORGANIZATION.md) | **Repo structure rules:** layers, where to add code, what not to move without a migration. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
+| [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) | **Start here to navigate:** top-level tree, `scripts/` layout, where to add code. |
+| [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`scripts/tools/update_project_structure.py`). |
 | [CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect (train → checkpoint → sample). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | Generation pipeline: prompt → T5 → diffusion loop → DiT → VAE → image; AR and ported code. |
 

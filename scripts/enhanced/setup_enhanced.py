@@ -8,6 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 
 def run_command(cmd, check=True):
     """Run a command and return the result."""
@@ -160,7 +164,9 @@ def validate_installation():
         print("✅ Core imports successful")
 
         # Test CLI
-        result = subprocess.run([sys.executable, "cli.py", "--help"], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, str(_REPO_ROOT / "scripts" / "cli.py"), "--help"], capture_output=True, text=True
+        )
         if result.returncode == 0:
             print("✅ CLI tool working")
         else:
@@ -214,10 +220,10 @@ def print_next_steps():
     print("\n📋 Next steps:")
     print("1. Prepare your dataset in a folder with images + .txt caption files")
     print("2. Analyze your dataset:")
-    print("   python cli.py analyze-dataset --data-path ./your_dataset")
+    print("   python scripts/cli.py analyze-dataset --data-path ./your_dataset")
     print("3. Create and validate your config:")
     print("   cp example_config.py my_config.py")
-    print("   python cli.py validate-config my_config.py --estimate-memory")
+    print("   python scripts/cli.py validate-config my_config.py --estimate-memory")
     print("4. Start training:")
     print("   python train.py --config my_config.py")
     print("5. Generate images:")
@@ -234,7 +240,7 @@ def print_next_steps():
 
     print("\n📚 Documentation:")
     print("- Enhanced features: docs/ENHANCED_FEATURES.md")
-    print("- CLI help: python cli.py --help")
+    print("- CLI help: python scripts/cli.py --help")
     print("- Original docs: docs/README.md")
 
 

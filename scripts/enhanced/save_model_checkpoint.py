@@ -4,7 +4,12 @@ Save a randomly initialized 3B parameter Enhanced DiT model checkpoint.
 This creates the model file you can use for inference or continue training.
 """
 
+import sys
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
 from config.train_config import TrainConfig

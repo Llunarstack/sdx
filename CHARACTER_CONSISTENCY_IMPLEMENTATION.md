@@ -35,14 +35,14 @@ I have successfully implemented a comprehensive character consistency solution f
 
 ### 5. CLI Interface
 - **Character Management Commands**: Complete CLI for character operations
-  - `python cli.py character create` - Create new character profiles
-  - `python cli.py character list` - List and filter characters
-  - `python cli.py character update` - Update existing characters
-  - `python cli.py character delete` - Remove characters
-  - `python cli.py character validate` - Validate consistency
-  - `python cli.py character stats` - Database statistics
+  - `python scripts/cli.py character create` - Create new character profiles
+  - `python scripts/cli.py character list` - List and filter characters
+  - `python scripts/cli.py character update` - Update existing characters
+  - `python scripts/cli.py character delete` - Remove characters
+  - `python scripts/cli.py character validate` - Validate consistency
+  - `python scripts/cli.py character stats` - Database statistics
 - **Enhanced Generation**: Generate images with character consistency
-  - `python cli.py generate "prompt" --character "character_name"`
+  - `python scripts/cli.py generate "prompt" --character "character_name"`
 
 ### 6. Comprehensive Testing
 - **test_character_consistency.py**: Complete test suite covering all components
@@ -190,13 +190,13 @@ losses = trainer.training_step(batch)
 ### CLI Usage
 ```bash
 # Create character
-python cli.py character create "Elena Rodriguez" --references ref1.jpg ref2.jpg ref3.jpg --face-shape oval --eye-color hazel
+python scripts/cli.py character create "Elena Rodriguez" --references ref1.jpg ref2.jpg ref3.jpg --face-shape oval --eye-color hazel
 
 # Generate with character
-python cli.py generate "Elena walking in park" --checkpoint model.pt --character "Elena Rodriguez"
+python scripts/cli.py generate "Elena walking in park" --checkpoint model.pt --character "Elena Rodriguez"
 
 # Validate consistency
-python cli.py character validate char_12345678 generated_image.png
+python scripts/cli.py character validate char_12345678 generated_image.png
 ```
 
 ## 📈 Next Steps for Production Use

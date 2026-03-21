@@ -235,24 +235,24 @@ def demonstrate_cli_usage():
 
     print("Character Management Commands:")
     print("  # Create a character")
-    print("  python cli.py character create 'Elena Rodriguez' --references ref1.jpg ref2.jpg ref3.jpg")
-    print("  python cli.py character create 'Elena Rodriguez' --face-shape oval --eye-color hazel --hair-color brown")
+    print("  python scripts/cli.py character create 'Elena Rodriguez' --references ref1.jpg ref2.jpg ref3.jpg")
+    print("  python scripts/cli.py character create 'Elena Rodriguez' --face-shape oval --eye-color hazel --hair-color brown")
     print()
     print("  # List characters")
-    print("  python cli.py character list")
-    print("  python cli.py character list --filter-name Elena --min-consistency 0.8")
+    print("  python scripts/cli.py character list")
+    print("  python scripts/cli.py character list --filter-name Elena --min-consistency 0.8")
     print()
     print("  # Validate character consistency")
-    print("  python cli.py character validate char_12345678 generated_image.png")
+    print("  python scripts/cli.py character validate char_12345678 generated_image.png")
     print()
     print("  # Generate with character consistency")
     print(
-        "  python cli.py generate 'Elena Rodriguez walking in a park' --checkpoint model.pt --character 'Elena Rodriguez'"
+        "  python scripts/cli.py generate 'Elena Rodriguez walking in a park' --checkpoint model.pt --character 'Elena Rodriguez'"
     )
-    print("  python cli.py generate 'portrait of Elena' --checkpoint model.pt --character char_12345678")
+    print("  python scripts/cli.py generate 'portrait of Elena' --checkpoint model.pt --character char_12345678")
     print()
     print("  # Character statistics")
-    print("  python cli.py character stats --output character_stats.json")
+    print("  python scripts/cli.py character stats --output character_stats.json")
 
 
 def save_demonstration_results(db, characters, validation_scores):

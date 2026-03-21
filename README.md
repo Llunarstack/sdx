@@ -50,6 +50,8 @@
 | **Books, comics, or manga pages** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
 | **Score or filter data with ViT** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | **Submit a fix or doc** | [Contributing & community](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
+| **Understand the folder layout** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
+| **Learn how sampling works** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
 
 ---
 
@@ -461,6 +463,9 @@ Everything below is also indexed in **[docs/README.md](docs/README.md)**. Use th
 | :--- | :--- |
 | [docs/README.md](docs/README.md) | Index of all project docs |
 | [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
+| [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) | **Navigate the tree:** folders, entry points, `scripts/` layout |
+| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — refresh with `python scripts/tools/update_project_structure.py` |
+| [docs/CODEBASE_ORGANIZATION.md](docs/CODEBASE_ORGANIZATION.md) | **Rules of thumb:** layers, where to add code, what stays at repo root |
 | [pipelines/README.md](pipelines/README.md) | **Two product lines:** **image_gen** vs **book_comic** (same engine; split docs + scripts) |
 | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
 
@@ -822,11 +827,14 @@ sdx/
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
 ├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking; EXCELLENCE_VS_DIT.md, backbone_presets.py
 ├── native/           # Optional Rust/Zig/C++/Go helpers
-├── scripts/
+├── scripts/          # see scripts/README.md
+│   ├── cli.py        # optional unified CLI (dataset, config, checkpoints)
 │   ├── setup/        # clone external refs
 │   ├── download/     # HF download scripts
 │   ├── training/     # precompute_latents, self_improve, …
-│   └── tools/        # ckpt_info, export_*, quick_test, …
+│   ├── tools/        # see scripts/tools/README.md
+│   ├── enhanced/     # EnhancedDiT train/sample (optional)
+│   └── cascade_generate.py
 ├── utils/
 ├── train.py
 ├── sample.py
