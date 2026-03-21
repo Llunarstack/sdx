@@ -5,6 +5,7 @@ import argparse
 import json
 import random
 import sys
+import textwrap
 from pathlib import Path
 
 import numpy as np
@@ -25,19 +26,28 @@ def seed_all(seed: int) -> None:
 
 
 def main() -> int:
+    from ViT.backbone_presets import describe_presets_for_help
     from ViT.config import ViTConfig
     from ViT.dataset import ViTManifestDataset, collate_vit_batch
     from ViT.ema import ModelEMA
     from ViT.losses import pairwise_ranking_loss
     from ViT.model import build_vit_model
 
-    p = argparse.ArgumentParser(description="Train ViT quality+adherence model on SDX manifest")
+    p = argparse.ArgumentParser(
+        description="Train ViT quality+adherence model on SDX manifest",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(describe_presets_for_help()),
+    )
     p.add_argument("--manifest-jsonl", required=True)
     p.add_argument("--image-root", default="")
     p.add_argument("--image-size", type=int, default=224)
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--num-workers", type=int, default=4)
-    p.add_argument("--model-name", default="vit_base_patch16_224")
+    p.add_argument(
+        "--model-name",
+        default="vit_base_patch16_224",
+        help="timm backbone for ViTQualityAdherenceModel (see ViT/backbone_presets.py, ViT/EXCELLENCE_VS_DIT.md).",
+    )
     p.add_argument("--no-pretrained", action="store_true")
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--weight-decay", type=float, default=1e-4)

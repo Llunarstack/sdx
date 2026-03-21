@@ -1,5 +1,11 @@
 # ViT module (quality + prompt adherence)
 
+## Why this is not “replacing DiT”
+
+**DiT** = diffusion **generator** in `models/`. **`ViT/`** = **scoring / ranking** on finished images (plus caption features). Stacking them is how you get large gains: clean training data, better best-of-N picks, optional reward finetuning. Read **[EXCELLENCE_VS_DIT.md](EXCELLENCE_VS_DIT.md)** for 2024–2026 paper pointers (Swin-DiT, FiT, LaVin-DiT, PRDP, multiscale IQA) and a practical checklist. Suggested **timm** backbones: **[backbone_presets.py](backbone_presets.py)**.
+
+---
+
 This folder is a concrete starter implementation for your **ViT idea**:
 
 - train a Vision Transformer to score:
@@ -42,6 +48,15 @@ python ViT/train.py \
   --ranking-loss-weight 0.2 \
   --save-ema
 ```
+
+Stronger backbone (VRAM permitting):
+
+```bash
+python ViT/train.py --manifest-jsonl data/manifest.jsonl --out-dir vit_runs \
+  --model-name vit_large_patch16_224 --batch-size 8
+```
+
+Run `python ViT/train.py --help` for a list of suggested `--model-name` values (from `backbone_presets.py`).
 
 ## Infer
 

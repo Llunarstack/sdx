@@ -111,6 +111,8 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | File | Description |
 |------|-------------|
 | [ViT/README.md](../ViT/README.md) | ViT quality + adherence; train / infer / rank / embeddings / prompt system. |
+| [ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | ViT vs DiT roles; research roadmap (Swin-DiT, FiT, reward finetuning, IQA); practical checklist. |
+| [ViT/backbone_presets.py](../ViT/backbone_presets.py) | Suggested timm model names for `--model-name`. |
 | [ViT/train.py](../ViT/train.py), [ViT/infer.py](../ViT/infer.py) | Train or score JSONL (**separate** from repo-root DiT `train.py`). |
 | [ViT/checkpoint_utils.py](../ViT/checkpoint_utils.py) | `load_vit_quality_checkpoint`, `vit_model_parameter_report` for tools and `infer.py`. |
 | [ViT/prompt_system.py](../ViT/prompt_system.py), [ViT/prompt_tool.py](../ViT/prompt_tool.py) | “Negative inside positive” prompt decomposition. |
