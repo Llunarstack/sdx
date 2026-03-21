@@ -20,6 +20,10 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
    pytest tests/ -q
    ```
 4. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
+5. **Doc links** (if you edit cross-links in markdown)
+   ```bash
+   python scripts/tools/verify_doc_links.py
+   ```
 
 ## Style
 

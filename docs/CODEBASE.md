@@ -8,7 +8,7 @@ How the SDX repo is organized, how to navigate it, and how we keep style consist
 
 | Layer | Directory | Responsibility |
 |:------|:----------|:---------------|
-| **Entry points** | `train.py`, `sample.py`, `inference.py`, `cli.py` | CLI and orchestration |
+| **Entry points** | `train.py`, `sample.py`, `inference.py`, `scripts/cli.py` | CLI and orchestration |
 | **Config** | `config/` | `TrainConfig`, model presets, domain/style tag tables |
 | **Data** | `data/` | `Text2ImageDataset`, caption parsing, JSONL → tensors |
 | **Diffusion** | `diffusion/` | Noise schedules, `GaussianDiffusion`, sampling utilities |
