@@ -3,6 +3,7 @@
 Comprehensive test suite for the Style Harmonization System.
 Tests style detection, conflict analysis, and harmonization strategies.
 """
+
 import sys
 from pathlib import Path
 
@@ -30,4 +31,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

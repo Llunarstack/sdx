@@ -56,23 +56,27 @@ def main() -> None:
     ap.add_argument("--min-hard-style", type=float, default=0.10, help="Fail if hard-style coverage < this fraction")
     ap.add_argument("--min-person", type=float, default=0.20, help="Fail if person-descriptor coverage < this fraction")
     ap.add_argument("--min-spatial", type=float, default=0.03, help="Fail if spatial wording coverage < this fraction")
-    ap.add_argument("--min-anatomy", type=float, default=0.10, help="Fail if anatomy/body-parts coverage < this fraction")
-    ap.add_argument("--min-concept-bleed", type=float, default=0.02, help="Fail if concept-bleed tag coverage < this fraction")
+    ap.add_argument(
+        "--min-anatomy", type=float, default=0.10, help="Fail if anatomy/body-parts coverage < this fraction"
+    )
+    ap.add_argument(
+        "--min-concept-bleed", type=float, default=0.02, help="Fail if concept-bleed tag coverage < this fraction"
+    )
     args = ap.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(repo_root))
 
     from data.caption_utils import (
-        QUALITY_TAGS,
-        HARD_STYLE_TAGS_FLAT,
-        SUBJECT_PREFIXES,
         AGE_TAGS,
-        HEIGHT_TAGS,
-        BUILD_BODY_TAGS,
         ANATOMY_FRAMING_TAGS,
         BODY_PART_TAGS,
+        BUILD_BODY_TAGS,
         DOMAIN_TAGS,
+        HARD_STYLE_TAGS_FLAT,
+        HEIGHT_TAGS,
+        QUALITY_TAGS,
+        SUBJECT_PREFIXES,
     )
 
     manifest_path = Path(args.manifest)
@@ -213,4 +217,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

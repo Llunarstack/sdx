@@ -1,4 +1,5 @@
 """Smoke tests for optional native/ helpers (Rust, Node, C++ DLL if built)."""
+
 from __future__ import annotations
 
 import json

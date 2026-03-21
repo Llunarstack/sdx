@@ -1,49 +1,75 @@
+<!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
+
+<br/>
 
 # SDX
 
-### Diffusion Transformer · Text-to-image · Built for *your* data
+### Diffusion Transformer · Text-to-image · Your data, your captions
 
-**DiT** + **xformers** + optional **block AR** (ACDiT-style), T5 conditioning, and a large set of training & sampling upgrades  
-(ViT-Gen, REPA, MoE, MDM, RAE bridge, test-time pick, and more).
+<p align="center">
+  <strong>DiT</strong> + <strong>xformers</strong> + optional <strong>block AR</strong> · T5 (optional <strong>triple</strong>: T5 + CLIP-L + CLIP-bigG)<br/>
+  <sub>ViT-Gen · REPA · MoE · MDM · RAE bridge · test-time pick · and more</sub>
+</p>
 
-No reference image required — quality comes from **the dataset and captions you train on**.
+No reference image required — **quality follows the dataset and captions you train on.**
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-diffusion-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![Docs](https://img.shields.io/badge/docs-IMPROVEMENTS-238636?style=for-the-badge)](docs/IMPROVEMENTS.md)
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.8+"/></a>
+  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-diffusion-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge" alt="License"/></a>
+  <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/docs-IMPROVEMENTS-238636?style=for-the-badge" alt="Docs"/></a>
+</p>
 
-[Quick start](#quick-start) · [Train](#training) · [Sample](#sampling) · [Docs hub](#documentation-hub) · [Layout](#project-layout)
+**[Quick start](#quick-start)** · **[Train](#training)** · **[Sample](#sampling)** · **[Pipeline](#architecture-and-pipeline)** · **[Docs](#documentation-hub)** · **[Layout](#project-layout)**
+
+<br/>
 
 </div>
 
 ---
 
-## Table of contents
+> **👋 New here?** Run [`scripts/tools/quick_test.py`](scripts/tools/quick_test.py), skim the **pipeline** below, then jump to [Quick start](#quick-start).
+
+---
+
+<details>
+<summary><strong>📑 Table of contents</strong></summary>
 
 | | |
 |:---|:---|
-| **Start here** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflows** | [Pipeline showcase](#pipeline-showcase) (repo map · `model/` · diagrams) · [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
-| **Reference** | [CLI options](#train-cli-quick-reference) · [SD/XL-style features](#sd--sdxl-style-features) · [Extra features](#extra-features) |
+| **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
+| **Workflow** | [Architecture and pipeline](#architecture-and-pipeline) · [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Reference** | [Train CLI](#train-cli-quick-reference) · [SD/XL-style](#sd--sdxl-style-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
+
+</details>
 
 ---
 
 ## At a glance
 
-| | What you get |
-|:---|:---|
-| **Model** | Text-conditioned DiT with cross-attention (**T5**; optional **triple**: T5 + CLIP-L + CLIP-bigG fusion), optional AR blocks, variants up to **Supreme** / **Predecessor** |
-| **Training** | Passes-based schedule, EMA, best checkpoint, val + early stopping, bf16, compile, DDP |
-| **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, ControlNet-style conditioning, refinement, pick-best |
-| **Data** | Folders + `.txt` / `.caption` or **JSONL** manifest; caption emphasis & domain boosts |
+| Pillar | What you get |
+|:-------|:-------------|
+| **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), optional **AR** blocks, up to **Supreme** / **Predecessor** variants |
+| **Training** | Pass-based schedule, **EMA**, **best** checkpoint, val + early stopping, bf16, compile, **DDP** |
+| **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, Control-style conditioning, refinement, **pick-best** |
+| **Data** | Folders + `.txt` / `.caption` or **JSONL**; caption emphasis & domain boosts |
 
-### Pipeline showcase
+---
 
-**End-to-end:** `data/` + manifest → **`train.py`** (`config/` + **`diffusion/`** + **`models/`** + **`utils/`**) → checkpoint → **`sample.py`** → image. Weights live under **`model/`** (gitignored) and resolve via **`utils/model_paths.py`**.
+## Architecture and pipeline
 
-#### Repository map (runtime)
+**One line:** `data/` + manifest → **`train.py`** (`config/` · **`diffusion/`** · **`models/`** · **`utils/`**) → **checkpoint** → **`sample.py`** → **images**. Weights live in **`model/`** (gitignored), resolved by **`utils/model_paths.py`**.
+
+<pre align="center">
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ 📂 <b>Data</b>    │───▶│ ⚙️ <b>train.py</b> │───▶│ 💾 <b>Checkpoint</b>│───▶│ ✨ <b>sample.py</b> │───▶│ 🖼️ <b>Images</b>   │
+│ JSONL · QA  │    │ DiT · loss  │    │ EMA · cfg   │    │ CFG · VAE   │    │ grids · pick│
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+</pre>
+
+### Repository map
 
 | Area | Role | Consumed by |
 |:-----|:-----|:------------|
@@ -57,9 +83,9 @@ No reference image required — quality comes from **the dataset and captions yo
 | **`native/`** | Fast JSONL helpers (Rust, Go, …) | Optional; not imported by training by default |
 | **`model/`** | Downloaded HF weights | Paths via `utils/model_paths.py` |
 
-Full file-level index: **[docs/FILES.md](docs/FILES.md)**.
+Full index → **[docs/FILES.md](docs/FILES.md)**
 
-#### Local weights (`model/`)
+### Local weights (`model/`)
 
 | Role | Typical folder / fallback |
 |:-----|:--------------------------|
@@ -69,179 +95,186 @@ Full file-level index: **[docs/FILES.md](docs/FILES.md)**.
 | Qwen LLM | `model/Qwen2.5-14B-Instruct` (optional prompt expansion) |
 | Stable Cascade | `model/StableCascade-Prior`, `model/StableCascade-Decoder` (optional; **not** DiT) |
 
-Details & download commands: **[docs/MODEL_STACK.md](docs/MODEL_STACK.md)** · `scripts/download/download_models.py` · `scripts/download/download_revolutionary_stack.py`.
+**Download:** [docs/MODEL_STACK.md](docs/MODEL_STACK.md) · `scripts/download/download_models.py` · `scripts/download/download_revolutionary_stack.py`
 
----
-
-#### Who’s who (vision / transformer names)
-
-SDX combines several **roles** that are easy to mix up:
+### Who’s who (easy to confuse)
 
 | Name | What it is | Where |
 |:-----|:-----------|:------|
-| **DiT** | **Diffusion Transformer** — the **generator**: patchifies latents, predicts noise/ε (or v), cross-attends to **text** | `models/dit_text.py`, `train.py`, `sample.py` |
-| **ViT-style blocks inside DiT** | **ViT-Gen** options: register tokens, RoPE, KV-merge, optional SSM mixer — still **one DiT model** | Flags like `--num-register-tokens`, `--use-rope` |
-| **REPA vision encoder** | **Frozen** DINOv2 or CLIP **image** encoder — aligns DiT internals to real images (aux loss) | `--repa-weight`, `--repa-encoder-model` |
-| **`ViT/` package** | **Separate** timm ViT heads for **dataset QA** (quality + adherence scores), ranking, embeddings — does **not** replace DiT | `ViT/train.py`, `ViT/infer.py` |
-| **Text triple (T5 + CLIP)** | **Text** encoders (T5 sequence + two CLIP text towers fused) → conditions **DiT** | `--text-encoder-mode triple` |
+| **DiT** | **Diffusion Transformer** — **generator**: patch latents, predict ε/v, **cross-attend text** | `models/dit_text.py`, `train.py`, `sample.py` |
+| **ViT-style blocks inside DiT** | **ViT-Gen** (registers, RoPE, KV-merge, SSM…) — still **one DiT** | `--num-register-tokens`, `--use-rope`, … |
+| **REPA vision encoder** | **Frozen** DINOv2 / CLIP **image** encoder — aux alignment loss | `--repa-weight`, `--repa-encoder-model` |
+| **`ViT/` package** | **Separate** timm ViT for **QA**, ranking, embeddings — **not** DiT | `ViT/train.py`, `ViT/infer.py` |
+| **Text triple (T5 + CLIP)** | **Text** towers fused → conditions **DiT** | `--text-encoder-mode triple` |
 
 ---
 
-**1) End-to-end — how everything hooks together**
+### Diagram 1 — Full stack (data → train → sample)
 
 ```mermaid
 flowchart TB
-  subgraph Weights["model/ + utils/model_paths.py"]
-    W[T5 · VAE · CLIP · DINOv2 · Qwen · Cascade weights]
+  classDef weight fill:#f6f8fa,stroke:#24292f,stroke-width:2px,color:#24292f
+  classDef data fill:#ddf4ff,stroke:#0969da,stroke-width:2px,color:#042033
+  classDef train fill:#fff8c5,stroke:#bf8700,stroke-width:2px,color:#3b2600
+  classDef sample fill:#dafbe1,stroke:#1a7f37,stroke-width:2px,color:#0d1f12
+  classDef side fill:#fbefff,stroke:#8250df,stroke-width:1px,color:#2e1067
+
+  subgraph WG["Weights · model/ + utils/model_paths.py"]
+    W[T5 · VAE · CLIP · DINOv2 · Qwen · Cascade]:::weight
   end
 
-  subgraph DataLayer["Data & optional QA"]
-    DS[(JSONL / folders)]
-    PL[prompt_lint · utils]
-    NT[optional native/ JSONL tools]
-    VITI[ViT/ infer → scores]
-    VITR[ViT/ rank → filter]
+  subgraph DL["Data and optional QA"]
+    DS[(JSONL / folders)]:::data
+    PL[prompt_lint]:::data
+    NT[native/ tools]:::data
+    V1[ViT/ infer → scores]:::data
+    V2[ViT/ rank → filter]:::data
+    DS2[Cleaner / weighted data]:::data
     DS --> PL
     DS --> NT
-    DS --> VITI
-    VITI --> VITR
-    VITR --> DS2[Cleaner or weighted dataset]
+    DS --> V1
+    V1 --> V2
+    V2 --> DS2
     DS --> DS2
   end
 
-  subgraph TrainPath["train.py — DiT training"]
-    TE[T5 or T5+CLIP fusion]
-    VA[VAE or RAE latents]
-    REP[Optional REPA: frozen DINOv2 or CLIP vision]
-    DIT[DiT-Text + diffusion loss]
-    W --> TE
-    W --> VA
-    W -.-> REP
+  subgraph TR["train.py — DiT training"]
+    TE[T5 or T5+CLIP fusion]:::train
+    VA[VAE or RAE latents]:::train
+    REP[Optional REPA vision]:::train
+    DIT[DiT-Text + diffusion loss]:::train
+    CKPT[(Checkpoint · EMA · config · fusion · RAE bridge)]:::weight
     TE --> DIT
     VA --> DIT
-    REP -.->|aux alignment| DIT
-    DIT --> CKPT[(checkpoint: DiT EMA + config + optional fusion + RAE bridge)]
+    REP -.->|aux| DIT
+    DIT --> CKPT
   end
 
-  subgraph SamplePath["sample.py — generation"]
-    TE2[Same text stack as ckpt]
-    DIT2[DiT denoise loop]
-    DEC[Decode latents]
-    PB[Optional pick-best: CLIP / edge / OCR]
-    W --> TE2
-    TE2 --> DIT2
-    DIT2 --> DEC
-    DEC --> PB
-    PB --> IMG[(images)]
+  subgraph SM["sample.py — generation"]
+    TE2[Text stack from ckpt]:::sample
+    DN[DiT denoise]:::sample
+    DC[VAE decode]:::sample
+    PB[pick-best CLIP/edge/OCR]:::sample
+    IMG[(Images)]:::sample
+    TE2 --> DN --> DC --> PB --> IMG
   end
 
-  subgraph Side["Optional side systems"]
-    QW[Qwen LLM — expand prompts]
-    CAS[Stable Cascade — scripts/cascade_generate.py]
+  subgraph OP["Optional side paths"]
+    QW[Qwen expand prompts]:::side
+    CAS[Stable Cascade · scripts/cascade_generate.py]:::side
   end
 
-  DS2 --> TrainPath
-  CKPT --> SamplePath
-  QW -.->|before encode| TE2
+  W --> TE
+  W --> VA
+  W --> TE2
+  W -.-> REP
   W -.-> QW
-  CAS -.->|weights| W
+  W -.-> CAS
+  DS2 --> TR
+  CKPT --> SM
+  QW -.-> TE2
 ```
 
----
-
-**2) Inside the DiT training path (text + latent + loss)**
+### Diagram 2 — Inside training (text + latent + DiT)
 
 ```mermaid
-flowchart TB
-  subgraph TextCond["Text conditioning"]
-    T5[T5-XXL seq]
-    C1[CLIP-L text]
-    C2[CLIP-bigG text]
-    FU[Fusion +2 tokens]
+flowchart LR
+  classDef t fill:#ddf4ff,stroke:#0969da,color:#042033
+  classDef l fill:#fff8c5,stroke:#bf8700,color:#3b2600
+  classDef d fill:#dafbe1,stroke:#1a7f37,color:#0d1f12
+
+  subgraph TX["Text conditioning"]
+    direction TB
+    T5[T5-XXL]:::t
+    C1[CLIP-L text]:::t
+    C2[CLIP-bigG text]:::t
+    FU[Fusion +2 tokens]:::t
+    TXT[encoder_hidden_states]:::t
     T5 --> FU
     C1 --> FU
     C2 --> FU
-    FU --> TXT[encoder_hidden_states]
+    FU --> TXT
   end
 
-  subgraph LatentIn["Latent tensor"]
-    VAE[VAE 4ch]
-    RAE2[RAE]
-    BR[RAE bridge to 4ch]
-    RAE2 --> BR
-    VAE --> LAT[Latent x]
-    BR --> LAT
+  subgraph LT["Latent"]
+    direction TB
+    VAE[VAE 4ch]:::l
+    RAE[RAE → bridge → 4ch]:::l
+    LAT[Latent x]:::l
+    VAE --> LAT
+    RAE --> LAT
   end
 
-  subgraph DiTCore["DiT-Text"]
-    LAT --> PE[patch embed + pos]
-    SA[self-attn + ViT-Gen opts]
-    CA[cross-attn to text]
-    PE --> SA
+  subgraph CORE["DiT-Text"]
+    direction TB
+    PE[patch + pos]:::d
+    SA[self-attn · ViT-Gen]:::d
+    CA[cross-attn → text]:::d
+    OUT[ε or v]:::d
+    LAT --> PE --> SA --> CA --> OUT
     TXT --> CA
-    SA --> CA
-    CA --> OUT[eps or v prediction]
   end
 
-  subgraph Aux["Optional REPA"]
-    IMG[Real images]
-    VIS[Frozen DINOv2 or CLIP vision]
-    IMG --> VIS
-    VIS -.->|align| OUT
+  subgraph RP["Optional REPA"]
+    IM[Real images]:::l
+    VS[Frozen DINOv2 / CLIP vision]:::l
+    IM --> VS -.->|align| OUT
   end
 ```
 
----
-
-**3) `ViT/` vs DiT — two different jobs**
+### Diagram 3 — `ViT/` vs DiT (different jobs)
 
 ```mermaid
 flowchart TB
-  subgraph DiTGen["Generation DiT train.py / sample.py"]
-    A[Pixel / latent diffusion objective]
-    B[Billions-scale image generation]
+  classDef gen fill:#dafbe1,stroke:#1a7f37,color:#0d1f12
+  classDef tool fill:#ddf4ff,stroke:#0969da,color:#042033
+
+  subgraph G["Generation: DiT · train.py / sample.py"]
+    A[Latent diffusion objective]:::gen
+    B[Image generation]:::gen
   end
 
-  subgraph ViTPack["ViT/ folder — tooling & QA"]
-    C[timm ViT quality + adherence]
-    D[Manifest scoring & rank]
-    E[prompt_system Nannano-style]
-    F[Embeddings for retrieval]
+  subgraph T["Tooling: ViT/ folder"]
+    C[Quality + adherence scores]:::tool
+    D[Manifest rank / filter]:::tool
+    E[prompt_system]:::tool
+    F[Embeddings]:::tool
   end
 
-  DiTGen -.->|improves model| CKPT2[DiT checkpoint]
-  ViTPack -.->|filters / weights data| DS3[dataset before train]
-  ViTPack -.->|optional rerank| N[best-of-N candidates]
+  CKPT2[(DiT checkpoint)]:::gen
+  DS3[(Dataset)]:::tool
+  N[best-of-N rerank]:::tool
+
+  G -.-> CKPT2
+  T -.-> DS3
+  T -.-> N
 ```
 
----
-
-**4) Quick reference**
+### Stage cheat sheet
 
 | Stage | What runs |
 |:------|:----------|
-| **Config** | **`config/train_config.py`**: `TrainConfig` + **`get_dit_build_kwargs`** → DiT build args (text mode, CLIP paths, RAE/REPA, …). |
-| **Data** | **`data/t2i_dataset.py`**: folders or JSONL, caption emphasis, latent cache. |
-| **Diffusion** | **`diffusion/`**: `GaussianDiffusion`, beta schedules, **DDIM** sampling, CFG rescale, **`respace`**, loss weighting. |
-| **Text → DiT** | Default: **T5** only. **Triple**: T5 + CLIP-L + CLIP-bigG → **`text_encoder_fusion`** (saved in ckpt; load via **`utils/checkpoint_loading.py`**). |
-| **Image → latent** | **VAE** or **RAE**; **`RAELatentBridge`** if RAE channels ≠ 4. |
-| **DiT core** | **`models/dit_text.py`** (+ **`dit_predecessor`**, **`pixart_blocks`**, …): patch embed, **self-attn**, **cross-attn** to text; optional **ViT-Gen** (registers, RoPE, KV-merge), **MoE**, **MDM** masks. |
-| **REPA** | Frozen **vision** encoder (e.g. DINOv2) — extra loss aligning DiT features to image semantics. |
-| **`ViT/` tools** | Train/infer **scoring ViT** on manifests; **prompt** decomposition; **rank**; not the same module as DiT. |
-| **Sample** | **`sample.py`**: ckpt + encoders + optional fusion/bridge; **CFG**; decode; optional **`utils/test_time_pick`** (**pick-best**). |
-| **Programmatic API** | **`inference.py`**: load checkpoint + config for code-driven sampling. |
-| **Other** | **Qwen** (`utils/llm_client.py`); **Stable Cascade** (`scripts/cascade_generate.py`) — **separate** Diffusers stack, not mixed into DiT forward. |
+| **Config** | **`config/train_config.py`**: `TrainConfig` + **`get_dit_build_kwargs`** → DiT build args |
+| **Data** | **`data/t2i_dataset.py`**: folders or JSONL, emphasis, latent cache |
+| **Diffusion** | **`diffusion/`**: `GaussianDiffusion`, schedules, DDIM, CFG rescale, **`respace`**, loss weights |
+| **Text → DiT** | Default **T5**. **Triple**: T5 + CLIP-L + CLIP-bigG → **`text_encoder_fusion`** in ckpt |
+| **Image → latent** | **VAE** or **RAE** + **`RAELatentBridge`** when channels ≠ 4 |
+| **DiT core** | **`models/dit_text.py`**: patch, self/cross-attn, ViT-Gen, **MoE**, **MDM** |
+| **REPA** | Frozen **vision** encoder — auxiliary alignment |
+| **`ViT/` tools** | Scoring / rank / prompts — **not** the generator |
+| **Sample** | **`sample.py`**: CFG, decode, **`utils/test_time_pick`** |
+| **API** | **`inference.py`**: programmatic sampling |
+| **Other** | **Qwen** (`utils/llm_client.py`); **Cascade** (`scripts/cascade_generate.py`) — separate from DiT forward |
 
-**Optional scaffolds (not the default `train.py` loop):** `diffusion/cascaded_multimodal_pipeline.py`, **`models/cascaded_multimodal_diffusion.py`**, **`models/native_multimodal_transformer.py`** — experimental / staged designs; see **[docs/FILES.md](docs/FILES.md)**.
+**Optional scaffolds** (not default `train.py`): `diffusion/cascaded_multimodal_pipeline.py`, **`models/cascaded_multimodal_diffusion.py`**, **`models/native_multimodal_transformer.py`** — see **[docs/FILES.md](docs/FILES.md)**
 
 | See also | |
 |:---------|:--|
-| **Weights & paths** | **[docs/MODEL_STACK.md](docs/MODEL_STACK.md)** |
-| **Every file & script** | **[docs/FILES.md](docs/FILES.md)** |
-| **Config ↔ checkpoint ↔ sample** | **[docs/CONNECTIONS.md](docs/CONNECTIONS.md)** |
+| **Weights** | **[docs/MODEL_STACK.md](docs/MODEL_STACK.md)** |
+| **Every file** | **[docs/FILES.md](docs/FILES.md)** |
+| **Config ↔ ckpt ↔ sample** | **[docs/CONNECTIONS.md](docs/CONNECTIONS.md)** |
 
 ---
-
 ## Highlights
 
 <details open>
@@ -293,6 +326,13 @@ flowchart TB
 
 ## Quick start
 
+| Step | Command |
+|:-----|:--------|
+| **1 · Env** | `pip install -r requirements.txt` |
+| **2 · Smoke** | `python scripts/tools/quick_test.py` |
+| **3 · Train** | `python train.py --data-path ... --results-dir results` |
+| **4 · Sample** | `python sample.py --ckpt .../best.pt --prompt "..." --out out.png` |
+
 ```bash
 cd sdx
 pip install -r requirements.txt
@@ -325,6 +365,8 @@ Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `
 
 | Topic | Where |
 |:------|:------|
+| **Code layout & conventions** | [docs/CODEBASE.md](docs/CODEBASE.md) · [CONTRIBUTING.md](CONTRIBUTING.md) |
+| **Format / lint** | `pip install ruff` → `ruff format .` · `ruff check .` (see `pyproject.toml`) |
 | **Hardware & storage** (VRAM tiers, huge booru-scale data) | [docs/HARDWARE.md](docs/HARDWARE.md) |
 | **HF gated models** | Copy `.env.example` → `.env`, set `HF_TOKEN` |
 | **Download weights** (T5, VAE, optional CLIP/LLM) | `python scripts/download/download_models.py --all` → `model/` |
@@ -347,19 +389,20 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 
 ## Documentation hub
 
-| Doc | Purpose |
-|:----|:--------|
-| [docs/README.md](docs/README.md) | Index of all docs |
-| [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, what’s implemented |
-| [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt → T5 → DiT → VAE → image |
-| [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | Config ↔ data ↔ checkpoint ↔ sample |
-| [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
-| [docs/AR.md](docs/AR.md) | Block AR: 0 vs 2 vs 4 |
-| [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md) | Style / artist extraction |
-| [docs/INSPIRATION.md](docs/INSPIRATION.md) | Upstream repos & ideas |
-| [docs/FILES.md](docs/FILES.md) | File map |
-| [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Stable Cascade |
-| [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds & determinism |
+| | Doc | Purpose |
+|:-:|----|:--------|
+| 📚 | [docs/README.md](docs/README.md) | Index of all docs |
+| 🗺️ | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, what’s implemented |
+| ⚙️ | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt → T5 → DiT → VAE → image |
+| 🔗 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | Config ↔ data ↔ checkpoint ↔ sample |
+| ✨ | [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
+| 🧩 | [docs/AR.md](docs/AR.md) | Block AR: 0 vs 2 vs 4 |
+| 🎨 | [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md) | Style / artist extraction |
+| 💡 | [docs/INSPIRATION.md](docs/INSPIRATION.md) | Upstream repos & ideas |
+| 📂 | [docs/FILES.md](docs/FILES.md) | File map |
+| 📝 | [docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md) | JSONL `parts` / `region_captions` for layout-aware training text |
+| 🧱 | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Stable Cascade |
+| 🎲 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds & determinism |
 
 ---
 
@@ -376,6 +419,8 @@ One JSON object per line, e.g.
 `{"image_path": "/path/to/img.png", "caption": "your caption"}`
 
 Use `--manifest-jsonl /path/to/manifest.jsonl` (and you can leave `--data-path` empty per your workflow).
+
+**Regional / layout labels** (optional): add **`parts`** (dict) and/or **`region_captions`** (list) so T5 sees *who/what/where* per region merged after the global `caption` (default `[layout] …`). Helps composition and part-level grounding without changing DiT. See **[docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md)** and `--region-caption-mode append|prefix|off`.
 
 ### Caption tips
 
@@ -470,6 +515,8 @@ python scripts/book/generate_book.py --ckpt "C:\path\best.pt" `
 |:------|:------------|
 | `caption` | Positive prompt (required) |
 | `negative_caption` / `negative_prompt` | Concepts to avoid |
+| `parts` | Dict of regional descriptions (`subject`, `clothing`, `background`, …) merged into training caption |
+| `region_captions` / `segments` | List of strings or `{label, text}` — merged with `parts` when both set |
 | `style` | Style text; blended with `style_strength` |
 | `control_image` / `control_path` | Control image path |
 | `init_image` / `init_image_path` / `source_image` | Img2img source (with `--img2img-prob` in training) |
@@ -557,6 +604,7 @@ Sampling: DDIM-style loop with cond/uncond; use **`--cfg-rescale`**, **`--num`**
 | Resume | `--resume path/to/best.pt` |
 | Sample weights | JSONL `weight` / `aesthetic_score` |
 | Crops | `--crop-mode center\|random\|largest_center` |
+| Layout / regional text | JSONL `parts` / `region_captions`; `--region-caption-mode append\|prefix\|off`, `--region-layout-tag` — [docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md) |
 | Caption dropout schedule | `--caption-dropout-schedule 0,0.2,10000,0.05` |
 | Polyak average | `--save-polyak N` |
 | WandB / TensorBoard | `--wandb-project`, `--tensorboard-dir` |
@@ -649,7 +697,11 @@ Licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
 <div align="center">
 
-**SDX** — train once on your data, sample with the stack you choose.
+---
+
+### SDX
+
+**Train on your data · sample with the stack you choose**
 
 [↑ Back to top](#sdx)
 

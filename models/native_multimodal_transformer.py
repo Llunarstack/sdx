@@ -66,4 +66,3 @@ class NativeMultimodalTransformer(nn.Module):
             "fused_vision_tokens": y[:, : v.shape[1], :],
             "fused_all_tokens": y,
         }
-

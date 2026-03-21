@@ -1,8 +1,9 @@
 # Base DiT (Meta) - class-conditional. Used for components and optional class-cond baseline.
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
+
 from .moe import MoEFeedForward
 
 
@@ -24,9 +25,7 @@ class TimestepEmbedder(nn.Module):
     def timestep_embedding(t, dim, max_period=10000):
         half = dim // 2
         device = t.device if isinstance(t, torch.Tensor) else torch.device("cpu")
-        freqs = torch.exp(
-            -torch.arange(half, device=device, dtype=torch.float32) * (float(np.log(max_period)) / half)
-        )
+        freqs = torch.exp(-torch.arange(half, device=device, dtype=torch.float32) * (float(np.log(max_period)) / half))
         args = t[:, None].float() * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
@@ -134,7 +133,7 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=
 def _get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     omega = np.arange(embed_dim // 2, dtype=np.float64)
     omega /= embed_dim / 2.0
-    omega = 1.0 / 10000 ** omega
+    omega = 1.0 / 10000**omega
     pos = pos.reshape(-1)
     out = np.einsum("m,d->md", pos, omega)
     return np.concatenate([np.sin(out), np.cos(out)], axis=1)
@@ -192,8 +191,9 @@ class DiT(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
+
         self.apply(_basic_init)
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
         nn.init.xavier_uniform_(self.x_embedder.proj.weight.view([self.x_embedder.proj.weight.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)

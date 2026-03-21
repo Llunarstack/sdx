@@ -7,6 +7,7 @@ Remove redundant files inside model/ folders to free space. Does NOT remove enti
 - sdxl-vae-fp16-fix: keep diffusion_pytorch_model.safetensors only; remove diffusion_pytorch_model.bin,
   sdxl.vae.safetensors, sdxl_vae.safetensors (duplicate same weights).
 """
+
 import argparse
 import os
 import sys

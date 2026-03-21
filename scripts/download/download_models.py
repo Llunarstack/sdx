@@ -13,6 +13,7 @@ Saves to model/ (or --model-dir). Defaults are chosen to save disk space.
 Use --all to download the minimal recommended set: T5-XXL, 2 VAEs, SmolLM 360M (saves space).
 To free space after downloading everything, run: python scripts/download/remove_unused_models.py
 """
+
 import argparse
 import os
 import sys
@@ -25,15 +26,15 @@ MODEL_DIR_DEFAULT = os.path.join(ROOT, "model")
 
 # Text encoders: better prompt understanding (research: SDXL, FLUX, PixArt use T5-XXL)
 T5_REPOS = [
-    ("google/t5-v1_1-xxl", "T5-XXL"),    # 4096-dim, best understanding (default)
-    ("google/t5-v1_1-xl", "T5-XL"),      # 1024-dim, lighter / faster
+    ("google/t5-v1_1-xxl", "T5-XXL"),  # 4096-dim, best understanding (default)
+    ("google/t5-v1_1-xl", "T5-XL"),  # 1024-dim, lighter / faster
     ("google/t5-v1_1-large", "T5-Large"),  # 768-dim, lightest option
 ]
 # VAEs: decode quality (same latent space; pick one for training, try others at inference)
 VAE_REPOS = [
-    ("stabilityai/sd-vae-ft-mse", "sd-vae-ft-mse"),   # SD 1.5 MSE fine-tuned (current default)
-    ("stabilityai/sd-vae-ft-ema", "sd-vae-ft-ema"),   # SD 1.5 EMA (alternative)
-    ("stabilityai/sdxl-vae", "sdxl-vae"),             # SDXL: better decode quality
+    ("stabilityai/sd-vae-ft-mse", "sd-vae-ft-mse"),  # SD 1.5 MSE fine-tuned (current default)
+    ("stabilityai/sd-vae-ft-ema", "sd-vae-ft-ema"),  # SD 1.5 EMA (alternative)
+    ("stabilityai/sdxl-vae", "sdxl-vae"),  # SDXL: better decode quality
     ("madebyollin/sdxl-vae-fp16-fix", "sdxl-vae-fp16-fix"),  # SDXL VAE, fp16-safe
 ]
 # CLIP: optional for future dual-encoder (T5 + CLIP) pipelines
@@ -79,6 +80,7 @@ ALLOW_LLM = [
 
 def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=None):
     from huggingface_hub import snapshot_download
+
     kwargs = {"repo_id": repo_id, "local_dir": local_dir, "max_workers": max_workers}
     if allow_patterns:
         kwargs["allow_patterns"] = allow_patterns
@@ -87,15 +89,21 @@ def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Download best HF models for image output: T5, VAE, LLMs into model/."
-    )
+    parser = argparse.ArgumentParser(description="Download best HF models for image output: T5, VAE, LLMs into model/.")
     parser.add_argument("--model-dir", type=str, default=MODEL_DIR_DEFAULT, help="Base dir (default: project model/)")
-    parser.add_argument("--t5", action="store_true", help="Download T5 text encoders: XXL (best), XL, Large (prompt understanding)")
-    parser.add_argument("--vae", action="store_true", help="Download VAEs: sd-vae-ft-mse, sd-vae-ft-ema, sdxl-vae, sdxl-vae-fp16-fix")
-    parser.add_argument("--clip", action="store_true", help="Download CLIP ViT-L/14 (optional, for future T5+CLIP dual-encoder)")
+    parser.add_argument(
+        "--t5", action="store_true", help="Download T5 text encoders: XXL (best), XL, Large (prompt understanding)"
+    )
+    parser.add_argument(
+        "--vae", action="store_true", help="Download VAEs: sd-vae-ft-mse, sd-vae-ft-ema, sdxl-vae, sdxl-vae-fp16-fix"
+    )
+    parser.add_argument(
+        "--clip", action="store_true", help="Download CLIP ViT-L/14 (optional, for future T5+CLIP dual-encoder)"
+    )
     parser.add_argument("--llm", action="store_true", help="Download default LLM (SmolLM2-360M) for prompt expansion")
-    parser.add_argument("--llm-best", action="store_true", help="Download best LLM (Qwen2.5-7B-Instruct) for prompt expansion")
+    parser.add_argument(
+        "--llm-best", action="store_true", help="Download best LLM (Qwen2.5-7B-Instruct) for prompt expansion"
+    )
     parser.add_argument("--all", action="store_true", help="Download all T5 sizes, all VAEs, CLIP, and both LLMs")
     parser.add_argument("--max-workers", type=int, default=4, help="Parallel download workers")
     args = parser.parse_args()

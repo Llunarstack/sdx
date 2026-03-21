@@ -31,4 +31,3 @@ def pairwise_ranking_loss(
     dif = pred_i - pred_j
     losses = F.relu(float(margin) - dif)
     return losses[mask].mean()
-

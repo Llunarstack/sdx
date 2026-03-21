@@ -14,7 +14,7 @@ def unit_weight(sigma: torch.Tensor) -> torch.Tensor:
 
 def edm_weight(sigma: torch.Tensor, sigma_data: float = 0.5) -> torch.Tensor:
     """EDM weighting: (sigma^2 + sigma_data^2) / (sigma * sigma_data)^2."""
-    return (sigma ** 2 + sigma_data ** 2) / (sigma * sigma_data).clamp(min=1e-8) ** 2
+    return (sigma**2 + sigma_data**2) / (sigma * sigma_data).clamp(min=1e-8) ** 2
 
 
 def v_weight(sigma: torch.Tensor) -> torch.Tensor:

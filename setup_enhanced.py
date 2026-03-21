@@ -2,9 +2,10 @@
 """
 Enhanced SDX Setup Script - Automatically configure and validate the enhanced SDX environment.
 """
-import sys
-import subprocess
+
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -33,6 +34,7 @@ def check_cuda():
     """Check CUDA availability."""
     try:
         import torch
+
         if torch.cuda.is_available():
             print(f"✅ CUDA available: {torch.cuda.get_device_name(0)}")
             print(f"   CUDA version: {torch.version.cuda}")
@@ -49,26 +51,26 @@ def check_cuda():
 def install_dependencies():
     """Install required dependencies."""
     print("\n📦 Installing dependencies...")
-    
+
     # Install main requirements
     if not run_command("pip install -r requirements.txt"):
         print("❌ Failed to install requirements")
         return False
-    
+
     # Install optional dependencies for enhanced features
     optional_deps = [
         "scipy",  # For image analysis
-        "tqdm",   # For progress bars
+        "tqdm",  # For progress bars
         "wandb",  # For experiment tracking
         "tensorboard",  # For logging
         "safetensors",  # For safe model loading
-        "omegaconf",   # For configuration management
+        "omegaconf",  # For configuration management
     ]
-    
+
     for dep in optional_deps:
         print(f"Installing {dep}...")
         run_command(f"pip install {dep}", check=False)
-    
+
     print("✅ Dependencies installed")
     return True
 
@@ -76,28 +78,20 @@ def install_dependencies():
 def create_directories():
     """Create necessary directories."""
     print("\n📁 Creating directories...")
-    
-    directories = [
-        "experiments",
-        "checkpoints", 
-        "logs",
-        "datasets",
-        "outputs",
-        ".kiro/steering",
-        ".kiro/settings"
-    ]
-    
+
+    directories = ["experiments", "checkpoints", "logs", "datasets", "outputs", ".kiro/steering", ".kiro/settings"]
+
     for dir_name in directories:
         Path(dir_name).mkdir(parents=True, exist_ok=True)
         print(f"   Created: {dir_name}")
-    
+
     print("✅ Directories created")
 
 
 def create_example_config():
     """Create example configuration files."""
     print("\n⚙️  Creating example configurations...")
-    
+
     # Example training config
     example_config = """# Example training configuration
 from config.train_config import TrainConfig
@@ -127,28 +121,28 @@ cfg = TrainConfig(
     use_compile=True,
 )
 """
-    
+
     with open("example_config.py", "w") as f:
         f.write(example_config)
-    
+
     # Example environment file
     env_example = """# Copy this to .env and fill in your values
 HF_TOKEN=your_huggingface_token_here
 CUDA_VISIBLE_DEVICES=0
 WANDB_API_KEY=your_wandb_key_here
 """
-    
+
     if not Path(".env").exists():
         with open(".env.example", "w") as f:
             f.write(env_example)
-    
+
     print("✅ Example configurations created")
 
 
 def validate_installation():
     """Validate the installation."""
     print("\n🔍 Validating installation...")
-    
+
     try:
         # Test required modules without unused import side effects.
         required_modules = [
@@ -162,19 +156,18 @@ def validate_installation():
         for module_name in required_modules:
             if importlib.util.find_spec(module_name) is None:
                 raise ImportError(f"Missing module: {module_name}")
-        
+
         print("✅ Core imports successful")
-        
+
         # Test CLI
-        result = subprocess.run([sys.executable, "cli.py", "--help"], 
-                              capture_output=True, text=True)
+        result = subprocess.run([sys.executable, "cli.py", "--help"], capture_output=True, text=True)
         if result.returncode == 0:
             print("✅ CLI tool working")
         else:
             print("⚠️  CLI tool may have issues")
-        
+
         return True
-        
+
     except ImportError as e:
         print(f"❌ Import error: {e}")
         return False
@@ -183,37 +176,33 @@ def validate_installation():
 def run_quick_test():
     """Run a quick test of the enhanced features."""
     print("\n🧪 Running quick tests...")
-    
+
     try:
         # Test configuration validation
         from config.train_config import TrainConfig
         from utils.config_validator import validate_train_config
-        
-        cfg = TrainConfig(
-            data_path="./datasets/test",
-            model_name="DiT-XL/2-Text",
-            global_batch_size=16,
-            passes=1
-        )
-        
+
+        cfg = TrainConfig(data_path="./datasets/test", model_name="DiT-XL/2-Text", global_batch_size=16, passes=1)
+
         issues = validate_train_config(cfg)
         print(f"   Config validation: {len(issues)} issues found (expected)")
-        
+
         # Test prompt optimization
         from utils.advanced_inference import PromptOptimizer
-        
+
         optimizer = PromptOptimizer()
         optimized = optimizer.optimize_prompt("a girl in a garden", style="anime")
         print(f"   Prompt optimization: '{optimized[:50]}...'")
-        
+
         # Test dataset analyzer (without actual data)
         from utils.data_analysis import DatasetAnalyzer
+
         _analyzer = DatasetAnalyzer()
         print("   Dataset analyzer: initialized successfully")
-        
+
         print("✅ Quick tests passed")
         return True
-        
+
     except Exception as e:
         print(f"❌ Test failed: {e}")
         return False
@@ -233,7 +222,7 @@ def print_next_steps():
     print("   python train.py --config my_config.py")
     print("5. Generate images:")
     print("   python sample.py --ckpt ./checkpoints/best.pt --prompt 'your prompt'")
-    
+
     print("\n🔧 Enhanced features available:")
     print("- Dataset quality analysis")
     print("- Configuration validation")
@@ -242,7 +231,7 @@ def print_next_steps():
     print("- Model architecture analysis")
     print("- Training metrics tracking")
     print("- Image quality enhancement")
-    
+
     print("\n📚 Documentation:")
     print("- Enhanced features: docs/ENHANCED_FEATURES.md")
     print("- CLI help: python cli.py --help")
@@ -253,32 +242,32 @@ def main():
     """Main setup function."""
     print("🚀 Enhanced SDX Setup")
     print("=" * 50)
-    
+
     # Check prerequisites
     if not check_python_version():
         sys.exit(1)
-    
+
     # Install dependencies
     if not install_dependencies():
         sys.exit(1)
-    
+
     # Check CUDA after PyTorch installation
     check_cuda()
-    
+
     # Create directories
     create_directories()
-    
+
     # Create example configs
     create_example_config()
-    
+
     # Validate installation
     if not validate_installation():
         print("⚠️  Installation validation failed - some features may not work")
-    
+
     # Run quick tests
     if not run_quick_test():
         print("⚠️  Quick tests failed - check your installation")
-    
+
     # Print next steps
     print_next_steps()
 

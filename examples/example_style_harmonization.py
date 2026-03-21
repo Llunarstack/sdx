@@ -3,6 +3,7 @@
 Style Harmonization System Example
 Demonstrates how to handle mixed styles to prevent weird-looking images.
 """
+
 import sys
 from pathlib import Path
 
@@ -94,4 +95,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -1,3 +1,4 @@
+# Core ML / diffusion
 torch>=2.0.0
 torchvision
 timm>=0.9.0
@@ -5,24 +6,20 @@ transformers>=4.30.0
 huggingface_hub>=0.20.0
 diffusers>=0.25.0
 xformers>=0.0.23
+accelerate>=0.25.0
+
+# Data & IO
 Pillow
 numpy
-accelerate>=0.25.0
 scipy
+opencv-python
+safetensors
+omegaconf
+
+# Training / logging
 tqdm
 wandb
 tensorboard
-safetensors
-omegaconf
-opencv-python
+
+# Optional utilities (OCR, etc.)
 pytesseract
-asyncio
-dataclasses
-pathlib
-logging
-hashlib
-pickle
-math
-re
-json
-collections

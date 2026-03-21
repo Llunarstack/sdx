@@ -3,6 +3,7 @@
 Export a .pt checkpoint's DiT weights to .safetensors for ComfyUI, A1111, or other loaders.
 Saves only the model state_dict (ema or model). Optional: --metadata to embed config fields as JSON.
 """
+
 import argparse
 import json
 import sys
@@ -14,11 +15,11 @@ if str(ROOT) not in sys.path:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Export .pt checkpoint DiT weights to .safetensors."
-    )
+    parser = argparse.ArgumentParser(description="Export .pt checkpoint DiT weights to .safetensors.")
     parser.add_argument("ckpt", type=str, help="Path to .pt checkpoint")
-    parser.add_argument("--out", type=str, default="", help="Output path (default: same stem as ckpt with .safetensors)")
+    parser.add_argument(
+        "--out", type=str, default="", help="Output path (default: same stem as ckpt with .safetensors)"
+    )
     parser.add_argument("--metadata", action="store_true", help="Embed config fields as safetensors metadata")
     args = parser.parse_args()
 

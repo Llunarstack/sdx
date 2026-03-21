@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import torch
-
 from utils.text_encoder_bundle import TripleTextFusion
 
 

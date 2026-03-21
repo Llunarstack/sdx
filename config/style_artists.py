@@ -27,8 +27,16 @@ ARTIST_STYLE_PATTERNS = [
 
 # Prefixes that often start a style phrase (for comma-separated tags).
 STYLE_PHRASE_PREFIXES = (
-    "by ", "art by ", "drawn by ", "style of ", "in the style of ",
-    "artist:", "style:", "art style ", "painting style ", "illustration style ",
+    "by ",
+    "art by ",
+    "drawn by ",
+    "style of ",
+    "in the style of ",
+    "artist:",
+    "style:",
+    "art style ",
+    "painting style ",
+    "illustration style ",
 )
 
 # Well-known artist/style tags from tag boards (PixAI, Danbooru, etc.).
@@ -36,14 +44,36 @@ STYLE_PHRASE_PREFIXES = (
 # Add more as needed; model learns from your dataset's actual tags.
 ARTIST_STYLE_TAGS: List[str] = [
     # Anime / illustration (Danbooru-style; often use underscore)
-    "makoto_shinkai", "ghibli", "studio_ghibli", "miyazaki", "hayao_miyazaki",
-    "kyoani", "shaft", "trigger", "ufotable", "a-1_pictures",
-    "digital_art", "anime_screencap", "official_art", "fan_art",
+    "makoto_shinkai",
+    "ghibli",
+    "studio_ghibli",
+    "miyazaki",
+    "hayao_miyazaki",
+    "kyoani",
+    "shaft",
+    "trigger",
+    "ufotable",
+    "a-1_pictures",
+    "digital_art",
+    "anime_screencap",
+    "official_art",
+    "fan_art",
     # Art styles (PixAI / general)
-    "oil_painting", "watercolor", "digital_painting", "concept_art",
-    "cel_shading", "soft_lighting", "dramatic_lighting", "cinematic",
-    "fantasy_art", "character_design", "concept_art", "environment_art",
-    "pixiv", "artstation", "behance",
+    "oil_painting",
+    "watercolor",
+    "digital_painting",
+    "concept_art",
+    "cel_shading",
+    "soft_lighting",
+    "dramatic_lighting",
+    "cinematic",
+    "fantasy_art",
+    "character_design",
+    "concept_art",
+    "environment_art",
+    "pixiv",
+    "artstation",
+    "behance",
     # Can add more: e.g. specific artist names from your dataset
 ]
 

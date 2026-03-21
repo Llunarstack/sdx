@@ -3,23 +3,25 @@
 Character Consistency System Example
 Demonstrates how to use the character consistency features for maintaining character identity across generations.
 """
+
+import json
 import os
 import sys
+from pathlib import Path
+
 import torch
 from PIL import Image, ImageDraw, ImageFont
-import json
-from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from models.enhanced_dit import EnhancedDiT  # noqa: E402
+from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
 from utils.character_consistency import (  # noqa: E402
     CharacterDatabase,
     PhysicalFeatures,
     StylePreferences,
 )
-from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
-from models.enhanced_dit import EnhancedDiT  # noqa: E402
 
 
 def create_sample_reference_images(character_name: str, output_dir: str = "./sample_references"):
@@ -41,7 +43,7 @@ def create_sample_reference_images(character_name: str, output_dir: str = "./sam
         except Exception:
             font = None
 
-        text = f"{character_name}\nRef {i+1}"
+        text = f"{character_name}\nRef {i + 1}"
         if font:
             draw.text((10, 10), text, fill=(0, 0, 0), font=font)
         else:
@@ -59,7 +61,7 @@ def create_sample_reference_images(character_name: str, output_dir: str = "./sam
         draw.arc([100, 160, 156, 180], 0, 180, fill=(0, 0, 0), width=3)
 
         # Save image
-        img_path = os.path.join(output_dir, f"{character_name.lower().replace(' ', '_')}_ref_{i+1}.png")
+        img_path = os.path.join(output_dir, f"{character_name.lower().replace(' ', '_')}_ref_{i + 1}.png")
         img.save(img_path)
         reference_paths.append(img_path)
         print(f"Created reference image: {img_path}")
@@ -244,7 +246,9 @@ def demonstrate_cli_usage():
     print("  python cli.py character validate char_12345678 generated_image.png")
     print()
     print("  # Generate with character consistency")
-    print("  python cli.py generate 'Elena Rodriguez walking in a park' --checkpoint model.pt --character 'Elena Rodriguez'")
+    print(
+        "  python cli.py generate 'Elena Rodriguez walking in a park' --checkpoint model.pt --character 'Elena Rodriguez'"
+    )
     print("  python cli.py generate 'portrait of Elena' --checkpoint model.pt --character char_12345678")
     print()
     print("  # Character statistics")
@@ -294,4 +298,3 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
-

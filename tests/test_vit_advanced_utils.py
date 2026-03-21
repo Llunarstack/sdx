@@ -34,4 +34,3 @@ def test_tta_predict_shapes() -> None:
     assert out["quality_logit"].shape == (2,)
     assert out["adherence_score"].shape == (2,)
     assert out["embedding"].shape[0] == 2
-

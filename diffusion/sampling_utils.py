@@ -7,9 +7,7 @@ def append_dims(x: torch.Tensor, target_dims: int) -> torch.Tensor:
     """Append dimensions so x has target_dims. From k-diffusion / ControlNet."""
     dims_to_append = target_dims - x.ndim
     if dims_to_append < 0:
-        raise ValueError(
-            f"input has {x.ndim} dims but target_dims is {target_dims}"
-        )
+        raise ValueError(f"input has {x.ndim} dims but target_dims is {target_dims}")
     return x[(...,) + (None,) * dims_to_append]
 
 

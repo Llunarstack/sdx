@@ -87,9 +87,8 @@ def main() -> None:
     grid_path = out_dir / "grid.png"
     _make_grid(img_paths, args.rows, args.cols, grid_path)
     (out_dir / "seeds.json").write_text(json.dumps({"seeds": seeds}, indent=2), encoding="utf-8")
-    print(f"Saved seeds: {out_dir/'seeds.json'}")
+    print(f"Saved seeds: {out_dir / 'seeds.json'}")
 
 
 if __name__ == "__main__":
     main()
-

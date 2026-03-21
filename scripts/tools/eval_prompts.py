@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
-
 DEFAULT_PROMPTS: Dict[str, str] = {
     "portrait_real": "portrait of a woman, soft window light, shallow depth of field, sharp eyes, 50mm lens",
     "fullbody_char": "1girl, standing, long dress, legs, shoes, full body, outdoors, sunset",
@@ -82,4 +81,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,39 @@
+[project]
+name = "sdx"
+version = "0.0.0"
+description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+# Install runtime deps with: pip install -r requirements.txt
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+src = ["config", "data", "diffusion", "examples", "models", "scripts", "tests", "training", "utils", "ViT"]
+
+[tool.ruff.lint]
+# Keep this set small so `ruff check` stays green on the full tree; tighten over time.
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort (auto-fix with `ruff check --fix`)
+]
+ignore = [
+  "E501",  # line length
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]

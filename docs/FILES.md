@@ -22,14 +22,17 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md` |
 | **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/model_paths.py` |
 
-End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + diffusion) → checkpoint → sample.py → image**. See [README § Pipeline showcase](../README.md#pipeline-showcase).
+End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + diffusion) → checkpoint → sample.py → image**. See [README § Architecture and pipeline](../README.md#architecture-and-pipeline).
 
 ### Root
 
 | File | Description |
 |------|-------------|
 | [README.md](../README.md) | Project overview, setup, data format, training, options. |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | PR checklist: ruff format/check, pytest, docs. |
+| [pyproject.toml](../pyproject.toml) | Ruff + pytest settings; minimal `[project]` metadata. |
 | [requirements.txt](../requirements.txt) | Pip dependencies (torch, transformers, diffusers, xformers, etc.). |
+| [.editorconfig](../.editorconfig) | Editor defaults (indent, UTF-8, final newline). |
 | [train.py](../train.py) | Training: DiT + T5 (optional **triple** CLIP fusion via `--text-encoder-mode triple`), VAE/RAE, REPA, passes/epochs, val, DDP; **--crop-mode**, **--caption-dropout-schedule**, **--save-polyak**, **--wandb-project**, **--tensorboard-dir**, **--dry-run**. |
 | [inference.py](../inference.py) | Load checkpoint and config for programmatic inference. |
 | [sample.py](../sample.py) | CLI sampling: prompt, negative prompt, steps, width, height; **--cfg-scale**, **--num N** (batch), **--grid**, **--vae-tiling**, **--cfg-rescale**, **--deterministic** (reproducible); style, control, lora, img2img, sharpen, contrast. High CFG auto-enables rescale/threshold. |
@@ -38,7 +41,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 | File | Description |
 |------|-------------|
-| [config/__init__.py](../config/__init__.py) | Exports `TrainConfig`. |
+| [config/__init__.py](../config/__init__.py) | Exports `TrainConfig`, `get_dit_build_kwargs`, `DEFAULT_NEGATIVE_PROMPT`. |
 | [config/train_config.py](../config/train_config.py) | TrainConfig + `get_dit_build_kwargs(cfg)`: DiT build args; **`text_encoder_mode`**, **`clip_text_encoder_*`**, RAE/REPA fields. |
 | [config/pixai_reference.py](../config/pixai_reference.py) | PixAI.art-style model labels for logs (Haruka, Tsubaki, etc.). |
 | [config/prompt_domains.py](../config/prompt_domains.py) | Recommended prompts/negatives for 3D, realistic, interior, exterior. |
@@ -153,6 +156,7 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [docs/CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect: TrainConfig → checkpoint → sample/inference; get_dit_build_kwargs; data flow. |
 | [docs/HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | How generation works: prompt → T5 → diffusion loop → DiT denoising → VAE decode → image. |
 | [docs/DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior: how we handle hard-to-generate domains. |
+| [docs/REGION_CAPTIONS.md](REGION_CAPTIONS.md) | JSONL **`parts`** / **`region_captions`**: merge regional labels into T5 text for layout-aware training. |
 | [docs/MODEL_STACK.md](MODEL_STACK.md) | What lives under **`model/`** (T5, CLIP, DINOv2, Cascade, …) and how it maps to training vs `ViT/`. |
 | [docs/FILES.md](FILES.md) | This file: project file map and external reference links. |
 
@@ -260,5 +264,5 @@ Cloned into `external/` by [scripts/setup/clone_repos.ps1](../scripts/setup/clon
 - **Diffusion:** [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) · [diffusion/respace.py](../diffusion/respace.py) · [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) · [diffusion/loss_weighting.py](../diffusion/loss_weighting.py)
 - **Models:** [models/dit_text.py](../models/dit_text.py) · [models/dit_predecessor.py](../models/dit_predecessor.py) · [models/pixart_blocks.py](../models/pixart_blocks.py) (SizeEmbedder, ported from PixArt)
 - **Data:** [data/t2i_dataset.py](../data/t2i_dataset.py) · [data/caption_utils.py](../data/caption_utils.py)
-- **Docs:** [README](../README.md) · [MODEL_STACK](MODEL_STACK.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
+- **Docs:** [README](../README.md) · [REGION_CAPTIONS](REGION_CAPTIONS.md) · [MODEL_STACK](MODEL_STACK.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
 - **Weights / paths:** [docs/MODEL_STACK.md](MODEL_STACK.md) · [utils/model_paths.py](../utils/model_paths.py)

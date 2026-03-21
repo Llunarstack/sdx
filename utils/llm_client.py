@@ -39,7 +39,10 @@ def expand_prompt_qwen(
 ) -> str:
     """Return an expanded prompt string (best-effort)."""
     messages = [
-        {"role": "system", "content": "You expand image generation prompts with concrete visual detail. Output only the prompt, no quotes."},
+        {
+            "role": "system",
+            "content": "You expand image generation prompts with concrete visual detail. Output only the prompt, no quotes.",
+        },
         {"role": "user", "content": f"Expand this prompt for a high-quality image: {prompt}"},
     ]
     try:

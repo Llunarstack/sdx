@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageFilter
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -53,4 +52,3 @@ def test_image_quality_qc_thresholding(tmp_path: Path, sharp_blur_imgs: tuple[Pa
     r2 = subprocess.run(cmd_fail, capture_output=True, text=True, timeout=30)
     assert r2.returncode == 1, r2.stderr
     assert "imageqc:" in r2.stdout
-

@@ -1,7 +1,9 @@
-from .gaussian_diffusion import create_diffusion, GaussianDiffusion
+"""Diffusion schedules, Gaussian diffusion wrapper, and sampling helpers."""
+
+from .gaussian_diffusion import GaussianDiffusion, create_diffusion
+from .loss_weighting import get_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
-from .loss_weighting import get_loss_weight
 
 __all__ = [
     "create_diffusion",

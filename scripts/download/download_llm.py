@@ -3,6 +3,7 @@
 Download an LLM for prompt understanding/expansion (e.g. short user prompt → detailed caption).
 Uses Hugging Face Hub. Use --best for top-quality (Qwen2.5-7B-Instruct); default is fast/small (SmolLM2-360M).
 """
+
 import argparse
 import os
 import sys

@@ -32,9 +32,7 @@ def space_timesteps(num_timesteps: int, section_counts) -> np.ndarray:
     for i, section_count in enumerate(section_counts):
         size = size_per + (1 if i < extra else 0)
         if size < section_count:
-            raise ValueError(
-                f"Section has {size} steps but requested {section_count}; cannot divide."
-            )
+            raise ValueError(f"Section has {size} steps but requested {section_count}; cannot divide.")
         if section_count <= 1:
             frac_stride = 1.0
         else:

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)
 
 
@@ -217,4 +216,3 @@ def should_fail(stats: Dict[str, object], opts: PromptLintOptions) -> bool:
     if not opts.fail_on_overlap:
         return False
     return int(stats.get("pos_neg_overlap_rows", 0)) > 0
-

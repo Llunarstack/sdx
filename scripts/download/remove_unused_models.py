@@ -6,6 +6,7 @@ Removes: T5-XL, T5-Large, sd-vae-ft-ema, sdxl-vae, CLIP-ViT-L-14, Qwen2.5-7B-Ins
 
 Close any app using these models (IDE, Python, Hugging Face) before running.
 """
+
 import argparse
 import os
 import shutil

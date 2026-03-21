@@ -43,4 +43,3 @@ def analyze_image_quality(image: Image.Image) -> Dict[str, float]:
         "sharpness": laplacian_sharpness(image),
         "contrast": grayscale_contrast(image),
     }
-

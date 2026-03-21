@@ -81,4 +81,3 @@ class CascadedMultimodalDiffusion(nn.Module):
         if self.bridge is None:
             return z_rae.new_zeros(())
         return self.bridge.cycle_loss(z_rae)
-

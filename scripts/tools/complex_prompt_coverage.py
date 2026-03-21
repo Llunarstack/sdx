@@ -96,7 +96,7 @@ def _load_custom_categories(custom_path: str) -> Dict[str, Dict[str, Any]]:
     data = json.loads(p.read_text(encoding="utf-8"))
     cats = data.get("categories", data)  # allow either wrapper or direct mapping
     if not isinstance(cats, dict):
-        raise SystemExit("custom-categories-json must be {\"categories\": {name: {terms:[...]}}} or {name: {...}}")
+        raise SystemExit('custom-categories-json must be {"categories": {name: {terms:[...]}}} or {name: {...}}')
     out: Dict[str, Dict[str, Any]] = {}
     for name, spec in cats.items():
         if not isinstance(spec, dict):
@@ -135,7 +135,7 @@ def main() -> None:
         "--custom-categories-json",
         type=str,
         default="",
-        help="Optional JSON file with extra/override categories: {\"categories\": {name: {\"terms\": [...]}}}",
+        help='Optional JSON file with extra/override categories: {"categories": {name: {"terms": [...]}}}',
     )
     args = ap.parse_args()
 
@@ -490,7 +490,7 @@ def main() -> None:
         data = json.loads(p.read_text(encoding="utf-8"))
         cats = data.get("categories", data)
         if not isinstance(cats, dict):
-            raise SystemExit("suggestions-json must be {\"categories\": {...}} or {...category...} structure.")
+            raise SystemExit('suggestions-json must be {"categories": {...}} or {...category...} structure.')
         out: Dict[str, Dict[str, str]] = {}
         for cat, spec in cats.items():
             if isinstance(spec, dict):
@@ -560,9 +560,20 @@ def main() -> None:
     if args.out:
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps({"manifest": str(manifest_path), "rows_scanned": total, "counts": counts, "fractions": fractions, "thresholds": thresholds}, indent=2), encoding="utf-8")
+        out_path.write_text(
+            json.dumps(
+                {
+                    "manifest": str(manifest_path),
+                    "rows_scanned": total,
+                    "counts": counts,
+                    "fractions": fractions,
+                    "thresholds": thresholds,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":
     main()
-

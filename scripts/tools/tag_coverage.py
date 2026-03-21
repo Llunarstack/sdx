@@ -70,15 +70,15 @@ def main() -> None:
     sys.path.insert(0, str(repo_root))
 
     from data.caption_utils import (
-        QUALITY_TAGS,
-        HARD_STYLE_TAGS_FLAT,
-        SUBJECT_PREFIXES,
         AGE_TAGS,
-        HEIGHT_TAGS,
-        BUILD_BODY_TAGS,
         ANATOMY_FRAMING_TAGS,
         BODY_PART_TAGS,
+        BUILD_BODY_TAGS,
         DOMAIN_TAGS,
+        HARD_STYLE_TAGS_FLAT,
+        HEIGHT_TAGS,
+        QUALITY_TAGS,
+        SUBJECT_PREFIXES,
     )
 
     manifest_path = Path(args.manifest)
@@ -154,4 +154,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

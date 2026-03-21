@@ -87,7 +87,9 @@ def main() -> int:
         pin_memory=torch.cuda.is_available(),
     )
 
-    model = build_vit_model(cfg.model_name, pretrained=cfg.pretrained, text_feat_dim=cfg.text_feat_dim, hidden_dim=cfg.hidden_dim)
+    model = build_vit_model(
+        cfg.model_name, pretrained=cfg.pretrained, text_feat_dim=cfg.text_feat_dim, hidden_dim=cfg.hidden_dim
+    )
     model.to(device)
     ema = ModelEMA(model, decay=float(args.ema_decay))
 
@@ -142,7 +144,7 @@ def main() -> int:
 
         avg_loss = running / max(1, n)
         history.append({"epoch": epoch + 1, "loss": avg_loss})
-        print(f"[ViT] epoch {epoch+1}/{cfg.epochs} loss={avg_loss:.6f}")
+        print(f"[ViT] epoch {epoch + 1}/{cfg.epochs} loss={avg_loss:.6f}")
 
         ckpt = {
             "state_dict": model.state_dict(),
@@ -179,4 +181,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

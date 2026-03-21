@@ -1,9 +1,6 @@
-from .train_config import TrainConfig, get_dit_build_kwargs
+"""Public config API: training dataclass, DiT build kwargs, shared prompt defaults."""
 
-# Optional: prompt domains and defaults (used by sample.py, data pipeline)
-try:
-    from .prompt_domains import DEFAULT_NEGATIVE_PROMPT
-except ImportError:
-    DEFAULT_NEGATIVE_PROMPT = " "
+from .prompt_domains import DEFAULT_NEGATIVE_PROMPT
+from .train_config import TrainConfig, get_dit_build_kwargs
 
 __all__ = ["TrainConfig", "get_dit_build_kwargs", "DEFAULT_NEGATIVE_PROMPT"]

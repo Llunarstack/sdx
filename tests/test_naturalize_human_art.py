@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-
 from utils.quality import naturalize
 
 
@@ -19,4 +18,3 @@ def test_naturalize_human_art_modifies_image() -> None:
     assert np.any(out != img)
     # Keep values within valid range.
     assert out.min() >= 0 and out.max() <= 255
-

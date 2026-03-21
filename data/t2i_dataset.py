@@ -1,20 +1,21 @@
 # Text-to-image dataset: PixAI-style tag prompts + ReVe-style long/complex captions.
 import random
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import torch
-from torch.utils.data import Dataset
-from PIL import Image
 import numpy as np
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
 
 from .caption_utils import (
+    add_anti_blending_and_count,
     apply_pixai_emphasis,
-    normalize_tag_order,
+    boost_domain_tags,
     boost_hard_style_tags,
     boost_quality_tags,
-    boost_domain_tags,
-    add_anti_blending_and_count,
+    merge_region_captions_into_caption,
+    normalize_tag_order,
 )
 
 
@@ -25,9 +26,7 @@ def _center_crop(pil_image, image_size: int):
         pil_image = pil_image.resize((w // 2, h // 2), resample=Image.BOX)
         w, h = pil_image.size
     scale = image_size / min(w, h)
-    pil_image = pil_image.resize(
-        (round(w * scale), round(h * scale)), resample=Image.BICUBIC
-    )
+    pil_image = pil_image.resize((round(w * scale), round(h * scale)), resample=Image.BICUBIC)
     arr = np.array(pil_image)
     h, w = arr.shape[:2]
     crop_y = (h - image_size) // 2
@@ -42,9 +41,7 @@ def _random_crop(pil_image, image_size: int):
         pil_image = pil_image.resize((w // 2, h // 2), resample=Image.BOX)
         w, h = pil_image.size
     scale = image_size / min(w, h)
-    pil_image = pil_image.resize(
-        (round(w * scale), round(h * scale)), resample=Image.BICUBIC
-    )
+    pil_image = pil_image.resize((round(w * scale), round(h * scale)), resample=Image.BICUBIC)
     arr = np.array(pil_image)
     h, w = arr.shape[:2]
     if h == image_size and w == image_size:
@@ -116,6 +113,8 @@ class Text2ImageDataset(Dataset):
         latent_cache_dir: Optional[str] = None,
         crop_mode: str = "center",  # "center" | "random" | "largest_center" (IMPROVEMENTS 1.2)
         extract_style_from_caption: bool = True,  # Auto-fill style from artist/style tags (PixAI, Danbooru)
+        region_caption_mode: str = "append",  # "append" | "prefix" | "off" — merge JSONL regions/parts into T5 caption
+        region_layout_tag: str = "[layout]",
     ):
         self.data_path = Path(data_path)
         self.extract_style_from_caption = extract_style_from_caption
@@ -132,13 +131,18 @@ class Text2ImageDataset(Dataset):
         self.use_tag_order = use_tag_order
         self.use_quality_boost = use_quality_boost
         self.use_anti_blending = use_anti_blending
-        self._crop_fn = {"center": _center_crop, "random": _random_crop, "largest_center": _largest_center_crop}.get(crop_mode, _center_crop)
+        self._crop_fn = {"center": _center_crop, "random": _random_crop, "largest_center": _largest_center_crop}.get(
+            crop_mode, _center_crop
+        )
+        self.region_caption_mode = region_caption_mode
+        self.region_layout_tag = region_layout_tag
         self.samples: List[Dict[str, Any]] = []
         self._scan()
 
     def _scan(self):
         if self.data_path.suffix.lower() == ".jsonl":
             import json
+
             with open(self.data_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
@@ -147,6 +151,15 @@ class Text2ImageDataset(Dataset):
                     d = json.loads(line)
                     path = d.get("image_path") or d.get("path") or d.get("image")
                     cap = d.get("caption") or d.get("text") or d.get("caption")
+                    parts = d.get("parts")
+                    rc = d.get("region_captions") or d.get("segments")
+                    regions: Any = None
+                    if isinstance(parts, dict) and rc is not None:
+                        regions = {"parts": parts, "region_captions": rc}
+                    elif isinstance(parts, dict):
+                        regions = parts
+                    else:
+                        regions = rc
                     if path and cap:
                         neg = d.get("negative_caption") or d.get("negative_prompt") or ""
                         style = d.get("style") or ""
@@ -154,11 +167,19 @@ class Text2ImageDataset(Dataset):
                         w = float(d.get("weight", d.get("aesthetic_score", 1.0)))
                         init_img = d.get("init_image") or d.get("init_image_path") or d.get("source_image") or ""
                         difficulty = float(d.get("difficulty", 0.5))
-                        self.samples.append({
-                            "path": path, "caption": cap, "negative_caption": neg,
-                            "style": style, "control_image": ctrl, "init_image": init_img, "weight": w,
-                            "difficulty": difficulty,
-                        })
+                        self.samples.append(
+                            {
+                                "path": path,
+                                "caption": cap,
+                                "negative_caption": neg,
+                                "style": style,
+                                "control_image": ctrl,
+                                "init_image": init_img,
+                                "weight": w,
+                                "difficulty": difficulty,
+                                "regions": regions,
+                            }
+                        )
             return
         for subdir in self.data_path.iterdir():
             if not subdir.is_dir():
@@ -176,16 +197,19 @@ class Text2ImageDataset(Dataset):
                 negative_caption = lines[1].strip() if len(lines) > 1 else ""
                 if not caption:
                     continue
-                self.samples.append({
-                    "path": str(img_path),
-                    "caption": caption,
-                    "negative_caption": negative_caption,
-                    "style": "",
-                    "control_image": "",
-                    "init_image": "",
-                    "weight": 1.0,
-                    "difficulty": 0.5,
-                })
+                self.samples.append(
+                    {
+                        "path": str(img_path),
+                        "caption": caption,
+                        "negative_caption": negative_caption,
+                        "style": "",
+                        "control_image": "",
+                        "init_image": "",
+                        "weight": 1.0,
+                        "difficulty": 0.5,
+                        "regions": None,
+                    }
+                )
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -218,13 +242,28 @@ class Text2ImageDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         s = self.samples[idx]
         path = s["path"]
-        caption, negative_caption = self._process_caption(s["caption"], s.get("negative_caption", ""))
-        out = {"caption": caption, "negative_caption": negative_caption, "path": path, "weight": s.get("weight", 1.0), "difficulty": s.get("difficulty", 0.5)}
+        raw_caption = s["caption"]
+        regions = s.get("regions")
+        raw_caption = merge_region_captions_into_caption(
+            raw_caption,
+            regions,
+            mode=self.region_caption_mode,
+            layout_tag=self.region_layout_tag,
+        )
+        caption, negative_caption = self._process_caption(raw_caption, s.get("negative_caption", ""))
+        out = {
+            "caption": caption,
+            "negative_caption": negative_caption,
+            "path": path,
+            "weight": s.get("weight", 1.0),
+            "difficulty": s.get("difficulty", 0.5),
+        }
         style_text = s.get("style", "")
         # Auto-fill style from caption when missing (artist/style tags from PixAI, Danbooru, etc.)
         if not style_text and self.extract_style_from_caption:
             try:
                 from config.style_artists import extract_style_from_text
+
                 style_text = extract_style_from_text(s.get("caption", "")) or ""
             except Exception:
                 pass
