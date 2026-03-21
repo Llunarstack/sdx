@@ -178,6 +178,7 @@ class TrainConfig:
     tensorboard_dir: Optional[str] = None  # e.g. "runs" to enable TensorBoard
     log_images_every: int = 0  # 0 = off; when > 0 and wandb/tb enabled, log a sample image every N steps
     log_images_prompt: str = "a photo of a cat"  # prompt used for log sample image
+    dry_run: bool = False  # Run 1 training step and exit (verify setup)
     # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
     save_polyak: int = 0  # if > 0, keep running avg of weights and save as polyak.pt every ckpt_every
 

@@ -2,6 +2,8 @@
 
 Thanks for helping improve SDX.
 
+For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see the README section **[Contributing & community](README.md#contributing--community)**.
+
 **Context:** SDX is a **modular training/sampling codebase** first. Not every PR needs a new benchmark or sample images—docs, tests, small tools, and **tiny reproducible training configs** are valuable too. See the README section **Project status, compute, and expectations** for how we frame scope.
 
 ## Before you open a PR

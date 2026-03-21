@@ -15,7 +15,8 @@ How the SDX repo is organized, how to navigate it, and how we keep style consist
 | **Models** | `models/` | DiT, ControlNet, MoE, RAE bridge, experimental multimodal scaffolds |
 | **Utils** | `utils/` | Checkpoints, text encoders, REPA, pick-best, lint, LLM client |
 | **ViT tools** | `ViT/` | **Separate** from the generator: quality scoring, ranking, prompt tools |
-| **Scripts** | `scripts/` | Downloads, book generation, one-off tools (not imported as a package) |
+| **Pipelines** | `pipelines/` | **image_gen** vs **book_comic** docs; book workflow script (`pipelines/book_comic/scripts/generate_book.py`); not a second copy of DiT |
+| **Scripts** | `scripts/` | Downloads, thin `scripts/book/` launcher, one-off tools (not imported as a package) |
 | **Tests** | `tests/` | PyTest; run from repo root |
 
 End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](FILES.md).

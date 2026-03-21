@@ -8,6 +8,9 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
+| [../pipelines/README.md](../pipelines/README.md) | **Two product lines:** `image_gen/` vs `book_comic/` (shared `train.py`; split docs + book script). |
+| [SMOKE_TRAINING.md](SMOKE_TRAINING.md) | Minimal `train.py` run: synthetic data + small DiT + `--dry-run`. |
+| [DANBOORU_HF.md](DANBOORU_HF.md) | Hugging Face Danbooru-style data → JSONL + `train.py`; one-shot `hf_download_and_train.py`. |
 | [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
@@ -34,7 +37,8 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
-| [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** (flow/distillation/test-time scaling/layout/data engine). |
+| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 industry context:** production-grade gen, authenticity, system-of-experts pipelines, 4K/aspect, text-in-image, grounding — mapped to SDX ([utils/orchestration.py](../utils/orchestration.py)). |
+| [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** and **§12 Industry alignment (2026)**. |
 | [INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos. |
 | [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy‑paste prompt recipes using presets, op‑modes, hard styles, and all the quality flags. |
 

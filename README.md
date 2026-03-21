@@ -34,11 +34,11 @@
 
 | Section | Links |
 | :--- | :--- |
-| **Context** | [Status & expectations](#project-status-compute-and-expectations) |
+| **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines (2 lines)](pipelines/README.md) |
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
 | **Workflow** | [Pipeline](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [2026 landscape](docs/LANDSCAPE_2026.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 </details>
 
@@ -52,13 +52,13 @@
 | :--- | :--- |
 | **What this repo optimizes for** | Modular **code**: `train.py` / `sample.py`, `GaussianDiffusion`, DiT variants, encoders, dataset tools, optional ViT QA—so “future you” or a lab can plug in compute without redesigning the stack. |
 | **What we don’t claim** | A single **official** base model, fixed **leaderboard** numbers, or a gallery of **example images** for every variant—unless someone trains and publishes them (contributions welcome). |
-| **Credibility without a huge model** | The implementation is **runnable**: `quick_test`, unit tests, `dit_variant_compare`, timestep previews, docs. A **tiny** run (small DiT, low resolution, short steps) is still a valid proof that the **pipeline** works—see [docs/HARDWARE.md](docs/HARDWARE.md). |
+| **Credibility without a huge model** | The implementation is **runnable**: `quick_test`, unit tests, `dit_variant_compare`, timestep previews, docs. A **tiny** training run (synthetic data + `DiT-B`) proves the full loop—see **[docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)** and [docs/HARDWARE.md](docs/HARDWARE.md). |
 
 ### If you only have a consumer GPU (e.g. ~16 GB VRAM)
 
 You can still get value **without** training a billion-parameter model:
 
-1. **Smoke / micro-runs** — `DiT-B/2-Text`, small `--image-size`, small `--global-batch-size`, `--no-compile` / grad checkpointing as needed; even a few hundred steps proves the loop runs.
+1. **Smoke / micro-runs** — `python scripts/tools/make_smoke_dataset.py --out data/smoke_tiny` then `train.py` with **`DiT-B/2-Text`**, `--dry-run` or `--max-steps 5` ([docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)).
 2. **Frozen encoders + train DiT only** — Use off-the-shelf VAE + T5 (and CLIP if triple mode); memory goes mostly to the DiT forward, not retraining encoders.
 3. **Infrastructure first** — Dataset JSONL, `scripts/tools/*`, ViT ranking, export scripts: these pay off before you ever touch a cluster.
 4. **Memory tricks** (typical across diffusion repos): gradient checkpointing, mixed precision (bf16), smaller batch + accumulation, smaller `image-size`, fewer simultaneous options (MoE/REPA off until needed).
@@ -68,8 +68,10 @@ You can still get value **without** training a billion-parameter model:
 | Phase | Focus |
 | :--- | :--- |
 | **Now** | Architecture clarity, docs, small tests, optional micro-training. |
-| **Next** | One **minimal** training recipe (small DiT, low res) documented end-to-end. |
+| **Next** | Run **[docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)** on your GPU when ready; iterate from there. |
 | **Later** | Serious training when you have **GPU time**, **storage**, and a **dataset** you trust. |
+
+**Want to help?** You don’t need a cluster—see **[Contributing & community](#contributing--community)** (docs, tests, tooling, and small reproducible runs all count).
 
 ---
 
@@ -87,6 +89,8 @@ You can still get value **without** training a billion-parameter model:
 ## Architecture and pipeline
 
 **End-to-end:** `data/` and optional manifest → `train.py` (uses `config/`, `diffusion/`, `models/`, `utils/`) → **checkpoint** → `sample.py` → **images**. Downloaded weights live in `model/` (gitignored); paths resolve via `utils/model_paths.py`.
+
+**Two training / product lines** (same engine, different docs and workflows): **[pipelines/image_gen/](pipelines/image_gen/README.md)** (general T2I) and **[pipelines/book_comic/](pipelines/book_comic/README.md)** (books, comics, manga). See **[pipelines/README.md](pipelines/README.md)**.
 
 <pre align="center">
 ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
@@ -106,6 +110,7 @@ You can still get value **without** training a billion-parameter model:
 | **`utils/`** | Checkpoint load, text-encoder bundle, REPA helpers, QC, **pick-best**, metrics | `train.py`, `sample.py`, scripts |
 | **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator) | CLI, optional dataset QA |
 | **`scripts/`** | Downloads, tools, Cascade stub | Ops & CI |
+| **`pipelines/`** | **image_gen** vs **book_comic** docs + book workflow script (no second DiT copy) | Contributors, multi-page / OCR workflows |
 | **`native/`** | Fast JSONL helpers (Rust, Go, …) | Optional; not imported by training by default |
 | **`model/`** | Downloaded HF weights | Paths via `utils/model_paths.py` |
 
@@ -419,7 +424,10 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 | Doc | Purpose |
 | :--- | :--- |
 | [docs/README.md](docs/README.md) | Index of all project docs |
-| [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, implemented vs planned |
+| [pipelines/README.md](pipelines/README.md) | **Two lines:** general **image_gen** vs **book_comic** (shared engine; split docs + scripts) |
+| [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
+| [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) | Hugging Face → JSONL + images; **`hf_download_and_train.py`** one-shot |
+| [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, implemented vs planned (incl. §12 industry alignment) |
 | [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion and flow ideas, timestep sampling, paper pointers |
 | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt to T5 to DiT to VAE to image |
 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | How config, data, checkpoint, and sampling connect |
@@ -431,6 +439,7 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 | [docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md) | JSONL `parts` and `region_captions` |
 | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds and determinism |
+| [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Industry context (2026):** authenticity, multi-stage pipelines, 4K/AR, text-in-image, grounding—mapped to SDX |
 
 ---
 
@@ -447,6 +456,8 @@ One JSON object per line, e.g.
 `{"image_path": "/path/to/img.png", "caption": "your caption"}`
 
 Use `--manifest-jsonl /path/to/manifest.jsonl` (and you can leave `--data-path` empty per your workflow).
+
+**Hugging Face (e.g. Danbooru-style):** if the dataset includes an **`image`** column plus captions/tags, use **`scripts/training/hf_download_and_train.py`** (export + basic `DiT-B` train) or **`scripts/training/hf_export_to_sdx_manifest.py`** alone — see **[docs/DANBOORU_HF.md](docs/DANBOORU_HF.md)** (`pip install datasets`). Example datasets with **`image` + `text`** (verified in that doc): `YaYaB/onepiece-blip-captions`, `KorAI/onepiece-captioned` (`--caption-field text`). Metadata-only dumps (no images in the parquet) need a separate image-download step.
 
 **Regional / layout labels** (optional): add **`parts`** (dict) and/or **`region_captions`** (list) so T5 sees *who/what/where* per region merged after the global `caption` (default `[layout] …`). Helps composition and part-level grounding without changing DiT. See **[docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md)** and `--region-caption-mode append|prefix|off`.
 
@@ -569,11 +580,22 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
 
 **Programmatic load**: `python inference.py --ckpt .../best.pt` (use **`--allow-imperfect`** for raw output).
 
-**Book / manga**: [scripts/book/generate_book.py](scripts/book/generate_book.py) — multi-page, optional face/speech-bubble anchoring, OCR.
+**Book / manga** — multi-page workflow (same `train.py` / checkpoints as general T2I; see **[pipelines/README.md](pipelines/README.md)**):
+
+| Piece | Role |
+|:------|:-----|
+| [pipelines/book_comic/scripts/generate_book.py](pipelines/book_comic/scripts/generate_book.py) | Canonical script (legacy: [scripts/book/generate_book.py](scripts/book/generate_book.py) forwards here) |
+| [pipelines/book_comic/book_helpers.py](pipelines/book_comic/book_helpers.py) | `--book-accuracy` presets, wiring to **`sample.py`** pick-best / CFG / post-process |
+| [utils/test_time_pick.py](utils/test_time_pick.py) | CLIP / edge / OCR **combo** scoring when `--num` > 1 |
+| [utils/quality.py](utils/quality.py) | Optional sharpen + **naturalize** after each page |
+| [data/caption_utils.py](data/caption_utils.py) | **prepend_quality_if_short** when preset enables it |
+
+**`--book-accuracy`:** `none` (legacy, single sample) \| `fast` \| `balanced` (2 candidates + combo pick + boost + light post) \| `maximum` (4 candidates + stronger post). Override with `--sample-candidates`, `--pick-best`, `--post-sharpen`, `--cfg-scale`, `--vae-tiling`, etc. Full detail: **[pipelines/book_comic/README.md](pipelines/book_comic/README.md)**.
 
 ```powershell
-python scripts/book/generate_book.py --ckpt "C:\path\best.pt" `
+python pipelines/book_comic/scripts/generate_book.py --ckpt "C:\path\best.pt" `
   --output-dir out_book --book-type manga --model-preset anime `
+  --book-accuracy balanced --text-in-image `
   --prompts-file pages.txt --expected-text "OPEN" --ocr-fix --ocr-iters 2 `
   --anchor-face --edge-anchor --anchor-speech-bubbles
 ```
@@ -693,7 +715,10 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | Timestep sampling preview | `scripts/tools/training_timestep_preview.py` (compare `--timestep-sample-mode` distributions) |
 | DiT size compare | `scripts/tools/dit_variant_compare.py` (params / GiB per variant) |
 | ViT checkpoint inspect | `scripts/tools/vit_inspect.py` (config + optional module tree) |
-| Export ONNX | `scripts/tools/export_onnx.py` |
+| Smoke training data | `scripts/tools/make_smoke_dataset.py` + [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) |
+| HF → JSONL (Danbooru-style) | `scripts/training/hf_export_to_sdx_manifest.py` + [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) |
+| Download + train (basic DiT-B) | `scripts/training/hf_download_and_train.py` (or `--demo` without HF) |
+  | Export ONNX | `scripts/tools/export_onnx.py` |
 | Latent cache | `scripts/training/precompute_latents.py` + `--latent-cache-dir` |
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |
 | Test-time pick | `--num 4 --pick-best clip\|edge\|ocr\|combo` |
@@ -737,6 +762,7 @@ sdx/
 ├── data/             # Text2ImageDataset, caption_utils
 ├── diffusion/        # gaussian_diffusion, schedules
 ├── docs/             # All markdown docs
+├── pipelines/        # image_gen vs book_comic workflows (docs + book script)
 ├── model/            # Downloaded weights (gitignored)
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
 ├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking tools
@@ -755,6 +781,55 @@ sdx/
 ```
 
 </details>
+
+---
+
+## Contributing & community
+
+SDX grows when **researchers, hobbyists, and doc writers** share fixes and ideas. You’re welcome here whether you’re tuning DiT on a single GPU or polishing a paragraph in `docs/`.
+
+### Why contribute here
+
+| Reason | Detail |
+| :----- | :----- |
+| **Modular surface area** | Clear seams: `diffusion/`, `models/`, `data/`, `utils/`, `scripts/tools/`—pick one area without owning the whole stack. |
+| **Impact without huge compute** | Tests, docs, dataset export scripts, Windows quirks, and **smoke runs** ([docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)) help everyone. |
+| **Modern diffusion topics** | Timestep sampling, REPA, MoE, AR blocks, triple text encoders—room for focused PRs and design notes in `docs/`. |
+
+### Ways to contribute (pick any)
+
+| Type | Examples |
+| :--- | :------- |
+| **Documentation** | Fix unclear CLI steps, add a recipe to [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md), cross-link [docs/FILES.md](docs/FILES.md), improve README sections. |
+| **Tests** | Extend `tests/` for new flags, `diffusion/timestep_sampling`, or dataset edge cases. |
+| **Tooling** | `scripts/tools/*`, HF export helpers, `quick_test`, `dit_variant_compare`, `vit_inspect`. |
+| **Robustness** | Reproducible failure reports (OS, GPU, PyTorch version), smaller defaults for low-VRAM, or clearer error messages. |
+| **Research-shaped code** | Optional losses, schedulers, or ablation knobs—prefer small PRs + a short note in `docs/` or [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md). |
+
+### Good first contributions
+
+- Run **`python scripts/tools/quick_test.py`** and **`pytest tests/ -q`**; report or fix any breakage on your platform.
+- Add **one** missing docstring or **one** CLI flag to the [Train CLI](#train-cli-quick-reference) table if it’s undocumented.
+- Improve **[CONTRIBUTING.md](CONTRIBUTING.md)** with a tip you wish you’d had on day one.
+- **Smoke path:** document or script a one-command path for your OS (see [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)).
+
+### Developer quick start (from repo root)
+
+```bash
+python -m venv .venv && .venv\Scripts\activate   # Windows
+# source .venv/bin/activate                       # Linux / macOS
+pip install -r requirements.txt
+python scripts/tools/quick_test.py
+pytest tests/ -q
+pip install ruff && ruff format . && ruff check .
+```
+
+PR workflow, style, and license: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+### Communication
+
+- **PRs:** small, focused changes are easier to review than large rewrites; describe *what* and *why*.
+- **Issues / discussions:** if your project uses GitHub Issues or Discussions, use them for bugs, ideas, and “good first issue” triage—otherwise, open a PR with a short rationale in the description.
 
 ---
 

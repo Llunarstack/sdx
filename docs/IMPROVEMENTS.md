@@ -386,3 +386,25 @@ High-signal directions that are **not all implemented** but are **actionable** a
 | **Long-term architecture** | **PixelDiT** (arXiv 2511.20645), full **rectified flow** trainer, **RecTok**-class tokenizers. | Ceiling raise; **large** engineering cost—treat as parallel experiments. |
 
 **Practical “OP stack” order (recommended):** (1) **Data engine + buckets** → (2) **timestep + loss tuning** (SNR-aware) → (3) **best-of-N + refinement gate** at sample → (4) **preference fine-tune** on curated pairs → (5) **distillation** for speed.
+
+---
+
+## 12. Industry alignment (2026): authenticity, systems, resolution, text, grounding
+
+**Context:** Image generation is increasingly **production infrastructure**—precision, grounding, and “real” outputs matter as much as aesthetics. See **[LANDSCAPE_2026.md](LANDSCAPE_2026.md)** for the full narrative and **named pipeline roles** in **[utils/orchestration.py](../utils/orchestration.py)**.
+
+| Trend | What leading stacks emphasize | SDX hooks today | Good contributions |
+|-------|------------------------------|-----------------|-------------------|
+| **Authenticity (“anti-plastic”)** | Natural texture, asymmetry, lens-like noise | CFG rescale / dynamic threshold, refinement, domain tags | Bucketed multi-res training (§1.1), optional frequency losses, richer “lived-in” captions |
+| **System of experts** | Designer / Verifier / Reasoner pipelines | `sample.py` + `--pick-best` + `ViT/` + T5/triple/LLM | Orchestration script wrapping K samples → score → refine; document in LANDSCAPE_2026 |
+| **Native high-res & AR** | Fewer pure upscaler workflows | `--width`/`--height`, VAE tiling | §1.1 buckets, docs for train-low / sample-high |
+| **Text & design in-image** | Paragraphs, logos, UI | OCR pick-best, MODEL_WEAKNESSES | Text-heavy JSONL, preference/DPO later (§11) |
+| **Live / retrieval grounding** | External facts in the loop | None built-in (frozen encoders) | Optional RAG module + clear safety/docs split |
+
+**Tickets (actionable, small PRs welcome):**
+
+1. Add **one** end-to-end doc example: `sample.py --num 4 --pick-best combo` + when to enable refinement (link from LANDSCAPE_2026).
+2. Optional **thin orchestration CLI** under `scripts/tools/` that chains generate → `test_time_pick` → optional refine—keep minimal and tested if added.
+3. Extend **spatial / relation** coverage tools (see [repo README](../README.md#extra-features) “Extra features”) for “blue book under red book” style prompts—aligns with “reasoner” stress tests.
+
+Cross-reference: §11 (insane quality), [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md), [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md).
