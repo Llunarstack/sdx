@@ -68,6 +68,8 @@ These are **not all hard dependencies** of SDX, but they inform our defaults, pr
 - `scripts/tools/tag_coverage.py` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
 - `scripts/tools/spatial_coverage.py` — Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...).
 - `scripts/tools/training_timestep_preview.py` — Preview histograms for `--timestep-sample-mode` (uniform / logit_normal / high_noise) before long training runs.
+- `scripts/tools/dit_variant_compare.py` — Parameter counts and FP32/BF16 GiB estimates for DiT / EnhancedDiT registry names.
+- `scripts/tools/vit_inspect.py` — Inspect ViT quality checkpoints (config + optional module tree via `utils/nn_inspect.py`).
 - `scripts/tools/op_preflight.py` — One-shot “coverage + thresholds” gate (PASS/FAIL) before training.
 - `scripts/tools/complex_prompt_coverage.py` — Check coverage for clothes/weapons/food/text/foreground/background/weird/NSFW categories.
 - `scripts/tools/prompt_gap_scout.py` — Analyze a single prompt and suggest missing tricky category keywords.

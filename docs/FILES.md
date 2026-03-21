@@ -99,6 +99,8 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/config_validator.py](../utils/config_validator.py) | Train config validation. |
 | [utils/checkpoint_manager.py](../utils/checkpoint_manager.py) | Checkpoint rotation / save helpers. |
 | [utils/metrics.py](../utils/metrics.py) | FLOPs / logging helpers. |
+| [utils/dit_architecture.py](../utils/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
+| [utils/nn_inspect.py](../utils/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
 
@@ -108,6 +110,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 |------|-------------|
 | [ViT/README.md](../ViT/README.md) | ViT quality + adherence; train / infer / rank / embeddings / prompt system. |
 | [ViT/train.py](../ViT/train.py), [ViT/infer.py](../ViT/infer.py) | Train or score JSONL (**separate** from repo-root DiT `train.py`). |
+| [ViT/checkpoint_utils.py](../ViT/checkpoint_utils.py) | `load_vit_quality_checkpoint`, `vit_model_parameter_report` for tools and `infer.py`. |
 | [ViT/prompt_system.py](../ViT/prompt_system.py), [ViT/prompt_tool.py](../ViT/prompt_tool.py) | “Negative inside positive” prompt decomposition. |
 
 ### Native (`native/`)
@@ -135,6 +138,8 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/tools/spatial_coverage.py](../scripts/tools/spatial_coverage.py) | Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...). |
 | [scripts/tools/op_preflight.py](../scripts/tools/op_preflight.py) | One-shot “coverage + thresholds” gate (PASS/FAIL) before training. |
 | [scripts/tools/training_timestep_preview.py](../scripts/tools/training_timestep_preview.py) | ASCII histograms for `timestep_sample_mode` (uniform / logit_normal / high_noise). |
+| [scripts/tools/dit_variant_compare.py](../scripts/tools/dit_variant_compare.py) | Table of DiT / EnhancedDiT parameter counts and weight-size estimates (no training). |
+| [scripts/tools/vit_inspect.py](../scripts/tools/vit_inspect.py) | ViT checkpoint: config, param count, optional module tree. |
 | [scripts/tools/op_pipeline.ps1](../scripts/tools/op_pipeline.ps1) | Windows wrapper to run preflight + normalize/boost (+ optional train/eval). |
 | [scripts/tools/complex_prompt_coverage.py](../scripts/tools/complex_prompt_coverage.py) | Coverage analyzer for tricky categories (clothes/weapons/food/text/foreground/background/weird/NSFW). |
 | [scripts/tools/prompt_gap_scout.py](../scripts/tools/prompt_gap_scout.py) | Analyze one prompt and suggest missing tricky category keywords. |

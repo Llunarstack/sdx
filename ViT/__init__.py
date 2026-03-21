@@ -1,5 +1,6 @@
 """ViT utilities for quality and prompt-adherence scoring."""
 
+from .checkpoint_utils import load_vit_quality_checkpoint, vit_model_parameter_report
 from .config import ViTConfig
 from .losses import pairwise_ranking_loss
 from .model import ViTQualityAdherenceModel, build_vit_model
@@ -9,6 +10,8 @@ __all__ = [
     "ViTConfig",
     "ViTQualityAdherenceModel",
     "build_vit_model",
+    "load_vit_quality_checkpoint",
+    "vit_model_parameter_report",
     "pairwise_ranking_loss",
     "breakdown_prompt",
     "compose_positive_with_embedded_negative",
