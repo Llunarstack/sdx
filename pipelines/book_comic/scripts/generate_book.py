@@ -585,8 +585,8 @@ def main() -> None:
     parser.add_argument(
         "--book-accuracy",
         default="none",
-        choices=["none", "fast", "balanced", "maximum"],
-        help="Preset: balanced=2 candidates+combo pick+boost+post; maximum=4 candidates; none=single sample (legacy).",
+        choices=["none", "fast", "balanced", "maximum", "production"],
+        help="Preset: balanced=2 candidates+combo; maximum=4; production=6+stricter lexicon negatives; none=single sample.",
     )
     parser.add_argument(
         "--sample-candidates",
@@ -635,10 +635,59 @@ def main() -> None:
     parser.add_argument("--post-grain", type=float, default=-1.0, help="Grain amount (-1 = preset).")
     parser.add_argument("--post-micro-contrast", type=float, default=-1.0, help="-1 = preset.")
 
+    # Lexicon / aspect (see pipelines/book_comic/prompt_lexicon.py, docs/BOOK_COMIC_TECH.md)
+    parser.add_argument(
+        "--lexicon-style",
+        default="none",
+        choices=[
+            "none",
+            "shonen",
+            "shoujo",
+            "seinen",
+            "slice_of_life",
+            "chibi",
+            "webtoon",
+            "manhwa_color",
+            "graphic_novel",
+            "editorial",
+            "light_novel",
+            "yonkoma",
+        ],
+        help="Append style snippet (ink, pacing, format) to the book-type prefix.",
+    )
+    parser.add_argument(
+        "--aspect-preset",
+        default="none",
+        choices=[
+            "none",
+            "square",
+            "print_manga",
+            "webtoon_tall",
+            "widescreen_panel",
+            "cover_hd",
+            "double_page_spread",
+            "print_us_comic",
+        ],
+        help="Set --width/--height when both are 0 (see prompt_lexicon.ASPECT_PRESETS).",
+    )
+    parser.set_defaults(lexicon_negative=True)
+    parser.add_argument(
+        "--no-lexicon-negative",
+        dest="lexicon_negative",
+        action="store_false",
+        help="Do not merge lexicon anti-artifact negatives into --negative-prompt.",
+    )
+    parser.add_argument(
+        "--include-tategaki-hint",
+        action="store_true",
+        help="Add vertical JP lettering hint to prefix (training data should support JP).",
+    )
+    parser.add_argument("--include-sfx-hint", action="store_true", help="Add hand-drawn SFX typography hint.")
+
     args = parser.parse_args()
 
     _ensure_repo_on_path()
-    from pipelines.book_comic import book_helpers
+    from pipelines.book_comic import book_helpers, prompt_lexicon
 
     settings = book_helpers.resolve_book_sample_settings(args)
 
@@ -679,7 +728,22 @@ def main() -> None:
         "novel_cover": "book cover design, title typography, author name, professional layout, readable lettering",
         "storyboard": "storyboard frame, manga anime layout, clean thumbnails, camera framing, clear panel borders",
     }
-    prompt_prefix = book_prefix_map.get(args.book_type, "")
+    base_prefix = book_prefix_map.get(args.book_type, "")
+    prompt_prefix = prompt_lexicon.enhance_book_prefix(
+        base_prefix,
+        lexicon_style=str(getattr(args, "lexicon_style", "none") or "none"),
+        book_type=str(args.book_type),
+        include_tategaki_hint=bool(getattr(args, "include_tategaki_hint", False)),
+        include_sfx_hint=bool(getattr(args, "include_sfx_hint", False)),
+        include_print_finish=bool(getattr(args, "include_print_finish", False)),
+        include_cover_spotlight=bool(getattr(args, "include_cover_spotlight", False)),
+    )
+
+    # Optional width/height from aspect preset when user did not set both.
+    ap = str(getattr(args, "aspect_preset", "none") or "none")
+    aw, ah = prompt_lexicon.aspect_dimensions(ap)
+    if aw > 0 and ah > 0 and (not int(args.width or 0)) and (not int(args.height or 0)):
+        args.width, args.height = aw, ah
 
     # Load OCR engine lazily (so script can run without tesseract).
     text_engine = None
@@ -725,6 +789,15 @@ def main() -> None:
     # Resolve size flags: sample.py uses native image_size when width/height are 0.
     width_arg = args.width
     height_arg = args.height
+
+    def _merged_negative() -> str:
+        if not getattr(args, "lexicon_negative", True):
+            return (args.negative_prompt or "").strip()
+        return prompt_lexicon.suggest_negative_addon(
+            use_lexicon_negative=True,
+            user_negative=(args.negative_prompt or ""),
+            production_tier=str(getattr(args, "book_accuracy", "") or "").lower() == "production",
+        ).strip()
 
     def _postprocess_output(path: Path, page_seed: int) -> None:
         book_helpers.apply_postprocess_to_image_file(
@@ -785,8 +858,9 @@ def main() -> None:
             cmd += ["--width", str(width_arg)]
         if height_arg and height_arg > 0:
             cmd += ["--height", str(height_arg)]
-        if args.negative_prompt:
-            cmd += ["--negative-prompt", args.negative_prompt]
+        mn = _merged_negative()
+        if mn:
+            cmd += ["--negative-prompt", mn]
         if args.no_neg_filter:
             cmd += ["--no-neg-filter"]
         if args.text_in_image:
@@ -827,7 +901,7 @@ def main() -> None:
                 sample_width=args.width,
                 sample_height=args.height,
                 device=args.device,
-                negative_prompt=args.negative_prompt,
+                negative_prompt=_merged_negative(),
                 no_neg_filter=args.no_neg_filter,
                 text_engine=text_engine,
                 ocr_engine=ocr_engine,
@@ -946,7 +1020,7 @@ def main() -> None:
                 sample_width=args.width,
                 sample_height=args.height,
                 device=args.device,
-                negative_prompt=args.negative_prompt,
+                negative_prompt=_merged_negative(),
                 no_neg_filter=args.no_neg_filter,
                 text_engine=text_engine,
                 ocr_engine=ocr_engine,

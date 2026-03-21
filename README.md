@@ -38,7 +38,7 @@
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
 | **Workflow** | [Pipeline](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [2026 landscape](docs/LANDSCAPE_2026.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [2026 landscape](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 </details>
 
@@ -440,6 +440,8 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds and determinism |
 | [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Industry context (2026):** authenticity, multi-stage pipelines, 4K/AR, text-in-image, grounding—mapped to SDX |
+| [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) | **Book/comic/manga:** consistency, layout, lettering, presets—mapped to SDX + [prompt_lexicon](pipelines/book_comic/prompt_lexicon.py) |
+| [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) | **Production-quality books:** data + training + `--book-accuracy production`, pick-best, OCR/anchoring checklist |
 
 ---
 
@@ -585,12 +587,17 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
 | Piece | Role |
 |:------|:-----|
 | [pipelines/book_comic/scripts/generate_book.py](pipelines/book_comic/scripts/generate_book.py) | Canonical script (legacy: [scripts/book/generate_book.py](scripts/book/generate_book.py) forwards here) |
-| [pipelines/book_comic/book_helpers.py](pipelines/book_comic/book_helpers.py) | `--book-accuracy` presets, wiring to **`sample.py`** pick-best / CFG / post-process |
+| [pipelines/book_comic/book_helpers.py](pipelines/book_comic/book_helpers.py) | `--book-accuracy` presets (`none` → `production`), wiring to **`sample.py`** pick-best / CFG / post-process |
+| [pipelines/book_comic/prompt_lexicon.py](pipelines/book_comic/prompt_lexicon.py) | Style snippets, merged negatives (incl. **production** tier), aspect presets, optional print/cover hints |
 | [utils/test_time_pick.py](utils/test_time_pick.py) | CLIP / edge / OCR **combo** scoring when `--num` > 1 |
 | [utils/quality.py](utils/quality.py) | Optional sharpen + **naturalize** after each page |
 | [data/caption_utils.py](data/caption_utils.py) | **prepend_quality_if_short** when preset enables it |
 
-**`--book-accuracy`:** `none` (legacy, single sample) \| `fast` \| `balanced` (2 candidates + combo pick + boost + light post) \| `maximum` (4 candidates + stronger post). Override with `--sample-candidates`, `--pick-best`, `--post-sharpen`, `--cfg-scale`, `--vae-tiling`, etc. Full detail: **[pipelines/book_comic/README.md](pipelines/book_comic/README.md)**.
+**`--book-accuracy`:** `none` (legacy, single sample) \| `fast` \| `balanced` (2 candidates + combo pick + boost + light post) \| `maximum` (4 candidates + stronger post) \| **`production`** (6 candidates + stricter lexicon negatives + strongest default post). Override with `--sample-candidates`, `--pick-best`, `--post-sharpen`, `--cfg-scale`, `--vae-tiling`, etc. Full detail: **[pipelines/book_comic/README.md](pipelines/book_comic/README.md)**. Quality checklist: **[docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md)**.
+
+**Lexicon & layout (2024–2026 patterns):** **`--lexicon-style`** (`shonen`, `shoujo`, `webtoon`, `graphic_novel`, …) augments the page prefix; **`--aspect-preset`** (`webtoon_tall`, `print_manga`, `double_page_spread`, …) sets default width/height; **`--no-lexicon-negative`** disables merged anti-artifact negatives. See **[docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md)** and **[pipelines/book_comic/prompt_lexicon.py](pipelines/book_comic/prompt_lexicon.py)**.
+
+**Story → pages file:** `python scripts/tools/book_scene_split.py script.md --out pages.txt` (splits on `## Page N` / `---PAGE---`) then pass **`--prompts-file pages.txt`** to `generate_book.py`.
 
 ```powershell
 python pipelines/book_comic/scripts/generate_book.py --ckpt "C:\path\best.pt" `
@@ -599,6 +606,8 @@ python pipelines/book_comic/scripts/generate_book.py --ckpt "C:\path\best.pt" `
   --prompts-file pages.txt --expected-text "OPEN" --ocr-fix --ocr-iters 2 `
   --anchor-face --edge-anchor --anchor-speech-bubbles
 ```
+
+**Maximum quality (slower):** same command with **`--book-accuracy production`** (6 candidates per page, stricter merged negatives, stronger post). Add **`--lexicon-style graphic_novel`** / **`--aspect-preset print_manga`** / **`--include-print-finish`** as needed.
 
 `pages.txt` per-line optional OCR override: `prompt text here|||OPEN`
 
@@ -718,6 +727,7 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | Smoke training data | `scripts/tools/make_smoke_dataset.py` + [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) |
 | HF → JSONL (Danbooru-style) | `scripts/training/hf_export_to_sdx_manifest.py` + [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) |
 | Download + train (basic DiT-B) | `scripts/training/hf_download_and_train.py` (or `--demo` without HF) |
+| Book scene → line per page | `scripts/tools/book_scene_split.py` → `pages.txt` for `generate_book.py` |
   | Export ONNX | `scripts/tools/export_onnx.py` |
 | Latent cache | `scripts/training/precompute_latents.py` + `--latent-cache-dir` |
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |

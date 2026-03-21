@@ -38,6 +38,8 @@ Quick links to all project docs, grouped by purpose.
 | Doc | Description |
 |-----|--------------|
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 industry context:** production-grade gen, authenticity, system-of-experts pipelines, 4K/aspect, text-in-image, grounding — mapped to SDX ([utils/orchestration.py](../utils/orchestration.py)). |
+| [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: consistency, GLIGEN/Control-style ideas, lettering, **prompt_lexicon** + `generate_book` flags. |
+| [BOOK_MODEL_EXCELLENCE.md](BOOK_MODEL_EXCELLENCE.md) | “Best book output” checklist: data, training, `--book-accuracy production`, pick-best, OCR/anchoring. |
 | [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** and **§12 Industry alignment (2026)**. |
 | [INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos. |
 | [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy‑paste prompt recipes using presets, op‑modes, hard styles, and all the quality flags. |

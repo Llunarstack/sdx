@@ -127,6 +127,10 @@ Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imp
 | [pipelines/image_gen/README.md](../pipelines/image_gen/README.md) | Training pointers for general image generation. |
 | [pipelines/book_comic/README.md](../pipelines/book_comic/README.md) | Book/comic/manga workflow; canonical [generate_book.py](../pipelines/book_comic/scripts/generate_book.py). |
 | [pipelines/book_comic/book_helpers.py](../pipelines/book_comic/book_helpers.py) | Presets, pick-best + CFG flags for `sample.py`, post-process (quality.py). |
+| [pipelines/book_comic/prompt_lexicon.py](../pipelines/book_comic/prompt_lexicon.py) | Comic/manga **style** snippets, merged negatives, aspect presets, tategaki/SFX hints. |
+| [docs/BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential-art techniques (consistency, layout, lettering) vs SDX modules. |
+| [docs/BOOK_MODEL_EXCELLENCE.md](BOOK_MODEL_EXCELLENCE.md) | Checklist: data, training, `generate_book` flags, pick-best, post-process for “best” book output. |
+| [scripts/tools/book_scene_split.py](../scripts/tools/book_scene_split.py) | `## Page` / `---PAGE---` → `pages.txt` for `generate_book.py`. |
 | [scripts/book/generate_book.py](../scripts/book/generate_book.py) | Thin launcher → `pipelines/book_comic/scripts/generate_book.py`. |
 
 ### Scripts

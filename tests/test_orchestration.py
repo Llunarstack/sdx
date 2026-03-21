@@ -1,6 +1,6 @@
 """Tests for utils/orchestration.py (pipeline role registry)."""
 
-from utils.orchestration import DESIGNER, VERIFIER, REASONER, pipeline_roles
+from utils.orchestration import DESIGNER, REASONER, VERIFIER, pipeline_roles
 
 
 def test_pipeline_roles_order_and_names():
