@@ -108,7 +108,7 @@ You can still get value **without** training a billion-parameter model:
 | **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, **`timestep_sampling`**, respacing | `train.py`, `sample.py` |
 | **`models/`** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
 | **`utils/`** | Checkpoint load, text-encoder bundle, REPA helpers, QC, **pick-best**, metrics | `train.py`, `sample.py`, scripts |
-| **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator) | CLI, optional dataset QA |
+| **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator); **[ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md)** (research + checklist), **[ViT/backbone_presets.py](ViT/backbone_presets.py)** (`timm` names for `--model-name`) | CLI, optional dataset QA |
 | **`scripts/`** | Downloads, tools, Cascade stub | Ops & CI |
 | **`pipelines/`** | **image_gen** vs **book_comic** docs + book workflow script (no second DiT copy) | Contributors, multi-page / OCR workflows |
 | **`native/`** | Fast JSONL helpers (Rust, Go, …) | Optional; not imported by training by default |
@@ -135,7 +135,7 @@ Full index → **[docs/FILES.md](docs/FILES.md)**
 | **DiT** | **Diffusion Transformer** — **generator**: patch latents, predict ε/v, **cross-attend text** | `models/dit_text.py`, `train.py`, `sample.py` |
 | **ViT-style blocks inside DiT** | **ViT-Gen** (registers, RoPE, KV-merge, SSM…) — still **one DiT** | `--num-register-tokens`, `--use-rope`, … |
 | **REPA vision encoder** | **Frozen** DINOv2 / CLIP **image** encoder — aux alignment loss | `--repa-weight`, `--repa-encoder-model` |
-| **`ViT/` package** | **Separate** timm ViT for **QA**, ranking, embeddings — **not** DiT | `ViT/train.py`, `ViT/infer.py` |
+| **`ViT/` package** | **Separate** timm ViT for **QA**, ranking, embeddings — **not** DiT (see **[ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md)**) | `ViT/train.py`, `ViT/infer.py` |
 | **Text triple (T5 + CLIP)** | **Text** towers fused → conditions **DiT** | `--text-encoder-mode triple` |
 
 ---
@@ -280,6 +280,8 @@ flowchart TB
   T -.-> DS3
   T -.-> N
 ```
+
+**Details:** [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) (ViT vs DiT roles, Swin-DiT / FiT / reward-model pointers, practical upgrades). Train with alternate backbones: `python ViT/train.py --help` (epilog lists presets).
 
 ### Stage cheat sheet
 
@@ -442,6 +444,7 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 | [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Industry context (2026):** authenticity, multi-stage pipelines, 4K/AR, text-in-image, grounding—mapped to SDX |
 | [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) | **Book/comic/manga:** consistency, layout, lettering, presets—mapped to SDX + [prompt_lexicon](pipelines/book_comic/prompt_lexicon.py) |
 | [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) | **Production-quality books:** data + training + `--book-accuracy production`, pick-best, OCR/anchoring checklist |
+| [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) | **ViT QA vs DiT generator:** research roadmap (Swin-DiT, FiT, reward/IQA), timm backbones, ensemble with pick-best |
 
 ---
 
@@ -724,6 +727,8 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | Timestep sampling preview | `scripts/tools/training_timestep_preview.py` (compare `--timestep-sample-mode` distributions) |
 | DiT size compare | `scripts/tools/dit_variant_compare.py` (params / GiB per variant) |
 | ViT checkpoint inspect | `scripts/tools/vit_inspect.py` (config + optional module tree) |
+| ViT QA training | `python ViT/train.py --manifest-jsonl …` — **`--model-name`** timm backbone ([ViT/backbone_presets.py](ViT/backbone_presets.py)); **`python ViT/train.py --help`** lists suggestions |
+| ViT vs DiT (docs) | [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | Smoke training data | `scripts/tools/make_smoke_dataset.py` + [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) |
 | HF → JSONL (Danbooru-style) | `scripts/training/hf_export_to_sdx_manifest.py` + [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) |
 | Download + train (basic DiT-B) | `scripts/training/hf_download_and_train.py` (or `--demo` without HF) |
@@ -775,7 +780,7 @@ sdx/
 ├── pipelines/        # image_gen vs book_comic workflows (docs + book script)
 ├── model/            # Downloaded weights (gitignored)
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
-├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking tools
+├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking; EXCELLENCE_VS_DIT.md, backbone_presets.py
 ├── native/           # Optional Rust/Zig/C++/Go helpers
 ├── scripts/
 │   ├── setup/        # clone external refs

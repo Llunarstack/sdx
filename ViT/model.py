@@ -12,6 +12,10 @@ class ViTQualityAdherenceModel(nn.Module):
     ViT backbone with two heads:
     - quality_logit: binary quality classification (good/bad)
     - adherence_score: regression in [0,1] for prompt adherence
+
+    This is a **discriminative** scorer (dataset QA / ranking), not the DiT generator.
+    Stronger timm backbones and research directions: ``ViT/backbone_presets.py``,
+    ``ViT/EXCELLENCE_VS_DIT.md``.
     """
 
     def __init__(
