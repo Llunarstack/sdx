@@ -58,11 +58,12 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 | File | Description |
 |------|-------------|
-| [diffusion/__init__.py](../diffusion/__init__.py) | Exports `create_diffusion`, `GaussianDiffusion`. |
+| [diffusion/__init__.py](../diffusion/__init__.py) | Exports `create_diffusion`, `GaussianDiffusion`, `sample_training_timesteps`. |
 | [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) | Diffusion: beta schedule, training losses (min-SNR, v/epsilon), DDIM sampling, CFG rescale, dynamic threshold. |
 | [diffusion/respace.py](../diffusion/respace.py) | Timestep respacing for sampling. |
 | [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) | Thresholding helpers. |
 | [diffusion/loss_weighting.py](../diffusion/loss_weighting.py) | EDM / v / eps loss weights. |
+| [diffusion/timestep_sampling.py](../diffusion/timestep_sampling.py) | Training-time `t` distributions: uniform, logit-normal (SD3-style discrete), high-noise Beta bias. |
 | [diffusion/cascaded_multimodal_pipeline.py](../diffusion/cascaded_multimodal_pipeline.py) | Optional **cascaded** stage-1 → stage-2 forward + optional RAE bridge (scaffold; not wired into default `train.py` loop). |
 
 ### Models
@@ -133,6 +134,7 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/tools/tag_coverage.py](../scripts/tools/tag_coverage.py) | Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage. |
 | [scripts/tools/spatial_coverage.py](../scripts/tools/spatial_coverage.py) | Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...). |
 | [scripts/tools/op_preflight.py](../scripts/tools/op_preflight.py) | One-shot “coverage + thresholds” gate (PASS/FAIL) before training. |
+| [scripts/tools/training_timestep_preview.py](../scripts/tools/training_timestep_preview.py) | ASCII histograms for `timestep_sample_mode` (uniform / logit_normal / high_noise). |
 | [scripts/tools/op_pipeline.ps1](../scripts/tools/op_pipeline.ps1) | Windows wrapper to run preflight + normalize/boost (+ optional train/eval). |
 | [scripts/tools/complex_prompt_coverage.py](../scripts/tools/complex_prompt_coverage.py) | Coverage analyzer for tricky categories (clothes/weapons/food/text/foreground/background/weird/NSFW). |
 | [scripts/tools/prompt_gap_scout.py](../scripts/tools/prompt_gap_scout.py) | Analyze one prompt and suggest missing tricky category keywords. |
@@ -261,7 +263,7 @@ Cloned into `external/` by [scripts/setup/clone_repos.ps1](../scripts/setup/clon
 
 - **Training:** [train.py](../train.py) · [config/train_config.py](../config/train_config.py)
 - **Sampling:** [sample.py](../sample.py) · [inference.py](../inference.py)
-- **Diffusion:** [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) · [diffusion/respace.py](../diffusion/respace.py) · [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) · [diffusion/loss_weighting.py](../diffusion/loss_weighting.py)
+- **Diffusion:** [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) · [diffusion/respace.py](../diffusion/respace.py) · [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) · [diffusion/loss_weighting.py](../diffusion/loss_weighting.py) · [diffusion/timestep_sampling.py](../diffusion/timestep_sampling.py)
 - **Models:** [models/dit_text.py](../models/dit_text.py) · [models/dit_predecessor.py](../models/dit_predecessor.py) · [models/pixart_blocks.py](../models/pixart_blocks.py) (SizeEmbedder, ported from PixArt)
 - **Data:** [data/t2i_dataset.py](../data/t2i_dataset.py) · [data/caption_utils.py](../data/caption_utils.py)
 - **Docs:** [README](../README.md) · [REGION_CAPTIONS](REGION_CAPTIONS.md) · [MODEL_STACK](MODEL_STACK.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
