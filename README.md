@@ -1,53 +1,47 @@
 <!-- markdownlint-disable MD033 MD041 -->
-<div align="center">
 
-<br/>
+<div align="center">
 
 # SDX
 
-### Diffusion Transformer · Text-to-image · Your data, your captions
+### Text-to-image **Diffusion Transformer** · Your data, your captions
 
 <p align="center">
-  <strong>DiT</strong> + <strong>xformers</strong> + optional <strong>block AR</strong> · T5 (optional <strong>triple</strong>: T5 + CLIP-L + CLIP-bigG)<br/>
-  <sub>ViT-Gen · REPA · MoE · MDM · RAE bridge · test-time pick · and more</sub>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/></a>
+  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="License"/></a>
+  <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/Docs-IMPROVEMENTS-238636?style=flat-square" alt="Docs"/></a>
 </p>
 
-No reference image required — **quality follows the dataset and captions you train on.**
+**Stack:** DiT · xformers · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · optional block **AR** · REPA · MoE · MDM · RAE bridge · test-time **pick-best**
 
-<p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.8+"/></a>
-  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-diffusion-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge" alt="License"/></a>
-  <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/docs-IMPROVEMENTS-238636?style=for-the-badge" alt="Docs"/></a>
-</p>
+*No reference image required — quality follows what you train on.*
 
-**[Quick start](#quick-start)** · **[Train](#training)** · **[Sample](#sampling)** · **[Pipeline](#architecture-and-pipeline)** · **[Docs](#documentation-hub)** · **[Layout](#project-layout)**
-
-<br/>
+| Start | Train | Timesteps | Sample | Docs |
+| :---: | :---: | :---: | :---: | :---: |
+| [Quick start](#quick-start) | [Training](#training) | [Timestep sampling](#modern-diffusion-training-timestep-sampling) | [Sampling](#sampling) | [Doc hub](#documentation-hub) |
 
 </div>
 
 ---
 
-> **👋 New here?** Run [`scripts/tools/quick_test.py`](scripts/tools/quick_test.py), skim the **pipeline** below, then jump to [Quick start](#quick-start).
-
----
+> **New here?** Run `python scripts/tools/quick_test.py`, skim [Architecture and pipeline](#architecture-and-pipeline), then open [Quick start](#quick-start).
 
 <details>
-<summary><strong>📑 Table of contents</strong></summary>
+<summary><strong>Table of contents</strong></summary>
 
-| | |
-|:---|:---|
+| Section | Links |
+| :--- | :--- |
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflow** | [Architecture and pipeline](#architecture-and-pipeline) · [Training](#training) · [Modern timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
-| **Reference** | [Train CLI](#train-cli-quick-reference) · [SD/XL-style](#sd--sdxl-style-features) · [Extra features](#extra-features) |
+| **Workflow** | [Pipeline](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
 
 </details>
 
 ---
 
-## At a glance
+## Overview
 
 | Pillar | What you get |
 |:-------|:-------------|
@@ -60,13 +54,13 @@ No reference image required — **quality follows the dataset and captions you t
 
 ## Architecture and pipeline
 
-**One line:** `data/` + manifest → **`train.py`** (`config/` · **`diffusion/`** · **`models/`** · **`utils/`**) → **checkpoint** → **`sample.py`** → **images**. Weights live in **`model/`** (gitignored), resolved by **`utils/model_paths.py`**.
+**End-to-end:** `data/` and optional manifest → `train.py` (uses `config/`, `diffusion/`, `models/`, `utils/`) → **checkpoint** → `sample.py` → **images**. Downloaded weights live in `model/` (gitignored); paths resolve via `utils/model_paths.py`.
 
 <pre align="center">
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ 📂 <b>Data</b>    │───▶│ ⚙️ <b>train.py</b> │───▶│ 💾 <b>Checkpoint</b>│───▶│ ✨ <b>sample.py</b> │───▶│ 🖼️ <b>Images</b>   │
-│ JSONL · QA  │    │ DiT · loss  │    │ EMA · cfg   │    │ CFG · VAE   │    │ grids · pick│
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
+│ <b>Data</b>      │───▶│ <b>train.py</b> │───▶│ <b>Checkpoint</b>│───▶│ <b>sample.py</b> │───▶│ <b>Images</b>    │
+│ JSONL, QA  │    │ DiT, loss  │    │ EMA, cfg   │    │ CFG, VAE   │    │ grid, pick │
+└────────────┘    └────────────┘    └────────────┘    └────────────┘    └────────────┘
 </pre>
 
 ### Repository map
@@ -97,7 +91,7 @@ Full index → **[docs/FILES.md](docs/FILES.md)**
 
 **Download:** [docs/MODEL_STACK.md](docs/MODEL_STACK.md) · `scripts/download/download_models.py` · `scripts/download/download_revolutionary_stack.py`
 
-### Who’s who (easy to confuse)
+### Who is who (easy to confuse)
 
 | Name | What it is | Where |
 |:-----|:-----------|:------|
@@ -266,15 +260,16 @@ flowchart TB
 | **API** | **`inference.py`**: programmatic sampling |
 | **Other** | **Qwen** (`utils/llm_client.py`); **Cascade** (`scripts/cascade_generate.py`) — separate from DiT forward |
 
-**Optional scaffolds** (not default `train.py`): `diffusion/cascaded_multimodal_pipeline.py`, **`models/cascaded_multimodal_diffusion.py`**, **`models/native_multimodal_transformer.py`** — see **[docs/FILES.md](docs/FILES.md)**
+**Optional scaffolds** (not default `train.py`): `diffusion/cascaded_multimodal_pipeline.py`, `models/cascaded_multimodal_diffusion.py`, `models/native_multimodal_transformer.py` — see [docs/FILES.md](docs/FILES.md).
 
-| See also | |
-|:---------|:--|
-| **Weights** | **[docs/MODEL_STACK.md](docs/MODEL_STACK.md)** |
-| **Every file** | **[docs/FILES.md](docs/FILES.md)** |
-| **Config ↔ ckpt ↔ sample** | **[docs/CONNECTIONS.md](docs/CONNECTIONS.md)** |
+| See also | Doc |
+| :--- | :--- |
+| **Weights** | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
+| **Every file** | [docs/FILES.md](docs/FILES.md) |
+| **Config, checkpoint, sample** | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) |
 
 ---
+
 ## Highlights
 
 <details open>
@@ -285,7 +280,7 @@ flowchart TB
 | **Passes, not blind epochs** | `--passes N` = N full sweeps over the dataset; optional `--max-steps` cap |
 | **Quality of training** | Cosine LR, **EMA**, **save best**, optional **val split + early stopping** |
 | **Captions** | `(tag)` / `((tag))` emphasis, `[tag]` de-emphasis, subject-first order |
-| **Negative prompts** | Trained as *positive − w×negative* so the model avoids unwanted concepts |
+| **Negative prompts** | Trained using cond / uncond style signal so the model learns to avoid concepts in the negative prompt |
 | **JSONL** | `caption`, `negative_*`, `style`, `control_*`, `init_image`, weights, etc. |
 
 </details>
@@ -389,21 +384,21 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 
 ## Documentation hub
 
-| | Doc | Purpose |
-|:-:|----|:--------|
-| 📚 | [docs/README.md](docs/README.md) | Index of all docs |
-| 🗺️ | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, what’s implemented |
-| 🧪 | [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion/flow ideas vs SDX; timestep sampling; papers (FasterDiT, DPO, …) |
-| ⚙️ | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt → T5 → DiT → VAE → image |
-| 🔗 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | Config ↔ data ↔ checkpoint ↔ sample |
-| ✨ | [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
-| 🧩 | [docs/AR.md](docs/AR.md) | Block AR: 0 vs 2 vs 4 |
-| 🎨 | [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md) | Style / artist extraction |
-| 💡 | [docs/INSPIRATION.md](docs/INSPIRATION.md) | Upstream repos & ideas |
-| 📂 | [docs/FILES.md](docs/FILES.md) | File map |
-| 📝 | [docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md) | JSONL `parts` / `region_captions` for layout-aware training text |
-| 🧱 | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Stable Cascade |
-| 🎲 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds & determinism |
+| Doc | Purpose |
+| :--- | :--- |
+| [docs/README.md](docs/README.md) | Index of all project docs |
+| [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, implemented vs planned |
+| [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion and flow ideas, timestep sampling, paper pointers |
+| [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt to T5 to DiT to VAE to image |
+| [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | How config, data, checkpoint, and sampling connect |
+| [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
+| [docs/AR.md](docs/AR.md) | Block autoregressive modes (0 / 2 / 4) |
+| [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md) | Style and artist tags |
+| [docs/INSPIRATION.md](docs/INSPIRATION.md) | Upstream repos and ideas |
+| [docs/FILES.md](docs/FILES.md) | Full file map |
+| [docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md) | JSONL `parts` and `region_captions` |
+| [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade |
+| [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds and determinism |
 
 ---
 
@@ -484,7 +479,7 @@ python train.py --data-path /path/to/data --no-xformers
 
 ## Modern diffusion: training timestep sampling
 
-Classic DDPM training draws each batch’s noise step **`t`** uniformly from `{0 … T−1}`. Many newer text-to-image stacks treat **which noise levels you train on** as a first-class knob: if the model sees some regimes more often, it can allocate capacity where denoising is hardest or where human perception is most sensitive—**without** changing the underlying VP-DDPM forward process (`q_sample`, β schedule).
+Classic DDPM training draws each batch’s noise step **`t`** uniformly from `{0, …, T-1}`. Many newer text-to-image stacks treat **which noise levels you train on** as a first-class knob: if the model sees some regimes more often, it can allocate capacity where denoising is hardest or where human perception is most sensitive — **without** changing the underlying VP-DDPM forward process (`q_sample`, beta schedule).
 
 ### What SDX does
 
@@ -630,17 +625,19 @@ For `.txt`: line 1 = positive, line 2 = negative.
 
 ---
 
-## SD / SDXL-style features
+## SDXL-inspired training features
+
+Training options aligned with common Stable Diffusion / SDXL practice (offset noise, Min-SNR, v-pred, cosine schedule, modern timestep sampling).
 
 | Feature | Flag | Description |
 |:--------|:-----|:------------|
-| Offset noise | `--noise-offset` | Light/dark balance |
-| Min-SNR | `--min-snr-gamma` | Timestep loss balance |
-| Timestep sampling | `--timestep-sample-mode` | Non-uniform training `t` (logit-normal / high-noise bias); [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
+| Offset noise | `--noise-offset` | Light/dark balance in latents |
+| Min-SNR | `--min-snr-gamma` | Per-timestep loss balance |
+| Timestep sampling | `--timestep-sample-mode` | Non-uniform training `t` (logit-normal / high-noise bias) — [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
 | V-pred | `--prediction-type v` | Velocity parameterization |
-| Cosine β | `--beta-schedule cosine` | Alternative noise schedule |
+| Cosine noise schedule | `--beta-schedule cosine` | Alternative beta schedule |
 
-Sampling: DDIM-style loop with cond/uncond; use **`--cfg-rescale`**, **`--num`**, **`--vae-tiling`** as needed.
+**Sampling:** DDIM-style loop with cond/uncond; use `--cfg-rescale`, `--num`, `--vae-tiling` when needed.
 
 ---
 
@@ -748,12 +745,8 @@ Licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
 <div align="center">
 
----
+**SDX** — train on your data, sample with the stack you choose.
 
-### SDX
-
-**Train on your data · sample with the stack you choose**
-
-[↑ Back to top](#sdx)
+[Back to top](#sdx)
 
 </div>
