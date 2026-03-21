@@ -98,6 +98,11 @@ class TrainConfig:
     # Alternative loss weighting (generative-models-style): "unit" | "edm" | "v" | "eps". If set, min_snr_gamma is ignored for timestep weight.
     loss_weighting: str = "min_snr"  # "min_snr" (default) | "unit" | "edm" | "v" | "eps"
     loss_weighting_sigma_data: float = 0.5  # For loss_weighting="edm"
+    # Which diffusion indices t to sample during training (VP-DDPM unchanged; only P(t)).
+    # See diffusion/timestep_sampling.py and docs/MODERN_DIFFUSION.md.
+    timestep_sample_mode: str = "uniform"  # uniform | logit_normal | high_noise
+    timestep_logit_mean: float = 0.0  # for logit_normal (SD3-style defaults often 0)
+    timestep_logit_std: float = 1.0  # for logit_normal (SD3-style defaults often 1)
 
     # Training length: prefer passes (N full passes over data), then max_steps, then epochs
     passes: int = 0  # If > 0, train for this many full passes over dataset (steps = passes * steps_per_epoch)

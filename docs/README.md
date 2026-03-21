@@ -9,6 +9,7 @@ Quick links to all project docs, grouped by purpose.
 | Doc | Description |
 |-----|--------------|
 | [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
+| [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect (train → checkpoint → sample). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | Generation pipeline: prompt → T5 → diffusion loop → DiT → VAE → image; AR and ported code. |
@@ -66,6 +67,7 @@ These are **not all hard dependencies** of SDX, but they inform our defaults, pr
 - `scripts/tools/smoke_imports.py` — Import smoke-test for internal modules (catches broken imports early).
 - `scripts/tools/tag_coverage.py` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
 - `scripts/tools/spatial_coverage.py` — Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...).
+- `scripts/tools/training_timestep_preview.py` — Preview histograms for `--timestep-sample-mode` (uniform / logit_normal / high_noise) before long training runs.
 - `scripts/tools/op_preflight.py` — One-shot “coverage + thresholds” gate (PASS/FAIL) before training.
 - `scripts/tools/complex_prompt_coverage.py` — Check coverage for clothes/weapons/food/text/foreground/background/weird/NSFW categories.
 - `scripts/tools/prompt_gap_scout.py` — Analyze a single prompt and suggest missing tricky category keywords.

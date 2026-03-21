@@ -35,6 +35,7 @@ except ImportError:
 from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.loss_weighting import get_loss_weight
+from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
 from models.rae_latent_bridge import RAELatentBridge
 from utils.checkpoint_manager import CheckpointManager
@@ -44,6 +45,19 @@ from utils.metrics import MetricsTracker, log_system_info
 from utils.model_paths import default_t5_path
 from utils.model_viz import print_model_summary
 from utils.text_encoder_bundle import load_text_encoder_bundle
+
+
+def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
+    """Integer diffusion indices for training batch (see ``timestep_sample_mode``)."""
+    return sample_training_timesteps(
+        batch_size,
+        int(num_timesteps),
+        device=device,
+        mode=str(getattr(cfg, "timestep_sample_mode", "uniform")),
+        logit_mean=float(getattr(cfg, "timestep_logit_mean", 0.0)),
+        logit_std=float(getattr(cfg, "timestep_logit_std", 1.0)),
+    )
+
 
 # Enable TF32 on Ampere+ for speed
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -506,7 +520,7 @@ def eval_val_loss(
                     train_fusion=False,
                 )
                 style_embedding = style_embedding.mean(dim=1)
-            t = torch.randint(0, diffusion.num_timesteps, (latents.shape[0],), device=device)
+            t = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
             model_kwargs = {
                 "encoder_hidden_states": encoder_hidden,
                 "encoder_hidden_states_negative": encoder_hidden_neg,
@@ -1167,7 +1181,7 @@ def main(cfg: TrainConfig):
                     z_cycle = latents_raw.detach()
                 else:
                     z_cycle = None
-                t = torch.randint(0, diffusion.num_timesteps, (latents.shape[0],), device=device)
+                t = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
                 model_kwargs = {
                     "encoder_hidden_states": encoder_hidden,
                     "encoder_hidden_states_negative": encoder_hidden_neg,
@@ -1678,6 +1692,25 @@ if __name__ == "__main__":
     parser.add_argument(
         "--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm"
     )
+    parser.add_argument(
+        "--timestep-sample-mode",
+        type=str,
+        default="uniform",
+        choices=["uniform", "logit_normal", "high_noise"],
+        help="Training t distribution: uniform (classic) | logit_normal (SD3-style discrete) | high_noise (Beta bias to large t)",
+    )
+    parser.add_argument(
+        "--timestep-logit-mean",
+        type=float,
+        default=0.0,
+        help="Gaussian mean on logit axis for --timestep-sample-mode logit_normal",
+    )
+    parser.add_argument(
+        "--timestep-logit-std",
+        type=float,
+        default=1.0,
+        help="Gaussian std on logit axis for --timestep-sample-mode logit_normal",
+    )
     parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint path")
     parser.add_argument(
         "--val-split",
@@ -1818,6 +1851,9 @@ if __name__ == "__main__":
         min_snr_gamma=args.min_snr_gamma,
         loss_weighting=getattr(args, "loss_weighting", "min_snr"),
         loss_weighting_sigma_data=getattr(args, "loss_weighting_sigma_data", 0.5),
+        timestep_sample_mode=getattr(args, "timestep_sample_mode", "uniform"),
+        timestep_logit_mean=getattr(args, "timestep_logit_mean", 0.0),
+        timestep_logit_std=getattr(args, "timestep_logit_std", 1.0),
         resume=args.resume,
         val_split=args.val_split,
         val_every=args.val_every,

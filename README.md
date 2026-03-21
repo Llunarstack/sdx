@@ -39,7 +39,7 @@ No reference image required — **quality follows the dataset and captions you t
 | | |
 |:---|:---|
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflow** | [Architecture and pipeline](#architecture-and-pipeline) · [Training](#training) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Workflow** | [Architecture and pipeline](#architecture-and-pipeline) · [Training](#training) · [Modern timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SD/XL-style](#sd--sdxl-style-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
 
@@ -52,7 +52,7 @@ No reference image required — **quality follows the dataset and captions you t
 | Pillar | What you get |
 |:-------|:-------------|
 | **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), optional **AR** blocks, up to **Supreme** / **Predecessor** variants |
-| **Training** | Pass-based schedule, **EMA**, **best** checkpoint, val + early stopping, bf16, compile, **DDP** |
+| **Training** | Pass-based schedule, **EMA**, **best** checkpoint, val + early stopping, bf16, compile, **DDP**, optional **non-uniform timestep sampling** (SD3-style / high-noise bias) |
 | **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, Control-style conditioning, refinement, **pick-best** |
 | **Data** | Folders + `.txt` / `.caption` or **JSONL**; caption emphasis & domain boosts |
 
@@ -75,7 +75,7 @@ No reference image required — **quality follows the dataset and captions you t
 |:-----|:-----|:------------|
 | **`config/`** | `TrainConfig`, `get_dit_build_kwargs`, presets | `train.py`, `sample.py`, checkpoints |
 | **`data/`** | `Text2ImageDataset`, captions | `train.py` |
-| **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, respacing | `train.py`, `sample.py` |
+| **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, **`timestep_sampling`**, respacing | `train.py`, `sample.py` |
 | **`models/`** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
 | **`utils/`** | Checkpoint load, text-encoder bundle, REPA helpers, QC, **pick-best**, metrics | `train.py`, `sample.py`, scripts |
 | **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator) | CLI, optional dataset QA |
@@ -393,6 +393,7 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 |:-:|----|:--------|
 | 📚 | [docs/README.md](docs/README.md) | Index of all docs |
 | 🗺️ | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, what’s implemented |
+| 🧪 | [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion/flow ideas vs SDX; timestep sampling; papers (FasterDiT, DPO, …) |
 | ⚙️ | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt → T5 → DiT → VAE → image |
 | 🔗 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | Config ↔ data ↔ checkpoint ↔ sample |
 | ✨ | [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
@@ -481,6 +482,51 @@ python train.py --data-path /path/to/data --no-xformers
 
 ---
 
+## Modern diffusion: training timestep sampling
+
+Classic DDPM training draws each batch’s noise step **`t`** uniformly from `{0 … T−1}`. Many newer text-to-image stacks treat **which noise levels you train on** as a first-class knob: if the model sees some regimes more often, it can allocate capacity where denoising is hardest or where human perception is most sensitive—**without** changing the underlying VP-DDPM forward process (`q_sample`, β schedule).
+
+### What SDX does
+
+| Piece | Role |
+|:------|:-----|
+| [`diffusion/timestep_sampling.py`](diffusion/timestep_sampling.py) | `sample_training_timesteps(...)` — draws integer **`t`** indices for each batch. |
+| [`config/train_config.py`](config/train_config.py) | `timestep_sample_mode`, `timestep_logit_mean`, `timestep_logit_std`. |
+| [`train.py`](train.py) | Uses the helper for normal training and validation loss (same API as `torch.randint` before). |
+
+**Modes** (CLI: `--timestep-sample-mode`):
+
+| Mode | Idea | Typical use |
+|:-----|:-----|:--------------|
+| **`uniform`** | Same as classic `randint(0, T)` | Baseline / reproducing older recipes. |
+| **`logit_normal`** | Sample continuous `u ~ sigmoid(N(μ, σ))`, map to indices (SD3-style **discrete** analogue) | Emphasize mid/high or mid/low noise depending on μ, σ; common presets use μ=0, σ=1. |
+| **`high_noise`** | `u ~ Beta(2,1)` → more samples at **large** `t` | Stress heavily noised latents so the network spends more steps learning coarse structure / hard corruption. |
+
+**Important:** Only the **distribution of `t`** changes. The noise schedule and loss definitions in `GaussianDiffusion` are unchanged—so checkpoints stay comparable, and this composes with **`--min-snr-gamma`** (per-step loss weighting) rather than replacing it.
+
+### Why it can improve models
+
+- **Better compute allocation:** Uniform `t` can under-train regimes that matter for final image quality; biasing `t` is a cheap way to focus optimization (similar in spirit to SNR-aware training analyses, e.g. FasterDiT-style thinking — see [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md)).
+- **Match industry practice:** Logit-normal–style time sampling appears in modern pipelines (e.g. SD3 / diffusers discussions); SDX implements a **discrete-index** version that fits the existing **1000-step VP** trainer.
+- **Ablations:** Try `logit_normal` vs `uniform` on the **same** data and val protocol; use `high_noise` if samples look clean early but **weak under heavy noise** or composition breaks at high guidance.
+
+### Tools & tests
+
+| | |
+|:--|:--|
+| **Preview distributions** | `python scripts/tools/training_timestep_preview.py` — histograms / quantiles for each mode before long runs ([`scripts/tools/training_timestep_preview.py`](scripts/tools/training_timestep_preview.py)). |
+| **Unit tests** | `pytest tests/test_timestep_sampling.py` |
+| **Roadmap / “OP” ideas** | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) §1.7, §11.9 |
+
+**Example:**
+
+```bash
+python train.py --data-path /path/to/data --passes 3 \
+  --timestep-sample-mode logit_normal --timestep-logit-mean 0 --timestep-logit-std 1
+```
+
+---
+
 ## Sampling
 
 ```bash
@@ -556,6 +602,9 @@ For `.txt`: line 1 = positive, line 2 = negative.
 | `--prediction-type` | epsilon | `epsilon` or `v` |
 | `--noise-offset` | 0 | SD-style noise offset |
 | `--min-snr-gamma` | 5 | Min-SNR weighting (0=off) |
+| `--timestep-sample-mode` | uniform | `uniform` \| `logit_normal` (SD3-style) \| `high_noise` |
+| `--timestep-logit-mean` | 0 | For `logit_normal` mode |
+| `--timestep-logit-std` | 1 | For `logit_normal` mode |
 | `--resume` | None | Resume path |
 | `--val-split` | 0 | Val fraction |
 | `--val-every` | 2000 | Val frequency |
@@ -587,6 +636,7 @@ For `.txt`: line 1 = positive, line 2 = negative.
 |:--------|:-----|:------------|
 | Offset noise | `--noise-offset` | Light/dark balance |
 | Min-SNR | `--min-snr-gamma` | Timestep loss balance |
+| Timestep sampling | `--timestep-sample-mode` | Non-uniform training `t` (logit-normal / high-noise bias); [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
 | V-pred | `--prediction-type v` | Velocity parameterization |
 | Cosine β | `--beta-schedule cosine` | Alternative noise schedule |
 
@@ -611,6 +661,7 @@ Sampling: DDIM-style loop with cond/uncond; use **`--cfg-rescale`**, **`--num`**
 | Dry run | `--dry-run` |
 | Log samples | `--log-images-every`, `--log-images-prompt` |
 | Data quality script | `scripts/tools/data_quality.py` |
+| Timestep sampling preview | `scripts/tools/training_timestep_preview.py` (compare `--timestep-sample-mode` distributions) |
 | Export ONNX | `scripts/tools/export_onnx.py` |
 | Latent cache | `scripts/training/precompute_latents.py` + `--latent-cache-dir` |
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |
