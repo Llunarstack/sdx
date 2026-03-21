@@ -1,6 +1,9 @@
 # Reference repos (optional clone)
 external/
 
+# Optional parallel package tree (local experiments; main code: models/, train.py)
+enhanced_dit/
+
 # Python
 __pycache__/
 *.py[cod]

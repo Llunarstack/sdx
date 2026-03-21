@@ -29,8 +29,8 @@ def load_dit_text_checkpoint(
     if reject_enhanced and str(model_name).startswith("EnhancedDiT"):
         raise ValueError(
             "This checkpoint is an EnhancedDiT model, which is not compatible with sample.py (DiT-Text/T5 sampler).\n"
-            "Use sample_enhanced.py instead:\n"
-            '  python sample_enhanced.py "<prompt>" --checkpoint <path_to_ckpt> --output out.png\n'
+            "Use scripts/enhanced/sample_enhanced.py instead:\n"
+            '  python scripts/enhanced/sample_enhanced.py "<prompt>" --checkpoint <path_to_ckpt> --output out.png\n'
             "Or train a DiT-*-Text checkpoint with train.py to use sample.py."
         )
 

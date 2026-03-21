@@ -8,6 +8,8 @@ All **SDX project files** (what we run and edit) and **key files in external rep
 
 Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` are on the path.
 
+**Quick orientation:** [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) — entry points, `scripts/` layout, contribution targets.
+
 ### How the tree fits together (runtime)
 
 | Area | Role | Consumed by |
@@ -30,6 +32,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | File | Description |
 |------|-------------|
 | [README.md](../README.md) | Project overview, setup, data format, training, options. |
+| [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — run `python scripts/tools/update_project_structure.py` to refresh. |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | PR checklist: ruff format/check, pytest, docs. |
 | [pyproject.toml](../pyproject.toml) | Ruff + pytest settings; minimal `[project]` metadata. |
 | [requirements.txt](../requirements.txt) | Pip dependencies (torch, transformers, diffusers, xformers, etc.). |
@@ -37,6 +40,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [train.py](../train.py) | Training: DiT + T5 (optional **triple** CLIP fusion via `--text-encoder-mode triple`), VAE/RAE, REPA, passes/epochs, val, DDP; **--crop-mode**, **--caption-dropout-schedule**, **--save-polyak**, **--wandb-project**, **--tensorboard-dir**, **--dry-run**. |
 | [inference.py](../inference.py) | Load checkpoint and config for programmatic inference. |
 | [sample.py](../sample.py) | CLI sampling: prompt, negative prompt, steps, width, height; **--cfg-scale**, **--num N** (batch), **--grid**, **--vae-tiling**, **--cfg-rescale**, **--deterministic** (reproducible); style, control, lora, img2img, sharpen, contrast. High CFG auto-enables rescale/threshold. |
+| [scripts/cli.py](../scripts/cli.py) | Optional CLI entry (analyze dataset, validate config, checkpoints, …). |
 
 ### Config
 
@@ -137,17 +141,21 @@ Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imp
 
 ### Scripts
 
-Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **book/** (launcher only), **root** (e.g. Stable Cascade stub).
+Index: **[scripts/README.md](../scripts/README.md)**. **Tools (categorized):** **[scripts/tools/README.md](../scripts/tools/README.md)**. Subdirs: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **book/** (launcher only), **enhanced/** (EnhancedDiT train/sample — [scripts/enhanced/README.md](../scripts/enhanced/README.md)), **root** (e.g. Stable Cascade stub).
 
 | File | Description |
 |------|-------------|
+| [scripts/enhanced/train_enhanced.py](../scripts/enhanced/train_enhanced.py) | Train **EnhancedDiT** (optional path; main path is `train.py`). |
+| [scripts/enhanced/sample_enhanced.py](../scripts/enhanced/sample_enhanced.py) | Sample EnhancedDiT checkpoints when `sample.py` is incompatible. |
+| [scripts/enhanced/setup_enhanced.py](../scripts/enhanced/setup_enhanced.py) | Optional enhanced-stack setup / checks. |
+| [scripts/enhanced/save_model_checkpoint.py](../scripts/enhanced/save_model_checkpoint.py) | Save initialized Enhanced DiT-XL checkpoint. |
 | [scripts/setup/clone_repos.ps1](../scripts/setup/clone_repos.ps1) | Windows: clone DiT, ControlNet, flux, generative-models, PixArt, Z-Image, SiT, Lumina into `external/`. |
 | [scripts/setup/clone_repos.sh](../scripts/setup/clone_repos.sh) | Linux/macOS: same clones. |
 | [scripts/download/download_models.py](../scripts/download/download_models.py) | Download best HF models: T5-XXL (text encoder), VAEs (sd-vae-ft-mse, sdxl-vae, sdxl-vae-fp16-fix), LLMs (SmolLM, Qwen2.5-7B). Use `--all` or `--t5` / `--vae` / `--llm` / `--llm-best`. |
 | [scripts/download/download_llm.py](../scripts/download/download_llm.py) | Download a single LLM for prompt expansion (SmolLM2-360M or Qwen2.5-7B with `--best`). |
 | [scripts/download/download_revolutionary_stack.py](../scripts/download/download_revolutionary_stack.py) | Bulk HF snapshot downloads for extended stacks (see `docs/MODEL_STACK.md`). |
 | [scripts/cascade_generate.py](../scripts/cascade_generate.py) | **Stable Cascade** (diffusers) sampling — optional path; uses `model/StableCascade-*` via `utils/model_paths`. |
-| [scripts/training/self_improve.py](../scripts/training/self_improve.py) | Self-improvement loop (8.6): generate images, caption with VLM, write manifest.jsonl. |
+| — | **self_improve.py** (planned, not in `scripts/training/` on this branch) — see [IMPROVEMENTS.md](IMPROVEMENTS.md) §8.6; use `hf_download_and_train.py` for similar loops. |
 | [scripts/training/precompute_latents.py](../scripts/training/precompute_latents.py) | Precompute VAE latents for faster training. |
 | [scripts/training/hf_export_to_sdx_manifest.py](../scripts/training/hf_export_to_sdx_manifest.py) | HF `datasets` → `manifest.jsonl` + images (Danbooru-style when schema fits). |
 | [scripts/training/hf_download_and_train.py](../scripts/training/hf_download_and_train.py) | One-shot: HF export + `DiT-B/2-Text` train; `--demo` for synthetic data only. |
@@ -170,11 +178,15 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/tools/export_safetensors.py](../scripts/tools/export_safetensors.py) | Export .pt checkpoint DiT weights to .safetensors (ComfyUI/A1111); optional `--metadata` for config JSON. |
 | [scripts/tools/quick_test.py](../scripts/tools/quick_test.py) | Smoke test: one DiT forward pass to verify env. |
 | [scripts/tools/image_quality_qc.py](../scripts/tools/image_quality_qc.py) | Image QC for JSONL: Laplacian sharpness + grayscale contrast; optional fail thresholds. |
+| [scripts/tools/update_project_structure.py](../scripts/tools/update_project_structure.py) | Regenerate **`PROJECT_STRUCTURE.md`** at repo root. |
+| [scripts/tools/verify_doc_links.py](../scripts/tools/verify_doc_links.py) | Verify relative markdown links in key docs (CI-friendly). |
 
 ### Docs
 
 | File | Description |
 |------|-------------|
+| [docs/REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) | Top-level tree, entry points, `scripts/` layout, where to add code. |
+| [docs/CODEBASE_ORGANIZATION.md](CODEBASE_ORGANIZATION.md) | Principles: core packages vs `scripts/`, contribution targets, anti-patterns. |
 | [docs/CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md) | Civitai-style fixes: oversaturation, blur, bad hands, resolution; sample.py flags and training tips. |
 | [docs/STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md) | Style/artist tags from PixAI, Danbooru, Gelbooru: extraction, training, `--auto-style-from-prompt`. |
 | [docs/GENERATION_DIAGRAM.md](GENERATION_DIAGRAM.md) | Flowchart: text → T5 → diffusion loop (DiT) → VAE → image; optional img2img, control, LoRA (Mermaid + ASCII). |

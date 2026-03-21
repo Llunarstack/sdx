@@ -18,8 +18,9 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Repo root: scripts/enhanced/ -> parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO_ROOT))
 
 # Project imports
 from config.train_config import TrainConfig

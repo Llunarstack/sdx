@@ -186,32 +186,32 @@ quality = QualityAnalyzer.analyze_quality(image)
 print(f"Quality score: {quality['quality_score']:.1f}/100")
 ```
 
-### 8. Comprehensive CLI Tool (`cli.py`)
+### 8. Comprehensive CLI Tool (`scripts/cli.py`)
 
 A powerful command-line interface for all operations:
 
 ```bash
 # Analyze dataset quality
-python cli.py analyze-dataset --data-path ./dataset --output report.txt
+python scripts/cli.py analyze-dataset --data-path ./dataset --output report.txt
 
 # Validate training configuration
-python cli.py validate-config config.py --estimate-memory --suggest-optimizations
+python scripts/cli.py validate-config config.py --estimate-memory --suggest-optimizations
 
 # Manage checkpoints
-python cli.py checkpoints list --checkpoint-dir ./checkpoints --sort-by loss
-python cli.py checkpoints cleanup --checkpoint-dir ./checkpoints --keep-best 3
+python scripts/cli.py checkpoints list --checkpoint-dir ./checkpoints --sort-by loss
+python scripts/cli.py checkpoints cleanup --checkpoint-dir ./checkpoints --keep-best 3
 
 # Merge checkpoints
-python cli.py merge-checkpoints ckpt1.pt ckpt2.pt --output merged.pt --weights 0.7,0.3
+python scripts/cli.py merge-checkpoints ckpt1.pt ckpt2.pt --output merged.pt --weights 0.7,0.3
 
 # Optimize prompts
-python cli.py optimize-prompt --prompt "a girl" --style anime --negative "blurry"
+python scripts/cli.py optimize-prompt --prompt "a girl" --style anime --negative "blurry"
 
 # Analyze model architecture
-python cli.py analyze-model --model DiT-XL/2-Text --output analysis.json
+python scripts/cli.py analyze-model --model DiT-XL/2-Text --output analysis.json
 
 # Validate checkpoint integrity
-python cli.py validate-checkpoint checkpoint.pt
+python scripts/cli.py validate-checkpoint checkpoint.pt
 ```
 
 ## 🔧 Integration with Existing Code
@@ -364,12 +364,12 @@ print(f"Average parameter change: {analysis['statistics']['average_difference']}
 
 2. **Analyze your dataset**:
    ```bash
-   python cli.py analyze-dataset --data-path ./your_dataset
+   python scripts/cli.py analyze-dataset --data-path ./your_dataset
    ```
 
 3. **Validate your configuration**:
    ```bash
-   python cli.py validate-config your_config.py --estimate-memory
+   python scripts/cli.py validate-config your_config.py --estimate-memory
    ```
 
 4. **Train with enhanced features**:
@@ -379,7 +379,7 @@ print(f"Average parameter change: {analysis['statistics']['average_difference']}
 
 5. **Optimize prompts for inference**:
    ```bash
-   python cli.py optimize-prompt --prompt "your prompt" --style anime
+   python scripts/cli.py optimize-prompt --prompt "your prompt" --style anime
    ```
 
 The enhanced SDX framework provides comprehensive tools for every stage of the diffusion model workflow, from dataset analysis to final image generation and quality assessment.
@@ -463,22 +463,22 @@ The CLI now provides access to all advanced features:
 
 ```bash
 # Generate with advanced features
-python cli.py generate "a beautiful landscape" --checkpoint model.pt \
+python scripts/cli.py generate "a beautiful landscape" --checkpoint model.pt \
   --precision-control --anatomy-correction --has-text --quality high
 
 # Create character for consistency
-python cli.py create-character "hero" "a brave knight in shining armor" \
+python scripts/cli.py create-character "hero" "a brave knight in shining armor" \
   --reference-prompt "knight in armor, heroic pose"
 
 # Create style profile
-python cli.py create-style "fantasy" "medieval fantasy art style" \
+python scripts/cli.py create-style "fantasy" "medieval fantasy art style" \
   --reference-prompt "fantasy art, medieval, detailed"
 
 # Validate complete setup
-python cli.py validate-setup --config config.py --checkpoint model.pt
+python scripts/cli.py validate-setup --config config.py --checkpoint model.pt
 
 # Get comprehensive statistics
-python cli.py statistics --checkpoint model.pt --output stats.json
+python scripts/cli.py statistics --checkpoint model.pt --output stats.json
 ```
 
 ### Integration Testing

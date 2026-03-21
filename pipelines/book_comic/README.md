@@ -10,7 +10,7 @@ Uses the **same** `sample.py` / `train.py` as general image gen; this folder own
 | [scripts/generate_book.py](scripts/generate_book.py) | Multi-page generator: inpaint chains, MDM masks, OCR repair |
 | [book_helpers.py](book_helpers.py) | Presets (`--book-accuracy`), pick-best wiring, post-process (sharpen / naturalize) |
 | [prompt_lexicon.py](prompt_lexicon.py) | Style snippets (shonen/webtoon/…), merged negatives, aspect presets, tategaki/SFX hints |
-| [../docs/BOOK_COMIC_TECH.md](../docs/BOOK_COMIC_TECH.md) | Tech survey + SDX mapping (consistency, layout, OCR) |
+| [../../docs/BOOK_COMIC_TECH.md](../../docs/BOOK_COMIC_TECH.md) | Tech survey + SDX mapping (consistency, layout, OCR) |
 | [../../scripts/tools/book_scene_split.py](../../scripts/tools/book_scene_split.py) | Split `## Page N` script → one line per page for `--prompts-file` |
 
 **Legacy entry (wrapper):** `scripts/book/generate_book.py` forwards to the path above so old commands keep working.
@@ -29,7 +29,7 @@ python pipelines/book_comic/scripts/generate_book.py --ckpt path/to/best.pt --ou
   --book-type manga --prompts-file pages.txt --book-accuracy balanced --text-in-image
 ```
 
-Use `--book-accuracy maximum` for 4 candidates, or **`production`** for 6 candidates + stricter merged negatives (`prompt_lexicon.PRODUCTION_TIER_NEGATIVE_ADDON`). See **[../docs/BOOK_MODEL_EXCELLENCE.md](../docs/BOOK_MODEL_EXCELLENCE.md)** for a full quality checklist.
+Use `--book-accuracy maximum` for 4 candidates, or **`production`** for 6 candidates + stricter merged negatives (`prompt_lexicon.PRODUCTION_TIER_NEGATIVE_ADDON`). See **[../../docs/BOOK_MODEL_EXCELLENCE.md](../../docs/BOOK_MODEL_EXCELLENCE.md)** for a full quality checklist.
 
 ## Shared engine (repo root)
 

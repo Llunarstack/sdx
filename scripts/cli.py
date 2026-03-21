@@ -11,8 +11,9 @@ from pathlib import Path
 
 import torch
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Repo root: scripts/cli.py -> parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO_ROOT))
 
 from config.train_config import TrainConfig
 from utils.advanced_inference import PromptOptimizer
