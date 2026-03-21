@@ -4,6 +4,7 @@ torchvision
 timm>=0.9.0
 transformers>=4.30.0
 huggingface_hub>=0.20.0
+datasets>=2.14.0
 diffusers>=0.25.0
 xformers>=0.0.23
 accelerate>=0.25.0

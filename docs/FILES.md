@@ -19,6 +19,7 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **utils/** | Checkpoint load, text-encoder bundle, REPA helpers, QC, metrics | `train.py`, `sample.py`, scripts |
 | **ViT/** | Standalone ViT scoring / prompt tools (**not** the DiT generator) | CLI + optional dataset QA |
 | **scripts/** | Download, tools, cascade stub | Ops & CI |
+| **pipelines/** | **image_gen** vs **book_comic**: per–product-line docs; book script at `pipelines/book_comic/scripts/generate_book.py` | See [pipelines/README.md](../pipelines/README.md) |
 | **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md` |
 | **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/model_paths.py` |
 
@@ -102,6 +103,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/dit_architecture.py](../utils/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
 | [utils/nn_inspect.py](../utils/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
+| [utils/orchestration.py](../utils/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
 | *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
 
 ### ViT (`ViT/`)
@@ -117,9 +119,19 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imported by Python training by default. See [native/README.md](../native/README.md).
 
+### Pipelines (`pipelines/`)
+
+| Path | Description |
+|------|-------------|
+| [pipelines/README.md](../pipelines/README.md) | Index: **image_gen** (general T2I) vs **book_comic** (multi-page, OCR). |
+| [pipelines/image_gen/README.md](../pipelines/image_gen/README.md) | Training pointers for general image generation. |
+| [pipelines/book_comic/README.md](../pipelines/book_comic/README.md) | Book/comic/manga workflow; canonical [generate_book.py](../pipelines/book_comic/scripts/generate_book.py). |
+| [pipelines/book_comic/book_helpers.py](../pipelines/book_comic/book_helpers.py) | Presets, pick-best + CFG flags for `sample.py`, post-process (quality.py). |
+| [scripts/book/generate_book.py](../scripts/book/generate_book.py) | Thin launcher → `pipelines/book_comic/scripts/generate_book.py`. |
+
 ### Scripts
 
-Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **root** (e.g. Stable Cascade stub).
+Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **book/** (launcher only), **root** (e.g. Stable Cascade stub).
 
 | File | Description |
 |------|-------------|
@@ -131,6 +143,9 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/cascade_generate.py](../scripts/cascade_generate.py) | **Stable Cascade** (diffusers) sampling — optional path; uses `model/StableCascade-*` via `utils/model_paths`. |
 | [scripts/training/self_improve.py](../scripts/training/self_improve.py) | Self-improvement loop (8.6): generate images, caption with VLM, write manifest.jsonl. |
 | [scripts/training/precompute_latents.py](../scripts/training/precompute_latents.py) | Precompute VAE latents for faster training. |
+| [scripts/training/hf_export_to_sdx_manifest.py](../scripts/training/hf_export_to_sdx_manifest.py) | HF `datasets` → `manifest.jsonl` + images (Danbooru-style when schema fits). |
+| [scripts/training/hf_download_and_train.py](../scripts/training/hf_download_and_train.py) | One-shot: HF export + `DiT-B/2-Text` train; `--demo` for synthetic data only. |
+| [docs/DANBOORU_HF.md](DANBOORU_HF.md) | Using Hugging Face Danbooru-related data with SDX. |
 | [scripts/tools/ckpt_info.py](../scripts/tools/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
 | [scripts/tools/data_quality.py](../scripts/tools/data_quality.py) | Filter/dedup JSONL or folder: `--dedup phash|md5`, `--min-caption-len`, `--bad-words`, `--min-weight` (IMPROVEMENTS 1.6). |
 | [scripts/tools/prompt_lint.py](../scripts/tools/prompt_lint.py) | Prompt adherence lint for SDX JSONL (empty captions, token heuristics, pos/neg overlap). |
@@ -139,6 +154,8 @@ Scripts are grouped by purpose: **setup/** (clone repos), **download/** (T5/VAE/
 | [scripts/tools/op_preflight.py](../scripts/tools/op_preflight.py) | One-shot “coverage + thresholds” gate (PASS/FAIL) before training. |
 | [scripts/tools/training_timestep_preview.py](../scripts/tools/training_timestep_preview.py) | ASCII histograms for `timestep_sample_mode` (uniform / logit_normal / high_noise). |
 | [scripts/tools/dit_variant_compare.py](../scripts/tools/dit_variant_compare.py) | Table of DiT / EnhancedDiT parameter counts and weight-size estimates (no training). |
+| [scripts/tools/make_smoke_dataset.py](../scripts/tools/make_smoke_dataset.py) | Synthetic PNGs + captions for smoke-testing `train.py`. |
+| [SMOKE_TRAINING.md](SMOKE_TRAINING.md) | Step-by-step minimal training commands (`--dry-run`, low VRAM tips). |
 | [scripts/tools/vit_inspect.py](../scripts/tools/vit_inspect.py) | ViT checkpoint: config, param count, optional module tree. |
 | [scripts/tools/op_pipeline.ps1](../scripts/tools/op_pipeline.ps1) | Windows wrapper to run preflight + normalize/boost (+ optional train/eval). |
 | [scripts/tools/complex_prompt_coverage.py](../scripts/tools/complex_prompt_coverage.py) | Coverage analyzer for tricky categories (clothes/weapons/food/text/foreground/background/weird/NSFW). |
