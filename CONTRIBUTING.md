@@ -2,6 +2,8 @@
 
 Thanks for helping improve SDX.
 
+**Context:** SDX is a **modular training/sampling codebase** first. Not every PR needs a new benchmark or sample images—docs, tests, small tools, and **tiny reproducible training configs** are valuable too. See the README section **Project status, compute, and expectations** for how we frame scope.
+
 ## Before you open a PR
 
 1. **Run from repo root** so imports resolve (`config`, `data`, `models`, …).
