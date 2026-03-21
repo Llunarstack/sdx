@@ -14,6 +14,8 @@ Short survey of **recent directions** and how they relate to **SDX** (VP DDPM + 
 | V-prediction | `--prediction-type v` | Velocity parameterization (SD2-style). |
 | CFG rescale / dynamic threshold | `sample.py` | High-CFG friendly. |
 | Cosine **beta** schedule | `--beta-schedule cosine` | Alternative noise schedule (not the same as “cosmap” loss weighting in SD3). |
+| **Sigmoid** / **squaredcos_cap_v2** schedules | `--beta-schedule sigmoid` or `squaredcos_cap_v2` | See `diffusion/schedules.py` (diffusers-style squared cosine + smooth sigmoid ramp). |
+| **Soft min-SNR** loss weight | `--loss-weighting min_snr_soft` | Smooth `gamma/(snr+gamma)` weight (see `diffusion/timestep_loss_weight.py`); alternative to hard `min_snr`. |
 
 ---
 

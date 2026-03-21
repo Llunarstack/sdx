@@ -63,7 +63,10 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 | File | Description |
 |------|-------------|
-| [diffusion/__init__.py](../diffusion/__init__.py) | Exports `create_diffusion`, `GaussianDiffusion`, `sample_training_timesteps`. |
+| [diffusion/__init__.py](../diffusion/__init__.py) | Exports `create_diffusion`, `GaussianDiffusion`, `get_beta_schedule`, `get_timestep_loss_weight`, `sample_training_timesteps`. |
+| [diffusion/schedules.py](../diffusion/schedules.py) | VP beta schedules: linear, cosine, sigmoid, squaredcos_cap_v2 (Improved DDPM–style). |
+| [diffusion/timestep_loss_weight.py](../diffusion/timestep_loss_weight.py) | Unified timestep loss weights: `min_snr`, `min_snr_soft`, EDM-style modes. |
+| [diffusion/snr_utils.py](../diffusion/snr_utils.py) | NumPy SNR / `alpha_cumprod` helpers for analysis. |
 | [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) | Diffusion: beta schedule, training losses (min-SNR, v/epsilon), DDIM sampling, CFG rescale, dynamic threshold. |
 | [diffusion/respace.py](../diffusion/respace.py) | Timestep respacing for sampling. |
 | [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) | Thresholding helpers. |

@@ -91,12 +91,12 @@ class TrainConfig:
     # Diffusion (SD/SDXL-style options)
     num_timesteps: int = 1000
     timestep_respacing: str = ""
-    beta_schedule: str = "linear"  # "linear" or "cosine"
+    beta_schedule: str = "linear"  # linear | cosine | sigmoid | squaredcos_cap_v2
     prediction_type: str = "epsilon"  # "epsilon" or "v" (velocity, SD2-style)
     noise_offset: float = 0.0  # SD/SDXL: shift noise for better light/dark balance (e.g. 0.1)
     min_snr_gamma: float = 5.0  # Min-SNR weighting: cap SNR for loss (0 = off, 5 typical)
-    # Alternative loss weighting (generative-models-style): "unit" | "edm" | "v" | "eps". If set, min_snr_gamma is ignored for timestep weight.
-    loss_weighting: str = "min_snr"  # "min_snr" (default) | "unit" | "edm" | "v" | "eps"
+    # Timestep loss: "min_snr" | "min_snr_soft" | "unit" | "edm" | "v" | "eps" (non-min modes ignore min_snr_gamma for the weight formula).
+    loss_weighting: str = "min_snr"
     loss_weighting_sigma_data: float = 0.5  # For loss_weighting="edm"
     # Which diffusion indices t to sample during training (VP-DDPM unchanged; only P(t)).
     # See diffusion/timestep_sampling.py and docs/MODERN_DIFFUSION.md.
@@ -179,7 +179,7 @@ class TrainConfig:
     log_images_every: int = 0  # 0 = off; when > 0 and wandb/tb enabled, log a sample image every N steps
     log_images_prompt: str = "a photo of a cat"  # prompt used for log sample image
     dry_run: bool = False  # Run 1 training step and exit (verify setup)
-    # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
+        # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
     save_polyak: int = 0  # if > 0, keep running avg of weights and save as polyak.pt every ckpt_every
 
     # Quality / reproducibility
