@@ -8,6 +8,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 - **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md).
 - **Min-SNR weighting** in training — stabilizes learning; avoids overfitting to easy timesteps (SD/SDXL).
+- **Non-uniform training timestep sampling** — `--timestep-sample-mode logit_normal|high_noise` (SD3-style discrete logit-normal or high-noise bias); see [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) and `diffusion/timestep_sampling.py`.
 - **Noise offset** — better light/dark balance in latents (SD/SDXL).
 - **EMA** — inference from EMA weights; smoother, better generalization.
 - **Passes-based training** — “N passes over data” instead of raw steps/epochs.
@@ -53,6 +54,11 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 - **Idea:** Deduplicate by embedding or perceptual hash; filter or downweight low-aesthetic / low-caption-quality samples. Used by SD, SDXL, and many fine-tuners.
 - **Add:** Script or dataset option: (a) dedup (e.g. by CLIP or image hash), (b) aesthetic score from a small rater (or use existing `weight` in JSONL), (c) caption length/quality filter (drop or weight by length, bad words, etc.). Document in data prep section.
+
+### 1.7 Training timestep distribution (logit-normal / high-noise) — **coded**
+
+- **Idea:** Uniform random `t` is not the only choice; SD3-style pipelines often use a logit-normal on normalized time so the model sees some noise regimes more often. You can also bias toward **high noise** (large `t`) to stress hard denoising.
+- **Coded:** `--timestep-sample-mode uniform|logit_normal|high_noise`, plus `--timestep-logit-mean` / `--timestep-logit-std` for logit-normal. VP-DDPM forward process is unchanged; only the batch distribution over discrete indices changes. Details: [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md).
 
 ---
 
@@ -362,5 +368,21 @@ When you implement anything from §11, add a **one-line “wired in” note** he
 
 | Idea | Where |
 |------|--------|
+| **Non-uniform training timesteps** | `diffusion/timestep_sampling.py`; `train.py` `--timestep-sample-mode uniform\|logit_normal\|high_noise`, `--timestep-logit-mean`, `--timestep-logit-std`. |
 | **RAE ↔ DiT latent bridge** | `models/rae_latent_bridge.py`; `train.py` creates the bridge when RAE `encoder_hidden_size != 4`, adds optional `--rae-bridge-cycle-weight`, saves `rae_latent_bridge` in checkpoints; `sample.py` / `inference.py` load it and run `dit_to_rae` before decode. |
 | **Test-time best-of-N** | `sample.py --num N --pick-best clip\|edge\|ocr\|combo` (+ `--pick-save-all`, `--pick-clip-model`); scores in `utils/test_time_pick.py`. |
+
+### 11.9 Paper-backed horizon (2024–2026) — make the model “OP”
+
+High-signal directions that are **not all implemented** but are **actionable** as ablations, stage-2 training, or inference stacks. Full citations and SDX mapping: **[MODERN_DIFFUSION.md](MODERN_DIFFUSION.md)**.
+
+| Cluster | Move | Why it can dominate |
+|--------|------|---------------------|
+| **Train faster / same budget** | **FasterDiT-style** SNR PDF analysis + tuned supervision and timestep policy (NeurIPS 2024 / arXiv 2410.10356). | Same architecture, better **step efficiency**; pairs with your **Min-SNR** + **`timestep_sample_mode`**. |
+| **Scale smarter** | Follow **scaling-law** style studies (e.g. arXiv 2412.12391): **data + curriculum** before raw parameter inflation. | Avoids training a bigger model on **dirty or narrow** data. |
+| **Smaller strong checkpoint** | **DiT-Air**-style efficiency (arXiv 2503.10618): shared layers, width/depth trade, conditioning ablations. | Better **GenEval / CompBench per parameter** for deployment. |
+| **Inference compute** | **SANA-style** “spend more at test time”: multi-sample + **judge** (you have pick-best); optional **depth/width** student for edge devices. | Perceived quality ↑ without retraining the whole stack. |
+| **Alignment pass** | **Diffusion-DPO** / **RankDPO** / curriculum preferences (CVPR 2024 line; ICCV 2025; arXiv 2602.13055). | Fixes **aesthetics, prompt following, safety** after base convergence. |
+| **Long-term architecture** | **PixelDiT** (arXiv 2511.20645), full **rectified flow** trainer, **RecTok**-class tokenizers. | Ceiling raise; **large** engineering cost—treat as parallel experiments. |
+
+**Practical “OP stack” order (recommended):** (1) **Data engine + buckets** → (2) **timestep + loss tuning** (SNR-aware) → (3) **best-of-N + refinement gate** at sample → (4) **preference fine-tune** on curated pairs → (5) **distillation** for speed.
