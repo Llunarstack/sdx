@@ -96,7 +96,20 @@ def main() -> None:
             "suggest_zh": "如果你希望学到 NSFW，请保持数据集中 NSFW 描述词一致（使用你自己的标签集合）。",
         },
         "clothes_wardrobe": {
-            "terms": ["dress", "coat", "jacket", "shirt", "hoodie", "uniform", "armor", "gloves", "boots", "belt", "cape", "cloak"],
+            "terms": [
+                "dress",
+                "coat",
+                "jacket",
+                "shirt",
+                "hoodie",
+                "uniform",
+                "armor",
+                "gloves",
+                "boots",
+                "belt",
+                "cape",
+                "cloak",
+            ],
             "examples_en": "wearing a coat and gloves, belt, boots",
             "examples_zh": "穿着外套和手套，腰带，靴子",
             "suggest_en": "Add explicit wardrobe details (garments + material + accessories).",
@@ -218,14 +231,42 @@ def main() -> None:
             "suggest_zh": "前置明确的艺术风格词（anime/manga/oil painting/cyberpunk/noir 等）。",
         },
         "weapons_props": {
-            "terms": ["sword", "gun", "rifle", "pistol", "knife", "bow", "arrow", "staff", "hammer", "axe", "katana", "blaster", "laser"],
+            "terms": [
+                "sword",
+                "gun",
+                "rifle",
+                "pistol",
+                "knife",
+                "bow",
+                "arrow",
+                "staff",
+                "hammer",
+                "axe",
+                "katana",
+                "blaster",
+                "laser",
+            ],
             "examples_en": "holding a sword, gripping a rifle, carrying a pistol",
             "examples_zh": "手持剑，抓握步枪，携带手枪",
             "suggest_en": "Add the exact weapon/prop word + (ideally) holding/gripping/carrying action.",
             "suggest_zh": "补充精确的武器/道具词，并尽量加上 holding/gripping/carrying 这类动作。",
         },
         "food_drink": {
-            "terms": ["pizza", "ramen", "sushi", "burger", "taco", "steak", "soup", "cake", "pie", "coffee", "tea", "noodles", "dumplings"],
+            "terms": [
+                "pizza",
+                "ramen",
+                "sushi",
+                "burger",
+                "taco",
+                "steak",
+                "soup",
+                "cake",
+                "pie",
+                "coffee",
+                "tea",
+                "noodles",
+                "dumplings",
+            ],
             "examples_en": "holding ramen bowl, slice of pizza, coffee cup",
             "examples_zh": "拿着拉面碗，披萨一片，咖啡杯",
             "suggest_en": "Add explicit food/drink words and serving/holding context if relevant.",
@@ -253,7 +294,23 @@ def main() -> None:
             "suggest_zh": "补充明确的背景构图词（detailed background/backdrop/sky/horizon）。",
         },
         "fine_details": {
-            "terms": ["intricate", "ornate", "embroidery", "stitched", "seams", "texture", "weathered", "steam", "smoke", "fog", "dust", "particles", "micro details", "depth of field", "bokeh"],
+            "terms": [
+                "intricate",
+                "ornate",
+                "embroidery",
+                "stitched",
+                "seams",
+                "texture",
+                "weathered",
+                "steam",
+                "smoke",
+                "fog",
+                "dust",
+                "particles",
+                "micro details",
+                "depth of field",
+                "bokeh",
+            ],
             "examples_en": "intricate textures, stitched seams, micro details, particles, depth of field",
             "examples_zh": "精细纹理，缝线细节，微细节，粒子效果，景深",
             "suggest_en": "Add fine detail anchors (textures/material + particles/DOF/bokeh).",
@@ -288,12 +345,15 @@ def main() -> None:
     missing = [name for name, ok in sorted(found.items(), key=lambda kv: kv[0]) if not ok]
     present = [name for name, ok in sorted(found.items(), key=lambda kv: kv[0]) if ok]
 
-    suggestions_en: Dict[str, str] = {name: categories[name].get("suggest_en", "") for name in categories.keys() if name in categories}
+    suggestions_en: Dict[str, str] = {
+        name: categories[name].get("suggest_en", "") for name in categories.keys() if name in categories
+    }
     out: Dict[str, Any] = {
         "prompt": prompt,
         "present_categories": present,
         "missing_categories": missing,
     }
+
     # Optional external i18n
     def _load_suggestions(path_str: str) -> Dict[str, Dict[str, str]]:
         p = Path(path_str)
@@ -302,7 +362,7 @@ def main() -> None:
         data = json.loads(p.read_text(encoding="utf-8"))
         cats = data.get("categories", data)
         if not isinstance(cats, dict):
-            raise SystemExit("suggestions-json must be {\"categories\": {...}} or {...category...} structure.")
+            raise SystemExit('suggestions-json must be {"categories": {...}} or {...category...} structure.')
         out2: Dict[str, Dict[str, str]] = {}
         for cat, spec in cats.items():
             if isinstance(spec, dict):
@@ -354,4 +414,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -3,7 +3,7 @@
 from .config import ViTConfig
 from .losses import pairwise_ranking_loss
 from .model import ViTQualityAdherenceModel, build_vit_model
-from .prompt_system import build_prompt_plan, breakdown_prompt, compose_positive_with_embedded_negative
+from .prompt_system import breakdown_prompt, build_prompt_plan, compose_positive_with_embedded_negative
 
 __all__ = [
     "ViTConfig",
@@ -14,4 +14,3 @@ __all__ = [
     "compose_positive_with_embedded_negative",
     "build_prompt_plan",
 ]
-

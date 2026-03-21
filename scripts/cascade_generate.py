@@ -4,6 +4,7 @@ Stable Cascade (diffusers) — optional path separate from DiT+T5 sampling.
 
 Requires: pip install diffusers (and models under model/StableCascade-*).
 """
+
 from __future__ import annotations
 
 import argparse

@@ -2,6 +2,7 @@
 """
 Test script to create and verify the 3B parameter Enhanced DiT model.
 """
+
 import sys
 from pathlib import Path
 
@@ -79,4 +80,3 @@ def test_model_creation():
 
 if __name__ == "__main__":
     _model = test_model_creation()
-

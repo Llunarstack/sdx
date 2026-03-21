@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import torch
-
-from config import get_dit_build_kwargs
 from models import DiT_models_text
 from models.rae_latent_bridge import RAELatentBridge
+
+from config import get_dit_build_kwargs
 
 
 def load_dit_text_checkpoint(
@@ -30,7 +30,7 @@ def load_dit_text_checkpoint(
         raise ValueError(
             "This checkpoint is an EnhancedDiT model, which is not compatible with sample.py (DiT-Text/T5 sampler).\n"
             "Use sample_enhanced.py instead:\n"
-            "  python sample_enhanced.py \"<prompt>\" --checkpoint <path_to_ckpt> --output out.png\n"
+            '  python sample_enhanced.py "<prompt>" --checkpoint <path_to_ckpt> --output out.png\n'
             "Or train a DiT-*-Text checkpoint with train.py to use sample.py."
         )
 

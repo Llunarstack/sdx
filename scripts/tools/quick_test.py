@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Smoke test: one forward pass (no training). Verifies imports, config, and model run."""
+
 import os
 import sys
 from contextlib import redirect_stderr
@@ -14,9 +15,10 @@ def main():
     with open(os.devnull, "w") as devnull:
         with redirect_stderr(devnull):
             import torch
-            from config import TrainConfig, get_dit_build_kwargs
-            from models import DiT_models_text
             from diffusion import create_diffusion
+            from models import DiT_models_text
+
+            from config import TrainConfig, get_dit_build_kwargs
 
     cfg = TrainConfig(
         data_path="",

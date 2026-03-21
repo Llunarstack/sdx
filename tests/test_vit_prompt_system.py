@@ -36,4 +36,3 @@ def test_prompt_tool_jsonl(tmp_path: Path) -> None:
     assert "vit_prompt_add" in row
     assert "vit_prompt_avoid" in row
     assert "vit_prompt_composed" in row
-

@@ -47,4 +47,3 @@ def test_cascaded_multimodal_diffusion_bridge_flow() -> None:
     assert out["base_output"].shape == (2, 4, 32, 32)
     assert out["refine_output"].shape == (2, 4, 32, 32)
     assert out["final_output"].shape == (2, 16, 32, 32)
-

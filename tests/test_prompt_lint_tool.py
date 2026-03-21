@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -38,4 +37,3 @@ def test_prompt_lint_fails_on_overlap(sample_jsonl: Path) -> None:
     r = run_prompt_lint(["--fail-on-overlap"], sample_jsonl)
     assert r.returncode == 1
     assert "pos_neg_overlap_rows: 1" in r.stdout
-

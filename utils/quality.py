@@ -77,12 +77,10 @@ def naturalize(
         small_w = max(8, w // 8)
         tex_small = rng.normal(0.0, 1.0, size=(small_h, small_w)).astype(np.float32)
         tex_img = Image.fromarray(
-            (np.clip((tex_small - tex_small.min()) / (tex_small.ptp() + 1e-8), 0.0, 1.0) * 255.0).astype(
-                np.uint8
-            )
+            (np.clip((tex_small - tex_small.min()) / (tex_small.ptp() + 1e-8), 0.0, 1.0) * 255.0).astype(np.uint8)
         )
         tex = np.array(tex_img.resize((w, h), resample=Image.BILINEAR), dtype=np.float32)
-        tex = (tex / 255.0 - 0.5)  # centered [-0.5, 0.5]
+        tex = tex / 255.0 - 0.5  # centered [-0.5, 0.5]
         paper_amt = 0.035 * strength  # in luminance units
         lum = img[:, :, 0] * 0.299 + img[:, :, 1] * 0.587 + img[:, :, 2] * 0.114
         lum = np.clip(lum + lum * tex * paper_amt, 0.0, 255.0)
@@ -152,6 +150,7 @@ def sharpen_pil(pil_image, amount: float = 0.5, radius: float = 1.0):
     arr = np.array(pil_image)
     out = sharpen(arr, amount=amount, radius=radius)
     from PIL import Image
+
     return Image.fromarray(out.astype(np.uint8) if out.dtype != np.uint8 else out)
 
 
@@ -179,4 +178,5 @@ def contrast_pil(pil_image, factor: float):
     arr = np.array(pil_image, dtype=np.float32)
     out = contrast(arr, factor=factor)
     from PIL import Image
+
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))

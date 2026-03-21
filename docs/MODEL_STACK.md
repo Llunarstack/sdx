@@ -1,6 +1,6 @@
 # Local model stack (`model/`)
 
-When folders exist under `model/`, paths resolve automatically (see `utils/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Pipeline showcase](../README.md#pipeline-showcase)** and **[FILES.md](FILES.md)**.
+When folders exist under `model/`, paths resolve automatically (see `utils/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](FILES.md)**.
 
 | Role | Folder / default |
 |------|------------------|
@@ -14,7 +14,7 @@ When folders exist under `model/`, paths resolve automatically (see `utils/model
 
 ## How this maps to the SDX pipeline
 
-- **DiT generation** uses **text** encoders (T5, optionally + CLIP fusion) and **image latents** from VAE/RAE — see the main **[README § Pipeline showcase](../README.md#pipeline-showcase)** for full diagrams (DiT vs `ViT/` QA tools vs REPA).
+- **DiT generation** uses **text** encoders (T5, optionally + CLIP fusion) and **image latents** from VAE/RAE — see the main **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** for full diagrams (DiT vs `ViT/` QA tools vs REPA).
 - **`ViT/`** in this repo is a **separate** scoring/ranking stack (timm ViT on manifests), not the same module as the DiT generator.
 - **REPA** uses a **frozen vision** model (often DINOv2) to align DiT **internal** features during training.
 

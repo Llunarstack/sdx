@@ -64,4 +64,3 @@ def build_vit_model(
         text_feat_dim=text_feat_dim,
         hidden_dim=hidden_dim,
     )
-

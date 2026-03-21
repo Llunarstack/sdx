@@ -2,6 +2,7 @@
 Test-time scaling: score candidate RGB images (uint8 HWC) to pick the best sample.
 Used by sample.py --pick-best (§11.3 IMPROVEMENTS.md).
 """
+
 from __future__ import annotations
 
 import re
@@ -45,8 +46,8 @@ def score_ocr_match(rgb_uint8: np.ndarray, expected: str) -> float:
     if not expected or not str(expected).strip():
         return 0.5
     try:
-        from PIL import Image
         import pytesseract
+        from PIL import Image
     except ImportError:
         return 0.5
     pil = Image.fromarray(rgb_uint8, mode="RGB")
@@ -73,8 +74,8 @@ def score_clip_similarity(
     if not prompt or not str(prompt).strip():
         return [0.5] * len(rgb_uint8_list)
     try:
-        from PIL import Image
         import torch
+        from PIL import Image
         from transformers import CLIPModel, CLIPProcessor
     except ImportError:
         return [0.5] * len(rgb_uint8_list)

@@ -56,9 +56,7 @@ class MoERouter(nn.Module):
 
         if routing_context is not None:
             if routing_context.dim() != 2 or routing_context.shape[0] != B or routing_context.shape[1] != C:
-                raise ValueError(
-                    f"routing_context must be (B,C) with matching B,C; got {tuple(routing_context.shape)}"
-                )
+                raise ValueError(f"routing_context must be (B,C) with matching B,C; got {tuple(routing_context.shape)}")
             ctx = self.context_proj(routing_context).unsqueeze(1).expand(B, N, C).reshape(T, C)
             x_flat_for_routing = x_flat + ctx
         else:
@@ -369,4 +367,3 @@ class MoEProjection(nn.Module):
             out_flat.index_add_(0, token_indices, y_sel * w_sel)
 
         return out_flat.reshape(B, N, C)
-

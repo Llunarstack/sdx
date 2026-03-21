@@ -3,6 +3,7 @@
 Integration test for enhanced DiT model architecture.
 Tests that all components work together properly.
 """
+
 import sys
 from pathlib import Path
 
@@ -38,4 +39,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

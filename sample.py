@@ -7,11 +7,12 @@ Presets and OP modes:
 - --preset sdxl|flux|anime|zit: apply a model-style preset from config.model_presets.
 - --op-mode portrait|fullbody|anime_char: apply a high-level OP bundle on top.
 """
+
 import argparse
 import json
-import subprocess
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Tuple
@@ -44,6 +45,7 @@ def load_model_from_ckpt(ckpt_path, device="cuda"):
     )
     try:
         from config.pixai_reference import get_pixai_style_label
+
         print(f"Model: {model_name} — {get_pixai_style_label(model_name)}")
     except ImportError:
         pass
@@ -227,7 +229,7 @@ def _maybe_append_text_says(prompt: str, expected_texts: list) -> str:
     t = expected_texts[0]
     if not t:
         return p
-    quoted = f"\"{t}\""
+    quoted = f'"{t}"'
     if quoted.lower() in p.lower() or t.lower() in p.lower():
         return p
     # Append in a way our prompt-negative logic understands (TEXT_IN_IMAGE_PHRASES).
@@ -273,7 +275,9 @@ def _sanitize_character_prompt_tokens(tokens: list, negative_tokens: list) -> Tu
         # Add a mild negative to reduce explicit outcomes.
         negative_tokens.extend(["explicit genital content"])
         # Keep warning concise; don't spam if this is called repeatedly.
-        print(f"{SHEET_SAFE_WARN_PREFIX} Replaced explicit gender term with '{SHEET_FUTA_REPLACEMENT}'.", file=sys.stderr)
+        print(
+            f"{SHEET_SAFE_WARN_PREFIX} Replaced explicit gender term with '{SHEET_FUTA_REPLACEMENT}'.", file=sys.stderr
+        )
     return tokens, negative_tokens
 
 
@@ -353,7 +357,7 @@ def _token_weights_from_segments(cleaned: str, segments: list, tokenizer, max_le
         return None
     offset_mapping = offset_mapping[0]
     weights = []
-    for (s, e) in offset_mapping:
+    for s, e in offset_mapping:
         if s == 0 and e == 0:  # padding
             weights.append(1.0)
             continue
@@ -392,12 +396,20 @@ def encode_text(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate image: prompt, negative prompt, steps, width, height, CFG, and scheduler.")
+    parser = argparse.ArgumentParser(
+        description="Generate image: prompt, negative prompt, steps, width, height, CFG, and scheduler."
+    )
     parser.add_argument("--ckpt", type=str, required=True, help="Checkpoint path (e.g. results/.../best.pt)")
-    parser.add_argument("--prompt", type=str, default="", help="Positive prompt (optional if --tags or --tags-file provided)")
+    parser.add_argument(
+        "--prompt", type=str, default="", help="Positive prompt (optional if --tags or --tags-file provided)"
+    )
     parser.add_argument("--negative-prompt", type=str, default="", help="Negative prompt (what to avoid)")
-    parser.add_argument("--out", type=str, default="output.png", help="Output image path (with --num N: stem_0.png, stem_1.png, ...)")
-    parser.add_argument("--num", type=int, default=1, help="Number of images to generate (batch); saved as out_0.png, out_1.png, ...")
+    parser.add_argument(
+        "--out", type=str, default="output.png", help="Output image path (with --num N: stem_0.png, stem_1.png, ...)"
+    )
+    parser.add_argument(
+        "--num", type=int, default=1, help="Number of images to generate (batch); saved as out_0.png, out_1.png, ..."
+    )
     parser.add_argument("--steps", type=int, default=50, help="Number of inference steps")
     parser.add_argument("--width", type=int, default=0, help="Output width (0 = use model image_size)")
     parser.add_argument("--height", type=int, default=0, help="Output height (0 = use model image_size)")
@@ -406,13 +418,38 @@ def main():
     # Optional (kept; only CFG/sampler/scheduler removed)
     parser.add_argument("--style", type=str, default="", help="Style prompt (e.g. oil painting, artist name)")
     parser.add_argument("--style-strength", type=float, default=0.7, help="Style blend strength")
-    parser.add_argument("--auto-style-from-prompt", action="store_true", help="Extract style/artist from prompt when --style empty (e.g. 'by X', 'style of X', artist tags)")
+    parser.add_argument(
+        "--auto-style-from-prompt",
+        action="store_true",
+        help="Extract style/artist from prompt when --style empty (e.g. 'by X', 'style of X', artist tags)",
+    )
     parser.add_argument("--control-image", type=str, default="", help="Path to control image (depth/edge/pose)")
     parser.add_argument("--control-scale", type=float, default=0.85, help="ControlNet strength")
-    parser.add_argument("--lora", type=str, nargs="*", default=[], help="LoRA paths (.pt or .safetensors) with optional scale, e.g. path.safetensors path2.pt:0.6")
-    parser.add_argument("--lora-trigger", type=str, default="", help="Trigger word(s) to prepend to prompt when using LoRAs (e.g. style or character trigger)")
-    parser.add_argument("--tags", type=str, default="", help="Comma-separated tags; prepended to prompt with subject-first order (PixAI/Danbooru-style)")
-    parser.add_argument("--tags-file", type=str, default="", help="Path to file with tags (one per line or comma-separated); used like --tags")
+    parser.add_argument(
+        "--lora",
+        type=str,
+        nargs="*",
+        default=[],
+        help="LoRA paths (.pt or .safetensors) with optional scale, e.g. path.safetensors path2.pt:0.6",
+    )
+    parser.add_argument(
+        "--lora-trigger",
+        type=str,
+        default="",
+        help="Trigger word(s) to prepend to prompt when using LoRAs (e.g. style or character trigger)",
+    )
+    parser.add_argument(
+        "--tags",
+        type=str,
+        default="",
+        help="Comma-separated tags; prepended to prompt with subject-first order (PixAI/Danbooru-style)",
+    )
+    parser.add_argument(
+        "--tags-file",
+        type=str,
+        default="",
+        help="Path to file with tags (one per line or comma-separated); used like --tags",
+    )
     parser.add_argument("--init-image", type=str, default="", help="Img2img: path to initial image")
     parser.add_argument("--strength", type=float, default=0.75, help="Img2img strength 0-1")
     parser.add_argument("--init-latent", type=str, default="", help="Start from saved latent .pt (from-z)")
@@ -424,25 +461,82 @@ def main():
         choices=["legacy", "mdm"],
         help="Inpainting behavior: legacy (old hack) or mdm (freeze known regions each step).",
     )
-    parser.add_argument("--sharpen", type=float, default=0.0, help="Post-process: unsharp strength 0-1 (0=off; needs scipy)")
+    parser.add_argument(
+        "--sharpen", type=float, default=0.0, help="Post-process: unsharp strength 0-1 (0=off; needs scipy)"
+    )
     parser.add_argument("--contrast", type=float, default=1.0, help="Post-process: contrast factor (1=off)")
-    parser.add_argument("--creativity", type=float, default=None, help="Creativity/diversity 0-1 (only if model was trained with --creativity-embed-dim)")
-    parser.add_argument("--originality", type=float, default=0.0, help="0-1; inject novelty tokens and tune sampling/creativity for less templated results")
-    parser.add_argument("--save-attn", type=str, default="", help="Save cross-attention weights to path (e.g. attn.pt) for explanation/heatmap")
+    parser.add_argument(
+        "--creativity",
+        type=float,
+        default=None,
+        help="Creativity/diversity 0-1 (only if model was trained with --creativity-embed-dim)",
+    )
+    parser.add_argument(
+        "--originality",
+        type=float,
+        default=0.0,
+        help="0-1; inject novelty tokens and tune sampling/creativity for less templated results",
+    )
+    parser.add_argument(
+        "--save-attn",
+        type=str,
+        default="",
+        help="Save cross-attention weights to path (e.g. attn.pt) for explanation/heatmap",
+    )
     parser.add_argument("--no-refine", action="store_true", help="Disable refinement pass (raw/imperfect look, faster)")
-    parser.add_argument("--refine-t", type=int, default=50, help="Refinement noise level t (small t fixes imperfections; e.g. 50)")
-    parser.add_argument("--dynamic-threshold-percentile", type=float, default=0.0, help="If > 0, clamp x0 to this percentile (e.g. 99.5); use with --dynamic-threshold-type percentile")
-    parser.add_argument("--dynamic-threshold-type", type=str, default="percentile", choices=["percentile", "norm", "spatial_norm"], help="x0 thresholding: percentile | norm | spatial_norm (ControlNet-style)")
-    parser.add_argument("--dynamic-threshold-value", type=float, default=0.0, help="For norm/spatial_norm: min norm (e.g. 1.0); ignored for percentile")
-    parser.add_argument("--cfg-scale", type=float, default=7.5, help="Classifier-free guidance scale (lower 3-5 = softer, 7-10 = stronger; use with --cfg-rescale if oversaturated)")
-    parser.add_argument("--cfg-rescale", type=float, default=0.0, help="ComfyUI-style CFG rescale to reduce oversaturation (e.g. 0.7)")
+    parser.add_argument(
+        "--refine-t", type=int, default=50, help="Refinement noise level t (small t fixes imperfections; e.g. 50)"
+    )
+    parser.add_argument(
+        "--dynamic-threshold-percentile",
+        type=float,
+        default=0.0,
+        help="If > 0, clamp x0 to this percentile (e.g. 99.5); use with --dynamic-threshold-type percentile",
+    )
+    parser.add_argument(
+        "--dynamic-threshold-type",
+        type=str,
+        default="percentile",
+        choices=["percentile", "norm", "spatial_norm"],
+        help="x0 thresholding: percentile | norm | spatial_norm (ControlNet-style)",
+    )
+    parser.add_argument(
+        "--dynamic-threshold-value",
+        type=float,
+        default=0.0,
+        help="For norm/spatial_norm: min norm (e.g. 1.0); ignored for percentile",
+    )
+    parser.add_argument(
+        "--cfg-scale",
+        type=float,
+        default=7.5,
+        help="Classifier-free guidance scale (lower 3-5 = softer, 7-10 = stronger; use with --cfg-rescale if oversaturated)",
+    )
+    parser.add_argument(
+        "--cfg-rescale", type=float, default=0.0, help="ComfyUI-style CFG rescale to reduce oversaturation (e.g. 0.7)"
+    )
     # AdaGen (adaptive sampling) early-exit: stop when latent deltas get small.
-    parser.add_argument("--ada-early-exit", action="store_true", help="Enable AdaGen-style early exit during sampling (faster, may slightly reduce detail).")
-    parser.add_argument("--ada-exit-delta-threshold", type=float, default=1e-3, help="Early-exit threshold for average latent delta magnitude.")
-    parser.add_argument("--ada-exit-patience", type=int, default=3, help="Number of consecutive steps below threshold before exiting.")
-    parser.add_argument("--ada-exit-min-steps", type=int, default=5, help="Minimum sampling steps before early-exit is allowed.")
+    parser.add_argument(
+        "--ada-early-exit",
+        action="store_true",
+        help="Enable AdaGen-style early exit during sampling (faster, may slightly reduce detail).",
+    )
+    parser.add_argument(
+        "--ada-exit-delta-threshold",
+        type=float,
+        default=1e-3,
+        help="Early-exit threshold for average latent delta magnitude.",
+    )
+    parser.add_argument(
+        "--ada-exit-patience", type=int, default=3, help="Number of consecutive steps below threshold before exiting."
+    )
+    parser.add_argument(
+        "--ada-exit-min-steps", type=int, default=5, help="Minimum sampling steps before early-exit is allowed."
+    )
     # PBFM-style guidance (lightweight edge/high-pass drift in latent update)
-    parser.add_argument("--pbfm-edge-boost", type=float, default=0.0, help="PBFM heuristic: add high-pass drift to x0_pred (0=off).")
+    parser.add_argument(
+        "--pbfm-edge-boost", type=float, default=0.0, help="PBFM heuristic: add high-pass drift to x0_pred (0=off)."
+    )
     parser.add_argument("--pbfm-edge-kernel", type=int, default=3, help="PBFM high-pass kernel size (odd >=3).")
     # Test-time scaling: generate N candidates (--num) and keep the best (§11.3 IMPROVEMENTS.md)
     parser.add_argument(
@@ -452,47 +546,159 @@ def main():
         choices=["none", "clip", "edge", "ocr", "combo"],
         help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo)",
     )
-    parser.add_argument("--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best")
+    parser.add_argument(
+        "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"
+    )
     parser.add_argument(
         "--pick-clip-model",
         type=str,
         default="openai/clip-vit-base-patch32",
         help="HF model id for --pick-best clip/combo",
     )
-    parser.add_argument("--vae-tiling", action="store_true", help="Enable VAE tiling for decode (lower VRAM for large output)")
-    parser.add_argument("--grid", action="store_true", help="When --num > 1, also save a single N-up grid image (e.g. 2x2 for 4)")
-    parser.add_argument("--deterministic", action="store_true", help="Reproducible decode: cudnn deterministic + benchmark off (same seed -> same image when supported)")
-    parser.add_argument("--no-cache", action="store_true", help="Disable T5 encoding cache (use when prompt/negative change every run)")
-    parser.add_argument("--scheduler", type=str, default="ddim", choices=["ddim", "euler"], help="Sampling scheduler: ddim (default) or euler")
-    parser.add_argument("--no-neg-filter", action="store_true", help="Disable positive/negative conflict filter (default: remove from neg any token that appears in pos)")
-    parser.add_argument("--text-in-image", action="store_true", help="Use text-friendly default negative (legible text, signs, lettering) so desired text is not suppressed")
-    parser.add_argument("--expected-text", type=str, default="", help="Expected OCR text for --ocr-fix (comma-separated or JSON list).")
-    parser.add_argument("--ocr-fix", action="store_true", help="Enable OCR validation and iterative inpainting to fix misrendered text.")
+    parser.add_argument(
+        "--vae-tiling", action="store_true", help="Enable VAE tiling for decode (lower VRAM for large output)"
+    )
+    parser.add_argument(
+        "--grid", action="store_true", help="When --num > 1, also save a single N-up grid image (e.g. 2x2 for 4)"
+    )
+    parser.add_argument(
+        "--deterministic",
+        action="store_true",
+        help="Reproducible decode: cudnn deterministic + benchmark off (same seed -> same image when supported)",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true", help="Disable T5 encoding cache (use when prompt/negative change every run)"
+    )
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        default="ddim",
+        choices=["ddim", "euler"],
+        help="Sampling scheduler: ddim (default) or euler",
+    )
+    parser.add_argument(
+        "--no-neg-filter",
+        action="store_true",
+        help="Disable positive/negative conflict filter (default: remove from neg any token that appears in pos)",
+    )
+    parser.add_argument(
+        "--text-in-image",
+        action="store_true",
+        help="Use text-friendly default negative (legible text, signs, lettering) so desired text is not suppressed",
+    )
+    parser.add_argument(
+        "--expected-text", type=str, default="", help="Expected OCR text for --ocr-fix (comma-separated or JSON list)."
+    )
+    parser.add_argument(
+        "--ocr-fix", action="store_true", help="Enable OCR validation and iterative inpainting to fix misrendered text."
+    )
     parser.add_argument("--ocr-threshold", type=float, default=0.65, help="Stop when OCR accuracy_score >= this value.")
     parser.add_argument("--ocr-iters", type=int, default=2, help="Max OCR repair iterations.")
     parser.add_argument("--ocr-mask-dilate", type=int, default=0, help="Dilate OCR mask before inpainting (pixels).")
-    parser.add_argument("--ocr-inpaint-strength", type=float, default=0.55, help="MDM inpaint strength when repairing text via OCR.")
+    parser.add_argument(
+        "--ocr-inpaint-strength", type=float, default=0.55, help="MDM inpaint strength when repairing text via OCR."
+    )
     parser.add_argument("--ocr-repair-iter", type=int, default=0, help=argparse.SUPPRESS)
-    parser.add_argument("--boost-quality", action="store_true", help="Prepend 'masterpiece, best quality' to the prompt for stronger adherence (complex/challenging prompts)")
-    parser.add_argument("--save-prompt", action="store_true", help="Write a .txt sidecar next to output with prompt, negative, seed, steps (reproducibility)")
-    parser.add_argument("--subject-first", action="store_true", help="Reorder comma-separated prompt so subject tags (1girl, 1boy, etc.) come first")
-    parser.add_argument("--prompt-file", type=str, default="", help="Read prompt from file (overrides --prompt when set)")
-    parser.add_argument("--hard-style", type=str, default=None, choices=["3d", "realistic", "3d_realistic", "style_mix"], help="Prepend recommended tags for hard styles (3d, realistic, 3d_realistic, style_mix); see config/prompt_domains.py for negatives")
-    parser.add_argument("--naturalize", action="store_true", help="Reduce AI look: add anti-plastic/oversmooth negative, optional natural-look prompt prefix, and subtle film grain + micro-contrast post-process")
-    parser.add_argument("--naturalize-grain", type=float, default=0.015, help="Film grain amount when --naturalize (0=off, 0.01-0.03 typical)")
-    parser.add_argument("--anti-bleed", action="store_true", help="Reduce concept/color bleeding: add distinct-colors positive and color-bleed negative")
-    parser.add_argument("--diversity", action="store_true", help="Reduce same-face/repetitive face: add diversity positive and repetitive-face negative")
-    parser.add_argument("--anti-artifacts", action="store_true", help="Add artifact negative (white dots, speckles, spiky, pixel stretch)")
-    parser.add_argument("--strong-watermark", action="store_true", help="Stronger watermark/logo negative (for stubborn baked-in logos)")
-    parser.add_argument("--gender-swap", action="store_true", help="Heuristic gender swap: girl<->boy, woman<->man, she<->he in the prompt")
-    parser.add_argument("--anatomy-scale", type=str, default="", help="Comma-separated: longer,bigger,wider (anatomy proportions)")
-    parser.add_argument("--object-scale", type=str, default="", help="Comma-separated: longer,bigger,wider (bigger/longer/wider props)")
-    parser.add_argument("--scene-scale", type=str, default="", help="Comma-separated: longer,bigger,wider (wider/longer/bigger scene framing)")
-    parser.add_argument("--character-sheet", type=str, default="", help="Path to character sheet JSON to inject appearance tokens into prompt")
-    parser.add_argument("--character-prompt-extra", type=str, default="", help="Extra character tokens appended to prompt")
-    parser.add_argument("--character-negative-extra", type=str, default="", help="Extra negative tokens to append for the character (applied after defaults)")
-    parser.add_argument("--preset", type=str, default=None, choices=["sdxl", "flux", "anime", "zit"], help="Apply a sampler preset (soft defaults) from config.model_presets")
-    parser.add_argument("--op-mode", type=str, default=None, choices=["portrait", "fullbody", "anime_char"], help="High-level OP mode (applied after preset)")
+    parser.add_argument(
+        "--boost-quality",
+        action="store_true",
+        help="Prepend 'masterpiece, best quality' to the prompt for stronger adherence (complex/challenging prompts)",
+    )
+    parser.add_argument(
+        "--save-prompt",
+        action="store_true",
+        help="Write a .txt sidecar next to output with prompt, negative, seed, steps (reproducibility)",
+    )
+    parser.add_argument(
+        "--subject-first",
+        action="store_true",
+        help="Reorder comma-separated prompt so subject tags (1girl, 1boy, etc.) come first",
+    )
+    parser.add_argument(
+        "--prompt-file", type=str, default="", help="Read prompt from file (overrides --prompt when set)"
+    )
+    parser.add_argument(
+        "--hard-style",
+        type=str,
+        default=None,
+        choices=["3d", "realistic", "3d_realistic", "style_mix"],
+        help="Prepend recommended tags for hard styles (3d, realistic, 3d_realistic, style_mix); see config/prompt_domains.py for negatives",
+    )
+    parser.add_argument(
+        "--naturalize",
+        action="store_true",
+        help="Reduce AI look: add anti-plastic/oversmooth negative, optional natural-look prompt prefix, and subtle film grain + micro-contrast post-process",
+    )
+    parser.add_argument(
+        "--naturalize-grain",
+        type=float,
+        default=0.015,
+        help="Film grain amount when --naturalize (0=off, 0.01-0.03 typical)",
+    )
+    parser.add_argument(
+        "--anti-bleed",
+        action="store_true",
+        help="Reduce concept/color bleeding: add distinct-colors positive and color-bleed negative",
+    )
+    parser.add_argument(
+        "--diversity",
+        action="store_true",
+        help="Reduce same-face/repetitive face: add diversity positive and repetitive-face negative",
+    )
+    parser.add_argument(
+        "--anti-artifacts",
+        action="store_true",
+        help="Add artifact negative (white dots, speckles, spiky, pixel stretch)",
+    )
+    parser.add_argument(
+        "--strong-watermark", action="store_true", help="Stronger watermark/logo negative (for stubborn baked-in logos)"
+    )
+    parser.add_argument(
+        "--gender-swap",
+        action="store_true",
+        help="Heuristic gender swap: girl<->boy, woman<->man, she<->he in the prompt",
+    )
+    parser.add_argument(
+        "--anatomy-scale", type=str, default="", help="Comma-separated: longer,bigger,wider (anatomy proportions)"
+    )
+    parser.add_argument(
+        "--object-scale", type=str, default="", help="Comma-separated: longer,bigger,wider (bigger/longer/wider props)"
+    )
+    parser.add_argument(
+        "--scene-scale",
+        type=str,
+        default="",
+        help="Comma-separated: longer,bigger,wider (wider/longer/bigger scene framing)",
+    )
+    parser.add_argument(
+        "--character-sheet",
+        type=str,
+        default="",
+        help="Path to character sheet JSON to inject appearance tokens into prompt",
+    )
+    parser.add_argument(
+        "--character-prompt-extra", type=str, default="", help="Extra character tokens appended to prompt"
+    )
+    parser.add_argument(
+        "--character-negative-extra",
+        type=str,
+        default="",
+        help="Extra negative tokens to append for the character (applied after defaults)",
+    )
+    parser.add_argument(
+        "--preset",
+        type=str,
+        default=None,
+        choices=["sdxl", "flux", "anime", "zit"],
+        help="Apply a sampler preset (soft defaults) from config.model_presets",
+    )
+    parser.add_argument(
+        "--op-mode",
+        type=str,
+        default=None,
+        choices=["portrait", "fullbody", "anime_char"],
+        help="High-level OP mode (applied after preset)",
+    )
     args = parser.parse_args()
 
     # Apply preset and OP mode as soft defaults (only for unset args)
@@ -509,7 +715,11 @@ def main():
     # Build effective prompt from --prompt-file, --tags / --tags-file, and optional --lora-trigger
     if has_prompt_file:
         pf_path = Path(args.prompt_file)
-        prompt_for_encoding = pf_path.read_text(encoding="utf-8", errors="ignore").strip() if pf_path.exists() else (args.prompt or "").strip()
+        prompt_for_encoding = (
+            pf_path.read_text(encoding="utf-8", errors="ignore").strip()
+            if pf_path.exists()
+            else (args.prompt or "").strip()
+        )
         if not prompt_for_encoding and pf_path.exists():
             print(f"Warning: --prompt-file is empty: {pf_path}", file=sys.stderr)
     else:
@@ -529,6 +739,7 @@ def main():
             print(f"Warning: --tags-file not found: {tags_path}", file=sys.stderr)
     if tags_list:
         from data.caption_utils import prompt_from_tags
+
         tag_str = prompt_from_tags(tags_list)
         prompt_for_encoding = (tag_str + ", " + prompt_for_encoding) if prompt_for_encoding else tag_str
     if getattr(args, "lora_trigger", "").strip() and args.lora:
@@ -536,6 +747,7 @@ def main():
         prompt_for_encoding = f"{trigger}, {prompt_for_encoding}" if prompt_for_encoding else trigger
     if getattr(args, "subject_first", False) and prompt_for_encoding:
         from data.caption_utils import prompt_from_tags
+
         parts = [p.strip() for p in prompt_for_encoding.split(",") if p.strip()]
         if len(parts) > 1:
             prompt_for_encoding = prompt_from_tags(parts)
@@ -578,6 +790,7 @@ def main():
     if getattr(args, "hard_style", None):
         try:
             from config.prompt_domains import HARD_STYLE_RECOMMENDED_PROMPTS
+
             prefix = HARD_STYLE_RECOMMENDED_PROMPTS.get(args.hard_style, [None])[0]
             if prefix and args.prompt:
                 args.prompt = f"{prefix}, {args.prompt}"
@@ -589,18 +802,21 @@ def main():
     if getattr(args, "naturalize", False) and args.prompt:
         try:
             from config.prompt_domains import NATURAL_LOOK_POSITIVE
+
             args.prompt = f"{NATURAL_LOOK_POSITIVE}, {args.prompt}"
         except ImportError:
             pass
     if getattr(args, "anti_bleed", False) and args.prompt:
         try:
             from config.prompt_domains import CONCEPT_BLEEDING_POSITIVE
+
             args.prompt = f"{CONCEPT_BLEEDING_POSITIVE}, {args.prompt}"
         except ImportError:
             pass
     if getattr(args, "diversity", False) and args.prompt:
         try:
             from config.prompt_domains import DIVERSITY_POSITIVE
+
             args.prompt = f"{DIVERSITY_POSITIVE}, {args.prompt}"
         except ImportError:
             pass
@@ -611,7 +827,14 @@ def main():
     if getattr(args, "originality", 0.0) and args.prompt:
         try:
             from config.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
-            from data.caption_utils import SUBJECT_PREFIXES, AGE_TAGS, HEIGHT_TAGS, BUILD_BODY_TAGS, ANATOMY_FRAMING_TAGS, BODY_PART_TAGS
+            from data.caption_utils import (
+                AGE_TAGS,
+                ANATOMY_FRAMING_TAGS,
+                BODY_PART_TAGS,
+                BUILD_BODY_TAGS,
+                HEIGHT_TAGS,
+                SUBJECT_PREFIXES,
+            )
 
             strength = float(args.originality)
             strength = max(0.0, min(1.0, strength))
@@ -624,7 +847,14 @@ def main():
                 chosen = list(rng.choice(tokens, size=k, replace=False))
 
                 parts = [p.strip() for p in args.prompt.split(",") if p.strip()]
-                person_terms = list(SUBJECT_PREFIXES) + list(AGE_TAGS) + list(HEIGHT_TAGS) + list(BUILD_BODY_TAGS) + list(ANATOMY_FRAMING_TAGS) + list(BODY_PART_TAGS)
+                person_terms = (
+                    list(SUBJECT_PREFIXES)
+                    + list(AGE_TAGS)
+                    + list(HEIGHT_TAGS)
+                    + list(BUILD_BODY_TAGS)
+                    + list(ANATOMY_FRAMING_TAGS)
+                    + list(BODY_PART_TAGS)
+                )
 
                 def _norm(x: str) -> str:
                     return x.lower().strip().replace("_", " ")
@@ -666,6 +896,7 @@ def main():
     # Apply LoRAs
     if args.lora:
         from models.lora import apply_loras
+
         lora_specs = []
         for spec in args.lora:
             if ":" in spec:
@@ -676,8 +907,8 @@ def main():
         _, num_keys = apply_loras(model, lora_specs)
         print(f"Applied {len(lora_specs)} LoRA(s), {num_keys} layer(s)")
 
-    from transformers import AutoTokenizer, T5EncoderModel
     from diffusers import AutoencoderKL, AutoencoderRAE
+    from transformers import AutoTokenizer, T5EncoderModel
     from utils.text_encoder_bundle import attach_fusion_weights, load_text_encoder_bundle
 
     text_bundle = None
@@ -698,7 +929,10 @@ def main():
         tok_out = tokenizer(args.prompt, return_tensors="pt", truncation=False)
         n_tok = tok_out.input_ids.shape[1]
         if n_tok > 250:
-            print(f"Note: prompt has {n_tok} tokens; T5 truncates at 300. Put key elements first for best adherence.", file=sys.stderr)
+            print(
+                f"Note: prompt has {n_tok} tokens; T5 truncates at 300. Put key elements first for best adherence.",
+                file=sys.stderr,
+            )
     except Exception:
         pass
     ae_type = getattr(cfg, "autoencoder_type", "kl")
@@ -768,6 +1002,7 @@ def main():
     if getattr(args, "boost_quality", False) and prompt_to_encode.strip():
         try:
             from data.caption_utils import QUALITY_PREFIX
+
             if not prompt_to_encode.strip().lower().startswith("masterpiece"):
                 prompt_to_encode = f"{QUALITY_PREFIX}{prompt_to_encode}".strip()
         except ImportError:
@@ -780,13 +1015,18 @@ def main():
         prompt_to_encode = _maybe_append_text_says(prompt_to_encode, expected_texts)
         args.prompt = prompt_to_encode
     try:
-        from config import DEFAULT_NEGATIVE_PROMPT, TEXT_IN_IMAGE_NEGATIVE, TEXT_IN_IMAGE_PHRASES
         from config.prompt_domains import ANTI_AI_LOOK_NEGATIVE
+
+        from config import DEFAULT_NEGATIVE_PROMPT, TEXT_IN_IMAGE_NEGATIVE, TEXT_IN_IMAGE_PHRASES
     except ImportError:
         DEFAULT_NEGATIVE_PROMPT = " "
-        TEXT_IN_IMAGE_NEGATIVE = "garbled text, misspelled, wrong spelling, illegible, watermark, signature, low quality, blurry"
-        TEXT_IN_IMAGE_PHRASES = ("sign that says", "text that says", "lettering", "written", "reads \"", "says \"")
-        ANTI_AI_LOOK_NEGATIVE = "oversaturated, plastic skin, smooth skin, airbrushed, waxy, doll-like, synthetic, artificial, CGI, uncanny"
+        TEXT_IN_IMAGE_NEGATIVE = (
+            "garbled text, misspelled, wrong spelling, illegible, watermark, signature, low quality, blurry"
+        )
+        TEXT_IN_IMAGE_PHRASES = ("sign that says", "text that says", "lettering", "written", 'reads "', 'says "')
+        ANTI_AI_LOOK_NEGATIVE = (
+            "oversaturated, plastic skin, smooth skin, airbrushed, waxy, doll-like, synthetic, artificial, CGI, uncanny"
+        )
     # When user wants text in the image (sign, lettering, etc.), use a negative that avoids bad text but doesn't suppress desired text
     user_neg = (args.negative_prompt or "").strip()
     if user_neg:
@@ -797,7 +1037,9 @@ def main():
         prompt_lower = prompt_to_encode.lower()
         if any(phrase in prompt_lower for phrase in TEXT_IN_IMAGE_PHRASES):
             negative_text_raw = TEXT_IN_IMAGE_NEGATIVE
-            print("Text-in-image detected: using text-friendly negative (legible text not suppressed).", file=sys.stderr)
+            print(
+                "Text-in-image detected: using text-friendly negative (legible text not suppressed).", file=sys.stderr
+            )
         else:
             negative_text_raw = DEFAULT_NEGATIVE_PROMPT
     if getattr(args, "naturalize", False):
@@ -805,24 +1047,28 @@ def main():
     if getattr(args, "anti_bleed", False):
         try:
             from config.prompt_domains import CONCEPT_BLEEDING_NEGATIVE
+
             negative_text_raw = f"{negative_text_raw}, {CONCEPT_BLEEDING_NEGATIVE}".strip()
         except ImportError:
             pass
     if getattr(args, "diversity", False):
         try:
             from config.prompt_domains import FLUX_FACE_DIVERSITY_NEGATIVE
+
             negative_text_raw = f"{negative_text_raw}, {FLUX_FACE_DIVERSITY_NEGATIVE}".strip()
         except ImportError:
             pass
     if getattr(args, "anti_artifacts", False):
         try:
             from config.prompt_domains import ARTIFACT_NEGATIVES
+
             negative_text_raw = f"{negative_text_raw}, {ARTIFACT_NEGATIVES}".strip()
         except ImportError:
             pass
     if getattr(args, "strong_watermark", False):
         try:
             from config.prompt_domains import WATERMARK_NEGATIVE_STRONG
+
             negative_text_raw = f"{negative_text_raw}, {WATERMARK_NEGATIVE_STRONG}".strip()
         except ImportError:
             pass
@@ -838,15 +1084,22 @@ def main():
         if not negative_text.strip():
             negative_text = " "
         if negative_text != negative_text_raw:
-            print(f"Negative prompt filtered (conflict resolution): \"{negative_text_raw[:60]}{'...' if len(negative_text_raw) > 60 else ''}\" -> \"{negative_text[:60]}{'...' if len(negative_text) > 60 else ''}\"", file=sys.stderr)
+            print(
+                f'Negative prompt filtered (conflict resolution): "{negative_text_raw[:60]}{"..." if len(negative_text_raw) > 60 else ""}" -> "{negative_text[:60]}{"..." if len(negative_text) > 60 else ""}"',
+                file=sys.stderr,
+            )
     # Style: explicit --style or auto-extract from prompt (artist/style tags from PixAI, Danbooru, etc.)
     effective_style = (args.style or "").strip()
     if getattr(cfg, "style_embed_dim", 0) and not effective_style and getattr(args, "auto_style_from_prompt", False):
         try:
             from config.style_artists import extract_style_from_text
+
             effective_style = extract_style_from_text(prompt_to_encode) or ""
             if effective_style:
-                print(f"Auto-style from prompt: \"{effective_style[:50]}{'...' if len(effective_style) > 50 else ''}\"", file=sys.stderr)
+                print(
+                    f'Auto-style from prompt: "{effective_style[:50]}{"..." if len(effective_style) > 50 else ""}"',
+                    file=sys.stderr,
+                )
         except Exception:
             pass
     style_key = effective_style if getattr(cfg, "style_embed_dim", 0) else ""
@@ -859,12 +1112,8 @@ def main():
             style_emb_cached = style_emb_cached.to(device)
         print("T5 cache hit.")
     else:
-        cond_emb = encode_text(
-            [prompt_to_encode], tokenizer, text_encoder, device, text_bundle=text_bundle
-        )
-        uncond_emb = encode_text(
-            [negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle
-        )
+        cond_emb = encode_text([prompt_to_encode], tokenizer, text_encoder, device, text_bundle=text_bundle)
+        uncond_emb = encode_text([negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle)
         style_emb_cached = None
         if effective_style and getattr(cfg, "style_embed_dim", 0):
             style_emb_cached = encode_text(
@@ -873,7 +1122,11 @@ def main():
         if cache_key is not None:
             while len(_t5_cache) >= _T5_CACHE_MAX:
                 _t5_cache.pop(next(iter(_t5_cache)))
-            _t5_cache[cache_key] = (cond_emb.cpu(), uncond_emb.cpu(), style_emb_cached.cpu() if style_emb_cached is not None else None)
+            _t5_cache[cache_key] = (
+                cond_emb.cpu(),
+                uncond_emb.cpu(),
+                style_emb_cached.cpu() if style_emb_cached is not None else None,
+            )
     if num_gen > 1:
         cond_emb = cond_emb.expand(num_gen, -1, -1)
         uncond_emb = uncond_emb.expand(num_gen, -1, -1)
@@ -1004,7 +1257,10 @@ def main():
     if cfg_scale > 10 and cfg_rescale == 0.0 and dyn_thresh_p == 0.0:
         cfg_rescale = 0.7
         dyn_thresh_p = 99.5
-        print(f"High CFG ({cfg_scale}): auto-enabled cfg_rescale=0.7 and dynamic_threshold_percentile=99.5 to reduce oversaturation.", file=sys.stderr)
+        print(
+            f"High CFG ({cfg_scale}): auto-enabled cfg_rescale=0.7 and dynamic_threshold_percentile=99.5 to reduce oversaturation.",
+            file=sys.stderr,
+        )
     print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
     x0 = diffusion.sample_loop(
         model,
@@ -1027,8 +1283,12 @@ def main():
         inpaint_x0=inpaint_x0,
         inpaint_noise=inpaint_noise,
         inpaint_freeze_known=(args.mask and args.inpaint_mode == "mdm"),
-        ada_early_exit_delta_threshold=(getattr(args, "ada_exit_delta_threshold", 0.0) if getattr(args, "ada_early_exit", False) else 0.0),
-        ada_early_exit_patience=(int(getattr(args, "ada_exit_patience", 0)) if getattr(args, "ada_early_exit", False) else 0),
+        ada_early_exit_delta_threshold=(
+            getattr(args, "ada_exit_delta_threshold", 0.0) if getattr(args, "ada_early_exit", False) else 0.0
+        ),
+        ada_early_exit_patience=(
+            int(getattr(args, "ada_exit_patience", 0)) if getattr(args, "ada_early_exit", False) else 0
+        ),
         ada_early_exit_min_steps=int(getattr(args, "ada_exit_min_steps", 0)),
         pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
         pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
@@ -1072,7 +1332,10 @@ def main():
     # Civitai-style tip: non-native resolution often causes blur/artifacts
     if out_w != image_size or out_h != image_size:
         if max(out_w, out_h) > image_size * 1.5 or min(out_w, out_h) < image_size * 0.5:
-            print(f"Note: output {out_w}x{out_h} differs from model native {image_size}x{image_size}; for best quality use native or enable --vae-tiling for large decode.", file=sys.stderr)
+            print(
+                f"Note: output {out_w}x{out_h} differs from model native {image_size}x{image_size}; for best quality use native or enable --vae-tiling for large decode.",
+                file=sys.stderr,
+            )
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1086,6 +1349,7 @@ def main():
         if args.contrast != 1.0 or args.sharpen > 0:
             try:
                 from utils.quality import contrast, sharpen
+
                 if args.contrast != 1.0:
                     img_np = contrast(img_np.astype(np.float32), factor=args.contrast)
                     img_np = np.clip(img_np, 0, 255).astype(np.uint8)
@@ -1096,6 +1360,7 @@ def main():
         if getattr(args, "naturalize", False):
             try:
                 from utils.quality import naturalize
+
                 grain = max(0.0, getattr(args, "naturalize_grain", 0.015))
                 img_np = naturalize(img_np, grain_amount=grain, micro_contrast=1.02, seed=args.seed + i)
             except Exception:
@@ -1162,9 +1427,9 @@ def main():
         and int(getattr(args, "ocr_repair_iter", 0)) < int(getattr(args, "ocr_iters", 0))
     ):
         try:
-            from utils.text_rendering import create_text_rendering_pipeline
-            import numpy as _np
             import cv2 as _cv2
+            import numpy as _np
+            from utils.text_rendering import create_text_rendering_pipeline
 
             pipe = create_text_rendering_pipeline()
             text_engine = pipe["engine"]
@@ -1247,7 +1512,11 @@ def main():
                     ]
 
                     # Forward common generation knobs that impact text quality.
-                    if getattr(args, "dynamic_threshold_type", "percentile") != "percentile" or getattr(args, "dynamic_threshold_value", 0.0) > 0.0 or getattr(args, "dynamic_threshold_percentile", 0.0) > 0.0:
+                    if (
+                        getattr(args, "dynamic_threshold_type", "percentile") != "percentile"
+                        or getattr(args, "dynamic_threshold_value", 0.0) > 0.0
+                        or getattr(args, "dynamic_threshold_percentile", 0.0) > 0.0
+                    ):
                         repair_cmd += [
                             "--dynamic-threshold-percentile",
                             str(getattr(args, "dynamic_threshold_percentile", 0.0)),
@@ -1316,7 +1585,10 @@ def main():
                     if getattr(args, "strong_watermark", False):
                         repair_cmd.append("--strong-watermark")
 
-                    print(f"OCR fix: acc={acc:.3f} < {args.ocr_threshold}; repairing with mdm inpainting...", file=sys.stderr)
+                    print(
+                        f"OCR fix: acc={acc:.3f} < {args.ocr_threshold}; repairing with mdm inpainting...",
+                        file=sys.stderr,
+                    )
                     subprocess.run(repair_cmd, check=True)
                     # Stop this process: the repair subprocess overwrote args.out.
                     sys.exit(0)

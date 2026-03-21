@@ -5,7 +5,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-
 from models.rae_latent_bridge import RAELatentBridge
 
 
@@ -65,4 +64,3 @@ class CascadedMultimodalPipeline(nn.Module):
             refined_latents=refined_out,
             bridge_cycle_loss=cycle_loss,
         )
-

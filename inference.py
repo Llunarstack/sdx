@@ -2,9 +2,11 @@
 Inference with optional refinement: fix imperfections during/after generation.
 Set allow_imperfect_output=True (or refine_output=False) when you want the raw/fucked look.
 """
+
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import torch
 
 # Run from repo root
@@ -15,9 +17,7 @@ from utils.checkpoint_loading import load_dit_text_checkpoint
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    model, cfg, rae_bridge, _, _fusion_sd = load_dit_text_checkpoint(
-        ckpt_path, device=device, reject_enhanced=False
-    )
+    model, cfg, rae_bridge, _, _fusion_sd = load_dit_text_checkpoint(ckpt_path, device=device, reject_enhanced=False)
     return model, cfg, rae_bridge
 
 
@@ -33,9 +33,7 @@ def refine_latent_once(diffusion, model, x_0_latent, encoder_hidden_states, t_re
         sqrt_alpha = diffusion.sqrt_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_0_latent.ndim - 1)]
         sqrt_one = diffusion.sqrt_one_minus_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_0_latent.ndim - 1)]
         x_t = sqrt_alpha * x_0_latent + sqrt_one * noise
-        x_0_pred, _ = diffusion.p_step(
-            model, x_t, t, model_kwargs={"encoder_hidden_states": encoder_hidden_states}
-        )
+        x_0_pred, _ = diffusion.p_step(model, x_t, t, model_kwargs={"encoder_hidden_states": encoder_hidden_states})
     return x_0_pred
 
 
@@ -48,7 +46,9 @@ def main():
         default=True,
         help="Enable/disable one refinement pass to fix imperfections (default: enabled)",
     )
-    parser.add_argument("--allow-imperfect", action="store_true", help="Skip refinement; output raw result (user wants fucked look)")
+    parser.add_argument(
+        "--allow-imperfect", action="store_true", help="Skip refinement; output raw result (user wants fucked look)"
+    )
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 

@@ -110,9 +110,25 @@ TEXT_IN_IMAGE_NEGATIVE = (
 
 # Phrases that suggest the user wants legible text / lettering in the image (sample.py uses this to switch negative).
 TEXT_IN_IMAGE_PHRASES = (
-    "sign that says", "sign says", "text that says", "text reads", "says \"", "reads \"",
-    "lettering", "written", "caption", "label", "headline", "title says", "subtitle",
-    "words ", "phrase ", "spelling", "legible", "readable text", "clear text",
+    "sign that says",
+    "sign says",
+    "text that says",
+    "text reads",
+    'says "',
+    'reads "',
+    "lettering",
+    "written",
+    "caption",
+    "label",
+    "headline",
+    "title says",
+    "subtitle",
+    "words ",
+    "phrase ",
+    "spelling",
+    "legible",
+    "readable text",
+    "clear text",
 )
 
 # Tips for generating images with text (training data and inference).

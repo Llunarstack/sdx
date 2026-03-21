@@ -2,6 +2,7 @@
 Fast training for text-conditioned DiT (PixArt/ReVe-style prompt adherence).
 Step-based training (quality improves with steps), refinement (fix imperfections), optional DDP.
 """
+
 import argparse
 import glob
 import itertools
@@ -16,28 +17,32 @@ from typing import Optional
 
 import torch
 import torch.distributed as dist
+
+# Project imports (run from repo root: python train.py ...)
+from config.train_config import TrainConfig, get_dit_build_kwargs
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
 
-# Project imports (run from repo root: python train.py ...)
-from config.train_config import TrainConfig, get_dit_build_kwargs
 try:
     from config.pixai_reference import get_pixai_style_label
 except ImportError:
+
     def get_pixai_style_label(_model_name):
         return "PixAI.art-style"
+
+
 from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.loss_weighting import get_loss_weight
 from models import DiT_models_text
 from models.rae_latent_bridge import RAELatentBridge
 from utils.checkpoint_manager import CheckpointManager
-from utils.error_handling import setup_logging, log_gpu_memory, get_model_info
-from utils.config_validator import validate_train_config, estimate_memory_usage
+from utils.config_validator import estimate_memory_usage, validate_train_config
+from utils.error_handling import get_model_info, log_gpu_memory, setup_logging
 from utils.metrics import MetricsTracker, log_system_info
-from utils.model_viz import print_model_summary
 from utils.model_paths import default_t5_path
+from utils.model_viz import print_model_summary
 from utils.text_encoder_bundle import load_text_encoder_bundle
 
 # Enable TF32 on Ampere+ for speed
@@ -73,6 +78,7 @@ def get_t5_and_vae(device, cfg: TrainConfig):
     global _transformers, _diffusers
     if _transformers is None:
         import transformers
+
         _transformers = transformers
     if _diffusers is None:
         _diffusers = None
@@ -173,6 +179,7 @@ def _get_repa_vision(device, cfg):
 
     # Lazy import: keep startup fast.
     from transformers import AutoImageProcessor
+
     if "dinov2" in str(encoder_id).lower():
         from transformers import Dinov2Model
 
@@ -220,7 +227,9 @@ def _repa_features(pixel_values: torch.Tensor, device, cfg) -> torch.Tensor:
 
     # [-1,1] -> [0,1]
     x = (pixel_values * 0.5 + 0.5).clamp(0.0, 1.0)
-    x = torch.nn.functional.interpolate(x, size=(_repa_target_hw, _repa_target_hw), mode="bilinear", align_corners=False)
+    x = torch.nn.functional.interpolate(
+        x, size=(_repa_target_hw, _repa_target_hw), mode="bilinear", align_corners=False
+    )
     x = (x.to(torch.float32) - _repa_mean) / _repa_std
 
     enc_id = str(getattr(cfg, "repa_encoder_model", "")).lower()
@@ -307,7 +316,9 @@ def compute_mdm_training_loss(
 
     ph = H // mdm_patch_size
     pw = W // mdm_patch_size
-    sched = sorted(((int(ts), float(r)) for ts, r in mdm_mask_schedule), key=lambda x: x[0]) if mdm_mask_schedule else []
+    sched = (
+        sorted(((int(ts), float(r)) for ts, r in mdm_mask_schedule), key=lambda x: x[0]) if mdm_mask_schedule else []
+    )
     if sched:
         first_t, first_r = sched[0]
         last_t, last_r = sched[-1]
@@ -509,16 +520,15 @@ def eval_val_loss(
                 model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
             if getattr(cfg, "creativity_embed_dim", 0) > 0:
                 creativity_max = getattr(cfg, "creativity_max", 1.0)
-                model_kwargs["creativity"] = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+                model_kwargs["creativity"] = (
+                    torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+                )
             if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
                 model_kwargs["size_embed"] = _size_embed_from_latents(latents, device)
             sample_weights = batch.get("sample_weights")
             if sample_weights is not None:
                 sample_weights = sample_weights.to(device)
-            if (
-                float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0
-                or getattr(cfg, "mdm_mask_schedule", None)
-            ):
+            if float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
                 loss_dict = compute_mdm_training_loss(
                     diffusion,
                     ema_model,
@@ -666,7 +676,8 @@ def _log_sample_image(
                 [[float(latent_size), float(latent_size)]], device=device, dtype=torch.float32
             )
         x0 = diffusion.sample_loop(
-            ema_model, shape,
+            ema_model,
+            shape,
             model_kwargs_cond=mk_cond,
             model_kwargs_uncond=None,
             cfg_scale=7.5,
@@ -689,6 +700,7 @@ def _log_sample_image(
     if getattr(cfg, "wandb_project", None):
         try:
             import wandb
+
             wandb.log({"sample": wandb.Image(img)}, step=steps)
         except Exception:
             pass
@@ -713,10 +725,10 @@ def create_logger(log_dir):
 
 def main(cfg: TrainConfig):
     assert torch.cuda.is_available(), "CUDA required"
-    
+
     # Enhanced error handling and validation
     logger = setup_logging()
-    
+
     # Validate configuration
     logger.info("Validating configuration...")
     config_issues = validate_train_config(cfg)
@@ -727,15 +739,15 @@ def main(cfg: TrainConfig):
                 raise ValueError(f"Configuration error: {issue}")
             else:
                 logger.warning(issue)
-    
+
     # Log system information
     system_info = log_system_info()
     logger.info(f"System info: {system_info}")
-    
+
     # Memory estimation
     memory_est = estimate_memory_usage(cfg)
     logger.info(f"Estimated memory usage: {memory_est['total_estimated_gb']:.1f}GB")
-    
+
     use_ddp = "RANK" in os.environ or "LOCAL_RANK" in os.environ
     if use_ddp:
         dist.init_process_group("nccl")
@@ -771,11 +783,11 @@ def main(cfg: TrainConfig):
         exp_dir.mkdir(parents=True, exist_ok=True)
         ckpt_dir = exp_dir / "checkpoints"
         ckpt_dir.mkdir(exist_ok=True)
-        
+
         # Initialize enhanced utilities
         _checkpoint_manager = CheckpointManager(str(ckpt_dir))
         _metrics_tracker = MetricsTracker(str(exp_dir))
-        
+
         logger = create_logger(str(exp_dir))
     else:
         exp_dir = Path(cfg.results_dir) / "run"
@@ -839,15 +851,17 @@ def main(cfg: TrainConfig):
     if model_fn is None:
         raise ValueError(f"Unknown model {cfg.model_name}. Choices: {list(DiT_models_text.keys())}")
     # When caption_dropout_schedule is set, we apply dropout in the loop; use 0 for model's built-in dropout
-    build_kw = get_dit_build_kwargs(cfg, class_dropout_prob=0.0 if getattr(cfg, "caption_dropout_schedule", None) else None)
+    build_kw = get_dit_build_kwargs(
+        cfg, class_dropout_prob=0.0 if getattr(cfg, "caption_dropout_schedule", None) else None
+    )
     model = model_fn(**build_kw).to(device)
-    
+
     # Log model information
     if rank == 0:
         model_info = get_model_info(model)
         logger.info(f"Model info: {model_info}")
         print_model_summary(model)
-    
+
     if cfg.grad_checkpointing:
         model.enable_gradient_checkpointing()
     ema = deepcopy(model)
@@ -904,11 +918,7 @@ def main(cfg: TrainConfig):
                     logger.info("Loaded rae_latent_bridge from checkpoint.")
                 except Exception as e:
                     logger.warning(f"Could not load rae_latent_bridge: {e}")
-            if (
-                text_bundle is not None
-                and text_bundle.fusion is not None
-                and ckpt.get("text_encoder_fusion")
-            ):
+            if text_bundle is not None and text_bundle.fusion is not None and ckpt.get("text_encoder_fusion"):
                 try:
                     text_bundle.fusion.load_state_dict(ckpt["text_encoder_fusion"], strict=True)
                     logger.info("Loaded text_encoder_fusion from checkpoint.")
@@ -925,6 +935,8 @@ def main(cfg: TrainConfig):
         image_size=cfg.image_size,
         latent_cache_dir=getattr(cfg, "latent_cache_dir", None),
         crop_mode=getattr(cfg, "crop_mode", "center"),
+        region_caption_mode=getattr(cfg, "region_caption_mode", "append"),
+        region_layout_tag=getattr(cfg, "region_layout_tag", "[layout]"),
     )
     val_split = getattr(cfg, "val_split", 0.0)
     val_loader = None
@@ -952,10 +964,15 @@ def main(cfg: TrainConfig):
 
     def _worker_init(worker_id):
         import numpy as np
+
         np.random.seed(cfg.global_seed + rank * 1000 + worker_id)
         torch.manual_seed(cfg.global_seed + rank * 1000 + worker_id)
 
-    sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=cfg.global_seed) if use_ddp else None
+    sampler = (
+        DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=cfg.global_seed)
+        if use_ddp
+        else None
+    )
     loader = DataLoader(
         train_dataset,
         batch_size=cfg.per_device_batch_size,
@@ -967,7 +984,9 @@ def main(cfg: TrainConfig):
         collate_fn=collate_t2i,
         persistent_workers=cfg.num_workers > 0,
         worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
-        generator=torch.Generator().manual_seed(cfg.global_seed + rank) if getattr(cfg, "deterministic", False) else None,
+        generator=torch.Generator().manual_seed(cfg.global_seed + rank)
+        if getattr(cfg, "deterministic", False)
+        else None,
     )
     logger.info(f"Train size: {len(train_dataset)}, batch per device: {cfg.per_device_batch_size}")
 
@@ -982,7 +1001,9 @@ def main(cfg: TrainConfig):
         steps_per_epoch = max(1, len(train_dataset) // cfg.global_batch_size)
         steps_from_passes = passes * steps_per_epoch
         max_steps = steps_from_passes if max_steps <= 0 else min(steps_from_passes, max_steps)
-        logger.info(f"Passes-based: {passes} passes × {steps_per_epoch} steps/epoch = {steps_from_passes} steps (max_steps={max_steps})")
+        logger.info(
+            f"Passes-based: {passes} passes × {steps_per_epoch} steps/epoch = {steps_from_passes} steps (max_steps={max_steps})"
+        )
     use_step_based = max_steps > 0
     if use_step_based:
         loader = itertools.cycle(loader)
@@ -1020,6 +1041,7 @@ def main(cfg: TrainConfig):
     if rank == 0 and getattr(cfg, "tensorboard_dir", None):
         try:
             from torch.utils.tensorboard import SummaryWriter
+
             tb_writer = SummaryWriter(log_dir=str(Path(cfg.tensorboard_dir) / Path(cfg.results_dir).name))
             logger.info(f"TensorBoard logging to {cfg.tensorboard_dir}")
         except Exception as e:
@@ -1027,6 +1049,7 @@ def main(cfg: TrainConfig):
     if rank == 0 and getattr(cfg, "wandb_project", None):
         try:
             import wandb
+
             wandb.init(project=cfg.wandb_project, config=cfg.__dict__ if hasattr(cfg, "__dict__") else {})
             logger.info(f"WandB project: {cfg.wandb_project}")
         except Exception as e:
@@ -1061,8 +1084,7 @@ def main(cfg: TrainConfig):
             control_images = batch.get("control_image")
 
             max_caption_len = (
-                get_curriculum_max_length(steps, curriculum_steps, curriculum_lengths)
-                if curriculum_steps else 300
+                get_curriculum_max_length(steps, curriculum_steps, curriculum_lengths) if curriculum_steps else 300
             )
 
             with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
@@ -1076,7 +1098,9 @@ def main(cfg: TrainConfig):
                     if init_pixel_values is not None and getattr(cfg, "img2img_prob", 0) > 0:
                         use_init = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) < cfg.img2img_prob
                         if use_init.any():
-                            init_latents = encode_images_vae(init_pixel_values.to(device, non_blocking=True), vae, effective_latent_scale)
+                            init_latents = encode_images_vae(
+                                init_pixel_values.to(device, non_blocking=True), vae, effective_latent_scale
+                            )
                             latents = torch.where(use_init.view(-1, 1, 1, 1).expand_as(latents), init_latents, latents)
                     encoder_hidden = encode_text(
                         captions,
@@ -1106,7 +1130,9 @@ def main(cfg: TrainConfig):
                                     train_fusion=True,
                                 )
                             empty_embed = empty_embed_cache[max_caption_len].expand(B, -1, -1)
-                            mask = (torch.rand(B, device=device, dtype=torch.bfloat16) < current_cap_dropout).view(B, 1, 1)
+                            mask = (torch.rand(B, device=device, dtype=torch.bfloat16) < current_cap_dropout).view(
+                                B, 1, 1
+                            )
                             encoder_hidden = encoder_hidden * (1 - mask) + empty_embed * mask
                     # Negative prompt: encode so model can try really hard not to add those features
                     encoder_hidden_neg = None
@@ -1155,7 +1181,9 @@ def main(cfg: TrainConfig):
                     model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
                 if getattr(cfg, "creativity_embed_dim", 0) > 0:
                     creativity_max = getattr(cfg, "creativity_max", 1.0)
-                    model_kwargs["creativity"] = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+                    model_kwargs["creativity"] = (
+                        torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+                    )
                 if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
                     model_kwargs["size_embed"] = _size_embed_from_latents(latents, device)
                 sample_weights = batch.get("sample_weights")
@@ -1175,10 +1203,7 @@ def main(cfg: TrainConfig):
                         sample_weights = sample_weights * w
                     else:
                         sample_weights = w
-                if (
-                    float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0
-                    or getattr(cfg, "mdm_mask_schedule", None)
-                ):
+                if float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
                     loss_dict = compute_mdm_training_loss(
                         diffusion,
                         train_model,
@@ -1279,9 +1304,7 @@ def main(cfg: TrainConfig):
                     avg_loss = t.item() / world_size
                 lr_val = opt.param_groups[0]["lr"] if opt.param_groups else 0.0
                 lr_str = f" lr={lr_val:.2e}" if use_step_based else ""
-                logger.info(
-                    f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}"
-                )
+                logger.info(f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}")
                 # IMPROVEMENTS 5.1: TensorBoard / WandB
                 if rank == 0:
                     if tb_writer is not None:
@@ -1290,12 +1313,19 @@ def main(cfg: TrainConfig):
                     if getattr(cfg, "wandb_project", None):
                         try:
                             import wandb
+
                             wandb.log({"loss": avg_loss, "lr": lr_val, "step": steps}, step=steps)
                         except Exception:
                             pass
                 # IMPROVEMENTS 5.1: log sample images to WandB/TensorBoard every log_images_every steps
                 log_images_every = getattr(cfg, "log_images_every", 0)
-                if rank == 0 and log_images_every > 0 and steps > 0 and steps % log_images_every == 0 and (tb_writer is not None or getattr(cfg, "wandb_project", None)):
+                if (
+                    rank == 0
+                    and log_images_every > 0
+                    and steps > 0
+                    and steps % log_images_every == 0
+                    and (tb_writer is not None or getattr(cfg, "wandb_project", None))
+                ):
                     try:
                         _log_sample_image(
                             ema,
@@ -1451,10 +1481,27 @@ if __name__ == "__main__":
         default="",
         help="CLIP-ViT-bigG/14 folder or HF id (triple mode; empty = default)",
     )
-    parser.add_argument("--vae-model", type=str, default="stabilityai/sd-vae-ft-mse", help="Autoencoder model id/path (VAE=AutoencoderKL or RAE=AutoencoderRAE)")
-    parser.add_argument("--autoencoder-type", type=str, default="kl", choices=["kl", "rae"], help="Autoencoder type: kl=AutoencoderKL, rae=AutoencoderRAE")
-    parser.add_argument("--no-rae-latent-bridge", action="store_true", help="When using RAE with C!=4, error out instead of training RAELatentBridge")
-    parser.add_argument("--rae-bridge-cycle-weight", type=float, default=0.01, help="Cycle loss weight for RAELatentBridge (0=off)")
+    parser.add_argument(
+        "--vae-model",
+        type=str,
+        default="stabilityai/sd-vae-ft-mse",
+        help="Autoencoder model id/path (VAE=AutoencoderKL or RAE=AutoencoderRAE)",
+    )
+    parser.add_argument(
+        "--autoencoder-type",
+        type=str,
+        default="kl",
+        choices=["kl", "rae"],
+        help="Autoencoder type: kl=AutoencoderKL, rae=AutoencoderRAE",
+    )
+    parser.add_argument(
+        "--no-rae-latent-bridge",
+        action="store_true",
+        help="When using RAE with C!=4, error out instead of training RAELatentBridge",
+    )
+    parser.add_argument(
+        "--rae-bridge-cycle-weight", type=float, default=0.01, help="Cycle loss weight for RAELatentBridge (0=off)"
+    )
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--global-batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=100)
@@ -1467,81 +1514,233 @@ if __name__ == "__main__":
     parser.add_argument("--no-grad-checkpoint", action="store_true")
     parser.add_argument("--num-ar-blocks", type=int, default=0, help="Block-wise AR (0=off, 2 or 4)")
     parser.add_argument("--no-xformers", action="store_true", help="Disable xformers attention")
-    parser.add_argument("--passes", type=int, default=0, help="Train for N full passes over the dataset (recommended). Overrides epochs; use with cosine LR.")
-    parser.add_argument("--max-steps", type=int, default=0, help="Cap steps when using --passes, or raw step limit when passes=0 (0=use epochs).")
+    parser.add_argument(
+        "--passes",
+        type=int,
+        default=0,
+        help="Train for N full passes over the dataset (recommended). Overrides epochs; use with cosine LR.",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=0,
+        help="Cap steps when using --passes, or raw step limit when passes=0 (0=use epochs).",
+    )
     parser.add_argument("--min-lr", type=float, default=1e-6, help="Min LR for cosine schedule")
     parser.add_argument("--lr-warmup-steps", type=int, default=500)
-    parser.add_argument("--refinement-prob", type=float, default=0.25, help="Prob of training on fix-imperfection (small t)")
+    parser.add_argument(
+        "--refinement-prob", type=float, default=0.25, help="Prob of training on fix-imperfection (small t)"
+    )
     parser.add_argument("--refinement-max-t", type=int, default=150)
-    parser.add_argument("--img2img-prob", type=float, default=0.0, help="Img2img training: prob to use init_image as x_start (0=off)")
+    parser.add_argument(
+        "--img2img-prob", type=float, default=0.0, help="Img2img training: prob to use init_image as x_start (0=off)"
+    )
     # MDM (Masked Diffusion Models)-style masked-patch training
-    parser.add_argument("--mdm-mask-ratio", type=float, default=0.0, help="MDM training: fraction of latent patches to mask (0=off)")
+    parser.add_argument(
+        "--mdm-mask-ratio", type=float, default=0.0, help="MDM training: fraction of latent patches to mask (0=off)"
+    )
     parser.add_argument(
         "--mdm-mask-schedule",
         type=str,
         default=None,
         help="MDM training: state-dependent mask ratio schedule as comma pairs: t_step,mask_ratio (e.g. 0,0.05,500,0.25,999,0.35)",
     )
-    parser.add_argument("--mdm-patch-size", type=int, default=2, help="MDM training: latent patch size (typically 2, matches DiT patch embed)")
-    parser.add_argument("--mdm-min-mask-patches", type=int, default=1, help="MDM training: ensure at least N patches masked per sample")
-    parser.add_argument("--no-mdm-loss-only-masked", action="store_true", help="MDM training: include unmasked regions in loss (default is masked-only)")
+    parser.add_argument(
+        "--mdm-patch-size",
+        type=int,
+        default=2,
+        help="MDM training: latent patch size (typically 2, matches DiT patch embed)",
+    )
+    parser.add_argument(
+        "--mdm-min-mask-patches", type=int, default=1, help="MDM training: ensure at least N patches masked per sample"
+    )
+    parser.add_argument(
+        "--no-mdm-loss-only-masked",
+        action="store_true",
+        help="MDM training: include unmasked regions in loss (default is masked-only)",
+    )
     # MoE DiT upgrade (MLP-only MoE)
     parser.add_argument("--moe-num-experts", type=int, default=0, help="MoE training: number of FFN experts (0=off)")
     parser.add_argument("--moe-top-k", type=int, default=2, help="MoE routing: top-k experts per token")
-    parser.add_argument("--moe-balance-loss-weight", type=float, default=0.0, help="MoE: auxiliary router balance loss weight (0=off)")
+    parser.add_argument(
+        "--moe-balance-loss-weight", type=float, default=0.0, help="MoE: auxiliary router balance loss weight (0=off)"
+    )
     parser.add_argument("--no-save-best", action="store_true", help="Disable saving best checkpoint by loss")
-    parser.add_argument("--negative-prompt-weight", type=float, default=0.5, help="Weight for subtracting negative prompt")
-    parser.add_argument("--style-embed-dim", type=int, default=0, help="Style conditioning (same as text_dim, e.g. 4096); 0=off")
+    parser.add_argument(
+        "--negative-prompt-weight", type=float, default=0.5, help="Weight for subtracting negative prompt"
+    )
+    parser.add_argument(
+        "--style-embed-dim", type=int, default=0, help="Style conditioning (same as text_dim, e.g. 4096); 0=off"
+    )
     parser.add_argument("--style-strength", type=float, default=0.7, help="Style blend strength in training (0.6-0.8)")
     parser.add_argument("--control-cond-dim", type=int, default=0, help="1=enable ControlNet; 0=off")
     parser.add_argument("--control-scale", type=float, default=0.85, help="ControlNet strength in training (0.7-1.0)")
-    parser.add_argument("--creativity-embed-dim", type=int, default=0, help="Creativity/diversity knob (0=off; e.g. 64)")
+    parser.add_argument(
+        "--creativity-embed-dim", type=int, default=0, help="Creativity/diversity knob (0=off; e.g. 64)"
+    )
     parser.add_argument("--creativity-max", type=float, default=1.0, help="Training: sample creativity in [0, this]")
-    parser.add_argument("--size-embed-dim", type=int, default=0, dest="size_embed_dim", help="PixArt-style latent (H,W) -> timestep embed dim (0=off; DiT still sees native res via pos embed)")
-    parser.add_argument("--patch-se", action="store_true", dest="patch_se", help="Zero-init patch channel gate after patch embed (identity at init)")
-    parser.add_argument("--patch-se-reduction", type=int, default=8, dest="patch_se_reduction", help="Bottleneck divisor for patch SE MLP")
-    parser.add_argument("--curriculum-difficulty-steps", type=str, default=None, help="Comma-sep steps for difficulty curriculum (e.g. 0,5000,10000); use with JSONL 'difficulty' 0-1")
-    parser.add_argument("--no-difficulty-easy-first", action="store_true", help="If set, late steps prefer easy (default: early=easy)")
-    parser.add_argument("--rule-loss-weight", type=float, default=0.0, help="Constitutional/rule auxiliary loss weight (0=off)")
+    parser.add_argument(
+        "--size-embed-dim",
+        type=int,
+        default=0,
+        dest="size_embed_dim",
+        help="PixArt-style latent (H,W) -> timestep embed dim (0=off; DiT still sees native res via pos embed)",
+    )
+    parser.add_argument(
+        "--patch-se",
+        action="store_true",
+        dest="patch_se",
+        help="Zero-init patch channel gate after patch embed (identity at init)",
+    )
+    parser.add_argument(
+        "--patch-se-reduction",
+        type=int,
+        default=8,
+        dest="patch_se_reduction",
+        help="Bottleneck divisor for patch SE MLP",
+    )
+    parser.add_argument(
+        "--curriculum-difficulty-steps",
+        type=str,
+        default=None,
+        help="Comma-sep steps for difficulty curriculum (e.g. 0,5000,10000); use with JSONL 'difficulty' 0-1",
+    )
+    parser.add_argument(
+        "--no-difficulty-easy-first", action="store_true", help="If set, late steps prefer easy (default: early=easy)"
+    )
+    parser.add_argument(
+        "--rule-loss-weight", type=float, default=0.0, help="Constitutional/rule auxiliary loss weight (0=off)"
+    )
     # REPA (Representation Alignment)
     parser.add_argument("--repa-weight", type=float, default=0.0, help="REPA auxiliary loss weight (0=off)")
-    parser.add_argument("--repa-encoder-model", type=str, default="facebook/dinov2-base", help="Frozen vision encoder: dinov2* or clip* (HF id)")
-    parser.add_argument("--repa-out-dim", type=int, default=768, help="Projection output dim; must match encoder embedding dim")
-    parser.add_argument("--repa-projector-hidden-dim", type=int, default=0, help="REPA projector hidden dim (0=linear head)")
+    parser.add_argument(
+        "--repa-encoder-model",
+        type=str,
+        default="facebook/dinov2-base",
+        help="Frozen vision encoder: dinov2* or clip* (HF id)",
+    )
+    parser.add_argument(
+        "--repa-out-dim", type=int, default=768, help="Projection output dim; must match encoder embedding dim"
+    )
+    parser.add_argument(
+        "--repa-projector-hidden-dim", type=int, default=0, help="REPA projector hidden dim (0=linear head)"
+    )
     # SSM swap (hybrid SSM-like token mixer)
-    parser.add_argument("--ssm-every-n", type=int, default=0, help="Replace every Nth self-attention block with SSM-like token mixer (0=off).")
-    parser.add_argument("--ssm-kernel-size", type=int, default=7, help="SSM token mixer depthwise conv kernel size (odd >=3).")
+    parser.add_argument(
+        "--ssm-every-n",
+        type=int,
+        default=0,
+        help="Replace every Nth self-attention block with SSM-like token mixer (0=off).",
+    )
+    parser.add_argument(
+        "--ssm-kernel-size", type=int, default=7, help="SSM token mixer depthwise conv kernel size (odd >=3)."
+    )
 
     # ViT-Gen features
-    parser.add_argument("--num-register-tokens", type=int, default=0, help="Append N learnable register tokens to the patch token stream.")
-    parser.add_argument("--use-rope", action="store_true", help="Enable RoPE (rotary positional embeddings) in self-attention.")
+    parser.add_argument(
+        "--num-register-tokens",
+        type=int,
+        default=0,
+        help="Append N learnable register tokens to the patch token stream.",
+    )
+    parser.add_argument(
+        "--use-rope", action="store_true", help="Enable RoPE (rotary positional embeddings) in self-attention."
+    )
     parser.add_argument("--rope-base", type=float, default=10000.0, help="RoPE base frequency (theta).")
-    parser.add_argument("--kv-merge-factor", type=int, default=1, help="KV pooling factor for hierarchical patch merging in self-attention (1=off).")
-    parser.add_argument("--token-routing-enabled", action="store_true", help="Enable soft per-token routing (gating) in DiT blocks.")
-    parser.add_argument("--token-routing-strength", type=float, default=1.0, help="Token routing strength in [0,1] (higher = more gating).")
+    parser.add_argument(
+        "--kv-merge-factor",
+        type=int,
+        default=1,
+        help="KV pooling factor for hierarchical patch merging in self-attention (1=off).",
+    )
+    parser.add_argument(
+        "--token-routing-enabled", action="store_true", help="Enable soft per-token routing (gating) in DiT blocks."
+    )
+    parser.add_argument(
+        "--token-routing-strength",
+        type=float,
+        default=1.0,
+        help="Token routing strength in [0,1] (higher = more gating).",
+    )
     parser.add_argument("--beta-schedule", type=str, default="linear", choices=["linear", "cosine"])
-    parser.add_argument("--prediction-type", type=str, default="epsilon", choices=["epsilon", "v"], help="v = velocity (SD2-style)")
+    parser.add_argument(
+        "--prediction-type", type=str, default="epsilon", choices=["epsilon", "v"], help="v = velocity (SD2-style)"
+    )
     parser.add_argument("--noise-offset", type=float, default=0.0, help="SD-style noise offset (e.g. 0.1)")
     parser.add_argument("--min-snr-gamma", type=float, default=5.0, help="Min-SNR loss weighting (0=off)")
-    parser.add_argument("--loss-weighting", type=str, default="min_snr", choices=["min_snr", "unit", "edm", "v", "eps"], help="Timestep loss weight: min_snr (default) | unit | edm | v | eps")
-    parser.add_argument("--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm")
+    parser.add_argument(
+        "--loss-weighting",
+        type=str,
+        default="min_snr",
+        choices=["min_snr", "unit", "edm", "v", "eps"],
+        help="Timestep loss weight: min_snr (default) | unit | edm | v | eps",
+    )
+    parser.add_argument(
+        "--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm"
+    )
     parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint path")
-    parser.add_argument("--val-split", type=float, default=0.0, help="Fraction of data for validation (e.g. 0.05); 0=off. Enables best-by-val and early stopping.")
-    parser.add_argument("--val-every", type=int, default=2000, help="Evaluate val loss every N steps (when val-split > 0)")
-    parser.add_argument("--early-stopping-patience", type=int, default=0, help="Stop after N val checks with no improvement; 0=off")
-    parser.add_argument("--val-max-batches", type=int, default=None, help="Max val batches per eval (default: full val set)")
+    parser.add_argument(
+        "--val-split",
+        type=float,
+        default=0.0,
+        help="Fraction of data for validation (e.g. 0.05); 0=off. Enables best-by-val and early stopping.",
+    )
+    parser.add_argument(
+        "--val-every", type=int, default=2000, help="Evaluate val loss every N steps (when val-split > 0)"
+    )
+    parser.add_argument(
+        "--early-stopping-patience", type=int, default=0, help="Stop after N val checks with no improvement; 0=off"
+    )
+    parser.add_argument(
+        "--val-max-batches", type=int, default=None, help="Max val batches per eval (default: full val set)"
+    )
     parser.add_argument("--deterministic", action="store_true", help="Reproducible training (worker seeds)")
-    parser.add_argument("--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training")
+    parser.add_argument(
+        "--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training"
+    )
     parser.add_argument("--seed", type=int, default=42)
     # IMPROVEMENTS from docs
-    parser.add_argument("--caption-dropout-schedule", type=str, default=None, help="Comma-sep pairs step,prob e.g. 0,0.2,10000,0.05 (decay caption dropout over training)")
-    parser.add_argument("--crop-mode", type=str, default="center", choices=["center", "random", "largest_center"], help="Crop strategy for training images (1.2)")
-    parser.add_argument("--save-polyak", type=int, default=0, help="Running avg of last N steps; save as polyak.pt every ckpt-every (0=off)")
+    parser.add_argument(
+        "--caption-dropout-schedule",
+        type=str,
+        default=None,
+        help="Comma-sep pairs step,prob e.g. 0,0.2,10000,0.05 (decay caption dropout over training)",
+    )
+    parser.add_argument(
+        "--crop-mode",
+        type=str,
+        default="center",
+        choices=["center", "random", "largest_center"],
+        help="Crop strategy for training images (1.2)",
+    )
+    parser.add_argument(
+        "--region-caption-mode",
+        type=str,
+        default="append",
+        choices=["append", "prefix", "off"],
+        help="Merge JSONL parts/region_captions into training caption: append|prefix|off (see docs/REGION_CAPTIONS.md)",
+    )
+    parser.add_argument(
+        "--region-layout-tag",
+        type=str,
+        default="[layout]",
+        help="Tag before regional block in merged caption (empty string to omit)",
+    )
+    parser.add_argument(
+        "--save-polyak",
+        type=int,
+        default=0,
+        help="Running avg of last N steps; save as polyak.pt every ckpt-every (0=off)",
+    )
     parser.add_argument("--wandb-project", type=str, default=None, help="WandB project name (enables WandB logging)")
     parser.add_argument("--tensorboard-dir", type=str, default=None, help="TensorBoard log dir (enables TensorBoard)")
     parser.add_argument("--dry-run", action="store_true", help="Run 1 step and exit (verify setup)")
-    parser.add_argument("--log-images-every", type=int, default=0, help="Log a sample image to WandB/TB every N steps (0=off)")
-    parser.add_argument("--log-images-prompt", type=str, default="a photo of a cat", help="Prompt for --log-images-every sample")
+    parser.add_argument(
+        "--log-images-every", type=int, default=0, help="Log a sample image to WandB/TB every N steps (0=off)"
+    )
+    parser.add_argument(
+        "--log-images-prompt", type=str, default="a photo of a cat", help="Prompt for --log-images-every sample"
+    )
     args = parser.parse_args()
 
     cfg = TrainConfig(
@@ -1596,7 +1795,9 @@ if __name__ == "__main__":
         size_embed_dim=getattr(args, "size_embed_dim", 0),
         patch_se=getattr(args, "patch_se", False),
         patch_se_reduction=getattr(args, "patch_se_reduction", 8),
-        curriculum_difficulty_steps=[int(x.strip()) for x in args.curriculum_difficulty_steps.split(",") if x.strip()] if (getattr(args, "curriculum_difficulty_steps", None) and str(args.curriculum_difficulty_steps).strip()) else None,
+        curriculum_difficulty_steps=[int(x.strip()) for x in args.curriculum_difficulty_steps.split(",") if x.strip()]
+        if (getattr(args, "curriculum_difficulty_steps", None) and str(args.curriculum_difficulty_steps).strip())
+        else None,
         curriculum_difficulty_easy_first=not getattr(args, "no_difficulty_easy_first", False),
         rule_loss_weight=args.rule_loss_weight,
         repa_weight=args.repa_weight,
@@ -1626,6 +1827,8 @@ if __name__ == "__main__":
         latent_cache_dir=args.latent_cache_dir,
         caption_dropout_schedule=parse_caption_dropout_schedule(getattr(args, "caption_dropout_schedule", None)),
         crop_mode=getattr(args, "crop_mode", "center"),
+        region_caption_mode=getattr(args, "region_caption_mode", "append"),
+        region_layout_tag=getattr(args, "region_layout_tag", "[layout]"),
         save_polyak=getattr(args, "save_polyak", 0),
         wandb_project=getattr(args, "wandb_project", None),
         tensorboard_dir=getattr(args, "tensorboard_dir", None),

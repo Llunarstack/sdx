@@ -8,6 +8,7 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
+| [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect (train → checkpoint → sample). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | Generation pipeline: prompt → T5 → diffusion loop → DiT → VAE → image; AR and ported code. |

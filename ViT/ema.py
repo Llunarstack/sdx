@@ -8,11 +8,7 @@ class ModelEMA:
 
     def __init__(self, model: torch.nn.Module, decay: float = 0.999):
         self.decay = float(decay)
-        self.shadow = {
-            k: v.detach().clone()
-            for k, v in model.state_dict().items()
-            if v.dtype.is_floating_point
-        }
+        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items() if v.dtype.is_floating_point}
 
     @torch.no_grad()
     def update(self, model: torch.nn.Module) -> None:
@@ -37,4 +33,3 @@ class ModelEMA:
     @torch.no_grad()
     def load_state_dict(self, state: dict[str, torch.Tensor]) -> None:
         self.shadow = {k: v.clone() for k, v in state.items()}
-
