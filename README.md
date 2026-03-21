@@ -4,65 +4,79 @@
 
 # SDX
 
-### Modular **Diffusion Transformer** training & sampling — built for clarity, datasets, and real experiments
+### Text-to-image **Diffusion Transformers**
+
+*Train · sample · iterate — one codebase, clear layers, real experiments.*
 
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/></a>
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="License Apache 2.0"/></a>
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome"/></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-CONTRIBUTING.md-1f6feb?style=flat-square" alt="Contributing"/></a>
+  <a href="docs/README.md"><img src="https://img.shields.io/badge/Docs-docs%2FREADME-24292f?style=flat-square&logo=github" alt="Documentation"/></a>
   <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/Roadmap-IMPROVEMENTS-238636?style=flat-square" alt="Roadmap"/></a>
 </p>
 
 <p align="center">
-  <b><a href="#quick-start">Get started</a></b> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="#architecture-and-pipeline">Architecture</a> ·
+  <a href="#training">Training</a> ·
   <a href="#documentation-hub">Documentation</a> ·
   <a href="#contributing--community">Contribute</a>
 </p>
 
-**Core stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · optional **AR** blocks · REPA · MoE · MDM · RAE bridge · **pick-best** · **book/comic** pipelines
+**Stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · AR blocks · REPA · MoE · MDM · RAE bridge · **pick-best** · **book/comic** pipelines
 
-*Train on your captions. No reference image required for the base path — quality follows your data and settings.*
+<sub>Caption-driven training · no reference image required for the base path · quality follows your data and settings</sub>
 
 </div>
 
 ---
 
-## At a glance
+## Why this repo exists
 
-| Pillar | What you get |
-| :----- | :----------- |
-| **Research-first** | One readable pipeline: `data/` → `train.py` → checkpoint → `sample.py` — swap encoders, timestep sampling, and DiT options without a rewrite. |
-| **Production-minded** | JSONL manifests, val/early stopping, EMA, latent cache, multi-GPU, book workflow with OCR and pick-best ([pipelines/book_comic/](pipelines/book_comic/README.md)). |
-| **Contributor-ready** | `pytest`, `ruff`, [CONTRIBUTING.md](CONTRIBUTING.md), and docs structured for small, reviewable PRs. |
+**SDX** is a **modular** diffusion–transformer codebase for **dataset-faithful** text-to-image research and production: **data → `train.py` → checkpoint → `sample.py`**, with clean boundaries between datasets, VP diffusion math, DiT, encoders, and tooling. Swap timestep sampling, loss weighting, or DiT variants without forking the world.
 
-**What SDX is:** a **modular diffusion–transformer codebase** for **dataset-faithful** text-to-image work — clean separation of data, diffusion math, DiT, sampling, and tooling — so you can try fusion encoders, MoE, AR blocks, REPA, and test-time reranking on top of a solid baseline.
+| | You get |
+| :--- | :--- |
+| **Researchers** | One readable pipeline: `pytest` + `ruff`, [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md), non-uniform `t`, REPA, MoE — ablation-friendly. |
+| **Builders** | JSONL manifests, val / early stopping, EMA, latent cache, DDP, book workflows ([pipelines/book_comic/](pipelines/book_comic/README.md)). |
+| **Contributors** | Small PRs welcome: [CONTRIBUTING.md](CONTRIBUTING.md), [docs/CODEBASE.md](docs/CODEBASE.md), and tools under `scripts/tools/`. |
+
+---
+
+### Find your path
+
+| Goal | Jump to |
+| :--- | :--- |
+| **Run something now** | [Quick start](#quick-start) — `python scripts/tools/quick_test.py` |
+| **Train (folders or JSONL)** | [Training](#training) · [Data format](#data-format) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) |
+| **Books / comics / manga** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
+| **Score or filter data (ViT)** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
+| **Submit a PR or doc fix** | [Contributing](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
+| **Navigate the tree** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
+| **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
 
 ---
 
-### Choose your path
+### On this page
 
-| I want to… | Start here |
-| :----------- | :--------- |
-| **Verify the install** | [Quick start](#quick-start) — `python scripts/tools/quick_test.py` |
-| **Train on folders or JSONL** | [Training](#training) · [Data format](#data-format) |
-| **Books, comics, or manga pages** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
-| **Score or filter data with ViT** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
-| **Submit a fix or doc** | [Contributing & community](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
-| **Understand the folder layout** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
-| **Learn how sampling works** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
-
----
+| | |
+| :--- | :--- |
+| **Setup** | [Project status](#project-status-compute-and-expectations) · [Setup](#setup) |
+| **Core** | [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) |
+| **Train & sample** | [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
+| **Reference** | [JSONL fields](#data-jsonl-fields) · [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 <details>
-<summary><strong>Table of contents</strong></summary>
+<summary><strong>Table of contents (same links, expanded)</strong></summary>
 
 | Section | Links |
 | :--- | :--- |
 | **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines](pipelines/README.md) |
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflow** | [Architecture](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Workflow** | [Architecture](#architecture-and-pipeline) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
@@ -70,11 +84,56 @@
 
 ---
 
-> **First visit?** Run `python scripts/tools/quick_test.py`, skim [**Architecture**](#architecture-and-pipeline), then [**Quick start**](#quick-start).
+## Quick start
+
+| Step | Command |
+| :--- | :--- |
+| **1 · Environment** | `pip install -r requirements.txt` |
+| **2 · Smoke test** | `python scripts/tools/quick_test.py` |
+| **3 · Train** | `python train.py --data-path /path/to/images --results-dir results` |
+| **4 · Sample** | `python sample.py --ckpt results/.../best.pt --prompt "..." --out out.png` |
+
+```bash
+cd sdx
+pip install -r requirements.txt
+python scripts/tools/quick_test.py    # env check (no dataset required)
+```
+
+**Train** (single GPU):
+
+```bash
+python train.py --data-path /path/to/image_folders --results-dir results
+```
+
+**Sample**:
+
+```bash
+python sample.py --ckpt results/.../best.pt --prompt "your prompt" --steps 50 --width 256 --height 256 --out out.png
+```
+
+**Multi-GPU**:
+
+```bash
+torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-size 256
+```
 
 ---
 
-## Project status, compute, and expectations
+### Contribute in 5 minutes
+
+| Step | Action |
+| :--- | :--- |
+| 1 | Fork / clone · `cd` to repo root |
+| 2 | `pip install -r requirements.txt` · `python scripts/tools/quick_test.py` |
+| 3 | `pytest tests/ -q` · `ruff format . && ruff check .` |
+| 4 | Open a **small** PR — docs, tests, and tooling count. See **[CONTRIBUTING.md](CONTRIBUTING.md)**. |
+
+> **First visit?** Run `python scripts/tools/quick_test.py`, skim [**Architecture**](#architecture-and-pipeline), then pick a task from [Find your path](#find-your-path).
+
+---
+
+<details>
+<summary><strong>Project status, compute, and expectations</strong> — scope, VRAM, roadmap</summary>
 
 SDX is a **research-grade pipeline and architecture blueprint** — not a single vendor “model in a box.” Some configs have no pretrained weights in-repo; serious training often means **multi-GPU**, **high VRAM**, and **large storage**. Solo and academic setups are normal: the repo is designed so you can grow into bigger runs without changing stacks.
 
@@ -103,31 +162,59 @@ You can still get value **without** training a billion-parameter model:
 
 **Want to help?** You don’t need a cluster—see **[Contributing & community](#contributing--community)** (docs, tests, tooling, and small reproducible runs all count).
 
+</details>
+
 ---
 
 ## Overview
 
-| Layer | Capabilities |
-| :---- | :----------- |
-| **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), optional **AR** blocks, **Supreme** / **Predecessor** variants |
-| **Training** | Pass-based schedule, **EMA**, **best** checkpoint, val + early stopping, bf16, compile, **DDP**, **non-uniform timestep sampling** (logit-normal / high-noise bias) |
-| **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, control conditioning, refinement, **pick-best** |
-| **Data** | Folders + sidecar captions or **JSONL**; emphasis, domains, regional captions |
+| Layer | What you can do |
+| :---: | :--- |
+| **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), **AR** blocks, **Supreme** / **Predecessor** variants |
+| **Training** | Pass-based schedule · **EMA** · **best** ckpt · val + early stopping · bf16 · compile · **DDP** · **non-uniform timestep** sampling |
+| **Sampling** | CFG · schedulers · img2img / inpaint · LoRA · control · refinement · **pick-best** |
+| **Data** | Folders + sidecars or **JSONL** · emphasis · domains · regional captions |
 
 ---
 
 ## Architecture and pipeline
 
-End-to-end flow: **`data/`** (+ optional manifest & QA) → **`train.py`** (`config/`, `diffusion/`, `models/`, `utils/`) → **checkpoint** → **`sample.py`** → **images**. Weights under **`model/`** (gitignored); paths via **`utils/model_paths.py`**.
+**End-to-end:** `data/` → **`train.py`** → **checkpoint** → **`sample.py`** → images. Frozen weights live under **`model/`** (gitignored); paths resolve via **`utils/model_paths.py`**.
 
-**Two training / product lines** (same engine, different docs and workflows): **[pipelines/image_gen/](pipelines/image_gen/README.md)** (general T2I) and **[pipelines/book_comic/](pipelines/book_comic/README.md)** (books, comics, manga). See **[pipelines/README.md](pipelines/README.md)**.
+### Core pipeline
 
-<pre align="center">
-┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
-│ <b>Data</b>      │───▶│ <b>train.py</b> │───▶│ <b>Checkpoint</b>│───▶│ <b>sample.py</b> │───▶│ <b>Images</b>    │
-│ JSONL, QA  │    │ DiT, loss  │    │ EMA, cfg   │    │ CFG, VAE   │    │ grid, pick │
-└────────────┘    └────────────┘    └────────────┘    └────────────┘    └────────────┘
-</pre>
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+flowchart LR
+    A[Data · captions · JSONL] --> B[train.py · DiT + diffusion]
+    B --> C[("Checkpoint · EMA · config")]
+    C --> D[sample.py · CFG + VAE]
+    D --> E[Images · grids · pick-best]
+    style A fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    style B fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style C fill:#f3e8ff,stroke:#9333ea,color:#581c87
+    style D fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style E fill:#fce7f3,stroke:#db2777,color:#831843
+```
+
+### Product pipelines (same engine)
+
+One **DiT + diffusion** stack; docs and scripts differ by use case:
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+flowchart TB
+    ROOT([train.py · sample.py · shared checkpoints])
+    ROOT --> IG["General T2I"]
+    ROOT --> BK["Books · comics · manga"]
+    IG --> IG1["pipelines/image_gen/"]
+    BK --> BK1["pipelines/book_comic/ · generate_book.py"]
+    style ROOT fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px
+    style IG fill:#fefce8,stroke:#eab308
+    style BK fill:#fdf4ff,stroke:#c026d3
+```
+
+See **[pipelines/README.md](pipelines/README.md)** · [image_gen](pipelines/image_gen/README.md) · [book_comic](pipelines/book_comic/README.md).
 
 ### Repository map
 
@@ -144,7 +231,7 @@ End-to-end flow: **`data/`** (+ optional manifest & QA) → **`train.py`** (`con
 | **`native/`** | Fast JSONL helpers (Rust, Go, …) | Optional; not imported by training by default |
 | **`model/`** | Downloaded HF weights | Paths via `utils/model_paths.py` |
 
-Full index → **[docs/FILES.md](docs/FILES.md)**
+Full index → **[docs/FILES.md](docs/FILES.md)** · **Training-only map (DiT + ViT)** → [Training files reference](#training-files-reference-what-each-part-does)
 
 ### Local weights (`model/`)
 
@@ -170,59 +257,52 @@ Full index → **[docs/FILES.md](docs/FILES.md)**
 
 ---
 
-### Diagram 1 — Full stack (data → train → sample)
+<details>
+<summary><strong>Deep-dive diagrams</strong> — full stack, inside the DiT forward, ViT vs DiT</summary>
+
+### 1 · Full stack
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 flowchart TB
-  classDef weight fill:#f6f8fa,stroke:#24292f,stroke-width:2px,color:#24292f
-  classDef data fill:#ddf4ff,stroke:#0969da,stroke-width:2px,color:#042033
-  classDef train fill:#fff8c5,stroke:#bf8700,stroke-width:2px,color:#3b2600
-  classDef sample fill:#dafbe1,stroke:#1a7f37,stroke-width:2px,color:#0d1f12
-  classDef side fill:#fbefff,stroke:#8250df,stroke-width:1px,color:#2e1067
-
   subgraph WG["Weights · model/ + utils/model_paths.py"]
-    W[T5 · VAE · CLIP · DINOv2 · Qwen · Cascade]:::weight
+    W[T5 · VAE · CLIP · DINOv2 · Qwen · Cascade]
   end
 
-  subgraph DL["Data and optional QA"]
-    DS[(JSONL / folders)]:::data
-    PL[prompt_lint]:::data
-    NT[native/ tools]:::data
-    V1[ViT/ infer → scores]:::data
-    V2[ViT/ rank → filter]:::data
-    DS2[Cleaner / weighted data]:::data
-    DS --> PL
-    DS --> NT
-    DS --> V1
-    V1 --> V2
-    V2 --> DS2
+  subgraph DL["Data path · optional QA"]
+    DS[JSONL / folders]
+    DS --> PL[prompt_lint]
+    DS --> NT[native/ helpers]
+    DS --> V1[ViT infer → scores]
+    V1 --> V2[ViT rank / filter]
+    V2 --> DS2[Cleaner weighted data]
     DS --> DS2
   end
 
-  subgraph TR["train.py — DiT training"]
-    TE[T5 or T5+CLIP fusion]:::train
-    VA[VAE or RAE latents]:::train
-    REP[Optional REPA vision]:::train
-    DIT[DiT-Text + diffusion loss]:::train
-    CKPT[(Checkpoint · EMA · config · fusion · RAE bridge)]:::weight
+  subgraph TR["train.py"]
+    TE[T5 or triple fusion]
+    VA[VAE / RAE latents]
+    REP[REPA vision · optional]
+    DIT[DiT + diffusion loss]
+    CKPT[(Checkpoint)]
     TE --> DIT
     VA --> DIT
-    REP -.->|aux| DIT
+    REP -.->|aux loss| DIT
     DIT --> CKPT
   end
 
-  subgraph SM["sample.py — generation"]
-    TE2[Text stack from ckpt]:::sample
-    DN[DiT denoise]:::sample
-    DC[VAE decode]:::sample
-    PB[pick-best CLIP/edge/OCR]:::sample
-    IMG[(Images)]:::sample
+  subgraph SM["sample.py"]
+    TE2[Text from ckpt]
+    DN[DiT denoise]
+    DC[VAE decode]
+    PB[pick-best]
+    IMG[Images]
     TE2 --> DN --> DC --> PB --> IMG
   end
 
-  subgraph OP["Optional side paths"]
-    QW[Qwen expand prompts]:::side
-    CAS[Stable Cascade · scripts/cascade_generate.py]:::side
+  subgraph OP["Optional"]
+    QW[Qwen prompt expand]
+    CAS[Cascade · cascade_generate.py]
   end
 
   W --> TE
@@ -231,89 +311,104 @@ flowchart TB
   W -.-> REP
   W -.-> QW
   W -.-> CAS
-  DS2 --> TR
-  CKPT --> SM
+  DS2 --> TE
+  CKPT --> TE2
   QW -.-> TE2
 ```
 
-### Diagram 2 — Inside training (text + latent + DiT)
+### 2 · Training forward · text + latent + DiT
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 flowchart LR
-  classDef t fill:#ddf4ff,stroke:#0969da,color:#042033
-  classDef l fill:#fff8c5,stroke:#bf8700,color:#3b2600
-  classDef d fill:#dafbe1,stroke:#1a7f37,color:#0d1f12
-
-  subgraph TX["Text conditioning"]
+  subgraph TX["Text"]
     direction TB
-    T5[T5-XXL]:::t
-    C1[CLIP-L text]:::t
-    C2[CLIP-bigG text]:::t
-    FU[Fusion +2 tokens]:::t
-    TXT[encoder_hidden_states]:::t
-    T5 --> FU
-    C1 --> FU
-    C2 --> FU
-    FU --> TXT
+    T5[T5-XXL] --> FU[Fusion +2 tok]
+    CL1[CLIP-L] --> FU
+    CL2[CLIP-bigG] --> FU
+    FU --> HID[encoder_hidden_states]
   end
 
-  subgraph LT["Latent"]
+  subgraph LT["Latent space"]
     direction TB
-    VAE[VAE 4ch]:::l
-    RAE[RAE → bridge → 4ch]:::l
-    LAT[Latent x]:::l
-    VAE --> LAT
-    RAE --> LAT
+    VAE[VAE 4ch] --> LAT[Latent x]
+    RAE[RAE + bridge] --> LAT
   end
 
   subgraph CORE["DiT-Text"]
     direction TB
-    PE[patch + pos]:::d
-    SA[self-attn · ViT-Gen]:::d
-    CA[cross-attn → text]:::d
-    OUT[ε or v]:::d
-    LAT --> PE --> SA --> CA --> OUT
-    TXT --> CA
+    PE[patch + pos] --> SA[self-attn · ViT-Gen]
+    SA --> CA[cross-attn]
+    CA --> OUT[ε or v]
   end
 
-  subgraph RP["Optional REPA"]
-    IM[Real images]:::l
-    VS[Frozen DINOv2 / CLIP vision]:::l
-    IM --> VS -.->|align| OUT
+  subgraph RP["REPA · optional"]
+    direction TB
+    IM[Pixels] --> VS[DINOv2 / CLIP vision]
   end
+
+  LAT --> PE
+  HID --> CA
+  VS -.->|align| OUT
+
+  style TX fill:#e0f2fe,stroke:#0284c7
+  style LT fill:#fef9c3,stroke:#ca8a04
+  style CORE fill:#dcfce7,stroke:#16a34a
+  style RP fill:#faf5ff,stroke:#9333ea
 ```
 
-### Diagram 3 — `ViT/` vs DiT (different jobs)
+### 3 · Generator vs ViT tooling
 
 ```mermaid
-flowchart TB
-  classDef gen fill:#dafbe1,stroke:#1a7f37,color:#0d1f12
-  classDef tool fill:#ddf4ff,stroke:#0969da,color:#042033
-
-  subgraph G["Generation: DiT · train.py / sample.py"]
-    A[Latent diffusion objective]:::gen
-    B[Image generation]:::gen
+%%{init: {'theme':'neutral'}}%%
+flowchart LR
+  subgraph GEN["DiT generator · train.py / sample.py"]
+    G1[Latent diffusion] --> G2[T2I output]
   end
 
-  subgraph T["Tooling: ViT/ folder"]
-    C[Quality + adherence scores]:::tool
-    D[Manifest rank / filter]:::tool
-    E[prompt_system]:::tool
-    F[Embeddings]:::tool
+  subgraph VIT["ViT/ package · QA & ranking"]
+    V1[Quality + adherence] --> V2[Rank / filter manifest]
+    V3[prompt_system · embeddings]
   end
 
-  CKPT2[(DiT checkpoint)]:::gen
-  DS3[(Dataset)]:::tool
-  N[best-of-N rerank]:::tool
+  CKPT[(DiT ckpt)]
+  DATA[(Dataset)]
+  PICK[best-of-N rerank]
 
-  G -.-> CKPT2
-  T -.-> DS3
-  T -.-> N
+  GEN --> CKPT
+  VIT --> DATA
+  VIT --> PICK
+  CKPT -.->|samples| PICK
+
+  style GEN fill:#dcfce7,stroke:#15803d
+  style VIT fill:#dbeafe,stroke:#1d4ed8
 ```
 
-**Details:** [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) (ViT vs DiT roles, Swin-DiT / FiT / reward-model pointers, practical upgrades). Train with alternate backbones: `python ViT/train.py --help` (epilog lists presets).
+**More:** [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) · `python ViT/train.py --help` (backbone presets).
+
+</details>
 
 ### Stage cheat sheet
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+flowchart LR
+    CFG[config · TrainConfig] --> DAT[data · dataset]
+    DAT --> DIFF[diffusion · VP + loss]
+    DIFF --> TXT[text · T5 or triple]
+    TXT --> IMG[latent · VAE or RAE]
+    IMG --> DIT[DiT-Text]
+    DIT --> REP[REPA optional]
+    DIT --> OUT[train loss → ckpt]
+    style CFG fill:#f1f5f9,stroke:#475569
+    style DAT fill:#e0f2fe,stroke:#0284c7
+    style DIFF fill:#fef9c3,stroke:#ca8a04
+    style TXT fill:#dbeafe,stroke:#2563eb
+    style IMG fill:#ffedd5,stroke:#ea580c
+    style DIT fill:#dcfce7,stroke:#16a34a
+    style REP fill:#faf5ff,stroke:#9333ea
+    style OUT fill:#fce7f3,stroke:#db2777
+```
 
 | Stage | What runs |
 |:------|:----------|
@@ -390,41 +485,6 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 
 ---
 
-## Quick start
-
-| Step | Command |
-|:-----|:--------|
-| **1 · Env** | `pip install -r requirements.txt` |
-| **2 · Smoke** | `python scripts/tools/quick_test.py` |
-| **3 · Train** | `python train.py --data-path ... --results-dir results` |
-| **4 · Sample** | `python sample.py --ckpt .../best.pt --prompt "..." --out out.png` |
-
-```bash
-cd sdx
-pip install -r requirements.txt
-python scripts/tools/quick_test.py    # env smoke test (no dataset)
-```
-
-**Train** (single GPU):
-
-```bash
-python train.py --data-path /path/to/image_folders --results-dir results
-```
-
-**Sample**:
-
-```bash
-python sample.py --ckpt results/.../best.pt --prompt "your prompt" --steps 50 --width 256 --height 256 --out out.png
-```
-
-**Multi-GPU**:
-
-```bash
-torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-size 256
-```
-
----
-
 ## Setup
 
 Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `models`, and `utils` import correctly.
@@ -455,7 +515,7 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 
 ## Documentation hub
 
-Everything below is also indexed in **[docs/README.md](docs/README.md)**. Use this table as a **single map** from task → doc.
+Everything below is indexed in **[docs/README.md](docs/README.md)** — use it as the **master doc list**.
 
 ### Essentials
 
@@ -567,6 +627,136 @@ Use **`best.pt`** for inference.
 ```bash
 python train.py --data-path /path/to/data --no-xformers
 ```
+
+---
+
+## Training files reference (what each part does)
+
+SDX has **two** training tracks for **two different model families** (they stack for quality workflows: train the **generator** with `train.py`, optionally train a **ViT scorer** to clean data or rank outputs):
+
+| Track | Entry script | What it trains |
+|:------|:-------------|:---------------|
+| **DiT / diffusion (T2I generator)** | [`train.py`](train.py) | **DiT** predicting noise / velocity in VAE latents, with frozen **VAE** + **T5** (or **triple** T5+CLIP fusion), optional **REPA**, **RAE bridge**, **MDM** masking, **MoE**, **EMA**, DDP, etc. Same engine for general T2I and book/comic workflows ([`pipelines/README.md`](pipelines/README.md)). |
+| **ViT (quality / adherence)** | [`ViT/train.py`](ViT/train.py) | A **separate** Vision Transformer that scores images vs captions — for **dataset QA**, **manifest ranking**, and best-of-N — **not** the DiT ([`ViT/EXCELLENCE_VS_DIT.md`](ViT/EXCELLENCE_VS_DIT.md), [`ViT/README.md`](ViT/README.md)). |
+
+Below: files that participate in each loop. For a full repo index see **[`docs/FILES.md`](docs/FILES.md)**.
+
+<details>
+<summary><strong>Expand: per-file map</strong> — <code>config/</code>, <code>data/</code>, <code>diffusion/</code>, <code>models/</code>, <code>utils/</code>, scripts, ViT</summary>
+
+### 1) DiT training — `train.py` and dependencies
+
+#### Root entry
+
+| File | Role in training |
+|:-----|:-----------------|
+| [`train.py`](train.py) | **Main trainer**: builds `TrainConfig`, dataset + loaders, `create_diffusion` / `GaussianDiffusion`, DiT from `DiT_models_text`, text bundle (T5 or triple), VAE/RAE encode, `training_losses` (and MDM path), REPA aux loss, EMA, validation, `CheckpointManager`, optional wandb/tensorboard. |
+| [`config/train_config.py`](config/train_config.py) | **`TrainConfig`** + **`get_dit_build_kwargs()`** — all CLI fields (LR, resolution, DiT variant, diffusion, text mode, REPA, RAE, MDM, MoE, …). |
+| [`config/__init__.py`](config/__init__.py) | Exports `TrainConfig`, `get_dit_build_kwargs`, defaults. |
+| [`config/pixai_reference.py`](config/pixai_reference.py) | Optional **PixAI-style** model labels for logs (Haruka, Tsubaki, …). |
+| [`config/prompt_domains.py`](config/prompt_domains.py) | Domain prompt hints (used by tooling/docs; not required for core train loop). |
+
+#### Data (batches into the DiT)
+
+| File | Role |
+|:-----|:-----|
+| [`data/t2i_dataset.py`](data/t2i_dataset.py) | **`Text2ImageDataset`**: folder or JSONL images, captions, optional regions/`parts`, latent **cache**, img2img fields, emphasis. |
+| [`data/caption_utils.py`](data/caption_utils.py) | Tag order, **emphasis** `()` / `[]`, quality boosts, anti-blending — text fed to T5. |
+| [`data/__init__.py`](data/__init__.py) | Exports dataset + **`collate_t2i`** for the DataLoader. |
+
+#### Diffusion (noise schedule, loss, sampling math)
+
+| File | Role |
+|:-----|:-----|
+| [`diffusion/gaussian_diffusion.py`](diffusion/gaussian_diffusion.py) | **`GaussianDiffusion`**: forward `q_sample`, **`training_losses`** (ε/v target, timestep weights), DDIM/DDPM-style sampling, CFG helpers used at train/samp boundaries. |
+| [`diffusion/schedules.py`](diffusion/schedules.py) | VP **β schedules**: linear, cosine, sigmoid, `squaredcos_cap_v2` — used when constructing diffusion. |
+| [`diffusion/timestep_loss_weight.py`](diffusion/timestep_loss_weight.py) | **`get_timestep_loss_weight`**: min-SNR, **soft** min-SNR, or EDM-style weights — shared with MDM loss in `train.py`. |
+| [`diffusion/loss_weighting.py`](diffusion/loss_weighting.py) | EDM / v / eps **sigma-based** weights when `loss_weighting` is not min-SNR. |
+| [`diffusion/timestep_sampling.py`](diffusion/timestep_sampling.py) | **`sample_training_timesteps`** — uniform, logit-normal, high-noise **distribution of `t`** during training. |
+| [`diffusion/snr_utils.py`](diffusion/snr_utils.py) | NumPy SNR / ᾱ helpers for **analysis** (not required at runtime). |
+| [`diffusion/respace.py`](diffusion/respace.py) | Timestep **respacing** for shorter sampling schedules (inference-focused; training uses full `T` unless you customize). |
+| [`diffusion/sampling_utils.py`](diffusion/sampling_utils.py) | Thresholding helpers (more relevant to **`sample.py`**; shared diffusion code). |
+| [`diffusion/cascaded_multimodal_pipeline.py`](diffusion/cascaded_multimodal_pipeline.py) | Optional **cascaded** multimodal scaffold — **not** wired into default `train.py`. |
+| [`diffusion/__init__.py`](diffusion/__init__.py) | Package exports (`create_diffusion`, schedules, loss helpers, `sample_training_timesteps`, …). |
+
+#### Models (DiT and optional heads)
+
+Built via **`DiT_models_text[...]`** and **`get_dit_build_kwargs`**. Core files:
+
+| File | Role |
+|:-----|:-----|
+| [`models/__init__.py`](models/__init__.py) | **`DiT_models_text`** registry (DiT-B/L/XL, DiT-P, Supreme, …). |
+| [`models/dit.py`](models/dit.py) | Base **DiT** blocks (patch embed, timestep, AdaLN). |
+| [`models/dit_text.py`](models/dit_text.py) | **T5 cross-attention** DiT — main generator class for T2I. |
+| [`models/dit_predecessor.py`](models/dit_predecessor.py) | **DiT-P / Supreme** variants (QK-norm, SwiGLU, REPA projector hooks). |
+| [`models/pixart_blocks.py`](models/pixart_blocks.py) | Extra embedders / gates (size, channel gates, …) per config. |
+| [`models/attention.py`](models/attention.py) | Attention with **xformers** / SDPA fallback (training uses this every forward). |
+| [`models/rae_latent_bridge.py`](models/rae_latent_bridge.py) | **RAE ↔ 4ch DiT latent** bridge + cycle loss when RAE training is enabled. |
+| [`models/lora.py`](models/lora.py) | **LoRA** layers when LoRA training flags are used. |
+| [`models/moe.py`](models/moe.py) | **MoE** FFN / router when MoE options are on. |
+| [`models/controlnet.py`](models/controlnet.py) | ControlNet path when control training is enabled. |
+| [`models/native_multimodal_transformer.py`](models/native_multimodal_transformer.py) | Experimental **native multimodal** scaffold (optional). |
+| [`models/cascaded_multimodal_diffusion.py`](models/cascaded_multimodal_diffusion.py) | Two-stage **cascaded** wrapper (optional scaffold). |
+| [`models/enhanced_dit.py`](models/enhanced_dit.py) | **EnhancedDiT** variants if selected (larger experimental stack). |
+
+#### Utils (checkpointing, text, REPA, logging)
+
+| File | Role |
+|:-----|:-----|
+| [`utils/text_encoder_bundle.py`](utils/text_encoder_bundle.py) | Loads **T5** and optional **triple** CLIP fusion + trainable **`text_encoder_fusion`**. |
+| [`utils/model_paths.py`](utils/model_paths.py) | Resolves **`model/`** paths vs HF ids (T5, CLIP, DINOv2, …). |
+| [`utils/checkpoint_manager.py`](utils/checkpoint_manager.py) | **Save / rotate** checkpoints (`best.pt`, steps, …). |
+| [`utils/checkpoint_loading.py`](utils/checkpoint_loading.py) | Load DiT checkpoints for **resume** / inference (used by tooling and `sample.py`; resume logic in `train.py` overlaps). |
+| [`utils/config_validator.py`](utils/config_validator.py) | **`validate_train_config`**, **`estimate_memory_usage`** before train. |
+| [`utils/error_handling.py`](utils/error_handling.py) | Logging, GPU memory helpers, model info. |
+| [`utils/metrics.py`](utils/metrics.py) | **MetricsTracker**, system logging. |
+| [`utils/model_viz.py`](utils/model_viz.py) | **`print_model_summary`** at startup. |
+
+*REPA (optional)*: `train.py` loads **DINOv2 / CLIP vision** via `transformers` inside **`_get_repa_vision`** / **`_repa_features`** — no separate `utils/repa.py`; encoder IDs come from `TrainConfig`.
+
+#### Scripts & one-shots (help training without importing as a library)
+
+| File | Role |
+|:-----|:-----|
+| [`scripts/training/hf_download_and_train.py`](scripts/training/hf_download_and_train.py) | HF dataset → JSONL + **`train.py`** wrapper ([`docs/DANBOORU_HF.md`](docs/DANBOORU_HF.md)). |
+| [`scripts/training/hf_export_to_sdx_manifest.py`](scripts/training/hf_export_to_sdx_manifest.py) | HF → SDX manifest only. |
+| [`scripts/training/precompute_latents.py`](scripts/training/precompute_latents.py) | Precompute VAE latents for faster epochs when using **`--latent-cache-dir`**. |
+| [`scripts/tools/make_smoke_dataset.py`](scripts/tools/make_smoke_dataset.py) | Tiny dataset for **smoke** runs ([`docs/SMOKE_TRAINING.md`](docs/SMOKE_TRAINING.md)). |
+| [`scripts/tools/training_timestep_preview.py`](scripts/tools/training_timestep_preview.py) | Histograms for **`timestep_sample_mode`** before long runs. |
+| [`scripts/tools/ckpt_info.py`](scripts/tools/ckpt_info.py) | Inspect saved **`TrainConfig`** / step in a `.pt` file. |
+| [`scripts/download/download_models.py`](scripts/download/download_models.py) | Pull T5/VAE/CLIP weights into **`model/`**. |
+| [`scripts/cli.py`](scripts/cli.py) | Optional **CLI**: validate `TrainConfig`, analyze datasets, checkpoint helpers, etc. |
+
+#### Pipelines (docs + book workflow — same `train.py` binary)
+
+| Path | Role |
+|:-----|:-----|
+| [`pipelines/image_gen/README.md`](pipelines/image_gen/README.md) | General T2I training notes. |
+| [`pipelines/book_comic/README.md`](pipelines/book_comic/README.md) | Book/comic data + **same checkpoints**; generation scripts, not a second trainer. |
+
+---
+
+### 2) ViT training — `ViT/train.py` (separate model)
+
+Use this when you want a **classifier / regressor** on (image, caption) pairs to **score** or **filter** data — it does **not** replace `train.py` for the DiT.
+
+| File | Role |
+|:-----|:-----|
+| [`ViT/train.py`](ViT/train.py) | **ViT training loop**: quality + adherence heads, optional EMA, saves `best.pt`. |
+| [`ViT/config.py`](ViT/config.py) | ViT **dataclass** config. |
+| [`ViT/dataset.py`](ViT/dataset.py) | JSONL dataset + text features for ViT. |
+| [`ViT/model.py`](ViT/model.py) | **`ViTQualityAdherenceModel`**. |
+| [`ViT/losses.py`](ViT/losses.py) | Pairwise **ranking** loss. |
+| [`ViT/ema.py`](ViT/ema.py) | EMA weights for ViT. |
+| [`ViT/backbone_presets.py`](ViT/backbone_presets.py) | **timm** backbone names for `--model-name`. |
+| [`ViT/prompt_system.py`](ViT/prompt_system.py) | Prompt decomposition / negatives (used with ViT tooling). |
+| [`ViT/tta.py`](ViT/tta.py) | Test-time augmentation for **infer** / rank. |
+| [`ViT/infer.py`](ViT/infer.py) | Score a manifest (post-train; feeds better training data if you filter). |
+| [`ViT/rank.py`](ViT/rank.py) | Filter/sort JSONL by ViT scores. |
+
+**Optional experimental trainer** (separate codepath): [`scripts/enhanced/train_enhanced.py`](scripts/enhanced/train_enhanced.py) — see `scripts/enhanced/` and docs if you use that stack.
+
+</details>
 
 ---
 
@@ -704,10 +894,11 @@ For `.txt`: line 1 = positive, line 2 = negative.
 | `--refinement-prob` | 0.25 | Refinement training probability |
 | `--refinement-max-t` | 150 | Refinement t cap |
 | `--no-save-best` | False | Disable best-by-train-loss ckpt |
-| `--beta-schedule` | linear | `linear` or `cosine` |
+| `--beta-schedule` | linear | `linear` \| `cosine` \| `sigmoid` \| `squaredcos_cap_v2` |
 | `--prediction-type` | epsilon | `epsilon` or `v` |
 | `--noise-offset` | 0 | SD-style noise offset |
-| `--min-snr-gamma` | 5 | Min-SNR weighting (0=off) |
+| `--min-snr-gamma` | 5 | Min-SNR / soft min-SNR weighting (0=off) |
+| `--loss-weighting` | min_snr | `min_snr` \| `min_snr_soft` \| `unit` \| `edm` \| `v` \| `eps` |
 | `--timestep-sample-mode` | uniform | `uniform` \| `logit_normal` (SD3-style) \| `high_noise` |
 | `--timestep-logit-mean` | 0 | For `logit_normal` mode |
 | `--timestep-logit-std` | 1 | For `logit_normal` mode |
@@ -743,10 +934,11 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | Feature | Flag | Description |
 |:--------|:-----|:------------|
 | Offset noise | `--noise-offset` | Light/dark balance in latents |
-| Min-SNR | `--min-snr-gamma` | Per-timestep loss balance |
+| Min-SNR | `--min-snr-gamma` + `--loss-weighting min_snr` | Per-timestep loss balance |
+| Soft min-SNR | `--loss-weighting min_snr_soft` | Smooth alternative to hard min-SNR (`diffusion/timestep_loss_weight.py`) |
 | Timestep sampling | `--timestep-sample-mode` | Non-uniform training `t` (logit-normal / high-noise bias) — [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
 | V-pred | `--prediction-type v` | Velocity parameterization |
-| Cosine noise schedule | `--beta-schedule cosine` | Alternative beta schedule |
+| Cosine / sigmoid / squaredcos v2 | `--beta-schedule cosine` (or `sigmoid`, `squaredcos_cap_v2`) | Noise schedule variants (`diffusion/schedules.py`) |
 
 **Sampling:** DDIM-style loop with cond/uncond; use `--cfg-rescale`, `--num`, `--vae-tiling` when needed.
 
@@ -849,50 +1041,22 @@ sdx/
 
 ## Contributing & community
 
-**We want your PRs.** SDX improves when researchers, artists, and doc writers ship small, focused changes — whether you are tuning DiT on one GPU, fixing Windows paths, or clarifying one paragraph in `docs/`.
+**Pull requests welcome.** Small, focused changes beat large rewrites — docs, tests, tooling, and reproducible bug reports matter as much as new architectures. Start with **[Contribute in 5 minutes](#contribute-in-5-minutes)** above, then read **[CONTRIBUTING.md](CONTRIBUTING.md)** (ruff, pytest, doc links).
 
-### Why contribute here
+| Why here | |
+| :--- | :--- |
+| **Clear code boundaries** | Own `diffusion/`, `models/`, `data/`, or `scripts/tools/` without redesigning the stack. |
+| **Impact without a cluster** | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md), `quick_test`, `pytest`, cross-links in [docs/FILES.md](docs/FILES.md). |
+| **Room to experiment** | Timestep sampling, REPA, MoE, triple encoders — pair code with a short note in `docs/` or [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md). |
 
-| Reason | Detail |
-| :----- | :----- |
-| **Clear boundaries** | `diffusion/`, `models/`, `data/`, `utils/`, `scripts/tools/` — you can own one area without rewriting the stack. |
-| **Impact without a cluster** | Tests, docs, `scripts/tools/*`, smoke runs ([docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)), and reproducible bug reports help everyone. |
-| **Modern diffusion surface** | Timestep sampling, REPA, MoE, AR blocks, triple encoders — room for focused PRs + short notes in `docs/` or [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md). |
+| Contribution type | Examples |
+| :--- | :--- |
+| **Docs** | CLI recipes, [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md), README fixes, [Train CLI](#train-cli-quick-reference) gaps. |
+| **Tests** | New flags, `diffusion/` sampling, dataset edge cases. |
+| **Tooling** | `scripts/tools/*`, HF helpers, `dit_variant_compare`, `vit_inspect`. |
+| **Robustness** | Clear errors, low-VRAM defaults, repro steps (OS, GPU, torch version). |
 
-### Ways to contribute (pick any)
-
-| Type | Examples |
-| :--- | :------- |
-| **Documentation** | Fix unclear CLI steps, add a recipe to [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md), cross-link [docs/FILES.md](docs/FILES.md), improve README sections. |
-| **Tests** | Extend `tests/` for new flags, `diffusion/timestep_sampling`, or dataset edge cases. |
-| **Tooling** | `scripts/tools/*`, HF export helpers, `quick_test`, `dit_variant_compare`, `vit_inspect`. |
-| **Robustness** | Reproducible failure reports (OS, GPU, PyTorch version), smaller defaults for low-VRAM, or clearer error messages. |
-| **Research-shaped code** | Optional losses, schedulers, or ablation knobs—prefer small PRs + a short note in `docs/` or [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md). |
-
-### Good first contributions
-
-- Run **`python scripts/tools/quick_test.py`** and **`pytest tests/ -q`**; report or fix any breakage on your platform.
-- Add **one** missing docstring or **one** CLI flag to the [Train CLI](#train-cli-quick-reference) table if it’s undocumented.
-- Improve **[CONTRIBUTING.md](CONTRIBUTING.md)** with a tip you wish you’d had on day one.
-- **Smoke path:** document or script a one-command path for your OS (see [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)).
-
-### Developer quick start (from repo root)
-
-```bash
-python -m venv .venv && .venv\Scripts\activate   # Windows
-# source .venv/bin/activate                       # Linux / macOS
-pip install -r requirements.txt
-python scripts/tools/quick_test.py
-pytest tests/ -q
-pip install ruff && ruff format . && ruff check .
-```
-
-PR workflow, style, and license: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
-
-### Communication
-
-- **PRs:** small, focused changes are easier to review than large rewrites; describe *what* and *why*.
-- **Issues / discussions:** if your project uses GitHub Issues or Discussions, use them for bugs, ideas, and “good first issue” triage—otherwise, open a PR with a short rationale in the description.
+**PR hygiene:** say *what* and *why*; prefer one concern per PR. **License:** Apache-2.0 — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -919,6 +1083,6 @@ Licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
 **SDX** — *modular diffusion transformers, documented for builders.*
 
-[Contributing](#contributing--community) · [Documentation hub](#documentation-hub) · [Back to top](#sdx)
+[Quick start](#quick-start) · [Contributing](#contributing--community) · [Documentation hub](#documentation-hub) · [docs/README.md](docs/README.md)
 
 </div>
