@@ -1,4 +1,5 @@
 """Smoke tests for DiT-Text size conditioning and patch SE."""
+
 import sys
 from pathlib import Path
 

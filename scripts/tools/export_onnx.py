@@ -4,6 +4,7 @@ Export a .pt checkpoint's DiT to ONNX for fast deployment (e.g. TensorRT, ONNX R
 Exports the model forward: x, t, encoder_hidden_states -> noise prediction.
 Run from repo root: python scripts/tools/export_onnx.py path/to/best.pt [--out dit.onnx]
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -28,8 +29,9 @@ def main():
         return 1
 
     import torch
-    from config import get_dit_build_kwargs
     from models import DiT_models_text
+
+    from config import get_dit_build_kwargs
 
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = ckpt.get("config")

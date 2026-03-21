@@ -2,6 +2,7 @@
 # Optional: SizeEmbedder for multi-resolution (h, w) conditioning; use when training with variable aspect/size.
 # KV compression and full PixArt blocks can be wired in later (see IMPROVEMENTS.md).
 import math
+
 import torch
 import torch.nn as nn
 
@@ -32,9 +33,7 @@ class SizeEmbedder(nn.Module):
     @staticmethod
     def sinusoidal_embed(x: torch.Tensor, dim: int, max_period: int = 10000) -> torch.Tensor:
         half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(half, dtype=torch.float32, device=x.device) / half
-        )
+        freqs = torch.exp(-math.log(max_period) * torch.arange(half, dtype=torch.float32, device=x.device) / half)
         args = x.unsqueeze(-1).float() * freqs.unsqueeze(0)
         emb = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:

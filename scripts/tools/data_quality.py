@@ -5,6 +5,7 @@ Data quality pipeline for JSONL or image folders (IMPROVEMENTS 1.6).
 - Filter: min/max caption length, bad-words list, optional weight/aesthetic column.
 - Output: filtered JSONL. Does not modify originals.
 """
+
 import argparse
 import hashlib
 import json
@@ -21,6 +22,7 @@ def _perceptual_hash(path: Path, size: int = 8) -> str:
     try:
         import imagehash
         from PIL import Image
+
         phash = imagehash.phash(Image.open(path), hash_size=size)
         return str(phash)
     except ImportError:
@@ -41,8 +43,12 @@ def _file_hash(path: Path) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Filter/dedup JSONL or scan folder for data quality.")
     parser.add_argument("input", type=str, help="Path to manifest JSONL or folder of images")
-    parser.add_argument("--out", type=str, default="", help="Output filtered JSONL (default: print to stdout or input_quality.jsonl)")
-    parser.add_argument("--dedup", type=str, default="", choices=["", "phash", "md5"], help="Dedup by perceptual hash or file MD5")
+    parser.add_argument(
+        "--out", type=str, default="", help="Output filtered JSONL (default: print to stdout or input_quality.jsonl)"
+    )
+    parser.add_argument(
+        "--dedup", type=str, default="", choices=["", "phash", "md5"], help="Dedup by perceptual hash or file MD5"
+    )
     parser.add_argument("--min-caption-len", type=int, default=0, help="Drop rows with caption length < N")
     parser.add_argument("--max-caption-len", type=int, default=0, help="Drop rows with caption length > N (0=off)")
     parser.add_argument("--bad-words", type=str, default="", help="Comma-sep words; drop if caption contains any")
@@ -112,7 +118,11 @@ def main():
                 cap_path = img_path.with_suffix(caption_ext)
                 if not cap_path.exists():
                     cap_path = img_path.with_name(img_path.stem + ".caption")
-                cap = cap_path.read_text(encoding="utf-8", errors="ignore").strip().split("\n")[0] if cap_path.exists() else ""
+                cap = (
+                    cap_path.read_text(encoding="utf-8", errors="ignore").strip().split("\n")[0]
+                    if cap_path.exists()
+                    else ""
+                )
                 path_str = str(img_path)
                 if args.dedup:
                     h = _perceptual_hash(img_path) if args.dedup == "phash" else _file_hash(img_path)
@@ -134,7 +144,10 @@ def main():
                     continue
                 rows.append({"image_path": path_str, "caption": cap})
 
-    print(f"Kept: {len(rows)}, dropped: dup={dropped_dup} caption={dropped_caption} bad_words={dropped_bad} weight={dropped_weight}", file=sys.stderr)
+    print(
+        f"Kept: {len(rows)}, dropped: dup={dropped_dup} caption={dropped_caption} bad_words={dropped_bad} weight={dropped_weight}",
+        file=sys.stderr,
+    )
     if args.dry_run:
         return 0
     if not rows:

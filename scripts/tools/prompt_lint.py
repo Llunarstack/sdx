@@ -27,8 +27,12 @@ def main() -> int:
 
     p = argparse.ArgumentParser(description="Prompt lint for SDX JSONL manifests")
     p.add_argument("input", type=str, help="Path to JSONL manifest (one JSON object per line)")
-    p.add_argument("--min-caption-len-chars", type=int, default=0, help="Drop captions shorter than N characters (0=off)")
-    p.add_argument("--max-caption-tokens", type=int, default=0, help="Max distinct-token-set size for positive captions (0=off)")
+    p.add_argument(
+        "--min-caption-len-chars", type=int, default=0, help="Drop captions shorter than N characters (0=off)"
+    )
+    p.add_argument(
+        "--max-caption-tokens", type=int, default=0, help="Max distinct-token-set size for positive captions (0=off)"
+    )
     p.add_argument("--top-overlap-tokens", type=int, default=10, help="Print top overlapping tokens (0=off)")
     p.add_argument("--fail-on-overlap", action="store_true", help="Exit non-zero if any pos/neg overlap rows exist")
     p.add_argument("--json-report", type=str, default="", help="Optional path to write full stats JSON")
@@ -65,10 +69,7 @@ def main() -> int:
         f"min={stats['caption_token_count_set_size_min']} max={stats['caption_token_count_set_size_max']}"
     )
     print(f"pos_neg_overlap_rows: {stats['pos_neg_overlap_rows']}")
-    print(
-        "pos_neg_overlap_max_distinct_tokens: "
-        f"{stats['pos_neg_overlap_max_distinct_tokens']}"
-    )
+    print(f"pos_neg_overlap_max_distinct_tokens: {stats['pos_neg_overlap_max_distinct_tokens']}")
     top = stats.get("top_overlap_tokens") or []
     if top:
         top_str = ", ".join(f"{tok}({cnt})" for tok, cnt in top)
@@ -79,4 +80,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

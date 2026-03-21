@@ -10,7 +10,6 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)
 
 
@@ -120,7 +119,9 @@ class ViTManifestDataset(Dataset):
             "caption": cap,
             "text_features": tf,
             "quality_label": None if quality_label is None else torch.tensor(float(quality_label), dtype=torch.float32),
-            "adherence_score": None if adherence_score is None else torch.tensor(float(adherence_score), dtype=torch.float32),
+            "adherence_score": None
+            if adherence_score is None
+            else torch.tensor(float(adherence_score), dtype=torch.float32),
             "image_path": s["image_path"],
         }
 
@@ -145,4 +146,3 @@ def collate_vit_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
     else:
         out["adherence_scores"] = None
     return out
-

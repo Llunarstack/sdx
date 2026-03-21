@@ -180,4 +180,3 @@ def apply_op_mode_to_args(args: Any, mode_name: str) -> None:
         else:
             if current in (0, 0.0, None):
                 setattr(args, key, value)
-

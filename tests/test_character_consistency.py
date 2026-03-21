@@ -3,6 +3,7 @@
 Comprehensive test suite for the Character Consistency System.
 Tests character profile management, consistency validation, and training integration.
 """
+
 import sys
 from pathlib import Path
 
@@ -34,4 +35,3 @@ def test_character_consistency_smoke():
 
 if __name__ == "__main__":
     main()
-

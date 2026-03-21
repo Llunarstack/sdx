@@ -125,9 +125,7 @@ def _build_face_keep_mask(init_image: Image.Image, out_path: Path, face_padding:
     w, h = img.size
     img_np = np.array(img)
     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-    face_cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     faces = face_cascade.detectMultiScale(gray, 1.1, 4)
 
     # Default: no face detected => inpaint everything (all white)
@@ -448,8 +446,15 @@ def main() -> None:
     parser.add_argument("--ckpt", required=True, help="Checkpoint path passed to sample.py")
     parser.add_argument("--output-dir", required=True, help="Directory to write cover/pages into")
 
-    parser.add_argument("--book-type", default="manga", choices=["manga", "comic", "novel_cover", "storyboard"], help="Prompt style preset")
-    parser.add_argument("--model-preset", default="anime", choices=["sdxl", "flux", "anime", "zit"], help="sample.py preset flag")
+    parser.add_argument(
+        "--book-type",
+        default="manga",
+        choices=["manga", "comic", "novel_cover", "storyboard"],
+        help="Prompt style preset",
+    )
+    parser.add_argument(
+        "--model-preset", default="anime", choices=["sdxl", "flux", "anime", "zit"], help="sample.py preset flag"
+    )
 
     parser.add_argument(
         "--prompts-file",
@@ -457,19 +462,33 @@ def main() -> None:
         help="Text file: one page prompt per line. Optional per-page expected text: use `prompt|||expected_text`.",
     )
     parser.add_argument("--pages", type=int, default=0, help="Number of pages to generate using --page-prompt-template")
-    parser.add_argument("--page-prompt-template", default="", help="Template for each page prompt; supports {page} placeholder.")
+    parser.add_argument(
+        "--page-prompt-template", default="", help="Template for each page prompt; supports {page} placeholder."
+    )
 
     parser.add_argument("--cover-prompt", default="", help="Optional cover prompt")
-    parser.add_argument("--expected-text", default="", help="Expected text (comma-separated or JSON list). Used for OCR validation + fixes.")
+    parser.add_argument(
+        "--expected-text",
+        default="",
+        help="Expected text (comma-separated or JSON list). Used for OCR validation + fixes.",
+    )
     parser.add_argument("--cover-expected-text", default="", help="Expected cover text (defaults to --expected-text).")
     parser.add_argument("--pages-expected-text", default="", help="Expected page text (defaults to --expected-text).")
-    parser.add_argument("--ocr-fix", action="store_true", help="Enable OCR validation + iterative inpainting of text regions.")
-    parser.add_argument("--ocr-threshold", type=float, default=0.65, help="Stop when OCR accuracy_score >= this threshold.")
+    parser.add_argument(
+        "--ocr-fix", action="store_true", help="Enable OCR validation + iterative inpainting of text regions."
+    )
+    parser.add_argument(
+        "--ocr-threshold", type=float, default=0.65, help="Stop when OCR accuracy_score >= this threshold."
+    )
     parser.add_argument("--ocr-iters", type=int, default=2, help="Max OCR repair iterations per page.")
     parser.add_argument("--ocr-mask-dilate", type=int, default=0, help="Dilate OCR mask before inpainting (pixels).")
 
-    parser.add_argument("--anchor-face", action="store_true", help="Freeze detected face region across pages (character consistency).")
-    parser.add_argument("--face-anchor-padding", type=float, default=0.25, help="Padding fraction around detected face bbox.")
+    parser.add_argument(
+        "--anchor-face", action="store_true", help="Freeze detected face region across pages (character consistency)."
+    )
+    parser.add_argument(
+        "--face-anchor-padding", type=float, default=0.25, help="Padding fraction around detected face bbox."
+    )
     parser.add_argument(
         "--anchor-mask",
         type=str,
@@ -483,15 +502,40 @@ def main() -> None:
         choices=["inpaint", "keep"],
         help="Interpret --anchor-mask values as: inpaint=white=inpaint/black=keep, keep=white=keep/black=inpaint.",
     )
-    parser.add_argument("--edge-anchor", action="store_true", help="Additionally freeze strong edges from previous page (reduces distortion).")
+    parser.add_argument(
+        "--edge-anchor",
+        action="store_true",
+        help="Additionally freeze strong edges from previous page (reduces distortion).",
+    )
     parser.add_argument("--edge-anchor-dilate", type=int, default=3, help="Edge mask dilation radius (pixels).")
     parser.add_argument("--edge-anchor-canny-1", type=int, default=50, help="Canny threshold 1 for edges.")
     parser.add_argument("--edge-anchor-canny-2", type=int, default=150, help="Canny threshold 2 for edges.")
-    parser.add_argument("--anchor-speech-bubbles", action="store_true", help="Freeze approximate speech-bubble outlines across pages using OCR text region anchors.")
-    parser.add_argument("--speech-bubble-anchor-inner-dilate", type=int, default=2, help="Inner dilation around OCR text (defines bubble interior excluded from keep).")
-    parser.add_argument("--speech-bubble-anchor-outer-dilate", type=int, default=18, help="Outer dilation around OCR text (defines bubble outline keep ring).")
-    parser.add_argument("--page-inpaint-strength", type=float, default=0.78, help="MDM inpaint strength when generating subsequent pages.")
-    parser.add_argument("--text-inpaint-strength", type=float, default=0.55, help="MDM inpaint strength when fixing text.")
+    parser.add_argument(
+        "--anchor-speech-bubbles",
+        action="store_true",
+        help="Freeze approximate speech-bubble outlines across pages using OCR text region anchors.",
+    )
+    parser.add_argument(
+        "--speech-bubble-anchor-inner-dilate",
+        type=int,
+        default=2,
+        help="Inner dilation around OCR text (defines bubble interior excluded from keep).",
+    )
+    parser.add_argument(
+        "--speech-bubble-anchor-outer-dilate",
+        type=int,
+        default=18,
+        help="Outer dilation around OCR text (defines bubble outline keep ring).",
+    )
+    parser.add_argument(
+        "--page-inpaint-strength",
+        type=float,
+        default=0.78,
+        help="MDM inpaint strength when generating subsequent pages.",
+    )
+    parser.add_argument(
+        "--text-inpaint-strength", type=float, default=0.55, help="MDM inpaint strength when fixing text."
+    )
 
     parser.add_argument("--steps", type=int, default=30, help="Inference steps passed to sample.py")
     parser.add_argument("--width", type=int, default=0, help="Output width (0 => model native image_size)")
@@ -501,15 +545,30 @@ def main() -> None:
     parser.add_argument("--scheduler", type=str, default="ddim", choices=["ddim", "euler"], help="Sampler scheduler.")
 
     parser.add_argument("--negative-prompt", default="", help="Additional negative prompt passed to sample.py")
-    parser.add_argument("--no-neg-filter", action="store_true", help="Disable positive/negative token conflict filtering.")
+    parser.add_argument(
+        "--no-neg-filter", action="store_true", help="Disable positive/negative token conflict filtering."
+    )
 
-    parser.add_argument("--character-sheet", type=str, default="", help="Path to character sheet JSON forwarded to sample.py")
-    parser.add_argument("--character-prompt-extra", type=str, default="", help="Extra character tokens forwarded to sample.py")
-    parser.add_argument("--character-negative-extra", type=str, default="", help="Extra character negative tokens forwarded to sample.py")
+    parser.add_argument(
+        "--character-sheet", type=str, default="", help="Path to character sheet JSON forwarded to sample.py"
+    )
+    parser.add_argument(
+        "--character-prompt-extra", type=str, default="", help="Extra character tokens forwarded to sample.py"
+    )
+    parser.add_argument(
+        "--character-negative-extra",
+        type=str,
+        default="",
+        help="Extra character negative tokens forwarded to sample.py",
+    )
 
     # Optional: keep prompt stable while injecting expected text.
-    parser.add_argument("--force-text-quote", action="store_true", help="When OCR fixing, ensure prompt contains text that says \"...\".")
-    parser.add_argument("--text-in-image", action="store_true", help="Set sample.py --text-in-image (also helps negatives).")
+    parser.add_argument(
+        "--force-text-quote", action="store_true", help='When OCR fixing, ensure prompt contains text that says "...".'
+    )
+    parser.add_argument(
+        "--text-in-image", action="store_true", help="Set sample.py --text-in-image (also helps negatives)."
+    )
 
     args = parser.parse_args()
 
@@ -521,8 +580,12 @@ def main() -> None:
     cover_dir.mkdir(exist_ok=True)
 
     expected_texts = _parse_expected_texts(args.expected_text)
-    cover_expected_texts = _parse_expected_texts(args.cover_expected_text) if args.cover_expected_text.strip() else expected_texts
-    pages_expected_texts = _parse_expected_texts(args.pages_expected_text) if args.pages_expected_text.strip() else expected_texts
+    cover_expected_texts = (
+        _parse_expected_texts(args.cover_expected_text) if args.cover_expected_text.strip() else expected_texts
+    )
+    pages_expected_texts = (
+        _parse_expected_texts(args.pages_expected_text) if args.pages_expected_text.strip() else expected_texts
+    )
 
     book_prefix_map: Dict[str, str] = {
         "manga": "manga panel page, black and white ink, screentones, clean lineart, high contrast, dynamic composition",
@@ -550,7 +613,9 @@ def main() -> None:
     if not prompts and args.cover_prompt:
         prompts = []
     if not prompts and not args.cover_prompt:
-        raise SystemExit("Provide either --prompts-file or (--pages and --page-prompt-template), or provide --cover-prompt.")
+        raise SystemExit(
+            "Provide either --prompts-file or (--pages and --page-prompt-template), or provide --cover-prompt."
+        )
 
     # Initialize OCR lazily (only when needed).
     # - If OCR-fix is requested, we only need OCR if we actually have expected text.
@@ -692,9 +757,8 @@ def main() -> None:
             page_expected_texts = page_expected_overrides[i]
 
         user_anchor_exists = user_anchor_mask_internal is not None and user_anchor_mask_internal.exists()
-        should_anchor = (
-            prev_path is not None
-            and (args.anchor_face or args.edge_anchor or args.anchor_speech_bubbles or user_anchor_exists)
+        should_anchor = prev_path is not None and (
+            args.anchor_face or args.edge_anchor or args.anchor_speech_bubbles or user_anchor_exists
         )
 
         if i == 0 or not should_anchor:
@@ -793,4 +857,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

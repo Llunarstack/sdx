@@ -16,6 +16,9 @@ class TrainConfig:
     caption_dropout_schedule: Optional[List[tuple]] = None  # list of (step, prob)
     # IMPROVEMENTS 1.2: crop mode for training images
     crop_mode: str = "center"  # "center" | "random" | "largest_center"
+    # Regional / layout text (JSONL `parts` / `region_captions`) merged into T5 caption — no DiT change
+    region_caption_mode: str = "append"  # "append" | "prefix" | "off"
+    region_layout_tag: str = "[layout]"  # prefix before regional block; set "" to disable tag
 
     # Model
     model_name: str = "DiT-XL/2-Text"
@@ -78,7 +81,9 @@ class TrainConfig:
     # Creativity/diversity knob (IMPROVEMENTS 8.7): 0 = off; else hidden dim for scalar conditioning (e.g. 64)
     creativity_embed_dim: int = 0
     creativity_max: float = 1.0  # Training: sample creativity in [0, creativity_max]
-    size_embed_dim: int = 0  # PixArt-style (h, w) latent grid -> timestep conditioning; 0 = off (still can infer H,W from x)
+    size_embed_dim: int = (
+        0  # PixArt-style (h, w) latent grid -> timestep conditioning; 0 = off (still can infer H,W from x)
+    )
     # Optional channel gate on patch tokens after embed (zero-init = identity at start).
     patch_se: bool = False
     patch_se_reduction: int = 8
@@ -252,22 +257,18 @@ cfg = TrainConfig(
     global_batch_size=32,  # Smaller for 3B model
     lr=5e-5,  # Lower learning rate for large model
     epochs=50,
-    
     # Data settings
     data_path="./data",
     num_workers=4,
-    
     # Training settings
     use_bf16=True,
     grad_checkpointing=True,
     grad_accum_steps=2,
     max_grad_norm=1.0,
-    
     # Logging
     results_dir="./enhanced_results",
     log_every=25,
     ckpt_every=2500,
-    
     # Enhanced features (will be added by train script)
     # These will be set by the training script based on command line args
 )

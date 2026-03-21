@@ -1,11 +1,11 @@
 # Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, v-pred, DDIM, CFG).
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
+from .loss_weighting import get_loss_weight as _get_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
-from .loss_weighting import get_loss_weight as _get_loss_weight
 
 
 def _beta_schedule(schedule_name: str, num_timesteps: int):
@@ -98,7 +98,9 @@ class GaussianDiffusion:
         if noise is None:
             noise = torch.randn_like(x_start, device=x_start.device, dtype=x_start.dtype)
         if noise_offset > 0:
-            noise = noise + noise_offset * torch.randn(x_start.shape[0], 1, 1, 1, device=noise.device, dtype=noise.dtype).expand_as(noise)
+            noise = noise + noise_offset * torch.randn(
+                x_start.shape[0], 1, 1, 1, device=noise.device, dtype=noise.dtype
+            ).expand_as(noise)
         self._to_device(x_start.device)
         sqrt_alpha = self.sqrt_alpha_cumprod.to(x_start.device)[t][(...,) + (None,) * (x_start.ndim - 1)]
         sqrt_one_minus = self.sqrt_one_minus_alpha_cumprod.to(x_start.device)[t][(...,) + (None,) * (x_start.ndim - 1)]
@@ -258,9 +260,7 @@ class GaussianDiffusion:
         if pbfm_edge_boost and float(pbfm_edge_boost) != 0.0:
             k = int(pbfm_edge_kernel)
             k = max(3, k | 1)  # odd >=3
-            hp = x_0_pred - torch.nn.functional.avg_pool2d(
-                x_0_pred, kernel_size=k, stride=1, padding=k // 2
-            )
+            hp = x_0_pred - torch.nn.functional.avg_pool2d(x_0_pred, kernel_size=k, stride=1, padding=k // 2)
             x_0_pred = x_0_pred + float(pbfm_edge_boost) * hp
         if dynamic_threshold_percentile > 0 or (dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0):
             x_0_pred = self._dynamic_threshold(
@@ -273,7 +273,9 @@ class GaussianDiffusion:
         alpha = self.alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
         alpha_next = self.alpha_cumprod.to(x_t.device)[t_next][(...,) + (None,) * (x_t.ndim - 1)]
         sigma = eta * ((1 - alpha_next) / (1 - alpha + 1e-8) * (1 - alpha / (alpha_next + 1e-8))).clamp(0).sqrt()
-        dir_xt = (1 - alpha_next - sigma ** 2).clamp(0).sqrt() * (x_t - alpha.sqrt() * x_0_pred) / (1 - alpha + 1e-8).sqrt()
+        dir_xt = (
+            (1 - alpha_next - sigma**2).clamp(0).sqrt() * (x_t - alpha.sqrt() * x_0_pred) / (1 - alpha + 1e-8).sqrt()
+        )
         x_next = alpha_next.sqrt() * x_0_pred + dir_xt
         if eta > 0:
             x_next = x_next + sigma * torch.randn_like(x_t, device=x_t.device, dtype=x_t.dtype)
@@ -323,10 +325,7 @@ class GaussianDiffusion:
         model_kwargs_cond = model_kwargs_cond or {}
         model_kwargs_uncond = model_kwargs_uncond or {}
         do_inpaint = bool(
-            inpaint_freeze_known
-            and inpaint_mask is not None
-            and inpaint_x0 is not None
-            and inpaint_noise is not None
+            inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
         )
         if do_inpaint:
             inpaint_mask = inpaint_mask.to(device=device, dtype=dtype)
@@ -339,13 +338,17 @@ class GaussianDiffusion:
             x = torch.randn(shape, device=device, dtype=dtype)
             timesteps = self.set_timesteps(num_inference_steps, scheduler=scheduler).to(device)
         x_0_pred = None
-        early_exit_enabled = (float(ada_early_exit_delta_threshold) > 0.0 and int(ada_early_exit_patience) > 0)
+        early_exit_enabled = float(ada_early_exit_delta_threshold) > 0.0 and int(ada_early_exit_patience) > 0
         early_exit_patience = int(ada_early_exit_patience)
         early_exit_min_steps = int(ada_early_exit_min_steps)
         early_exit_counter = 0
         for i in range(len(timesteps)):
             t = timesteps[i].expand(shape[0])
-            t_next = timesteps[i + 1].expand(shape[0]) if i + 1 < len(timesteps) else torch.zeros(shape[0], device=device, dtype=torch.long)
+            t_next = (
+                timesteps[i + 1].expand(shape[0])
+                if i + 1 < len(timesteps)
+                else torch.zeros(shape[0], device=device, dtype=torch.long)
+            )
             x_prev = x
             if cfg_scale != 1.0 and cfg_scale > 0 and model_kwargs_uncond:
                 out_cond = model(x, t, **model_kwargs_cond)
@@ -364,7 +367,11 @@ class GaussianDiffusion:
                     out = out[:, : x.shape[1]]
             if i + 1 < len(timesteps):
                 x, x_0_pred = self.step_with_pred(
-                    x, t, t_next, out, eta=eta,
+                    x,
+                    t,
+                    t_next,
+                    out,
+                    eta=eta,
                     dynamic_threshold_percentile=dynamic_threshold_percentile,
                     dynamic_threshold_type=dynamic_threshold_type,
                     dynamic_threshold_value=dynamic_threshold_value,
@@ -395,7 +402,9 @@ class GaussianDiffusion:
                         break
             else:
                 x_0_pred, _ = self._predict_x0_and_noise(out, x, t)
-                if dynamic_threshold_percentile > 0 or (dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0):
+                if dynamic_threshold_percentile > 0 or (
+                    dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
+                ):
                     x_0_pred = self._dynamic_threshold(
                         x_0_pred,
                         percentile=dynamic_threshold_percentile,

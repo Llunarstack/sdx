@@ -1,0 +1,28 @@
+# Contributing
+
+Thanks for helping improve SDX.
+
+## Before you open a PR
+
+1. **Run from repo root** so imports resolve (`config`, `data`, `models`, …).
+2. **Format & lint**
+   ```bash
+   pip install ruff
+   ruff format .
+   ruff check .
+   ```
+3. **Tests** (when you touch training/sampling/core utils)
+   ```bash
+   pytest tests/ -q
+   ```
+4. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
+
+## Style
+
+- **Ruff** is the source of truth (`pyproject.toml`).
+- Prefer **clear names** and **small focused functions** over clever one-liners.
+- For large features, a short note in `docs/` or an entry in `docs/IMPROVEMENTS.md` is welcome.
+
+## License
+
+By contributing, you agree your contributions are under the same **Apache-2.0** license as the project.

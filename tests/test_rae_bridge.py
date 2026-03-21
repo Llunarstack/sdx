@@ -1,6 +1,6 @@
 """RAELatentBridge smoke tests."""
-import torch
 
+import torch
 from models.rae_latent_bridge import RAELatentBridge
 
 

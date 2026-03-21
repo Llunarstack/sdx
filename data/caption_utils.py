@@ -1,104 +1,311 @@
 # PixAI-style emphasis and ReVe-style caption normalization for strong prompt adherence.
 # Quality tags (10x boost), anti-blending, count-aware.
 import re
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 # Quality tags that should strongly improve output when present (repeat/boost in caption)
 QUALITY_TAGS = [
-    "masterpiece", "best quality", "high quality", "highres", "8k", "ultra detailed",
-    "absurdres", "detailed", "sharp focus", "professional", "perfect composition",
+    "masterpiece",
+    "best quality",
+    "high quality",
+    "highres",
+    "8k",
+    "ultra detailed",
+    "absurdres",
+    "detailed",
+    "sharp focus",
+    "professional",
+    "perfect composition",
 ]
 
 # Person descriptors: order for prompt_from_tags / normalize_tag_order (subject → age → height → build → anatomy → rest).
-SUBJECT_PREFIXES = ("1girl", "1boy", "2girls", "2boys", "3girls", "1 other", "solo", "multiple", "woman", "man", "girl", "boy")
+SUBJECT_PREFIXES = (
+    "1girl",
+    "1boy",
+    "2girls",
+    "2boys",
+    "3girls",
+    "1 other",
+    "solo",
+    "multiple",
+    "woman",
+    "man",
+    "girl",
+    "boy",
+)
 AGE_TAGS = (
-    "child", "toddler", "teen", "teenager", "young", "adult", "middle-aged", "elderly", "old", "aged",
-    "kid", "youth", "minor", "mature", "senior", "little girl", "little boy", "young woman", "young man",
+    "child",
+    "toddler",
+    "teen",
+    "teenager",
+    "young",
+    "adult",
+    "middle-aged",
+    "elderly",
+    "old",
+    "aged",
+    "kid",
+    "youth",
+    "minor",
+    "mature",
+    "senior",
+    "little girl",
+    "little boy",
+    "young woman",
+    "young man",
 )
 HEIGHT_TAGS = (
-    "tall", "short", "average height", "very tall", "petite", "giant", "tiny", "towering",
-    "tall woman", "tall man", "short woman", "short man", "height difference", "long legs", "short legs",
+    "tall",
+    "short",
+    "average height",
+    "very tall",
+    "petite",
+    "giant",
+    "tiny",
+    "towering",
+    "tall woman",
+    "tall man",
+    "short woman",
+    "short man",
+    "height difference",
+    "long legs",
+    "short legs",
 )
 BUILD_BODY_TAGS = (
-    "slim", "thin", "skinny", "muscular", "athletic", "curvy", "plus size", "fat", "obese", "chubby",
-    "petite", "hourglass", "broad shoulders", "narrow waist", "large breasts", "small breasts",
-    "flat chest", "muscular woman", "muscular man", "lean", "stocky", "heavy", "voluptuous",
+    "slim",
+    "thin",
+    "skinny",
+    "muscular",
+    "athletic",
+    "curvy",
+    "plus size",
+    "fat",
+    "obese",
+    "chubby",
+    "petite",
+    "hourglass",
+    "broad shoulders",
+    "narrow waist",
+    "large breasts",
+    "small breasts",
+    "flat chest",
+    "muscular woman",
+    "muscular man",
+    "lean",
+    "stocky",
+    "heavy",
+    "voluptuous",
 )
 ANATOMY_FRAMING_TAGS = (
-    "full body", "upper body", "portrait", "bust", "face focus", "close-up", "cowboy shot",
-    "from above", "from below", "profile", "back", "front", "side view", "head to toe",
-    "head out of frame", "navel", "cleavage", "ass focus", "foot focus", "hand focus",
+    "full body",
+    "upper body",
+    "portrait",
+    "bust",
+    "face focus",
+    "close-up",
+    "cowboy shot",
+    "from above",
+    "from below",
+    "profile",
+    "back",
+    "front",
+    "side view",
+    "head to toe",
+    "head out of frame",
+    "navel",
+    "cleavage",
+    "ass focus",
+    "foot focus",
+    "hand focus",
 )
 BODY_PART_TAGS = (
-    "long hair", "short hair", "hands", "feet", "visible hands", "arms", "legs", "fingers",
-    "bare feet", "open mouth", "smile", "eyes", "hair", "braid", "ponytail", "bangs",
-    "correct hands", "five fingers", "visible feet", "crossed arms", "raised arm", "arm up",
+    "long hair",
+    "short hair",
+    "hands",
+    "feet",
+    "visible hands",
+    "arms",
+    "legs",
+    "fingers",
+    "bare feet",
+    "open mouth",
+    "smile",
+    "eyes",
+    "hair",
+    "braid",
+    "ponytail",
+    "bangs",
+    "correct hands",
+    "five fingers",
+    "visible feet",
+    "crossed arms",
+    "raised arm",
+    "arm up",
 )
 
 # Domain tags that many models struggle with — boost when present so our model learns them well.
 # Use these in training captions and at inference for 3D, realistic, interior/exterior, etc.
 DOMAIN_TAGS = {
     "3d": [
-        "3d render", "3d illustration", "octane render", "cinema 4d", "blender",
-        "isometric", "low poly", "voxel", "solid shading", "clean 3d",
+        "3d render",
+        "3d illustration",
+        "octane render",
+        "cinema 4d",
+        "blender",
+        "isometric",
+        "low poly",
+        "voxel",
+        "solid shading",
+        "clean 3d",
     ],
     "realistic": [
-        "photorealistic", "realistic", "photo", "real photography", "hyperrealistic",
-        "raw photo", "natural lighting", "detailed skin", "skin texture",
+        "photorealistic",
+        "realistic",
+        "photo",
+        "real photography",
+        "hyperrealistic",
+        "raw photo",
+        "natural lighting",
+        "detailed skin",
+        "skin texture",
     ],
     "interior": [
-        "interior", "interior design", "indoor", "room", "living room", "bedroom",
-        "architecture interior", "furniture", "cozy interior", "modern interior",
+        "interior",
+        "interior design",
+        "indoor",
+        "room",
+        "living room",
+        "bedroom",
+        "architecture interior",
+        "furniture",
+        "cozy interior",
+        "modern interior",
     ],
     "exterior": [
-        "exterior", "outdoor", "architecture", "building", "facade", "landscape",
-        "street view", "urban", "nature", "outdoors",
+        "exterior",
+        "outdoor",
+        "architecture",
+        "building",
+        "facade",
+        "landscape",
+        "street view",
+        "urban",
+        "nature",
+        "outdoors",
     ],
     "other_hard": [
-        "hands", "correct anatomy", "perspective", "symmetry", "text", "lettering",
-        "multiple objects", "complex composition", "depth of field",
+        "hands",
+        "correct anatomy",
+        "perspective",
+        "symmetry",
+        "text",
+        "lettering",
+        "multiple objects",
+        "complex composition",
+        "depth of field",
     ],
     # Text in image: legible text, signs, labels (many models render text poorly; boost when present).
     "text_in_image": [
-        "legible text", "clear text", "readable text", "sharp text", "clear lettering",
-        "sign that says", "text that says", "lettering", "written text", "caption",
-        "label", "headline", "title", "correct spelling", "readable",
+        "legible text",
+        "clear text",
+        "readable text",
+        "sharp text",
+        "clear lettering",
+        "sign that says",
+        "text that says",
+        "lettering",
+        "written text",
+        "caption",
+        "label",
+        "headline",
+        "title",
+        "correct spelling",
+        "readable",
     ],
     # Things other models famously suck at — boost so we learn them (research: SD/SDXL/FLUX limitations)
     "anatomy": [
-        "correct anatomy", "correct hands", "five fingers", "proper proportions",
-        "full body", "standing", "legs", "feet", "visible hands", "natural pose",
+        "correct anatomy",
+        "correct hands",
+        "five fingers",
+        "proper proportions",
+        "full body",
+        "standing",
+        "legs",
+        "feet",
+        "visible hands",
+        "natural pose",
     ],
     "avoid_failures": [
-        "single subject", "no duplicate", "clear composition", "readable text",
-        "correct number of", "distinct", "well proportioned", "coherent",
+        "single subject",
+        "no duplicate",
+        "clear composition",
+        "readable text",
+        "correct number of",
+        "distinct",
+        "well proportioned",
+        "coherent",
     ],
     # Concept bleeding (SDXL etc.): colors/objects bleeding together; boost so model keeps distinct colors/edges.
     "concept_bleed": [
-        "distinct colors", "separate colors", "clear separation", "no color bleed", "defined edges",
-        "distinct objects", "separate objects", "clean edges", "sharp boundaries",
+        "distinct colors",
+        "separate colors",
+        "clear separation",
+        "no color bleed",
+        "defined edges",
+        "distinct objects",
+        "separate objects",
+        "clean edges",
+        "sharp boundaries",
     ],
     # Complex prompts: multi-element, detailed, long captions (boost for better adherence).
     "complex": [
-        "complex composition", "multiple elements", "detailed", "specific",
-        "intricate", "layered", "coherent", "full detail", "ultra detailed",
+        "complex composition",
+        "multiple elements",
+        "detailed",
+        "specific",
+        "intricate",
+        "layered",
+        "coherent",
+        "full detail",
+        "ultra detailed",
     ],
     # Challenging / surreal / abstract / weird (boost so model learns these; no censorship).
     "challenging": [
-        "surreal", "abstract", "fantasy", "unusual", "bizarre", "dreamlike",
-        "moody", "atmospheric", "detailed", "masterpiece", "best quality",
+        "surreal",
+        "abstract",
+        "fantasy",
+        "unusual",
+        "bizarre",
+        "dreamlike",
+        "moody",
+        "atmospheric",
+        "detailed",
+        "masterpiece",
+        "best quality",
     ],
     # Style / artist tags (PixAI, Danbooru, etc.): strong style conditioning.
     "style_artist": [
-        "oil painting", "watercolor", "digital painting", "concept art",
-        "cel shading", "cinematic", "fantasy art", "character design",
-        "in the style of", "art by", "drawn by", "style of",
-        "ghibli", "studio ghibli", "miyazaki", "digital art", "official art",
+        "oil painting",
+        "watercolor",
+        "digital painting",
+        "concept art",
+        "cel shading",
+        "cinematic",
+        "fantasy art",
+        "character design",
+        "in the style of",
+        "art by",
+        "drawn by",
+        "style of",
+        "ghibli",
+        "studio ghibli",
+        "miyazaki",
+        "digital art",
+        "official art",
     ],
     # Person descriptors: height, age, body size/build, anatomy & body parts — order and boost for consistent adherence.
     "person_descriptors": (
-        list(AGE_TAGS) + list(HEIGHT_TAGS) + list(BUILD_BODY_TAGS)
-        + list(ANATOMY_FRAMING_TAGS) + list(BODY_PART_TAGS)
+        list(AGE_TAGS) + list(HEIGHT_TAGS) + list(BUILD_BODY_TAGS) + list(ANATOMY_FRAMING_TAGS) + list(BODY_PART_TAGS)
     ),
 }
 # Flat list for "boost when present" (so model learns these domains strongly)
@@ -109,21 +316,60 @@ DOMAIN_TAGS_FLAT = [t for tags in DOMAIN_TAGS.values() for t in tags]
 # See config/prompt_domains.py for recommended prompts and negatives per hard style.
 HARD_STYLE_TAGS = {
     "3d": [
-        "3d render", "3d illustration", "octane render", "cinema 4d", "blender",
-        "isometric", "low poly", "voxel", "solid shading", "clean 3d", "cg",
-        "unreal engine", "unity", "3d model", "rendered", "subsurface scattering",
+        "3d render",
+        "3d illustration",
+        "octane render",
+        "cinema 4d",
+        "blender",
+        "isometric",
+        "low poly",
+        "voxel",
+        "solid shading",
+        "clean 3d",
+        "cg",
+        "unreal engine",
+        "unity",
+        "3d model",
+        "rendered",
+        "subsurface scattering",
     ],
     "realistic": [
-        "photorealistic", "realistic", "hyperrealistic", "raw photo", "real photography",
-        "natural lighting", "detailed skin", "skin texture", "photo", "real life",
-        "8k uhd", "dslr", "film grain", "lens flare", "depth of field", "bokeh",
+        "photorealistic",
+        "realistic",
+        "hyperrealistic",
+        "raw photo",
+        "real photography",
+        "natural lighting",
+        "detailed skin",
+        "skin texture",
+        "photo",
+        "real life",
+        "8k uhd",
+        "dslr",
+        "film grain",
+        "lens flare",
+        "depth of field",
+        "bokeh",
     ],
     # Style mixes: 2.5D, semi-realistic, anime+realistic, etc. — models often blur these.
     "style_mix": [
-        "2.5d", "2.5d style", "semi-realistic", "semi realistic", "anime realistic",
-        "photorealistic anime", "realistic anime", "3d anime", "anime 3d",
-        "realistic 3d", "3d realistic", "mixed style", "hybrid style", "stylized realistic",
-        "illustration realistic", "realistic illustration", "painterly realistic",
+        "2.5d",
+        "2.5d style",
+        "semi-realistic",
+        "semi realistic",
+        "anime realistic",
+        "photorealistic anime",
+        "realistic anime",
+        "3d anime",
+        "anime 3d",
+        "realistic 3d",
+        "3d realistic",
+        "mixed style",
+        "hybrid style",
+        "stylized realistic",
+        "illustration realistic",
+        "realistic illustration",
+        "painterly realistic",
     ],
 }
 HARD_STYLE_TAGS_FLAT = [t for tags in HARD_STYLE_TAGS.values() for t in tags]
@@ -131,9 +377,13 @@ HARD_STYLE_TAGS_FLAT = [t for tags in HARD_STYLE_TAGS.values() for t in tags]
 # Universal negative prompt snippets that help avoid common diffusion-model failures.
 # Use at inference or append to training negative_caption when relevant (hands, anatomy, double head, etc.)
 NEGATIVE_ANATOMY = "bad anatomy, bad hands, missing fingers, extra fingers, fused fingers, mutated hands, poorly drawn hands, deformed hands, extra limbs, missing limbs, malformed limbs, disfigured"
-NEGATIVE_FACE = "bad face, deformed face, ugly face, distorted eyes, asymmetric eyes, wrong eyes, blurry face, mutated face"
+NEGATIVE_FACE = (
+    "bad face, deformed face, ugly face, distorted eyes, asymmetric eyes, wrong eyes, blurry face, mutated face"
+)
 NEGATIVE_COMPOSITION = "duplicate, duplicate head, two heads, merged subjects, cropped, out of frame, bad composition, cut off, missing body parts"
-NEGATIVE_QUALITY = "blurry, low quality, worst quality, jpeg artifacts, distorted, oversaturated, underexposed, overexposed"
+NEGATIVE_QUALITY = (
+    "blurry, low quality, worst quality, jpeg artifacts, distorted, oversaturated, underexposed, overexposed"
+)
 # Use when you want to avoid bad/unwanted text but NOT when you want text in the image.
 NEGATIVE_TEXT = "garbled text, misspelled text, unreadable text, wrong text, watermark, signature"
 # When generating images that should contain text, use this (avoids bad text, keeps desired text possible).
@@ -143,8 +393,18 @@ NEGATIVE_ANATOMY_FULL = f"{NEGATIVE_ANATOMY}, {NEGATIVE_FACE}, {NEGATIVE_COMPOSI
 
 # Phrases that imply multiple people/crowd — we add anti-blending and respect count
 MULTI_PERSON_PHRASES = (
-    "2girls", "2boys", "3girls", "multiple girls", "crowd", "group", "room full of people",
-    "many people", "several people", "lots of people", "gathering", "audience",
+    "2girls",
+    "2boys",
+    "3girls",
+    "multiple girls",
+    "crowd",
+    "group",
+    "room full of people",
+    "many people",
+    "several people",
+    "lots of people",
+    "gathering",
+    "audience",
 )
 ANTI_BLEND_POSITIVE = "distinct characters, no character blending, clear separation, separate individuals"
 ANTI_BLEND_NEGATIVE = "character blending, merged figures, fused characters, blur between people"
@@ -302,6 +562,118 @@ def boost_domain_tags(caption: str, repeat_factor: int = 2) -> str:
         return caption
     extra = ", ".join(found * repeat_factor)
     return f"{extra}, {caption}".strip()
+
+
+# --- Regional / layout captions (JSONL: segment + label → richer T5 conditioning) ---
+# Order hints for dict-style "parts" so subject/clothing/background stay consistent.
+REGION_PART_ORDER: Tuple[str, ...] = (
+    "subject",
+    "person",
+    "character",
+    "characters",
+    "outfit",
+    "clothing",
+    "accessories",
+    "body",
+    "hands",
+    "face",
+    "foreground",
+    "background",
+    "props",
+    "lighting",
+    "style",
+)
+
+
+def _region_sort_key(key: str) -> Tuple[int, str]:
+    kl = key.lower().strip()
+    try:
+        idx = next(i for i, x in enumerate(REGION_PART_ORDER) if x == kl)
+    except StopIteration:
+        idx = len(REGION_PART_ORDER)
+    return (idx, key)
+
+
+def format_parts_dict(parts: dict, order: Optional[List[str]] = None) -> str:
+    """Turn {'subject': '...', 'background': '...'} into one line for T5."""
+    if not parts:
+        return ""
+    if order:
+        keys = [k for k in order if k in parts and str(parts[k]).strip()]
+    else:
+        keys = sorted(parts.keys(), key=_region_sort_key)
+    bits: List[str] = []
+    for k in keys:
+        v = str(parts[k]).strip()
+        if v:
+            bits.append(f"{k}: {v}")
+    return " | ".join(bits)
+
+
+def _normalize_region_item(item: Any) -> str:
+    """List element: str or {label, text|caption|description}."""
+    if item is None:
+        return ""
+    if isinstance(item, str):
+        return item.strip()
+    if isinstance(item, dict):
+        label = (item.get("label") or item.get("name") or item.get("region") or "").strip()
+        text = (item.get("text") or item.get("caption") or item.get("description") or "").strip()
+        if not text:
+            return ""
+        if label:
+            return f"{label}: {text}"
+        return text
+    return str(item).strip()
+
+
+def format_region_captions_block(regions: Any) -> str:
+    """
+    Normalize region_captions / parts / mixed structures into one block.
+    - list[str] or list[dict] → 'a: x | b: y'
+    - dict (parts) → ordered key: value
+    - {'parts': {...}, 'region_captions': [...]} → merged
+    """
+    if regions is None:
+        return ""
+    if isinstance(regions, dict) and "parts" in regions and "region_captions" in regions:
+        a = format_parts_dict(regions["parts"]) if isinstance(regions.get("parts"), dict) else ""
+        b = format_region_captions_block(regions.get("region_captions"))
+        if a and b:
+            return f"{a} | {b}"
+        return a or b
+    if isinstance(regions, dict) and "region_captions" in regions and isinstance(regions.get("region_captions"), list):
+        return format_region_captions_block(regions["region_captions"])
+    if isinstance(regions, dict):
+        return format_parts_dict(regions)
+    if isinstance(regions, list):
+        bits = [_normalize_region_item(x) for x in regions]
+        bits = [b for b in bits if b]
+        return " | ".join(bits)
+    return str(regions).strip()
+
+
+def merge_region_captions_into_caption(
+    base_caption: str,
+    regions: Any,
+    *,
+    mode: str = "append",
+    layout_tag: str = "[layout]",
+) -> str:
+    """
+    Combine global caption with regional labels for stronger spatial/semantic grounding.
+    mode: 'append' → base then layout block; 'prefix' → layout block then base; 'off' → base only.
+    """
+    if mode == "off" or not regions:
+        return base_caption
+    block = format_region_captions_block(regions)
+    if not block:
+        return base_caption
+    tagged = f"{layout_tag} {block}".strip()
+    base_caption = (base_caption or "").strip()
+    if mode == "prefix":
+        return f"{tagged}. {base_caption}".strip() if base_caption else tagged
+    return f"{base_caption}. {tagged}".strip() if base_caption else tagged
 
 
 # Default quality prefix for challenging/short prompts (inference or data).

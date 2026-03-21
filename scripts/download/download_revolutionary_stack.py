@@ -106,8 +106,7 @@ def main() -> int:
     use_hf_transfer = bool(args.hf_transfer or mode == "fast")
     skip_existing = bool(args.skip_existing or mode in ("balanced", "low-mem"))
     print(
-        f"Downloader config: mode={mode} max_workers={mw} "
-        f"hf_transfer={use_hf_transfer} skip_existing={skip_existing}"
+        f"Downloader config: mode={mode} max_workers={mw} hf_transfer={use_hf_transfer} skip_existing={skip_existing}"
     )
     jobs = [
         # Triple text encoder stack
@@ -258,4 +257,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main() or 0)
-

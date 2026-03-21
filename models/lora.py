@@ -1,10 +1,11 @@
 # LoRA (Low-Rank Adaptation) application for DiT.
 # Supports multiple LoRAs with per-LoRA scale so styles/concepts blend without slop.
 # Loads .safetensors or .pt; optional trigger words for tag-style LoRAs.
+from pathlib import Path
+from typing import Dict, List, Tuple, Union
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Tuple, Union
-from pathlib import Path
 
 
 def _get_lora_state_dict(path_or_state: Union[str, Path, Dict]) -> Dict[str, torch.Tensor]:
@@ -14,6 +15,7 @@ def _get_lora_state_dict(path_or_state: Union[str, Path, Dict]) -> Dict[str, tor
     if path.suffix.lower() == ".safetensors":
         try:
             from safetensors.torch import load_file
+
             return load_file(str(path), device="cpu")
         except ImportError:
             raise ImportError("LoRA is .safetensors; install safetensors: pip install safetensors")
@@ -77,6 +79,7 @@ def apply_lora(
             base = k.replace(".lora_up.weight", "")
             lora_pairs.setdefault(base, (None, None))
             lora_pairs[base] = (lora_pairs[base][0], v)
+
     def get_attr(obj, name):
         if name.isdigit():
             return obj[int(name)]

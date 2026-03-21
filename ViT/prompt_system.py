@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List
 
-
 _SPLIT_RE = re.compile(r"[,\n;|]+")
 _WS_RE = re.compile(r"\s+")
 
@@ -137,4 +136,3 @@ def build_prompt_plan(prompt: str, *, inject_default_avoid: bool = True) -> Dict
         "neutral": b.neutral,
         "composed_prompt": composed,
     }
-

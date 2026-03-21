@@ -3,12 +3,13 @@
 # Same text conditioning interface as DiT_Text (style, control, negative prompt).
 import torch
 import torch.nn as nn
-from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
-from .attention import memory_efficient_attention, create_block_causal_mask_2d, SSMTokenMixer
-from .controlnet import ControlNetEncoder
-from .dit_text import TextEmbedder, CrossAttention
-from .moe import MoEExperts, MoEProjection, MoERouter
 from timm.models.vision_transformer import PatchEmbed
+
+from .attention import SSMTokenMixer, create_block_causal_mask_2d, memory_efficient_attention
+from .controlnet import ControlNetEncoder
+from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
+from .dit_text import CrossAttention, TextEmbedder
+from .moe import MoEExperts, MoEProjection, MoERouter
 
 
 def modulate(x, shift, scale):
@@ -43,7 +44,7 @@ class SelfAttentionQKNorm(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size)
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.moe_out_proj = None
@@ -71,9 +72,7 @@ class SelfAttentionQKNorm(nn.Module):
         q, k, v = qkv.unbind(2)
         q = self.q_norm(q)
         k = self.k_norm(k)
-        out = memory_efficient_attention(
-            q, k, v, attn_mask=attn_mask, scale=self.scale, use_xformers=use_xformers
-        )
+        out = memory_efficient_attention(q, k, v, attn_mask=attn_mask, scale=self.scale, use_xformers=use_xformers)
         out = out.reshape(B, N, C)
         if self.moe_out_proj is not None:
             out = self.moe_out_proj(
@@ -118,7 +117,7 @@ class CrossAttentionQKNorm(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.q_proj = nn.Linear(hidden_size, hidden_size)
         self.k_proj = nn.Linear(text_dim, hidden_size)
         self.v_proj = nn.Linear(text_dim, hidden_size)
@@ -150,9 +149,7 @@ class CrossAttentionQKNorm(nn.Module):
         v = self.v_proj(text_emb).reshape(B, L, self.num_heads, self.head_dim)
         q = self.q_norm(q)
         k = self.k_norm(k)
-        out = memory_efficient_attention(
-            q, k, v, attn_mask=None, scale=self.scale, use_xformers=use_xformers
-        )
+        out = memory_efficient_attention(q, k, v, attn_mask=None, scale=self.scale, use_xformers=use_xformers)
         out = out.reshape(B, N, C)
         if self.moe_out_proj is not None:
             out = self.moe_out_proj(
@@ -519,7 +516,7 @@ class DiT_Predecessor_Text(nn.Module):
 
         self.register_buffer("_ar_mask", None)
         if num_ar_blocks > 0:
-            p = int(self.num_patches ** 0.5)
+            p = int(self.num_patches**0.5)
             self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)
 
         # Blocks receive text_emb from text_embedder (already projected to hidden_size), not raw encoder_hidden_states
@@ -552,10 +549,9 @@ class DiT_Predecessor_Text(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
+
         self.apply(_basic_init)
-        pos_embed = get_2d_sincos_pos_embed(
-            self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5)
-        )
+        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
         if self.register_tokens is not None:
             nn.init.normal_(self.register_tokens, std=0.02)
@@ -569,7 +565,9 @@ class DiT_Predecessor_Text(nn.Module):
             nn.init.normal_(self.style_proj.weight, std=0.02)
             nn.init.zeros_(self.style_proj.bias)
         if self.control_encoder is not None:
-            nn.init.xavier_uniform_(self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1))
+            nn.init.xavier_uniform_(
+                self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1)
+            )
             nn.init.zeros_(self.control_encoder.proj.bias)
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
@@ -654,7 +652,11 @@ class DiT_Predecessor_Text(nn.Module):
         for block in self.blocks:
             if self._grad_checkpointing and self.training:
                 x = torch.utils.checkpoint.checkpoint(
-                    block, x, c, text_emb, attn_mask,
+                    block,
+                    x,
+                    c,
+                    text_emb,
+                    attn_mask,
                     use_reentrant=False,
                     num_patch_tokens=self.num_patches,
                 )
@@ -771,6 +773,7 @@ class DiT_Supreme_Text(nn.Module):
             self.creativity_proj = None
         if size_embed_dim > 0:
             from .pixart_blocks import SizeEmbedder
+
             self.size_embedder = SizeEmbedder(size_embed_dim, concat_dims=False)
             self.size_proj = nn.Linear(size_embed_dim, hidden_size)
         else:
@@ -799,7 +802,7 @@ class DiT_Supreme_Text(nn.Module):
 
         self.register_buffer("_ar_mask", None)
         if num_ar_blocks > 0:
-            p = int(self.num_patches ** 0.5)
+            p = int(self.num_patches**0.5)
             self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)
 
         blocks = []
@@ -832,10 +835,9 @@ class DiT_Supreme_Text(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
+
         self.apply(_basic_init)
-        pos_embed = get_2d_sincos_pos_embed(
-            self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5)
-        )
+        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
@@ -845,7 +847,9 @@ class DiT_Supreme_Text(nn.Module):
             nn.init.normal_(self.style_proj.weight, std=0.02)
             nn.init.zeros_(self.style_proj.bias)
         if self.control_encoder is not None:
-            nn.init.xavier_uniform_(self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1))
+            nn.init.xavier_uniform_(
+                self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1)
+            )
             nn.init.zeros_(self.control_encoder.proj.bias)
         if self.size_proj is not None:
             nn.init.normal_(self.size_proj.weight, std=0.02)
@@ -939,7 +943,11 @@ class DiT_Supreme_Text(nn.Module):
         for block in self.blocks:
             if self._grad_checkpointing and self.training:
                 x = torch.utils.checkpoint.checkpoint(
-                    block, x, c, text_emb, attn_mask,
+                    block,
+                    x,
+                    c,
+                    text_emb,
+                    attn_mask,
                     use_reentrant=False,
                     num_patch_tokens=self.num_patches,
                 )

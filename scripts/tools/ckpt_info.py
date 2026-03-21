@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Print checkpoint config and basic info without loading the full model (fast)."""
+
 import argparse
 import sys
 from pathlib import Path
@@ -32,9 +33,19 @@ def main():
 
     # Mirror get_dit_build_kwargs / TrainConfig fields
     attrs = [
-        "model_name", "image_size", "text_encoder", "vae_model", "latent_scale",
-        "num_ar_blocks", "use_xformers", "style_embed_dim", "control_cond_dim", "creativity_embed_dim",
-        "num_timesteps", "beta_schedule", "prediction_type",
+        "model_name",
+        "image_size",
+        "text_encoder",
+        "vae_model",
+        "latent_scale",
+        "num_ar_blocks",
+        "use_xformers",
+        "style_embed_dim",
+        "control_cond_dim",
+        "creativity_embed_dim",
+        "num_timesteps",
+        "beta_schedule",
+        "prediction_type",
     ]
     print("Config:")
     for a in attrs:

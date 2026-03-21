@@ -1,14 +1,17 @@
 # Memory-efficient attention: xformers with fallback to PyTorch SDPA or manual.
 # Supports causal/block-causal masks for AR.
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional
+
 from .moe import MoEProjection
 
 _XFORMERS_AVAILABLE = False
 try:
     import xformers.ops as xops
+
     _XFORMERS_AVAILABLE = True
 except ImportError:
     pass
@@ -39,13 +42,15 @@ def memory_efficient_attention(
         return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, scale=scale)
     B, N, H, D = q.shape
     if scale is None:
-        scale = D ** -0.5
+        scale = D**-0.5
 
     if use_xformers and _XFORMERS_AVAILABLE and q.is_cuda:
         try:
             # xformers wants (B, N, H, D)
             out = xops.memory_efficient_attention(
-                q, k, v,
+                q,
+                k,
+                v,
                 attn_bias=attn_mask,
                 scale=scale,
             )
@@ -78,7 +83,7 @@ def _apply_rope_1d(x: torch.Tensor, positions: torch.Tensor, base: float = 10000
     inv_freq = torch.pow(torch.tensor(base, device=x.device, dtype=x_even.dtype), -2.0 * idx / max(1, D_even))
 
     angles = positions[:, None] * inv_freq[None, :]  # (N, dim_half)
-    cos = torch.cos(angles)[None, :, None, :]       # (1, N, 1, dim_half)
+    cos = torch.cos(angles)[None, :, None, :]  # (1, N, 1, dim_half)
     sin = torch.sin(angles)[None, :, None, :]
 
     out_even = x_even * cos - x_odd * sin
@@ -167,7 +172,7 @@ class SelfAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size)
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.moe_out_proj = None
@@ -207,7 +212,7 @@ class SelfAttention(nn.Module):
             N_patch = int(num_patch_tokens)
             if N_patch <= 0 or N_patch > N:
                 raise ValueError(f"Invalid num_patch_tokens={N_patch} for N={N}.")
-            p = int(round(N_patch ** 0.5))
+            p = int(round(N_patch**0.5))
             if p * p != N_patch:
                 raise ValueError(f"num_patch_tokens={N_patch} is not a perfect square.")
             if p % f != 0:
@@ -238,9 +243,7 @@ class SelfAttention(nn.Module):
             pos_k = torch.arange(k.shape[1], device=x.device, dtype=torch.long)
             k = _apply_rope_1d(k, pos_k, base=self.rope_base)
 
-        out = memory_efficient_attention(
-            q, k, v, attn_mask=attn_mask, scale=self.scale, use_xformers=use_xformers
-        )
+        out = memory_efficient_attention(q, k, v, attn_mask=attn_mask, scale=self.scale, use_xformers=use_xformers)
         out = out.reshape(B, N, C)
         if self.moe_out_proj is not None:
             out = self.moe_out_proj(

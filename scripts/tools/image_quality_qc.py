@@ -37,7 +37,6 @@ def _resolve_path(image_path: str, manifest_path: Path, image_root: Optional[str
 
 def main() -> int:
     from PIL import Image
-
     from utils.image_quality_metrics import analyze_image_quality
 
     ap = argparse.ArgumentParser(description="Compute image sharpness/contrast for SDX JSONL manifests")
@@ -135,7 +134,9 @@ def main() -> int:
     if args.json_report:
         outp = Path(args.json_report)
         outp.parent.mkdir(parents=True, exist_ok=True)
-        outp.write_text(json.dumps({"summary": report, "rows": results}, indent=2, ensure_ascii=False), encoding="utf-8")
+        outp.write_text(
+            json.dumps({"summary": report, "rows": results}, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     print(f"imageqc: count={len(results)} fail={fail}")
     if fail:
@@ -146,4 +147,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
