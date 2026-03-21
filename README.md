@@ -4,49 +4,77 @@
 
 # SDX
 
-### Text-to-image **Diffusion Transformer** · Your data, your captions
+### Modular **Diffusion Transformer** training & sampling — built for clarity, datasets, and real experiments
 
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/></a>
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="License"/></a>
-  <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/Docs-IMPROVEMENTS-238636?style=flat-square" alt="Docs"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="License Apache 2.0"/></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome"/></a>
+  <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/Roadmap-IMPROVEMENTS-238636?style=flat-square" alt="Roadmap"/></a>
 </p>
 
-**Stack:** DiT · xformers · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · optional block **AR** · REPA · MoE · MDM · RAE bridge · test-time **pick-best**
+<p align="center">
+  <b><a href="#quick-start">Get started</a></b> ·
+  <a href="#architecture-and-pipeline">Architecture</a> ·
+  <a href="#documentation-hub">Documentation</a> ·
+  <a href="#contributing--community">Contribute</a>
+</p>
 
-*No reference image required — quality follows what you train on.*
+**Core stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · optional **AR** blocks · REPA · MoE · MDM · RAE bridge · **pick-best** · **book/comic** pipelines
 
-**What SDX is:** a **modular diffusion-transformer stack** for **dataset-faithful** text-to-image research—clean separation of data, diffusion math, DiT, sampling, and tooling—so you can experiment with modern ideas (fusion encoders, MoE, AR blocks, REPA, test-time rerank) without rewriting a pipeline from scratch.
-
-| Start | Train | Timesteps | Sample | Docs |
-| :---: | :---: | :---: | :---: | :---: |
-| [Quick start](#quick-start) | [Training](#training) | [Timestep sampling](#modern-diffusion-training-timestep-sampling) | [Sampling](#sampling) | [Doc hub](#documentation-hub) |
+*Train on your captions. No reference image required for the base path — quality follows your data and settings.*
 
 </div>
 
 ---
 
-> **New here?** Run `python scripts/tools/quick_test.py`, skim [Architecture and pipeline](#architecture-and-pipeline), then open [Quick start](#quick-start).
+## At a glance
+
+| Pillar | What you get |
+| :----- | :----------- |
+| **Research-first** | One readable pipeline: `data/` → `train.py` → checkpoint → `sample.py` — swap encoders, timestep sampling, and DiT options without a rewrite. |
+| **Production-minded** | JSONL manifests, val/early stopping, EMA, latent cache, multi-GPU, book workflow with OCR and pick-best ([pipelines/book_comic/](pipelines/book_comic/README.md)). |
+| **Contributor-ready** | `pytest`, `ruff`, [CONTRIBUTING.md](CONTRIBUTING.md), and docs structured for small, reviewable PRs. |
+
+**What SDX is:** a **modular diffusion–transformer codebase** for **dataset-faithful** text-to-image work — clean separation of data, diffusion math, DiT, sampling, and tooling — so you can try fusion encoders, MoE, AR blocks, REPA, and test-time reranking on top of a solid baseline.
+
+---
+
+### Choose your path
+
+| I want to… | Start here |
+| :----------- | :--------- |
+| **Verify the install** | [Quick start](#quick-start) — `python scripts/tools/quick_test.py` |
+| **Train on folders or JSONL** | [Training](#training) · [Data format](#data-format) |
+| **Books, comics, or manga pages** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
+| **Score or filter data with ViT** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
+| **Submit a fix or doc** | [Contributing & community](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
+
+---
 
 <details>
 <summary><strong>Table of contents</strong></summary>
 
 | Section | Links |
 | :--- | :--- |
-| **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines (2 lines)](pipelines/README.md) |
+| **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines](pipelines/README.md) |
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflow** | [Pipeline](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Workflow** | [Architecture](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [2026 landscape](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 </details>
 
 ---
 
+> **First visit?** Run `python scripts/tools/quick_test.py`, skim [**Architecture**](#architecture-and-pipeline), then [**Quick start**](#quick-start).
+
+---
+
 ## Project status, compute, and expectations
 
-**Honest framing:** SDX is built as a **research-grade pipeline and architecture blueprint**, not a guarantee that every configuration has a pretrained checkpoint or benchmark table in-repo. Serious text-to-image training usually needs **multi-GPU clusters**, **large VRAM**, and **lots of storage** for data and latents. If you don’t have that yet, you’re not behind—you’re in the same boat as many solo and academic setups.
+SDX is a **research-grade pipeline and architecture blueprint** — not a single vendor “model in a box.” Some configs have no pretrained weights in-repo; serious training often means **multi-GPU**, **high VRAM**, and **large storage**. Solo and academic setups are normal: the repo is designed so you can grow into bigger runs without changing stacks.
 
 | Topic | What to expect |
 | :--- | :--- |
@@ -77,18 +105,18 @@ You can still get value **without** training a billion-parameter model:
 
 ## Overview
 
-| Pillar | What you get |
-|:-------|:-------------|
-| **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), optional **AR** blocks, up to **Supreme** / **Predecessor** variants |
-| **Training** | Pass-based schedule, **EMA**, **best** checkpoint, val + early stopping, bf16, compile, **DDP**, optional **non-uniform timestep sampling** (SD3-style / high-noise bias) |
-| **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, Control-style conditioning, refinement, **pick-best** |
-| **Data** | Folders + `.txt` / `.caption` or **JSONL**; caption emphasis & domain boosts |
+| Layer | Capabilities |
+| :---- | :----------- |
+| **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), optional **AR** blocks, **Supreme** / **Predecessor** variants |
+| **Training** | Pass-based schedule, **EMA**, **best** checkpoint, val + early stopping, bf16, compile, **DDP**, **non-uniform timestep sampling** (logit-normal / high-noise bias) |
+| **Sampling** | CFG, schedulers, img2img, inpainting, LoRA, control conditioning, refinement, **pick-best** |
+| **Data** | Folders + sidecar captions or **JSONL**; emphasis, domains, regional captions |
 
 ---
 
 ## Architecture and pipeline
 
-**End-to-end:** `data/` and optional manifest → `train.py` (uses `config/`, `diffusion/`, `models/`, `utils/`) → **checkpoint** → `sample.py` → **images**. Downloaded weights live in `model/` (gitignored); paths resolve via `utils/model_paths.py`.
+End-to-end flow: **`data/`** (+ optional manifest & QA) → **`train.py`** (`config/`, `diffusion/`, `models/`, `utils/`) → **checkpoint** → **`sample.py`** → **images**. Weights under **`model/`** (gitignored); paths via **`utils/model_paths.py`**.
 
 **Two training / product lines** (same engine, different docs and workflows): **[pipelines/image_gen/](pipelines/image_gen/README.md)** (general T2I) and **[pipelines/book_comic/](pipelines/book_comic/README.md)** (books, comics, manga). See **[pipelines/README.md](pipelines/README.md)**.
 
@@ -311,6 +339,8 @@ flowchart TB
 
 ## Highlights
 
+Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
+
 <details open>
 <summary><strong>Core training & data</strong></summary>
 
@@ -423,11 +453,21 @@ Pulls **DiT**, **ControlNet**, **flux**, **Stability-AI/generative-models** into
 
 ## Documentation hub
 
+Everything below is also indexed in **[docs/README.md](docs/README.md)**. Use this table as a **single map** from task → doc.
+
+### Essentials
+
 | Doc | Purpose |
 | :--- | :--- |
 | [docs/README.md](docs/README.md) | Index of all project docs |
-| [pipelines/README.md](pipelines/README.md) | **Two lines:** general **image_gen** vs **book_comic** (shared engine; split docs + scripts) |
+| [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
+| [pipelines/README.md](pipelines/README.md) | **Two product lines:** **image_gen** vs **book_comic** (same engine; split docs + scripts) |
 | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
+
+### Training, quality & diffusion
+
+| Doc | Purpose |
+| :--- | :--- |
 | [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) | Hugging Face → JSONL + images; **`hf_download_and_train.py`** one-shot |
 | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, implemented vs planned (incl. §12 industry alignment) |
 | [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion and flow ideas, timestep sampling, paper pointers |
@@ -733,7 +773,7 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | HF → JSONL (Danbooru-style) | `scripts/training/hf_export_to_sdx_manifest.py` + [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) |
 | Download + train (basic DiT-B) | `scripts/training/hf_download_and_train.py` (or `--demo` without HF) |
 | Book scene → line per page | `scripts/tools/book_scene_split.py` → `pages.txt` for `generate_book.py` |
-  | Export ONNX | `scripts/tools/export_onnx.py` |
+| Export ONNX | `scripts/tools/export_onnx.py` |
 | Latent cache | `scripts/training/precompute_latents.py` + `--latent-cache-dir` |
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |
 | Test-time pick | `--num 4 --pick-best clip\|edge\|ocr\|combo` |
@@ -801,15 +841,15 @@ sdx/
 
 ## Contributing & community
 
-SDX grows when **researchers, hobbyists, and doc writers** share fixes and ideas. You’re welcome here whether you’re tuning DiT on a single GPU or polishing a paragraph in `docs/`.
+**We want your PRs.** SDX improves when researchers, artists, and doc writers ship small, focused changes — whether you are tuning DiT on one GPU, fixing Windows paths, or clarifying one paragraph in `docs/`.
 
 ### Why contribute here
 
 | Reason | Detail |
 | :----- | :----- |
-| **Modular surface area** | Clear seams: `diffusion/`, `models/`, `data/`, `utils/`, `scripts/tools/`—pick one area without owning the whole stack. |
-| **Impact without huge compute** | Tests, docs, dataset export scripts, Windows quirks, and **smoke runs** ([docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)) help everyone. |
-| **Modern diffusion topics** | Timestep sampling, REPA, MoE, AR blocks, triple text encoders—room for focused PRs and design notes in `docs/`. |
+| **Clear boundaries** | `diffusion/`, `models/`, `data/`, `utils/`, `scripts/tools/` — you can own one area without rewriting the stack. |
+| **Impact without a cluster** | Tests, docs, `scripts/tools/*`, smoke runs ([docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md)), and reproducible bug reports help everyone. |
+| **Modern diffusion surface** | Timestep sampling, REPA, MoE, AR blocks, triple encoders — room for focused PRs + short notes in `docs/` or [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md). |
 
 ### Ways to contribute (pick any)
 
@@ -869,8 +909,8 @@ Licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
 <div align="center">
 
-**SDX** — train on your data, sample with the stack you choose.
+**SDX** — *modular diffusion transformers, documented for builders.*
 
-[Back to top](#sdx)
+[Contributing](#contributing--community) · [Documentation hub](#documentation-hub) · [Back to top](#sdx)
 
 </div>
