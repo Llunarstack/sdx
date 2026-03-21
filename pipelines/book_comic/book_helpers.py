@@ -73,6 +73,20 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
             post_micro_contrast=1.03,
             prepend_quality_if_short=True,
         )
+    if n == "production":
+        # Heaviest test-time stack: more candidates, same pick metric, slightly stronger print polish.
+        return BookAccuracyPreset(
+            sample_candidates=6,
+            pick_best="combo",
+            boost_quality=True,
+            subject_first=True,
+            save_prompt_sidecar=True,
+            post_sharpen=0.5,
+            post_naturalize=True,
+            post_grain=0.022,
+            post_micro_contrast=1.04,
+            prepend_quality_if_short=True,
+        )
     # none
     return BookAccuracyPreset(
         sample_candidates=1,

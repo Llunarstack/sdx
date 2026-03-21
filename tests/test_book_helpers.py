@@ -17,6 +17,13 @@ def test_preset_balanced_has_multi_candidate():
     assert p.pick_best == "combo"
 
 
+def test_preset_production_stronger_than_maximum():
+    prod = preset_for_book_accuracy("production")
+    mx = preset_for_book_accuracy("maximum")
+    assert prod.sample_candidates >= mx.sample_candidates
+    assert prod.post_sharpen >= mx.post_sharpen
+
+
 def test_resolve_forces_combo_when_multi_candidate():
     args = SimpleNamespace(
         book_accuracy="balanced",
