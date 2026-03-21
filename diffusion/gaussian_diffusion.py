@@ -3,23 +3,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .loss_weighting import get_loss_weight as _get_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
-
-
-def _beta_schedule(schedule_name: str, num_timesteps: int):
-    if schedule_name == "linear":
-        beta = np.linspace(0.0001, 0.02, num_timesteps, dtype=np.float64)
-    elif schedule_name == "cosine":
-        steps = np.arange(num_timesteps + 1, dtype=np.float64)
-        alpha_bar = np.cos(((steps / num_timesteps) + 0.01) / 1.01 * np.pi * 0.5) ** 2
-        alpha_bar = alpha_bar / alpha_bar[0]
-        beta = 1 - (alpha_bar[1:] / alpha_bar[:-1])
-        beta = np.clip(beta, 1e-4, 0.999)
-    else:
-        raise ValueError(schedule_name)
-    return beta
+from .schedules import get_beta_schedule
+from .timestep_loss_weight import get_timestep_loss_weight
 
 
 def create_diffusion(
@@ -71,7 +58,7 @@ class GaussianDiffusion:
         self.timestep_respacing_str = timestep_respacing_str  # "ddim50" or "10,15,20" for set_timesteps
         self.loss_type = loss_type
         self.prediction_type = prediction_type  # "epsilon" or "v"
-        beta = _beta_schedule(beta_schedule, num_timesteps)
+        beta = get_beta_schedule(beta_schedule, num_timesteps)
         alpha = 1.0 - beta
         alpha_cumprod = np.cumprod(alpha)
         alpha_cumprod_prev = np.concatenate([[1.0], alpha_cumprod[:-1]])
@@ -123,7 +110,7 @@ class GaussianDiffusion:
     ):
         """
         Compute training loss. SD/SDXL-style: offset noise, epsilon or v-prediction.
-        loss_weighting: "min_snr" (default, SD-style) | "unit" | "edm" | "v" | "eps" (generative-models-style).
+        loss_weighting: "min_snr" (default) | "min_snr_soft" | "unit" | "edm" | "v" | "eps".
         sample_weights: (B,) optional; per-sample loss weight (e.g. aesthetic score).
         """
         if model_kwargs is None:
@@ -149,15 +136,17 @@ class GaussianDiffusion:
         loss = nn.functional.mse_loss(model_out, target, reduction="none")
         # Per-sample mean (over spatial/channels)
         loss = loss.mean(dim=tuple(range(1, loss.ndim)))
-        # Timestep loss weighting: min_snr (SD/SDXL) or unit/edm/v/eps (generative-models-style)
-        if loss_weighting == "min_snr" and min_snr_gamma > 0 and hasattr(self, "snr"):
-            snr = self.snr.to(device)[t]
-            weight = torch.clamp(snr, max=min_snr_gamma) / (snr + 1e-8)
-            loss = loss * weight
-        elif loss_weighting != "min_snr":
-            alpha = self.alpha_cumprod.to(device)[t]
-            weight = _get_loss_weight(alpha, loss_weighting, loss_weighting_sigma_data)
-            loss = loss * weight
+        # Timestep loss weighting: min_snr / min_snr_soft / unit / edm / v / eps
+        snr_t = self.snr.to(device)[t] if hasattr(self, "snr") else None
+        alpha = self.alpha_cumprod.to(device)[t]
+        weight = get_timestep_loss_weight(
+            loss_weighting,
+            snr=snr_t,
+            alpha_cumprod=alpha,
+            min_snr_gamma=min_snr_gamma,
+            loss_weighting_sigma_data=loss_weighting_sigma_data,
+        )
+        loss = loss * weight
         # Aesthetic / sample weighting
         if sample_weights is not None and sample_weights.shape[0] == loss.shape[0]:
             sample_weights = sample_weights.to(device, dtype=loss.dtype)

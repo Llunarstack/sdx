@@ -34,7 +34,7 @@ except ImportError:
 
 from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
-from diffusion.loss_weighting import get_loss_weight
+from diffusion.timestep_loss_weight import get_timestep_loss_weight
 from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
 from models.rae_latent_bridge import RAELatentBridge
@@ -422,14 +422,16 @@ def compute_mdm_training_loss(
         loss_per_sample = mse.mean(dim=tuple(range(1, mse.ndim)))
 
     # Timestep loss weighting (match diffusion.training_losses semantics).
-    if loss_weighting == "min_snr" and min_snr_gamma > 0 and hasattr(diffusion, "snr"):
-        snr = diffusion.snr.to(device)[t]
-        weight = torch.clamp(snr, max=min_snr_gamma) / (snr + 1e-8)
-        loss_per_sample = loss_per_sample * weight
-    elif loss_weighting != "min_snr":
-        alpha = diffusion.alpha_cumprod.to(device)[t]
-        weight = get_loss_weight(alpha, loss_weighting, loss_weighting_sigma_data)
-        loss_per_sample = loss_per_sample * weight
+    snr_t = diffusion.snr.to(device)[t] if hasattr(diffusion, "snr") else None
+    alpha = diffusion.alpha_cumprod.to(device)[t]
+    weight = get_timestep_loss_weight(
+        loss_weighting,
+        snr=snr_t,
+        alpha_cumprod=alpha,
+        min_snr_gamma=min_snr_gamma,
+        loss_weighting_sigma_data=loss_weighting_sigma_data,
+    )
+    loss_per_sample = loss_per_sample * weight
 
     # Optional sample weighting.
     if sample_weights is not None and sample_weights.shape[0] == loss_per_sample.shape[0]:
@@ -1676,7 +1678,12 @@ if __name__ == "__main__":
         default=1.0,
         help="Token routing strength in [0,1] (higher = more gating).",
     )
-    parser.add_argument("--beta-schedule", type=str, default="linear", choices=["linear", "cosine"])
+    parser.add_argument(
+        "--beta-schedule",
+        type=str,
+        default="linear",
+        choices=["linear", "cosine", "sigmoid", "squaredcos_cap_v2"],
+    )
     parser.add_argument(
         "--prediction-type", type=str, default="epsilon", choices=["epsilon", "v"], help="v = velocity (SD2-style)"
     )
@@ -1686,8 +1693,8 @@ if __name__ == "__main__":
         "--loss-weighting",
         type=str,
         default="min_snr",
-        choices=["min_snr", "unit", "edm", "v", "eps"],
-        help="Timestep loss weight: min_snr (default) | unit | edm | v | eps",
+        choices=["min_snr", "min_snr_soft", "unit", "edm", "v", "eps"],
+        help="Timestep loss weight: min_snr | min_snr_soft (smooth) | unit | edm | v | eps",
     )
     parser.add_argument(
         "--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm"
