@@ -17,6 +17,8 @@
 
 *No reference image required — quality follows what you train on.*
 
+**What SDX is:** a **modular diffusion-transformer stack** for **dataset-faithful** text-to-image research—clean separation of data, diffusion math, DiT, sampling, and tooling—so you can experiment with modern ideas (fusion encoders, MoE, AR blocks, REPA, test-time rerank) without rewriting a pipeline from scratch.
+
 | Start | Train | Timesteps | Sample | Docs |
 | :---: | :---: | :---: | :---: | :---: |
 | [Quick start](#quick-start) | [Training](#training) | [Timestep sampling](#modern-diffusion-training-timestep-sampling) | [Sampling](#sampling) | [Doc hub](#documentation-hub) |
@@ -32,12 +34,42 @@
 
 | Section | Links |
 | :--- | :--- |
+| **Context** | [Status & expectations](#project-status-compute-and-expectations) |
 | **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
 | **Workflow** | [Pipeline](#architecture-and-pipeline) · [Training](#training) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Project layout](#project-layout) · [References](#references) |
 
 </details>
+
+---
+
+## Project status, compute, and expectations
+
+**Honest framing:** SDX is built as a **research-grade pipeline and architecture blueprint**, not a guarantee that every configuration has a pretrained checkpoint or benchmark table in-repo. Serious text-to-image training usually needs **multi-GPU clusters**, **large VRAM**, and **lots of storage** for data and latents. If you don’t have that yet, you’re not behind—you’re in the same boat as many solo and academic setups.
+
+| Topic | What to expect |
+| :--- | :--- |
+| **What this repo optimizes for** | Modular **code**: `train.py` / `sample.py`, `GaussianDiffusion`, DiT variants, encoders, dataset tools, optional ViT QA—so “future you” or a lab can plug in compute without redesigning the stack. |
+| **What we don’t claim** | A single **official** base model, fixed **leaderboard** numbers, or a gallery of **example images** for every variant—unless someone trains and publishes them (contributions welcome). |
+| **Credibility without a huge model** | The implementation is **runnable**: `quick_test`, unit tests, `dit_variant_compare`, timestep previews, docs. A **tiny** run (small DiT, low resolution, short steps) is still a valid proof that the **pipeline** works—see [docs/HARDWARE.md](docs/HARDWARE.md). |
+
+### If you only have a consumer GPU (e.g. ~16 GB VRAM)
+
+You can still get value **without** training a billion-parameter model:
+
+1. **Smoke / micro-runs** — `DiT-B/2-Text`, small `--image-size`, small `--global-batch-size`, `--no-compile` / grad checkpointing as needed; even a few hundred steps proves the loop runs.
+2. **Frozen encoders + train DiT only** — Use off-the-shelf VAE + T5 (and CLIP if triple mode); memory goes mostly to the DiT forward, not retraining encoders.
+3. **Infrastructure first** — Dataset JSONL, `scripts/tools/*`, ViT ranking, export scripts: these pay off before you ever touch a cluster.
+4. **Memory tricks** (typical across diffusion repos): gradient checkpointing, mixed precision (bf16), smaller batch + accumulation, smaller `image-size`, fewer simultaneous options (MoE/REPA off until needed).
+
+### Roadmap shape (not a promise of dates)
+
+| Phase | Focus |
+| :--- | :--- |
+| **Now** | Architecture clarity, docs, small tests, optional micro-training. |
+| **Next** | One **minimal** training recipe (small DiT, low res) documented end-to-end. |
+| **Later** | Serious training when you have **GPU time**, **storage**, and a **dataset** you trust. |
 
 ---
 
@@ -659,6 +691,8 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | Log samples | `--log-images-every`, `--log-images-prompt` |
 | Data quality script | `scripts/tools/data_quality.py` |
 | Timestep sampling preview | `scripts/tools/training_timestep_preview.py` (compare `--timestep-sample-mode` distributions) |
+| DiT size compare | `scripts/tools/dit_variant_compare.py` (params / GiB per variant) |
+| ViT checkpoint inspect | `scripts/tools/vit_inspect.py` (config + optional module tree) |
 | Export ONNX | `scripts/tools/export_onnx.py` |
 | Latent cache | `scripts/training/precompute_latents.py` + `--latent-cache-dir` |
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |

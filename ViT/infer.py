@@ -23,8 +23,8 @@ def _resolve_path(image_path: str, manifest_path: Path) -> Path:
 
 
 def main() -> int:
+    from ViT.checkpoint_utils import load_vit_quality_checkpoint
     from ViT.dataset import text_feature_vector
-    from ViT.model import build_vit_model
     from ViT.tta import tta_predict
 
     p = argparse.ArgumentParser(description="Run ViT quality/adherence scoring on JSONL manifest")
@@ -36,18 +36,7 @@ def main() -> int:
     p.add_argument("--use-ema", action="store_true", help="If checkpoint contains ema_state_dict, use it")
     args = p.parse_args()
 
-    ckpt = torch.load(args.ckpt, map_location="cpu", weights_only=False)
-    cfg = ckpt.get("config", {})
-    model = build_vit_model(
-        model_name=cfg.get("model_name", "vit_base_patch16_224"),
-        pretrained=False,
-        text_feat_dim=int(cfg.get("text_feat_dim", 8)),
-        hidden_dim=int(cfg.get("hidden_dim", 256)),
-    )
-    if args.use_ema and "ema_state_dict" in ckpt:
-        model.load_state_dict(ckpt["ema_state_dict"], strict=False)
-    else:
-        model.load_state_dict(ckpt["state_dict"], strict=True)
+    model, cfg = load_vit_quality_checkpoint(args.ckpt, use_ema=args.use_ema)
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
 
