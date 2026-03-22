@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="SDX Codebase Atlas — architecture map for the Llunarstack/sdx diffusion transformer repo." />
+    <title>SDX · Codebase Atlas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#view-overview">Skip to content</a>
+
+    <div class="ambient" aria-hidden="true">
+      <div class="ambient__glow ambient__glow--cyan"></div>
+      <div class="ambient__glow ambient__glow--violet"></div>
+    </div>
+
+    <div class="app">
+      <nav class="nav-rail" aria-label="Primary">
+        <div class="nav-brand">
+          <span class="nav-brand__mark">◇</span>
+          <span class="nav-brand__text">SDX<br /><small>Atlas</small></span>
+        </div>
+        <button type="button" class="nav-item nav-item--active" data-view="overview" title="Overview">
+          <span class="nav-item__ico" aria-hidden="true">◎</span>
+          <span class="nav-item__lab">Overview</span>
+        </button>
+        <button type="button" class="nav-item" data-view="files" title="File explorer">
+          <span class="nav-item__ico" aria-hidden="true">▤</span>
+          <span class="nav-item__lab">Files</span>
+        </button>
+        <button type="button" class="nav-item" data-view="graph" title="Architecture graph">
+          <span class="nav-item__ico" aria-hidden="true">⎔</span>
+          <span class="nav-item__lab">Graph</span>
+        </button>
+        <button type="button" class="nav-item" data-view="pipeline" title="Pipelines &amp; training">
+          <span class="nav-item__ico" aria-hidden="true">↯</span>
+          <span class="nav-item__lab">Pipeline</span>
+        </button>
+        <a
+          class="nav-item nav-item--link"
+          href="https://github.com/Llunarstack/sdx"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Repository on GitHub"
+        >
+          <span class="nav-item__ico" aria-hidden="true">⎘</span>
+          <span class="nav-item__lab">GitHub</span>
+        </a>
+      </nav>
+
+      <div class="workspace">
+        <!-- Overview -->
+        <section id="view-overview" class="view view--active glass-panel" tabindex="-1">
+          <header class="view-hero">
+            <p class="eyebrow">Llunarstack/sdx · Diffusion transformers</p>
+            <h1>Codebase Atlas</h1>
+            <p class="lede">
+              A <strong>system map</strong> of the repo: how <strong>data → training → checkpoint → sampling</strong> connects for
+              both <strong>general image gen</strong> and <strong>book/comic</strong> workflows — same DiT core, two product lines.
+            </p>
+            <dl class="metrics" aria-label="Index statistics">
+              <div class="metric">
+                <dt>Indexed files</dt>
+                <dd id="stat-count">—</dd>
+              </div>
+              <div class="metric">
+                <dt>Import edges</dt>
+                <dd id="stat-edges">—</dd>
+              </div>
+              <div class="metric">
+                <dt>Generated</dt>
+                <dd><time id="gen-time">—</time></dd>
+              </div>
+            </dl>
+            <div class="hero-actions">
+              <button type="button" class="btn-primary" data-jump="files">Explore files</button>
+              <button type="button" class="btn-ghost" data-jump="graph">View graph</button>
+            </div>
+          </header>
+          <div class="overview-grid">
+            <article class="tile">
+              <h2>Dataset &amp; config</h2>
+              <p><code>data/</code>, <code>config/</code> — captions, JSONL, <code>TrainConfig</code>, and presets that shape what the model learns.</p>
+            </article>
+            <article class="tile tile--glow">
+              <h2>Model core</h2>
+              <p><code>models/</code>, <code>diffusion/</code> — DiT, attention, VP schedules, losses; training and inference both flow through here.</p>
+            </article>
+            <article class="tile">
+              <h2>Sampling &amp; pipelines</h2>
+              <p><code>sample.py</code> · <code>pipelines/image_gen/</code> · <code>pipelines/book_comic/</code> — prompt → image, including multi-page books.</p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Files -->
+        <section id="view-files" class="view glass-panel" hidden>
+          <header class="view-head">
+            <h2>Repository explorer</h2>
+            <p class="view-sub">Search, filter by area, and open the <strong>intelligence panel</strong> on any card.</p>
+          </header>
+
+          <div id="load-error" class="load-error" hidden>
+            <p>
+              <strong>No data loaded.</strong> Run <code>python scripts/tools/generate_codebase_site.py</code> to build
+              <code>data/files-inline.js</code>.
+            </p>
+          </div>
+
+          <div class="files-layout">
+            <nav class="mini-toc" id="toc-nav" aria-label="Jump to folder"></nav>
+            <div class="files-main">
+              <div class="controls" id="controls">
+                <div class="controls-row">
+                  <label class="field field-search">
+                    <span class="field-label">Search</span>
+                    <span class="search-wrap">
+                      <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                          d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Z"
+                          fill="currentColor"
+                          opacity=".45"
+                        />
+                        <path d="M15.2 15.2 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".45" />
+                      </svg>
+                      <input type="search" id="search" placeholder="Path, summary, tags, imports…" autocomplete="off" />
+                    </span>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Area</span>
+                    <select id="filter-top" class="select"></select>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Pipeline</span>
+                    <select id="filter-atlas" class="select">
+                      <option value="__all__">All layers</option>
+                      <option value="image_gen">Image gen</option>
+                      <option value="book_comic">Book / comic</option>
+                      <option value="training">Training</option>
+                      <option value="sampling">Sampling</option>
+                      <option value="shared_core">Shared core</option>
+                      <option value="vit_scorer">ViT scorer</option>
+                      <option value="dataset">Dataset</option>
+                      <option value="utilities">Utilities</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Role</span>
+                    <select id="filter-role" class="select">
+                      <option value="__all__">All roles</option>
+                      <option value="entrypoint">Entrypoints</option>
+                      <option value="model">models/</option>
+                      <option value="diffusion">diffusion/</option>
+                      <option value="vit">ViT/</option>
+                      <option value="config">config/</option>
+                      <option value="data">data/</option>
+                      <option value="util">utils/</option>
+                      <option value="test">tests/</option>
+                      <option value="tool">scripts/tools/</option>
+                      <option value="pipeline">pipelines/</option>
+                      <option value="native">native/</option>
+                      <option value="source">Other</option>
+                    </select>
+                  </label>
+                  <p class="result-count" id="stats" aria-live="polite"></p>
+                </div>
+                <p class="controls-hint"><kbd>/</kbd> focus search · Click a card (not links) to open the right panel</p>
+              </div>
+              <main id="main-content">
+                <div id="areas"></div>
+              </main>
+            </div>
+          </div>
+        </section>
+
+        <!-- Graph -->
+        <section id="view-graph" class="view glass-panel" hidden>
+          <header class="view-head">
+            <h2>Architecture graph</h2>
+            <p class="view-sub">Conceptual modules and data flow — edges reflect how SDX is organized (not every import).</p>
+          </header>
+          <div class="graph-wrap">
+            <svg class="arch-graph" viewBox="0 0 920 520" role="img" aria-label="SDX high-level architecture">
+              <defs>
+                <linearGradient id="edgeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="rgba(34,211,238,0.5)" />
+                  <stop offset="100%" stop-color="rgba(167,139,250,0.45)" />
+                </linearGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="2" result="b" />
+                  <feMerge>
+                    <feMergeNode in="b" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <!-- Edges -->
+              <path d="M 460 88 L 460 138" stroke="url(#edgeGrad)" stroke-width="2" fill="none" />
+              <path d="M 200 250 L 340 250" stroke="url(#edgeGrad)" stroke-width="1.5" fill="none" opacity="0.85" />
+              <path d="M 580 250 L 720 250" stroke="url(#edgeGrad)" stroke-width="1.5" fill="none" opacity="0.85" />
+              <path d="M 460 250 L 460 310" stroke="url(#edgeGrad)" stroke-width="2" fill="none" />
+              <path d="M 200 250 L 200 380" stroke="url(#edgeGrad)" stroke-width="1.2" fill="none" opacity="0.7" />
+              <path d="M 720 250 L 720 380" stroke="url(#edgeGrad)" stroke-width="1.2" fill="none" opacity="0.7" />
+              <path d="M 460 380 L 460 430" stroke="url(#edgeGrad)" stroke-width="2" fill="none" />
+              <path d="M 300 250 L 380 180" stroke="rgba(148,163,184,0.35)" stroke-width="1" fill="none" />
+              <path d="M 620 250 L 540 180" stroke="rgba(148,163,184,0.35)" stroke-width="1" fill="none" />
+
+              <!-- Nodes -->
+              <g class="graph-node graph-node--root" transform="translate(340, 40)">
+                <rect width="240" height="48" rx="10" />
+                <text x="120" y="30" text-anchor="middle">train.py · shared DiT stack</text>
+              </g>
+              <g class="graph-node graph-node--data" transform="translate(80, 210)">
+                <rect width="240" height="80" rx="12" />
+                <text x="120" y="32" text-anchor="middle" class="graph-node__title">data/</text>
+                <text x="120" y="54" text-anchor="middle" class="graph-node__sub">Dataset · captions · JSONL</text>
+              </g>
+              <g class="graph-node graph-node--core" transform="translate(340, 210)">
+                <rect width="240" height="100" rx="12" filter="url(#glow)" />
+                <text x="120" y="36" text-anchor="middle" class="graph-node__title">models/ + diffusion/</text>
+                <text x="120" y="58" text-anchor="middle" class="graph-node__sub">DiT · schedules · loss</text>
+                <text x="120" y="80" text-anchor="middle" class="graph-node__sub">attention.py · gaussian_diffusion.py</text>
+              </g>
+              <g class="graph-node graph-node--sample" transform="translate(600, 210)">
+                <rect width="240" height="80" rx="12" />
+                <text x="120" y="32" text-anchor="middle" class="graph-node__title">sample.py · inference</text>
+                <text x="120" y="54" text-anchor="middle" class="graph-node__sub">Prompt → latent → image</text>
+              </g>
+              <g class="graph-node graph-node--cfg" transform="translate(80, 360)">
+                <rect width="200" height="64" rx="10" />
+                <text x="100" y="30" text-anchor="middle" class="graph-node__title">config/</text>
+                <text x="100" y="48" text-anchor="middle" class="graph-node__sub">TrainConfig</text>
+              </g>
+              <g class="graph-node graph-node--util" transform="translate(640, 360)">
+                <rect width="200" height="64" rx="10" />
+                <text x="100" y="30" text-anchor="middle" class="graph-node__title">utils/</text>
+                <text x="100" y="48" text-anchor="middle" class="graph-node__sub">Encoders · checkpoints</text>
+              </g>
+              <g class="graph-node graph-node--pipe" transform="translate(340, 330)">
+                <rect width="240" height="72" rx="12" />
+                <text x="120" y="30" text-anchor="middle" class="graph-node__title">pipelines/</text>
+                <text x="120" y="52" text-anchor="middle" class="graph-node__sub">image_gen · book_comic</text>
+              </g>
+              <g class="graph-node graph-node--vit" transform="translate(340, 430)">
+                <rect width="240" height="56" rx="10" />
+                <text x="120" y="34" text-anchor="middle">ViT/ — QA &amp; ranking (separate from DiT)</text>
+              </g>
+            </svg>
+          </div>
+          <p class="graph-legend">
+            <span class="lg lg--cyan">Cyan path</span> training &amp; shared core ·
+            <span class="lg lg--violet">Violet path</span> sampling &amp; pipelines
+          </p>
+        </section>
+
+        <!-- Pipeline -->
+        <section id="view-pipeline" class="view glass-panel" hidden>
+          <header class="view-head">
+            <h2>Pipelines &amp; training</h2>
+            <p class="view-sub">Two ways to go from prompt to pixels; one training loop.</p>
+          </header>
+
+          <section class="pipeline-diagram" id="pipeline-map" aria-labelledby="pd-heading">
+            <h2 id="pd-heading" class="pd-title">From prompt to image</h2>
+            <p class="pd-intro">
+              SDX uses a <strong>single</strong> diffusion + DiT codebase. Train with <code>train.py</code>; generate with
+              <code>sample.py</code> or book scripts — same checkpoint family.
+            </p>
+            <div class="pd-flow">
+              <div class="pd-row pd-row--split">
+                <div class="pd-lane">
+                  <header class="pd-lane-head">
+                    <span class="pd-lane-badge pd-lane-badge--ig">Image gen</span>
+                    <span class="pd-lane-sub">General T2I</span>
+                  </header>
+                  <ol class="pd-steps">
+                    <li><span class="pd-step">Prompt / caption</span></li>
+                    <li class="pd-join">↓</li>
+                    <li><span class="pd-step">T5 · optional CLIP fusion</span></li>
+                    <li class="pd-join">↓</li>
+                    <li><span class="pd-step">DiT denoise → VAE decode</span></li>
+                  </ol>
+                  <p class="pd-lane-foot"><code>sample.py</code> · <code>pipelines/image_gen/</code></p>
+                </div>
+                <div class="pd-lane">
+                  <header class="pd-lane-head">
+                    <span class="pd-lane-badge pd-lane-badge--bk">Book / comic</span>
+                    <span class="pd-lane-sub">Multi-page</span>
+                  </header>
+                  <ol class="pd-steps">
+                    <li><span class="pd-step">Script + lexicon + layout</span></li>
+                    <li class="pd-join">↓</li>
+                    <li><span class="pd-step">Same stack per page</span></li>
+                    <li class="pd-join">↓</li>
+                    <li><span class="pd-step">pick-best · OCR · book output</span></li>
+                  </ol>
+                  <p class="pd-lane-foot"><code>pipelines/book_comic/scripts/generate_book.py</code></p>
+                </div>
+              </div>
+              <div class="pd-merge">
+                <p class="pd-merge-label">Shared</p>
+                <div class="pd-merge-chips">
+                  <span><code>config/</code></span>
+                  <span><code>data/</code></span>
+                  <span><code>diffusion/</code></span>
+                  <span><code>models/</code></span>
+                  <span><code>utils/</code></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="train-timeline" aria-label="Training pipeline order">
+            <h3 class="train-timeline__title">Training loop (execution order)</h3>
+            <ol class="train-timeline__track">
+              <li class="tt-step">
+                <span class="tt-step__n">1</span>
+                <span class="tt-step__body"><strong>Load data</strong><small>data/t2i_dataset.py · JSONL / folders</small></span>
+              </li>
+              <li class="tt-connector" aria-hidden="true">→</li>
+              <li class="tt-step">
+                <span class="tt-step__n">2</span>
+                <span class="tt-step__body"><strong>Encode text</strong><small>utils/text_encoder_bundle.py</small></span>
+              </li>
+              <li class="tt-connector" aria-hidden="true">→</li>
+              <li class="tt-step">
+                <span class="tt-step__n">3</span>
+                <span class="tt-step__body"><strong>Forward + noise</strong><small>diffusion/ · models/dit_text.py</small></span>
+              </li>
+              <li class="tt-connector" aria-hidden="true">→</li>
+              <li class="tt-step">
+                <span class="tt-step__n">4</span>
+                <span class="tt-step__body"><strong>Loss · backward</strong><small>timestep sampling · EMA</small></span>
+              </li>
+              <li class="tt-connector" aria-hidden="true">→</li>
+              <li class="tt-step">
+                <span class="tt-step__n">5</span>
+                <span class="tt-step__body"><strong>Checkpoint</strong><small>utils/checkpoint_manager.py → best.pt</small></span>
+              </li>
+            </ol>
+          </div>
+        </section>
+      </div>
+
+      <!-- Intelligence drawer -->
+      <aside id="intel-drawer" class="intel-drawer" aria-hidden="true" aria-labelledby="intel-title">
+        <div class="intel-drawer__head">
+          <h2 id="intel-title" class="intel-drawer__title">File</h2>
+          <button type="button" class="intel-close" id="intel-close" aria-label="Close panel">×</button>
+        </div>
+        <div id="intel-body" class="intel-body"></div>
+      </aside>
+      <div id="intel-scrim" class="intel-scrim" hidden aria-hidden="true"></div>
+
+      <footer class="app-footer">
+        <p>
+          <a href="https://github.com/Llunarstack/sdx">github.com/Llunarstack/sdx</a> · Regenerate:
+          <code>python scripts/tools/generate_codebase_site.py</code>
+        </p>
+      </footer>
+    </div>
+
+    <script src="data/files-inline.js"></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>

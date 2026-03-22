@@ -10,15 +10,17 @@ Use this page when you’re lost in the tree or deciding **where new code should
 sdx/
 ├── train.py, sample.py, inference.py   # Main T2I entry points (stay at root for imports & docs)
 ├── config/                             # TrainConfig, presets, domains
+│   └── reference/                      # canonical prompt catalogs & presets (shim *.py at config/ root)
 ├── data/                               # Datasets, caption pipeline
 ├── diffusion/                          # Gaussian diffusion, timestep sampling, cascaded scaffold
+│   └── losses/                         # timestep loss weights (shim loss_weighting at diffusion/ root)
 ├── models/                             # DiT, ControlNet, MoE, RAE bridge, multimodal scaffolds
 ├── utils/                              # Checkpoints, text encoders, quality, pick-best, …
 ├── training/                           # Enhanced trainer module (used by scripts below)
 ├── ViT/                                # Quality / adherence scoring (not the DiT generator)
 ├── pipelines/                          # image_gen vs book_comic docs + book workflow
 ├── scripts/                            # cli.py, download/, tools/, enhanced/, … (see scripts/README.md)
-├── tests/                              # pytest
+├── tests/                              # pytest (see tests/diffusion/ for diffusion unit tests)
 ├── examples/                           # Small usage examples
 ├── native/                             # Optional fast JSONL helpers (Rust, Go, …)
 ├── docs/                               # All markdown documentation
@@ -72,7 +74,8 @@ See **[scripts/README.md](../scripts/README.md)** and **[scripts/enhanced/README
 | You’re adding… | Put it in… |
 |----------------|------------|
 | New DiT block / attention | `models/` |
-| Loss or noise schedule tweak | `diffusion/` |
+| Loss or noise schedule tweak | `diffusion/` (schedules, or `diffusion/losses/` for weighting) |
+| New prompt lists / presets (not train hyperparams) | `config/reference/` |
 | Dataset field / collation | `data/` |
 | Training flag / config field | `config/train_config.py` + `get_dit_build_kwargs` |
 | Sampling or checkpoint behavior | `sample.py` / `utils/checkpoint_loading.py` |

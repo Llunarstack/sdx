@@ -10,6 +10,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from utils.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
+
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)
 
 
@@ -53,6 +55,7 @@ class ViTManifestDataset(Dataset):
       - caption (or text)
       - quality_label (optional; 0/1)
       - adherence_score (optional; float in [0, 1])
+      - num_ar_blocks / dit_num_ar_blocks / ar_blocks (optional; 0, 2, or 4 for DiT AR — see docs/AR.md)
     """
 
     def __init__(self, manifest_jsonl: str, image_root: str = "", image_size: int = 224):
@@ -95,11 +98,13 @@ class ViTManifestDataset(Dataset):
                     continue
                 q = row.get("quality_label", row.get("quality"))
                 a = row.get("adherence_score", row.get("prompt_adherence"))
+                ar_b = parse_num_ar_blocks_from_row(row)
                 sample = {
                     "image_path": str(p_res),
                     "caption": str(cap),
                     "quality_label": None if q is None else float(q),
                     "adherence_score": None if a is None else float(a),
+                    "num_ar_blocks": int(ar_b),
                 }
                 self.samples.append(sample)
 
@@ -114,10 +119,12 @@ class ViTManifestDataset(Dataset):
         tf = text_feature_vector(cap)
         quality_label = s["quality_label"]
         adherence_score = s["adherence_score"]
+        ar_vec = ar_conditioning_vector(int(s["num_ar_blocks"]), dtype=torch.float32)
         return {
             "image": x,
             "caption": cap,
             "text_features": tf,
+            "ar_conditioning": ar_vec,
             "quality_label": None if quality_label is None else torch.tensor(float(quality_label), dtype=torch.float32),
             "adherence_score": None
             if adherence_score is None
@@ -129,9 +136,11 @@ class ViTManifestDataset(Dataset):
 def collate_vit_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
     images = torch.stack([b["image"] for b in batch], dim=0)
     text_features = torch.stack([b["text_features"] for b in batch], dim=0)
+    ar_conditioning = torch.stack([b["ar_conditioning"] for b in batch], dim=0)
     out: Dict[str, object] = {
         "images": images,
         "text_features": text_features,
+        "ar_conditioning": ar_conditioning,
         "captions": [b["caption"] for b in batch],
         "image_paths": [b["image_path"] for b in batch],
     }

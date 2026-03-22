@@ -81,3 +81,16 @@ Start with **0** or **2**; only try **4** if you’re aiming for a very ordered 
 ## Technical note: square latent grid
 
 The AR mask is built for a **square** patch grid (e.g. 32×32 patches for 256×256 image with patch_size=2). Non-square latent sizes would require passing separate `h` and `w` into the mask builder; the current DiT path uses `p = sqrt(num_patches)` so both dimensions are equal.
+
+---
+
+## ViT scorer alignment (DiT AR ↔ quality / adherence)
+
+The **`ViT/`** module scores finished images. If your **generator** was trained with `num_ar_blocks` 0, 2, or 4, failure modes differ slightly from full bidirectional DiT. To keep ViT scores **calibrated** to the layout the image came from:
+
+1. **Training ViT** (`ViT/train.py`): **AR conditioning is on by default**. Put the same regime on each JSONL row the model should learn:
+   - **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`** — integer **`0`**, **`2`**, or **`4`**. Missing or invalid → **unknown** bucket (4th one-hot).
+2. **Older ViT checkpoints** (no `use_ar_conditioning` in saved config) load as **text-only** (8-D caption features only). Use **`--no-ar-conditioning`** when training if you need weights compatible with that layout, or retrain with AR fields in the manifest.
+3. **Inference** (`ViT/infer.py`, `ViT/export_embeddings.py`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` is read and fused with caption features. Omitted → unknown.
+
+Bridge code: **`utils/ar_dit_vit.py`** (`ar_conditioning_vector`, `parse_num_ar_blocks_from_row`, `batch_ar_conditioning`).

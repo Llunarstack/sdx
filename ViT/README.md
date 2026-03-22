@@ -38,6 +38,9 @@ Optional labels (for supervised training):
 - `quality_label` (or `quality`) in `{0,1}`
 - `adherence_score` (or `prompt_adherence`) in `[0,1]`
 
+**DiT block-AR alignment** (recommended when images come from AR-trained DiT): set one of
+`num_ar_blocks`, `dit_num_ar_blocks`, or `ar_blocks` to **`0`**, **`2`**, or **`4`** (same meaning as root `train.py --num-ar-blocks`). Missing → **unknown** regime. By default the ViT fuses a 4-D one-hot with caption features; use **`--no-ar-conditioning`** to match old checkpoints that only use 8-D text features. See **`docs/AR.md`** § ViT scorer alignment and **`utils/ar_dit_vit.py`**.
+
 ## Train
 
 ```bash

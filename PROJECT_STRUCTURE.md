@@ -6,7 +6,7 @@
 > python scripts/tools/update_project_structure.py
 > ```
 >
-> Generated: **2026-03-21 17:50:42 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-03-22 03:06:00 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -16,10 +16,17 @@
 sdx/
 ├── checkpoints/
 ├── config/
+│   ├── reference/
+│   │   ├── __init__.py
+│   │   ├── model_presets.py
+│   │   ├── pixai_reference.py
+│   │   ├── prompt_domains.py
+│   │   └── style_artists.py
 │   ├── __init__.py
 │   ├── model_presets.py
 │   ├── pixai_reference.py
 │   ├── prompt_domains.py
+│   ├── README.md
 │   ├── style_artists.py
 │   └── train_config.py
 ├── configs/
@@ -37,12 +44,20 @@ sdx/
 │   ├── enhanced_dataset.py
 │   └── t2i_dataset.py
 ├── diffusion/
+│   ├── losses/
+│   │   ├── __init__.py
+│   │   ├── loss_weighting.py
+│   │   └── timestep_loss_weight.py
 │   ├── __init__.py
 │   ├── cascaded_multimodal_pipeline.py
 │   ├── gaussian_diffusion.py
 │   ├── loss_weighting.py
+│   ├── README.md
 │   ├── respace.py
 │   ├── sampling_utils.py
+│   ├── schedules.py
+│   ├── snr_utils.py
+│   ├── timestep_loss_weight.py
 │   └── timestep_sampling.py
 ├── docs/
 │   ├── api/
@@ -253,6 +268,10 @@ sdx/
 │   ├── cli.py
 │   └── README.md
 ├── tests/
+│   ├── diffusion/
+│   │   ├── test_schedules.py
+│   │   ├── test_timestep_loss_weight.py
+│   │   └── test_timestep_sampling.py
 │   ├── fixtures/
 │   ├── integration/
 │   ├── unit/
@@ -276,7 +295,6 @@ sdx/
 │   ├── test_region_captions.py
 │   ├── test_style_harmonization.py
 │   ├── test_text_encoder_fusion.py
-│   ├── test_timestep_sampling.py
 │   ├── test_update_project_structure.py
 │   ├── test_vit_advanced_utils.py
 │   ├── test_vit_backbone_presets.py

@@ -24,8 +24,10 @@ def _resolve_path(image_path: str, manifest_path: Path) -> Path:
 
 
 def main() -> int:
+    from utils.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
+
+    from ViT.checkpoint_utils import load_vit_quality_checkpoint
     from ViT.dataset import text_feature_vector
-    from ViT.model import build_vit_model
 
     p = argparse.ArgumentParser(description="Export ViT fused embeddings to .npz for retrieval/reranking")
     p.add_argument("--ckpt", required=True)
@@ -34,15 +36,8 @@ def main() -> int:
     p.add_argument("--device", default="cuda")
     args = p.parse_args()
 
-    ckpt = torch.load(args.ckpt, map_location="cpu", weights_only=False)
-    cfg = ckpt.get("config", {})
-    model = build_vit_model(
-        model_name=cfg.get("model_name", "vit_base_patch16_224"),
-        pretrained=False,
-        text_feat_dim=int(cfg.get("text_feat_dim", 8)),
-        hidden_dim=int(cfg.get("hidden_dim", 256)),
-    )
-    model.load_state_dict(ckpt["state_dict"], strict=True)
+    model, cfg = load_vit_quality_checkpoint(args.ckpt, use_ema=False)
+    use_ar = bool(cfg.get("use_ar_conditioning", False))
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
 
@@ -81,8 +76,12 @@ def main() -> int:
 
             x = tfm(img).unsqueeze(0).to(device)
             txt = text_feature_vector(str(caption)).unsqueeze(0).to(device)
+            ar_b = parse_num_ar_blocks_from_row(row)
+            ar_vec = (
+                ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0) if use_ar else None
+            )
             with torch.no_grad():
-                out = model(x, txt)
+                out = model(x, txt, ar_vec)
                 emb = out["embedding"].squeeze(0).detach().cpu().numpy()
             vecs.append(emb.astype(np.float32))
             paths.append(str(p_img))

@@ -62,6 +62,8 @@ Tools stay **flat** under this folder so `python -m scripts.tools.quick_test` an
 | Script | Purpose |
 |--------|---------|
 | **`update_project_structure.py`** | Write **`PROJECT_STRUCTURE.md`** at repo root (ASCII tree; run after moves). `python scripts/tools/update_project_structure.py --help` |
+| **`generate_codebase_site.py`** | Build **`website/files.json`** + **`website/data/files-inline.js`** for the **[Codebase Atlas](../../website/)**: docstrings, **Python import edges**, **`atlas_summary` / `atlas_tags`** (image gen vs book vs training) via **`atlas_pipeline_meta.py`**. Excludes `docs/`, `external/`, `model/`, caches. |
+| **`atlas_pipeline_meta.py`** | Imported by `generate_codebase_site.py`: tags + curated blurbs per file for the Atlas pipeline diagram. |
 | **`verify_doc_links.py`** | Check relative `[]()` links in README, `docs/`, `pipelines/`, `ViT/`, `scripts/**/*.md` — `python scripts/tools/verify_doc_links.py` (exit 1 if broken). |
 
 ## See also

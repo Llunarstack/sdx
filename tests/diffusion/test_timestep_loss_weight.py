@@ -1,9 +1,8 @@
-"""Tests for diffusion/timestep_loss_weight.py."""
+"""Tests for ``diffusion/losses/timestep_loss_weight.py`` (shim: ``diffusion/timestep_loss_weight``)."""
 
 from __future__ import annotations
 
 import torch
-
 from diffusion.timestep_loss_weight import get_timestep_loss_weight
 
 

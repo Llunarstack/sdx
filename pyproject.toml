@@ -10,7 +10,19 @@ license = { text = "Apache-2.0" }
 [tool.ruff]
 target-version = "py38"
 line-length = 120
-src = ["config", "data", "diffusion", "examples", "models", "pipelines", "scripts", "tests", "training", "utils", "ViT"]
+src = [
+  "config",
+  "data",
+  "diffusion",
+  "examples",
+  "models",
+  "pipelines",
+  "scripts",
+  "tests",
+  "training",
+  "utils",
+  "ViT",
+]
 # Optional parallel tree / vendored experiments — not part of default CI; keeps `ruff check .` green.
 exclude = ["enhanced_dit", "external", "model", ".git"]
 

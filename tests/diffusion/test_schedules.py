@@ -1,10 +1,9 @@
-"""Tests for diffusion/schedules.py."""
+"""Tests for ``diffusion/schedules.py`` (see ``tests/diffusion/``)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from diffusion.schedules import (
     cosine_beta_schedule,
     get_beta_schedule,

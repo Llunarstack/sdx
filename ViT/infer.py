@@ -23,6 +23,8 @@ def _resolve_path(image_path: str, manifest_path: Path) -> Path:
 
 
 def main() -> int:
+    from utils.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
+
     from ViT.checkpoint_utils import load_vit_quality_checkpoint
     from ViT.dataset import text_feature_vector
     from ViT.tta import tta_predict
@@ -37,6 +39,7 @@ def main() -> int:
     args = p.parse_args()
 
     model, cfg = load_vit_quality_checkpoint(args.ckpt, use_ema=args.use_ema)
+    use_ar = bool(cfg.get("use_ar_conditioning", False))
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
 
@@ -77,8 +80,17 @@ def main() -> int:
 
             x = tfm(img).unsqueeze(0).to(device)
             txt = text_feature_vector(str(caption)).unsqueeze(0).to(device)
+            ar_b = parse_num_ar_blocks_from_row(row)
+            ar_vec = (
+                ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0)
+                if use_ar
+                else None
+            )
             with torch.no_grad():
-                out = tta_predict(model, x, txt) if args.tta else model(x, txt)
+                if args.tta:
+                    out = tta_predict(model, x, txt, ar_vec)
+                else:
+                    out = model(x, txt, ar_vec)
                 quality_prob = torch.sigmoid(out["quality_logit"]).item()
                 adherence = out["adherence_score"].item()
 
