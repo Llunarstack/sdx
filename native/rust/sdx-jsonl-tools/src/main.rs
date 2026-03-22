@@ -3,7 +3,7 @@
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::collections::{HashMap, HashSet};
 
@@ -44,6 +44,24 @@ enum SubCmd {
         top_overlap_tokens: usize,
         #[arg(long, default_value_t = false)]
         fail_on_overlap: bool,
+    },
+    /// Print one image path per line (`image_path` / `path` / `image`) for pipeline / shell use.
+    ImagePaths {
+        #[arg(value_name = "FILE")]
+        path: PathBuf,
+        /// Emit a path for every JSON row (duplicates allowed). Default: unique paths only.
+        #[arg(long, default_value_t = false)]
+        all_rows: bool,
+        /// Sort lexicographically before printing (stable for diffs).
+        #[arg(long, default_value_t = false)]
+        sort: bool,
+    },
+    /// Print duplicate image paths (count > 1) — useful before dataset dedup.
+    DupImagePaths {
+        #[arg(value_name = "FILE")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 20)]
+        top: usize,
     },
 }
 
@@ -285,6 +303,69 @@ fn cmd_stats(path: &PathBuf) -> io::Result<i32> {
     Ok(0)
 }
 
+fn cmd_image_paths(path: &PathBuf, all_rows: bool, sort: bool) -> io::Result<i32> {
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for line in read_lines(path)? {
+        let line = line?;
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let v: Value = match serde_json::from_str(t) {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
+        let Some(img) = image_key(&v) else {
+            continue;
+        };
+        if all_rows {
+            out.push(img);
+        } else if seen.insert(img.clone()) {
+            out.push(img);
+        }
+    }
+    if sort {
+        out.sort();
+    }
+    let stdout = io::stdout();
+    let mut w = io::BufWriter::new(stdout.lock());
+    for p in out {
+        writeln!(w, "{p}")?;
+    }
+    Ok(0)
+}
+
+fn cmd_dup_image_paths(path: &PathBuf, top: usize) -> io::Result<i32> {
+    let mut counts: HashMap<String, u64> = HashMap::new();
+    for line in read_lines(path)? {
+        let line = line?;
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let v: Value = match serde_json::from_str(t) {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
+        let Some(img) = image_key(&v) else {
+            continue;
+        };
+        *counts.entry(img).or_insert(0) += 1;
+    }
+    let mut dups: Vec<(String, u64)> = counts.into_iter().filter(|(_, c)| *c > 1).collect();
+    dups.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    if top > 0 && dups.len() > top {
+        dups.truncate(top);
+    }
+    println!("dup_image_paths: file {}", path.display());
+    println!("duplicate_distinct_paths: {}", dups.len());
+    for (p, c) in dups {
+        println!("{c}\t{p}");
+    }
+    Ok(0)
+}
+
 fn cmd_validate(path: &PathBuf, min_cap: usize, max_cap: usize) -> io::Result<i32> {
     let mut bad = 0u64;
     for line in read_lines(path)? {
@@ -357,6 +438,18 @@ fn main() {
         )
         .unwrap_or_else(|e| {
             eprintln!("promptlint: {e}");
+            2
+        }),
+        SubCmd::ImagePaths {
+            path,
+            all_rows,
+            sort,
+        } => cmd_image_paths(&path, all_rows, sort).unwrap_or_else(|e| {
+            eprintln!("image-paths: {e}");
+            2
+        }),
+        SubCmd::DupImagePaths { path, top } => cmd_dup_image_paths(&path, top).unwrap_or_else(|e| {
+            eprintln!("dup-image-paths: {e}");
             2
         }),
     };

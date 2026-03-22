@@ -2,6 +2,7 @@
 
 from .latent_geometry import (
     dit_patch_size_from_variant_name,
+    latent_numel,
     latent_spatial_size,
     num_patch_tokens,
     patch_grid_dim,
@@ -9,6 +10,7 @@ from .latent_geometry import (
 
 __all__ = [
     "dit_patch_size_from_variant_name",
+    "latent_numel",
     "latent_spatial_size",
     "num_patch_tokens",
     "patch_grid_dim",
