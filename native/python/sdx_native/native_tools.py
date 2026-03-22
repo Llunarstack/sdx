@@ -1,0 +1,292 @@
+"""
+Optional ``native/`` helpers: discover built CLIs, run JSONL tools, FNV fingerprints,
+ctypes access to ``libsdx_latent``, and pure-Python fallbacks.
+
+Nothing here is required for ``train.py`` / ``sample.py``; failures degrade gracefully.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import json
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from sdx_native.latent_geometry import latent_spatial_size as py_latent_spatial_size
+from sdx_native.latent_geometry import num_patch_tokens as py_num_patch_tokens
+from sdx_native.latent_geometry import patch_grid_dim as py_patch_grid_dim
+
+# Repo root: native/python/sdx_native/native_tools.py -> parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _release_dir(name: str) -> Path:
+    return REPO_ROOT / "native" / name
+
+
+def rust_jsonl_tools_exe() -> Optional[Path]:
+    """``sdx-jsonl-tools`` release binary if ``cargo build --release`` was run."""
+    base = _release_dir("rust/sdx-jsonl-tools/target/release")
+    for n in ("sdx-jsonl-tools.exe", "sdx-jsonl-tools"):
+        p = base / n
+        if p.is_file():
+            return p
+    return None
+
+
+def zig_linecrc_exe() -> Optional[Path]:
+    """Zig ``sdx-linecrc`` if ``zig build`` was run."""
+    base = _release_dir("zig/sdx-linecrc/zig-out/bin")
+    for n in ("sdx-linecrc.exe", "sdx-linecrc"):
+        p = base / n
+        if p.is_file():
+            return p
+    return None
+
+
+def go_sdx_manifest_exe() -> Optional[Path]:
+    """Go merge helper if built next to source."""
+    d = _release_dir("go/sdx-manifest")
+    for n in ("sdx-manifest.exe", "sdx-manifest"):
+        p = d / n
+        if p.is_file():
+            return p
+    return None
+
+
+def node_script(name: str) -> Optional[Path]:
+    p = REPO_ROOT / "native" / "js" / name
+    return p if p.is_file() else None
+
+
+def latent_shared_library_path() -> Optional[Path]:
+    """First matching ``libsdx_latent`` build artifact."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_latent.dll",
+        cpp / "Debug" / "sdx_latent.dll",
+        cpp / "libsdx_latent.so",
+        cpp / "libsdx_latent.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def run_rust_jsonl_stats(manifest: Path, *, timeout: float = 600) -> subprocess.CompletedProcess[str]:
+    exe = rust_jsonl_tools_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-jsonl-tools not built (cargo build --release in native/rust/sdx-jsonl-tools)")
+    return subprocess.run(
+        [str(exe), "stats", str(manifest)],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def run_rust_jsonl_validate(
+    manifest: Path,
+    *,
+    min_caption_len: int = 0,
+    max_caption_len: int = 0,
+    timeout: float = 600,
+) -> subprocess.CompletedProcess[str]:
+    exe = rust_jsonl_tools_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-jsonl-tools not built")
+    return subprocess.run(
+        [
+            str(exe),
+            "validate",
+            str(manifest),
+            "--min-caption-len",
+            str(min_caption_len),
+            "--max-caption-len",
+            str(max_caption_len),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def run_zig_linecrc_file(manifest: Path, *, timeout: float = 600) -> subprocess.CompletedProcess[str]:
+    exe = zig_linecrc_exe()
+    if not exe:
+        raise FileNotFoundError("Zig sdx-linecrc not built")
+    return subprocess.run(
+        [str(exe), "--file", str(manifest)],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+# FNV-1a 64 — matches ``native/zig/sdx-linecrc`` **file** mode (raw bytes, chunk-wise).
+_FNV_OFFSET = 146959810393466560
+_FNV_PRIME = 1099511628211
+
+
+def fnv1a64_bytes(data: bytes) -> int:
+    h = _FNV_OFFSET
+    for b in data:
+        h ^= b
+        h = (h * _FNV_PRIME) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def fnv1a64_file(path: Path, chunk: int = 65536) -> Tuple[int, int, int]:
+    """
+    Same fingerprint as ``sdx-linecrc --file`` (streaming over file bytes).
+
+    Returns ``(hash_u64, line_count, byte_count)``.
+    """
+    h = _FNV_OFFSET
+    line_count = 0
+    byte_count = 0
+    with path.open("rb") as f:
+        while True:
+            buf = f.read(chunk)
+            if not buf:
+                break
+            byte_count += len(buf)
+            line_count += buf.count(b"\n")
+            for b in buf:
+                h ^= b
+                h = (h * _FNV_PRIME) & 0xFFFFFFFFFFFFFFFF
+    return h, line_count, byte_count
+
+
+def manifest_fingerprint_line(path: Path) -> str:
+    """
+    Human-readable fingerprint; uses Zig if built, else Python FNV (same **file** mode).
+    """
+    zig = zig_linecrc_exe()
+    if zig:
+        try:
+            r = run_zig_linecrc_file(path, timeout=600)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+    h, lines, nbytes = fnv1a64_file(path)
+    return f"fnv1a64={h:x} lines={lines} bytes={nbytes}"
+
+
+class LatentLib:
+    """ctypes wrapper for ``libsdx_latent`` with Python fallbacks."""
+
+    def __init__(self) -> None:
+        self._dll: Any = None
+        p = latent_shared_library_path()
+        if p is None:
+            return
+        try:
+            dll = ctypes.CDLL(str(p))
+            dll.sdx_latent_spatial_size.argtypes = (ctypes.c_int, ctypes.c_int)
+            dll.sdx_latent_spatial_size.restype = ctypes.c_int
+            dll.sdx_patch_grid_dim.argtypes = (ctypes.c_int, ctypes.c_int)
+            dll.sdx_patch_grid_dim.restype = ctypes.c_int
+            dll.sdx_num_patch_tokens.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
+            dll.sdx_num_patch_tokens.restype = ctypes.c_int
+            dll.sdx_latent_hw.argtypes = (ctypes.c_int, ctypes.c_int)
+            dll.sdx_latent_hw.restype = ctypes.c_int
+            self._dll = dll
+        except OSError:
+            self._dll = None
+
+    @property
+    def available(self) -> bool:
+        return self._dll is not None
+
+    def num_patch_tokens(self, image_hw: int, vae_scale: int, patch_size: int) -> int:
+        if self._dll is not None:
+            return int(self._dll.sdx_num_patch_tokens(int(image_hw), int(vae_scale), int(patch_size)))
+        return py_num_patch_tokens(image_hw, vae_scale, patch_size)
+
+    def latent_spatial_size(self, image_hw: int, vae_scale: int) -> int:
+        if self._dll is not None:
+            return int(self._dll.sdx_latent_spatial_size(int(image_hw), int(vae_scale)))
+        return py_latent_spatial_size(image_hw, vae_scale)
+
+    def patch_grid_dim(self, latent_hw: int, patch_size: int) -> int:
+        if self._dll is not None:
+            return int(self._dll.sdx_patch_grid_dim(int(latent_hw), int(patch_size)))
+        return py_patch_grid_dim(latent_hw, patch_size)
+
+
+_LATENT_SINGLETON: Optional[LatentLib] = None
+
+
+def get_latent_lib() -> LatentLib:
+    global _LATENT_SINGLETON
+    if _LATENT_SINGLETON is None:
+        _LATENT_SINGLETON = LatentLib()
+    return _LATENT_SINGLETON
+
+
+def merge_jsonl_files(
+    inputs: List[Path],
+    output: Path,
+    *,
+    dedupe_key: str = "image_path",
+    prefer_go: bool = True,
+) -> None:
+    """
+    Merge JSONL files; first row wins per ``dedupe_key``. Prefers Go binary if present.
+    """
+    out = output
+    go = go_sdx_manifest_exe() if prefer_go else None
+    if go is not None:
+        cmd = [str(go), "merge", "-o", str(out), "--dedupe-key", dedupe_key]
+        cmd.extend(str(p) for p in inputs)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        if r.returncode != 0:
+            raise RuntimeError(r.stderr or r.stdout or "go merge failed")
+        return
+
+    seen: set[str] = set()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as fout:
+        for inp in inputs:
+            with inp.open("r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    key = None
+                    if dedupe_key in obj:
+                        key = str(obj[dedupe_key])
+                    else:
+                        for alt in ("path", "image", "image_path"):
+                            if alt in obj:
+                                key = str(obj[alt])
+                                break
+                    if key is None:
+                        continue
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+
+def native_stack_status() -> Dict[str, Any]:
+    """Summary for diagnostics (e.g. ``quick_test --show-native``)."""
+    return {
+        "repo_root": str(REPO_ROOT),
+        "rust_sdx_jsonl_tools": str(rust_jsonl_tools_exe() or ""),
+        "zig_sdx_linecrc": str(zig_linecrc_exe() or ""),
+        "go_sdx_manifest": str(go_sdx_manifest_exe() or ""),
+        "node": shutil.which("node") or "",
+        "native_js_sdx_jsonl_stat": str(node_script("sdx-jsonl-stat.mjs") or ""),
+        "libsdx_latent": str(latent_shared_library_path() or ""),
+        "latent_lib_ctypes": get_latent_lib().available,
+    }
