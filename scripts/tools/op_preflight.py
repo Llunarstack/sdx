@@ -62,6 +62,11 @@ def main() -> None:
     ap.add_argument(
         "--min-concept-bleed", type=float, default=0.02, help="Fail if concept-bleed tag coverage < this fraction"
     )
+    ap.add_argument(
+        "--native-manifest-check",
+        action="store_true",
+        help="Before Python coverage: run Rust sdx-jsonl-tools `stats` if built (fast JSON/caption sanity).",
+    )
     args = ap.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -82,6 +87,22 @@ def main() -> None:
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():
         raise SystemExit(f"Not found: {manifest_path}")
+
+    if args.native_manifest_check:
+        try:
+            from utils.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats
+
+            exe = rust_jsonl_tools_exe()
+            if exe:
+                r = run_rust_jsonl_stats(manifest_path)
+                print("[native] sdx-jsonl-tools stats:", file=sys.stderr)
+                print(r.stdout, file=sys.stderr, end="")
+                if r.stderr:
+                    print(r.stderr, file=sys.stderr, end="")
+            else:
+                print("[native] Rust sdx-jsonl-tools not built — skipping stats.", file=sys.stderr)
+        except Exception as e:
+            print(f"[native] stats skipped: {e}", file=sys.stderr)
 
     hard_terms = HARD_STYLE_TAGS_FLAT
     person_terms = list(SUBJECT_PREFIXES) + list(AGE_TAGS) + list(HEIGHT_TAGS) + list(BUILD_BODY_TAGS)

@@ -8,8 +8,8 @@ import sys
 import traceback
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Add project root to path (this file lives in tests/integration/)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # Import all required modules
 from utils.advanced_prompting import create_advanced_prompting_system  # noqa: E402

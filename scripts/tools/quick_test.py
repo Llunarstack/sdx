@@ -11,6 +11,22 @@ sys.path.insert(0, str(ROOT))
 
 
 def main():
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Smoke test: one DiT forward pass.")
+    ap.add_argument(
+        "--show-native",
+        action="store_true",
+        help="Print optional native/ tool discovery (Rust, Zig, Go, Node, libsdx_latent) and exit 0.",
+    )
+    args, _unknown = ap.parse_known_args()
+    if args.show_native:
+        from utils.native_tools import native_stack_status
+        import json as _json
+
+        print(_json.dumps(native_stack_status(), indent=2))
+        return 0
+
     # Suppress xformers/Triton noise on Windows (Triton not available there)
     with open(os.devnull, "w") as devnull:
         with redirect_stderr(devnull):

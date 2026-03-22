@@ -60,10 +60,12 @@
 
 ### Latest additions
 
-Recent documentation and tooling (ViT–DiT AR bridge, config/diffusion layout):
+Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion layout):
 
 | Area | What |
 | :--- | :--- |
+| **Native + Python bridge** | **[`native/python/sdx_native/`](native/python/sdx_native/)** — `latent_geometry` + **`native_tools`** (discover Rust/Zig/Go/Node CLIs, FNV manifest fingerprints, JSONL merge, ctypes **`libsdx_latent`**). **[`utils/native_tools.py`](utils/native_tools.py)** / **[`utils/latent_geometry.py`](utils/latent_geometry.py)** re-export for stable imports. Wired: [`scripts/tools/data_quality.py`](scripts/tools/data_quality.py) (`--native-preflight`, `--native-stats`, `--native-validate`), [`scripts/tools/op_preflight.py`](scripts/tools/op_preflight.py) (`--native-manifest-check`), [`scripts/tools/dit_variant_compare.py`](scripts/tools/dit_variant_compare.py) (patch tokens + `--vae-scale`), [`scripts/tools/jsonl_merge.py`](scripts/tools/jsonl_merge.py), [`scripts/tools/quick_test.py`](scripts/tools/quick_test.py) (`--show-native`). Per-language notes: [native/README.md](native/README.md), [native/python/README.md](native/python/README.md). Pytest **`pythonpath`** includes `native/python` ([`pyproject.toml`](pyproject.toml)). |
+| **Tests layout** | [`tests/unit/`](tests/unit/) (e.g. latent/native-tool tests), [`tests/integration/`](tests/integration/) (e.g. advanced feature smoke), [`tests/diffusion/`](tests/diffusion/), [`tests/fixtures/`](tests/fixtures/). |
 | **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
 | **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
 | **Diffusion layout** | Timestep loss modules under [`diffusion/losses/`](diffusion/losses/) with stable re-exports at the package root — [diffusion/README.md](diffusion/README.md). Related tests: [`tests/diffusion/`](tests/diffusion/). |
@@ -239,7 +241,7 @@ See **[pipelines/README.md](pipelines/README.md)** · [image_gen](pipelines/imag
 | **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator); **[ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md)** (research + checklist), **[ViT/backbone_presets.py](ViT/backbone_presets.py)** (`timm` names for `--model-name`) | CLI, optional dataset QA |
 | **`scripts/`** | Downloads, tools, Cascade stub | Ops & CI |
 | **`pipelines/`** | **image_gen** vs **book_comic** docs + book workflow script (no second DiT copy) | Contributors, multi-page / OCR workflows |
-| **`native/`** | Fast JSONL helpers (Rust, Go, …) | Optional; not imported by training by default |
+| **`native/`** | Fast JSONL / line-FNV / merge CLIs; C++ ``libsdx_latent`` | Optional; **Python bridge** in [`native/python/sdx_native/`](native/python/sdx_native/) (also re-exported as [`utils/native_tools.py`](utils/native_tools.py) / [`utils/latent_geometry.py`](utils/latent_geometry.py)); dataset QA only — not required in `train.py` |
 | **`model/`** | Downloaded HF weights | Paths via `utils/model_paths.py` |
 
 Full index → **[docs/FILES.md](docs/FILES.md)** · **Training-only map (DiT + ViT)** → [Training files reference](#training-files-reference-what-each-part-does)
@@ -508,7 +510,7 @@ Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `
 | **HF gated models** | Copy `.env.example` → `.env`, set `HF_TOKEN` |
 | **Download weights** (T5, VAE, optional CLIP/LLM) | `python scripts/download/download_models.py --all` → `model/` |
 | **Curated stack** (T5 + CLIP + DINOv2 + Qwen + Cascade, optional) | `python scripts/download/download_revolutionary_stack.py` — see [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
-| **Optional native tools** (Rust/Zig/C++/Go/Node) | [native/README.md](native/README.md) |
+| **Optional native tools** (Rust/Zig/C++/Go/Node + Python `sdx_native`) | [native/README.md](native/README.md) · [native/python/README.md](native/python/README.md) |
 
 **Clone reference repos** (optional, for reading upstream code):
 
@@ -979,8 +981,9 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | Dry run | `--dry-run` |
 | Log samples | `--log-images-every`, `--log-images-prompt` |
 | Data quality script | `scripts/tools/data_quality.py` |
+| Native JSONL QA (optional Rust build) | `data_quality.py` `--native-preflight` / `--native-stats` / `--native-validate`; `op_preflight.py` `--native-manifest-check`; `jsonl_merge.py`; `quick_test.py` `--show-native` — [native/README.md](native/README.md) |
 | Timestep sampling preview | `scripts/tools/training_timestep_preview.py` (compare `--timestep-sample-mode` distributions) |
-| DiT size compare | `scripts/tools/dit_variant_compare.py` (params / GiB per variant) |
+| DiT size compare | `scripts/tools/dit_variant_compare.py` (params / GiB / patch tokens; `--vae-scale`) |
 | ViT checkpoint inspect | `scripts/tools/vit_inspect.py` (config + optional module tree) |
 | ViT QA training | `python ViT/train.py --manifest-jsonl …` — **`--model-name`** timm backbone ([ViT/backbone_presets.py](ViT/backbone_presets.py)); **`python ViT/train.py --help`** lists suggestions |
 | ViT vs DiT (docs) | [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
@@ -1036,7 +1039,8 @@ sdx/
 ├── model/            # Downloaded weights (gitignored)
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
 ├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking; EXCELLENCE_VS_DIT.md, backbone_presets.py
-├── native/           # Optional Rust/Zig/C++/Go helpers
+├── native/           # Rust/Zig/C++/Go/Node CLIs + native/python/sdx_native (Python bridge); native/README.md
+├── tests/            # pytest: unit/ integration/ diffusion/ fixtures/ (see tests/unit/README.md)
 ├── scripts/          # see scripts/README.md
 │   ├── cli.py        # optional unified CLI (dataset, config, checkpoints)
 │   ├── setup/        # clone external refs

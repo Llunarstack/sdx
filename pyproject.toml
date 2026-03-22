@@ -16,6 +16,7 @@ src = [
   "diffusion",
   "examples",
   "models",
+  "native/python",
   "pipelines",
   "scripts",
   "tests",
@@ -39,6 +40,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
+"utils/latent_geometry.py" = ["E402", "F403"]
+"utils/native_tools.py" = ["E402", "F403"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -47,6 +50,7 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+pythonpath = [".", "native/python"]
 addopts = "-q"
 filterwarnings = [
   "ignore::DeprecationWarning",

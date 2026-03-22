@@ -6,7 +6,7 @@
 > python scripts/tools/update_project_structure.py
 > ```
 >
-> Generated: **2026-03-22 04:33:27 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-03-22 04:54:00 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -174,18 +174,25 @@ sdx/
 │   │   │       └── latent.h
 │   │   ├── src/
 │   │   │   └── sdx_latent.cpp
-│   │   └── CMakeLists.txt
+│   │   ├── CMakeLists.txt
+│   │   └── README.md
 │   ├── go/
-│   │   └── sdx-manifest/
-│   │       ├── go.mod
-│   │       └── main.go
+│   │   ├── sdx-manifest/
+│   │   │   ├── go.mod
+│   │   │   └── main.go
+│   │   └── README.md
 │   ├── js/
+│   │   ├── README.md
 │   │   ├── sdx-jsonl-stat.mjs
 │   │   └── sdx-promptlint.mjs
+│   ├── python/
+│   │   ├── sdx_native/
+│   │   │   ├── __init__.py
+│   │   │   ├── latent_geometry.py
+│   │   │   └── native_tools.py
+│   │   └── README.md
 │   ├── rust/
 │   │   └── sdx-jsonl-tools/
-│   │       ├── consistency_data/
-│   │       │   └── references/
 │   │       ├── src/
 │   │       │   └── main.rs
 │   │       ├── target/
@@ -193,12 +200,14 @@ sdx/
 │   │       │   ├── release/
 │   │       │   └── CACHEDIR.TAG
 │   │       ├── Cargo.lock
-│   │       └── Cargo.toml
+│   │       ├── Cargo.toml
+│   │       └── README.md
 │   ├── zig/
 │   │   └── sdx-linecrc/
 │   │       ├── src/
 │   │       │   └── main.zig
-│   │       └── build.zig
+│   │       ├── build.zig
+│   │       └── README.md
 │   └── README.md
 ├── pipelines/
 │   ├── book_comic/
@@ -242,6 +251,7 @@ sdx/
 │   │   ├── export_onnx.py
 │   │   ├── export_safetensors.py
 │   │   ├── image_quality_qc.py
+│   │   ├── jsonl_merge.py
 │   │   ├── make_smoke_dataset.py
 │   │   ├── normalize_captions.py
 │   │   ├── op_pipeline.ps1
@@ -274,7 +284,12 @@ sdx/
 │   │   └── test_timestep_sampling.py
 │   ├── fixtures/
 │   ├── integration/
+│   │   ├── README.md
+│   │   └── test_integration.py
 │   ├── unit/
+│   │   ├── README.md
+│   │   ├── test_latent_geometry.py
+│   │   └── test_native_tools.py
 │   ├── __init__.py
 │   ├── test_ar_dit_vit.py
 │   ├── test_book_helpers.py
@@ -284,7 +299,6 @@ sdx/
 │   ├── test_dit_text_extras.py
 │   ├── test_enhanced_integration.py
 │   ├── test_image_quality_qc.py
-│   ├── test_integration.py
 │   ├── test_model_creation.py
 │   ├── test_native_helpers.py
 │   ├── test_native_multimodal_cascade.py
@@ -322,12 +336,14 @@ sdx/
 │   ├── error_handling.py
 │   ├── image_editing.py
 │   ├── image_quality_metrics.py
+│   ├── latent_geometry.py
 │   ├── llm_client.py
 │   ├── master_integration.py
 │   ├── metrics.py
 │   ├── model_paths.py
 │   ├── model_viz.py
 │   ├── multimodal_generation.py
+│   ├── native_tools.py
 │   ├── nn_inspect.py
 │   ├── orchestration.py
 │   ├── precision_control.py

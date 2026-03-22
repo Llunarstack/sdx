@@ -24,11 +24,12 @@ Tools stay **flat** under this folder so `python -m scripts.tools.quick_test` an
 
 | Script | Purpose |
 |--------|---------|
-| **`data_quality.py`** | Filter / dedup JSONL or folders (phash, md5, caption length, bad words) |
+| **`data_quality.py`** | Filter / dedup JSONL or folders (phash, md5, caption length, bad words); optional **`--native-preflight`** / **`--native-stats`** / **`--native-validate`** (Rust `sdx-jsonl-tools` if built) |
 | **`normalize_captions.py`** | Normalize caption fields in a manifest |
 | **`make_smoke_dataset.py`** | Synthetic PNGs + captions for smoke `train.py` |
 | **`book_scene_split.py`** | Split `## Page N` / `---PAGE---` scripts → one line per page for `generate_book.py` |
 | **`image_quality_qc.py`** | Per-image QC metrics on manifest (sharpness, contrast thresholds) |
+| **`jsonl_merge.py`** | Merge multiple `.jsonl` manifests with dedupe (prefers Go `native/go/sdx-manifest` if built; else Python — see `utils/native_tools.merge_jsonl_files`) |
 
 ---
 
@@ -52,7 +53,7 @@ Tools stay **flat** under this folder so `python -m scripts.tools.quick_test` an
 |--------|---------|
 | **`export_onnx.py`** | Export DiT checkpoint → ONNX |
 | **`export_safetensors.py`** | Export DiT weights → `.safetensors` (ComfyUI / A1111) |
-| **`op_preflight.py`** | Pre-train gate: coverage + thresholds (PASS/FAIL) |
+| **`op_preflight.py`** | Pre-train gate: coverage + thresholds (PASS/FAIL); optional `--native-manifest-check` runs Rust `sdx-jsonl-tools stats` if built |
 | **`op_pipeline.ps1`** | Windows: chain preflight → normalize → optional eval |
 
 ---

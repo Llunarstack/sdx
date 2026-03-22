@@ -34,6 +34,12 @@ def main() -> int:
         default="",
         help="Comma-separated DiT_models_text names; empty = all.",
     )
+    parser.add_argument(
+        "--vae-scale",
+        type=int,
+        default=8,
+        help="Latent scale vs pixels (SD-style VAE: 8).",
+    )
     args = parser.parse_args()
 
     from utils.dit_architecture import (
@@ -41,6 +47,8 @@ def main() -> int:
         instantiate_dit_text,
         list_all_dit_registry_names,
     )
+    from utils.latent_geometry import dit_patch_size_from_variant_name
+    from utils.native_tools import get_latent_lib
 
     names = [x.strip() for x in args.models.split(",") if x.strip()]
     if not names:
@@ -56,16 +64,24 @@ def main() -> int:
         except Exception as e:
             rows.append((name, "?", {"error": str(e)}))
 
-    print(f"image_size={args.image_size}  latent_side={args.image_size // 8}  text_dim={args.text_dim}\n")
-    print(f"{'Model':<36} {'Kind':<14} {'Params':>14} {'FP32 GiB':>10} {'BF16 GiB':>10}")
-    print("-" * 88)
+    latent_side = args.image_size // args.vae_scale
+    lib = get_latent_lib()
+    print(
+        f"image_size={args.image_size}  latent_side={latent_side}  vae_scale={args.vae_scale}  "
+        f"text_dim={args.text_dim}  libsdx_latent={'yes' if lib.available else 'no (pure Python math)'}\n"
+    )
+    print(f"{'Model':<36} {'Kind':<14} {'Params':>14} {'FP32 GiB':>10} {'BF16 GiB':>10}  patch  patch_tokens")
+    print("-" * 108)
     for name, kind, r in rows:
         if "error" in r:
             print(f"{name:<36} {kind:<14} ERROR: {r['error']}")
             continue
+        ps = dit_patch_size_from_variant_name(name)
+        npt = lib.num_patch_tokens(args.image_size, args.vae_scale, ps)
         print(
             f"{name:<36} {kind:<14} {r['total_parameters']:>14,} "
-            f"{r['size_fp32_gib']:>10.2f} {r['size_bf16_gib']:>10.2f}"
+            f"{r['size_fp32_gib']:>10.2f} {r['size_bf16_gib']:>10.2f}  "
+            f"patch={ps}  patch_tokens={npt}"
         )
     return 0
 

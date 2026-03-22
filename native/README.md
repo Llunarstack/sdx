@@ -85,6 +85,22 @@ print(n)
 ./sdx-manifest merge a.jsonl b.jsonl -o merged.jsonl --dedupe-key image_path
 ```
 
+## Python integration (repo root on `PYTHONPATH`)
+
+| Location | Role |
+|----------|------|
+| **`native/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
+| **`utils/latent_geometry.py`** · **`utils/native_tools.py`** | Thin shims (add `native/python` to `sys.path`) so existing `from utils.native_tools import …` keeps working. |
+| **`pyproject.toml`** | Pytest **`pythonpath`** includes `native/python` so `import sdx_native` works in tests. |
+
+**Wired scripts**
+
+- **`scripts/tools/data_quality.py`** — `--native-preflight` (Rust `stats` before filter), `--native-stats` (stats only), `--native-validate` (strict Rust validate).
+- **`scripts/tools/op_preflight.py`** — `--native-manifest-check` (Rust `stats` to stderr before coverage scan).
+- **`scripts/tools/dit_variant_compare.py`** — prints **patch token count** via `libsdx_latent` or Python math (`--vae-scale`).
+- **`scripts/tools/jsonl_merge.py`** — merge manifests; prefers Go **`sdx-manifest`** if built.
+- **`scripts/tools/quick_test.py`** — `--show-native` prints discovery JSON (paths empty until you build tools).
+
 ## Why these languages?
 
 - **Rust**: safe parallel I/O–friendly CLI tooling, easy distribution as one binary.
