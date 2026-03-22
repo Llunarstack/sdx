@@ -54,6 +54,21 @@ def main():
     parser.add_argument("--bad-words", type=str, default="", help="Comma-sep words; drop if caption contains any")
     parser.add_argument("--min-weight", type=float, default=0.0, help="Drop rows with weight/aesthetic_score < N")
     parser.add_argument("--dry-run", action="store_true", help="Only print counts, do not write output")
+    parser.add_argument(
+        "--native-preflight",
+        action="store_true",
+        help="If Rust sdx-jsonl-tools is built, print fast `stats` on stderr before Python filtering (JSON/caption distribution).",
+    )
+    parser.add_argument(
+        "--native-validate",
+        action="store_true",
+        help="If Rust is built, run strict `validate` with --min/--max-caption-len and exit non-zero on any bad row (before filtering).",
+    )
+    parser.add_argument(
+        "--native-stats",
+        action="store_true",
+        help="Print Rust JSONL `stats` for a .jsonl input and exit (ignores folder mode and other filters).",
+    )
     args = parser.parse_args()
 
     inp = Path(args.input)
@@ -67,6 +82,41 @@ def main():
     dropped_dup = dropped_caption = dropped_bad = dropped_weight = 0
 
     if inp.suffix.lower() == ".jsonl":
+        if args.native_preflight or args.native_validate:
+            try:
+                from utils.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats, run_rust_jsonl_validate
+
+                exe = rust_jsonl_tools_exe()
+                if exe:
+                    if args.native_preflight:
+                        rv = run_rust_jsonl_stats(inp)
+                        sys.stderr.write("[native] sdx-jsonl-tools stats:\n" + (rv.stdout or ""))
+                        if rv.stderr:
+                            sys.stderr.write(rv.stderr)
+                        if rv.returncode != 0:
+                            return rv.returncode
+                    if args.native_validate:
+                        rv = run_rust_jsonl_validate(
+                            inp,
+                            min_caption_len=args.min_caption_len,
+                            max_caption_len=args.max_caption_len,
+                        )
+                        sys.stderr.write(rv.stderr or "")
+                        sys.stdout.write(rv.stdout or "")
+                        if rv.returncode != 0:
+                            print(
+                                "native-validate: Rust validate failed — fix manifest or adjust caption bounds",
+                                file=sys.stderr,
+                            )
+                            return rv.returncode or 1
+                else:
+                    print(
+                        "native: Rust sdx-jsonl-tools not built; skipping. See native/README.md",
+                        file=sys.stderr,
+                    )
+            except Exception as e:
+                print(f"native tools: {e}", file=sys.stderr)
+                return 1
         with open(inp, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()

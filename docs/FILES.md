@@ -115,6 +115,10 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/metrics.py](../utils/metrics.py) | FLOPs / logging helpers. |
 | [utils/dit_architecture.py](../utils/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
 | [utils/ar_dit_vit.py](../utils/ar_dit_vit.py) | DiT **block-AR** regime ↔ ViT: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](AR.md). |
+| [native/python/sdx_native/latent_geometry.py](../native/python/sdx_native/latent_geometry.py) | Latent / DiT **patch token** math (pure Python; matches `native/cpp` C ABI). |
+| [native/python/sdx_native/native_tools.py](../native/python/sdx_native/native_tools.py) | Optional **`native/`** tool discovery (Rust/Zig/Go/Node), FNV manifest fingerprints, JSONL merge, ctypes `libsdx_latent`. |
+| [utils/latent_geometry.py](../utils/latent_geometry.py) | Shim → `sdx_native.latent_geometry`. |
+| [utils/native_tools.py](../utils/native_tools.py) | Shim → `sdx_native.native_tools`. |
 | [utils/nn_inspect.py](../utils/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | [utils/orchestration.py](../utils/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
