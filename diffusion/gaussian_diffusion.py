@@ -3,10 +3,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from .losses.timestep_loss_weight import get_timestep_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
 from .schedules import get_beta_schedule
-from .timestep_loss_weight import get_timestep_loss_weight
 
 
 def create_diffusion(

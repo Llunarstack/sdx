@@ -59,6 +59,11 @@ def main() -> int:
     p.add_argument("--ranking-min-gap", type=float, default=0.05)
     p.add_argument("--ema-decay", type=float, default=0.999)
     p.add_argument("--save-ema", action="store_true")
+    p.add_argument(
+        "--no-ar-conditioning",
+        action="store_true",
+        help="Disable DiT num_ar_blocks side-info (compat with older 8-D text-only ViT checkpoints).",
+    )
     p.add_argument("--device", default="cuda")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out-dir", default="vit_runs")
@@ -80,6 +85,7 @@ def main() -> int:
         device=args.device,
         seed=args.seed,
         out_dir=args.out_dir,
+        use_ar_conditioning=not args.no_ar_conditioning,
     )
     seed_all(cfg.seed)
 
@@ -98,7 +104,12 @@ def main() -> int:
     )
 
     model = build_vit_model(
-        cfg.model_name, pretrained=cfg.pretrained, text_feat_dim=cfg.text_feat_dim, hidden_dim=cfg.hidden_dim
+        cfg.model_name,
+        pretrained=cfg.pretrained,
+        text_feat_dim=cfg.text_feat_dim,
+        hidden_dim=cfg.hidden_dim,
+        use_ar_conditioning=cfg.use_ar_conditioning,
+        ar_cond_dim=cfg.ar_cond_dim,
     )
     model.to(device)
     ema = ModelEMA(model, decay=float(args.ema_decay))
@@ -169,7 +180,12 @@ def main() -> int:
             torch.save(ckpt, out_dir / "best.pt")
             if args.save_ema:
                 model_ema = build_vit_model(
-                    cfg.model_name, pretrained=False, text_feat_dim=cfg.text_feat_dim, hidden_dim=cfg.hidden_dim
+                    cfg.model_name,
+                    pretrained=False,
+                    text_feat_dim=cfg.text_feat_dim,
+                    hidden_dim=cfg.hidden_dim,
+                    use_ar_conditioning=cfg.use_ar_conditioning,
+                    ar_cond_dim=cfg.ar_cond_dim,
                 )
                 model_ema.to(device)
                 ema.copy_to(model_ema)
