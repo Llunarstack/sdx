@@ -55,16 +55,15 @@
 | **Score or filter data (ViT)** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | **Submit a PR or doc fix** | [Contributing](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
 | **Navigate the tree** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
-| **Browse every source file (no `docs/`)** | **[website/](website/)** — **Codebase Atlas** (dashboard: Overview / Files / Graph / Pipeline + **intelligence panel**); summaries, docstrings, **import graph**; offline via `data/files-inline.js` — [website/README.md](website/README.md) |
+| **Browse every source file** | **[docs/FILES.md](docs/FILES.md)** — per-file roles; **[docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md)** — folder map |
 | **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
 
 ### Latest additions
 
-Recent documentation and tooling (atlas UI, ViT–DiT AR bridge, config/diffusion layout):
+Recent documentation and tooling (ViT–DiT AR bridge, config/diffusion layout):
 
 | Area | What |
 | :--- | :--- |
-| **Codebase Atlas** ([`website/`](website/)) | Glass-style **dashboard**: **Overview** (live index stats), **Files** (search, filters, role-colored cards, jump TOC, import navigation), **Graph** (SVG architecture map), **Pipeline** (prompt→image lanes + training timeline), **intelligence drawer** for the selected file. Regenerate: `python scripts/tools/generate_codebase_site.py` → [`website/files.json`](website/files.json) + [`website/data/files-inline.js`](website/data/files-inline.js). Per-file pipeline tags/blurbs: [`scripts/tools/atlas_pipeline_meta.py`](scripts/tools/atlas_pipeline_meta.py). |
 | **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
 | **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
 | **Diffusion layout** | Timestep loss modules under [`diffusion/losses/`](diffusion/losses/) with stable re-exports at the package root — [diffusion/README.md](diffusion/README.md). Related tests: [`tests/diffusion/`](tests/diffusion/). |
@@ -537,7 +536,6 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
 | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) | **Navigate the tree:** folders, entry points, `scripts/` layout |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — refresh with `python scripts/tools/update_project_structure.py` |
-| [website/README.md](website/README.md) | **Codebase Atlas** — dashboard (Overview / Files / Graph / Pipeline + intel drawer) + `files.json` / `data/files-inline.js`: docstrings, **import graph**; excludes `docs/`. |
 | [docs/CODEBASE_ORGANIZATION.md](docs/CODEBASE_ORGANIZATION.md) | **Rules of thumb:** layers, where to add code, what stays at repo root |
 | [pipelines/README.md](pipelines/README.md) | **Two product lines:** **image_gen** vs **book_comic** (same engine; split docs + scripts) |
 | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
@@ -656,7 +654,7 @@ SDX has **two** training tracks for **two different model families** (they stack
 
 If the **DiT** was trained with **block-wise AR** ([`docs/AR.md`](docs/AR.md), `--num-ar-blocks` **0 / 2 / 4**), you can tag each ViT training or inference row with the same regime so scores match generator behavior: JSONL fields **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`**. The bridge is **[`utils/ar_dit_vit.py`](utils/ar_dit_vit.py)** (4-D one-hot + parsers). ViT **`text_proj`** optionally concatenates this with caption features (`use_ar_conditioning` in checkpoint; **`--no-ar-conditioning`** in [`ViT/train.py`](ViT/train.py) for legacy 8-D–only weights). **[`ViT/infer.py`](ViT/infer.py)** and **[`ViT/export_embeddings.py`](ViT/export_embeddings.py)** read the same fields when the checkpoint expects AR side-info.
 
-Below: files that participate in each loop. For a full repo index see **[`docs/FILES.md`](docs/FILES.md)**. For an **interactive** atlas (excluding `docs/`, `external/`, caches), see **[`website/`](website/)** and run [`scripts/tools/generate_codebase_site.py`](scripts/tools/generate_codebase_site.py) to refresh **[`website/files.json`](website/files.json)** and **`website/data/files-inline.js`**.
+Below: files that participate in each loop. For a full repo index see **[`docs/FILES.md`](docs/FILES.md)**.
 
 <details>
 <summary><strong>Expand: per-file map</strong> — <code>config/</code>, <code>data/</code>, <code>diffusion/</code>, <code>models/</code>, <code>utils/</code>, scripts, ViT</summary>
@@ -1038,7 +1036,6 @@ sdx/
 ├── model/            # Downloaded weights (gitignored)
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
 ├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking; EXCELLENCE_VS_DIT.md, backbone_presets.py
-├── website/          # Codebase Atlas dashboard (static UI + generated files.json / data/files-inline.js); website/README.md
 ├── native/           # Optional Rust/Zig/C++/Go helpers
 ├── scripts/          # see scripts/README.md
 │   ├── cli.py        # optional unified CLI (dataset, config, checkpoints)
