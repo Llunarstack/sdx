@@ -6,7 +6,7 @@
 > python scripts/tools/update_project_structure.py
 > ```
 >
-> Generated: **2026-03-22 03:06:00 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-03-22 04:33:27 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -276,6 +276,7 @@ sdx/
 │   ├── integration/
 │   ├── unit/
 │   ├── __init__.py
+│   ├── test_ar_dit_vit.py
 │   ├── test_book_helpers.py
 │   ├── test_book_scene_split.py
 │   ├── test_character_consistency.py
@@ -308,6 +309,7 @@ sdx/
 │   ├── advanced_inference.py
 │   ├── advanced_prompting.py
 │   ├── anatomy_correction.py
+│   ├── ar_dit_vit.py
 │   ├── character_consistency.py
 │   ├── checkpoint_loading.py
 │   ├── checkpoint_manager.py
@@ -353,6 +355,7 @@ sdx/
 │   ├── README.md
 │   ├── train.py
 │   └── tta.py
+├── website/
 ├── .editorconfig
 ├── .env.example
 ├── .gitignore
