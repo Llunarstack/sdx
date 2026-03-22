@@ -4,9 +4,10 @@ Small **high-throughput utilities** around the Python training stack. They are *
 
 | Component | Role |
 |-----------|------|
-| **Rust** `rust/sdx-jsonl-tools` | Stream a manifest JSONL: validate JSON, require `image_path`/`caption` (or aliases), stats, prompt lint. |
-| **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over lines (detect manifest changes without loading Python). |
-| **C++** `cpp/` | `libsdx_latent` — DiT/VAE **latent grid** helpers (`image_size`, `vae_scale`, `patch_size`) with **C ABI** for ctypes / other FFI. |
+| **Rust** `rust/sdx-jsonl-tools` | Stream a manifest JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`** (one path per line for shell pipelines), **`dup-image-paths`** (duplicate image keys before dedup). |
+| **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over file bytes (manifest change detection). |
+| **Zig** `zig/sdx-pathstat` | Given a **newline-separated path list**, print `path<TAB>size_bytes<TAB>ok|missing` (fast file-exists + size audit; pair with Rust `image-paths`). |
+| **C++** `cpp/` | `libsdx_latent` — DiT/VAE **latent grid** helpers (`image_size`, `vae_scale`, `patch_size`, **`latent_numel`**) with **C ABI** for ctypes / other FFI. |
 | **Go** `go/sdx-manifest` | Merge multiple JSONL files; optional dedupe by image path (first wins). |
 | **Node** `js/sdx-jsonl-stat.mjs` | Zero-build manifest stats if you already have **Node 18+** (no Rust install). |
 | **Node** `js/sdx-promptlint.mjs` | Zero-build prompt adherence lint for JSONL (pos/neg overlap, empty captions, token heuristics). |
@@ -24,7 +25,11 @@ cargo build --release
 ```bash
 cd native/zig/sdx-linecrc
 zig build -Doptimize=ReleaseFast
-# zig-out/bin/sdx-linecrc (or zig-out/bin/sdx-linecrc.exe)
+# zig-out/bin/sdx-linecrc (or .exe)
+
+cd native/zig/sdx-pathstat
+zig build -Doptimize=ReleaseFast
+# zig-out/bin/sdx-pathstat — stat paths from a file list
 ```
 
 ### C++
@@ -60,12 +65,20 @@ Same conventions as `data/t2i_dataset.py` and `scripts/tools/data_quality.py`.
 native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools stats data/manifest.jsonl
 native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools validate --min-caption-len 5 data/manifest.jsonl
 native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools prompt-lint --max-caption-tokens 250 data/manifest.jsonl
+native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools image-paths --sort data/manifest.jsonl
+native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools dup-image-paths data/manifest.jsonl
 ```
 
 ### Example: Zig fingerprint (pipe or file)
 ```bash
 native/zig/sdx-linecrc/zig-out/bin/sdx-linecrc --file data/manifest.jsonl
 type data\manifest.jsonl | native\zig\sdx-linecrc\zig-out\bin\sdx-linecrc.exe
+```
+
+### Example: path list → sizes (Zig `sdx-pathstat`)
+```bash
+native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools image-paths data/manifest.jsonl > paths.txt
+native/zig/sdx-pathstat/zig-out/bin/sdx-pathstat --file paths.txt
 ```
 
 ### Example: C ABI from Python (`ctypes`)
@@ -78,6 +91,9 @@ dll.sdx_num_patch_tokens.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
 dll.sdx_num_patch_tokens.restype = ctypes.c_int
 n = dll.sdx_num_patch_tokens(256, 8, 2)  # 32x32 latent -> 256 patch tokens for patch 2
 print(n)
+dll.sdx_latent_numel.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
+dll.sdx_latent_numel.restype = ctypes.c_int
+print(dll.sdx_latent_numel(4, 32, 32))  # 4 * 32 * 32 latent elements
 ```
 
 ### Example: merge JSONL (Go)
@@ -99,6 +115,7 @@ print(n)
 - **`scripts/tools/op_preflight.py`** — `--native-manifest-check` (Rust `stats` to stderr before coverage scan).
 - **`scripts/tools/dit_variant_compare.py`** — prints **patch token count** via `libsdx_latent` or Python math (`--vae-scale`).
 - **`scripts/tools/jsonl_merge.py`** — merge manifests; prefers Go **`sdx-manifest`** if built.
+- **`scripts/tools/manifest_paths.py`** — **`image-paths`** / **`dup-image-paths`** (Rust); pipe to Zig **`sdx-pathstat`** for byte sizes.
 - **`scripts/tools/quick_test.py`** — `--show-native` prints discovery JSON (paths empty until you build tools).
 
 ## Why these languages?

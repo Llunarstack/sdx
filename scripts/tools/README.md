@@ -30,6 +30,7 @@ Tools stay **flat** under this folder so `python -m scripts.tools.quick_test` an
 | **`book_scene_split.py`** | Split `## Page N` / `---PAGE---` scripts → one line per page for `generate_book.py` |
 | **`image_quality_qc.py`** | Per-image QC metrics on manifest (sharpness, contrast thresholds) |
 | **`jsonl_merge.py`** | Merge multiple `.jsonl` manifests with dedupe (prefers Go `native/go/sdx-manifest` if built; else Python — see `utils/native_tools.merge_jsonl_files`) |
+| **`manifest_paths.py`** | Extract **`image_path`** / **`path`** / **`image`** lines from JSONL (**Rust `image-paths`** if built); **`--dup`** uses **`dup-image-paths`**. For disk size checks, pipe output to Zig **`sdx-pathstat`** ([native/README.md](../../native/README.md)). |
 
 ---
 

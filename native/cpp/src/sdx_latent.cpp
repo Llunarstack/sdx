@@ -1,5 +1,7 @@
 #include "sdx/latent.h"
 
+#include <cstdint>
+
 static int check_div(int a, int b) {
   if (a <= 0 || b <= 0) return 0;
   if (a % b != 0) return 0;
@@ -28,6 +30,13 @@ SDX_LATENT_API int sdx_num_patch_tokens(int image_hw, int vae_scale, int patch_s
   const int g = sdx_patch_grid_dim(lh, patch_size);
   if (g <= 0) return 0;
   return g * g;
+}
+
+SDX_LATENT_API int sdx_latent_numel(int channels, int latent_h, int latent_w) {
+  if (channels <= 0 || latent_h <= 0 || latent_w <= 0) return 0;
+  const int64_t n = static_cast<int64_t>(channels) * latent_h * latent_w;
+  if (n > static_cast<int64_t>(2147483647)) return 0;
+  return static_cast<int>(n);
 }
 
 }

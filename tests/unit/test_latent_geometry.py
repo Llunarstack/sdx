@@ -2,6 +2,7 @@
 
 from utils.latent_geometry import (
     dit_patch_size_from_variant_name,
+    latent_numel,
     latent_spatial_size,
     num_patch_tokens,
     patch_grid_dim,
@@ -26,3 +27,8 @@ def test_patch_grid_dim():
 def test_dit_patch_size_from_name():
     assert dit_patch_size_from_variant_name("DiT-XL/2-Text") == 2
     assert dit_patch_size_from_variant_name("DiT-B/4-Text") == 4
+
+
+def test_latent_numel():
+    assert latent_numel(4, 32, 32) == 4 * 32 * 32
+    assert latent_numel(0, 32, 32) == 0

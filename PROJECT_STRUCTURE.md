@@ -6,7 +6,7 @@
 > python scripts/tools/update_project_structure.py
 > ```
 >
-> Generated: **2026-03-22 04:54:00 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-03-22 05:16:04 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -203,7 +203,12 @@ sdx/
 │   │       ├── Cargo.toml
 │   │       └── README.md
 │   ├── zig/
-│   │   └── sdx-linecrc/
+│   │   ├── sdx-linecrc/
+│   │   │   ├── src/
+│   │   │   │   └── main.zig
+│   │   │   ├── build.zig
+│   │   │   └── README.md
+│   │   └── sdx-pathstat/
 │   │       ├── src/
 │   │       │   └── main.zig
 │   │       ├── build.zig
@@ -253,6 +258,7 @@ sdx/
 │   │   ├── image_quality_qc.py
 │   │   ├── jsonl_merge.py
 │   │   ├── make_smoke_dataset.py
+│   │   ├── manifest_paths.py
 │   │   ├── normalize_captions.py
 │   │   ├── op_pipeline.ps1
 │   │   ├── op_preflight.py
