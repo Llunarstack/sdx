@@ -176,6 +176,7 @@ Index: **[scripts/README.md](../scripts/README.md)**. **Tools (categorized):** *
 | [docs/DANBOORU_HF.md](DANBOORU_HF.md) | Using Hugging Face Danbooru-related data with SDX. |
 | [scripts/tools/ckpt_info.py](../scripts/tools/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
 | [scripts/tools/data_quality.py](../scripts/tools/data_quality.py) | Filter/dedup JSONL or folder: `--dedup phash|md5`, `--min-caption-len`, `--bad-words`, `--min-weight` (IMPROVEMENTS 1.6). |
+| [scripts/tools/manifest_paths.py](../scripts/tools/manifest_paths.py) | List image paths from JSONL (**Rust `image-paths` / `dup-image-paths`** when built); pipe to Zig **`sdx-pathstat`** for file sizes. |
 | [scripts/tools/prompt_lint.py](../scripts/tools/prompt_lint.py) | Prompt adherence lint for SDX JSONL (empty captions, token heuristics, pos/neg overlap). |
 | [scripts/tools/tag_coverage.py](../scripts/tools/tag_coverage.py) | Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage. |
 | [scripts/tools/spatial_coverage.py](../scripts/tools/spatial_coverage.py) | Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...). |

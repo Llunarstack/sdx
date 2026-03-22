@@ -32,6 +32,12 @@ SDX_LATENT_API int sdx_num_patch_tokens(int image_hw, int vae_scale, int patch_s
 /** Combined helper; returns 0 if inputs invalid (non-positive or not divisible). */
 SDX_LATENT_API int sdx_latent_hw(int image_hw, int vae_scale);
 
+/**
+ * Element count for a latent tensor (channels * H * W). Any non-positive dimension → 0.
+ * Useful for logging / buffer sizing next to DiT/VAE latents.
+ */
+SDX_LATENT_API int sdx_latent_numel(int channels, int latent_h, int latent_w);
+
 #ifdef __cplusplus
 }
 #endif

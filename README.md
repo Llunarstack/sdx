@@ -64,7 +64,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 
 | Area | What |
 | :--- | :--- |
-| **Native + Python bridge** | **[`native/python/sdx_native/`](native/python/sdx_native/)** — `latent_geometry` + **`native_tools`** (discover Rust/Zig/Go/Node CLIs, FNV manifest fingerprints, JSONL merge, ctypes **`libsdx_latent`**). **[`utils/native_tools.py`](utils/native_tools.py)** / **[`utils/latent_geometry.py`](utils/latent_geometry.py)** re-export for stable imports. Wired: [`scripts/tools/data_quality.py`](scripts/tools/data_quality.py) (`--native-preflight`, `--native-stats`, `--native-validate`), [`scripts/tools/op_preflight.py`](scripts/tools/op_preflight.py) (`--native-manifest-check`), [`scripts/tools/dit_variant_compare.py`](scripts/tools/dit_variant_compare.py) (patch tokens + `--vae-scale`), [`scripts/tools/jsonl_merge.py`](scripts/tools/jsonl_merge.py), [`scripts/tools/quick_test.py`](scripts/tools/quick_test.py) (`--show-native`). Per-language notes: [native/README.md](native/README.md), [native/python/README.md](native/python/README.md). Pytest **`pythonpath`** includes `native/python` ([`pyproject.toml`](pyproject.toml)). |
+| **Native + Python bridge** | **[`native/python/sdx_native/`](native/python/sdx_native/)** — `latent_geometry` + **`native_tools`** (Rust **`image-paths`** / **`dup-image-paths`**, Zig **`sdx-pathstat`**, FNV, merge, ctypes **`libsdx_latent`** incl. **`latent_numel`**). **[`utils/native_tools.py`](utils/native_tools.py)** / **[`utils/latent_geometry.py`](utils/latent_geometry.py)** re-export. Wired: [`data_quality.py`](scripts/tools/data_quality.py), [`op_preflight.py`](scripts/tools/op_preflight.py), [`dit_variant_compare.py`](scripts/tools/dit_variant_compare.py), [`jsonl_merge.py`](scripts/tools/jsonl_merge.py), [`manifest_paths.py`](scripts/tools/manifest_paths.py), [`quick_test.py`](scripts/tools/quick_test.py) (`--show-native`). Docs: [native/README.md](native/README.md), [native/python/README.md](native/python/README.md). Pytest **`pythonpath`**: [`pyproject.toml`](pyproject.toml). |
 | **Tests layout** | [`tests/unit/`](tests/unit/) (e.g. latent/native-tool tests), [`tests/integration/`](tests/integration/) (e.g. advanced feature smoke), [`tests/diffusion/`](tests/diffusion/), [`tests/fixtures/`](tests/fixtures/). |
 | **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
 | **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
@@ -130,6 +130,17 @@ python sample.py --ckpt results/.../best.pt --prompt "your prompt" --steps 50 --
 torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-size 256
 ```
 
+### Tests (local)
+
+| Check | Command |
+| :--- | :--- |
+| **Full suite** | `pytest tests/ -q` (all `tests/**`, including `unit/`, `integration/`, `diffusion/`) |
+| **Fast unit** | `pytest tests/unit -q` |
+| **Smoke (DiT forward)** | `python scripts/tools/quick_test.py` |
+| **Optional native CLIs** | `python scripts/tools/quick_test.py --show-native` — lists Rust/Zig/Go/Node/`libsdx_latent` if built ([native/README.md](native/README.md)) |
+
+After pulling C++ changes to **`libsdx_latent`**, rebuild in `native/cpp` (`cmake --build build`) so ctypes sees new symbols (e.g. `sdx_latent_numel`).
+
 ---
 
 ### Contribute in 5 minutes
@@ -138,7 +149,7 @@ torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-si
 | :--- | :--- |
 | 1 | Fork / clone · `cd` to repo root |
 | 2 | `pip install -r requirements.txt` · `python scripts/tools/quick_test.py` |
-| 3 | `pytest tests/ -q` · `ruff format . && ruff check .` |
+| 3 | `pytest tests/ -q` · `ruff format` / `ruff check` on **files you changed** (see `pyproject.toml`) |
 | 4 | Open a **small** PR — docs, tests, and tooling count. See **[CONTRIBUTING.md](CONTRIBUTING.md)**. |
 
 > **First visit?** Run `python scripts/tools/quick_test.py`, skim [**Architecture**](#architecture-and-pipeline), then pick a task from [Find your path](#find-your-path).

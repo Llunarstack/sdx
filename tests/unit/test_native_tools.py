@@ -33,6 +33,7 @@ def test_fnv1a64_file_matches_bytes(tmp_path: Path):
 def test_native_stack_status_keys():
     s = nt.native_stack_status()
     assert "rust_sdx_jsonl_tools" in s
+    assert "zig_sdx_pathstat" in s
     assert "repo_root" in s
 
 

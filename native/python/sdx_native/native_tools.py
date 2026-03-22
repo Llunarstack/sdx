@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from sdx_native.latent_geometry import latent_numel as py_latent_numel
 from sdx_native.latent_geometry import latent_spatial_size as py_latent_spatial_size
 from sdx_native.latent_geometry import num_patch_tokens as py_num_patch_tokens
 from sdx_native.latent_geometry import patch_grid_dim as py_patch_grid_dim
@@ -40,6 +41,16 @@ def zig_linecrc_exe() -> Optional[Path]:
     """Zig ``sdx-linecrc`` if ``zig build`` was run."""
     base = _release_dir("zig/sdx-linecrc/zig-out/bin")
     for n in ("sdx-linecrc.exe", "sdx-linecrc"):
+        p = base / n
+        if p.is_file():
+            return p
+    return None
+
+
+def zig_pathstat_exe() -> Optional[Path]:
+    """Zig ``sdx-pathstat`` — file sizes for a path list (one per line)."""
+    base = _release_dir("zig/sdx-pathstat/zig-out/bin")
+    for n in ("sdx-pathstat.exe", "sdx-pathstat"):
         p = base / n
         if p.is_file():
             return p
@@ -82,6 +93,52 @@ def run_rust_jsonl_stats(manifest: Path, *, timeout: float = 600) -> subprocess.
         raise FileNotFoundError("Rust sdx-jsonl-tools not built (cargo build --release in native/rust/sdx-jsonl-tools)")
     return subprocess.run(
         [str(exe), "stats", str(manifest)],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def run_rust_image_paths(
+    manifest: Path,
+    *,
+    all_rows: bool = False,
+    sort: bool = False,
+    timeout: float = 600,
+) -> subprocess.CompletedProcess[str]:
+    """Run `sdx-jsonl-tools image-paths` — stdout is one path per line."""
+    exe = rust_jsonl_tools_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-jsonl-tools not built")
+    cmd = [str(exe), "image-paths", str(manifest)]
+    if all_rows:
+        cmd.append("--all-rows")
+    if sort:
+        cmd.append("--sort")
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def run_rust_dup_image_paths(
+    manifest: Path, *, top: int = 20, timeout: float = 600
+) -> subprocess.CompletedProcess[str]:
+    """Run `sdx-jsonl-tools dup-image-paths` — duplicate path report."""
+    exe = rust_jsonl_tools_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-jsonl-tools not built")
+    return subprocess.run(
+        [str(exe), "dup-image-paths", str(manifest), "--top", str(top)],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def run_zig_pathstat_list(pathlist_file: Path, *, timeout: float = 3600) -> subprocess.CompletedProcess[str]:
+    exe = zig_pathstat_exe()
+    if not exe:
+        raise FileNotFoundError("Zig sdx-pathstat not built")
+    return subprocess.run(
+        [str(exe), "--file", str(pathlist_file)],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -195,6 +252,10 @@ class LatentLib:
             dll.sdx_num_patch_tokens.restype = ctypes.c_int
             dll.sdx_latent_hw.argtypes = (ctypes.c_int, ctypes.c_int)
             dll.sdx_latent_hw.restype = ctypes.c_int
+            # Optional: older builds may lack sdx_latent_numel
+            if hasattr(dll, "sdx_latent_numel"):
+                dll.sdx_latent_numel.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
+                dll.sdx_latent_numel.restype = ctypes.c_int
             self._dll = dll
         except OSError:
             self._dll = None
@@ -217,6 +278,11 @@ class LatentLib:
         if self._dll is not None:
             return int(self._dll.sdx_patch_grid_dim(int(latent_hw), int(patch_size)))
         return py_patch_grid_dim(latent_hw, patch_size)
+
+    def latent_numel(self, channels: int, latent_h: int, latent_w: int) -> int:
+        if self._dll is not None and hasattr(self._dll, "sdx_latent_numel"):
+            return int(self._dll.sdx_latent_numel(int(channels), int(latent_h), int(latent_w)))
+        return py_latent_numel(channels, latent_h, latent_w)
 
 
 _LATENT_SINGLETON: Optional[LatentLib] = None
@@ -284,6 +350,7 @@ def native_stack_status() -> Dict[str, Any]:
         "repo_root": str(REPO_ROOT),
         "rust_sdx_jsonl_tools": str(rust_jsonl_tools_exe() or ""),
         "zig_sdx_linecrc": str(zig_linecrc_exe() or ""),
+        "zig_sdx_pathstat": str(zig_pathstat_exe() or ""),
         "go_sdx_manifest": str(go_sdx_manifest_exe() or ""),
         "node": shutil.which("node") or "",
         "native_js_sdx_jsonl_stat": str(node_script("sdx-jsonl-stat.mjs") or ""),

@@ -32,6 +32,16 @@ def num_patch_tokens(image_hw: int, vae_scale: int, patch_size: int) -> int:
     return g * g
 
 
+def latent_numel(channels: int, latent_h: int, latent_w: int) -> int:
+    """``C * H * W`` for a latent tensor (0 if any dimension invalid or product overflows int)."""
+    if channels <= 0 or latent_h <= 0 or latent_w <= 0:
+        return 0
+    n = channels * latent_h * latent_w
+    if n > 2147483647:
+        return 0
+    return int(n)
+
+
 def dit_patch_size_from_variant_name(model_name: str) -> int:
     """
     Parse DiT registry names like ``DiT-XL/2-Text`` or ``DiT-B/4-Text`` → patch size (2 or 4).
