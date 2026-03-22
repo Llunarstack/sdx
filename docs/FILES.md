@@ -46,10 +46,14 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 | File | Description |
 |------|-------------|
+| [config/README.md](../config/README.md) | Folder layout: `train_config` vs `reference/`. |
 | [config/__init__.py](../config/__init__.py) | Exports `TrainConfig`, `get_dit_build_kwargs`, `DEFAULT_NEGATIVE_PROMPT`. |
 | [config/train_config.py](../config/train_config.py) | TrainConfig + `get_dit_build_kwargs(cfg)`: DiT build args; **`text_encoder_mode`**, **`clip_text_encoder_*`**, RAE/REPA fields. |
-| [config/pixai_reference.py](../config/pixai_reference.py) | PixAI.art-style model labels for logs (Haruka, Tsubaki, etc.). |
-| [config/prompt_domains.py](../config/prompt_domains.py) | Recommended prompts/negatives for 3D, realistic, interior, exterior. |
+| [config/reference/](../config/reference/) | **Canonical** prompt catalogs, presets, labels (domains, styles, `sample.py` presets, PixAI names). |
+| [config/prompt_domains.py](../config/prompt_domains.py) | Shim → `reference/prompt_domains.py` (stable import path). |
+| [config/style_artists.py](../config/style_artists.py) | Shim → `reference/style_artists.py`. |
+| [config/model_presets.py](../config/model_presets.py) | Shim → `reference/model_presets.py`. |
+| [config/pixai_reference.py](../config/pixai_reference.py) | Shim → `reference/pixai_reference.py`. |
 
 ### Data
 
@@ -63,14 +67,16 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 | File | Description |
 |------|-------------|
+| [diffusion/README.md](../diffusion/README.md) | Folder layout: schedules, `losses/`, sampling, utils. |
 | [diffusion/__init__.py](../diffusion/__init__.py) | Exports `create_diffusion`, `GaussianDiffusion`, `get_beta_schedule`, `get_timestep_loss_weight`, `sample_training_timesteps`. |
 | [diffusion/schedules.py](../diffusion/schedules.py) | VP beta schedules: linear, cosine, sigmoid, squaredcos_cap_v2 (Improved DDPM–style). |
-| [diffusion/timestep_loss_weight.py](../diffusion/timestep_loss_weight.py) | Unified timestep loss weights: `min_snr`, `min_snr_soft`, EDM-style modes. |
+| [diffusion/losses/](../diffusion/losses/) | **Canonical** timestep loss code: `loss_weighting.py`, `timestep_loss_weight.py`. |
+| [diffusion/loss_weighting.py](../diffusion/loss_weighting.py) | Shim → `losses/loss_weighting.py`. |
+| [diffusion/timestep_loss_weight.py](../diffusion/timestep_loss_weight.py) | Shim → `losses/timestep_loss_weight.py`. |
 | [diffusion/snr_utils.py](../diffusion/snr_utils.py) | NumPy SNR / `alpha_cumprod` helpers for analysis. |
 | [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) | Diffusion: beta schedule, training losses (min-SNR, v/epsilon), DDIM sampling, CFG rescale, dynamic threshold. |
 | [diffusion/respace.py](../diffusion/respace.py) | Timestep respacing for sampling. |
 | [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) | Thresholding helpers. |
-| [diffusion/loss_weighting.py](../diffusion/loss_weighting.py) | EDM / v / eps loss weights. |
 | [diffusion/timestep_sampling.py](../diffusion/timestep_sampling.py) | Training-time `t` distributions: uniform, logit-normal (SD3-style discrete), high-noise Beta bias. |
 | [diffusion/cascaded_multimodal_pipeline.py](../diffusion/cascaded_multimodal_pipeline.py) | Optional **cascaded** stage-1 → stage-2 forward + optional RAE bridge (scaffold; not wired into default `train.py` loop). |
 
@@ -108,6 +114,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/checkpoint_manager.py](../utils/checkpoint_manager.py) | Checkpoint rotation / save helpers. |
 | [utils/metrics.py](../utils/metrics.py) | FLOPs / logging helpers. |
 | [utils/dit_architecture.py](../utils/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
+| [utils/ar_dit_vit.py](../utils/ar_dit_vit.py) | DiT **block-AR** regime ↔ ViT: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](AR.md). |
 | [utils/nn_inspect.py](../utils/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | [utils/orchestration.py](../utils/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |

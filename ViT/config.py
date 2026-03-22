@@ -17,6 +17,9 @@ class ViTConfig:
     pretrained: bool = True
     text_feat_dim: int = 8
     hidden_dim: int = 256
+    # DiT block-AR regime (0/2/4) as extra ViT conditioner; see utils/ar_dit_vit.py
+    use_ar_conditioning: bool = True
+    ar_cond_dim: int = 4
 
     # Optimization
     lr: float = 3e-4

@@ -29,12 +29,17 @@ def load_vit_quality_checkpoint(
     model_name = cfg.get("model_name", "vit_base_patch16_224")
     text_feat_dim = int(cfg.get("text_feat_dim", 8))
     hidden_dim = int(cfg.get("hidden_dim", 256))
+    # Older checkpoints omit these → full bidirectional DiT path (no AR side-info).
+    use_ar_conditioning = bool(cfg.get("use_ar_conditioning", False))
+    ar_cond_dim = int(cfg.get("ar_cond_dim", 4))
 
     model = build_vit_model(
         model_name=str(model_name),
         pretrained=False,
         text_feat_dim=text_feat_dim,
         hidden_dim=hidden_dim,
+        use_ar_conditioning=use_ar_conditioning,
+        ar_cond_dim=ar_cond_dim,
     )
     if use_ema and bool(ckpt.get("ema_state_dict")):
         model.load_state_dict(ckpt["ema_state_dict"], strict=False)

@@ -1,4 +1,4 @@
-"""Tests for diffusion/timestep_sampling.py."""
+"""Tests for ``diffusion/timestep_sampling.py``."""
 
 from __future__ import annotations
 

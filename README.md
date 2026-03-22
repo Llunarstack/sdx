@@ -55,7 +55,19 @@
 | **Score or filter data (ViT)** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | **Submit a PR or doc fix** | [Contributing](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
 | **Navigate the tree** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
+| **Browse every source file (no `docs/`)** | **[website/](website/)** — **Codebase Atlas** (dashboard: Overview / Files / Graph / Pipeline + **intelligence panel**); summaries, docstrings, **import graph**; offline via `data/files-inline.js` — [website/README.md](website/README.md) |
 | **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
+
+### Latest additions
+
+Recent documentation and tooling (atlas UI, ViT–DiT AR bridge, config/diffusion layout):
+
+| Area | What |
+| :--- | :--- |
+| **Codebase Atlas** ([`website/`](website/)) | Glass-style **dashboard**: **Overview** (live index stats), **Files** (search, filters, role-colored cards, jump TOC, import navigation), **Graph** (SVG architecture map), **Pipeline** (prompt→image lanes + training timeline), **intelligence drawer** for the selected file. Regenerate: `python scripts/tools/generate_codebase_site.py` → [`website/files.json`](website/files.json) + [`website/data/files-inline.js`](website/data/files-inline.js). Per-file pipeline tags/blurbs: [`scripts/tools/atlas_pipeline_meta.py`](scripts/tools/atlas_pipeline_meta.py). |
+| **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
+| **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
+| **Diffusion layout** | Timestep loss modules under [`diffusion/losses/`](diffusion/losses/) with stable re-exports at the package root — [diffusion/README.md](diffusion/README.md). Related tests: [`tests/diffusion/`](tests/diffusion/). |
 
 ---
 
@@ -64,7 +76,7 @@
 | | |
 | :--- | :--- |
 | **Setup** | [Project status](#project-status-compute-and-expectations) · [Setup](#setup) |
-| **Core** | [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) |
+| **Core** | [Latest additions](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) |
 | **Train & sample** | [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
 | **Reference** | [JSONL fields](#data-jsonl-fields) · [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
@@ -75,7 +87,7 @@
 | Section | Links |
 | :--- | :--- |
 | **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines](pipelines/README.md) |
-| **Start** | [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
+| **Start** | [Latest additions](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
 | **Workflow** | [Architecture](#architecture-and-pipeline) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
@@ -525,6 +537,7 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
 | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) | **Navigate the tree:** folders, entry points, `scripts/` layout |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — refresh with `python scripts/tools/update_project_structure.py` |
+| [website/README.md](website/README.md) | **Codebase Atlas** — dashboard (Overview / Files / Graph / Pipeline + intel drawer) + `files.json` / `data/files-inline.js`: docstrings, **import graph**; excludes `docs/`. |
 | [docs/CODEBASE_ORGANIZATION.md](docs/CODEBASE_ORGANIZATION.md) | **Rules of thumb:** layers, where to add code, what stays at repo root |
 | [pipelines/README.md](pipelines/README.md) | **Two product lines:** **image_gen** vs **book_comic** (same engine; split docs + scripts) |
 | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
@@ -639,7 +652,11 @@ SDX has **two** training tracks for **two different model families** (they stack
 | **DiT / diffusion (T2I generator)** | [`train.py`](train.py) | **DiT** predicting noise / velocity in VAE latents, with frozen **VAE** + **T5** (or **triple** T5+CLIP fusion), optional **REPA**, **RAE bridge**, **MDM** masking, **MoE**, **EMA**, DDP, etc. Same engine for general T2I and book/comic workflows ([`pipelines/README.md`](pipelines/README.md)). |
 | **ViT (quality / adherence)** | [`ViT/train.py`](ViT/train.py) | A **separate** Vision Transformer that scores images vs captions — for **dataset QA**, **manifest ranking**, and best-of-N — **not** the DiT ([`ViT/EXCELLENCE_VS_DIT.md`](ViT/EXCELLENCE_VS_DIT.md), [`ViT/README.md`](ViT/README.md)). |
 
-Below: files that participate in each loop. For a full repo index see **[`docs/FILES.md`](docs/FILES.md)**.
+### DiT block-AR ↔ ViT scorer (alignment)
+
+If the **DiT** was trained with **block-wise AR** ([`docs/AR.md`](docs/AR.md), `--num-ar-blocks` **0 / 2 / 4**), you can tag each ViT training or inference row with the same regime so scores match generator behavior: JSONL fields **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`**. The bridge is **[`utils/ar_dit_vit.py`](utils/ar_dit_vit.py)** (4-D one-hot + parsers). ViT **`text_proj`** optionally concatenates this with caption features (`use_ar_conditioning` in checkpoint; **`--no-ar-conditioning`** in [`ViT/train.py`](ViT/train.py) for legacy 8-D–only weights). **[`ViT/infer.py`](ViT/infer.py)** and **[`ViT/export_embeddings.py`](ViT/export_embeddings.py)** read the same fields when the checkpoint expects AR side-info.
+
+Below: files that participate in each loop. For a full repo index see **[`docs/FILES.md`](docs/FILES.md)**. For an **interactive** atlas (excluding `docs/`, `external/`, caches), see **[`website/`](website/)** and run [`scripts/tools/generate_codebase_site.py`](scripts/tools/generate_codebase_site.py) to refresh **[`website/files.json`](website/files.json)** and **`website/data/files-inline.js`**.
 
 <details>
 <summary><strong>Expand: per-file map</strong> — <code>config/</code>, <code>data/</code>, <code>diffusion/</code>, <code>models/</code>, <code>utils/</code>, scripts, ViT</summary>
@@ -753,6 +770,9 @@ Use this when you want a **classifier / regressor** on (image, caption) pairs to
 | [`ViT/tta.py`](ViT/tta.py) | Test-time augmentation for **infer** / rank. |
 | [`ViT/infer.py`](ViT/infer.py) | Score a manifest (post-train; feeds better training data if you filter). |
 | [`ViT/rank.py`](ViT/rank.py) | Filter/sort JSONL by ViT scores. |
+| [`ViT/checkpoint_utils.py`](ViT/checkpoint_utils.py) | `load_vit_quality_checkpoint` — restores `use_ar_conditioning` / `ar_cond_dim` for tools. |
+| [`ViT/export_embeddings.py`](ViT/export_embeddings.py) | Fused embeddings → `.npz`; respects AR fields when conditioning is on. |
+| [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) | DiT **`num_ar_blocks`** ↔ ViT: one-hot regime + JSONL parsing (not the generator). |
 
 **Optional experimental trainer** (separate codepath): [`scripts/enhanced/train_enhanced.py`](scripts/enhanced/train_enhanced.py) — see `scripts/enhanced/` and docs if you use that stack.
 
@@ -793,7 +813,7 @@ Classic DDPM training draws each batch’s noise step **`t`** uniformly from `{0
 | | |
 |:--|:--|
 | **Preview distributions** | `python scripts/tools/training_timestep_preview.py` — histograms / quantiles for each mode before long runs ([`scripts/tools/training_timestep_preview.py`](scripts/tools/training_timestep_preview.py)). |
-| **Unit tests** | `pytest tests/test_timestep_sampling.py` |
+| **Unit tests** | `pytest tests/diffusion/test_timestep_sampling.py` |
 | **Roadmap / “OP” ideas** | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) §1.7, §11.9 |
 
 **Example:**
@@ -1010,14 +1030,15 @@ Keep strengths moderate (e.g. style 0.6–0.8, control 0.7–1.0) to avoid muddy
 
 ```
 sdx/
-├── config/           # TrainConfig, model_presets, domains, style artists
+├── config/           # TrainConfig, presets; long lists in reference/ — config/README.md
 ├── data/             # Text2ImageDataset, caption_utils
-├── diffusion/        # gaussian_diffusion, schedules
+├── diffusion/        # gaussian_diffusion, schedules, losses/ — diffusion/README.md
 ├── docs/             # All markdown docs
 ├── pipelines/        # image_gen vs book_comic workflows (docs + book script)
 ├── model/            # Downloaded weights (gitignored)
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
 ├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking; EXCELLENCE_VS_DIT.md, backbone_presets.py
+├── website/          # Codebase Atlas dashboard (static UI + generated files.json / data/files-inline.js); website/README.md
 ├── native/           # Optional Rust/Zig/C++/Go helpers
 ├── scripts/          # see scripts/README.md
 │   ├── cli.py        # optional unified CLI (dataset, config, checkpoints)
