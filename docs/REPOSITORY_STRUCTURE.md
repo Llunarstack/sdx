@@ -24,6 +24,7 @@ sdx/
 ├── examples/                           # Small usage examples
 ├── native/                             # Optional fast JSONL helpers (Rust, Go, …)
 ├── docs/                               # All markdown documentation
+├── user_data/                          # **Your** images + captions for training (`train/` — see user_data/README.md)
 ├── model/                              # Downloaded weights (gitignored)
 └── consistency_data/                   # Sample JSON for character/style consistency tools
 ```

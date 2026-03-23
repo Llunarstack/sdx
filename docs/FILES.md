@@ -23,6 +23,7 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **scripts/** | Download, tools, cascade stub | Ops & CI |
 | **pipelines/** | **image_gen** vs **book_comic**: per–product-line docs; book script at `pipelines/book_comic/scripts/generate_book.py` | See [pipelines/README.md](../pipelines/README.md) |
 | **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md` |
+| **user_data/** | **Your** datasets: `user_data/train/` + sidecar captions (see [user_data/README.md](../user_data/README.md)) | `train.py --data-path user_data/train` |
 | **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/model_paths.py` |
 
 End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + diffusion) → checkpoint → sample.py → image**. See [README § Architecture and pipeline](../README.md#architecture-and-pipeline).
