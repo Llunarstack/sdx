@@ -38,6 +38,14 @@ Quick links to all project docs, grouped by purpose.
 
 ---
 
+## Releases (versioned source)
+
+| Doc | Description |
+|-----|-------------|
+| [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — install notes; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
+
+---
+
 ## Roadmap & inspiration
 
 | Doc | Description |
