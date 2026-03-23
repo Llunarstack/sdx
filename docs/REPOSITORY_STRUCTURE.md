@@ -52,7 +52,7 @@ Run from **repo root** so `config`, `data`, `models`, `utils` resolve without ex
 | **`scripts/download/`** | Pull T5, VAE, CLIP, LLM, optional stacks into `model/` |
 | **`scripts/setup/`** | Clone upstream repos into `external/` (reference only) |
 | **`scripts/training/`** | HF → JSONL, precompute latents, `hf_download_and_train`, … |
-| **`scripts/tools/`** | Utilities — **[scripts/tools/README.md](../scripts/tools/README.md)** (full categorized index) |
+| **`scripts/tools/`** | Utilities — grouped entrypoints (`dev/`, `data/`, `prompt/`, `ops/`, `export/`, `repo/`) plus legacy flat scripts — **[scripts/tools/README.md](../scripts/tools/README.md)** |
 | **`scripts/book/`** | Thin launcher → `pipelines/book_comic/scripts/generate_book.py` |
 | **`scripts/enhanced/`** | **EnhancedDiT** training, sampling, setup, checkpoint seed — optional path parallel to main `train.py` |
 | **`scripts/cascade_generate.py`** | Stable Cascade stub (optional) |
