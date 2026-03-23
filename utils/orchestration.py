@@ -51,3 +51,20 @@ REASONER = PipelineRole(
 def pipeline_roles() -> tuple[PipelineRole, ...]:
     """Return the canonical ordered tuple of pipeline roles."""
     return (DESIGNER, VERIFIER, REASONER)
+
+
+def sample_cli_hint(
+    *,
+    num_candidates: int = 4,
+    pick_metric: str = "combo",
+    out_path: str = "out.png",
+) -> str:
+    """
+    Return a minimal ``sample.py`` invocation string for multi-stage (Designer + Verifier) flows.
+
+    See **scripts/tools/orchestrate_pipeline.py** for a ready-made wrapper.
+    """
+    return (
+        f'python sample.py --ckpt CKPT --prompt "..." --num {num_candidates} '
+        f'--pick-best {pick_metric} --out {out_path}'
+    )

@@ -4,6 +4,52 @@
 
 This doc **does not** claim SDX ships commercial parity with any external product. It **does** map where the field is moving and how SDX can evolve (see also [IMPROVEMENTS.md](IMPROVEMENTS.md) §12, [utils/orchestration.py](../utils/orchestration.py)).
 
+**Note:** Product names, release dates, and benchmarks change quickly. Treat the **industry snapshot** below as an orientation to common themes in early-2026 discussions—not a live leaderboard.
+
+---
+
+## Industry snapshot (March 2026)
+
+The field has shifted from “single text-to-image box” toward **integrated creative systems**: **4K-class** outputs as a default expectation, **reliable text-in-image** (glyphs, posters, UI), **Diffusion Transformers (DiT)** over older U-Net stacks for scalability, and **editing/consistency** as first-class (not one-off img2img hacks).
+
+### Frontier models (closed / API-class)
+
+| Theme | Often-cited examples (illustrative) |
+| :--- | :--- |
+| **Speed + production polish** | **FLUX.1.1 Pro** (fast, high-fidelity previews), **FLUX.2** family (strong “production-grade” look; reduced “plastic” skin vs earlier gens) |
+| **Visual storytelling / lighting** | **MAI-Image-2** (Microsoft) — emphasis on skin tone, natural light, cinematic composition |
+| **Spatial reasoning & typography** | **GPT Image 1.5** (OpenAI ecosystem) — faster than prior DALL·E-era stacks; better object contact / non-floating props; strong multi-line text |
+| **Text-in-image (glyphs)** | **Imagen 3** (Google) — dedicated glyph / text paths for readable signs, posters, labels |
+| **Google / Gemini image stack** | **Nano Banana** line (e.g. Pro / flash variants tied to Gemini) — often highlighted for consistency, text, and editing speed |
+| **Artistic breadth** | **Midjourney v7** (2025+) — still a reference for stylized / aesthetic-led work |
+
+### Open-weight & community
+
+| Theme | Often-cited examples (illustrative) |
+| :--- | :--- |
+| **Large open weights, complex prompts** | **Qwen-Image-2512** (Alibaba) — very large open-weight stack; strong on long, precise prompts (colors, layout) |
+| **Real-time / distilled** | **Z-Image-Turbo** — sub-second class on mid-range GPUs; popular for live UI and streaming |
+| **Unified image + video** | **LTX** family — shared “unified diffusion” story across stills and short clips; style parity stills ↔ motion |
+| **Flexible OSS base** | **Stable Diffusion 3.5+** / **SD3 lineage** — MMDiT-style text and prompt following; large fine-tune ecosystem |
+| **FLUX ecosystem** | Open-weight **FLUX** variants + **Kontext**-style **contextual editing** (iterate clothes/background while holding identity) |
+| **Versatile commercial-style OSS** | **Seedream** (various versions) — multi-scenario, multi-style handling |
+
+### Architecture: U-Net → DiT, Flow Matching, editing
+
+- **DiT over U-Net:** Industry direction favors **transformer backbones** for diffusion at scale—better scaling to **high resolution** (4K/8K) without classic CNN upsampling artifacts (doubled limbs, tiled seams).
+- **Flow matching / context:** Some stacks (e.g. FLUX **Kontext**) lean on **flow-matching**-style training and **context-aware** conditioning so **iterative edits** preserve identity and scene structure.
+- **SDX alignment:** This repo is **DiT-centric** (`GaussianDiffusion` + DiT; see `train.py` / `sample.py`)—aligned with the architectural trend, independent of any vendor API.
+
+### Cross-cutting trends (early 2026)
+
+| Trend | What it means |
+| :--- | :--- |
+| **Authenticity / “lo-fi”** | Deliberate **film grain**, **lens flare**, **motion blur** to avoid the “too perfect” look — see [§1](#1-authenticity-over-the-ai-look) below. |
+| **Text & graphic design** | Legible **paragraphs**, **logos**, **UI mockups** — see [§4](#4-text-ui-and-graphic-design-in-the-image). |
+| **Subject / character consistency** | **Character locking** and multi-scene identity without hand-tuned LoRA for every project. |
+| **Grounding & freshness** | **Retrieval / live context** (e.g. current products, outfits) — still mostly **product-layer**, not “baked into” weights alone — see [§5](#5-grounding-and-live-knowledge). |
+| **Speed vs quality** | High-res in **seconds** is normal; distilled and “turbo” paths target **interactive** loops. |
+
 ---
 
 ## 1. Authenticity over “the AI look”
@@ -19,7 +65,8 @@ This doc **does not** claim SDX ships commercial parity with any external produc
 **Good next steps in-repo**
 
 - Optional **texture / frequency** regularization or auxiliary losses (document loss schedule; see [IMPROVEMENTS.md](IMPROVEMENTS.md) §11).
-- **Multi-resolution / aspect buckets** so the model sees non-square and varied crops ([IMPROVEMENTS.md](IMPROVEMENTS.md) §1.1).
+- **Multi-resolution / aspect buckets** — **implemented:** `train.py --resolution-buckets` (e.g. `256,512` or `512x768`), [`data/bucket_batch_sampler.py`](../data/bucket_batch_sampler.py), [`data/t2i_dataset.py`](../data/t2i_dataset.py) (single-GPU only; no `--val-split`; latent cache disabled when buckets are on). Prefer `--size-embed-dim` > 0 for best extrapolation ([IMPROVEMENTS.md](IMPROVEMENTS.md) §1.1).
+- **Lo-fi cosmetics** — **implemented:** [`add_motion_blur` / `add_lens_glare`](../utils/quality.py) alongside existing grain / `naturalize`.
 - Dataset-side **“lived-in”** captions (wear, dust, film grain) in JSONL—not only tag lists.
 
 ---
@@ -36,7 +83,7 @@ This doc **does not** claim SDX ships commercial parity with any external produc
 
 **Good next steps**
 
-- Explicit **orchestration** API or script that chains: generate K → score → optional refine → optional second-pass prompt (see [utils/orchestration.py](../utils/orchestration.py)).
+- Explicit **orchestration** — **implemented:** [`scripts/tools/orchestrate_pipeline.py`](../scripts/tools/orchestrate_pipeline.py) (wraps `sample.py` with `--num` + `--pick-best`); [`sample_cli_hint()`](../utils/orchestration.py) for copy-paste; optional **`--pick-best combo_exposure`** ([`score_exposure_balance`](../utils/test_time_pick.py)) for lightweight highlight/shadow clipping avoidance.
 - Optional **lightweight anatomy/physics** checks (hand bbox + finger count heuristics, shadow/light consistency) as *scores* feeding pick-best—not a full closed verifier.
 
 ---
@@ -52,7 +99,7 @@ This doc **does not** claim SDX ships commercial parity with any external produc
 
 **Good next steps**
 
-- **Resolution / aspect buckets** in training ([IMPROVEMENTS.md](IMPROVEMENTS.md) §1.1).
+- **Resolution / aspect buckets** in training — see §1 above (`--resolution-buckets`).
 - Document a **safe** recipe: train at moderate res, sample higher with tiling + light post-sharpen.
 
 ### Should we add an upscaler “to the model”?
@@ -95,7 +142,8 @@ SDX already has **VAE tiling** for large decodes and **sharpen/naturalize** in `
 
 **Good next steps**
 
-- **RAG-style** optional module: retrieve reference images/text → inject into caption or cross-attn (design doc + stub).
+- **RAG-style** optional module — **stub:** [`utils/rag_prompt.py`](../utils/rag_prompt.py) (`merge_facts_into_prompt`, `load_facts_from_jsonl`). Wire your own retrieval; then **encode** the merged prompt as usual.
+- **Character / subject consistency** — **helpers:** [`utils/character_lock.py`](../utils/character_lock.py) (`merge_character_into_caption`, …) for stable JSONL / prompt prefixes.
 - Clear **separation** in docs: “model knowledge” vs “user-supplied facts” for safety and reproducibility.
 
 ---
@@ -115,6 +163,9 @@ Commercial stacks and names change quickly. Treat the following as **examples** 
 
 ## See also
 
+- [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) — **workflow / efficiency** industry narratives (test-time compute, grounding, LLaDA-class ideas, Mamba) — **disclaimers** + SDX hooks  
+- [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) — **post-diffusion** themes (flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE) mapped to SDX  
+- [`utils/architecture_map.py`](../utils/architecture_map.py) — machine-readable theme → repo status  
 - [IMPROVEMENTS.md](IMPROVEMENTS.md) §11–§12 — research hooks and **2026 alignment** tickets  
 - [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) — timestep sampling and flow-era ideas  
 - [utils/orchestration.py](../utils/orchestration.py) — named pipeline roles (Designer / Verifier / Reasoner)

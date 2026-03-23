@@ -10,6 +10,7 @@ Tools stay **flat** under this folder so `python -m scripts.tools.quick_test` an
 
 | Script | Purpose |
 |--------|---------|
+| **`orchestrate_pipeline.py`** | **Designer → Verifier:** run `sample.py` with `--num` > 1 and `--pick-best` (e.g. `combo_exposure`) — see [LANDSCAPE_2026.md](../../docs/LANDSCAPE_2026.md) §2 |
 | **`quick_test.py`** | One DiT forward pass — verify torch, models, env |
 | **`smoke_imports.py`** | Import-check internal packages (`python -m scripts.tools.smoke_imports`) |
 | **`dit_variant_compare.py`** | Parameter counts / size estimates for DiT / EnhancedDiT registry names |

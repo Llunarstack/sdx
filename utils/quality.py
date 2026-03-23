@@ -180,3 +180,64 @@ def contrast_pil(pil_image, factor: float):
     from PIL import Image
 
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
+def add_motion_blur(
+    image: np.ndarray,
+    amount: float = 0.12,
+    angle_deg: float = 0.0,
+    seed: Optional[int] = None,
+) -> np.ndarray:
+    """
+    Subtle directional blur (LANDSCAPE: authenticity / lens-like motion).
+    ``amount`` in [0, 0.35]: blend strength toward a shifted copy along ``angle_deg``.
+    """
+    if amount <= 0:
+        return image
+    rng = np.random.default_rng(seed)
+    is_uint = image.dtype == np.uint8
+    img = image.astype(np.float32, copy=True)
+    h, w, c = img.shape
+    rad = np.deg2rad(angle_deg + rng.uniform(-2.0, 2.0))
+    dx = int(round(3 * amount * np.cos(rad)))
+    dy = int(round(3 * amount * np.sin(rad)))
+    if dx == 0 and dy == 0:
+        dx = 1
+    shifted = np.roll(np.roll(img, dx, axis=1), dy, axis=0)
+    a = float(min(0.35, max(0.02, amount)))
+    out = (1.0 - a) * img + a * shifted
+    out = np.clip(out, 0, 255)
+    if is_uint:
+        return out.astype(np.uint8)
+    return out
+
+
+def add_lens_glare(
+    image: np.ndarray,
+    strength: float = 0.1,
+    seed: Optional[int] = None,
+) -> np.ndarray:
+    """
+    Soft additive bloom toward one corner (cheap lens-flare stand-in; LANDSCAPE §1).
+    ``strength`` ~0.05–0.2 typical.
+    """
+    if strength <= 0:
+        return image
+    rng = np.random.default_rng(seed)
+    is_uint = image.dtype == np.uint8
+    img = image.astype(np.float32, copy=True)
+    h, w, c = img.shape
+    # Radial gradient from a random edge point
+    sx = rng.choice([0, w - 1])
+    sy = rng.choice([0, h - 1])
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = np.sqrt((xx - sx) ** 2 + (yy - sy) ** 2)
+    d = d / (d.max() + 1e-6)
+    glow = (1.0 - np.clip(d, 0, 1)) ** 2
+    glow = glow[:, :, None]
+    warm = np.array([1.0, 0.95, 0.85], dtype=np.float32) * 255.0
+    add = strength * glow * warm
+    out = np.clip(img + add, 0, 255)
+    if is_uint:
+        return out.astype(np.uint8)
+    return out

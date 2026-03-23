@@ -14,6 +14,8 @@ Quick links to all project docs, grouped by purpose.
 | [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
 | [CODEBASE_ORGANIZATION.md](CODEBASE_ORGANIZATION.md) | **Repo structure rules:** layers, where to add code, what not to move without a migration. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
+| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Post-diffusion era:** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
+| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency narratives:** coherency/4K, LLaDA-class ideas, test-time compute, live grounding, Mamba — **disclaimers** + SDX mapping ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) | **Start here to navigate:** top-level tree, `scripts/` layout, where to add code. |
 | [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`scripts/tools/update_project_structure.py`). |
@@ -41,6 +43,8 @@ Quick links to all project docs, grouped by purpose.
 | Doc | Description |
 |-----|--------------|
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 industry context:** production-grade gen, authenticity, system-of-experts pipelines, 4K/aspect, text-in-image, grounding — mapped to SDX ([utils/orchestration.py](../utils/orchestration.py)). |
+| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Research / architecture:** flow matching, diffusion bridges, hybrid AR+DiT, Mamba, distillation, semantic latents — vs SDX ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
+| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Industry workflow commentary** (efficiency, grounding, test-time compute) — **disclaimers** + SDX hooks ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
 | [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: consistency, GLIGEN/Control-style ideas, lettering, **prompt_lexicon** + `generate_book` flags. |
 | [BOOK_MODEL_EXCELLENCE.md](BOOK_MODEL_EXCELLENCE.md) | “Best book output” checklist: data, training, `--book-accuracy production`, pick-best, OCR/anchoring. |
 | [../ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | **ViT/ vs DiT:** scoring stack vs generator; Swin-DiT, FiT, reward/IQA papers; timm backbone presets. |

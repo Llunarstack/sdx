@@ -2,6 +2,8 @@
 
 Short survey of **recent directions** and how they relate to **SDX** (VP DDPM + DiT + `GaussianDiffusion`).
 
+For a broader **2026 architecture narrative** (flow matching vs bridges, hybrid AR+DiT, Mamba, DMD, RAE/VLM lines) with an SDX parity table, see **[ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md)** and **[`utils/architecture_map.py`](../utils/architecture_map.py)**.
+
 ---
 
 ## Implemented in SDX (this repo)
