@@ -122,6 +122,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/nn_inspect.py](../utils/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | [utils/orchestration.py](../utils/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
+| [utils/architecture_map.py](../utils/architecture_map.py) | **2026 architecture themes** → SDX parity (`THEMES`, `theme_by_id`, `themes_as_dict`); see [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md), [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md). |
 | *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
 
 ### ViT (`ViT/`)

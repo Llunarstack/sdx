@@ -1,6 +1,6 @@
 # Training config: single place for hyperparameters (fast + good defaults).
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -9,6 +9,8 @@ class TrainConfig:
     data_path: str = ""
     manifest_jsonl: Optional[str] = None
     image_size: int = 256
+    # IMPROVEMENTS §1.1: optional list of (H, W); None = single square --image-size
+    resolution_buckets: Optional[List[Tuple[int, int]]] = None
     num_workers: int = 8
     global_batch_size: int = 128
     caption_dropout_prob: float = 0.1

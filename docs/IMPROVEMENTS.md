@@ -27,7 +27,8 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 - **Idea:** Train on multiple resolutions or aspect ratios (e.g. 256², 512×256, 256×512) instead of a single square. Improves composition and “native” non-square generation.
 - **How others do it:** SDXL uses resolution buckets; FLUX/Kontext use fixed preferred resolutions per aspect. We currently have a single `--image-size`.
-- **Add:** Optional resolution buckets (e.g. list of (H,W) or aspect ratios) and batch by resolution so each batch is same size; or multi-scale training with random crop to one of several sizes.
+- **Coded (partial):** `train.py --resolution-buckets` — comma-separated squares (`256,384,512`) or explicit `HxW` (`512x768,256x512`). Uses [`ResolutionBucketBatchSampler`](../data/bucket_batch_sampler.py) so each batch is one shape. **Constraints:** single GPU only (no DDP); `--val-split` must be 0; latent cache disabled for bucket runs. Prefer `--size-embed-dim` > 0 when training multiple sizes.
+- **Future:** DDP-aware bucketing; optional multi-scale without buckets (padding) — not implemented.
 
 ### 1.2 Smarter crop strategy — **coded**
 

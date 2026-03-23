@@ -543,8 +543,8 @@ def main():
         "--pick-best",
         type=str,
         default="none",
-        choices=["none", "clip", "edge", "ocr", "combo"],
-        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo)",
+        choices=["none", "clip", "edge", "ocr", "combo", "combo_exposure"],
+        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure)",
     )
     parser.add_argument(
         "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"

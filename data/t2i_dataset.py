@@ -67,6 +67,66 @@ def _largest_center_crop(pil_image, image_size: int):
     return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
 
 
+# --- IMPROVEMENTS §1.1: rectangular targets (H, W) for resolution / aspect buckets ---
+def _cover_center_crop_hw(pil_image: Image.Image, H: int, W: int) -> Image.Image:
+    """Resize to cover (W,H), then center-crop to exactly H×W."""
+    iw, ih = pil_image.size
+    while min(iw, ih) >= 2 * min(H, W):
+        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
+        iw, ih = pil_image.size
+    scale = max(W / iw, H / ih)
+    nw, nh = round(iw * scale), round(ih * scale)
+    pil_image = pil_image.resize((nw, nh), resample=Image.BICUBIC)
+    arr = np.array(pil_image)
+    h, w = arr.shape[:2]
+    cy = max(0, (h - H) // 2)
+    cx = max(0, (w - W) // 2)
+    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
+
+
+def _cover_random_crop_hw(pil_image: Image.Image, H: int, W: int) -> Image.Image:
+    iw, ih = pil_image.size
+    while min(iw, ih) >= 2 * min(H, W):
+        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
+        iw, ih = pil_image.size
+    scale = max(W / iw, H / ih)
+    nw, nh = round(iw * scale), round(ih * scale)
+    pil_image = pil_image.resize((nw, nh), resample=Image.BICUBIC)
+    arr = np.array(pil_image)
+    h, w = arr.shape[:2]
+    cy = random.randint(0, max(0, h - H))
+    cx = random.randint(0, max(0, w - W))
+    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
+
+
+def _largest_center_crop_hw(pil_image: Image.Image, H: int, W: int) -> Image.Image:
+    """Match short-side scaling idea for non-square targets: min side -> min(H,W), then center crop."""
+    iw, ih = pil_image.size
+    target_min = min(H, W)
+    while min(iw, ih) >= 2 * target_min:
+        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
+        iw, ih = pil_image.size
+    imin = min(iw, ih)
+    scale = target_min / max(1, imin)
+    nw, nh = round(iw * scale), round(ih * scale)
+    pil_image = pil_image.resize((nw, nh), resample=Image.BICUBIC)
+    arr = np.array(pil_image)
+    h, w = arr.shape[:2]
+    cy = max(0, (h - H) // 2)
+    cx = max(0, (w - W) // 2)
+    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
+
+
+def _crop_to_hw(pil_image: Image.Image, H: int, W: int, crop_mode: str) -> Image.Image:
+    if H <= 0 or W <= 0:
+        raise ValueError(f"Invalid crop size H={H}, W={W}")
+    if crop_mode == "random":
+        return _cover_random_crop_hw(pil_image, H, W)
+    if crop_mode == "largest_center":
+        return _largest_center_crop_hw(pil_image, H, W)
+    return _cover_center_crop_hw(pil_image, H, W)
+
+
 def normalize_to_latent_range(x: torch.Tensor, scale: float = 0.18215) -> torch.Tensor:
     """Scale pixel tensor for VAE latent (e.g. SD convention)."""
     return x * scale
@@ -115,12 +175,18 @@ class Text2ImageDataset(Dataset):
         extract_style_from_caption: bool = True,  # Auto-fill style from artist/style tags (PixAI, Danbooru)
         region_caption_mode: str = "append",  # "append" | "prefix" | "off" — merge JSONL regions/parts into T5 caption
         region_layout_tag: str = "[layout]",
+        resolution_buckets: Optional[List[Tuple[int, int]]] = None,
+        bucket_seed: int = 42,
+        bucket_fixed_assign: bool = False,
     ):
         self.data_path = Path(data_path)
         self.extract_style_from_caption = extract_style_from_caption
         self.image_size = image_size
         self.latent_cache_dir = Path(latent_cache_dir) if latent_cache_dir else None
         self.crop_mode = crop_mode
+        self.resolution_buckets = resolution_buckets or []
+        self.bucket_seed = int(bucket_seed)
+        self.bucket_fixed_assign = bool(bucket_fixed_assign)
         self.normalize_latent_scale = normalize_latent_scale
         self.caption_ext = caption_ext
         self.use_struct = use_struct
@@ -138,6 +204,32 @@ class Text2ImageDataset(Dataset):
         self.region_layout_tag = region_layout_tag
         self.samples: List[Dict[str, Any]] = []
         self._scan()
+        self._bucket_assign: List[int] = [0] * len(self.samples)
+        self.set_epoch(0)
+
+    def set_epoch(self, epoch: int = 0) -> None:
+        """Refresh per-index bucket ids when using ``resolution_buckets`` (IMPROVEMENTS §1.1)."""
+        if not self.resolution_buckets:
+            return
+        nb = len(self.resolution_buckets)
+        e = int(epoch)
+        for i in range(len(self.samples)):
+            if self.bucket_fixed_assign:
+                self._bucket_assign[i] = (i * 100003 + self.bucket_seed) % nb
+            else:
+                self._bucket_assign[i] = (i * 100003 + e * 10007 + self.bucket_seed) % nb
+
+    def _hw_for_index(self, idx: int) -> Tuple[int, int]:
+        if self.resolution_buckets:
+            b = self._bucket_assign[idx]
+            return self.resolution_buckets[b]
+        return (self.image_size, self.image_size)
+
+    def _crop_image(self, pil: Image.Image, idx: int) -> Image.Image:
+        H, W = self._hw_for_index(idx)
+        if H == self.image_size and W == self.image_size and not self.resolution_buckets:
+            return self._crop_fn(pil, self.image_size)
+        return _crop_to_hw(pil, H, W, self.crop_mode)
 
     def _scan(self):
         if self.data_path.suffix.lower() == ".jsonl":
@@ -277,15 +369,16 @@ class Text2ImageDataset(Dataset):
             out["init_image_path"] = init_path
         # Latent cache: load precomputed latent to skip VAE encode
         lp = self._latent_path(path)
-        if lp is not None and lp.exists():
+        h_i, w_i = self._hw_for_index(idx)
+        if lp is not None and lp.exists() and not self.resolution_buckets:
             try:
                 latent = torch.load(lp, map_location="cpu", weights_only=True)
                 out["latent_values"] = latent
-                out["pixel_values"] = torch.zeros(3, self.image_size, self.image_size)
+                out["pixel_values"] = torch.zeros(3, h_i, w_i)
                 if init_path:
                     try:
                         init_pil = Image.open(init_path).convert("RGB")
-                        init_pil = self._crop_fn(init_pil, self.image_size)
+                        init_pil = self._crop_image(init_pil, idx)
                         init_arr = np.array(init_pil).astype(np.float32) / 255.0
                         init_arr = (init_arr - 0.5) / 0.5
                         out["init_pixel_values"] = torch.from_numpy(init_arr).permute(2, 0, 1)
@@ -294,7 +387,7 @@ class Text2ImageDataset(Dataset):
                 if ctrl_path:
                     try:
                         ctrl_pil = Image.open(ctrl_path).convert("RGB")
-                        ctrl_pil = self._crop_fn(ctrl_pil, self.image_size)
+                        ctrl_pil = self._crop_image(ctrl_pil, idx)
                         ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
                         ctrl_arr = (ctrl_arr - 0.5) / 0.5
                         out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
@@ -304,7 +397,7 @@ class Text2ImageDataset(Dataset):
             except Exception:
                 pass
         pil = Image.open(path).convert("RGB")
-        pil = self._crop_fn(pil, self.image_size)
+        pil = self._crop_image(pil, idx)
         img = np.array(pil).astype(np.float32) / 255.0
         img = (img - 0.5) / 0.5
         img = torch.from_numpy(img).permute(2, 0, 1)
@@ -312,7 +405,7 @@ class Text2ImageDataset(Dataset):
         if init_path:
             try:
                 init_pil = Image.open(init_path).convert("RGB")
-                init_pil = self._crop_fn(init_pil, self.image_size)
+                init_pil = self._crop_image(init_pil, idx)
                 init_arr = np.array(init_pil).astype(np.float32) / 255.0
                 init_arr = (init_arr - 0.5) / 0.5
                 out["init_pixel_values"] = torch.from_numpy(init_arr).permute(2, 0, 1)
@@ -321,7 +414,7 @@ class Text2ImageDataset(Dataset):
         if ctrl_path:
             try:
                 ctrl_pil = Image.open(ctrl_path).convert("RGB")
-                ctrl_pil = self._crop_fn(ctrl_pil, self.image_size)
+                ctrl_pil = self._crop_image(ctrl_pil, idx)
                 ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
                 ctrl_arr = (ctrl_arr - 0.5) / 0.5
                 out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)

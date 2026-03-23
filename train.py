@@ -32,7 +32,7 @@ except ImportError:
         return "PixAI.art-style"
 
 
-from data import Text2ImageDataset, collate_t2i
+from data import ResolutionBucketBatchSampler, Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.timestep_loss_weight import get_timestep_loss_weight
 from diffusion.timestep_sampling import sample_training_timesteps
@@ -619,6 +619,27 @@ def parse_caption_dropout_schedule(s: Optional[str]):
     return out if out else None
 
 
+def parse_resolution_buckets(s: Optional[str]):
+    """
+    Parse ``256,384,512`` (squares) or ``512x768,256x512`` (HxW) into a list of (H, W).
+    Returns None if empty.
+    """
+    if not s or not str(s).strip():
+        return None
+    out = []
+    for part in str(s).split(","):
+        part = part.strip().lower()
+        if not part:
+            continue
+        if "x" in part:
+            a, b = part.split("x", 1)
+            out.append((int(a.strip()), int(b.strip())))
+        else:
+            z = int(part)
+            out.append((z, z))
+    return out or None
+
+
 def parse_mdm_mask_schedule(s: Optional[str]):
     """
     Parse '0,0.05,500,0.25,999,0.35' -> [(0,0.05),(500,0.25),(999,0.35)].
@@ -946,15 +967,46 @@ def main(cfg: TrainConfig):
     data_path = cfg.manifest_jsonl or cfg.data_path
     if not data_path:
         raise ValueError("Set --data-path or --manifest-jsonl")
+
+    if getattr(cfg, "dry_run", False):
+        cfg.max_steps = 1
+        logger.info("Dry run: 1 step then exit.")
+
+    val_split = getattr(cfg, "val_split", 0.0)
+    res_buckets = getattr(cfg, "resolution_buckets", None) or []
+    latent_dir = getattr(cfg, "latent_cache_dir", None)
+    if res_buckets:
+        if use_ddp:
+            raise ValueError(
+                "--resolution-buckets is not supported with multi-GPU DDP yet. "
+                "Use a single GPU or omit --resolution-buckets."
+            )
+        if val_split > 0 and val_split < 1:
+            raise ValueError(
+                "--resolution-buckets requires --val-split 0 (no train/val split) in this version."
+            )
+        for h, w in res_buckets:
+            if int(h) % 8 != 0 or int(w) % 8 != 0:
+                raise ValueError(f"Resolution bucket ({h},{w}) must be divisible by 8 (VAE stride).")
+        if latent_dir:
+            logger.warning("Disabling latent cache (--latent-cache-dir) when using resolution buckets.")
+            latent_dir = None
+
+    max_steps_early = int(getattr(cfg, "max_steps", 0) or 0)
+    passes_early = int(getattr(cfg, "passes", 0) or 0)
+    bucket_fixed_assign = max_steps_early > 0 or passes_early > 0
+
     dataset = Text2ImageDataset(
         data_path,
         image_size=cfg.image_size,
-        latent_cache_dir=getattr(cfg, "latent_cache_dir", None),
+        latent_cache_dir=latent_dir,
         crop_mode=getattr(cfg, "crop_mode", "center"),
         region_caption_mode=getattr(cfg, "region_caption_mode", "append"),
         region_layout_tag=getattr(cfg, "region_layout_tag", "[layout]"),
+        resolution_buckets=res_buckets if res_buckets else None,
+        bucket_seed=int(getattr(cfg, "global_seed", 42)),
+        bucket_fixed_assign=bucket_fixed_assign,
     )
-    val_split = getattr(cfg, "val_split", 0.0)
     val_loader = None
     train_dataset = dataset
     if val_split > 0 and val_split < 1:
@@ -989,32 +1041,49 @@ def main(cfg: TrainConfig):
         if use_ddp
         else None
     )
-    loader = DataLoader(
-        train_dataset,
-        batch_size=cfg.per_device_batch_size,
-        shuffle=(sampler is None),
-        sampler=sampler,
-        num_workers=cfg.num_workers,
-        pin_memory=True,
-        drop_last=True,
-        collate_fn=collate_t2i,
-        persistent_workers=cfg.num_workers > 0,
-        worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
-        generator=torch.Generator().manual_seed(cfg.global_seed + rank)
-        if getattr(cfg, "deterministic", False)
-        else None,
-    )
+    if res_buckets:
+        bucket_sampler = ResolutionBucketBatchSampler(
+            train_dataset,
+            cfg.per_device_batch_size,
+            drop_last=True,
+            shuffle_batches=True,
+            generator=torch.Generator().manual_seed(cfg.global_seed),
+        )
+        loader = DataLoader(
+            train_dataset,
+            batch_sampler=bucket_sampler,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            collate_fn=collate_t2i,
+            persistent_workers=cfg.num_workers > 0,
+            worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
+        )
+    else:
+        loader = DataLoader(
+            train_dataset,
+            batch_size=cfg.per_device_batch_size,
+            shuffle=(sampler is None),
+            sampler=sampler,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=True,
+            collate_fn=collate_t2i,
+            persistent_workers=cfg.num_workers > 0,
+            worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
+            generator=torch.Generator().manual_seed(cfg.global_seed + rank)
+            if getattr(cfg, "deterministic", False)
+            else None,
+        )
     logger.info(f"Train size: {len(train_dataset)}, batch per device: {cfg.per_device_batch_size}")
 
     # Training length: passes (best) > max_steps > epochs
-    # IMPROVEMENTS 9: --dry-run runs one step and exits
-    if getattr(cfg, "dry_run", False):
-        cfg.max_steps = 1
-        logger.info("Dry run: 1 step then exit.")
     max_steps = getattr(cfg, "max_steps", 0)
     passes = getattr(cfg, "passes", 0)
     if passes > 0:
-        steps_per_epoch = max(1, len(train_dataset) // cfg.global_batch_size)
+        if res_buckets:
+            steps_per_epoch = max(1, len(loader))
+        else:
+            steps_per_epoch = max(1, len(train_dataset) // cfg.global_batch_size)
         steps_from_passes = passes * steps_per_epoch
         max_steps = steps_from_passes if max_steps <= 0 else min(steps_from_passes, max_steps)
         logger.info(
@@ -1078,6 +1147,8 @@ def main(cfg: TrainConfig):
                 break
             if use_ddp:
                 sampler.set_epoch(epoch)
+            if res_buckets:
+                train_dataset.set_epoch(epoch)
         batch_iter = loader
 
         for batch in batch_iter:
@@ -1519,6 +1590,12 @@ if __name__ == "__main__":
         "--rae-bridge-cycle-weight", type=float, default=0.01, help="Cycle loss weight for RAELatentBridge (0=off)"
     )
     parser.add_argument("--image-size", type=int, default=256)
+    parser.add_argument(
+        "--resolution-buckets",
+        type=str,
+        default="",
+        help="IMPROVEMENTS §1.1: comma-separated sizes, e.g. 256,384,512 or 512x768,256x512 (single-GPU only; no val-split)",
+    )
     parser.add_argument("--global-batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -1793,6 +1870,7 @@ if __name__ == "__main__":
         clip_text_encoder_l=str(getattr(args, "clip_text_encoder_l", "") or ""),
         clip_text_encoder_bigg=str(getattr(args, "clip_text_encoder_bigg", "") or ""),
         image_size=args.image_size,
+        resolution_buckets=parse_resolution_buckets(args.resolution_buckets or None),
         vae_model=args.vae_model,
         autoencoder_type=args.autoencoder_type,
         rae_use_latent_bridge=not getattr(args, "no_rae_latent_bridge", False),
