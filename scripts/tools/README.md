@@ -1,74 +1,22 @@
 # `scripts/tools/` — utility index
 
-Run from **repository root** (`python scripts/tools/<name>.py` or `python -m scripts.tools.<name>`).
+Run from repo root (`python scripts/tools/...` or `python -m scripts.tools...`).
 
-Tools stay **flat** under this folder so `python -m scripts.tools.quick_test` and imports like `from scripts.tools.book_scene_split import …` remain stable. Use the tables below to find what you need by **purpose**.
+## Canonical grouped entrypoints
 
----
+| Group | Examples |
+|---|---|
+| **dev** | `python -m scripts.tools.dev.quick_test`, `...dev.smoke_imports` |
+| **data** | `python -m scripts.tools.data.data_quality`, `...data.manifest_paths` |
+| **prompt** | `python -m scripts.tools.prompt.prompt_lint`, `...prompt.tag_coverage` |
+| **ops** | `python -m scripts.tools.ops.orchestrate_pipeline`, `...ops.op_preflight` |
+| **export** | `python -m scripts.tools.export.export_onnx`, `...export.export_safetensors` |
+| **repo** | `python -m scripts.tools.repo.update_project_structure`, `...repo.verify_doc_links` |
 
-## Smoke test & development
-
-| Script | Purpose |
-|--------|---------|
-| **`orchestrate_pipeline.py`** | **Designer → Verifier:** run `sample.py` with `--num` > 1 and `--pick-best` (e.g. `combo_exposure`) — see [LANDSCAPE_2026.md](../../docs/LANDSCAPE_2026.md) §2 |
-| **`quick_test.py`** | One DiT forward pass — verify torch, models, env |
-| **`smoke_imports.py`** | Import-check internal packages (`python -m scripts.tools.smoke_imports`) |
-| **`dit_variant_compare.py`** | Parameter counts / size estimates for DiT / EnhancedDiT registry names |
-| **`ckpt_info.py`** | Print checkpoint config and keys without full model load |
-| **`seed_explorer.py`** | Grid explore seeds / presets for a checkpoint |
-| **`training_timestep_preview.py`** | ASCII histograms for `--timestep-sample-mode` distributions |
-| **`vit_inspect.py`** | ViT QA checkpoint: config, param count, optional module tree |
-
----
-
-## Data & manifests
-
-| Script | Purpose |
-|--------|---------|
-| **`data_quality.py`** | Filter / dedup JSONL or folders (phash, md5, caption length, bad words); optional **`--native-preflight`** / **`--native-stats`** / **`--native-validate`** (Rust `sdx-jsonl-tools` if built) |
-| **`normalize_captions.py`** | Normalize caption fields in a manifest |
-| **`make_smoke_dataset.py`** | Synthetic PNGs + captions for smoke `train.py` |
-| **`book_scene_split.py`** | Split `## Page N` / `---PAGE---` scripts → one line per page for `generate_book.py` |
-| **`image_quality_qc.py`** | Per-image QC metrics on manifest (sharpness, contrast thresholds) |
-| **`jsonl_merge.py`** | Merge multiple `.jsonl` manifests with dedupe (prefers Go `native/go/sdx-manifest` if built; else Python — see `utils/native_tools.merge_jsonl_files`) |
-| **`manifest_paths.py`** | Extract **`image_path`** / **`path`** / **`image`** lines from JSONL (**Rust `image-paths`** if built); **`--dup`** uses **`dup-image-paths`**. For disk size checks, pipe output to Zig **`sdx-pathstat`** ([native/README.md](../../native/README.md)). |
-
----
-
-## Coverage & prompt analysis
-
-| Script | Purpose |
-|--------|---------|
-| **`tag_coverage.py`** | Scan JSONL for hard-style / person / anatomy / concept-bleed tags |
-| **`spatial_coverage.py`** | Spatial wording coverage (`behind`, `next to`, …) |
-| **`complex_prompt_coverage.py`** | Tricky categories (clothes, weapons, food, text, NSFW, …) |
-| **`prompt_gap_scout.py`** | Single-prompt gap analysis + i18n suggestions |
-| **`prompt_lint.py`** | CLI wrapper for JSONL prompt lint (see `utils/prompt_lint.py`) |
-| **`prompt_i18n.py`** | Shared i18n helpers (imported by other tools) |
-| **`eval_prompts.py`** | Evaluate prompts against a checkpoint (used by `op_pipeline.ps1`) |
-
----
-
-## Export & ops
-
-| Script | Purpose |
-|--------|---------|
-| **`export_onnx.py`** | Export DiT checkpoint → ONNX |
-| **`export_safetensors.py`** | Export DiT weights → `.safetensors` (ComfyUI / A1111) |
-| **`op_preflight.py`** | Pre-train gate: coverage + thresholds (PASS/FAIL); optional `--native-manifest-check` runs Rust `sdx-jsonl-tools stats` if built |
-| **`op_pipeline.ps1`** | Windows: chain preflight → normalize → optional eval |
-
----
-
-## Repo layout generator
-
-| Script | Purpose |
-|--------|---------|
-| **`update_project_structure.py`** | Write **`PROJECT_STRUCTURE.md`** at repo root (ASCII tree; run after moves). `python scripts/tools/update_project_structure.py --help` |
-| **`verify_doc_links.py`** | Check relative `[]()` links in README, `docs/`, `pipelines/`, `ViT/`, `scripts/**/*.md` — `python scripts/tools/verify_doc_links.py` (exit 1 if broken). |
+Legacy flat scripts (`scripts/tools/*.py`) are still supported for compatibility.
 
 ## See also
 
-- [scripts/README.md](../README.md) — all of `scripts/`
-- [docs/REPOSITORY_STRUCTURE.md](../../docs/REPOSITORY_STRUCTURE.md) — full repo map
-- [docs/FILES.md](../../docs/FILES.md) — exhaustive file list
+- [scripts/README.md](../README.md)
+- [docs/REPOSITORY_STRUCTURE.md](../../docs/REPOSITORY_STRUCTURE.md)
+
