@@ -15,10 +15,12 @@
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-CONTRIBUTING.md-1f6feb?style=flat-square" alt="Contributing"/></a>
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Docs-docs%2FREADME-24292f?style=flat-square&logo=github" alt="Documentation"/></a>
   <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/Roadmap-IMPROVEMENTS-238636?style=flat-square" alt="Roadmap"/></a>
+  <a href="https://github.com/Llunarstack/sdx/releases"><img src="https://img.shields.io/github/v/release/Llunarstack/sdx?label=release&style=flat-square&color=6f42c1" alt="GitHub release"/></a>
 </p>
 
 <p align="center">
   <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#your-training-data">Your data</a> ·
   <a href="#architecture-and-pipeline">Architecture</a> ·
   <a href="#training">Training</a> ·
   <a href="#documentation-hub">Documentation</a> ·
@@ -50,7 +52,7 @@
 | Goal | Jump to |
 | :--- | :--- |
 | **Run something now** | [Quick start](#quick-start) — `python scripts/tools/quick_test.py` |
-| **Train (folders or JSONL)** | [Training](#training) · [Data format](#data-format) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) |
+| **Train (folders or JSONL)** | **[`user_data/train/`](user_data/train/)** — drop images + captions here · [Training](#training) · [Data format](#data-format) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) |
 | **Books / comics / manga** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
 | **Score or filter data (ViT)** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | **Submit a PR or doc fix** | [Contributing](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
@@ -69,6 +71,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
 | **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
 | **Diffusion layout** | Timestep loss modules under [`diffusion/losses/`](diffusion/losses/) with stable re-exports at the package root — [diffusion/README.md](diffusion/README.md). Related tests: [`tests/diffusion/`](tests/diffusion/). |
+| **Your training data** | **[`user_data/train/`](user_data/train/)** — put **subfolders** here with paired images + `.txt` / `.caption` sidecars → `--data-path user_data/train`. Guide: **[user_data/README.md](user_data/README.md)** · [Data format](#data-format). |
 | **2026 industry docs & SDX hooks** | **[`utils/architecture_map.py`](utils/architecture_map.py)** — theme→repo parity (`theme_by_id`, `THEMES`). **Docs:** [ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) (flow, bridges, hybrid AR+DiT, RAE), [WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) (workflow / efficiency, disclaimers), [LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md). **Training:** `--resolution-buckets` ([`data/bucket_batch_sampler.py`](data/bucket_batch_sampler.py)). **Inference / tools:** `--pick-best combo_exposure`, [`orchestrate_pipeline.py`](scripts/tools/orchestrate_pipeline.py), [`rag_prompt.py`](utils/rag_prompt.py), [`character_lock.py`](utils/character_lock.py). Tests: [`test_architecture_map.py`](tests/unit/test_architecture_map.py), [`test_news_features.py`](tests/unit/test_news_features.py). |
 
 ---
@@ -78,8 +81,8 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | | |
 | :--- | :--- |
 | **Setup** | [Project status](#project-status-compute-and-expectations) · [Setup](#setup) |
-| **Core** | [Latest additions](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) |
-| **Train & sample** | [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
+| **Core** | [Latest additions](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) · [Your training data](#your-training-data) |
+| **Train & sample** | [Your training data](#your-training-data) · [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
 | **Reference** | [JSONL fields](#data-jsonl-fields) · [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
@@ -89,8 +92,8 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | Section | Links |
 | :--- | :--- |
 | **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines](pipelines/README.md) |
-| **Start** | [Latest additions](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
-| **Workflow** | [Architecture](#architecture-and-pipeline) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
+| **Start** | [Latest additions](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Your training data](#your-training-data) · [Data format](#data-format) |
+| **Workflow** | [Architecture](#architecture-and-pipeline) · [Your training data](#your-training-data) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
@@ -100,11 +103,11 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 
 ## Quick start
 
-| Step | Command |
+| Step | What to run |
 | :--- | :--- |
 | **1 · Environment** | `pip install -r requirements.txt` |
 | **2 · Smoke test** | `python scripts/tools/quick_test.py` |
-| **3 · Train** | `python train.py --data-path /path/to/images --results-dir results` |
+| **3 · Train** | `python train.py --data-path user_data/train --results-dir results` |
 | **4 · Sample** | `python sample.py --ckpt results/.../best.pt --prompt "..." --out out.png` |
 
 ```bash
@@ -113,10 +116,10 @@ pip install -r requirements.txt
 python scripts/tools/quick_test.py    # env check (no dataset required)
 ```
 
-**Train** (single GPU):
+**Train** (single GPU — use **[`user_data/train/`](user_data/train/)** or any folder with the same layout):
 
 ```bash
-python train.py --data-path /path/to/image_folders --results-dir results
+python train.py --data-path user_data/train --results-dir results
 ```
 
 **Sample**:
@@ -546,6 +549,7 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 
 | Doc | Purpose |
 | :--- | :--- |
+| [user_data/README.md](user_data/README.md) | **Where to put your images** — `user_data/train/` layout + JSONL pointer |
 | [docs/README.md](docs/README.md) | Index of all project docs |
 | [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
 | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) | **Navigate the tree:** folders, entry points, `scripts/` layout |
@@ -577,6 +581,28 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) | **Book/comic/manga:** consistency, layout, lettering, presets—mapped to SDX + [prompt_lexicon](pipelines/book_comic/prompt_lexicon.py) |
 | [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) | **Production-quality books:** data + training + `--book-accuracy production`, pick-best, OCR/anchoring checklist |
 | [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) | **ViT QA vs DiT generator:** research roadmap (Swin-DiT, FiT, reward/IQA), timm backbones, ensemble with pick-best |
+
+---
+
+## Your training data
+
+Put images and sidecar captions under **`user_data/train/`** (tracked in git as an empty layout; **image files stay local** — see `.gitignore`). Full guide: **[user_data/README.md](user_data/README.md)**.
+
+```text
+user_data/train/
+├── my_subject/                 ← one subfolder per group (style, character, shoot, …)
+│   ├── photo_001.png
+│   ├── photo_001.txt           ← caption sidecar (same base name)
+│   ├── photo_002.jpg
+│   └── photo_002.txt
+└── another_folder/
+    └── …
+```
+
+| | |
+| :---: | :--- |
+| **Train** | `python train.py --data-path user_data/train --results-dir results` |
+| **JSONL instead** | `--manifest-jsonl path/to/list.jsonl` — see [Data format](#data-format) below |
 
 ---
 
