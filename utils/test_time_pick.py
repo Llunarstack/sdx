@@ -99,6 +99,18 @@ def score_clip_similarity(
     return [float(s) for s in scores]
 
 
+def score_exposure_balance(rgb_uint8: np.ndarray) -> float:
+    """
+    Lightweight verifier score (LANDSCAPE §2): penalize heavy highlight/shadow clipping.
+    Higher = more pixels in a mid-tone band (less blown-out / crushed).
+    """
+    x = rgb_uint8.astype(np.float32)
+    gray = x.mean(axis=-1)
+    clipped = np.sum((gray <= 2.0) | (gray >= 253.0))
+    n = max(1, gray.size)
+    return 1.0 - float(clipped) / float(n)
+
+
 def pick_best_indices(
     rgb_images: List[np.ndarray],
     prompt: str,
@@ -109,7 +121,7 @@ def pick_best_indices(
 ) -> Tuple[int, List[float]]:
     """
     Return (best_index, raw_scores_one_per_image).
-    metric: none|clip|edge|ocr|combo
+    metric: none|clip|edge|ocr|combo|combo_exposure
     """
     metric = (metric or "none").lower().strip()
     n = len(rgb_images)
@@ -138,6 +150,13 @@ def pick_best_indices(
             combined = [0.5 * c + 0.35 * e + 0.15 * o for c, e, o in zip(s_clip, s_edge, s_ocr)]
         else:
             combined = [0.65 * c + 0.35 * e for c, e in zip(s_clip, s_edge)]
+        return int(np.argmax(combined)), combined
+
+    if metric == "combo_exposure":
+        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
+        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
+        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
+        combined = [0.45 * c + 0.30 * e + 0.25 * x for c, e, x in zip(s_clip, s_edge, s_exp)]
         return int(np.argmax(combined)), combined
 
     return 0, [0.0] * n

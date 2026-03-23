@@ -69,6 +69,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
 | **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
 | **Diffusion layout** | Timestep loss modules under [`diffusion/losses/`](diffusion/losses/) with stable re-exports at the package root — [diffusion/README.md](diffusion/README.md). Related tests: [`tests/diffusion/`](tests/diffusion/). |
+| **2026 industry docs & SDX hooks** | **[`utils/architecture_map.py`](utils/architecture_map.py)** — theme→repo parity (`theme_by_id`, `THEMES`). **Docs:** [ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) (flow, bridges, hybrid AR+DiT, RAE), [WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) (workflow / efficiency, disclaimers), [LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md). **Training:** `--resolution-buckets` ([`data/bucket_batch_sampler.py`](data/bucket_batch_sampler.py)). **Inference / tools:** `--pick-best combo_exposure`, [`orchestrate_pipeline.py`](scripts/tools/orchestrate_pipeline.py), [`rag_prompt.py`](utils/rag_prompt.py), [`character_lock.py`](utils/character_lock.py). Tests: [`test_architecture_map.py`](tests/unit/test_architecture_map.py), [`test_news_features.py`](tests/unit/test_news_features.py). |
 
 ---
 
@@ -80,7 +81,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | **Core** | [Latest additions](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) |
 | **Train & sample** | [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
 | **Reference** | [JSONL fields](#data-jsonl-fields) · [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 <details>
 <summary><strong>Table of contents (same links, expanded)</strong></summary>
@@ -91,7 +92,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | **Start** | [Latest additions](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Data format](#data-format) |
 | **Workflow** | [Architecture](#architecture-and-pipeline) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 </details>
 
@@ -571,6 +572,8 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds and determinism |
 | [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Industry context (2026):** authenticity, multi-stage pipelines, 4K/AR, text-in-image, grounding—mapped to SDX |
+| [docs/ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) | **Architecture / research (2026):** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture_map.py`](utils/architecture_map.py)) |
+| [docs/WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency commentary (2026):** coherency, LLaDA-class ideas, test-time compute, grounding, Mamba — **disclaimers** + SDX ([`utils/architecture_map.py`](utils/architecture_map.py)) |
 | [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) | **Book/comic/manga:** consistency, layout, lettering, presets—mapped to SDX + [prompt_lexicon](pipelines/book_comic/prompt_lexicon.py) |
 | [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) | **Production-quality books:** data + training + `--book-accuracy production`, pick-best, OCR/anchoring checklist |
 | [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) | **ViT QA vs DiT generator:** research roadmap (Swin-DiT, FiT, reward/IQA), timm backbones, ensemble with pick-best |
