@@ -22,7 +22,11 @@ __all__ = [
     "STYLE_MIX_TIPS",
     "LORA_MIX_TIPS",
     "ANTI_AI_LOOK_NEGATIVE",
+    "ANTI_AI_LOOK_NEGATIVE_STRONG",
     "NATURAL_LOOK_POSITIVE",
+    "NATURAL_LOOK_POSITIVE_DEEP",
+    "LORA_STACK_NEGATIVE",
+    "PHOTOGRAPHIC_AUTHENTIC_POSITIVE",
     "CONCEPT_BLEEDING_NEGATIVE",
     "CONCEPT_BLEEDING_POSITIVE",
     "ARTIFACT_NEGATIVES",
@@ -230,6 +234,7 @@ LORA_MIX_TIPS = [
     "For style + character: use style LoRA at 0.5–0.7 and character LoRA at 0.6–0.8, with both triggers in the prompt.",
     "If the output is muddy or oversaturated, lower CFG (e.g. 5–6) or use --cfg-rescale 0.7.",
     "Train or fine-tune on mixed-style data so the base model already understands 2.5d/semi-realistic; LoRAs then refine.",
+    "At inference: --lora-scaffold blend (or --lora-scaffold-auto) adds fusion-friendly pos/neg tokens; LORA_STACK_NEGATIVE helps when stacking two+ LoRAs.",
 ]
 
 # --- Natural / non-AI look: reduce plastic, oversmooth, CGI feel ---
@@ -239,11 +244,46 @@ LORA_MIX_TIPS = [
 ANTI_AI_LOOK_NEGATIVE = (
     "oversaturated, plastic skin, smooth skin, airbrushed, waxy, doll-like, "
     "perfect skin, flawless skin, synthetic, artificial, CGI, uncanny, "
-    "AI art, generated, digital art, overly smooth, porcelain skin, plastic look"
+    "AI art, generated, digital art, overly smooth, porcelain skin, plastic look, "
+    "neural network aesthetic, hyperreal plastic, hdr glow, halo artifacts, oversharpened, "
+    "too perfect symmetry, stock photo stiffness, candy saturation, glossy unreal skin"
+)
+
+# Stronger de-AI / de-CG pack (use with --anti-ai-pack strong or NATURAL_LOOK_POSITIVE_DEEP).
+ANTI_AI_LOOK_NEGATIVE_STRONG = (
+    ANTI_AI_LOOK_NEGATIVE
+    + ", midjourney look, generic AI illustration, same-face syndrome, "
+    "floating specular highlights, subsurface abuse, waxy teeth, dead glassy eyes, "
+    "uniform skin porelessness, beauty filter face, snapchat smooth skin, "
+    "tilt-shift miniature fake, tilt shift cliché, lens blur fake, computational hdr, "
+    "neon edge glow, burnt edges from cfg, posterization, banding in gradients"
 )
 
 # Positive: subtle hints for a more natural, photographic feel (optional prepend when --naturalize).
-NATURAL_LOOK_POSITIVE = "film grain, natural skin texture, subtle imperfections, raw photo, natural lighting"
+NATURAL_LOOK_POSITIVE = (
+    "film grain, natural skin texture, subtle imperfections, raw photo, natural lighting, "
+    "believable shadows, ambient occlusion subtle, real camera response"
+)
+
+# Deeper natural / human-capture cues (prepend with --naturalize-deep or human-media packs).
+NATURAL_LOOK_POSITIVE_DEEP = (
+    NATURAL_LOOK_POSITIVE
+    + ", authentic photograph, candid moment, imperfect but real, "
+    "shot on camera, natural white balance, organic grain, micro-contrast natural, "
+    "shallow depth of field natural, lens character subtle"
+)
+
+# When stacking LoRAs: negatives that reduce muddy fusion / double-style (pair with lower strengths).
+LORA_STACK_NEGATIVE = (
+    "double exposure style clash, conflicting adaptations, merged incompatible styles, "
+    "lora artifact seams, ghosting from adaptation, oversaturated lora bloom, muddy blend"
+)
+
+# Short positive prefix for “real photo not render” (composable with style LoRAs).
+PHOTOGRAPHIC_AUTHENTIC_POSITIVE = (
+    "authentic photograph, believable lighting, natural materials, real-world texture, "
+    "photographic depth, captured image not rendered"
+)
 
 # --- Community-reported issues (SDXL, Flux, Illustrious, NoobAI, Z-Image, etc.) ---
 # Use these negatives/tips to mitigate concept bleeding, plastic skin, repetitive faces, artifacts, etc.
@@ -387,6 +427,7 @@ PROMPT_STRUCTURE_TIPS = [
 
 # Originality / novelty: encourage fresher composition/details
 # so generations feel less like templated repeats of the same pattern.
+# Used by sample.py --originality and train.py --train-originality-prob (via utils/prompt/originality_augment.py).
 ORIGINALITY_POSITIVE_TOKENS = [
     "unique composition",
     "original concept",
@@ -398,4 +439,30 @@ ORIGINALITY_POSITIVE_TOKENS = [
     "creative accidents",
     "new idea",
     "rare details",
+    # --- expanded: camera, atmosphere, art-direction (keeps outputs feeling "new") ---
+    "unusual angle",
+    "dynamic framing",
+    "asymmetric balance",
+    "bold color story",
+    "muted palette twist",
+    "dramatic rim light",
+    "soft volumetric light",
+    "cinematic depth",
+    "environmental storytelling",
+    "foreground interest",
+    "layered depth",
+    "tactile materials",
+    "hand-crafted look",
+    "non-stock pose",
+    "candid moment",
+    "slice of life",
+    "dreamlike twist",
+    "subtle surreal touch",
+    "editorial fashion vibe",
+    "fine art photography",
+    "concept art energy",
+    "indie aesthetic",
+    "one-of-a-kind mood",
+    "surprising negative space",
+    "rhythm in shapes",
 ]

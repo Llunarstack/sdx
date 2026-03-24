@@ -683,11 +683,135 @@ def main() -> None:
         help="Add vertical JP lettering hint to prefix (training data should support JP).",
     )
     parser.add_argument("--include-sfx-hint", action="store_true", help="Add hand-drawn SFX typography hint.")
+    parser.add_argument(
+        "--include-print-finish",
+        action="store_true",
+        help="Add print-ready line weight / halftone hint (prompt_lexicon.PRINT_FINISH_HINT).",
+    )
+    parser.add_argument(
+        "--include-cover-spotlight",
+        action="store_true",
+        help="Add strong focal / title-area hint (covers and pin-ups; COVER_SPOTLIGHT_HINT).",
+    )
+
+    parser.add_argument(
+        "--chapter-break-every",
+        type=int,
+        default=0,
+        help="After every N pages, drop inpaint chain (fresh page like page 0). 0=off.",
+    )
+    parser.add_argument(
+        "--page-context-previous",
+        type=int,
+        default=0,
+        help="Append a short summary of the last N page prompts for continuity. 0=off.",
+    )
+    parser.add_argument(
+        "--page-context-max-chars",
+        type=int,
+        default=500,
+        help="Max characters for rolling page context (with --page-context-previous).",
+    )
+    parser.add_argument(
+        "--panel-layout",
+        default="none",
+        choices=[
+            "none",
+            "single",
+            "two_panel_horizontal",
+            "two_panel_vertical",
+            "three_panel_strip",
+            "four_koma",
+            "splash",
+            "grid_2x2",
+        ],
+        help="Soft panel/grid hint merged into each page prompt (prompt_lexicon.PANEL_LAYOUT_HINTS).",
+    )
+    parser.add_argument(
+        "--narration-prefix",
+        default="",
+        help="Optional string prepended to every page (series voice, e.g. dark fantasy noir).",
+    )
+    parser.add_argument(
+        "--sample-originality",
+        type=float,
+        default=0.0,
+        help="Forward to sample.py --originality (0–1) for less templated pages; 0=omit flag.",
+    )
+    parser.add_argument(
+        "--sample-creativity",
+        type=float,
+        default=-1.0,
+        help="Forward to sample.py --creativity (0–1). -1 = omit (use checkpoint default).",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="If page_NNN.png exists, skip regeneration (still updates inpaint chain + manifest).",
+    )
+    parser.add_argument(
+        "--start-page",
+        type=int,
+        default=0,
+        help="0-based index to start generating from (earlier prompts still feed --page-context-previous).",
+    )
+    parser.add_argument(
+        "--write-book-manifest",
+        action="store_true",
+        help="Write book_manifest.json under --output-dir (prompts, seeds, paths, flags).",
+    )
+
+    # Cross-page consistency (prompt cues; see pipelines/book_comic/consistency_helpers.py)
+    parser.add_argument(
+        "--consistency-json",
+        default="",
+        help="JSON spec for character/props/vehicle/setting/lettering (merged with CLI flags).",
+    )
+    parser.add_argument(
+        "--consistency-character",
+        default="",
+        help="Freeform recurring protagonist appearance (or use --consistency-json character object).",
+    )
+    parser.add_argument("--consistency-costume", default="", help="Locked outfit description for every page.")
+    parser.add_argument(
+        "--consistency-props",
+        default="",
+        help="Important props; semicolon-separated (each becomes a same-object cue).",
+    )
+    parser.add_argument("--consistency-vehicle", default="", help="Recurring vehicle description.")
+    parser.add_argument("--consistency-setting", default="", help="Continuous location / environment cue.")
+    parser.add_argument(
+        "--consistency-creature",
+        default="",
+        help="Recurring pet, mascot, or non-human companion description.",
+    )
+    parser.add_argument("--consistency-palette", default="", help="Locked color palette hint (comics color script).")
+    parser.add_argument(
+        "--consistency-lighting",
+        default="",
+        help="Consistent lighting / key direction (reduces drift across inpaint chain).",
+    )
+    parser.add_argument(
+        "--consistency-visual-extra",
+        default="",
+        help="Extra freeform tokens appended to the consistency block.",
+    )
+    parser.add_argument(
+        "--consistency-lettering-hard",
+        action="store_true",
+        help="Add strong legible-lettering positive cues (use with OCR / expected text for dialogue).",
+    )
+    parser.add_argument(
+        "--consistency-negative",
+        default=None,
+        choices=["none", "light", "strong"],
+        help="Append consistency anti-drift negatives (default: none, or JSON negative_level if set).",
+    )
 
     args = parser.parse_args()
 
     _ensure_repo_on_path()
-    from pipelines.book_comic import book_helpers, prompt_lexicon
+    from pipelines.book_comic import book_helpers, consistency_helpers, prompt_lexicon
 
     settings = book_helpers.resolve_book_sample_settings(args)
 
@@ -745,6 +869,26 @@ def main() -> None:
     if aw > 0 and ah > 0 and (not int(args.width or 0)) and (not int(args.height or 0)):
         args.width, args.height = aw, ah
 
+    panel_hint_str = prompt_lexicon.panel_layout_hint(str(getattr(args, "panel_layout", "none") or "none"))
+    narration_p = (getattr(args, "narration_prefix", "") or "").strip()
+
+    consistency_spec: Dict[str, Any] = {}
+    cj = str(getattr(args, "consistency_json", "") or "").strip()
+    if cj:
+        consistency_spec = dict(consistency_helpers.load_consistency_json(Path(cj)))
+    consistency_helpers.overlay_cli_on_spec(consistency_spec, args)
+    consistency_block = consistency_helpers.positive_block_from_mapping(consistency_spec)
+    consistency_neg_level = consistency_helpers.negative_level_from_spec(
+        consistency_spec, getattr(args, "consistency_negative", None)
+    )
+    consistency_neg_fragment = consistency_helpers.consistency_negative_addon(consistency_neg_level)
+    chapter_every = max(0, int(getattr(args, "chapter_break_every", 0) or 0))
+    context_n = max(0, int(getattr(args, "page_context_previous", 0) or 0))
+    context_mc = max(32, int(getattr(args, "page_context_max_chars", 500) or 500))
+    start_idx = max(0, int(getattr(args, "start_page", 0) or 0))
+    prev_prompts: List[str] = []
+    manifest_rows: List[Dict[str, Any]] = []
+
     # Load OCR engine lazily (so script can run without tesseract).
     text_engine = None
     ocr_engine = None
@@ -776,7 +920,7 @@ def main() -> None:
         needs_speech_bubble_ocr = args.anchor_speech_bubbles
         if needs_expected_text_ocr or needs_speech_bubble_ocr:
             try:
-                from utils.text_rendering import create_text_rendering_pipeline
+                from utils.generation.text_rendering import create_text_rendering_pipeline
 
                 pipe = create_text_rendering_pipeline()
                 text_engine = pipe["engine"]
@@ -866,6 +1010,16 @@ def main() -> None:
         if args.text_in_image:
             cmd += ["--text-in-image"]
 
+        orig = float(getattr(args, "sample_originality", 0.0) or 0.0)
+        if orig > 0:
+            cmd.extend(["--originality", str(max(0.0, min(1.0, orig)))])
+        try:
+            cr = float(getattr(args, "sample_creativity", -1.0))
+        except (TypeError, ValueError):
+            cr = -1.0
+        if cr >= 0.0:
+            cmd.extend(["--creativity", str(max(0.0, min(1.0, cr)))])
+
         if init_image is not None:
             cmd += ["--init-image", str(init_image)]
         if strength is not None:
@@ -880,19 +1034,35 @@ def main() -> None:
     # Cover generation
     if args.cover_prompt:
         cover_out = cover_dir / "cover.png"
+        cover_composed = book_helpers.compose_book_page_prompt(
+            user_prompt=args.cover_prompt,
+            narration_prefix=narration_p,
+            consistency_block=consistency_block,
+            panel_hint="",
+            rolling_context="",
+        )
         sample_generate(
-            args.cover_prompt,
+            cover_composed,
             cover_out,
             expected_texts_for_prompt=cover_expected_texts,
             page_seed=int(args.seed),
         )
+        if args.write_book_manifest:
+            manifest_rows.append(
+                {
+                    "kind": "cover",
+                    "path": f"cover/{cover_out.name}",
+                    "prompt": cover_composed,
+                    "seed": int(args.seed),
+                }
+            )
         # OCR-fix cover too (optional)
         if args.ocr_fix and cover_expected_texts:
             ocr_out = cover_out
             _try_ocr_fix(
                 image_path=cover_out,
                 expected_texts=cover_expected_texts,
-                prompt=args.cover_prompt,
+                prompt=cover_composed,
                 ckpt=args.ckpt,
                 out_path=ocr_out,
                 sample_steps=args.steps,
@@ -929,6 +1099,43 @@ def main() -> None:
 
     for i, page_prompt in enumerate(prompts):
         page_out = pages_dir / f"page_{i:03d}.png"
+
+        if i < start_idx:
+            prev_prompts.append(page_prompt)
+            if page_out.is_file():
+                prev_path = page_out
+            continue
+
+        rolling = book_helpers.build_rolling_page_context(
+            prev_prompts, num_previous=context_n, max_chars=context_mc
+        )
+        composed_prompt = book_helpers.compose_book_page_prompt(
+            user_prompt=page_prompt,
+            narration_prefix=narration_p,
+            consistency_block=consistency_block,
+            panel_hint=panel_hint_str,
+            rolling_context=rolling,
+        )
+
+        if chapter_every > 0 and i > 0 and (i % chapter_every == 0):
+            prev_path = None
+
+        if args.skip_existing and page_out.is_file():
+            prev_prompts.append(page_prompt)
+            prev_path = page_out
+            if args.write_book_manifest:
+                manifest_rows.append(
+                    {
+                        "kind": "page",
+                        "index": i,
+                        "path": f"pages/{page_out.name}",
+                        "prompt": composed_prompt,
+                        "seed": int(args.seed) + i * 9973,
+                        "skipped": True,
+                    }
+                )
+            continue
+
         # If this page has an override expected text, use it; otherwise use the global pages_expected_texts.
         page_expected_texts = pages_expected_texts
         if i < len(page_expected_overrides) and page_expected_overrides[i]:
@@ -943,7 +1150,7 @@ def main() -> None:
 
         if i == 0 or not should_anchor:
             sample_generate(
-                page_prompt,
+                composed_prompt,
                 page_out,
                 expected_texts_for_prompt=page_expected_texts,
                 page_seed=page_seed,
@@ -987,7 +1194,7 @@ def main() -> None:
             if not keep_masks:
                 # Shouldn't happen, but keep it safe: fall back to fresh generation.
                 sample_generate(
-                    page_prompt,
+                    composed_prompt,
                     page_out,
                     expected_texts_for_prompt=page_expected_texts,
                     page_seed=page_seed,
@@ -997,7 +1204,7 @@ def main() -> None:
                 _combine_keep_masks(keep_masks, mask_path)
 
                 sample_generate(
-                    page_prompt,
+                    composed_prompt,
                     page_out,
                     expected_texts_for_prompt=page_expected_texts,
                     init_image=prev_path,
@@ -1011,7 +1218,7 @@ def main() -> None:
             _try_ocr_fix(
                 image_path=page_out,
                 expected_texts=page_expected_texts,
-                prompt=page_prompt,
+                prompt=composed_prompt,
                 ckpt=args.ckpt,
                 out_path=page_out,
                 sample_steps=args.steps,
@@ -1035,7 +1242,36 @@ def main() -> None:
             )
             _postprocess_output(page_out, page_seed)
 
+        prev_prompts.append(page_prompt)
         prev_path = page_out
+        if args.write_book_manifest:
+            manifest_rows.append(
+                {
+                    "kind": "page",
+                    "index": i,
+                    "path": f"pages/{page_out.name}",
+                    "prompt": composed_prompt,
+                    "seed": page_seed,
+                    "skipped": False,
+                }
+            )
+
+    if args.write_book_manifest:
+        mf = {
+            "ckpt": args.ckpt,
+            "book_type": args.book_type,
+            "model_preset": args.model_preset,
+            "lexicon_style": getattr(args, "lexicon_style", ""),
+            "panel_layout": getattr(args, "panel_layout", ""),
+            "narration_prefix": narration_p,
+            "consistency_block": consistency_block,
+            "consistency_negative_level": consistency_neg_level,
+            "consistency_json": cj or None,
+            "chapter_break_every": chapter_every,
+            "page_context_previous": context_n,
+            "entries": manifest_rows,
+        }
+        (out_dir / "book_manifest.json").write_text(json.dumps(mf, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"Book generation finished: {out_dir}")
 

@@ -28,7 +28,7 @@ def main() -> int:
     p.add_argument("--use-ema", action="store_true", help="Load EMA weights if present")
     args = p.parse_args()
 
-    from utils.nn_inspect import format_module_tree
+    from utils.modeling.nn_inspect import format_module_tree
     from ViT.checkpoint_utils import load_vit_quality_checkpoint, vit_model_parameter_report
 
     path = Path(args.ckpt)

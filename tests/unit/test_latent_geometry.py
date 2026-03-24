@@ -1,6 +1,6 @@
 """Tests for :mod:`sdx_native.latent_geometry` (matches native C++ latent helpers)."""
 
-from utils.latent_geometry import (
+from utils.native.latent_geometry import (
     dit_patch_size_from_variant_name,
     latent_numel,
     latent_spatial_size,

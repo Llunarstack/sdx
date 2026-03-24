@@ -1,9 +1,9 @@
-"""Tests for scripts.tools.update_project_structure."""
+"""Tests for scripts.tools.repo.update_project_structure."""
 
 from pathlib import Path
 
 import pytest
-from scripts.tools import update_project_structure as ups
+from scripts.tools.repo import update_project_structure as ups
 
 
 def test_build_tree_includes_train_py(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

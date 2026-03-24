@@ -30,7 +30,7 @@ def main() -> int:
     from ViT.config import ViTConfig
     from ViT.dataset import ViTManifestDataset, collate_vit_batch
     from ViT.ema import ModelEMA
-    from ViT.losses import pairwise_ranking_loss
+    from ViT.losses import binary_focal_loss_with_logits, pairwise_ranking_loss
     from ViT.model import build_vit_model
 
     p = argparse.ArgumentParser(
@@ -57,6 +57,36 @@ def main() -> int:
     p.add_argument("--ranking-loss-weight", type=float, default=0.0)
     p.add_argument("--ranking-margin", type=float, default=0.15)
     p.add_argument("--ranking-min-gap", type=float, default=0.05)
+    p.add_argument("--fuse-dropout", type=float, default=0.1, help="Dropout after fuse MLP (before heads)")
+    p.add_argument("--text-proj-dropout", type=float, default=0.0, help="Dropout on text branch after text_proj (training only)")
+    p.add_argument(
+        "--backbone-grad-checkpointing",
+        action="store_true",
+        help="Enable timm backbone gradient checkpointing if supported (saves VRAM)",
+    )
+    p.add_argument(
+        "--train-augment",
+        action="store_true",
+        help="RandomResizedCrop + flip + mild ColorJitter (training only)",
+    )
+    p.add_argument(
+        "--focal-loss-gamma",
+        type=float,
+        default=0.0,
+        help="If >0, use focal loss for quality BCE (imbalanced labels). 0 = plain BCE.",
+    )
+    p.add_argument(
+        "--focal-loss-alpha",
+        type=float,
+        default=None,
+        help="Optional focal alpha in [0,1] weighting positive class (requires --focal-loss-gamma > 0)",
+    )
+    p.add_argument(
+        "--adherence-smooth-l1",
+        action="store_true",
+        help="Use SmoothL1 loss for adherence target instead of MSE",
+    )
+    p.add_argument("--adherence-smooth-l1-beta", type=float, default=0.1)
     p.add_argument("--ema-decay", type=float, default=0.999)
     p.add_argument("--save-ema", action="store_true")
     p.add_argument(
@@ -75,13 +105,21 @@ def main() -> int:
         image_size=args.image_size,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        training_augment=bool(args.train_augment),
         model_name=args.model_name,
         pretrained=not args.no_pretrained,
+        fuse_dropout=float(args.fuse_dropout),
+        text_proj_dropout=float(args.text_proj_dropout),
+        backbone_grad_checkpointing=bool(args.backbone_grad_checkpointing),
         lr=args.lr,
         weight_decay=args.weight_decay,
         epochs=args.epochs,
         quality_loss_weight=args.quality_loss_weight,
         adherence_loss_weight=args.adherence_loss_weight,
+        focal_loss_gamma=float(args.focal_loss_gamma),
+        focal_loss_alpha=args.focal_loss_alpha,
+        adherence_smooth_l1=bool(args.adherence_smooth_l1),
+        adherence_smooth_l1_beta=float(args.adherence_smooth_l1_beta),
         device=args.device,
         seed=args.seed,
         out_dir=args.out_dir,
@@ -90,7 +128,12 @@ def main() -> int:
     seed_all(cfg.seed)
 
     device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
-    ds = ViTManifestDataset(cfg.manifest_jsonl, image_root=cfg.image_root, image_size=cfg.image_size)
+    ds = ViTManifestDataset(
+        cfg.manifest_jsonl,
+        image_root=cfg.image_root,
+        image_size=cfg.image_size,
+        training_augment=cfg.training_augment,
+    )
     if len(ds) == 0:
         print("Dataset is empty after filtering valid rows.", file=sys.stderr)
         return 2
@@ -110,6 +153,9 @@ def main() -> int:
         hidden_dim=cfg.hidden_dim,
         use_ar_conditioning=cfg.use_ar_conditioning,
         ar_cond_dim=cfg.ar_cond_dim,
+        fuse_dropout=cfg.fuse_dropout,
+        text_proj_dropout=cfg.text_proj_dropout,
+        backbone_grad_checkpointing=cfg.backbone_grad_checkpointing,
     )
     model.to(device)
     ema = ModelEMA(model, decay=float(args.ema_decay))
@@ -117,6 +163,7 @@ def main() -> int:
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     bce = torch.nn.BCEWithLogitsLoss()
     mse = torch.nn.MSELoss()
+    smooth1 = torch.nn.SmoothL1Loss(beta=cfg.adherence_smooth_l1_beta)
 
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -130,21 +177,35 @@ def main() -> int:
         for b in dl:
             images = b["images"].to(device, non_blocking=True)
             txt = b["text_features"].to(device, non_blocking=True)
-            out = model(images, txt)
+            ar = b["ar_conditioning"].to(device, non_blocking=True)
+            out = model(images, txt, ar_conditioning=ar)
 
             loss = 0.0
             q = b["quality_labels"]
             a = b["adherence_scores"]
             if q is not None:
                 q = q.to(device, non_blocking=True)
-                loss = loss + cfg.quality_loss_weight * bce(out["quality_logit"], q)
+                if cfg.focal_loss_gamma and cfg.focal_loss_gamma > 0:
+                    lq = binary_focal_loss_with_logits(
+                        out["quality_logit"],
+                        q,
+                        gamma=cfg.focal_loss_gamma,
+                        alpha=cfg.focal_loss_alpha,
+                    )
+                else:
+                    lq = bce(out["quality_logit"], q)
+                loss = loss + cfg.quality_loss_weight * lq
                 if args.ranking_loss_weight > 0:
                     loss = loss + float(args.ranking_loss_weight) * pairwise_ranking_loss(
                         out["quality_logit"], q, margin=args.ranking_margin, min_target_gap=args.ranking_min_gap
                     )
             if a is not None:
                 a = a.to(device, non_blocking=True)
-                loss = loss + cfg.adherence_loss_weight * mse(out["adherence_score"], a)
+                if cfg.adherence_smooth_l1:
+                    la = smooth1(out["adherence_score"], a)
+                else:
+                    la = mse(out["adherence_score"], a)
+                loss = loss + cfg.adherence_loss_weight * la
                 if args.ranking_loss_weight > 0:
                     loss = loss + float(args.ranking_loss_weight) * pairwise_ranking_loss(
                         out["adherence_score"], a, margin=args.ranking_margin, min_target_gap=args.ranking_min_gap
@@ -186,6 +247,9 @@ def main() -> int:
                     hidden_dim=cfg.hidden_dim,
                     use_ar_conditioning=cfg.use_ar_conditioning,
                     ar_cond_dim=cfg.ar_cond_dim,
+                    fuse_dropout=cfg.fuse_dropout,
+                    text_proj_dropout=cfg.text_proj_dropout,
+                    backbone_grad_checkpointing=False,
                 )
                 model_ema.to(device)
                 ema.copy_to(model_ema)

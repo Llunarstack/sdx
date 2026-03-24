@@ -1,9 +1,8 @@
-"""Smoke tests for optional native/ helpers (Rust, Node, C++ DLL if built)."""
+"""Smoke tests for optional native/ helpers (Rust, pure-Python JSONL, C++ DLL if built)."""
 
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,21 +23,11 @@ def sample_jsonl(tmp_path: Path) -> Path:
     return p
 
 
-def test_node_jsonl_stat_runs(sample_jsonl: Path) -> None:
-    script = ROOT / "native" / "js" / "sdx-jsonl-stat.mjs"
-    if not script.is_file():
-        pytest.skip("native/js/sdx-jsonl-stat.mjs missing")
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("node not on PATH")
-    r = subprocess.run(
-        [node, str(script), str(sample_jsonl)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert r.returncode == 0, r.stderr
-    assert "rows_ok: 2" in r.stdout
+def test_python_jsonl_stat_runs(sample_jsonl: Path) -> None:
+    from sdx_native.jsonl_manifest_pure import jsonl_stat_text
+
+    out = jsonl_stat_text(sample_jsonl)
+    assert "rows_ok: 2" in out
 
 
 def test_rust_jsonl_tools_stats(sample_jsonl: Path) -> None:
@@ -86,19 +75,10 @@ def test_cpp_sdx_latent_dll_exists() -> None:
     assert dll.stat().st_size > 0
 
 
-def test_node_promptlint_runs(sample_jsonl: Path) -> None:
-    script = ROOT / "native" / "js" / "sdx-promptlint.mjs"
-    if not script.is_file():
-        pytest.skip("native/js/sdx-promptlint.mjs missing")
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("node not on PATH")
-    r = subprocess.run(
-        [node, str(script), str(sample_jsonl)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert r.returncode == 0, r.stderr
-    assert "promptlint:" in r.stdout
-    assert "rows_ok: 2" in r.stdout
+def test_python_promptlint_runs(sample_jsonl: Path) -> None:
+    from sdx_native.jsonl_manifest_pure import promptlint_text
+
+    out, code = promptlint_text(sample_jsonl)
+    assert code == 0
+    assert "promptlint:" in out
+    assert "rows_ok: 2" in out

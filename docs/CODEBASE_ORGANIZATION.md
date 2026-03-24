@@ -41,8 +41,8 @@ This document explains **how SDX is laid out** and **where to put new work** so 
 | Loss / schedule / diffusion math | `diffusion/` | Keep `GaussianDiffusion` API stable when possible |
 | Dataset field or collate | `data/` | Update `t2i_dataset.py` + docs for JSONL fields |
 | Training flag | `config/train_config.py` + `get_dit_build_kwargs` | Mirror in `sample.py` / checkpoint if needed |
-| Sampling behavior | `sample.py`, `utils/checkpoint_loading.py` | |
-| Standalone maintenance CLI | `scripts/tools/` | Add row to [scripts/tools/README.md](../scripts/tools/README.md) |
+| Sampling behavior | `sample.py`, `utils/checkpoint/checkpoint_loading.py` | |
+| Standalone maintenance CLI | `scripts/tools/` (prefer `python -m scripts.tools <cmd>`) | Add row to [scripts/tools/README.md](../scripts/tools/README.md) |
 | Multi-page / book workflow | `pipelines/book_comic/` | Canonical script: `pipelines/book_comic/scripts/generate_book.py` |
 | Optional EnhancedDiT workflow | `scripts/enhanced/` | Parallel to main `train.py` |
 | Tests | `tests/test_*.py` | Mirror package structure in name |

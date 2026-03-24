@@ -20,6 +20,11 @@ venv/
 .idea/
 .vscode/
 
+# Danbooru full tag dumps (regenerate: scripts/tools/fetch_danbooru_tags.py)
+data/danbooru/tags/raw/*.txt
+data/danbooru/tags/buckets/*.txt
+data/danbooru/tags/all_tags_categorized.txt
+
 # Outputs
 *.pt
 *.png

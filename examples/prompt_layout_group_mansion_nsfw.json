@@ -1,0 +1,116 @@
+{
+  "preset_order": "subject_first",
+  "wrap_subject_labels": true,
+  "intent": "explicit adult group scene, lavish interior, sci-fi fetish fashion, anime-style waifu catgirls",
+  "subjects": [
+    {
+      "label": "left foreground",
+      "tokens": [
+        "1girl",
+        "catgirl",
+        "cat ears",
+        "fluffy tail",
+        "waifu",
+        "futuristic lingerie",
+        "holographic trim",
+        "glowing seams",
+        "kneeling pose"
+      ],
+      "negative": ["male face", "wrong body type for character"]
+    },
+    {
+      "label": "center",
+      "tokens": [
+        "1girl",
+        "catgirl",
+        "nekomimi",
+        "waifu",
+        "sheer futuristic bodysuit",
+        "straddling pose",
+        "arched back"
+      ],
+      "negative": ["duplicate of left girl outfit"]
+    },
+    {
+      "label": "right background",
+      "tokens": [
+        "1girl",
+        "human ears",
+        "waifu",
+        "lace and chrome lingerie",
+        "standing",
+        "hand on hip",
+        "watching the others"
+      ],
+      "negative": ["cat ears on this girl"]
+    }
+  ],
+  "interaction": [
+    "group sex",
+    "orgy",
+    "multiple couples",
+    "different sex positions",
+    "tangled limbs readable",
+    "clear who is touching whom"
+  ],
+  "quality": [
+    "masterpiece",
+    "best quality",
+    "highres",
+    "detailed",
+    "sharp focus"
+  ],
+  "environment": [
+    "inside a luxury mansion",
+    "grand ballroom or master suite",
+    "marble floors",
+    "tall windows",
+    "chandelier",
+    "velvet drapes",
+    "night city lights outside"
+  ],
+  "props": [
+    "futuristic furniture",
+    "LED accent lighting",
+    "holo displays optional"
+  ],
+  "camera": [
+    "wide shot",
+    "environment visible",
+    "depth of field",
+    "cinematic framing"
+  ],
+  "lighting": [
+    "moody interior light",
+    "rim light on bodies",
+    "warm key light",
+    "cool fill from windows"
+  ],
+  "composition": [
+    "multi-character composition",
+    "clear subject separation",
+    "layered depth",
+    "each girl readable"
+  ],
+  "style": [
+    "anime illustration",
+    "high-end ecchi aesthetic",
+    "polished shading"
+  ],
+  "color_script": [
+    "rich jewel tones",
+    "neon accents on futuristic clothes"
+  ],
+  "negative": [
+    "watermark",
+    "signature",
+    "bad anatomy",
+    "extra limbs",
+    "merged bodies",
+    "same face on everyone",
+    "outfit swap confusion",
+    "morbid",
+    "low resolution",
+    "blurry"
+  ]
+}

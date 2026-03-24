@@ -6,7 +6,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 ## Already in place (baseline)
 
-- **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md).
+- **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md).
 - **Min-SNR weighting** in training — stabilizes learning; avoids overfitting to easy timesteps (SD/SDXL).
 - **Non-uniform training timestep sampling** — `--timestep-sample-mode logit_normal|high_noise` (SD3-style discrete logit-normal or high-noise bias); see [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) and `diffusion/timestep_sampling.py`.
 - **Noise offset** — better light/dark balance in latents (SD/SDXL).
@@ -15,7 +15,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 - **Validation + early stopping** — best checkpoint by val loss; stop when quality plateaus.
 - **Negative prompt** — model learns to avoid unwanted content.
 - **Refinement** (small-t training + optional refinement pass) — fix imperfections.
-- **Post-process** — optional sharpen / contrast (`utils/quality.py`).
+- **Post-process** — optional sharpen / contrast (`utils/quality/quality.py`).
 - **Aesthetic / sample weighting** — `weight` or `aesthetic_score` in JSONL.
 - **Precomputed latents** — `--latent-cache-dir` for faster training.
 
@@ -74,7 +74,9 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 ### 2.2 Self-attention guidance (SAG) or cross-attention control
 
 - **Idea:** Reduce attention to background (SAG) or scale cross-attention per token (prompt emphasis/de-emphasis at inference). Gives more control without retraining.
-- **Add:** Optional SAG strength in sampling (attenuate non-subject attention); or cross-attn scale per token from prompt (e.g. (word) → 1.2, [word] → 0.8). Requires hooking into model attention in `sample.py`.
+- **Coded (heuristic SAG):** `sample.py --sag-blur-sigma` + `--sag-scale` — in `GaussianDiffusion.sample_loop`, an extra forward on **Gaussian-blurred** latent blends `out += scale * (out - out_blur)` (~2× forwards). Not full in-model attention editing.
+- **Coded (reference / IP-Adapter-style):** `--reference-image` encodes with CLIP vision, `ReferenceTokenProjector` → `reference_tokens` concatenated to cross-attn context in `DiT_Text`; CFG uncond omits reference. Optional `--reference-adapter-pt` for a trained projector.
+- **Add:** True in-block SAG (modify self-attn maps) or cross-attn scale hooks beyond prompt `()` / `[]` emphasis.
 
 ### 2.3 Default CFG rescale / dynamic threshold when CFG is high — **coded**
 
@@ -230,7 +232,8 @@ Ideas that are uncommon or absent in mainstream DiT/SD/FLUX pipelines—worth ex
 ### 8.7 “Creativity” or diversity knob (temperature by region or step)
 
 - **Idea:** A single scalar (or per-step schedule) that controls how much the model **deviates** from the mode—e.g. higher noise in the sampler, or a learned “diversity” embedding that shifts the distribution. Lets users ask for “safe, on-prompt” vs “weirder, more varied” without changing the prompt. Partially overlaps CFG; explicit “creativity” parameter is rare.
-- **Add:** Optional conditioning: `creativity` or `diversity` embedding (e.g. scalar → MLP → vector) added to timestep or text path; train with random scalar so model learns to vary style/interpretation. At inference, user sets 0–1 for “strict” vs “creative”.
+- **Coded:** `creativity_embed_dim` + per-batch random `creativity` in training; **`--creativity-jitter-std`** widens the training scalar; **`--creativity-jitter`** at sample (esp. `--num` > 1). **`--originality`** / **`--train-originality-prob`** inject `ORIGINALITY_POSITIVE_TOKENS` ([`config/reference/prompt_domains.py`](../config/reference/prompt_domains.py)) via [`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py).
+- **Add (future):** Per-step creativity schedule; regional diversity without prompt edits.
 
 ### 8.8 Learning from rejection (negative signal from user feedback)
 
@@ -272,11 +275,11 @@ Ideas that are uncommon or absent in mainstream DiT/SD/FLUX pipelines—worth ex
 ## 9. Ideas you might add next
 
 - **Sample grid:** **Done** — `sample.py --num 4 --grid` saves individual files and a single `stem_grid.png` 2×2 (or N-up) grid.
-- **Export safetensors:** **Done** — `scripts/tools/export_safetensors.py` saves DiT `state_dict` to `.safetensors` for ComfyUI / other tools.
+- **Export safetensors:** **Done** — `scripts/tools/export/export_safetensors.py` saves DiT `state_dict` to `.safetensors` for ComfyUI / other tools.
 - **WandB or TensorBoard:** **Done** — `--wandb-project`, `--tensorboard-dir` in train.py (see 5.1).
 - **Default negative prompt:** Done — when `--negative-prompt` is empty, sample.py uses `config.prompt_domains.DEFAULT_NEGATIVE_PROMPT`.
-- **Checkpoint inspector:** Done — `python scripts/tools/ckpt_info.py path/to/best.pt` prints config and steps; `--keys` lists checkpoint keys.
-- **Smoke test:** Done — `python scripts/tools/quick_test.py` runs one forward pass to verify imports and model.
+- **Checkpoint inspector:** Done — `python scripts/tools/dev/ckpt_info.py path/to/best.pt` prints config and steps; `--keys` lists checkpoint keys.
+- **Smoke test:** Done — `python scripts/tools/dev/quick_test.py` runs one forward pass to verify imports and model.
 - **Dry-run training:** **Done** — `--dry-run` runs one step and exits (sets max_steps=1).
 - **.env.example:** **Done** — `.env.example` documents `HF_TOKEN` and `CUDA_VISIBLE_DEVICES`; copy to `.env` (in .gitignore).
 - **Reproducible sampling:** **Done** — `sample.py --deterministic` sets cudnn deterministic + benchmark off and (when supported) deterministic algorithms so same seed → same image.
@@ -290,12 +293,12 @@ Things commonly expected in production or in ComfyUI/A1111 that we don’t have 
 | Gap | What it is | Where (IMPROVEMENTS) | Effort |
 |-----|------------|----------------------|--------|
 | **Alternative samplers** | **Done** — `--scheduler ddim|euler` in sample.py; Euler uses linear timestep spacing. | §2.1 | — |
-| **Prompt emphasis at inference** | **Done** — Use `(word)` and `[word]` in prompt; per-token scale 1.2 / 0.8 (DiT token_weights). | §2.2 | — |
+| **Prompt emphasis (infer + train)** | **Done** — `(word)` / `[word]` → per-token scale 1.2 / 0.8 (`token_weights`). Training: **`train.py --train-prompt-emphasis`** + [`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py). | §2.2 | — |
 | **Multi-res / aspect bucketing** | Train on 256², 512×256, etc. in one run for better composition | §1.1 | Medium |
-| **Data quality pipeline** | **Done** — `scripts/tools/data_quality.py`: dedup (phash/md5), min/max caption length, bad-words, min-weight. | §1.6 | — |
+| **Data quality pipeline** | **Done** — `scripts/tools/data/data_quality.py`: dedup (phash/md5), min/max caption length, bad-words, min-weight. | §1.6 | — |
 | **T5 caching (server)** | **Done** — `sample.py` caches T5 output per (prompt, negative, style); `--no-cache` to disable. | §3.2 | — |
 | **Log sample images (train)** | **Done** — `--log-images-every N` and `--log-images-prompt`; logs to WandB/TensorBoard. | §5.1 | — |
-| **Export ONNX / TensorRT** | **Done** — `scripts/tools/export_onnx.py` exports DiT to ONNX; `--dynamic-batch` supported. | §5.2 | — |
+| **Export ONNX / TensorRT** | **Done** — `scripts/tools/export/export_onnx.py` exports DiT to ONNX; `--dynamic-batch` supported. | §5.2 | — |
 | **Full reproducibility** | **Done** — `--deterministic` in sample.py and train.py; [REPRODUCIBILITY.md](REPRODUCIBILITY.md). | §5.3 | — |
 | **Dual text encoder (T5+CLIP)** | SDXL-style; second encoder for style/alignment | §3.1 | Large |
 | **Inpainting in training** | Train with random masks so model learns inpainting natively (MDM-style patch masking). Inference already supports MDM-style known-region freezing via `sample.py --mask --inpaint-mode mdm`. | §3.3 | Large |
@@ -371,7 +374,7 @@ When you implement anything from §11, add a **one-line “wired in” note** he
 |------|--------|
 | **Non-uniform training timesteps** | `diffusion/timestep_sampling.py`; `train.py` `--timestep-sample-mode uniform\|logit_normal\|high_noise`, `--timestep-logit-mean`, `--timestep-logit-std`. |
 | **RAE ↔ DiT latent bridge** | `models/rae_latent_bridge.py`; `train.py` creates the bridge when RAE `encoder_hidden_size != 4`, adds optional `--rae-bridge-cycle-weight`, saves `rae_latent_bridge` in checkpoints; `sample.py` / `inference.py` load it and run `dit_to_rae` before decode. |
-| **Test-time best-of-N** | `sample.py --num N --pick-best clip\|edge\|ocr\|combo` (+ `--pick-save-all`, `--pick-clip-model`); scores in `utils/test_time_pick.py`. |
+| **Test-time best-of-N** | `sample.py --num N --pick-best clip\|edge\|ocr\|combo` (+ `--pick-save-all`, `--pick-clip-model`); scores in `utils/quality/test_time_pick.py`. |
 
 ### 11.9 Paper-backed horizon (2024–2026) — make the model “OP”
 
@@ -392,7 +395,7 @@ High-signal directions that are **not all implemented** but are **actionable** a
 
 ## 12. Industry alignment (2026): authenticity, systems, resolution, text, grounding
 
-**Context:** Image generation is increasingly **production infrastructure**—precision, grounding, and “real” outputs matter as much as aesthetics. See **[LANDSCAPE_2026.md](LANDSCAPE_2026.md)** for the full narrative and **named pipeline roles** in **[utils/orchestration.py](../utils/orchestration.py)**.
+**Context:** Image generation is increasingly **production infrastructure**—precision, grounding, and “real” outputs matter as much as aesthetics. See **[LANDSCAPE_2026.md](LANDSCAPE_2026.md)** for the full narrative and **named pipeline roles** in **[utils/generation/orchestration.py](../utils/generation/orchestration.py)**.
 
 | Trend | What leading stacks emphasize | SDX hooks today | Good contributions |
 |-------|------------------------------|-----------------|-------------------|

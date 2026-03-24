@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from models.enhanced_dit import EnhancedDiT  # noqa: E402
 from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
-from utils.character_consistency import (  # noqa: E402
+from utils.consistency.character_consistency import (  # noqa: E402
     CharacterDatabase,
     PhysicalFeatures,
     StylePreferences,
@@ -266,10 +266,13 @@ def save_demonstration_results(db, characters, validation_scores):
         },
     }
 
-    with open("character_consistency_demo_results.json", "w", encoding="utf-8") as f:
+    reports_dir = Path(__file__).resolve().parents[1] / "docs" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(reports_dir / "character_consistency_demo_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-    with open("character_consistency_demo_report.md", "w", encoding="utf-8") as f:
+    with open(reports_dir / "character_consistency_demo_report.md", "w", encoding="utf-8") as f:
         f.write("# Character Consistency System Demonstration Report\n\n")
         f.write("## Summary\n")
         f.write(f"- Total characters created: {len(characters)}\n")

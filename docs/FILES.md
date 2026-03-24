@@ -22,9 +22,10 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **ViT/** | Standalone ViT scoring / prompt tools (**not** the DiT generator) | CLI + optional dataset QA |
 | **scripts/** | Download, tools, cascade stub | Ops & CI |
 | **pipelines/** | **image_gen** vs **book_comic**: per–product-line docs; book script at `pipelines/book_comic/scripts/generate_book.py` | See [pipelines/README.md](../pipelines/README.md) |
-| **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md` |
+| **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md`, ecosystem map [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
+| **toolkit/** | QoL Python modules: env report, JSONL digest, seeds, timers | [toolkit/README.md](../toolkit/README.md); `python -m toolkit.training.env_health` |
 | **user_data/** | **Your** datasets: `user_data/train/` + sidecar captions (see [user_data/README.md](../user_data/README.md)) | `train.py --data-path user_data/train` |
-| **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/model_paths.py` |
+| **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/modeling/model_paths.py` |
 
 End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + diffusion) → checkpoint → sample.py → image**. See [README § Architecture and pipeline](../README.md#architecture-and-pipeline).
 
@@ -33,10 +34,11 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | File | Description |
 |------|-------------|
 | [README.md](../README.md) | Project overview, setup, data format, training, options. |
-| [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — run `python scripts/tools/update_project_structure.py` to refresh. |
+| [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — run `python -m scripts.tools update_project_structure` to refresh. |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | PR checklist: ruff format/check, pytest, docs. |
 | [pyproject.toml](../pyproject.toml) | Ruff + pytest settings; minimal `[project]` metadata. |
 | [requirements.txt](../requirements.txt) | Pip dependencies (torch, transformers, diffusers, xformers, etc.). |
+| [requirements-cuda128.txt](../requirements-cuda128.txt) | Optional: reinstall torch/torchvision/xformers from PyTorch’s **cu128** index after `requirements.txt` (avoids CPU-only PyPI torch). |
 | [.editorconfig](../.editorconfig) | Editor defaults (indent, UTF-8, final newline). |
 | [train.py](../train.py) | Training: DiT + T5 (optional **triple** CLIP fusion via `--text-encoder-mode triple`), VAE/RAE, REPA, passes/epochs, val, DDP; **--crop-mode**, **--caption-dropout-schedule**, **--save-polyak**, **--wandb-project**, **--tensorboard-dir**, **--dry-run**. |
 | [inference.py](../inference.py) | Load checkpoint and config for programmatic inference. |
@@ -91,7 +93,8 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [models/dit_predecessor.py](../models/dit_predecessor.py) | DiT-P / Supreme variants; QK-norm, SwiGLU, AdaLN-Zero; REPA projector when enabled. |
 | [models/pixart_blocks.py](../models/pixart_blocks.py) | SizeEmbedder, ZeroInitPatchChannelGate, etc. |
 | [models/rae_latent_bridge.py](../models/rae_latent_bridge.py) | RAE ↔ 4ch DiT latent **1×1** bridge + cycle loss. |
-| [models/native_multimodal_transformer.py](../models/native_multimodal_transformer.py) | Vision + text token fusion (experimental scaffold). |
+| [models/model_enhancements.py](../models/model_enhancements.py) | **RMSNorm**, **DropPath**, **TokenFiLM**, **SE1x1** — shared blocks for fusion / conditioning. |
+| [models/native_multimodal_transformer.py](../models/native_multimodal_transformer.py) | Vision + text fusion: self-attn stack, optional **cross-attn**, **RMSNorm** out, **FiLM** on vision; see [MODEL_ENHANCEMENTS.md](MODEL_ENHANCEMENTS.md). |
 | [models/cascaded_multimodal_diffusion.py](../models/cascaded_multimodal_diffusion.py) | Two-stage DiT + optional bridge wrapper. |
 | [models/attention.py](../models/attention.py) | Attention with xformers / SDPA fallback. |
 | [models/controlnet.py](../models/controlnet.py) | ControlNet conditioning (control image + scale). |
@@ -104,26 +107,29 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | File | Description |
 |------|-------------|
 | [utils/__init__.py](../utils/__init__.py) | Re-exports `quality` helpers. |
-| [utils/checkpoint_loading.py](../utils/checkpoint_loading.py) | `load_dit_text_checkpoint`: DiT + config + RAE bridge + **`text_encoder_fusion`** state. |
-| [utils/model_paths.py](../utils/model_paths.py) | Resolve `model/` local paths vs HF ids (`default_t5_path`, CLIP, DINOv2, Qwen, Cascade). |
-| [utils/text_encoder_bundle.py](../utils/text_encoder_bundle.py) | **Triple** text stack: T5 + CLIP-L + CLIP-bigG + trainable fusion. |
-| [utils/llm_client.py](../utils/llm_client.py) | Optional Qwen (or HF causal LM) for prompt expansion. |
-| [utils/quality.py](../utils/quality.py) | Post-process: sharpen (unsharp mask), contrast; **naturalize** (human-art style). |
-| [utils/prompt_lint.py](../utils/prompt_lint.py) | Prompt adherence linting for SDX JSONL (pos/neg overlap + caption heuristics). |
+| [utils/checkpoint/checkpoint_loading.py](../utils/checkpoint/checkpoint_loading.py) | `load_dit_text_checkpoint`: DiT + config + RAE bridge + **`text_encoder_fusion`** state. |
+| [utils/modeling/model_paths.py](../utils/modeling/model_paths.py) | Resolve `model/` local paths vs HF ids (`default_t5_path`, CLIP, DINOv2, Qwen, Cascade). |
+| [utils/modeling/text_encoder_bundle.py](../utils/modeling/text_encoder_bundle.py) | **Triple** text stack: T5 + CLIP-L + CLIP-bigG + trainable fusion. |
+| [utils/analysis/llm_client.py](../utils/analysis/llm_client.py) | Optional Qwen (or HF causal LM) for prompt expansion. |
+| [utils/quality/quality.py](../utils/quality/quality.py) | Post-process: sharpen (unsharp mask), contrast; **naturalize** (human-art style). |
+| [utils/prompt/prompt_lint.py](../utils/prompt/prompt_lint.py) | Prompt adherence linting for SDX JSONL (pos/neg overlap + caption heuristics). |
+| [utils/prompt/prompt_emphasis.py](../utils/prompt/prompt_emphasis.py) | `( )` / `[ ]` prompt emphasis → per-T5-token weights; shared by `sample.py` and **`train.py --train-prompt-emphasis`**. |
+| [utils/prompt/originality_augment.py](../utils/prompt/originality_augment.py) | **`--originality`** / **`--train-originality-prob`**: inject `ORIGINALITY_POSITIVE_TOKENS` after subject tags for fresher compositions. |
 | [utils/image_quality_metrics.py](../utils/image_quality_metrics.py) | Pure-PIL/numpy image QC metrics (sharpness + contrast). |
-| [utils/config_validator.py](../utils/config_validator.py) | Train config validation. |
-| [utils/checkpoint_manager.py](../utils/checkpoint_manager.py) | Checkpoint rotation / save helpers. |
-| [utils/metrics.py](../utils/metrics.py) | FLOPs / logging helpers. |
-| [utils/dit_architecture.py](../utils/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
-| [utils/ar_dit_vit.py](../utils/ar_dit_vit.py) | DiT **block-AR** regime ↔ ViT: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](AR.md). |
+| [utils/training/config_validator.py](../utils/training/config_validator.py) | Train config validation. |
+| [utils/checkpoint/checkpoint_manager.py](../utils/checkpoint/checkpoint_manager.py) | Checkpoint rotation / save helpers. |
+| [utils/training/metrics.py](../utils/training/metrics.py) | FLOPs / logging helpers. |
+| [utils/architecture/dit_architecture.py](../utils/architecture/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
+| [utils/architecture/ar_dit_vit.py](../utils/architecture/ar_dit_vit.py) | DiT **block-AR** regime ↔ ViT: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](AR.md). |
 | [native/python/sdx_native/latent_geometry.py](../native/python/sdx_native/latent_geometry.py) | Latent / DiT **patch token** math (pure Python; matches `native/cpp` C ABI). |
+| [native/python/sdx_native/text_hygiene.py](../native/python/sdx_native/text_hygiene.py) | Caption **NFKC** + zero-width strip, fingerprints (SHA256 / optional xxhash), pos/neg overlap; training flag `--caption-unicode-normalize`. |
 | [native/python/sdx_native/native_tools.py](../native/python/sdx_native/native_tools.py) | Optional **`native/`** tool discovery (Rust/Zig/Go/Node), FNV manifest fingerprints, JSONL merge, ctypes `libsdx_latent`. |
-| [utils/latent_geometry.py](../utils/latent_geometry.py) | Shim → `sdx_native.latent_geometry`. |
-| [utils/native_tools.py](../utils/native_tools.py) | Shim → `sdx_native.native_tools`. |
-| [utils/nn_inspect.py](../utils/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
-| [utils/test_time_pick.py](../utils/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
-| [utils/orchestration.py](../utils/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
-| [utils/architecture_map.py](../utils/architecture_map.py) | **2026 architecture themes** → SDX parity (`THEMES`, `theme_by_id`, `themes_as_dict`); see [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md), [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md). |
+| [utils/native/latent_geometry.py](../utils/native/latent_geometry.py) | Shim → `sdx_native.latent_geometry`. |
+| [utils/native/native_tools.py](../utils/native/native_tools.py) | Shim → `sdx_native.native_tools`. |
+| [utils/modeling/nn_inspect.py](../utils/modeling/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
+| [utils/quality/test_time_pick.py](../utils/quality/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
+| [utils/generation/orchestration.py](../utils/generation/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
+| [utils/architecture/architecture_map.py](../utils/architecture/architecture_map.py) | **2026 architecture themes** → SDX parity (`THEMES`, `theme_by_id`, `themes_as_dict`); see [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md), [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md). |
 | *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
 
 ### ViT (`ViT/`)
@@ -137,9 +143,21 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [ViT/checkpoint_utils.py](../ViT/checkpoint_utils.py) | `load_vit_quality_checkpoint`, `vit_model_parameter_report` for tools and `infer.py`. |
 | [ViT/prompt_system.py](../ViT/prompt_system.py), [ViT/prompt_tool.py](../ViT/prompt_tool.py) | “Negative inside positive” prompt decomposition. |
 
+### Toolkit (`toolkit/`)
+
+| File | Description |
+|------|-------------|
+| [toolkit/README.md](../toolkit/README.md) | Index: env health, manifest digest, seeds, timing, suggested optional deps. |
+| [toolkit/training/env_health.py](../toolkit/training/env_health.py) | `python -m toolkit.training.env_health` — torch/CUDA/cuDNN + optional libs + `sdx_native` status. |
+| [toolkit/training/seed_utils.py](../toolkit/training/seed_utils.py) | `seed_everything`, `worker_seed_fn` for DataLoader workers. |
+| [toolkit/quality/manifest_digest.py](../toolkit/quality/manifest_digest.py) | `python -m toolkit.quality.manifest_digest` — JSONL line/key stats; optional Rust `stats`. |
+| [toolkit/qol/timing.py](../toolkit/qol/timing.py) | `StepTimer`, `@timed` for step/sec and ETA hints. |
+| [toolkit/libs/optional_imports.py](../toolkit/libs/optional_imports.py) | `describe_optional_libs()` for install hints. |
+| [toolkit/extras/requirements-suggested.txt](../toolkit/extras/requirements-suggested.txt) | Commented optional pip packages (xxhash, rich, …). |
+
 ### Native (`native/`)
 
-Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imported by Python training by default. See [native/README.md](../native/README.md).
+Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imported by Python training by default. See [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) (quality / training / adherence).
 
 ### Pipelines (`pipelines/`)
 
@@ -157,7 +175,7 @@ Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imp
 
 ### Scripts
 
-Index: **[scripts/README.md](../scripts/README.md)**. **Tools (categorized):** **[scripts/tools/README.md](../scripts/tools/README.md)**. Subdirs: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **book/** (launcher only), **enhanced/** (EnhancedDiT train/sample — [scripts/enhanced/README.md](../scripts/enhanced/README.md)), **root** (e.g. Stable Cascade stub).
+Index: **[scripts/README.md](../scripts/README.md)**. **Tools:** **[scripts/tools/README.md](../scripts/tools/README.md)** · dispatcher **`python -m scripts.tools <command>`** ([`scripts/tools/__main__.py`](../scripts/tools/__main__.py)). Subdirs: **setup/** (clone repos), **download/** (T5/VAE/LLM, optional stacks), **training/** (precompute latents, self-improve), **tools/** (inspect, smoke test), **book/** (launcher only), **enhanced/** (EnhancedDiT train/sample — [scripts/enhanced/README.md](../scripts/enhanced/README.md)), **root** (e.g. Stable Cascade stub).
 
 | File | Description |
 |------|-------------|
@@ -176,13 +194,16 @@ Index: **[scripts/README.md](../scripts/README.md)**. **Tools (categorized):** *
 | [scripts/training/hf_export_to_sdx_manifest.py](../scripts/training/hf_export_to_sdx_manifest.py) | HF `datasets` → `manifest.jsonl` + images (Danbooru-style when schema fits). |
 | [scripts/training/hf_download_and_train.py](../scripts/training/hf_download_and_train.py) | One-shot: HF export + `DiT-B/2-Text` train; `--demo` for synthetic data only. |
 | [docs/DANBOORU_HF.md](DANBOORU_HF.md) | Using Hugging Face Danbooru-related data with SDX. |
-| [scripts/tools/ckpt_info.py](../scripts/tools/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
-| [scripts/tools/data_quality.py](../scripts/tools/data_quality.py) | Filter/dedup JSONL or folder: `--dedup phash|md5`, `--min-caption-len`, `--bad-words`, `--min-weight` (IMPROVEMENTS 1.6). |
-| [scripts/tools/manifest_paths.py](../scripts/tools/manifest_paths.py) | List image paths from JSONL (**Rust `image-paths` / `dup-image-paths`** when built); pipe to Zig **`sdx-pathstat`** for file sizes. |
-| [scripts/tools/prompt_lint.py](../scripts/tools/prompt_lint.py) | Prompt adherence lint for SDX JSONL (empty captions, token heuristics, pos/neg overlap). |
-| [scripts/tools/tag_coverage.py](../scripts/tools/tag_coverage.py) | Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage. |
+| [scripts/tools/dev/ckpt_info.py](../scripts/tools/dev/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
+| [scripts/tools/data/data_quality.py](../scripts/tools/data/data_quality.py) | Filter/dedup JSONL or folder: `--dedup phash|md5`, `--min-caption-len`, `--bad-words`, `--min-weight` (IMPROVEMENTS 1.6). |
+| [scripts/tools/data/caption_hygiene.py](../scripts/tools/data/caption_hygiene.py) | JSONL caption Unicode hygiene: `--normalize-samples`, `--report-dups`, `--report-overlap` ([`sdx_native.text_hygiene`](../native/python/sdx_native/text_hygiene.py)). |
+| [scripts/tools/data/ar_tag_manifest.py](../scripts/tools/data/ar_tag_manifest.py) | Tag JSONL with DiT `num_ar_blocks` + `ar_regime` from `.pt` or explicit flag (ViT AR alignment; [AR.md](AR.md)). |
+| [scripts/tools/data/manifest_paths.py](../scripts/tools/data/manifest_paths.py) | List image paths from JSONL (**Rust `image-paths` / `dup-image-paths`** when built); pipe to Zig **`sdx-pathstat`** for file sizes. |
+| [scripts/tools/prompt/prompt_lint.py](../scripts/tools/prompt/prompt_lint.py) | Prompt adherence lint for SDX JSONL (empty captions, token heuristics, pos/neg overlap). |
+| [scripts/tools/preview_generation_prompt.py](../scripts/tools/preview_generation_prompt.py) | Preview final pos/neg after `content_controls` + neg filter (no model load). |
+| [scripts/tools/prompt/tag_coverage.py](../scripts/tools/prompt/tag_coverage.py) | Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage. |
 | [scripts/tools/spatial_coverage.py](../scripts/tools/spatial_coverage.py) | Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...). |
-| [scripts/tools/op_preflight.py](../scripts/tools/op_preflight.py) | One-shot “coverage + thresholds” gate (PASS/FAIL) before training. |
+| [scripts/tools/ops/op_preflight.py](../scripts/tools/ops/op_preflight.py) | One-shot “coverage + thresholds” gate (PASS/FAIL) before training. |
 | [scripts/tools/training_timestep_preview.py](../scripts/tools/training_timestep_preview.py) | ASCII histograms for `timestep_sample_mode` (uniform / logit_normal / high_noise). |
 | [scripts/tools/dit_variant_compare.py](../scripts/tools/dit_variant_compare.py) | Table of DiT / EnhancedDiT parameter counts and weight-size estimates (no training). |
 | [scripts/tools/make_smoke_dataset.py](../scripts/tools/make_smoke_dataset.py) | Synthetic PNGs + captions for smoke-testing `train.py`. |
@@ -191,12 +212,12 @@ Index: **[scripts/README.md](../scripts/README.md)**. **Tools (categorized):** *
 | [scripts/tools/op_pipeline.ps1](../scripts/tools/op_pipeline.ps1) | Windows wrapper to run preflight + normalize/boost (+ optional train/eval). |
 | [scripts/tools/complex_prompt_coverage.py](../scripts/tools/complex_prompt_coverage.py) | Coverage analyzer for tricky categories (clothes/weapons/food/text/foreground/background/weird/NSFW). |
 | [scripts/tools/prompt_gap_scout.py](../scripts/tools/prompt_gap_scout.py) | Analyze one prompt and suggest missing tricky category keywords. |
-| [scripts/tools/export_onnx.py](../scripts/tools/export_onnx.py) | Export DiT from .pt to ONNX for deployment (optional `--dynamic-batch`). |
-| [scripts/tools/export_safetensors.py](../scripts/tools/export_safetensors.py) | Export .pt checkpoint DiT weights to .safetensors (ComfyUI/A1111); optional `--metadata` for config JSON. |
-| [scripts/tools/quick_test.py](../scripts/tools/quick_test.py) | Smoke test: one DiT forward pass to verify env. |
+| [scripts/tools/export/export_onnx.py](../scripts/tools/export/export_onnx.py) | Export DiT from .pt to ONNX for deployment (optional `--dynamic-batch`). |
+| [scripts/tools/export/export_safetensors.py](../scripts/tools/export/export_safetensors.py) | Export .pt checkpoint DiT weights to .safetensors (ComfyUI/A1111); optional `--metadata` for config JSON. |
+| [scripts/tools/dev/quick_test.py](../scripts/tools/dev/quick_test.py) | Smoke test: one DiT forward pass to verify env. |
 | [scripts/tools/image_quality_qc.py](../scripts/tools/image_quality_qc.py) | Image QC for JSONL: Laplacian sharpness + grayscale contrast; optional fail thresholds. |
-| [scripts/tools/update_project_structure.py](../scripts/tools/update_project_structure.py) | Regenerate **`PROJECT_STRUCTURE.md`** at repo root. |
-| [scripts/tools/verify_doc_links.py](../scripts/tools/verify_doc_links.py) | Verify relative markdown links in key docs (CI-friendly). |
+| [scripts/tools/repo/update_project_structure.py](../scripts/tools/repo/update_project_structure.py) | Regenerate **`PROJECT_STRUCTURE.md`** at repo root. |
+| [scripts/tools/repo/verify_doc_links.py](../scripts/tools/repo/verify_doc_links.py) | Verify relative markdown links in key docs (CI-friendly). |
 
 ### Docs
 
@@ -212,8 +233,13 @@ Index: **[scripts/README.md](../scripts/README.md)**. **Tools (categorized):** *
 | [docs/IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, and features from other SD/DiT/FLUX models. |
 | [docs/HARDWARE.md](HARDWARE.md) | PC specs, VRAM, storage for training and full booru scrape. |
 | [docs/AR.md](AR.md) | Block-wise autoregressive (AR): 0 vs 2 vs 4 blocks, raster order, when to use. |
+| [docs/TRAINING_TEXT_TO_PIXELS.md](TRAINING_TEXT_TO_PIXELS.md) | Training mental model: text encoder tokens vs DiT patch tokens; alignment, originality levers. |
 | [docs/CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect: TrainConfig → checkpoint → sample/inference; get_dit_build_kwargs; data flow. |
 | [docs/HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | How generation works: prompt → T5 → diffusion loop → DiT denoising → VAE decode → image. |
+| [docs/PROMPT_STACK.md](PROMPT_STACK.md) | Inference **text** path before T5: `content_controls`, `neg_filter`, key flags, preview CLI. |
+| [docs/NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | Lower-level libs: in-repo `native/` tools + ecosystem (image I/O, tokenization, QA) vs quality / training / adherence. |
+| [docs/MODEL_ENHANCEMENTS.md](MODEL_ENHANCEMENTS.md) | `model_enhancements.py`, multimodal cross-attn / FiLM / RMSNorm, cascade blend, RAE scales. |
+| [docs/PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book workflows). |
 | [docs/DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior: how we handle hard-to-generate domains. |
 | [docs/REGION_CAPTIONS.md](REGION_CAPTIONS.md) | JSONL **`parts`** / **`region_captions`**: merge regional labels into T5 text for layout-aware training. |
 | [docs/MODEL_STACK.md](MODEL_STACK.md) | What lives under **`model/`** (T5, CLIP, DINOv2, Cascade, …) and how it maps to training vs `ViT/`. |
@@ -324,4 +350,4 @@ Cloned into `external/` by [scripts/setup/clone_repos.ps1](../scripts/setup/clon
 - **Models:** [models/dit_text.py](../models/dit_text.py) · [models/dit_predecessor.py](../models/dit_predecessor.py) · [models/pixart_blocks.py](../models/pixart_blocks.py) (SizeEmbedder, ported from PixArt)
 - **Data:** [data/t2i_dataset.py](../data/t2i_dataset.py) · [data/caption_utils.py](../data/caption_utils.py)
 - **Docs:** [README](../README.md) · [REGION_CAPTIONS](REGION_CAPTIONS.md) · [MODEL_STACK](MODEL_STACK.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
-- **Weights / paths:** [docs/MODEL_STACK.md](MODEL_STACK.md) · [utils/model_paths.py](../utils/model_paths.py)
+- **Weights / paths:** [docs/MODEL_STACK.md](MODEL_STACK.md) · [utils/modeling/model_paths.py](../utils/modeling/model_paths.py)

@@ -13,7 +13,8 @@ from .dit_predecessor import (
 )
 from .dit_text import DiT_XL_2_Text
 from .enhanced_dit import EnhancedDiT_B_2, EnhancedDiT_L_2, EnhancedDiT_models, EnhancedDiT_XL_2
-from .native_multimodal_transformer import NativeMultimodalTransformer
+from .model_enhancements import DropPath, RMSNorm, SE1x1, TokenFiLM
+from .native_multimodal_transformer import NativeMultimodalTransformer, concat_padding_masks
 from .rae_latent_bridge import RAELatentBridge
 
 DiT_models_text = {
@@ -44,6 +45,11 @@ __all__ = [
     "EnhancedDiT_L_2",
     "EnhancedDiT_B_2",
     "NativeMultimodalTransformer",
+    "concat_padding_masks",
+    "RMSNorm",
+    "DropPath",
+    "TokenFiLM",
+    "SE1x1",
     "CascadedMultimodalDiffusion",
     "CascadedSchedule",
     "RAELatentBridge",

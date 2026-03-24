@@ -4,6 +4,36 @@ import torch
 import torch.nn.functional as F
 
 
+def binary_focal_loss_with_logits(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    *,
+    gamma: float = 2.0,
+    alpha: float | None = None,
+) -> torch.Tensor:
+    """
+    Focal loss for imbalanced **binary** quality labels (down-weights easy examples).
+
+    *targets* are floats in ``{0, 1}`` (same as ``BCEWithLogitsLoss``).
+    *alpha* optional class balance in [0, 1] (weight on positive class).
+    """
+    gamma = float(gamma)
+    if gamma <= 0:
+        return F.binary_cross_entropy_with_logits(logits, targets, reduction="mean")
+
+    targets = targets.float()
+    bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+    with torch.no_grad():
+        prob = torch.sigmoid(logits)
+    p_t = prob * targets + (1.0 - prob) * (1.0 - targets)
+    focal = (1.0 - p_t.clamp(min=1e-6, max=1.0 - 1e-6)) ** gamma * bce
+    if alpha is not None:
+        a = float(alpha)
+        w = a * targets + (1.0 - a) * (1.0 - targets)
+        focal = focal * w
+    return focal.mean()
+
+
 def pairwise_ranking_loss(
     pred: torch.Tensor,
     target: torch.Tensor,

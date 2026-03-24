@@ -39,7 +39,9 @@ Optional labels (for supervised training):
 - `adherence_score` (or `prompt_adherence`) in `[0,1]`
 
 **DiT block-AR alignment** (recommended when images come from AR-trained DiT): set one of
-`num_ar_blocks`, `dit_num_ar_blocks`, or `ar_blocks` to **`0`**, **`2`**, or **`4`** (same meaning as root `train.py --num-ar-blocks`). Missing → **unknown** regime. By default the ViT fuses a 4-D one-hot with caption features; use **`--no-ar-conditioning`** to match old checkpoints that only use 8-D text features. See **`docs/AR.md`** § ViT scorer alignment and **`utils/ar_dit_vit.py`**.
+`num_ar_blocks`, `dit_num_ar_blocks`, or `ar_blocks` to **`0`**, **`2`**, or **`4`** (same meaning as root `train.py --num-ar-blocks`). Missing → **unknown** regime. By default the ViT fuses a 4-D one-hot with caption features; use **`--no-ar-conditioning`** to match old checkpoints that only use 8-D text features. See **`docs/AR.md`** § ViT scorer alignment and **`utils/architecture/ar_dit_vit.py`**.
+
+**Training fixes & options (2026):** the trainer now passes **`ar_conditioning`** from each batch into the model (previously only inference did). New flags: **`--train-augment`** (crop/flip/jitter), **`--focal-loss-gamma`** / **`--focal-loss-alpha`** (imbalanced quality labels), **`--adherence-smooth-l1`** (outlier‑robust adherence), **`--fuse-dropout`**, **`--text-proj-dropout`**, **`--backbone-grad-checkpointing`** (VRAM). Checkpoint `config` stores these for `infer.py` / `load_vit_quality_checkpoint`.
 
 ## Train
 
@@ -71,6 +73,8 @@ python ViT/infer.py \
   --use-ema \
   --tta
 ```
+
+If the ViT checkpoint has **AR conditioning** (`use_ar_conditioning`) and your JSONL rows omit `num_ar_blocks`, add **`--default-num-ar-blocks 0`** (Meta/Facebook DiT–style full attention) or **`2`/`4`** to match your SDX DiT run. Same flag on **`export_embeddings.py`**. Prefer tagging manifests with `scripts/tools/data/ar_tag_manifest.py` when mixing generators; see **`docs/AR.md`**.
 
 ## Rank best rows
 

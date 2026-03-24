@@ -17,7 +17,7 @@ def test_parse_resolution_buckets_train():
 
 
 def test_rag_merge():
-    from utils.rag_prompt import merge_facts_into_prompt
+    from utils.prompt.rag_prompt import merge_facts_into_prompt
 
     out = merge_facts_into_prompt("draw a car", ["Model X 2026", "red"])
     assert "Model X" in out
@@ -25,7 +25,7 @@ def test_rag_merge():
 
 
 def test_character_lock():
-    from utils.character_lock import extract_character_tag, merge_character_into_caption
+    from utils.consistency.character_lock import extract_character_tag, merge_character_into_caption
 
     c = merge_character_into_caption("in a cafe", "h1", "short black hair", mode="prefix")
     assert "character_ref=h1" in c
@@ -33,7 +33,7 @@ def test_character_lock():
 
 
 def test_score_exposure():
-    from utils.test_time_pick import score_exposure_balance
+    from utils.quality.test_time_pick import score_exposure_balance
 
     flat = np.full((8, 8, 3), 128, dtype=np.uint8)
     hi = np.full((8, 8, 3), 255, dtype=np.uint8)

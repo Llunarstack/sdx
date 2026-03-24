@@ -29,6 +29,9 @@ def load_vit_quality_checkpoint(
     model_name = cfg.get("model_name", "vit_base_patch16_224")
     text_feat_dim = int(cfg.get("text_feat_dim", 8))
     hidden_dim = int(cfg.get("hidden_dim", 256))
+    fuse_dropout = float(cfg.get("fuse_dropout", 0.1))
+    text_proj_dropout = float(cfg.get("text_proj_dropout", 0.0))
+    backbone_grad_checkpointing = bool(cfg.get("backbone_grad_checkpointing", False))
     # Older checkpoints omit these → full bidirectional DiT path (no AR side-info).
     use_ar_conditioning = bool(cfg.get("use_ar_conditioning", False))
     ar_cond_dim = int(cfg.get("ar_cond_dim", 4))
@@ -40,6 +43,9 @@ def load_vit_quality_checkpoint(
         hidden_dim=hidden_dim,
         use_ar_conditioning=use_ar_conditioning,
         ar_cond_dim=ar_cond_dim,
+        fuse_dropout=fuse_dropout,
+        text_proj_dropout=text_proj_dropout,
+        backbone_grad_checkpointing=backbone_grad_checkpointing,
     )
     if use_ema and bool(ckpt.get("ema_state_dict")):
         model.load_state_dict(ckpt["ema_state_dict"], strict=False)

@@ -1,9 +1,10 @@
 """
 Precompute VAE latents for a dataset and save to disk. Then train with --latent-cache-dir for faster training.
-Usage: python scripts/precompute_latents.py --data-path /path/to/images --out-dir /path/to/latent_cache --image-size 256
+Usage: python scripts/training/precompute_latents.py --data-path /path/to/images --out-dir /path/to/latent_cache --image-size 256
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -63,7 +64,7 @@ class ImagePaths(Dataset):
         pil = center_crop(pil, self.image_size)
         img = np.array(pil).astype(np.float32) / 255.0
         img = (img - 0.5) / 0.5
-        img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)
+        img = torch.from_numpy(img).permute(2, 0, 1)  # CHW (DataLoader stacks to BCHW)
         return img, p
 
 
@@ -87,9 +88,18 @@ def main():
         help="kl=AutoencoderKL, rae=AutoencoderRAE",
     )
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=-1,
+        help="DataLoader workers; -1 = min(8, CPU count). Use 0 on Windows if workers hang.",
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    nw = args.num_workers
+    if nw < 0:
+        nw = min(8, (os.cpu_count() or 1))
     from diffusers import AutoencoderKL, AutoencoderRAE
 
     if args.autoencoder_type == "rae":
@@ -113,9 +123,18 @@ def main():
 
     from torch.utils.data import DataLoader
 
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    pin = device.type == "cuda"
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=nw,
+        pin_memory=pin,
+        persistent_workers=nw > 0,
+    )
+    processed = 0
     for i, (imgs, paths) in enumerate(loader):
-        imgs = imgs.to(device)
+        imgs = imgs.to(device, non_blocking=pin)
         with torch.no_grad():
             enc = vae.encode(imgs)
             if hasattr(enc, "latent_dist"):
@@ -125,8 +144,9 @@ def main():
         for j, p in enumerate(paths):
             name = Path(p).stem + ".pt"
             torch.save(latents[j].cpu(), out_dir / name)
+        processed += len(paths)
         if (i + 1) % 100 == 0:
-            print(f"Processed {(i + 1) * args.batch_size} / {len(dataset)}")
+            print(f"Processed {processed} / {len(dataset)}")
     print(f"Done. Latents saved to {out_dir}. Train with: --latent-cache-dir {out_dir}")
 
 

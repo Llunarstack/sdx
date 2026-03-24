@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import torch
-from utils.dit_architecture import (
+from utils.architecture.dit_architecture import (
     default_dit_profile_kwargs,
     dit_parameter_report,
     instantiate_dit_text,
     latent_side_from_image_size,
     list_dit_text_variant_names,
 )
-from utils.nn_inspect import child_parameter_summary, format_module_tree
+from utils.modeling.nn_inspect import child_parameter_summary, format_module_tree
 
 
 def test_latent_side() -> None:

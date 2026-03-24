@@ -51,7 +51,7 @@ These target **generation** (replace or extend `DiT_Text`), not the `ViT/` QA mo
 2. **More ranking supervision** — raise `--ranking-loss-weight`, curate *pairs* (same prompt, better/worse image).
 3. **EMA + TTA** — already in `ViT/ema.py`, `ViT/tta.py`; keep for inference stability.
 4. **Bigger `text_feat_dim` + richer `text_feature_vector`** — if captions carry structure, upgrade the text side (see `ViT/dataset.py`) so adherence isn’t from 8 random dims.
-5. **Wire into sampling** — merge ViT scores with `utils/test_time_pick.py` / `sample.py --pick-best` (ensemble: CLIP + edge + OCR + ViT).
+5. **Wire into sampling** — merge ViT scores with `utils/quality/test_time_pick.py` / `sample.py --pick-best` (ensemble: CLIP + edge + OCR + ViT).
 
 ### Medium term
 

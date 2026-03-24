@@ -149,7 +149,7 @@ flowchart TB
 | Loop | Diffusion | `diffusion/gaussian_diffusion.py`: `create_diffusion`, `sample_loop` |
 | Loop | DiT forward | `model(x, t, encoder_hidden_states=..., ...)` → noise or v prediction |
 | Decode | VAE | `vae.decode(x0).sample` |
-| Post | Quality | `utils/quality.py`: `sharpen`, `contrast` |
+| Post | Quality | `utils/quality/quality.py`: `sharpen`, `contrast` |
 
 ---
 

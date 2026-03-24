@@ -1,0 +1,22 @@
+# Optional: install Mojo via Pixi (Modular conda channel).
+#   cd native/mojo && pixi install
+#   pixi run mojo-run
+#
+# Install Pixi: https://pixi.sh/latest/
+# (osx-64 omitted: no mojo builds on that target in the Modular channel.)
+
+[workspace]
+name = "sdx-mojo"
+version = "0.1.0"
+description = "SDX optional Mojo tooling"
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+# Pixi solves every listed platform; keep only targets where `mojo` exists on the Modular channel.
+# WSL2 / Linux x86_64: use as-is. Native macOS ARM: add "osx-arm64". Native Linux ARM: add "linux-aarch64".
+platforms = ["linux-64"]
+
+[dependencies]
+# Conda versions are 0.26.x (not 25.x); use PEP440-safe lower bound.
+mojo = ">=0.25.0"
+
+[tasks]
+mojo-run = "mojo src/sdx_stub.mojo"

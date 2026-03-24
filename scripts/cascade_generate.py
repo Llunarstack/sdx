@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
-    from utils.model_paths import default_cascade_decoder_path, default_cascade_prior_path
+    from utils.modeling.model_paths import default_cascade_decoder_path, default_cascade_prior_path
 
     p = argparse.ArgumentParser(description="Stable Cascade image generation (Diffusers)")
     p.add_argument("--prompt", type=str, required=True)

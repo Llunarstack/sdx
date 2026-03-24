@@ -29,7 +29,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --cfg-scale 7 --cfg-rescale 0
 
 - **Use native resolution** — Prefer the model’s training size (e.g. 256 or 512). If you set `--width` / `--height` far from that, you’ll see a note; use `--vae-tiling` for large decodes to reduce VRAM and artifacts.
 - **More steps** — 25–35 steps often improve clarity; we default to 50.
-- **Post-process** — `--sharpen 0.3` and `--contrast 1.05` can help (see `utils/quality.py`).
+- **Post-process** — `--sharpen 0.3` and `--contrast 1.05` can help (see `utils/quality/quality.py`).
 - **VAE** — Train/sample with a good VAE (e.g. sd-vae-ft-mse or sdxl-vae); avoid heavily quantized VAEs for final decode.
 
 ---

@@ -91,6 +91,10 @@ The **`ViT/`** module scores finished images. If your **generator** was trained 
 1. **Training ViT** (`ViT/train.py`): **AR conditioning is on by default**. Put the same regime on each JSONL row the model should learn:
    - **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`** — integer **`0`**, **`2`**, or **`4`**. Missing or invalid → **unknown** bucket (4th one-hot).
 2. **Older ViT checkpoints** (no `use_ar_conditioning` in saved config) load as **text-only** (8-D caption features only). Use **`--no-ar-conditioning`** when training if you need weights compatible with that layout, or retrain with AR fields in the manifest.
-3. **Inference** (`ViT/infer.py`, `ViT/export_embeddings.py`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` is read and fused with caption features. Omitted → unknown.
+3. **Inference** (`ViT/infer.py`, `ViT/export_embeddings.py`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` / `generator_num_ar_blocks` is read (including optional nested blobs like `dit_config`) and fused with caption features. Omitted → **unknown** one-hot unless you pass **`--default-num-ar-blocks 0|2|4`** (e.g. whole manifest is from one DiT run).
 
-Bridge code: **`utils/ar_dit_vit.py`** (`ar_conditioning_vector`, `parse_num_ar_blocks_from_row`, `batch_ar_conditioning`).
+4. **Facebook / Meta DiT** (`facebookresearch/DiT`): vanilla checkpoints are **full bidirectional** → use **`num_ar_blocks = 0`** for ViT alignment. Only use `2`/`4` if you trained an SDX-compatible fork with the same block-causal mask API.
+
+5. **Tag manifests from a DiT `.pt`**: `python scripts/tools/data/ar_tag_manifest.py --dit-ckpt path/to/best.pt --manifest-jsonl data/in.jsonl --out data/out.jsonl` (or `--num-ar-blocks 2` without reading a file). Sets `num_ar_blocks`, mirrors `dit_num_ar_blocks`, and adds `ar_regime` (`full_bidirectional`, `block_ar_2x2`, …).
+
+Bridge code: **`utils/architecture/ar_dit_vit.py`** (`ar_conditioning_vector`, `parse_num_ar_blocks_from_row`, `read_num_ar_blocks_from_checkpoint`, `tag_manifest_row_ar`, `batch_ar_conditioning`).
