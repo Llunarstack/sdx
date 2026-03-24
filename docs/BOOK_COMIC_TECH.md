@@ -44,8 +44,8 @@ This note ties **common 2024–2026 product/research themes** in sequential art 
 **SDX today**
 
 - **`--text-in-image`**, **`--expected-text`**, **`--ocr-fix`** in `sample.py` / **`generate_book.py`**.
-- **`utils/text_rendering.py`** for OCR-aware masks and validation.
-- **Test-time pick:** **`--pick-best combo`** uses OCR alignment when expected text is set ([`utils/test_time_pick.py`](../utils/test_time_pick.py)).
+- **`utils/generation/text_rendering.py`** for OCR-aware masks and validation.
+- **Test-time pick:** **`--pick-best combo`** uses OCR alignment when expected text is set ([`utils/quality/test_time_pick.py`](../utils/quality/test_time_pick.py)).
 
 **Prompt hints:** see **`prompt_lexicon.tategaki_hint`**, **`lettering_negative_addon`**.
 

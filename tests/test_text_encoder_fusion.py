@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-from utils.text_encoder_bundle import TripleTextFusion
+from utils.modeling.text_encoder_bundle import TripleTextFusion
 
 
 def test_triple_fusion_shapes() -> None:

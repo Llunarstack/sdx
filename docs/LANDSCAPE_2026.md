@@ -2,7 +2,7 @@
 
 **Context:** Text-to-image is increasingly **production infrastructure**, not only a “cool art” demo. Teams care about **functional precision**, **grounding**, and **outputs that read as real**—not just high scores on aesthetics.
 
-This doc **does not** claim SDX ships commercial parity with any external product. It **does** map where the field is moving and how SDX can evolve (see also [IMPROVEMENTS.md](IMPROVEMENTS.md) §12, [utils/orchestration.py](../utils/orchestration.py)).
+This doc **does not** claim SDX ships commercial parity with any external product. It **does** map where the field is moving and how SDX can evolve (see also [IMPROVEMENTS.md](IMPROVEMENTS.md) §12, [utils/generation/orchestration.py](../utils/generation/orchestration.py)).
 
 **Note:** Product names, release dates, and benchmarks change quickly. Treat the **industry snapshot** below as an orientation to common themes in early-2026 discussions—not a live leaderboard.
 
@@ -59,14 +59,14 @@ The field has shifted from “single text-to-image box” toward **integrated cr
 **SDX today**
 
 - Training/inference knobs that reduce **CFG blowout** and oversaturation: CFG rescale, dynamic threshold, Min-SNR, noise offset ([CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md)).
-- **Refinement** and post-process (`utils/quality.py` naturalize/sharpen).
+- **Refinement** and post-process (`utils/quality/quality.py` naturalize/sharpen).
 - **Domain / style** tooling ([STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md), [DOMAINS.md](DOMAINS.md)).
 
 **Good next steps in-repo**
 
 - Optional **texture / frequency** regularization or auxiliary losses (document loss schedule; see [IMPROVEMENTS.md](IMPROVEMENTS.md) §11).
 - **Multi-resolution / aspect buckets** — **implemented:** `train.py --resolution-buckets` (e.g. `256,512` or `512x768`), [`data/bucket_batch_sampler.py`](../data/bucket_batch_sampler.py), [`data/t2i_dataset.py`](../data/t2i_dataset.py) (single-GPU only; no `--val-split`; latent cache disabled when buckets are on). Prefer `--size-embed-dim` > 0 for best extrapolation ([IMPROVEMENTS.md](IMPROVEMENTS.md) §1.1).
-- **Lo-fi cosmetics** — **implemented:** [`add_motion_blur` / `add_lens_glare`](../utils/quality.py) alongside existing grain / `naturalize`.
+- **Lo-fi cosmetics** — **implemented:** [`add_motion_blur` / `add_lens_glare`](../utils/quality/quality.py) alongside existing grain / `naturalize`.
 - Dataset-side **“lived-in”** captions (wear, dust, film grain) in JSONL—not only tag lists.
 
 ---
@@ -78,12 +78,12 @@ The field has shifted from “single text-to-image box” toward **integrated cr
 **SDX today**
 
 - **Designer-like core:** `sample.py` + DiT + VAE (and optional Control / regional captions).
-- **Verifier-like hooks:** `--pick-best` with CLIP / edge / OCR ([utils/test_time_pick.py](../utils/test_time_pick.py)); ViT quality tools under `ViT/`.
-- **Reasoner-like conditioning:** T5 (+ optional triple fusion); optional LLM prompt expansion ([utils/llm_client.py](../utils/llm_client.py)).
+- **Verifier-like hooks:** `--pick-best` with CLIP / edge / OCR ([utils/quality/test_time_pick.py](../utils/quality/test_time_pick.py)); ViT quality tools under `ViT/`.
+- **Reasoner-like conditioning:** T5 (+ optional triple fusion); optional LLM prompt expansion ([utils/analysis/llm_client.py](../utils/analysis/llm_client.py)).
 
 **Good next steps**
 
-- Explicit **orchestration** — **implemented:** [`scripts/tools/orchestrate_pipeline.py`](../scripts/tools/orchestrate_pipeline.py) (wraps `sample.py` with `--num` + `--pick-best`); [`sample_cli_hint()`](../utils/orchestration.py) for copy-paste; optional **`--pick-best combo_exposure`** ([`score_exposure_balance`](../utils/test_time_pick.py)) for lightweight highlight/shadow clipping avoidance.
+- Explicit **orchestration** — **implemented:** [`scripts/tools/ops/orchestrate_pipeline.py`](../scripts/tools/ops/orchestrate_pipeline.py) (wraps `sample.py` with `--num` + `--pick-best`); [`sample_cli_hint()`](../utils/generation/orchestration.py) for copy-paste; optional **`--pick-best combo_exposure`** ([`score_exposure_balance`](../utils/quality/test_time_pick.py)) for lightweight highlight/shadow clipping avoidance.
 - Optional **lightweight anatomy/physics** checks (hand bbox + finger count heuristics, shadow/light consistency) as *scores* feeding pick-best—not a full closed verifier.
 
 ---
@@ -112,7 +112,7 @@ The field has shifted from “single text-to-image box” toward **integrated cr
 | **Train the DiT natively at target res** (buckets, longer training) | Coherent structure at full resolution | More GPU memory and data |
 | **Latent upscale + second diffusion pass** (Hi-Res Fix style) | Strong for SD-family pipelines | Extra engineering in *this* repo; not the default SDX path today |
 
-SDX already has **VAE tiling** for large decodes and **sharpen/naturalize** in `utils/quality.py`. A dedicated **upscaler** is still useful for production (4K deliverables from 512²–1024² generators), but it belongs in **docs + optional script** calling an external SR tool, or a small **wrapper**—not necessarily a new trainable head inside `models/dit_text.py`.
+SDX already has **VAE tiling** for large decodes and **sharpen/naturalize** in `utils/quality/quality.py`. A dedicated **upscaler** is still useful for production (4K deliverables from 512²–1024² generators), but it belongs in **docs + optional script** calling an external SR tool, or a small **wrapper**—not necessarily a new trainable head inside `models/dit_text.py`.
 
 ---
 
@@ -142,8 +142,8 @@ SDX already has **VAE tiling** for large decodes and **sharpen/naturalize** in `
 
 **Good next steps**
 
-- **RAG-style** optional module — **stub:** [`utils/rag_prompt.py`](../utils/rag_prompt.py) (`merge_facts_into_prompt`, `load_facts_from_jsonl`). Wire your own retrieval; then **encode** the merged prompt as usual.
-- **Character / subject consistency** — **helpers:** [`utils/character_lock.py`](../utils/character_lock.py) (`merge_character_into_caption`, …) for stable JSONL / prompt prefixes.
+- **RAG-style** optional module — **stub:** [`utils/prompt/rag_prompt.py`](../utils/prompt/rag_prompt.py) (`merge_facts_into_prompt`, `load_facts_from_jsonl`). Wire your own retrieval; then **encode** the merged prompt as usual.
+- **Character / subject consistency** — **helpers:** [`utils/consistency/character_lock.py`](../utils/consistency/character_lock.py) (`merge_character_into_caption`, …) for stable JSONL / prompt prefixes.
 - Clear **separation** in docs: “model knowledge” vs “user-supplied facts” for safety and reproducibility.
 
 ---
@@ -165,7 +165,7 @@ Commercial stacks and names change quickly. Treat the following as **examples** 
 
 - [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) — **workflow / efficiency** industry narratives (test-time compute, grounding, LLaDA-class ideas, Mamba) — **disclaimers** + SDX hooks  
 - [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) — **post-diffusion** themes (flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE) mapped to SDX  
-- [`utils/architecture_map.py`](../utils/architecture_map.py) — machine-readable theme → repo status  
+- [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) — machine-readable theme → repo status  
 - [IMPROVEMENTS.md](IMPROVEMENTS.md) §11–§12 — research hooks and **2026 alignment** tickets  
 - [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) — timestep sampling and flow-era ideas  
-- [utils/orchestration.py](../utils/orchestration.py) — named pipeline roles (Designer / Verifier / Reasoner)
+- [utils/generation/orchestration.py](../utils/generation/orchestration.py) — named pipeline roles (Designer / Verifier / Reasoner)

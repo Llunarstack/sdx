@@ -12,13 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # Import all required modules
-from utils.advanced_prompting import create_advanced_prompting_system  # noqa: E402
-from utils.anatomy_correction import create_anatomy_correction_system  # noqa: E402
-from utils.consistency_system import create_consistency_system  # noqa: E402
-from utils.image_editing import create_editing_pipeline  # noqa: E402
-from utils.master_integration import create_sdx_master  # noqa: E402
-from utils.precision_control import create_precision_control_system  # noqa: E402
-from utils.text_rendering import create_text_rendering_pipeline  # noqa: E402
+from utils.prompt.advanced_prompting import create_advanced_prompting_system  # noqa: E402
+from utils.generation.anatomy_correction import create_anatomy_correction_system  # noqa: E402
+from utils.consistency.consistency_system import create_consistency_system  # noqa: E402
+from utils.generation.image_editing import create_editing_pipeline  # noqa: E402
+from utils.generation.master_integration import create_sdx_master  # noqa: E402
+from utils.generation.precision_control import create_precision_control_system  # noqa: E402
+from utils.generation.text_rendering import create_text_rendering_pipeline  # noqa: E402
 
 
 def test_imports():
@@ -26,24 +26,24 @@ def test_imports():
     print("Testing imports...")
 
     # Core utilities
-    from utils.advanced_inference import PromptOptimizer  # noqa: F401
-    from utils.advanced_prompting import create_advanced_prompting_system  # noqa: F401
-    from utils.anatomy_correction import create_anatomy_correction_system  # noqa: F401
-    from utils.checkpoint_manager import CheckpointManager  # noqa: F401
-    from utils.config_validator import validate_train_config  # noqa: F401
-    from utils.consistency_system import create_consistency_system  # noqa: F401
-    from utils.data_analysis import DatasetAnalyzer  # noqa: F401
-    from utils.error_handling import setup_logging  # noqa: F401
-    from utils.image_editing import create_editing_pipeline  # noqa: F401
+    from utils.generation.advanced_inference import PromptOptimizer  # noqa: F401
+    from utils.prompt.advanced_prompting import create_advanced_prompting_system  # noqa: F401
+    from utils.generation.anatomy_correction import create_anatomy_correction_system  # noqa: F401
+    from utils.checkpoint.checkpoint_manager import CheckpointManager  # noqa: F401
+    from utils.training.config_validator import validate_train_config  # noqa: F401
+    from utils.consistency.consistency_system import create_consistency_system  # noqa: F401
+    from utils.analysis.data_analysis import DatasetAnalyzer  # noqa: F401
+    from utils.training.error_handling import setup_logging  # noqa: F401
+    from utils.generation.image_editing import create_editing_pipeline  # noqa: F401
 
     # Master integration
-    from utils.master_integration import create_sdx_master  # noqa: F401
-    from utils.metrics import MetricsTracker  # noqa: F401
-    from utils.model_viz import analyze_model_architecture  # noqa: F401
+    from utils.generation.master_integration import create_sdx_master  # noqa: F401
+    from utils.training.metrics import MetricsTracker  # noqa: F401
+    from utils.modeling.model_viz import analyze_model_architecture  # noqa: F401
 
     # Advanced systems
-    from utils.precision_control import create_precision_control_system  # noqa: F401
-    from utils.text_rendering import create_text_rendering_pipeline  # noqa: F401
+    from utils.generation.precision_control import create_precision_control_system  # noqa: F401
+    from utils.generation.text_rendering import create_text_rendering_pipeline  # noqa: F401
 
     print("All imports successful")
 

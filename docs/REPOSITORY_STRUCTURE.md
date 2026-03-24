@@ -52,7 +52,7 @@ Run from **repo root** so `config`, `data`, `models`, `utils` resolve without ex
 | **`scripts/download/`** | Pull T5, VAE, CLIP, LLM, optional stacks into `model/` |
 | **`scripts/setup/`** | Clone upstream repos into `external/` (reference only) |
 | **`scripts/training/`** | HF → JSONL, precompute latents, `hf_download_and_train`, … |
-| **`scripts/tools/`** | Utilities — grouped entrypoints (`dev/`, `data/`, `prompt/`, `ops/`, `export/`, `repo/`) plus legacy flat scripts — **[scripts/tools/README.md](../scripts/tools/README.md)** |
+| **`scripts/tools/`** | Utilities — grouped entrypoints (`dev/`, `data/`, `prompt/`, `ops/`, `export/`, `repo/`) + **`python -m scripts.tools <cmd>`** dispatcher — **[scripts/tools/README.md](../scripts/tools/README.md)** |
 | **`scripts/book/`** | Thin launcher → `pipelines/book_comic/scripts/generate_book.py` |
 | **`scripts/enhanced/`** | **EnhancedDiT** training, sampling, setup, checkpoint seed — optional path parallel to main `train.py` |
 | **`scripts/cascade_generate.py`** | Stable Cascade stub (optional) |
@@ -79,7 +79,7 @@ See **[scripts/README.md](../scripts/README.md)** and **[scripts/enhanced/README
 | New prompt lists / presets (not train hyperparams) | `config/reference/` |
 | Dataset field / collation | `data/` |
 | Training flag / config field | `config/train_config.py` + `get_dit_build_kwargs` |
-| Sampling or checkpoint behavior | `sample.py` / `utils/checkpoint_loading.py` |
+| Sampling or checkpoint behavior | `sample.py` / `utils/checkpoint/checkpoint_loading.py` |
 | One-off maintenance script | `scripts/tools/` |
 | Documentation | `docs/` and link from [docs/README.md](README.md) |
 | Tests | `tests/test_*.py` |
@@ -90,4 +90,4 @@ See **[scripts/README.md](../scripts/README.md)** and **[scripts/enhanced/README
 
 For every path and description, see **[FILES.md](FILES.md)**.
 
-For a **machine-generated** directory tree (refresh after moves), see **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** (`python scripts/tools/update_project_structure.py`).
+For a **machine-generated** directory tree (refresh after moves), see **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** (`python -m scripts.tools update_project_structure`).

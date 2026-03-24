@@ -2,7 +2,7 @@
 
 **Context:** The field has moved past the first wave of “DiT replaces U-Net” hype into **deeper mathematical and systems refinement**. Pure **noise → image** diffusion is still dominant in production, but **flow matching**, **bridges**, **hybrid AR + diffusion**, **distillation**, and **semantic latents** are the active research and product frontier.
 
-This doc **orients** you to those themes and points to **what SDX already has** vs **future work** — see [`utils/architecture_map.py`](../utils/architecture_map.py) for a machine-readable map.
+This doc **orients** you to those themes and points to **what SDX already has** vs **future work** — see [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) for a machine-readable map.
 
 **Disclaimer:** Names (GLM-Image, FLUX.2, etc.) are **illustrative** of categories; release details change weekly.
 
@@ -27,7 +27,7 @@ This doc **orients** you to those themes and points to **what SDX already has** 
 | **AR “planner” + diffusion decoder** | **Autoregressive** module outputs **coarse semantic tokens** (layout, relations); **DiT / diffusion** refines **texture and detail**. | Addresses **spatial logic** (“X under Y”), **long text**, and **instruction-heavy** prompts. |
 | **Block-causal / raster AR in DiT** | Causal attention over **patches or blocks** so generation has a **sequence** bias without a separate tokenizer stack. | Lighter-weight hybrid than a full 9B AR image tokenizer — **controllable** in open-source. |
 
-**SDX today:** **`num_ar_blocks`** (0 / 2 / 4 / …), block masks in `models/attention.py`, [docs/AR.md](AR.md), **`utils/ar_dit_vit.py`** for ViT alignment. This is **one** credible open-source angle on “AR + diffusion” — not a full GLM-Image-style discrete token LM. **Status:** partial (DiT-native AR, not separate AR tokenizer).
+**SDX today:** **`num_ar_blocks`** (0 / 2 / 4 / …), block masks in `models/attention.py`, [docs/AR.md](AR.md), **`utils/architecture/ar_dit_vit.py`** for ViT alignment. This is **one** credible open-source angle on “AR + diffusion” — not a full GLM-Image-style discrete token LM. **Status:** partial (DiT-native AR, not separate AR tokenizer).
 
 ---
 
@@ -49,7 +49,7 @@ This doc **orients** you to those themes and points to **what SDX already has** 
 | **Distribution Matching Distillation (DMD)** | Distill a **teacher** diffusion into a **fast** student (sometimes **1 step**), combining ideas from **GANs** + **diffusion**. | **Real-time** UI, “generate as you type,” consumer GPUs. |
 | **Consistency / CM** | Enforce **trajectory consistency** for few-step sampling. | Alternative path to turbo inference. |
 
-**SDX today:** **DDIM-style** multi-step sampling; **no** built-in DMD/consistency trainer. **Test-time:** `--num K --pick-best` ([`utils/test_time_pick.py`](../utils/test_time_pick.py)) as a **quality** gate, not a distilled student. **Status:** not in-repo training; roadmap in [IMPROVEMENTS.md](IMPROVEMENTS.md) §2.4 / §11.
+**SDX today:** **DDIM-style** multi-step sampling; **no** built-in DMD/consistency trainer. **Test-time:** `--num K --pick-best` ([`utils/quality/test_time_pick.py`](../utils/quality/test_time_pick.py)) as a **quality** gate, not a distilled student. **Status:** not in-repo training; roadmap in [IMPROVEMENTS.md](IMPROVEMENTS.md) §2.4 / §11.
 
 ---
 
@@ -59,7 +59,7 @@ This doc **orients** you to those themes and points to **what SDX already has** 
 | :--- | :--- | :--- |
 | **Physics-informed / physical consistency** | Bias generations toward **plausible** lighting, gravity, contact — **not only** “looks plausible.” | Strong in **video / 3D**; emerging in **still** image stacks via **VLM** or **auxiliary losses**. |
 | **Scientific imaging** | Diffusion in **non-photographic** spaces (e.g. molecular, material) — **noise** = **uncertainty**, not pixels. | Different product line than **SDX**; included for **ecosystem** awareness. |
-| **RAG / facts in prompt** | **User-supplied** facts merged into the prompt before encoding — [`utils/rag_prompt.py`](../utils/rag_prompt.py). | **Grounding** without retraining. |
+| **RAG / facts in prompt** | **User-supplied** facts merged into the prompt before encoding — [`utils/prompt/rag_prompt.py`](../utils/prompt/rag_prompt.py). | **Grounding** without retraining. |
 
 **SDX today:** **T5 (+ optional CLIP fusion)**; **REPA** aligns features to **frozen vision** encoders; **RAE** path + `RAELatentBridge` for non–4ch latents; **no** built-in physics simulator. **Status:** partial (semantic alignment / RAE / REPA), not physics engine.
 
@@ -105,4 +105,4 @@ This doc **orients** you to those themes and points to **what SDX already has** 
 - [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) — what SDX implements vs research  
 - [IMPROVEMENTS.md](IMPROVEMENTS.md) — §11–§12 next-tier ideas  
 - [AR.md](AR.md) — block-wise AR in DiT  
-- [`utils/architecture_map.py`](../utils/architecture_map.py) — programmatic theme → repo mapping  
+- [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) — programmatic theme → repo mapping  

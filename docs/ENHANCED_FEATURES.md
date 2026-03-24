@@ -4,7 +4,7 @@ This document describes the new features and improvements added to the SDX diffu
 
 ## 🚀 New Features Overview
 
-### 1. Enhanced Error Handling & Logging (`utils/error_handling.py`)
+### 1. Enhanced Error Handling & Logging (`utils/training/error_handling.py`)
 
 - **Comprehensive error handling** with custom exception types
 - **GPU memory monitoring** and OOM recovery
@@ -13,7 +13,7 @@ This document describes the new features and improvements added to the SDX diffu
 - **Model information** extraction
 
 ```python
-from utils.error_handling import setup_logging, log_gpu_memory, retry_on_cuda_oom
+from utils.training.error_handling import setup_logging, log_gpu_memory, retry_on_cuda_oom
 
 # Setup enhanced logging
 logger = setup_logging(log_dir="./logs", level=logging.INFO)
@@ -28,7 +28,7 @@ def train_step(batch, batch_size=32):
     pass
 ```
 
-### 2. Configuration Validation (`utils/config_validator.py`)
+### 2. Configuration Validation (`utils/training/config_validator.py`)
 
 - **Pre-training validation** of all configuration parameters
 - **Memory usage estimation** based on model and batch size
@@ -36,7 +36,7 @@ def train_step(batch, batch_size=32):
 - **Hardware compatibility checks**
 
 ```python
-from utils.config_validator import validate_train_config, estimate_memory_usage
+from utils.training.config_validator import validate_train_config, estimate_memory_usage
 
 # Validate configuration
 issues = validate_train_config(cfg)
@@ -48,7 +48,7 @@ memory_est = estimate_memory_usage(cfg)
 print(f"Estimated VRAM needed: {memory_est['recommended_vram_gb']:.1f}GB")
 ```
 
-### 3. Training Metrics & Progress Tracking (`utils/metrics.py`)
+### 3. Training Metrics & Progress Tracking (`utils/training/metrics.py`)
 
 - **Comprehensive metrics tracking** with JSONL logging
 - **Training speed analysis** and ETA estimation
@@ -56,7 +56,7 @@ print(f"Estimated VRAM needed: {memory_est['recommended_vram_gb']:.1f}GB")
 - **System information logging**
 
 ```python
-from utils.metrics import MetricsTracker, TrainingMetrics, ProgressBar
+from utils.training.metrics import MetricsTracker, TrainingMetrics, ProgressBar
 
 # Initialize metrics tracker
 tracker = MetricsTracker(log_dir="./experiments/001")
@@ -78,7 +78,7 @@ tracker.log_step(metrics)
 summary = tracker.get_summary()
 ```
 
-### 4. Model Architecture Analysis (`utils/model_viz.py`)
+### 4. Model Architecture Analysis (`utils/modeling/model_viz.py`)
 
 - **Detailed parameter counting** by module type
 - **Model comparison** utilities
@@ -86,7 +86,7 @@ summary = tracker.get_summary()
 - **Layer-wise learning rate** group creation
 
 ```python
-from utils.model_viz import analyze_model_architecture, print_model_summary, compare_models
+from utils.modeling.model_viz import analyze_model_architecture, print_model_summary, compare_models
 
 # Analyze model architecture
 analysis = analyze_model_architecture(model)
@@ -99,7 +99,7 @@ compare_models(model1, model2, "DiT-XL", "DiT-P")
 export_model_info(model, "model_analysis.json")
 ```
 
-### 5. Dataset Quality Analysis (`utils/data_analysis.py`)
+### 5. Dataset Quality Analysis (`utils/analysis/data_analysis.py`)
 
 - **Comprehensive dataset statistics** (images, captions, quality)
 - **Caption emphasis analysis** and improvement suggestions
@@ -107,7 +107,7 @@ export_model_info(model, "model_analysis.json")
 - **Automated reporting** with actionable insights
 
 ```python
-from utils.data_analysis import DatasetAnalyzer
+from utils.analysis.data_analysis import DatasetAnalyzer
 
 # Analyze dataset
 analyzer = DatasetAnalyzer(data_path="./dataset", manifest_path="./data.jsonl")
@@ -120,7 +120,7 @@ quality_check = analyzer.check_data_quality()
 print(f"Found {len(quality_check['issues'])} critical issues")
 ```
 
-### 6. Advanced Checkpoint Management (`utils/checkpoint_manager.py`)
+### 6. Advanced Checkpoint Management (`utils/checkpoint/checkpoint_manager.py`)
 
 - **Metadata tracking** with integrity verification
 - **Automatic cleanup** of old checkpoints
@@ -128,7 +128,7 @@ print(f"Found {len(quality_check['issues'])} critical issues")
 - **Model merging** with multiple strategies
 
 ```python
-from utils.checkpoint_manager import CheckpointManager, merge_checkpoints
+from utils.checkpoint.checkpoint_manager import CheckpointManager, merge_checkpoints
 
 # Initialize checkpoint manager
 manager = CheckpointManager("./checkpoints")
@@ -153,7 +153,7 @@ merged_path = merge_checkpoints(
 )
 ```
 
-### 7. Advanced Inference Features (`utils/advanced_inference.py`)
+### 7. Advanced Inference Features (`utils/generation/advanced_inference.py`)
 
 - **Prompt optimization** with quality tag injection
 - **Batch inference** with progress tracking
@@ -161,7 +161,7 @@ merged_path = merge_checkpoints(
 - **Quality analysis** and artifact detection
 
 ```python
-from utils.advanced_inference import PromptOptimizer, ImageEnhancer, QualityAnalyzer
+from utils.generation.advanced_inference import PromptOptimizer, ImageEnhancer, QualityAnalyzer
 
 # Optimize prompts
 optimizer = PromptOptimizer()
@@ -262,8 +262,8 @@ The training script now includes:
 
 ```python
 from config.train_config import TrainConfig
-from utils.config_validator import validate_train_config
-from utils.data_analysis import DatasetAnalyzer
+from utils.training.config_validator import validate_train_config
+from utils.analysis.data_analysis import DatasetAnalyzer
 
 # 1. Analyze dataset
 analyzer = DatasetAnalyzer(data_path="./dataset")
@@ -290,7 +290,7 @@ if any("ERROR" in issue for issue in issues):
 ### Inference with Optimization
 
 ```python
-from utils.advanced_inference import PromptOptimizer, ImageEnhancer
+from utils.generation.advanced_inference import PromptOptimizer, ImageEnhancer
 
 # Optimize prompt
 optimizer = PromptOptimizer()
@@ -310,7 +310,7 @@ enhanced.save("enhanced_output.png")
 ### Enhanced Logging
 
 ```python
-from utils.error_handling import setup_logging
+from utils.training.error_handling import setup_logging
 
 # Setup comprehensive logging
 logger = setup_logging(log_dir="./logs", level=logging.DEBUG)
@@ -325,7 +325,7 @@ logger = setup_logging(log_dir="./logs", level=logging.DEBUG)
 ### Checkpoint Analysis
 
 ```python
-from utils.checkpoint_manager import analyze_checkpoint_differences
+from utils.checkpoint.checkpoint_manager import analyze_checkpoint_differences
 
 # Compare checkpoints to understand training progress
 analysis = analyze_checkpoint_differences("step_1000.pt", "step_2000.pt")
@@ -391,7 +391,7 @@ The SDX framework now includes a comprehensive master integration system that co
 ### Master System Architecture
 
 ```python
-from utils.master_integration import create_sdx_master
+from utils.generation.master_integration import create_sdx_master
 
 # Create master system
 master = create_sdx_master()
@@ -412,7 +412,7 @@ result = master.generate_image(
 
 ### Multimodal Generation System
 
-The new multimodal generation system (`utils/multimodal_generation.py`) provides:
+The new multimodal generation system (`utils/generation/multimodal_generation.py`) provides:
 
 - **Unified Generation Interface**: Single entry point for all generation types
 - **Advanced Feature Integration**: Automatic application of precision control, anatomy correction, etc.
@@ -421,7 +421,7 @@ The new multimodal generation system (`utils/multimodal_generation.py`) provides
 - **Metadata Tracking**: Comprehensive logging of all processing steps
 
 ```python
-from utils.multimodal_generation import GenerationRequest, create_multimodal_system
+from utils.generation.multimodal_generation import GenerationRequest, create_multimodal_system
 
 # Create generation request
 request = GenerationRequest(

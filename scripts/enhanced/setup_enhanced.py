@@ -153,9 +153,9 @@ def validate_installation():
             "torch",
             "transformers",
             "diffusers",
-            "utils.error_handling",
-            "utils.config_validator",
-            "utils.data_analysis",
+            "utils.training.error_handling",
+            "utils.training.config_validator",
+            "utils.analysis.data_analysis",
         ]
         for module_name in required_modules:
             if importlib.util.find_spec(module_name) is None:
@@ -186,7 +186,7 @@ def run_quick_test():
     try:
         # Test configuration validation
         from config.train_config import TrainConfig
-        from utils.config_validator import validate_train_config
+        from utils.training.config_validator import validate_train_config
 
         cfg = TrainConfig(data_path="./datasets/test", model_name="DiT-XL/2-Text", global_batch_size=16, passes=1)
 
@@ -194,14 +194,14 @@ def run_quick_test():
         print(f"   Config validation: {len(issues)} issues found (expected)")
 
         # Test prompt optimization
-        from utils.advanced_inference import PromptOptimizer
+        from utils.generation.advanced_inference import PromptOptimizer
 
         optimizer = PromptOptimizer()
         optimized = optimizer.optimize_prompt("a girl in a garden", style="anime")
         print(f"   Prompt optimization: '{optimized[:50]}...'")
 
         # Test dataset analyzer (without actual data)
-        from utils.data_analysis import DatasetAnalyzer
+        from utils.analysis.data_analysis import DatasetAnalyzer
 
         _analyzer = DatasetAnalyzer()
         print("   Dataset analyzer: initialized successfully")

@@ -60,7 +60,7 @@ $preflightReport = Join-Path $workAbs "preflight.json"
 
 Write-Host "OP pipeline: preflight coverage..."
 $preflightArgs = @(
-    "-m", "scripts.tools.op_preflight",
+    "-m", "scripts.tools", "op_preflight",
     "--manifest", $manifestInAbs,
     "--out", $preflightReport,
     "--min-hard-style", $MinHardStyle.ToString(),

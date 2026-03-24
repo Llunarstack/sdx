@@ -16,13 +16,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from config.train_config import TrainConfig
-from utils.advanced_inference import PromptOptimizer
-from utils.checkpoint_manager import CheckpointManager, analyze_checkpoint_differences, merge_checkpoints
-from utils.config_validator import estimate_memory_usage, suggest_optimizations, validate_train_config
-from utils.data_analysis import DatasetAnalyzer
-from utils.error_handling import validate_checkpoint
-from utils.master_integration import create_sdx_master, quick_generate
-from utils.model_viz import analyze_model_architecture, print_model_summary
+from utils.generation.advanced_inference import PromptOptimizer
+from utils.checkpoint.checkpoint_manager import CheckpointManager, analyze_checkpoint_differences, merge_checkpoints
+from utils.training.config_validator import estimate_memory_usage, suggest_optimizations, validate_train_config
+from utils.analysis.data_analysis import DatasetAnalyzer
+from utils.training.error_handling import validate_checkpoint
+from utils.generation.master_integration import create_sdx_master, quick_generate
+from utils.modeling.model_viz import analyze_model_architecture, print_model_summary
 
 
 def cmd_analyze_dataset(args):
@@ -297,7 +297,7 @@ def cmd_generate_image(args):
                 style_word in args.prompt.lower() for style_word in ["anime", "realistic", "cartoon", "3d", "painting"]
             )
         ):
-            from utils.style_harmonization import create_style_harmonization_system
+            from utils.consistency.style_harmonization import create_style_harmonization_system
 
             print("🎨 Applying style harmonization...")
             harmonizer = create_style_harmonization_system()
@@ -341,7 +341,7 @@ def cmd_generate_image(args):
 
         # Character consistency support
         if args.character:
-            from utils.character_consistency import CharacterDatabase
+            from utils.consistency.character_consistency import CharacterDatabase
 
             # Try to load character by ID or name
             db = CharacterDatabase()
@@ -454,7 +454,7 @@ def cmd_character_management(args):
 
 def cmd_create_character_profile(args):
     """Create a new character profile with consistency features."""
-    from utils.character_consistency import CharacterDatabase, PhysicalFeatures, StylePreferences
+    from utils.consistency.character_consistency import CharacterDatabase, PhysicalFeatures, StylePreferences
 
     print(f"🎭 Creating character profile: {args.name}")
 
@@ -504,7 +504,7 @@ def cmd_create_character_profile(args):
 
 def cmd_list_characters(args):
     """List all character profiles."""
-    from utils.character_consistency import CharacterDatabase
+    from utils.consistency.character_consistency import CharacterDatabase
 
     print("🎭 Character Profiles:")
 
@@ -550,7 +550,7 @@ def cmd_list_characters(args):
 
 def cmd_update_character(args):
     """Update an existing character profile."""
-    from utils.character_consistency import CharacterDatabase
+    from utils.consistency.character_consistency import CharacterDatabase
 
     print(f"🎭 Updating character: {args.character_id}")
 
@@ -604,7 +604,7 @@ def cmd_update_character(args):
 
 def cmd_delete_character(args):
     """Delete a character profile."""
-    from utils.character_consistency import CharacterDatabase
+    from utils.consistency.character_consistency import CharacterDatabase
 
     if not args.confirm:
         print(f"⚠️  Are you sure you want to delete character {args.character_id}?")
@@ -632,7 +632,7 @@ def cmd_validate_character_consistency(args):
     """Validate character consistency in an image."""
     import torchvision.transforms as transforms
     from PIL import Image
-    from utils.character_consistency import CharacterDatabase
+    from utils.consistency.character_consistency import CharacterDatabase
 
     print("🔍 Validating character consistency:")
     print(f"   Character ID: {args.character_id}")
@@ -681,7 +681,7 @@ def cmd_validate_character_consistency(args):
 
 def cmd_character_statistics(args):
     """Show character database statistics."""
-    from utils.character_consistency import CharacterDatabase
+    from utils.consistency.character_consistency import CharacterDatabase
 
     print("📊 Character Database Statistics:")
 
@@ -765,7 +765,7 @@ def cmd_style_management(args):
 
 def cmd_analyze_styles(args):
     """Analyze style conflicts in prompt and LoRAs."""
-    from utils.style_harmonization import create_style_harmonization_system
+    from utils.consistency.style_harmonization import create_style_harmonization_system
 
     print("🎨 Analyzing style conflicts:")
     print(f"   Prompt: {args.prompt}")
@@ -854,7 +854,7 @@ def cmd_analyze_styles(args):
 
 def cmd_harmonize_styles(args):
     """Harmonize conflicting styles."""
-    from utils.style_harmonization import create_style_harmonization_system
+    from utils.consistency.style_harmonization import create_style_harmonization_system
 
     print("🎨 Harmonizing styles:")
     print(f"   Original Prompt: {args.prompt}")
@@ -945,7 +945,7 @@ def cmd_harmonize_styles(args):
 
 def cmd_check_style_compatibility(args):
     """Check compatibility between different style types."""
-    from utils.style_harmonization import StyleCompatibilityMatrix, StyleType
+    from utils.consistency.style_harmonization import StyleCompatibilityMatrix, StyleType
 
     print("🔍 Checking style compatibility:")
 
@@ -1365,7 +1365,7 @@ def main():
         return
 
     # Setup logging
-    from utils.error_handling import setup_logging
+    from utils.training.error_handling import setup_logging
 
     setup_logging(level=20)  # INFO level
 

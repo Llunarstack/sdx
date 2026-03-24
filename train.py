@@ -38,13 +38,13 @@ from diffusion.timestep_loss_weight import get_timestep_loss_weight
 from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
 from models.rae_latent_bridge import RAELatentBridge
-from utils.checkpoint_manager import CheckpointManager
-from utils.config_validator import estimate_memory_usage, validate_train_config
-from utils.error_handling import get_model_info, log_gpu_memory, setup_logging
-from utils.metrics import MetricsTracker, log_system_info
-from utils.model_paths import default_t5_path
-from utils.model_viz import print_model_summary
-from utils.text_encoder_bundle import load_text_encoder_bundle
+from utils.checkpoint.checkpoint_manager import CheckpointManager
+from utils.training.config_validator import estimate_memory_usage, validate_train_config
+from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
+from utils.training.metrics import MetricsTracker, log_system_info
+from utils.modeling.model_paths import default_t5_path
+from utils.modeling.model_viz import print_model_summary
+from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
 
 
 def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
@@ -57,6 +57,16 @@ def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.d
         logit_mean=float(getattr(cfg, "timestep_logit_mean", 0.0)),
         logit_std=float(getattr(cfg, "timestep_logit_std", 1.0)),
     )
+
+
+def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
+    """Kwargs for ``GaussianDiffusion.training_losses`` (SFP prototype; ignored for MDM masked path)."""
+    return {
+        "use_spectral_sfp_loss": bool(getattr(cfg, "spectral_sfp_loss", False)),
+        "spectral_sfp_low_sigma": float(getattr(cfg, "spectral_sfp_low_sigma", 0.22)),
+        "spectral_sfp_high_sigma": float(getattr(cfg, "spectral_sfp_high_sigma", 0.22)),
+        "spectral_sfp_tau_power": float(getattr(cfg, "spectral_sfp_tau_power", 1.0)),
+    }
 
 
 # Enable TF32 on Ampere+ for speed
@@ -86,6 +96,15 @@ def _size_embed_from_latents(latents: torch.Tensor, device, dtype=torch.float32)
         ],
         dim=1,
     )
+
+
+def _negatives_strip_emphasis(negative_captions, train_prompt_emphasis: bool):
+    """Align negative T5 input with positive path when ``( )`` / ``[ ]`` stripping is enabled."""
+    if not train_prompt_emphasis:
+        return negative_captions
+    from utils.prompt.prompt_emphasis import parse_prompt_emphasis
+
+    return [parse_prompt_emphasis(n or "")[0] for n in negative_captions]
 
 
 def get_t5_and_vae(device, cfg: TrainConfig):
@@ -130,6 +149,8 @@ def encode_text(
     dtype=torch.bfloat16,
     text_bundle=None,
     train_fusion: bool = False,
+    clip_captions=None,
+    segment_texts=None,
 ):
     """Encode captions to hidden states (B, L, text_dim). Triple mode appends two CLIP tokens (train fusion when train_fusion=True)."""
     if text_bundle is not None:
@@ -139,6 +160,14 @@ def encode_text(
             max_length=max_length,
             dtype=dtype,
             train_fusion=train_fusion,
+            clip_captions=clip_captions,
+            segment_texts=segment_texts,
+        )
+    if segment_texts is not None:
+        from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
+
+        return encode_t5_segment_concat(
+            segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
         )
     with torch.no_grad():
         tok = tokenizer(
@@ -275,6 +304,7 @@ def compute_mdm_training_loss(
     mdm_patch_size: int,
     mdm_loss_only_masked: bool,
     mdm_min_mask_patches: int,
+    spectral_kwargs: Optional[dict] = None,
 ):
     """
     Masked Diffusion Models (MDM) style training.
@@ -284,6 +314,7 @@ def compute_mdm_training_loss(
     """
     device = x_start.device
     B, C, H, W = x_start.shape
+    sk = spectral_kwargs if spectral_kwargs is not None else {}
 
     if refinement_prob > 0 and refinement_max_t > 0 and torch.rand(1, device=device).item() < refinement_prob:
         t = torch.randint(0, min(refinement_max_t, diffusion.num_timesteps), (B,), device=device, dtype=t.dtype)
@@ -308,6 +339,7 @@ def compute_mdm_training_loss(
             sample_weights=sample_weights,
             loss_weighting=loss_weighting,
             loss_weighting_sigma_data=loss_weighting_sigma_data,
+            **sk,
         )
 
     mdm_patch_size = int(mdm_patch_size)
@@ -326,6 +358,7 @@ def compute_mdm_training_loss(
             sample_weights=sample_weights,
             loss_weighting=loss_weighting,
             loss_weighting_sigma_data=loss_weighting_sigma_data,
+            **sk,
         )
 
     ph = H // mdm_patch_size
@@ -409,6 +442,8 @@ def compute_mdm_training_loss(
 
     if diffusion.prediction_type == "v":
         target = sqrt_alpha * noise - sqrt_one * x_start
+    elif diffusion.prediction_type == "x0":
+        target = x_start
     else:
         target = noise
 
@@ -487,8 +522,22 @@ def eval_val_loss(
                 latents = encode_images_vae(pixel_values, vae, latent_scale)
             if rae_bridge is not None and latents.shape[1] != 4:
                 latents = rae_bridge.rae_to_dit(latents)
+            train_pe = bool(getattr(cfg, "train_prompt_emphasis", False))
+            pos_caps = captions
+            token_weights = None
+            if train_pe:
+                from utils.prompt.prompt_emphasis import batch_encoder_token_weights
+
+                pos_caps, token_weights = batch_encoder_token_weights(
+                    captions,
+                    tokenizer,
+                    max_caption_len,
+                    device=device,
+                    dtype=torch.bfloat16,
+                    text_bundle=text_bundle,
+                )
             encoder_hidden = encode_text(
-                captions,
+                pos_caps,
                 tokenizer,
                 text_encoder,
                 device,
@@ -497,10 +546,11 @@ def eval_val_loss(
                 text_bundle=text_bundle,
                 train_fusion=False,
             )
+            neg_caps = _negatives_strip_emphasis(negative_captions, train_pe)
             encoder_hidden_neg = None
-            if any(n and n.strip() for n in negative_captions):
+            if any(n and n.strip() for n in neg_caps):
                 encoder_hidden_neg = encode_text(
-                    [n or "" for n in negative_captions],
+                    [n or "" for n in neg_caps],
                     tokenizer,
                     text_encoder,
                     device,
@@ -528,6 +578,8 @@ def eval_val_loss(
                 "encoder_hidden_states_negative": encoder_hidden_neg,
                 "negative_prompt_weight": getattr(cfg, "negative_prompt_weight", 0.5),
             }
+            if token_weights is not None:
+                model_kwargs["token_weights"] = token_weights
             if style_embedding is not None:
                 model_kwargs["style_embedding"] = style_embedding
                 model_kwargs["style_strength"] = getattr(cfg, "style_strength", 0.7)
@@ -536,6 +588,7 @@ def eval_val_loss(
                 model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
             if getattr(cfg, "creativity_embed_dim", 0) > 0:
                 creativity_max = getattr(cfg, "creativity_max", 1.0)
+                # Val: no creativity_jitter_std (smoother metric; jitter is train-only).
                 model_kwargs["creativity"] = (
                     torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
                 )
@@ -563,6 +616,7 @@ def eval_val_loss(
                     mdm_patch_size=int(getattr(cfg, "mdm_patch_size", 2)),
                     mdm_loss_only_masked=bool(getattr(cfg, "mdm_loss_only_masked", True)),
                     mdm_min_mask_patches=int(getattr(cfg, "mdm_min_mask_patches", 1)),
+                    spectral_kwargs=_spectral_sfp_training_kwargs(cfg),
                 )
             else:
                 loss_dict = diffusion.training_losses(
@@ -577,6 +631,7 @@ def eval_val_loss(
                     sample_weights=sample_weights,
                     loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
                     loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
+                    **_spectral_sfp_training_kwargs(cfg),
                 )
             total_loss += loss_dict["loss"].mean().item()
         n_batches += 1
@@ -811,6 +866,8 @@ def main(cfg: TrainConfig):
             torch.use_deterministic_algorithms(True, warn_only=True)
         except Exception:
             pass
+    else:
+        torch.backends.cudnn.benchmark = True
 
     # Experiment dir with enhanced checkpoint management
     if rank == 0:
@@ -1003,10 +1060,19 @@ def main(cfg: TrainConfig):
         crop_mode=getattr(cfg, "crop_mode", "center"),
         region_caption_mode=getattr(cfg, "region_caption_mode", "append"),
         region_layout_tag=getattr(cfg, "region_layout_tag", "[layout]"),
+        use_adherence_boost=bool(getattr(cfg, "boost_adherence_caption", False)),
+        caption_unicode_normalize=bool(getattr(cfg, "caption_unicode_normalize", False)),
         resolution_buckets=res_buckets if res_buckets else None,
         bucket_seed=int(getattr(cfg, "global_seed", 42)),
         bucket_fixed_assign=bucket_fixed_assign,
     )
+
+    def _worker_init(worker_id):
+        import numpy as np
+
+        np.random.seed(cfg.global_seed + rank * 1000 + worker_id)
+        torch.manual_seed(cfg.global_seed + rank * 1000 + worker_id)
+
     val_loader = None
     train_dataset = dataset
     if val_split > 0 and val_split < 1:
@@ -1021,20 +1087,16 @@ def main(cfg: TrainConfig):
                 val_dataset,
                 batch_size=cfg.per_device_batch_size,
                 shuffle=False,
-                num_workers=0,
+                num_workers=cfg.num_workers,
                 pin_memory=True,
                 drop_last=False,
                 collate_fn=collate_t2i,
+                persistent_workers=cfg.num_workers > 0,
+                worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
             )
         logger.info(f"Train/val split: {len(train_dataset)} train, {len(val_dataset)} val")
     else:
         val_dataset = None
-
-    def _worker_init(worker_id):
-        import numpy as np
-
-        np.random.seed(cfg.global_seed + rank * 1000 + worker_id)
-        torch.manual_seed(cfg.global_seed + rank * 1000 + worker_id)
 
     sampler = (
         DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=cfg.global_seed)
@@ -1166,6 +1228,21 @@ def main(cfg: TrainConfig):
 
             pixel_values = batch["pixel_values"].to(device, non_blocking=True)
             captions = batch["captions"]
+            if float(getattr(cfg, "train_originality_augment_prob", 0.0)) > 0:
+                import numpy as np
+
+                from utils.prompt.originality_augment import inject_originality_tokens
+
+                prob = float(cfg.train_originality_augment_prob)
+                ost = max(0.0, min(1.0, float(getattr(cfg, "train_originality_strength", 0.5))))
+                rng_np = np.random.default_rng((int(cfg.global_seed) + int(steps) * 1_000_003 + int(rank)) % (2**32))
+                aug: list = []
+                for cap in captions:
+                    if rng_np.random() < prob:
+                        aug.append(inject_originality_tokens(cap or "", ost, rng_np))
+                    else:
+                        aug.append(cap)
+                captions = aug
             negative_captions = batch.get("negative_captions") or [""] * len(captions)
             styles = batch.get("styles") or [""] * len(captions)
             control_images = batch.get("control_image")
@@ -1189,8 +1266,22 @@ def main(cfg: TrainConfig):
                                 init_pixel_values.to(device, non_blocking=True), vae, effective_latent_scale
                             )
                             latents = torch.where(use_init.view(-1, 1, 1, 1).expand_as(latents), init_latents, latents)
+                    train_pe = bool(getattr(cfg, "train_prompt_emphasis", False))
+                    pos_caps = captions
+                    token_weights = None
+                    if train_pe:
+                        from utils.prompt.prompt_emphasis import batch_encoder_token_weights
+
+                        pos_caps, token_weights = batch_encoder_token_weights(
+                            captions,
+                            tokenizer,
+                            max_caption_len,
+                            device=device,
+                            dtype=torch.bfloat16,
+                            text_bundle=text_bundle,
+                        )
                     encoder_hidden = encode_text(
-                        captions,
+                        pos_caps,
                         tokenizer,
                         text_encoder,
                         device,
@@ -1221,11 +1312,15 @@ def main(cfg: TrainConfig):
                                 B, 1, 1
                             )
                             encoder_hidden = encoder_hidden * (1 - mask) + empty_embed * mask
+                            if token_weights is not None:
+                                mw = mask.squeeze(-1)  # (B, 1)
+                                token_weights = token_weights * (1 - mw) + mw.expand_as(token_weights)
                     # Negative prompt: encode so model can try really hard not to add those features
+                    neg_caps = _negatives_strip_emphasis(negative_captions, train_pe)
                     encoder_hidden_neg = None
-                    if any(n and n.strip() for n in negative_captions):
+                    if any(n and n.strip() for n in neg_caps):
                         encoder_hidden_neg = encode_text(
-                            [n or "" for n in negative_captions],
+                            [n or "" for n in neg_caps],
                             tokenizer,
                             text_encoder,
                             device,
@@ -1260,6 +1355,8 @@ def main(cfg: TrainConfig):
                     "encoder_hidden_states_negative": encoder_hidden_neg,
                     "negative_prompt_weight": getattr(cfg, "negative_prompt_weight", 0.5),
                 }
+                if token_weights is not None:
+                    model_kwargs["token_weights"] = token_weights
                 if style_embedding is not None:
                     model_kwargs["style_embedding"] = style_embedding
                     model_kwargs["style_strength"] = getattr(cfg, "style_strength", 0.7)
@@ -1268,9 +1365,13 @@ def main(cfg: TrainConfig):
                     model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
                 if getattr(cfg, "creativity_embed_dim", 0) > 0:
                     creativity_max = getattr(cfg, "creativity_max", 1.0)
-                    model_kwargs["creativity"] = (
-                        torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
-                    )
+                    cj = float(getattr(cfg, "creativity_jitter_std", 0.0))
+                    cre = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) * creativity_max
+                    if cj > 0:
+                        cre = (cre + torch.randn(latents.shape[0], device=device, dtype=torch.bfloat16) * cj).clamp(
+                            0.0, creativity_max
+                        )
+                    model_kwargs["creativity"] = cre
                 if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
                     model_kwargs["size_embed"] = _size_embed_from_latents(latents, device)
                 sample_weights = batch.get("sample_weights")
@@ -1309,6 +1410,7 @@ def main(cfg: TrainConfig):
                         mdm_patch_size=int(getattr(cfg, "mdm_patch_size", 2)),
                         mdm_loss_only_masked=bool(getattr(cfg, "mdm_loss_only_masked", True)),
                         mdm_min_mask_patches=int(getattr(cfg, "mdm_min_mask_patches", 1)),
+                        spectral_kwargs=_spectral_sfp_training_kwargs(cfg),
                     )
                 else:
                     loss_dict = diffusion.training_losses(
@@ -1323,6 +1425,7 @@ def main(cfg: TrainConfig):
                         sample_weights=sample_weights,
                         loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
                         loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
+                        **_spectral_sfp_training_kwargs(cfg),
                     )
                 loss = loss_dict["loss"].mean()
                 # MoE router balance auxiliary loss (optional).
@@ -1762,7 +1865,11 @@ if __name__ == "__main__":
         choices=["linear", "cosine", "sigmoid", "squaredcos_cap_v2"],
     )
     parser.add_argument(
-        "--prediction-type", type=str, default="epsilon", choices=["epsilon", "v"], help="v = velocity (SD2-style)"
+        "--prediction-type",
+        type=str,
+        default="epsilon",
+        choices=["epsilon", "v", "x0"],
+        help="epsilon=noise, v=velocity (SD2-style), x0=direct clean latent (train+sample must match)",
     )
     parser.add_argument("--noise-offset", type=float, default=0.0, help="SD-style noise offset (e.g. 0.1)")
     parser.add_argument("--min-snr-gamma", type=float, default=5.0, help="Min-SNR loss weighting (0=off)")
@@ -1775,6 +1882,30 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm"
+    )
+    parser.add_argument(
+        "--spectral-sfp-loss",
+        action="store_true",
+        help="Frequency-weighted FFT loss (prototype): emphasize low freqs at high t, high freqs at low t. "
+        "VP-DDPM only; not used with MDM masked loss.",
+    )
+    parser.add_argument(
+        "--spectral-sfp-low-sigma",
+        type=float,
+        default=0.22,
+        help="Radial falloff for low-frequency bin emphasis (see diffusion/spectral_sfp.py).",
+    )
+    parser.add_argument(
+        "--spectral-sfp-high-sigma",
+        type=float,
+        default=0.22,
+        help="Radial falloff for high-frequency bin emphasis.",
+    )
+    parser.add_argument(
+        "--spectral-sfp-tau-power",
+        type=float,
+        default=1.0,
+        help="Exponent on normalized timestep when blending low vs high frequency weights.",
     )
     parser.add_argument(
         "--timestep-sample-mode",
@@ -1844,6 +1975,39 @@ if __name__ == "__main__":
         help="Tag before regional block in merged caption (empty string to omit)",
     )
     parser.add_argument(
+        "--boost-adherence-caption",
+        action="store_true",
+        help="Prepend adherence tags to each training caption (literal prompt following; see caption_utils.prepend_adherence_boost)",
+    )
+    parser.add_argument(
+        "--caption-unicode-normalize",
+        action="store_true",
+        help="NFKC + zero-width strip per caption segment before emphasis/boost (see sdx_native.text_hygiene)",
+    )
+    parser.add_argument(
+        "--train-prompt-emphasis",
+        action="store_true",
+        help="Strip ( )/[ ] from captions for T5 (same as sample.py) and pass DiT token_weights (1.2 / 0.8); triple text appends two 1.0 weights for CLIP tokens",
+    )
+    parser.add_argument(
+        "--train-originality-prob",
+        type=float,
+        default=0.0,
+        help="Per-sample prob to inject novelty phrases (like sample.py --originality); 0=off, try 0.1–0.25",
+    )
+    parser.add_argument(
+        "--train-originality-strength",
+        type=float,
+        default=0.5,
+        help="0–1: how many originality tokens to insert when augment triggers (default 0.5)",
+    )
+    parser.add_argument(
+        "--creativity-jitter-std",
+        type=float,
+        default=0.0,
+        help="Gaussian noise on training creativity scalar when --creativity-embed-dim > 0 (0=off; try 0.05–0.15)",
+    )
+    parser.add_argument(
         "--save-polyak",
         type=int,
         default=0,
@@ -1910,6 +2074,9 @@ if __name__ == "__main__":
         control_scale=args.control_scale,
         creativity_embed_dim=args.creativity_embed_dim,
         creativity_max=args.creativity_max,
+        creativity_jitter_std=float(getattr(args, "creativity_jitter_std", 0.0)),
+        train_originality_augment_prob=float(getattr(args, "train_originality_prob", 0.0)),
+        train_originality_strength=float(getattr(args, "train_originality_strength", 0.5)),
         size_embed_dim=getattr(args, "size_embed_dim", 0),
         patch_se=getattr(args, "patch_se", False),
         patch_se_reduction=getattr(args, "patch_se_reduction", 8),
@@ -1936,6 +2103,10 @@ if __name__ == "__main__":
         min_snr_gamma=args.min_snr_gamma,
         loss_weighting=getattr(args, "loss_weighting", "min_snr"),
         loss_weighting_sigma_data=getattr(args, "loss_weighting_sigma_data", 0.5),
+        spectral_sfp_loss=bool(getattr(args, "spectral_sfp_loss", False)),
+        spectral_sfp_low_sigma=float(getattr(args, "spectral_sfp_low_sigma", 0.22)),
+        spectral_sfp_high_sigma=float(getattr(args, "spectral_sfp_high_sigma", 0.22)),
+        spectral_sfp_tau_power=float(getattr(args, "spectral_sfp_tau_power", 1.0)),
         timestep_sample_mode=getattr(args, "timestep_sample_mode", "uniform"),
         timestep_logit_mean=getattr(args, "timestep_logit_mean", 0.0),
         timestep_logit_std=getattr(args, "timestep_logit_std", 1.0),
@@ -1950,6 +2121,9 @@ if __name__ == "__main__":
         crop_mode=getattr(args, "crop_mode", "center"),
         region_caption_mode=getattr(args, "region_caption_mode", "append"),
         region_layout_tag=getattr(args, "region_layout_tag", "[layout]"),
+        boost_adherence_caption=bool(getattr(args, "boost_adherence_caption", False)),
+        caption_unicode_normalize=bool(getattr(args, "caption_unicode_normalize", False)),
+        train_prompt_emphasis=bool(getattr(args, "train_prompt_emphasis", False)),
         save_polyak=getattr(args, "save_polyak", 0),
         wandb_project=getattr(args, "wandb_project", None),
         tensorboard_dir=getattr(args, "tensorboard_dir", None),

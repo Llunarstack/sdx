@@ -1,0 +1,16 @@
+"""
+Re-export for backward compatibility.
+
+Implementation: :mod:`sdx_native.text_hygiene` under ``native/python/sdx_native/``.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_np = Path(__file__).resolve().parents[2] / "native" / "python"
+if str(_np) not in sys.path:
+    sys.path.insert(0, str(_np))
+
+from sdx_native.text_hygiene import *  # noqa: F403

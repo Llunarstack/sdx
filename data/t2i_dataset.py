@@ -16,7 +16,13 @@ from .caption_utils import (
     boost_quality_tags,
     merge_region_captions_into_caption,
     normalize_tag_order,
+    prepend_adherence_boost,
 )
+
+try:
+    from sdx_native.text_hygiene import normalize_caption_for_training as _normalize_caption_unicode
+except ImportError:  # pragma: no cover
+    _normalize_caption_unicode = None  # type: ignore[misc, assignment]
 
 
 def _center_crop(pil_image, image_size: int):
@@ -169,6 +175,8 @@ class Text2ImageDataset(Dataset):
         use_pixai_emphasis: bool = True,
         use_tag_order: bool = True,
         use_quality_boost: bool = True,
+        use_adherence_boost: bool = False,
+        caption_unicode_normalize: bool = False,
         use_anti_blending: bool = True,
         latent_cache_dir: Optional[str] = None,
         crop_mode: str = "center",  # "center" | "random" | "largest_center" (IMPROVEMENTS 1.2)
@@ -196,6 +204,8 @@ class Text2ImageDataset(Dataset):
         self.use_pixai_emphasis = use_pixai_emphasis
         self.use_tag_order = use_tag_order
         self.use_quality_boost = use_quality_boost
+        self.use_adherence_boost = use_adherence_boost
+        self.caption_unicode_normalize = caption_unicode_normalize
         self.use_anti_blending = use_anti_blending
         self._crop_fn = {"center": _center_crop, "random": _random_crop, "largest_center": _largest_center_crop}.get(
             crop_mode, _center_crop
@@ -307,6 +317,10 @@ class Text2ImageDataset(Dataset):
         return len(self.samples)
 
     def _process_caption(self, caption: str, negative_caption: str = "") -> Tuple[str, str]:
+        if self.caption_unicode_normalize and _normalize_caption_unicode is not None:
+            caption = _normalize_caption_unicode(caption)
+            if (negative_caption or "").strip():
+                negative_caption = _normalize_caption_unicode(negative_caption)
         if self.use_pixai_emphasis:
             caption = apply_pixai_emphasis(caption)
         if self.use_tag_order:
@@ -315,6 +329,8 @@ class Text2ImageDataset(Dataset):
         if self.use_quality_boost:
             caption = boost_quality_tags(caption, repeat_factor=3)
         caption = boost_domain_tags(caption, repeat_factor=2)
+        if self.use_adherence_boost:
+            caption = prepend_adherence_boost(caption, repeat_factor=2)
         if self.use_anti_blending:
             caption, negative_caption = add_anti_blending_and_count(caption, negative_caption)
         if self.max_caption_length:

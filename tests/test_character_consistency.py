@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Importing the full original test module is heavy; keep this as a smoke-runner.
 # If you need the full suite, expand this file with the original test logic.
-from utils.character_consistency import CharacterDatabase  # noqa: E402
+from utils.consistency.character_consistency import CharacterDatabase  # noqa: E402
 
 
 def main():

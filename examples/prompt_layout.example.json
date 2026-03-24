@@ -1,0 +1,25 @@
+{
+  "preset_order": "subject_first",
+  "wrap_subject_labels": true,
+  "intent": "slice-of-life illustration, emotional clarity",
+  "subjects": [
+    {
+      "label": "left",
+      "tokens": ["1girl", "long red hair", "cream turtleneck", "pleated skirt"],
+      "negative": ["wrong hair color"]
+    },
+    {
+      "label": "right",
+      "tokens": ["1boy", "short black hair", "denim jacket", "relaxed stance"],
+      "negative": ["female face on boy"]
+    }
+  ],
+  "interaction": ["talking animatedly", "eye contact between them"],
+  "quality": ["masterpiece", "best quality", "detailed"],
+  "environment": ["sunlit cafe interior", "plants on windowsill", "bokeh street outside"],
+  "camera": ["medium-wide shot", "eye level", "rule of thirds"],
+  "lighting": ["soft natural light", "warm highlights"],
+  "composition": ["clear depth", "two distinct silhouettes"],
+  "style": ["clean anime illustration", "sharp linework"],
+  "negative": ["watermark", "signature", "bad hands", "merged faces", "outfit swap"]
+}

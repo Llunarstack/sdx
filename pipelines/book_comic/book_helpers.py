@@ -294,3 +294,48 @@ def build_extra_ocr_sample_flags(settings: BookAccuracyPreset) -> List[str]:
     if settings.subject_first:
         out.append("--subject-first")
     return out
+
+
+def compose_book_page_prompt(
+    *,
+    user_prompt: str,
+    narration_prefix: str = "",
+    consistency_block: str = "",
+    panel_hint: str = "",
+    rolling_context: str = "",
+) -> str:
+    """Merge narration, consistency cues, panel hint, rolling continuity, then the page line."""
+    parts: List[str] = []
+    for p in (narration_prefix, consistency_block, panel_hint, rolling_context, user_prompt):
+        s = (p or "").strip()
+        if s:
+            parts.append(s)
+    return ", ".join(parts)
+
+
+def build_rolling_page_context(
+    previous_page_prompts: Sequence[str],
+    *,
+    num_previous: int,
+    max_chars: int = 500,
+) -> str:
+    """
+    Short summary of the last *num_previous* page prompts for cross-page visual continuity.
+    """
+    n = int(num_previous)
+    if n <= 0 or not previous_page_prompts:
+        return ""
+    take = [t.strip() for t in previous_page_prompts[-n:] if t and str(t).strip()]
+    if not take:
+        return ""
+    prefix = "visual continuity from prior pages: "
+    max_blob = max(0, int(max_chars) - len(prefix))
+    if max_blob <= 0:
+        return ""
+    blob = " · ".join(take)
+    if len(blob) > max_blob:
+        if max_blob == 1:
+            blob = blob[-1:]
+        else:
+            blob = "…" + blob[-(max_blob - 1) :]
+    return prefix + blob

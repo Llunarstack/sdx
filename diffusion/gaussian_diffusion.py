@@ -1,12 +1,18 @@
-# Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, v-pred, DDIM, CFG).
+# Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, ε/v/x0-pred, DDIM, CFG).
+from typing import Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
 
+from .inference_timesteps import build_inference_timesteps
 from .losses.timestep_loss_weight import get_timestep_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
 from .schedules import get_beta_schedule
+from .spectral_sfp import spectral_sfp_per_sample_loss
+
+INFERENCE_SOLVERS = ("ddim", "heun")
 
 
 def create_diffusion(
@@ -16,7 +22,8 @@ def create_diffusion(
     loss_type: str = "mse",
     prediction_type: str = "epsilon",
 ):
-    """Create GaussianDiffusion. prediction_type: 'epsilon' (default) or 'v' (velocity, SD2-style).
+    """Create GaussianDiffusion. prediction_type: 'epsilon' (default), 'v' (velocity, SD2-style),
+    or 'x0' (direct clean-latent prediction; use same type at train and sample time).
     timestep_respacing: "" = use all steps; int string (e.g. "50") = that many evenly spaced;
     "ddim50" = DDIM striding for 50 steps; "10,15,20" = section-based step counts."""
     use_timesteps = None
@@ -57,7 +64,7 @@ class GaussianDiffusion:
         self.use_timesteps = np.asarray(use_timesteps)
         self.timestep_respacing_str = timestep_respacing_str  # "ddim50" or "10,15,20" for set_timesteps
         self.loss_type = loss_type
-        self.prediction_type = prediction_type  # "epsilon" or "v"
+        self.prediction_type = prediction_type  # "epsilon" | "v" | "x0"
         beta = get_beta_schedule(beta_schedule, num_timesteps)
         alpha = 1.0 - beta
         alpha_cumprod = np.cumprod(alpha)
@@ -107,11 +114,17 @@ class GaussianDiffusion:
         sample_weights=None,
         loss_weighting="min_snr",
         loss_weighting_sigma_data=0.5,
+        use_spectral_sfp_loss=False,
+        spectral_sfp_low_sigma=0.22,
+        spectral_sfp_high_sigma=0.22,
+        spectral_sfp_tau_power=1.0,
     ):
         """
-        Compute training loss. SD/SDXL-style: offset noise, epsilon or v-prediction.
+        Compute training loss. SD/SDXL-style: offset noise; epsilon, v-, or x0-prediction.
         loss_weighting: "min_snr" (default) | "min_snr_soft" | "unit" | "edm" | "v" | "eps".
         sample_weights: (B,) optional; per-sample loss weight (e.g. aesthetic score).
+        use_spectral_sfp_loss: if True, replace spatial MSE with frequency-weighted FFT loss
+        (see diffusion/spectral_sfp.py); **not** used with MDM masked loss in train.py.
         """
         if model_kwargs is None:
             model_kwargs = {}
@@ -125,17 +138,30 @@ class GaussianDiffusion:
         model_out = model(x_t, t, **model_kwargs)
         if model_out.shape != x_start.shape and model_out.shape[1] > x_start.shape[1]:
             model_out = model_out[:, : x_start.shape[1]]
-        # Target: epsilon or v (velocity). v = sqrt(alpha_bar)*noise - sqrt(1-alpha_bar)*x0
+        # Target: epsilon, v (velocity), or x0. v = sqrt(alpha_bar)*noise - sqrt(1-alpha_bar)*x0
         self._to_device(device)
         sqrt_alpha = self.sqrt_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
         sqrt_one = self.sqrt_one_minus_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
         if self.prediction_type == "v":
             target = sqrt_alpha * noise - sqrt_one * x_start
+        elif self.prediction_type == "x0":
+            target = x_start
         else:
             target = noise
-        loss = nn.functional.mse_loss(model_out, target, reduction="none")
-        # Per-sample mean (over spatial/channels)
-        loss = loss.mean(dim=tuple(range(1, loss.ndim)))
+        if use_spectral_sfp_loss:
+            loss = spectral_sfp_per_sample_loss(
+                model_out,
+                target,
+                t,
+                self.num_timesteps,
+                low_sigma=float(spectral_sfp_low_sigma),
+                high_sigma=float(spectral_sfp_high_sigma),
+                tau_power=float(spectral_sfp_tau_power),
+            )
+        else:
+            loss = nn.functional.mse_loss(model_out, target, reduction="none")
+            # Per-sample mean (over spatial/channels)
+            loss = loss.mean(dim=tuple(range(1, loss.ndim)))
         # Timestep loss weighting: min_snr / min_snr_soft / unit / edm / v / eps
         snr_t = self.snr.to(device)[t] if hasattr(self, "snr") else None
         alpha = self.alpha_cumprod.to(device)[t]
@@ -156,7 +182,7 @@ class GaussianDiffusion:
         return {"loss": loss}
 
     def _predict_x0_and_noise(self, model_out, x_t, t):
-        """Convert model output (epsilon or v) to x_0 and noise."""
+        """Convert model output (epsilon, v, or x0) to x_0 and implied noise."""
         self._to_device(x_t.device)
         alpha = self.alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
         sigma = self.sqrt_one_minus_alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
@@ -164,6 +190,9 @@ class GaussianDiffusion:
         if self.prediction_type == "v":
             pred_noise = (sqrt_alpha * model_out + sigma * x_t) / (sigma + 1e-8)
             x_0_pred = sqrt_alpha * x_t - sigma * model_out
+        elif self.prediction_type == "x0":
+            x_0_pred = model_out
+            pred_noise = (x_t - sqrt_alpha * x_0_pred) / (sigma + 1e-8)
         else:
             pred_noise = model_out
             x_0_pred = (x_t - sigma * pred_noise) / (alpha.sqrt() + 1e-8)
@@ -187,17 +216,40 @@ class GaussianDiffusion:
         x_prev = alpha_prev.sqrt() * x_0_pred + sigma_prev * noise_impl
         return x_0_pred, x_prev
 
-    def set_timesteps(self, num_inference_steps: int, scheduler: str = "ddim"):
-        """Set inference timesteps. scheduler: 'ddim' (default, strided) or 'euler' (linear spacing)."""
-        if scheduler == "euler":
-            steps = np.linspace(0, self.num_timesteps - 1, num_inference_steps, dtype=np.int64)
-            self.timesteps = torch.from_numpy(steps[::-1].copy())
-        elif getattr(self, "timestep_respacing_str", None):
-            steps = space_timesteps(self.num_timesteps, self.timestep_respacing_str)
+    def set_timesteps(
+        self,
+        num_inference_steps: int,
+        timestep_schedule: str = "ddim",
+        *,
+        scheduler: Optional[str] = None,
+        karras_rho: float = 7.0,
+    ):
+        """
+        Set ``self.timesteps`` (high noise → low). ``timestep_schedule`` selects the index path;
+        ``scheduler`` is a legacy alias for ``timestep_schedule`` when provided.
+
+        Registered schedules: see ``diffusion.inference_timesteps.list_timestep_schedules()`` —
+        includes ``ddim``, ``euler``, ``karras_rho``, ``snr_uniform``, ``quad_cosine``.
+        If ``timestep_respacing_str`` was set at construction (e.g. ``ddim50``) and the
+        requested name is ``ddim``, respacing from ``space_timesteps`` is used (same as
+        legacy behavior). Other schedule names ignore respacing (e.g. ``euler`` with respacing
+        still uses the euler index path).
+        """
+        name = str(scheduler if scheduler is not None else timestep_schedule).lower().strip()
+        ts_resp = getattr(self, "timestep_respacing_str", None)
+        if ts_resp and name == "ddim":
+            steps = space_timesteps(self.num_timesteps, ts_resp)
             self.timesteps = torch.from_numpy(steps[::-1].copy().astype(np.int64))
-        else:
-            step = max(1, self.num_timesteps // num_inference_steps)
-            self.timesteps = torch.from_numpy(np.arange(0, self.num_timesteps, step)[::-1].copy().astype(np.int64))
+            return self.timesteps
+        ac = self.alpha_cumprod.detach().cpu().numpy()
+        steps = build_inference_timesteps(
+            name,
+            self.num_timesteps,
+            num_inference_steps,
+            ac,
+            karras_rho=float(karras_rho),
+        )
+        self.timesteps = torch.from_numpy(np.asarray(steps, dtype=np.int64).copy())
         return self.timesteps
 
     def set_timesteps_from(self, num_inference_steps: int, t_start: int):
@@ -242,7 +294,7 @@ class GaussianDiffusion:
         pbfm_edge_boost: float = 0.0,
         pbfm_edge_kernel: int = 3,
     ):
-        """DDIM-style step using pre-computed model output (for CFG). pred_out = combined prediction (epsilon or v)."""
+        """DDIM-style step using pre-computed model output (for CFG). pred_out = ε, v, or x0 per prediction_type."""
         x_0_pred, _ = self._predict_x0_and_noise(pred_out, x_t, t)
         # PBFM: add a high-pass ("edge") drift to x_0_pred before DDIM update.
         # This is a heuristic implementation intended to reduce oversmoothing.
@@ -288,6 +340,9 @@ class GaussianDiffusion:
         dynamic_threshold_type="percentile",
         dynamic_threshold_value=0.0,
         scheduler="ddim",
+        timestep_schedule=None,
+        solver="ddim",
+        karras_rho: float = 7.0,
         # Optional: masked/inpainting-style freezing of known regions.
         # This approximates MDM-style "fill the blanks" behavior at inference:
         # after each denoise step, unmasked latents are reset to q_sample(x0_known, t).
@@ -302,10 +357,23 @@ class GaussianDiffusion:
         # PBFM guidance
         pbfm_edge_boost: float = 0.0,
         pbfm_edge_kernel: int = 3,
+        # Blur-based self-attention guidance (heuristic): extra model forward on Gaussian-blurred x;
+        # amplifies high-frequency structure vs a smoothed baseline. Costs ~2× forwards when enabled.
+        sag_blur_sigma: float = 0.0,
+        sag_scale: float = 0.0,
     ):
         """
         Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
-        scheduler: "ddim" (default) or "euler" (linear timestep spacing).
+
+        **Timestep placement** (``scheduler`` or ``timestep_schedule``): chooses discrete
+        training indices — ``ddim``, ``euler``, ``karras_rho``, ``snr_uniform``, ``quad_cosine``
+        (see ``diffusion.inference_timesteps``). ``timestep_schedule`` overrides ``scheduler``
+        when set.
+
+        **Solver** (``solver``): ``ddim`` = one DDIM-style update per step (default);
+        ``heun`` = predictor–corrector with two model evaluations per step (often sharper,
+        ~2× forward cost when SAG is off).
+
         cfg_rescale: ComfyUI-style; if > 0, rescale CFG delta to reduce over-saturation (e.g. 0.7).
         dynamic_threshold_percentile: if > 0, clamp x_0_pred to this percentile (e.g. 99.5).
         dynamic_threshold_type: "percentile" | "norm" | "spatial_norm" (ControlNet-style).
@@ -313,6 +381,10 @@ class GaussianDiffusion:
         """
         model_kwargs_cond = model_kwargs_cond or {}
         model_kwargs_uncond = model_kwargs_uncond or {}
+        ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).lower().strip()
+        sol = str(solver).lower().strip()
+        if sol not in INFERENCE_SOLVERS:
+            raise ValueError(f"Unknown solver {solver!r}. Choose one of: {INFERENCE_SOLVERS}")
         do_inpaint = bool(
             inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
         )
@@ -325,7 +397,11 @@ class GaussianDiffusion:
             timesteps = self.set_timesteps_from(num_inference_steps, start_timestep).to(device)
         else:
             x = torch.randn(shape, device=device, dtype=dtype)
-            timesteps = self.set_timesteps(num_inference_steps, scheduler=scheduler).to(device)
+            timesteps = self.set_timesteps(
+                num_inference_steps,
+                timestep_schedule=ts_name,
+                karras_rho=float(karras_rho),
+            ).to(device)
         x_0_pred = None
         early_exit_enabled = float(ada_early_exit_delta_threshold) > 0.0 and int(ada_early_exit_patience) > 0
         early_exit_patience = int(ada_early_exit_patience)
@@ -339,22 +415,52 @@ class GaussianDiffusion:
                 else torch.zeros(shape[0], device=device, dtype=torch.long)
             )
             x_prev = x
-            if cfg_scale != 1.0 and cfg_scale > 0 and model_kwargs_uncond:
-                out_cond = model(x, t, **model_kwargs_cond)
-                out_uncond = model(x, t, **model_kwargs_uncond)
-                if out_cond.shape != x.shape and out_cond.shape[1] > x.shape[1]:
-                    out_cond, out_uncond = out_cond[:, : x.shape[1]], out_uncond[:, : x.shape[1]]
-                delta = out_cond - out_uncond
-                if cfg_rescale > 0:
-                    sigma = delta.std() + 1e-8
-                    scale = max(sigma / cfg_rescale, 1.0)
-                    delta = delta / scale
-                out = out_uncond + cfg_scale * delta
-            else:
-                out = model(x, t, **model_kwargs_cond)
-                if out.shape != x.shape and out.shape[1] > x.shape[1]:
-                    out = out[:, : x.shape[1]]
+
+            def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
+                if cfg_scale != 1.0 and cfg_scale > 0 and model_kwargs_uncond:
+                    out_cond = model(x_in, t_batch, **model_kwargs_cond)
+                    out_uncond = model(x_in, t_batch, **model_kwargs_uncond)
+                    if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
+                        out_cond, out_uncond = out_cond[:, : x_in.shape[1]], out_uncond[:, : x_in.shape[1]]
+                    delta = out_cond - out_uncond
+                    if cfg_rescale > 0:
+                        sig = delta.std() + 1e-8
+                        scale = max(sig / cfg_rescale, 1.0)
+                        delta = delta / scale
+                    return out_uncond + cfg_scale * delta
+                o = model(x_in, t_batch, **model_kwargs_cond)
+                if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
+                    o = o[:, : x_in.shape[1]]
+                return o
+
+            def _apply_sag(x_in: torch.Tensor, t_batch: torch.Tensor, base_out: torch.Tensor) -> torch.Tensor:
+                if float(sag_scale) > 0.0 and float(sag_blur_sigma) > 0.0:
+                    from .sampling_utils import gaussian_blur_latent
+
+                    x_b = gaussian_blur_latent(x_in, float(sag_blur_sigma))
+                    out_b = _model_prediction(x_b, t_batch)
+                    return base_out + float(sag_scale) * (base_out - out_b)
+                return base_out
+
+            out1 = _apply_sag(x, t, _model_prediction(x, t))
             if i + 1 < len(timesteps):
+                if sol == "heun":
+                    x_euler, _ = self.step_with_pred(
+                        x,
+                        t,
+                        t_next,
+                        out1,
+                        eta=eta,
+                        dynamic_threshold_percentile=dynamic_threshold_percentile,
+                        dynamic_threshold_type=dynamic_threshold_type,
+                        dynamic_threshold_value=dynamic_threshold_value,
+                        pbfm_edge_boost=pbfm_edge_boost,
+                        pbfm_edge_kernel=pbfm_edge_kernel,
+                    )
+                    out2 = _apply_sag(x_euler, t_next, _model_prediction(x_euler, t_next))
+                    out = 0.5 * (out1 + out2)
+                else:
+                    out = out1
                 x, x_0_pred = self.step_with_pred(
                     x,
                     t,
@@ -390,7 +496,7 @@ class GaussianDiffusion:
                     if early_exit_counter >= early_exit_patience:
                         break
             else:
-                x_0_pred, _ = self._predict_x0_and_noise(out, x, t)
+                x_0_pred, _ = self._predict_x0_and_noise(out1, x, t)
                 if dynamic_threshold_percentile > 0 or (
                     dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
                 ):

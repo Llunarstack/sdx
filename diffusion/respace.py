@@ -16,12 +16,13 @@ def space_timesteps(num_timesteps: int, section_counts) -> np.ndarray:
         s = section_counts.strip().lower()
         if s.startswith("ddim"):
             n = int(s[4:].strip())
-            for stride in range(1, num_timesteps):
-                steps = np.arange(0, num_timesteps, stride)
-                if len(steps) == n:
-                    return steps
+            t = int(num_timesteps)
+            # len(np.arange(0, t, stride)) == (t - 1) // stride + 1 for t >= 1, stride >= 1
+            for stride in range(1, t):
+                if (t - 1) // stride + 1 == n:
+                    return np.arange(0, t, stride, dtype=np.int64)
             # Fallback: linear spacing to get ~n steps
-            return np.linspace(0, num_timesteps - 1, n, dtype=np.int64)
+            return np.linspace(0, t - 1, n, dtype=np.int64)
         section_counts = [int(x.strip()) for x in section_counts.split(",") if x.strip()]
     if not section_counts:
         return np.arange(num_timesteps, dtype=np.int64)

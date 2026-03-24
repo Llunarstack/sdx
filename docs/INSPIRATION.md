@@ -28,7 +28,7 @@ Run `scripts/setup/clone_repos.ps1` (Windows) or `scripts/setup/clone_repos.sh` 
 ## ComfyUI / A1111 ideas
 
 - **CFG rescale / dynamic threshold**: Internal sampling uses fixed behavior; not exposed as CLI options.
-- **Post-process**: Optional `--sharpen`, `--contrast` in `sample.py`. See `utils/quality.py`.
+- **Post-process**: Optional `--sharpen`, `--contrast` in `sample.py`. See `utils/quality/quality.py`.
 
 ## Features that make images look better and match the user
 
@@ -36,7 +36,7 @@ Run `scripts/setup/clone_repos.ps1` (Windows) or `scripts/setup/clone_repos.sh` 
 2. **Quality tags** — Boost tags like `masterpiece`, `best quality` in data so the model learns to improve quality.
 3. **Style + ControlNet + LoRA** — Blended with scales (style_strength, control_scale, per-LoRA scale) so output isn’t messy.
 4. **CFG rescale / dynamic threshold** — (Internal only; not exposed in sample CLI.)
-5. **Post-process** — Optional sharpen and contrast for a crisper look (see `utils/quality.py`).
+5. **Post-process** — Optional sharpen and contrast for a crisper look (see `utils/quality/quality.py`).
 6. **Step-based training + save best** — More steps → better checkpoint; no epoch ceiling.
 7. **Refinement** — Train on small-t to fix imperfections; optional refinement pass at inference.
 8. **Img2img + inpainting** — Training and sample.py `--init-image`, `--mask`.
