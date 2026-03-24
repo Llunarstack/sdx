@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/CUDA-12.8%20wheels-76B900?style=flat-square" alt="CUDA 12.8 optional wheels"/></a>
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="License Apache 2.0"/></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-CONTRIBUTING.md-1f6feb?style=flat-square" alt="Contributing"/></a>
@@ -27,9 +28,9 @@
   <a href="#contributing--community">Contribute</a>
 </p>
 
-**Stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · AR blocks · REPA · MoE · MDM · RAE bridge · **pick-best** · **book/comic** pipelines
+**Stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · AR blocks · REPA · MoE · MDM · RAE bridge · **reference tokens** (CLIP vision, IP-Adapter-style) · **SAG-style** guided sampling (blur heuristic) · **pick-best** · **face-region post-enhance** · **book/comic** pipelines + **consistency helpers**
 
-<sub>Caption-driven training · no reference image required for the base path · quality follows your data and settings</sub>
+<sub>Caption-driven training · optional **reference image** conditioning at sample time · GPU stack: **`requirements-cuda128.txt`** after base `pip` · quality follows your data and settings</sub>
 
 </div>
 
@@ -51,28 +52,45 @@
 
 | Goal | Jump to |
 | :--- | :--- |
-| **Run something now** | [Quick start](#quick-start) — `python scripts/tools/quick_test.py` |
+| **Run something now** | [Quick start](#quick-start) — `python scripts/tools/dev/quick_test.py` |
 | **Train (folders or JSONL)** | **[`user_data/train/`](user_data/train/)** — drop images + captions here · [Training](#training) · [Data format](#data-format) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) |
 | **Books / comics / manga** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
 | **Score or filter data (ViT)** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | **Submit a PR or doc fix** | [Contributing](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
 | **Navigate the tree** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
 | **Browse every source file** | **[docs/FILES.md](docs/FILES.md)** — per-file roles; **[docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md)** — folder map |
-| **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
+| **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) · [Sampling](#sampling) |
+| **Honest limits & mitigations** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) (gaps table, fixes) · [docs/COMMON_ISSUES.md](docs/COMMON_ISSUES.md) |
+| **Diffusion upgrade ideas** | [docs/DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md) · [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
+| **Prompt pipeline (modules + flags)** | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) · [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) · `python scripts/tools/preview_generation_prompt.py --help` |
 
-### Latest additions
+<a id="latest-additions"></a>
 
-Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion layout):
+### What’s new (recent work)
 
-| Area | What |
+High-signal additions to inference, books, packaging, and docs — all on the same **`train.py` / `sample.py`** engine.
+
+| Area | What shipped |
 | :--- | :--- |
-| **Native + Python bridge** | **[`native/python/sdx_native/`](native/python/sdx_native/)** — `latent_geometry` + **`native_tools`** (Rust **`image-paths`** / **`dup-image-paths`**, Zig **`sdx-pathstat`**, FNV, merge, ctypes **`libsdx_latent`** incl. **`latent_numel`**). **[`utils/native_tools.py`](utils/native_tools.py)** / **[`utils/latent_geometry.py`](utils/latent_geometry.py)** re-export. Wired: [`data_quality.py`](scripts/tools/data_quality.py), [`op_preflight.py`](scripts/tools/op_preflight.py), [`dit_variant_compare.py`](scripts/tools/dit_variant_compare.py), [`jsonl_merge.py`](scripts/tools/jsonl_merge.py), [`manifest_paths.py`](scripts/tools/manifest_paths.py), [`quick_test.py`](scripts/tools/quick_test.py) (`--show-native`). Docs: [native/README.md](native/README.md), [native/python/README.md](native/python/README.md). Pytest **`pythonpath`**: [`pyproject.toml`](pyproject.toml). |
-| **Tests layout** | [`tests/unit/`](tests/unit/) (e.g. latent/native-tool tests), [`tests/integration/`](tests/integration/) (e.g. advanced feature smoke), [`tests/diffusion/`](tests/diffusion/), [`tests/fixtures/`](tests/fixtures/). |
-| **ViT ↔ DiT AR** | [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) aligns **block-wise AR** (`num_ar_blocks`) with ViT JSONL fields; optional **AR conditioning** on ViT `text_proj` ([`ViT/train.py`](ViT/train.py), `--no-ar-conditioning` for legacy checkpoints). Tests: [`tests/test_ar_dit_vit.py`](tests/test_ar_dit_vit.py). [docs/AR.md](docs/AR.md) · [Training files](#training-files-reference-what-each-part-does). |
-| **Config layout** | Long prompt/preset catalogs live under [`config/reference/`](config/reference/); thin shims preserve imports — [config/README.md](config/README.md). |
-| **Diffusion layout** | Timestep loss modules under [`diffusion/losses/`](diffusion/losses/) with stable re-exports at the package root — [diffusion/README.md](diffusion/README.md). Related tests: [`tests/diffusion/`](tests/diffusion/). |
-| **Your training data** | **[`user_data/train/`](user_data/train/)** — put **subfolders** here with paired images + `.txt` / `.caption` sidecars → `--data-path user_data/train`. Guide: **[user_data/README.md](user_data/README.md)** · [Data format](#data-format). |
-| **2026 industry docs & SDX hooks** | **[`utils/architecture_map.py`](utils/architecture_map.py)** — theme→repo parity (`theme_by_id`, `THEMES`). **Docs:** [ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) (flow, bridges, hybrid AR+DiT, RAE), [WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) (workflow / efficiency, disclaimers), [LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md). **Training:** `--resolution-buckets` ([`data/bucket_batch_sampler.py`](data/bucket_batch_sampler.py)). **Inference / tools:** `--pick-best combo_exposure`, [`orchestrate_pipeline.py`](scripts/tools/orchestrate_pipeline.py), [`rag_prompt.py`](utils/rag_prompt.py), [`character_lock.py`](utils/character_lock.py). Tests: [`test_architecture_map.py`](tests/unit/test_architecture_map.py), [`test_news_features.py`](tests/unit/test_news_features.py). |
+| **Reference conditioning (IP-Adapter-style)** | **`--reference-image`** + **`--reference-tokens`** / **`--reference-scale`** inject CLIP vision tokens into **`DiT_Text`** ([`models/dit_text.py`](models/dit_text.py), [`models/reference_token_projection.py`](models/reference_token_projection.py), [`utils/generation/clip_reference_embed.py`](utils/generation/clip_reference_embed.py)). Optional **`--clip-reference-model`** for the vision tower. |
+| **SAG-style guided sampling** | Blur-based self-attention guidance in the denoise loop: **`--sag-blur-sigma`**, **`--sag-scale`** on [`GaussianDiffusion.sample_loop`](diffusion/gaussian_diffusion.py). |
+| **Face & reference post-process** | **`--face-enhance`** (+ sharpen / contrast / padding / max faces) via [`utils/quality/face_region_enhance.py`](utils/quality/face_region_enhance.py). **`--post-reference-image`** / **`--post-reference-alpha`** for light pixel-space blend after decode. OCR repair paths forward these flags when set. |
+| **NVIDIA install path** | **[`requirements-cuda128.txt`](requirements-cuda128.txt)** — after `requirements.txt`, **`pip install --force-reinstall -r requirements-cuda128.txt`** pulls **torch / torchvision / xformers** from PyTorch’s **cu128** index (avoids CPU-only PyPI torch). **`python -m toolkit.training.env_health`** prints a hint when **`+cpu`** torch is detected ([`toolkit/training/env_health.py`](toolkit/training/env_health.py)). |
+| **Book / comic consistency layer** | [`pipelines/book_comic/consistency_helpers.py`](pipelines/book_comic/consistency_helpers.py) + CLI flags on **`generate_book.py`** (`--consistency-json`, character/costume/props/vehicle/setting/creature/palette/lighting/lettering, negative tiers). Prompt order: narration → **consistency block** → panel → rolling context ([`book_helpers.compose_book_page_prompt`](pipelines/book_comic/book_helpers.py)); rolling context respects **`--page-context-max-chars`** for the **full** composed string. |
+| **Architecture map & 2026 docs** | **[`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)** — themes ↔ repo hooks. **Docs:** [ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md), [WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md), [LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md). **Leverage roadmap:** [DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md). |
+| **Gaps vs common T2I failures** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) — structured “what breaks / why / mitigations” (incl. hands, faces, text-in-image, composition). |
+| **Tests** | [`tests/unit/test_reference_tokens_and_sag.py`](tests/unit/test_reference_tokens_and_sag.py), [`tests/unit/test_face_region_enhance.py`](tests/unit/test_face_region_enhance.py), [`tests/unit/test_consistency_helpers.py`](tests/unit/test_consistency_helpers.py), plus existing **`tests/unit/`**, **`tests/integration/`**, **`tests/diffusion/`**. |
+| **Prompt lint (path)** | Canonical script: [`scripts/tools/prompt/prompt_lint.py`](scripts/tools/prompt/prompt_lint.py) (invoked by tooling / CI that still says `prompt_lint`). |
+
+### Platform & repo layout (stable)
+
+| Area | Pointer |
+| :--- | :--- |
+| **Native + Python bridge** | [`native/python/sdx_native/`](native/python/sdx_native/) · re-exports [`utils/native/native_tools.py`](utils/native/native_tools.py) · [native/README.md](native/README.md) · [docs/NATIVE_AND_SYSTEM_LIBS.md](docs/NATIVE_AND_SYSTEM_LIBS.md) |
+| **ViT ↔ DiT AR** | [`utils/architecture/ar_dit_vit.py`](utils/architecture/ar_dit_vit.py) · [docs/AR.md](docs/AR.md) · [`ViT/train.py`](ViT/train.py) (`--no-ar-conditioning` for legacy) |
+| **Config / diffusion packages** | [`config/reference/`](config/reference/) · [`diffusion/losses/`](diffusion/losses/) — [diffusion/README.md](diffusion/README.md) |
+| **Your images** | **[`user_data/train/`](user_data/train/)** · [user_data/README.md](user_data/README.md) |
+| **Training + inference QoL** | [`toolkit/`](toolkit/) — `python -m toolkit.training.env_health`, seeds, manifest digest ([`toolkit/README.md`](toolkit/README.md)) |
 
 ---
 
@@ -81,7 +99,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | | |
 | :--- | :--- |
 | **Setup** | [Project status](#project-status-compute-and-expectations) · [Setup](#setup) |
-| **Core** | [Latest additions](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) · [Your training data](#your-training-data) |
+| **Core** | [What’s new](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) · [Your training data](#your-training-data) |
 | **Train & sample** | [Your training data](#your-training-data) · [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
 | **Reference** | [JSONL fields](#data-jsonl-fields) · [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
@@ -92,7 +110,7 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | Section | Links |
 | :--- | :--- |
 | **Context** | [Status & expectations](#project-status-compute-and-expectations) · [Pipelines](pipelines/README.md) |
-| **Start** | [Latest additions](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Your training data](#your-training-data) · [Data format](#data-format) |
+| **Start** | [What’s new](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Your training data](#your-training-data) · [Data format](#data-format) |
 | **Workflow** | [Architecture](#architecture-and-pipeline) · [Your training data](#your-training-data) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
 | **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
@@ -106,15 +124,23 @@ Recent documentation and tooling (native bridge, ViT–DiT AR, config/diffusion 
 | Step | What to run |
 | :--- | :--- |
 | **1 · Environment** | `pip install -r requirements.txt` |
-| **2 · Smoke test** | `python scripts/tools/quick_test.py` |
+| **2 · Smoke test** | `python scripts/tools/dev/quick_test.py` |
 | **3 · Train** | `python train.py --data-path user_data/train --results-dir results` |
 | **4 · Sample** | `python sample.py --ckpt results/.../best.pt --prompt "..." --out out.png` |
 
 ```bash
 cd sdx
 pip install -r requirements.txt
-python scripts/tools/quick_test.py    # env check (no dataset required)
+python scripts/tools/dev/quick_test.py    # env check (no dataset required)
 ```
+
+**NVIDIA GPU (CUDA 12.8):** default PyPI `torch` is often **CPU-only**. After the step above, reinstall GPU wheels (same venv):
+
+```bash
+pip install --force-reinstall -r requirements-cuda128.txt
+```
+
+Confirm with `python -m toolkit.training.env_health` (`cuda_available` should be true when drivers are installed). **Windows:** `triton-windows` remains in `requirements.txt` for xformers’ `import triton`.
 
 **Train** (single GPU — use **[`user_data/train/`](user_data/train/)** or any folder with the same layout):
 
@@ -140,8 +166,8 @@ torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-si
 | :--- | :--- |
 | **Full suite** | `pytest tests/ -q` (all `tests/**`, including `unit/`, `integration/`, `diffusion/`) |
 | **Fast unit** | `pytest tests/unit -q` |
-| **Smoke (DiT forward)** | `python scripts/tools/quick_test.py` |
-| **Optional native CLIs** | `python scripts/tools/quick_test.py --show-native` — lists Rust/Zig/Go/Node/`libsdx_latent` if built ([native/README.md](native/README.md)) |
+| **Smoke (DiT forward)** | `python scripts/tools/dev/quick_test.py` |
+| **Optional native CLIs** | `python scripts/tools/dev/quick_test.py --show-native` — lists Rust/Zig/Go/Node/`libsdx_latent` if built ([native/README.md](native/README.md)) |
 
 After pulling C++ changes to **`libsdx_latent`**, rebuild in `native/cpp` (`cmake --build build`) so ctypes sees new symbols (e.g. `sdx_latent_numel`).
 
@@ -152,11 +178,11 @@ After pulling C++ changes to **`libsdx_latent`**, rebuild in `native/cpp` (`cmak
 | Step | Action |
 | :--- | :--- |
 | 1 | Fork / clone · `cd` to repo root |
-| 2 | `pip install -r requirements.txt` · `python scripts/tools/quick_test.py` |
+| 2 | `pip install -r requirements.txt` · (GPU:) `pip install --force-reinstall -r requirements-cuda128.txt` · `python scripts/tools/dev/quick_test.py` |
 | 3 | `pytest tests/ -q` · `ruff format` / `ruff check` on **files you changed** (see `pyproject.toml`) |
 | 4 | Open a **small** PR — docs, tests, and tooling count. See **[CONTRIBUTING.md](CONTRIBUTING.md)**. |
 
-> **First visit?** Run `python scripts/tools/quick_test.py`, skim [**Architecture**](#architecture-and-pipeline), then pick a task from [Find your path](#find-your-path).
+> **First visit?** Run `python scripts/tools/dev/quick_test.py`, skim [**Architecture**](#architecture-and-pipeline), then pick a task from [Find your path](#find-your-path).
 
 ---
 
@@ -200,14 +226,14 @@ You can still get value **without** training a billion-parameter model:
 | :---: | :--- |
 | **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), **AR** blocks, **Supreme** / **Predecessor** variants |
 | **Training** | Pass-based schedule · **EMA** · **best** ckpt · val + early stopping · bf16 · compile · **DDP** · **non-uniform timestep** sampling |
-| **Sampling** | CFG · schedulers · img2img / inpaint · LoRA · control · refinement · **pick-best** |
+| **Sampling** | CFG · schedulers · img2img / inpaint · LoRA · control · refinement · **pick-best** · **reference tokens** · **SAG** · **face enhance** / **post-reference** blend |
 | **Data** | Folders + sidecars or **JSONL** · emphasis · domains · regional captions |
 
 ---
 
 ## Architecture and pipeline
 
-**End-to-end:** `data/` → **`train.py`** → **checkpoint** → **`sample.py`** → images. Frozen weights live under **`model/`** (gitignored); paths resolve via **`utils/model_paths.py`**.
+**End-to-end:** `data/` → **`train.py`** → **checkpoint** → **`sample.py`** → images. Frozen weights live under **`model/`** (gitignored); paths resolve via **`utils/modeling/model_paths.py`**.
 
 ### Core pipeline
 
@@ -252,12 +278,13 @@ See **[pipelines/README.md](pipelines/README.md)** · [image_gen](pipelines/imag
 | **`data/`** | `Text2ImageDataset`, captions | `train.py` |
 | **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, **`timestep_sampling`**, respacing | `train.py`, `sample.py` |
 | **`models/`** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
-| **`utils/`** | Checkpoint load, text-encoder bundle, REPA helpers, QC, **pick-best**, metrics | `train.py`, `sample.py`, scripts |
+| **`utils/`** | Checkpoint load, **`utils/prompt/`** (content controls, neg filter, scene blueprint, RAG), text-encoder bundle, REPA helpers, **`utils/quality/`** (pick-best, face region enhance), metrics | `train.py`, `sample.py`, scripts |
 | **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator); **[ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md)** (research + checklist), **[ViT/backbone_presets.py](ViT/backbone_presets.py)** (`timm` names for `--model-name`) | CLI, optional dataset QA |
 | **`scripts/`** | Downloads, tools, Cascade stub | Ops & CI |
 | **`pipelines/`** | **image_gen** vs **book_comic** docs + book workflow script (no second DiT copy) | Contributors, multi-page / OCR workflows |
-| **`native/`** | Fast JSONL / line-FNV / merge CLIs; C++ ``libsdx_latent`` | Optional; **Python bridge** in [`native/python/sdx_native/`](native/python/sdx_native/) (also re-exported as [`utils/native_tools.py`](utils/native_tools.py) / [`utils/latent_geometry.py`](utils/latent_geometry.py)); dataset QA only — not required in `train.py` |
-| **`model/`** | Downloaded HF weights | Paths via `utils/model_paths.py` |
+| **`native/`** | Fast JSONL / line-FNV / merge CLIs; C++ ``libsdx_latent`` | Optional; **Python bridge** in [`native/python/sdx_native/`](native/python/sdx_native/) (also re-exported as [`utils/native/native_tools.py`](utils/native/native_tools.py) / [`utils/native/latent_geometry.py`](utils/native/latent_geometry.py)); dataset QA only — not required in `train.py` |
+| **`toolkit/`** | Training QoL: env report, JSONL digest, seeds, timers | [`toolkit/README.md`](toolkit/README.md) — `python -m toolkit.training.env_health`; optional pip list in `toolkit/extras/requirements-suggested.txt` |
+| **`model/`** | Downloaded HF weights | Paths via `utils/modeling/model_paths.py` |
 
 Full index → **[docs/FILES.md](docs/FILES.md)** · **Training-only map (DiT + ViT)** → [Training files reference](#training-files-reference-what-each-part-does)
 
@@ -293,7 +320,7 @@ Full index → **[docs/FILES.md](docs/FILES.md)** · **Training-only map (DiT + 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TB
-  subgraph WG["Weights · model/ + utils/model_paths.py"]
+  subgraph WG["Weights · model/ + utils/modeling/model_paths.py"]
     W[T5 · VAE · CLIP · DINOv2 · Qwen · Cascade]
   end
 
@@ -450,7 +477,7 @@ flowchart LR
 | **`ViT/` tools** | Scoring / rank / prompts — **not** the generator |
 | **Sample** | **`sample.py`**: CFG, decode, **`utils/test_time_pick`** |
 | **API** | **`inference.py`**: programmatic sampling |
-| **Other** | **Qwen** (`utils/llm_client.py`); **Cascade** (`scripts/cascade_generate.py`) — separate from DiT forward |
+| **Other** | **Qwen** (`utils/analysis/llm_client.py`); **Cascade** (`scripts/cascade_generate.py`) — separate from DiT forward |
 
 **Optional scaffolds** (not default `train.py`): `diffusion/cascaded_multimodal_pipeline.py`, `models/cascaded_multimodal_diffusion.py`, `models/native_multimodal_transformer.py` — see [docs/FILES.md](docs/FILES.md).
 
@@ -473,7 +500,8 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 |:--------|:------|
 | **Passes, not blind epochs** | `--passes N` = N full sweeps over the dataset; optional `--max-steps` cap |
 | **Quality of training** | Cosine LR, **EMA**, **save best**, optional **val split + early stopping** |
-| **Captions** | `(tag)` / `((tag))` emphasis, `[tag]` de-emphasis, subject-first order |
+| **Captions** | `(tag)` / `((tag))` emphasis, `[tag]` de-emphasis, subject-first order; **`train.py --train-prompt-emphasis`** applies the same `( )`/`[ ]` → DiT `token_weights` as `sample.py` ([`docs/TRAINING_TEXT_TO_PIXELS.md`](docs/TRAINING_TEXT_TO_PIXELS.md)) |
+| **Originality / novelty** | **`--train-originality-prob`** + **`--train-originality-strength`** inject composition tokens; **`--creativity-embed-dim`** + **`--creativity-jitter-std`** diversify the learned creativity channel |
 | **Negative prompts** | Trained using cond / uncond style signal so the model learns to avoid concepts in the negative prompt |
 | **JSONL** | `caption`, `negative_*`, `style`, `control_*`, `init_image`, weights, etc. |
 
@@ -506,10 +534,16 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 | **LoRA & control** | `--lora`, `--control-image`, style via `--style` or `--auto-style-from-prompt` |
 | **Test-time pick** | `--pick-best clip\|edge\|ocr\|combo` with `--num` |
 | **RAE bridge** | Checkpoints can carry `rae_latent_bridge` for non-4ch RAE latents |
+| **Reference image → DiT** | **`--reference-image`** · **`--reference-tokens`** · **`--reference-scale`** · **`--clip-reference-model`** — CLIP vision projected into cross-attn ([`models/dit_text.py`](models/dit_text.py)) |
+| **SAG-style guidance** | **`--sag-blur-sigma`** · **`--sag-scale`** — blur self-attention guidance during [`sample_loop`](diffusion/gaussian_diffusion.py) |
+| **Face & pixel polish** | **`--face-enhance`** (+ `--face-enhance-sharpen`, `--face-enhance-contrast`, …) · **`--post-reference-image`** / **`--post-reference-alpha`** |
+| **Originality at sample** | **`--originality 0.3`** (novelty tokens), **`--creativity`** + **`--creativity-jitter`** (batch diversity), **`--diversity`** — see [docs/TRAINING_TEXT_TO_PIXELS.md](docs/TRAINING_TEXT_TO_PIXELS.md) |
+| **Prompt scaffolding** | `utils/prompt/content_controls.py`: `--safety-mode`, `--one-shot-boost`, `--auto-content-fix`, `--less-ai`, `--anti-ai-pack`, `--human-media`, `--lora-scaffold`, Civitai packs — see **[docs/PROMPT_STACK.md](docs/PROMPT_STACK.md)** |
+| **Preview prompts (no GPU)** | `python scripts/tools/preview_generation_prompt.py --prompt "..."` — mirrors content controls + pos/neg filter |
 
 </details>
 
-> **Model presets** live in `config/model_presets.py`; domain prompts in `config/prompt_domains.py`; caption pipeline in `data/t2i_dataset.py`.
+> **Model presets** live in `config/model_presets.py`; domain prompts in `config/prompt_domains.py`; caption pipeline in `data/t2i_dataset.py`. **Prompt architecture** (inference chain): **[docs/PROMPT_STACK.md](docs/PROMPT_STACK.md)** · recipes: **[docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md)**.
 
 ---
 
@@ -523,6 +557,7 @@ Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `
 | **Format / lint** | `pip install ruff` → `ruff format .` · `ruff check .` (see `pyproject.toml`) |
 | **Hardware & storage** (VRAM tiers, huge booru-scale data) | [docs/HARDWARE.md](docs/HARDWARE.md) |
 | **HF gated models** | Copy `.env.example` → `.env`, set `HF_TOKEN` |
+| **NVIDIA GPU wheels** | After `pip install -r requirements.txt`, run **`pip install --force-reinstall -r requirements-cuda128.txt`** — see [Quick start](#quick-start) · `python -m toolkit.training.env_health` |
 | **Download weights** (T5, VAE, optional CLIP/LLM) | `python scripts/download/download_models.py --all` → `model/` |
 | **Curated stack** (T5 + CLIP + DINOv2 + Qwen + Cascade, optional) | `python scripts/download/download_revolutionary_stack.py` — see [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
 | **Optional native tools** (Rust/Zig/C++/Go/Node + Python `sdx_native`) | [native/README.md](native/README.md) · [native/python/README.md](native/python/README.md) |
@@ -553,7 +588,7 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/README.md](docs/README.md) | Index of all project docs |
 | [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
 | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) | **Navigate the tree:** folders, entry points, `scripts/` layout |
-| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — refresh with `python scripts/tools/update_project_structure.py` |
+| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — refresh with `python scripts/tools/repo/update_project_structure.py` |
 | [docs/CODEBASE_ORGANIZATION.md](docs/CODEBASE_ORGANIZATION.md) | **Rules of thumb:** layers, where to add code, what stays at repo root |
 | [pipelines/README.md](pipelines/README.md) | **Two product lines:** **image_gen** vs **book_comic** (same engine; split docs + scripts) |
 | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
@@ -565,7 +600,12 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) | Hugging Face → JSONL + images; **`hf_download_and_train.py`** one-shot |
 | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, implemented vs planned (incl. §12 industry alignment) |
 | [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion and flow ideas, timestep sampling, paper pointers |
+| [docs/DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage upgrades: data, latents, conditioning, objectives, inference, alignment |
+| [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) | Honest gap analysis: common T2I failure modes and SDX mitigations |
+| [docs/MODEL_ENHANCEMENTS.md](docs/MODEL_ENHANCEMENTS.md) | Shared blocks (RMSNorm, FiLM, DropPath), multimodal cross-attn, RAE scales |
 | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt to T5 to DiT to VAE to image |
+| [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) | **Inference prompt pipeline:** `content_controls`, `neg_filter`, flags, preview CLI |
+| [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book) |
 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | How config, data, checkpoint, and sampling connect |
 | [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
 | [docs/AR.md](docs/AR.md) | Block autoregressive modes (0 / 2 / 4) |
@@ -576,8 +616,8 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds and determinism |
 | [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Industry context (2026):** authenticity, multi-stage pipelines, 4K/AR, text-in-image, grounding—mapped to SDX |
-| [docs/ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) | **Architecture / research (2026):** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture_map.py`](utils/architecture_map.py)) |
-| [docs/WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency commentary (2026):** coherency, LLaDA-class ideas, test-time compute, grounding, Mamba — **disclaimers** + SDX ([`utils/architecture_map.py`](utils/architecture_map.py)) |
+| [docs/ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) | **Architecture / research (2026):** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)) |
+| [docs/WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency commentary (2026):** coherency, LLaDA-class ideas, test-time compute, grounding, Mamba — **disclaimers** + SDX ([`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)) |
 | [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) | **Book/comic/manga:** consistency, layout, lettering, presets—mapped to SDX + [prompt_lexicon](pipelines/book_comic/prompt_lexicon.py) |
 | [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) | **Production-quality books:** data + training + `--book-accuracy production`, pick-best, OCR/anchoring checklist |
 | [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) | **ViT QA vs DiT generator:** research roadmap (Swin-DiT, FiT, reward/IQA), timm backbones, ensemble with pick-best |
@@ -631,7 +671,7 @@ Use `--manifest-jsonl /path/to/manifest.jsonl` (and you can leave `--data-path` 
 - **Negative**: JSONL `negative_caption` / `negative_prompt`, or **second line** in `.txt`.
 - **Domains** (3D, photoreal, interior, etc.): see [docs/DOMAINS.md](docs/DOMAINS.md) and [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md).
 
-**Utilities**: `python scripts/tools/ckpt_info.py results/.../best.pt` — config + step info.
+**Utilities**: `python scripts/tools/dev/ckpt_info.py results/.../best.pt` — config + step info.
 
 ---
 
@@ -661,7 +701,7 @@ python train.py --data-path /path/to/data --passes 3
 python train.py --data-path /path/to/data --text-encoder-mode triple
 ```
 
-Use **`--text-encoder`**, **`--clip-text-encoder-l`**, **`--clip-text-encoder-bigg`** to override paths; empty defaults use `utils/model_paths.py` (local folders first).
+Use **`--text-encoder`**, **`--clip-text-encoder-l`**, **`--clip-text-encoder-bigg`** to override paths; empty defaults use `utils/modeling/model_paths.py` (local folders first).
 
 **Avoid overtraining** — use val loss as the quality signal:
 
@@ -681,6 +721,8 @@ Use **`best.pt`** for inference.
 python train.py --data-path /path/to/data --no-xformers
 ```
 
+**Triton + xformers (Windows):** xformers probes `import triton` for some CUDA kernels. On Windows, install the community wheel (also declared in `requirements.txt` for `win32`): `pip install triton-windows`. On Linux x86_64, `requirements.txt` pulls `triton` when present on PyPI for your Python version. Check status with `python -m toolkit.training.env_health`.
+
 ---
 
 ## Training files reference (what each part does)
@@ -694,7 +736,7 @@ SDX has **two** training tracks for **two different model families** (they stack
 
 ### DiT block-AR ↔ ViT scorer (alignment)
 
-If the **DiT** was trained with **block-wise AR** ([`docs/AR.md`](docs/AR.md), `--num-ar-blocks` **0 / 2 / 4**), you can tag each ViT training or inference row with the same regime so scores match generator behavior: JSONL fields **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`**. The bridge is **[`utils/ar_dit_vit.py`](utils/ar_dit_vit.py)** (4-D one-hot + parsers). ViT **`text_proj`** optionally concatenates this with caption features (`use_ar_conditioning` in checkpoint; **`--no-ar-conditioning`** in [`ViT/train.py`](ViT/train.py) for legacy 8-D–only weights). **[`ViT/infer.py`](ViT/infer.py)** and **[`ViT/export_embeddings.py`](ViT/export_embeddings.py)** read the same fields when the checkpoint expects AR side-info.
+If the **DiT** was trained with **block-wise AR** ([`docs/AR.md`](docs/AR.md), `--num-ar-blocks` **0 / 2 / 4**), you can tag each ViT training or inference row with the same regime so scores match generator behavior: JSONL fields **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`**. The bridge is **[`utils/architecture/ar_dit_vit.py`](utils/architecture/ar_dit_vit.py)** (4-D one-hot + parsers). ViT **`text_proj`** optionally concatenates this with caption features (`use_ar_conditioning` in checkpoint; **`--no-ar-conditioning`** in [`ViT/train.py`](ViT/train.py) for legacy 8-D–only weights). **[`ViT/infer.py`](ViT/infer.py)** and **[`ViT/export_embeddings.py`](ViT/export_embeddings.py)** read the same fields when the checkpoint expects AR side-info.
 
 Below: files that participate in each loop. For a full repo index see **[`docs/FILES.md`](docs/FILES.md)**.
 
@@ -760,14 +802,14 @@ Built via **`DiT_models_text[...]`** and **`get_dit_build_kwargs`**. Core files:
 
 | File | Role |
 |:-----|:-----|
-| [`utils/text_encoder_bundle.py`](utils/text_encoder_bundle.py) | Loads **T5** and optional **triple** CLIP fusion + trainable **`text_encoder_fusion`**. |
-| [`utils/model_paths.py`](utils/model_paths.py) | Resolves **`model/`** paths vs HF ids (T5, CLIP, DINOv2, …). |
-| [`utils/checkpoint_manager.py`](utils/checkpoint_manager.py) | **Save / rotate** checkpoints (`best.pt`, steps, …). |
-| [`utils/checkpoint_loading.py`](utils/checkpoint_loading.py) | Load DiT checkpoints for **resume** / inference (used by tooling and `sample.py`; resume logic in `train.py` overlaps). |
-| [`utils/config_validator.py`](utils/config_validator.py) | **`validate_train_config`**, **`estimate_memory_usage`** before train. |
-| [`utils/error_handling.py`](utils/error_handling.py) | Logging, GPU memory helpers, model info. |
-| [`utils/metrics.py`](utils/metrics.py) | **MetricsTracker**, system logging. |
-| [`utils/model_viz.py`](utils/model_viz.py) | **`print_model_summary`** at startup. |
+| [`utils/modeling/text_encoder_bundle.py`](utils/modeling/text_encoder_bundle.py) | Loads **T5** and optional **triple** CLIP fusion + trainable **`text_encoder_fusion`**. |
+| [`utils/modeling/model_paths.py`](utils/modeling/model_paths.py) | Resolves **`model/`** paths vs HF ids (T5, CLIP, DINOv2, …). |
+| [`utils/checkpoint/checkpoint_manager.py`](utils/checkpoint/checkpoint_manager.py) | **Save / rotate** checkpoints (`best.pt`, steps, …). |
+| [`utils/checkpoint/checkpoint_loading.py`](utils/checkpoint/checkpoint_loading.py) | Load DiT checkpoints for **resume** / inference (used by tooling and `sample.py`; resume logic in `train.py` overlaps). |
+| [`utils/training/config_validator.py`](utils/training/config_validator.py) | **`validate_train_config`**, **`estimate_memory_usage`** before train. |
+| [`utils/training/error_handling.py`](utils/training/error_handling.py) | Logging, GPU memory helpers, model info. |
+| [`utils/training/metrics.py`](utils/training/metrics.py) | **MetricsTracker**, system logging. |
+| [`utils/modeling/model_viz.py`](utils/modeling/model_viz.py) | **`print_model_summary`** at startup. |
 
 *REPA (optional)*: `train.py` loads **DINOv2 / CLIP vision** via `transformers` inside **`_get_repa_vision`** / **`_repa_features`** — no separate `utils/repa.py`; encoder IDs come from `TrainConfig`.
 
@@ -780,7 +822,7 @@ Built via **`DiT_models_text[...]`** and **`get_dit_build_kwargs`**. Core files:
 | [`scripts/training/precompute_latents.py`](scripts/training/precompute_latents.py) | Precompute VAE latents for faster epochs when using **`--latent-cache-dir`**. |
 | [`scripts/tools/make_smoke_dataset.py`](scripts/tools/make_smoke_dataset.py) | Tiny dataset for **smoke** runs ([`docs/SMOKE_TRAINING.md`](docs/SMOKE_TRAINING.md)). |
 | [`scripts/tools/training_timestep_preview.py`](scripts/tools/training_timestep_preview.py) | Histograms for **`timestep_sample_mode`** before long runs. |
-| [`scripts/tools/ckpt_info.py`](scripts/tools/ckpt_info.py) | Inspect saved **`TrainConfig`** / step in a `.pt` file. |
+| [`scripts/tools/dev/ckpt_info.py`](scripts/tools/dev/ckpt_info.py) | Inspect saved **`TrainConfig`** / step in a `.pt` file. |
 | [`scripts/download/download_models.py`](scripts/download/download_models.py) | Pull T5/VAE/CLIP weights into **`model/`**. |
 | [`scripts/cli.py`](scripts/cli.py) | Optional **CLI**: validate `TrainConfig`, analyze datasets, checkpoint helpers, etc. |
 
@@ -812,7 +854,7 @@ Use this when you want a **classifier / regressor** on (image, caption) pairs to
 | [`ViT/rank.py`](ViT/rank.py) | Filter/sort JSONL by ViT scores. |
 | [`ViT/checkpoint_utils.py`](ViT/checkpoint_utils.py) | `load_vit_quality_checkpoint` — restores `use_ar_conditioning` / `ar_cond_dim` for tools. |
 | [`ViT/export_embeddings.py`](ViT/export_embeddings.py) | Fused embeddings → `.npz`; respects AR fields when conditioning is on. |
-| [`utils/ar_dit_vit.py`](utils/ar_dit_vit.py) | DiT **`num_ar_blocks`** ↔ ViT: one-hot regime + JSONL parsing (not the generator). |
+| [`utils/architecture/ar_dit_vit.py`](utils/architecture/ar_dit_vit.py) | DiT **`num_ar_blocks`** ↔ ViT: one-hot regime + JSONL parsing (not the generator). |
 
 **Optional experimental trainer** (separate codepath): [`scripts/enhanced/train_enhanced.py`](scripts/enhanced/train_enhanced.py) — see `scripts/enhanced/` and docs if you use that stack.
 
@@ -872,9 +914,24 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
   --steps 50 --width 256 --height 256 --out out.png
 ```
 
-**Often-used flags**: `--cfg-scale`, `--cfg-rescale`, `--scheduler ddim|euler`, `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, `--style`, `--auto-style-from-prompt`, `--control-image`, `--lora`, `--init-image`, `--mask`, `--inpaint-mode legacy|mdm`, `--sharpen`, `--contrast`, `--preset`, `--op-mode`, `--pick-best`, `--no-refine`.
+**Often-used flags**: `--cfg-scale`, `--cfg-rescale`, `--scheduler ddim|euler`, `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, `--style`, `--auto-style-from-prompt`, `--control-image`, `--lora`, `--init-image`, `--mask`, `--inpaint-mode legacy|mdm`, `--sharpen`, `--contrast`, `--preset`, `--op-mode`, `--pick-best`, `--no-refine`, **`--reference-image`** / **`--reference-scale`**, **`--sag-blur-sigma`** / **`--sag-scale`**, **`--face-enhance`**, **`--post-reference-image`**.
+
+**Reference conditioning:** pass **`--reference-image path.png`** (and optionally **`--reference-tokens`**, **`--reference-scale`**, **`--clip-reference-model`**) to encode the image with CLIP vision and inject **reference tokens** into the DiT cross-attention — similar in spirit to IP-Adapter, implemented in-repo ([`models/reference_token_projection.py`](models/reference_token_projection.py)). Use **`--reference-scale 0`** to disable injection while keeping other paths unchanged.
+
+**SAG-style guidance:** **`--sag-blur-sigma`** (e.g. small positive σ) and **`--sag-scale`** bias the denoising loop using a **blurred** copy of the current latent for a cheap self-attention guidance signal ([`diffusion/gaussian_diffusion.py`](diffusion/gaussian_diffusion.py)). Tuning is empirical; start small on σ and scale.
+
+**Post decode:** **`--face-enhance`** runs a light **face-region** sharpen/contrast pass ([`utils/quality/face_region_enhance.py`](utils/quality/face_region_enhance.py)). **`--post-reference-image`** + **`--post-reference-alpha`** blend a reference into the output in pixel space (optional **`--face-restore-shell`** if you wire an external restorer).
 
 **Prompt tricks**: `(word)` / `[word]` emphasis in `sample.py`; `--tags` / `--tags-file`; `--gender-swap`, anatomy/object/scene scales, `--character-sheet` JSON.
+
+### Prompt stack (technical)
+
+| Topic | Where |
+|:------|:------|
+| **Modules & order of operations** | **[docs/PROMPT_STACK.md](docs/PROMPT_STACK.md)** — `content_controls` → `neg_filter` → T5 |
+| **Copy-paste recipes** | **[docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md)** — presets, `--less-ai`, `--naturalize`, book flags |
+| **CLI preview (no checkpoint)** | `python scripts/tools/preview_generation_prompt.py --prompt "..." --safety-mode nsfw` |
+| **Debug** | `SDX_DEBUG=1` if `apply_content_controls` raises in `sample.py` |
 
 **OCR repair**: e.g. `--expected-text "OPEN" --ocr-fix` (pytesseract + masked inpaint).
 
@@ -886,9 +943,10 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
 |:------|:-----|
 | [pipelines/book_comic/scripts/generate_book.py](pipelines/book_comic/scripts/generate_book.py) | Canonical script (legacy: [scripts/book/generate_book.py](scripts/book/generate_book.py) forwards here) |
 | [pipelines/book_comic/book_helpers.py](pipelines/book_comic/book_helpers.py) | `--book-accuracy` presets (`none` → `production`), wiring to **`sample.py`** pick-best / CFG / post-process |
+| [pipelines/book_comic/consistency_helpers.py](pipelines/book_comic/consistency_helpers.py) | Character / prop / vehicle / setting / lettering JSON + CLI — merged into **`compose_book_page_prompt`** order |
 | [pipelines/book_comic/prompt_lexicon.py](pipelines/book_comic/prompt_lexicon.py) | Style snippets, merged negatives (incl. **production** tier), aspect presets, optional print/cover hints |
-| [utils/test_time_pick.py](utils/test_time_pick.py) | CLIP / edge / OCR **combo** scoring when `--num` > 1 |
-| [utils/quality.py](utils/quality.py) | Optional sharpen + **naturalize** after each page |
+| [utils/quality/test_time_pick.py](utils/quality/test_time_pick.py) | CLIP / edge / OCR **combo** scoring when `--num` > 1 |
+| [utils/quality/quality.py](utils/quality/quality.py) | Optional sharpen + **naturalize** after each page |
 | [data/caption_utils.py](data/caption_utils.py) | **prepend_quality_if_short** when preset enables it |
 
 **`--book-accuracy`:** `none` (legacy, single sample) \| `fast` \| `balanced` (2 candidates + combo pick + boost + light post) \| `maximum` (4 candidates + stronger post) \| **`production`** (6 candidates + stricter lexicon negatives + strongest default post). Override with `--sample-candidates`, `--pick-best`, `--post-sharpen`, `--cfg-scale`, `--vae-tiling`, etc. Full detail: **[pipelines/book_comic/README.md](pipelines/book_comic/README.md)**. Quality checklist: **[docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md)**.
@@ -1020,7 +1078,7 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | WandB / TensorBoard | `--wandb-project`, `--tensorboard-dir` |
 | Dry run | `--dry-run` |
 | Log samples | `--log-images-every`, `--log-images-prompt` |
-| Data quality script | `scripts/tools/data_quality.py` |
+| Data quality script | `scripts/tools/data/data_quality.py` |
 | Native JSONL QA (optional Rust build) | `data_quality.py` `--native-preflight` / `--native-stats` / `--native-validate`; `op_preflight.py` `--native-manifest-check`; `jsonl_merge.py`; `quick_test.py` `--show-native` — [native/README.md](native/README.md) |
 | Timestep sampling preview | `scripts/tools/training_timestep_preview.py` (compare `--timestep-sample-mode` distributions) |
 | DiT size compare | `scripts/tools/dit_variant_compare.py` (params / GiB / patch tokens; `--vae-scale`) |
@@ -1031,12 +1089,13 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | HF → JSONL (Danbooru-style) | `scripts/training/hf_export_to_sdx_manifest.py` + [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) |
 | Download + train (basic DiT-B) | `scripts/training/hf_download_and_train.py` (or `--demo` without HF) |
 | Book scene → line per page | `scripts/tools/book_scene_split.py` → `pages.txt` for `generate_book.py` |
-| Export ONNX | `scripts/tools/export_onnx.py` |
+| Export ONNX | `scripts/tools/export/export_onnx.py` |
 | Latent cache | `scripts/training/precompute_latents.py` + `--latent-cache-dir` |
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |
 | Test-time pick | `--num 4 --pick-best clip\|edge\|ocr\|combo` |
+| Reference tokens + SAG + face post | `sample.py` `--reference-image`, `--sag-blur-sigma`, `--face-enhance`, `--post-reference-image` — [Sampling](#sampling) |
 | RAE bridge | Train with RAE + bridge; ckpt stores `rae_latent_bridge` |
-| Safetensors export | `scripts/tools/export_safetensors.py` |
+| Safetensors export | `scripts/tools/export/export_safetensors.py` |
 
 </details>
 
@@ -1094,6 +1153,7 @@ sdx/
 ├── sample.py
 ├── inference.py
 ├── requirements.txt
+├── requirements-cuda128.txt
 └── README.md
 ```
 
