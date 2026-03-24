@@ -25,5 +25,9 @@ def test_vit_model_forward_smoke() -> None:
     with torch.no_grad():
         out = model(x, tf)
     assert out["quality_logit"].shape == (2,)
+    ar = torch.tensor([[1.0, 0, 0, 0], [0, 1.0, 0, 0]], dtype=torch.float32)
+    with torch.no_grad():
+        out2 = model(x, tf, ar_conditioning=ar)
+    assert out2["adherence_score"].shape == (2,)
     assert out["adherence_score"].shape == (2,)
     assert out["embedding"].shape[0] == 2

@@ -60,4 +60,4 @@ python train.py ^
 - Process starts, loads encoders/VAE, runs forward + backward at least once, exits without crash.
 - You are **not** expecting good images from synthetic data—only that the **stack is wired**.
 
-For forward-only checks without data, use `python scripts/tools/quick_test.py`.
+For forward-only checks without data, use `python scripts/tools/dev/quick_test.py`.

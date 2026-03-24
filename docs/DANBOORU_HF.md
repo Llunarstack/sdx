@@ -1,5 +1,7 @@
 # Training on Danbooru-style data from Hugging Face
 
+**Full Danbooru tag vocabulary + category/bucket files:** see [`data/danbooru/README.md`](../data/danbooru/README.md) and `scripts/tools/fetch_danbooru_tags.py` / `split_danbooru_general_tags.py` (official API categories + heuristic splits for clothes/objects/style).
+
 SDX trains from either **folders + sidecar captions** or a **JSONL manifest** (`image_path` + `caption`). Hugging Face hosts many **Danbooru-related** datasets; they are **not** all the same shape:
 
 | Type | What you get | SDX export |

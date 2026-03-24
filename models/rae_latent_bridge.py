@@ -15,7 +15,7 @@ import torch.nn as nn
 class RAELatentBridge(nn.Module):
     """Maps RAE latent (B, C_rae, h, w) ↔ DiT latent (B, 4, h, w). Spatial size unchanged."""
 
-    def __init__(self, rae_channels: int, dit_channels: int = 4):
+    def __init__(self, rae_channels: int, dit_channels: int = 4, *, learnable_output_scale: bool = False):
         super().__init__()
         if rae_channels <= 0 or dit_channels <= 0:
             raise ValueError("rae_channels and dit_channels must be positive")
@@ -27,12 +27,24 @@ class RAELatentBridge(nn.Module):
         nn.init.zeros_(self.to_dit.bias)
         nn.init.xavier_uniform_(self.to_rae.weight)
         nn.init.zeros_(self.to_rae.bias)
+        if learnable_output_scale:
+            self.scale_dit = nn.Parameter(torch.ones(1))
+            self.scale_rae = nn.Parameter(torch.ones(1))
+        else:
+            self.register_parameter("scale_dit", None)
+            self.register_parameter("scale_rae", None)
 
     def rae_to_dit(self, z_rae: torch.Tensor) -> torch.Tensor:
-        return self.to_dit(z_rae)
+        y = self.to_dit(z_rae)
+        if self.scale_dit is not None:
+            y = y * self.scale_dit
+        return y
 
     def dit_to_rae(self, z_dit: torch.Tensor) -> torch.Tensor:
-        return self.to_rae(z_dit)
+        y = self.to_rae(z_dit)
+        if self.scale_rae is not None:
+            y = y * self.scale_rae
+        return y
 
     def cycle_loss(self, z_rae: torch.Tensor) -> torch.Tensor:
         """L1 reconstruction: z ≈ to_rae(to_dit(z))."""

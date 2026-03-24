@@ -42,13 +42,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from utils.dit_architecture import (
+    from utils.architecture.dit_architecture import (
         dit_parameter_report,
         instantiate_dit_text,
         list_all_dit_registry_names,
     )
-    from utils.latent_geometry import dit_patch_size_from_variant_name
-    from utils.native_tools import get_latent_lib
+    from utils.native.latent_geometry import dit_patch_size_from_variant_name
+    from utils.native.native_tools import get_latent_lib
 
     names = [x.strip() for x in args.models.split(",") if x.strip()]
     if not names:

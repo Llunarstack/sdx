@@ -1,6 +1,6 @@
 # Local model stack (`model/`)
 
-When folders exist under `model/`, paths resolve automatically (see `utils/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](FILES.md)**.
+When folders exist under `model/`, paths resolve automatically (see `utils/modeling/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](FILES.md)**.
 
 | Role | Folder / default |
 |------|------------------|
@@ -33,5 +33,5 @@ When folders exist under `model/`, paths resolve automatically (see `utils/model
 
 ## Other
 
-- **Qwen prompt expansion:** `utils/llm_client.py` (`load_qwen_causal_lm`, `expand_prompt_qwen`).
+- **Qwen prompt expansion:** `utils/analysis/llm_client.py` (`load_qwen_causal_lm`, `expand_prompt_qwen`).
 - **Stable Cascade (Diffusers):** `python scripts/cascade_generate.py --prompt "..."` — separate from DiT; does not share the DiT forward pass.

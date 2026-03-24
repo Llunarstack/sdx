@@ -90,6 +90,18 @@ COVER_SPOTLIGHT_HINT = (
     "strong focal point on hero figure, title area reserved, balanced negative space for typography"
 )
 
+# Panel / grid hints (sequential art — model follows training; these are soft cues)
+PANEL_LAYOUT_HINTS: Dict[str, str] = {
+    "none": "",
+    "single": "single full-bleed panel, one clear focal composition",
+    "two_panel_horizontal": "two horizontal panels stacked, clear gutter between tiers",
+    "two_panel_vertical": "two vertical panels side by side, western comic gutters",
+    "three_panel_strip": "three panel horizontal strip, equal rhythm, readable flow",
+    "four_koma": "four panel vertical strip, yonkoma beat timing, punchline bottom panel",
+    "splash": "large splash panel with inset smaller panel, dynamic hierarchy",
+    "grid_2x2": "four equal panels in 2x2 grid, consistent line weight across cells",
+}
+
 # ---------------------------------------------------------------------------
 # Aspect presets (width x height) — suggestions; 0 means “model native” in generate_book
 # ---------------------------------------------------------------------------
@@ -173,3 +185,7 @@ def suggest_negative_addon(
 def aspect_dimensions(preset_name: str) -> Tuple[int, int]:
     key = (preset_name or "none").lower().strip()
     return ASPECT_PRESETS.get(key, (0, 0))
+
+
+def panel_layout_hint(name: str) -> str:
+    return PANEL_LAYOUT_HINTS.get((name or "none").lower().strip(), "")

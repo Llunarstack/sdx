@@ -35,9 +35,14 @@ Prompt (+ optional negative, style, control)
 - **Positive prompt** → tokenize (e.g. max_length=300) → T5 encoder → `cond_emb` shape `(1, L, 4096)`.
 - **Negative prompt** (or default like “blurry, worst quality, bad anatomy…”) → same pipeline → `uncond_emb`.
 - Optional **style** prompt → encoded and blended into conditioning (if `style_embed_dim` and `--style` are used).
-- Optional **creativity** scalar 0–1 is added as extra conditioning if the model was trained with `creativity_embed_dim`.
+- Optional **creativity** scalar 0–1 is added as extra conditioning if the model was trained with `creativity_embed_dim`. **`--creativity-jitter`** adds per-image noise (useful with **`--num`** > 1 for more spread).
+- Optional **`--originality`** (0–1) prepends random **composition / lighting** tokens after subject tags ([`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py)); train with **`--train-originality-prob`** for the same distribution at learning time.
 
 These embeddings are passed as `encoder_hidden_states` (and negative as `encoder_hidden_states_negative` for CFG).
+
+- Optional **`token_weights`** (per T5 position): `sample.py` parses `(word)` / `[word]` in the positive prompt, strips brackets for T5, and scales cross-attn conditioning (1.2 / 0.8). Training can mirror this with **`train.py --train-prompt-emphasis`** ([`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py), [TRAINING_TEXT_TO_PIXELS.md](TRAINING_TEXT_TO_PIXELS.md)).
+
+**Preview without a GPU:** `python scripts/tools/preview_generation_prompt.py --prompt "..."` runs `utils.prompt.content_controls` + the same pos/neg token conflict filter as `sample.py` (subset of flags; no checkpoint). Set `SDX_DEBUG=1` to print a traceback if `apply_content_controls` fails.
 
 ---
 

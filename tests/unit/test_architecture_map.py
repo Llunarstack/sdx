@@ -1,6 +1,6 @@
 """Smoke tests for utils/architecture_map.py (2026 theme → SDX mapping)."""
 
-from utils.architecture_map import (
+from utils.architecture.architecture_map import (
     ParityStatus,
     THEMES,
     iter_themes,

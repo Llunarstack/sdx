@@ -1,6 +1,6 @@
 """
 Optional ``native/`` helpers: discover built CLIs, run JSONL tools, FNV fingerprints,
-ctypes access to ``libsdx_latent``, and pure-Python fallbacks.
+ctypes access to ``libsdx_latent``, and pure-Python fallbacks (including JSONL stat/prompt-lint).
 
 Nothing here is required for ``train.py`` / ``sample.py``; failures degrade gracefully.
 """
@@ -67,11 +67,6 @@ def go_sdx_manifest_exe() -> Optional[Path]:
     return None
 
 
-def node_script(name: str) -> Optional[Path]:
-    p = REPO_ROOT / "native" / "js" / name
-    return p if p.is_file() else None
-
-
 def latent_shared_library_path() -> Optional[Path]:
     """First matching ``libsdx_latent`` build artifact."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
@@ -85,6 +80,71 @@ def latent_shared_library_path() -> Optional[Path]:
         if p.is_file() and p.stat().st_size > 0:
             return p
     return None
+
+
+def inference_timesteps_shared_library_path() -> Optional[Path]:
+    """First matching ``sdx_inference_timesteps`` build artifact (inference path finalization)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_inference_timesteps.dll",
+        cpp / "Debug" / "sdx_inference_timesteps.dll",
+        cpp / "libsdx_inference_timesteps.so",
+        cpp / "libsdx_inference_timesteps.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def beta_schedules_shared_library_path() -> Optional[Path]:
+    """First matching ``sdx_beta_schedules`` build artifact (squared-cosine betas)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_beta_schedules.dll",
+        cpp / "Debug" / "sdx_beta_schedules.dll",
+        cpp / "libsdx_beta_schedules.so",
+        cpp / "libsdx_beta_schedules.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def line_stats_shared_library_path() -> Optional[Path]:
+    """``sdx_line_stats`` — fast manifest byte + newline count."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_line_stats.dll",
+        cpp / "Debug" / "sdx_line_stats.dll",
+        cpp / "libsdx_line_stats.so",
+        cpp / "libsdx_line_stats.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_hwc_to_chw_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_hwc_to_chw`` (``-DSDX_BUILD_CUDA=ON``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_hwc_to_chw.dll",
+        cpp / "Debug" / "sdx_cuda_hwc_to_chw.dll",
+        cpp / "libsdx_cuda_hwc_to_chw.so",
+        cpp / "libsdx_cuda_hwc_to_chw.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def mojo_cli_path() -> str:
+    """Modular ``mojo`` or ``magic`` CLI if on PATH."""
+    return (shutil.which("mojo") or shutil.which("magic") or "").strip()
 
 
 def run_rust_jsonl_stats(manifest: Path, *, timeout: float = 600) -> subprocess.CompletedProcess[str]:
@@ -344,6 +404,15 @@ def merge_jsonl_files(
                     fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
+def _xxhash_available() -> bool:
+    try:
+        import xxhash  # type: ignore[import-untyped]
+
+        return True
+    except ImportError:
+        return False
+
+
 def native_stack_status() -> Dict[str, Any]:
     """Summary for diagnostics (e.g. ``quick_test --show-native``)."""
     return {
@@ -352,8 +421,14 @@ def native_stack_status() -> Dict[str, Any]:
         "zig_sdx_linecrc": str(zig_linecrc_exe() or ""),
         "zig_sdx_pathstat": str(zig_pathstat_exe() or ""),
         "go_sdx_manifest": str(go_sdx_manifest_exe() or ""),
-        "node": shutil.which("node") or "",
-        "native_js_sdx_jsonl_stat": str(node_script("sdx-jsonl-stat.mjs") or ""),
+        "jsonl_manifest_pure": "sdx_native.jsonl_manifest_pure (python -m sdx_native.jsonl_manifest_pure stat|promptlint)",
         "libsdx_latent": str(latent_shared_library_path() or ""),
+        "libsdx_inference_timesteps": str(inference_timesteps_shared_library_path() or ""),
+        "libsdx_beta_schedules": str(beta_schedules_shared_library_path() or ""),
+        "libsdx_line_stats": str(line_stats_shared_library_path() or ""),
+        "libsdx_cuda_hwc_to_chw": str(cuda_hwc_to_chw_shared_library_path() or ""),
+        "mojo_or_magic_cli": mojo_cli_path(),
         "latent_lib_ctypes": get_latent_lib().available,
+        "caption_text_hygiene": True,
+        "xxhash_installed": _xxhash_available(),
     }

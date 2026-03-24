@@ -1,0 +1,25 @@
+# Optional pip packages for SDX QoL (not required for core train/sample).
+# Install selectively: pip install -r toolkit/extras/requirements-suggested.txt
+#
+# Uncomment what you need:
+
+# xxhash
+# Fast caption fingerprints (sdx_native.text_hygiene, caption_hygiene.py)
+
+# rich
+# Prettier terminal tables / progress in custom scripts
+
+# humanize
+# Readable byte counts and durations in tooling output
+
+# orjson
+# Faster JSONL parsing in custom offline tools
+
+# psutil
+# RAM / disk checks in training preflight scripts
+
+# wandb
+# experiment tracking (train.py --wandb-project)
+
+# tensorboard
+# train.py --tensorboard-dir

@@ -5,8 +5,9 @@ from typing import Dict, Optional
 import timm
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from utils.ar_dit_vit import AR_COND_DIM, default_unknown_ar_batch
+from utils.architecture.ar_dit_vit import AR_COND_DIM, default_unknown_ar_batch
 
 
 class ViTQualityAdherenceModel(nn.Module):
@@ -32,11 +33,18 @@ class ViTQualityAdherenceModel(nn.Module):
         *,
         use_ar_conditioning: bool = True,
         ar_cond_dim: int = AR_COND_DIM,
+        fuse_dropout: float = 0.1,
+        text_proj_dropout: float = 0.0,
+        backbone_grad_checkpointing: bool = False,
     ):
         super().__init__()
         self.use_ar_conditioning = bool(use_ar_conditioning)
         self.ar_cond_dim = int(ar_cond_dim) if self.use_ar_conditioning else 0
+        self.text_proj_dropout = float(text_proj_dropout)
         self.backbone = timm.create_model(model_name, pretrained=pretrained, num_classes=0, global_pool="avg")
+        if backbone_grad_checkpointing and hasattr(self.backbone, "set_grad_checkpointing"):
+            self.backbone.set_grad_checkpointing(True)
+
         feat_dim = int(self.backbone.num_features)
 
         cond_in = int(text_feat_dim) + self.ar_cond_dim
@@ -45,11 +53,12 @@ class ViTQualityAdherenceModel(nn.Module):
             nn.GELU(),
             nn.LayerNorm(hidden_dim),
         )
+        fd = float(fuse_dropout)
         self.fuse = nn.Sequential(
             nn.Linear(feat_dim + hidden_dim, hidden_dim),
             nn.GELU(),
             nn.LayerNorm(hidden_dim),
-            nn.Dropout(0.1),
+            nn.Dropout(fd),
         )
         self.quality_head = nn.Linear(hidden_dim, 1)
         self.adherence_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
@@ -70,6 +79,8 @@ class ViTQualityAdherenceModel(nn.Module):
         else:
             x_txt = text_features
         txt_feat = self.text_proj(x_txt)
+        if self.text_proj_dropout > 0 and self.training:
+            txt_feat = F.dropout(txt_feat, p=self.text_proj_dropout, training=True)
         fused = self.fuse(torch.cat([img_feat, txt_feat], dim=1))
         quality_logit = self.quality_head(fused).squeeze(1)
         adherence_score = self.adherence_head(fused).squeeze(1)
@@ -88,6 +99,9 @@ def build_vit_model(
     *,
     use_ar_conditioning: bool = True,
     ar_cond_dim: int = AR_COND_DIM,
+    fuse_dropout: float = 0.1,
+    text_proj_dropout: float = 0.0,
+    backbone_grad_checkpointing: bool = False,
 ) -> ViTQualityAdherenceModel:
     return ViTQualityAdherenceModel(
         model_name=model_name,
@@ -96,4 +110,7 @@ def build_vit_model(
         hidden_dim=hidden_dim,
         use_ar_conditioning=use_ar_conditioning,
         ar_cond_dim=ar_cond_dim,
+        fuse_dropout=fuse_dropout,
+        text_proj_dropout=text_proj_dropout,
+        backbone_grad_checkpointing=backbone_grad_checkpointing,
     )

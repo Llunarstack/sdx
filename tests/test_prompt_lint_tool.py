@@ -22,7 +22,7 @@ def sample_jsonl(tmp_path: Path) -> Path:
 
 
 def run_prompt_lint(args: list[str], jsonl: Path) -> subprocess.CompletedProcess[str]:
-    script = ROOT / "scripts" / "tools" / "prompt_lint.py"
+    script = ROOT / "scripts" / "tools" / "prompt" / "prompt_lint.py"
     cmd = [sys.executable, str(script), str(jsonl), *args]
     return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 

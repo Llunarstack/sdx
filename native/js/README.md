@@ -1,12 +1,12 @@
-# Node (zero-build) scripts
+# JavaScript tools (removed)
 
-Requires **Node 18+**.
-
-| File | Role |
-|------|------|
-| **`sdx-jsonl-stat.mjs`** | Quick manifest stats |
-| **`sdx-promptlint.mjs`** | Prompt overlap / caption heuristics |
+Former `*.mjs` helpers live in pure Python now:
 
 ```bash
-node native/js/sdx-jsonl-stat.mjs data/manifest.jsonl
+python -m sdx_native.jsonl_manifest_pure stat path/to/manifest.jsonl
+python -m sdx_native.jsonl_manifest_pure promptlint path/to/manifest.jsonl
 ```
+
+(`native/python` must be on `PYTHONPATH`, or run from repo root with `pyproject.toml` / `pytest` paths.)
+
+For a compiled fast path, build **Rust** `native/rust/sdx-jsonl-tools` instead.

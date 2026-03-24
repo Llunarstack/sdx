@@ -14,13 +14,19 @@ Quick links to all project docs, grouped by purpose.
 | [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
 | [CODEBASE_ORGANIZATION.md](CODEBASE_ORGANIZATION.md) | **Repo structure rules:** layers, where to add code, what not to move without a migration. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
-| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Post-diffusion era:** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
-| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency narratives:** coherency/4K, LLaDA-class ideas, test-time compute, live grounding, Mamba — **disclaimers** + SDX mapping ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
+| [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
+| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Post-diffusion era:** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
+| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency narratives:** coherency/4K, LLaDA-class ideas, test-time compute, live grounding, Mamba — **disclaimers** + SDX mapping ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) | **Start here to navigate:** top-level tree, `scripts/` layout, where to add code. |
-| [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`scripts/tools/update_project_structure.py`). |
+| [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`scripts/tools/repo/update_project_structure.py`). |
 | [CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect (train → checkpoint → sample). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | Generation pipeline: prompt → T5 → diffusion loop → DiT → VAE → image; AR and ported code. |
+| [PROMPT_STACK.md](PROMPT_STACK.md) | **Inference text path:** `content_controls` → `neg_filter` → encoder; flag cheat sheet; links to preview CLI. |
+| [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | **Lower-level / native libs:** in-repo Rust/Zig/C++/Go tools + ecosystem picks (image I/O, tokenization, QA) mapped to **quality**, **training**, **prompt adherence**. |
+| [MODEL_ENHANCEMENTS.md](MODEL_ENHANCEMENTS.md) | Shared model blocks (**RMSNorm**, **FiLM**, **DropPath**) + multimodal **cross-attn**, cascade **blend**, **RAE** learnable scales. |
+| [../toolkit/README.md](../toolkit/README.md) | **QoL toolkit:** `python -m toolkit.training.env_health`, manifest digest, seeds, step timer, suggested optional pip packages. |
+| [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book). |
 
 ---
 
@@ -30,6 +36,7 @@ Quick links to all project docs, grouped by purpose.
 |-----|--------------|
 | [HARDWARE.md](HARDWARE.md) | PC specs, VRAM, storage, latent cache. |
 | [AR.md](AR.md) | Block-wise autoregressive (AR): 0 vs 2 vs 4 blocks, when to use. |
+| [TRAINING_TEXT_TO_PIXELS.md](TRAINING_TEXT_TO_PIXELS.md) | **Text tokens ↔ latent patches:** faithful “dissection” vs originality; captions, negatives, creativity, caption dropout. |
 | [STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md) | Style/artist tags (PixAI, Danbooru): extraction, training, `--auto-style-from-prompt`. |
 | [DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior domains. |
 | [MODEL_WEAKNESSES.md](MODEL_WEAKNESSES.md) | Hands, faces, text, composition: causes and fixes. |
@@ -50,9 +57,9 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
-| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 industry context:** production-grade gen, authenticity, system-of-experts pipelines, 4K/aspect, text-in-image, grounding — mapped to SDX ([utils/orchestration.py](../utils/orchestration.py)). |
-| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Research / architecture:** flow matching, diffusion bridges, hybrid AR+DiT, Mamba, distillation, semantic latents — vs SDX ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
-| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Industry workflow commentary** (efficiency, grounding, test-time compute) — **disclaimers** + SDX hooks ([`utils/architecture_map.py`](../utils/architecture_map.py)). |
+| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 industry context:** production-grade gen, authenticity, system-of-experts pipelines, 4K/aspect, text-in-image, grounding — mapped to SDX ([utils/generation/orchestration.py](../utils/generation/orchestration.py)). |
+| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Research / architecture:** flow matching, diffusion bridges, hybrid AR+DiT, Mamba, distillation, semantic latents — vs SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
+| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Industry workflow commentary** (efficiency, grounding, test-time compute) — **disclaimers** + SDX hooks ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: consistency, GLIGEN/Control-style ideas, lettering, **prompt_lexicon** + `generate_book` flags. |
 | [BOOK_MODEL_EXCELLENCE.md](BOOK_MODEL_EXCELLENCE.md) | “Best book output” checklist: data, training, `--book-accuracy production`, pick-best, OCR/anchoring. |
 | [../ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | **ViT/ vs DiT:** scoring stack vs generator; Swin-DiT, FiT, reward/IQA papers; timm backbone presets. |
@@ -86,14 +93,15 @@ These are **not all hard dependencies** of SDX, but they inform our defaults, pr
 
 ## Maintenance / sanity checks
 
-- `scripts/tools/smoke_imports.py` — Import smoke-test for internal modules (catches broken imports early).
-- `scripts/tools/tag_coverage.py` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
+- `scripts/tools/dev/smoke_imports.py` — Import smoke-test for internal modules (catches broken imports early).
+- `scripts/tools/prompt/tag_coverage.py` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
 - `scripts/tools/spatial_coverage.py` — Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...).
 - `scripts/tools/training_timestep_preview.py` — Preview histograms for `--timestep-sample-mode` (uniform / logit_normal / high_noise) before long training runs.
 - `scripts/tools/dit_variant_compare.py` — Parameter counts and FP32/BF16 GiB estimates for DiT / EnhancedDiT registry names.
-- `scripts/tools/vit_inspect.py` — Inspect ViT quality checkpoints (config + optional module tree via `utils/nn_inspect.py`).
-- `scripts/tools/op_preflight.py` — One-shot “coverage + thresholds” gate (PASS/FAIL) before training.
+- `scripts/tools/vit_inspect.py` — Inspect ViT quality checkpoints (config + optional module tree via `utils/modeling/nn_inspect.py`).
+- `scripts/tools/ops/op_preflight.py` — One-shot “coverage + thresholds” gate (PASS/FAIL) before training.
 - `scripts/tools/complex_prompt_coverage.py` — Check coverage for clothes/weapons/food/text/foreground/background/weird/NSFW categories.
 - `scripts/tools/prompt_gap_scout.py` — Analyze a single prompt and suggest missing tricky category keywords.
+- [`scripts/tools/preview_generation_prompt.py`](../scripts/tools/preview_generation_prompt.py) — Print effective positive/negative after `content_controls` + neg filter (no checkpoint).
 
 Run from repo root so `config`, `data`, `diffusion`, `models`, `utils` are on `sys.path`.

@@ -142,3 +142,51 @@ Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornn
 - `--cfg-rescale 0.7`, lower `--cfg-scale` — v-pred burn, oversaturation
 
 **Config:** All related negatives and tip lists are in `config/prompt_domains.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`, `EMOTION_PROMPT_TIPS`, `SPATIAL_AWARENESS_TIPS`). See COMMON_ISSUES.md for the full issue → mitigation table.
+
+---
+
+## 10. Gaps: what frontier models still struggle with — and what SDX does **not** fully solve
+
+This section is the honest complement to §1–9 and [COMMON_ISSUES.md](COMMON_ISSUES.md): **community mitigations** (prompts, negatives, flags) are not the same as a **guaranteed fix**. Below, **“no in-repo fix”** means there is no integrated module that *enforces* correctness; you rely on training data, luck, or external tools.
+
+### A. Still fundamentally hard (diffusion + CLIP/T5 blind spots)
+
+| Problem | Why models fail | What SDX has | What we **don’t** have |
+| :--- | :--- | :--- | :--- |
+| **Arbitrary spelled text** | Text is learned as texture; long strings are unstable. | OCR-guided **repair** when you know the target string (`sample.py` / `generate_book.py` + `utils/generation/text_rendering.py`); lettering negatives; book pipeline expected text. | General “render this exact paragraph” without **known** expected text; no diffusers-style dedicated text renderer layer in-core. |
+| **Exact counts** (“exactly 7 coins”) | No discrete counter in the denoiser. | Dataset-side `add_anti_blending_and_count`, explicit prompt counts, negatives for merging. | **Verifier** or constrained decoding that guarantees cardinality at inference. |
+| **Fine spatial logic** (“left hand holds blue cup, right waves”) | Conditioning is global; relations are fuzzy. | `SPATIAL_AWARENESS_TIPS`, `--subject-first`, early prompt ordering. | Scene-graph / layout-conditioned attention (ControlNet-class conditioning is only partially exposed via `control_cond_dim` on `DiT_Text` — not a full layout stack). |
+| **Physical plausibility** | No simulation; only statistics of pixels. | Tips, pick-best metrics (`utils/quality/test_time_pick.py`), orchestration hooks. | Physics engine, 3D consistency, reflection law enforcement ([`architecture_map`](../utils/architecture/architecture_map.py): `physical_grounding` = not in repo). |
+| **Identity across unrelated images** | No persistent memory per user. | `--character-sheet`, **`--reference-image`** + CLIP → extra cross-attn tokens (`DiT_Text`), book anchors, `consistency_helpers`. | Strong identity still needs **trained** `--reference-adapter-pt` or LoRA; default projector is randomly initialized. |
+| **Video / temporal coherence** | Out of scope for single-image DiT. | — | Native video diffusion or frame consistency training. |
+
+### B. Partially mitigated (prompts + data — not architectural guarantees)
+
+| Problem | SDX mitigation | Remaining gap |
+| :--- | :--- | :--- |
+| **Hands / anatomy** | `DOMAIN_TAGS`, `NEGATIVE_ANATOMY`, `HAND_FIX_PROMPT_TIPS` | No **auxiliary anatomy loss** or hand keypoint head on the denoiser ([`auxiliary_structure_supervision`](../utils/architecture/architecture_map.py)). |
+| **Distant / small faces** | `DISTANT_FACE_TIPS`, `GARBLED_FACE_TIPS` in `config/prompt_domains.py` | In `sample.py`: **`--face-enhance`** (Haar + local sharpen/contrast), **`--face-restore-shell`** for external GFPGAN/ADetailer CLIs; not a full in-repo face restoration model. |
+| **Composition / cropping** | `NEGATIVE_COMPOSITION`, quality tags | No automatic “subject saliency” crop at inference (training has `crop-mode` only). |
+| **Style / concept bleeding** | `--anti-bleed`, dataset boosts | No token-level cross-attention steering (SAG / per-token scale) — see [IMPROVEMENTS.md](IMPROVEMENTS.md) §2.2. |
+
+### C. Training / inference tooling gaps (listed elsewhere, summarized)
+
+These are called out in [IMPROVEMENTS.md](IMPROVEMENTS.md) and [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md):
+
+- **Few-step distilled student** (consistency / DMD) — no trainer in repo.  
+- **Full flow-matching / rectified-flow training** — not drop-in for current `GaussianDiffusion` ([MODERN_DIFFUSION.md](MODERN_DIFFUSION.md)).  
+- **Extra samplers** (DPM++ / UniPC as first-class flags) — DDIM/Euler-style path is primary; more schedulers are “add” items.  
+- **Inpaint-aware *training*** (random latent masks) — not wired; inpainting is inference/workflow (`sample.py`, book pipeline).  
+- **DDP + resolution buckets** — buckets exist; multi-GPU + buckets is constrained.  
+- **WebDataset / giant-scale streaming** — optional future in IMPROVEMENTS.  
+- **Live web retrieval** — facts via `utils/rag_prompt.py` only; no built-in crawl.
+
+### D. Where to invest if you want to *close* gaps (not just document them)
+
+1. **Text:** double down on OCR + expected-text workflows **or** train with readable text in-domain; consider external typography for production UI.  
+2. **Structure:** auxiliary heads or ControlNet-style conditioning (see [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) §3–4).  
+3. **Identity:** reference-image adapter or stronger character-sheet conditioning in `DiT_Text`.  
+4. **Inference control:** SAG / cross-attn hooks in `sample.py` ([IMPROVEMENTS.md](IMPROVEMENTS.md) §2.2).  
+5. **Faces at distance:** optional post-pass script wrapping GFPGAN/CodeFormer or face-region inpaint — **bridge** the doc↔code gap ADetailer users expect.
+
+When you ship a new fix, update **§1–9** or [COMMON_ISSUES.md](COMMON_ISSUES.md) for users, and **`architecture_map.py`** for theme status.

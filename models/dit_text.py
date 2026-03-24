@@ -283,7 +283,7 @@ class TextEmbedder(nn.Module):
 
 
 class DiT_Text(nn.Module):
-    """DiT + text (PixArt-style). Negative prompt, styles, ControlNet, block AR, xformers. No reference image — excels on dataset only."""
+    """DiT + text (PixArt-style). Negative prompt, styles, ControlNet, optional reference_tokens (CLIP→extra cross-attn), block AR, xformers."""
 
     def __init__(
         self,
@@ -550,6 +550,21 @@ class DiT_Text(nn.Module):
             if style_emb.dim() == 2:
                 style_emb = style_emb.unsqueeze(1).expand(-1, text_emb.size(1), -1)
             text_emb = text_emb + style_strength * style_emb
+        # IP-Adapter-style: optional image-derived tokens (same dim as text_emb after TextEmbedder).
+        ref_tok = kwargs.get("reference_tokens")
+        if ref_tok is not None:
+            rs = float(kwargs.get("reference_scale", 1.0) or 0.0)
+            if rs > 0.0:
+                rt = ref_tok.to(device=text_emb.device, dtype=text_emb.dtype)
+                if rt.shape[0] != text_emb.shape[0]:
+                    if rt.shape[0] == 1:
+                        rt = rt.expand(text_emb.shape[0], -1, -1)
+                    else:
+                        raise ValueError(
+                            "reference_tokens batch must match encoder_hidden_states batch "
+                            f"({rt.shape[0]} vs {text_emb.shape[0]})"
+                        )
+                text_emb = torch.cat([text_emb, rt * rs], dim=1)
         c = t_emb
         size_embed = kwargs.get("size_embed")
         if size_embed is None and self.size_embedder is not None and self.size_proj is not None:

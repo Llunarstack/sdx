@@ -2,6 +2,8 @@
 
 Short, opinionated recipes that use the flags and presets you’ve added (`--preset`, `--op-mode`, `--hard-style`, `--naturalize`, `--anti-bleed`, `--diversity`, etc.).
 
+**How the prompt is built (modules and order):** see **[PROMPT_STACK.md](PROMPT_STACK.md)**. **Preview without sampling:** `python scripts/tools/preview_generation_prompt.py --prompt "..."`.
+
 All examples assume:
 
 ```bash

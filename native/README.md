@@ -1,4 +1,6 @@
-# SDX native helpers (Rust, Zig, C++, Go)
+# SDX native helpers (Rust, Zig, C++, CUDA, Go, Mojo)
+
+**Broader map (ecosystem libs + how they help quality / training / adherence):** [docs/NATIVE_AND_SYSTEM_LIBS.md](../docs/NATIVE_AND_SYSTEM_LIBS.md).
 
 Small **high-throughput utilities** around the Python training stack. They are **optional**: `train.py` / `sample.py` do not depend on them, but they speed up dataset QA and give reusable math/code for extensions (e.g. custom preprocessors, bindings).
 
@@ -7,10 +9,11 @@ Small **high-throughput utilities** around the Python training stack. They are *
 | **Rust** `rust/sdx-jsonl-tools` | Stream a manifest JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`** (one path per line for shell pipelines), **`dup-image-paths`** (duplicate image keys before dedup). |
 | **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over file bytes (manifest change detection). |
 | **Zig** `zig/sdx-pathstat` | Given a **newline-separated path list**, print `path<TAB>size_bytes<TAB>ok|missing` (fast file-exists + size audit; pair with Rust `image-paths`). |
-| **C++** `cpp/` | `libsdx_latent` — DiT/VAE **latent grid** helpers (`image_size`, `vae_scale`, `patch_size`, **`latent_numel`**) with **C ABI** for ctypes / other FFI. |
+| **C++** `cpp/` | `libsdx_latent`, **`sdx_line_stats`** (fast JSONL byte + newline count), inference/beta helpers — **C ABI** for ctypes. |
+| **CUDA** `cpp/cuda/` + [cuda/README.md](cuda/README.md) | Optional **`sdx_cuda_hwc_to_chw`** — uint8 HWC→float NCHW; build with `-DSDX_BUILD_CUDA=ON`. |
+| **Mojo** `mojo/` + [mojo/README.md](mojo/README.md) | Optional **Modular Mojo** stubs + **Python** `mojopy` launcher for CPU/SIMD experiments. |
 | **Go** `go/sdx-manifest` | Merge multiple JSONL files; optional dedupe by image path (first wins). |
-| **Node** `js/sdx-jsonl-stat.mjs` | Zero-build manifest stats if you already have **Node 18+** (no Rust install). |
-| **Node** `js/sdx-promptlint.mjs` | Zero-build prompt adherence lint for JSONL (pos/neg overlap, empty captions, token heuristics). |
+| **Python** `sdx_native.jsonl_manifest_pure` | Zero-build manifest **stats** + **prompt-lint** (same role as the old `js/*.mjs`; no Node). |
 
 ## Build (quick)
 
@@ -38,6 +41,9 @@ cd native/cpp
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 # shared library: build/libsdx_latent.so or sdx_latent.dll + import lib on MSVC
+# optional CUDA kernel (requires nvcc):
+# cmake -S . -B build -DSDX_BUILD_CUDA=ON
+# cmake --build build --config Release
 ```
 
 ### Go
@@ -46,11 +52,24 @@ cd native/go/sdx-manifest
 go build -o sdx-manifest .
 ```
 
-### Node (optional)
+### Python JSONL stat / prompt-lint (no install)
 ```bash
-node native/js/sdx-jsonl-stat.mjs data/manifest.jsonl
-node native/js/sdx-promptlint.mjs data/manifest.jsonl
+python -m sdx_native.jsonl_manifest_pure stat data/manifest.jsonl
+python -m sdx_native.jsonl_manifest_pure promptlint data/manifest.jsonl
 ```
+
+### One-shot native build (C++ + optional CUDA + Rust)
+```powershell
+.\scripts\tools\native\build_native.ps1
+# CPU-only C++:
+#   $env:SDX_BUILD_CUDA='0'; .\scripts\tools\native\build_native.ps1
+```
+```bash
+bash scripts/tools/native/build_native.sh
+```
+
+### Mojo (Pixi, linux-64 / WSL2)
+See [mojo/README.md](mojo/README.md) and `native/mojo/pixi.toml`. On Windows use `install_mojo_wsl.ps1` or WSL `pixi install` under `native/mojo`.
 
 ## Use with SDX manifests
 
@@ -58,7 +77,7 @@ Manifest lines should be JSON objects with at least:
 - `image_path` (or `path` / `image`)
 - `caption` (or `text`)
 
-Same conventions as `data/t2i_dataset.py` and `scripts/tools/data_quality.py`.
+Same conventions as `data/t2i_dataset.py` and `scripts/tools/data/data_quality.py`.
 
 ### Example: Rust validate + stats
 ```bash
@@ -105,18 +124,19 @@ print(dll.sdx_latent_numel(4, 32, 32))  # 4 * 32 * 32 latent elements
 
 | Location | Role |
 |----------|------|
-| **`native/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
-| **`utils/latent_geometry.py`** · **`utils/native_tools.py`** | Thin shims (add `native/python` to `sys.path`) so existing `from utils.native_tools import …` keeps working. |
+| **`native/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `text_hygiene.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
+| **`utils/native/latent_geometry.py`** · **`utils/native/text_hygiene.py`** · **`utils/native/native_tools.py`** | Thin shims (add `native/python` to `sys.path`) so existing `from utils.native.native_tools import …` keeps working. |
 | **`pyproject.toml`** | Pytest **`pythonpath`** includes `native/python` so `import sdx_native` works in tests. |
 
 **Wired scripts**
 
-- **`scripts/tools/data_quality.py`** — `--native-preflight` (Rust `stats` before filter), `--native-stats` (stats only), `--native-validate` (strict Rust validate).
-- **`scripts/tools/op_preflight.py`** — `--native-manifest-check` (Rust `stats` to stderr before coverage scan).
+- **`scripts/tools/data/data_quality.py`** — `--native-preflight` (Rust `stats` before filter), `--native-stats` (stats only), `--native-validate` (strict Rust validate).
+- **`scripts/tools/data/caption_hygiene.py`** — JSONL **NFKC** samples, **caption fingerprint** dup report, pos/neg overlap (`sdx_native.text_hygiene`); pairs with `train.py --caption-unicode-normalize`.
+- **`scripts/tools/ops/op_preflight.py`** — `--native-manifest-check` (Rust `stats` to stderr before coverage scan).
 - **`scripts/tools/dit_variant_compare.py`** — prints **patch token count** via `libsdx_latent` or Python math (`--vae-scale`).
-- **`scripts/tools/jsonl_merge.py`** — merge manifests; prefers Go **`sdx-manifest`** if built.
-- **`scripts/tools/manifest_paths.py`** — **`image-paths`** / **`dup-image-paths`** (Rust); pipe to Zig **`sdx-pathstat`** for byte sizes.
-- **`scripts/tools/quick_test.py`** — `--show-native` prints discovery JSON (paths empty until you build tools).
+- **`scripts/tools/data/jsonl_merge.py`** — merge manifests; prefers Go **`sdx-manifest`** if built.
+- **`scripts/tools/data/manifest_paths.py`** — **`image-paths`** / **`dup-image-paths`** (Rust); pipe to Zig **`sdx-pathstat`** for byte sizes.
+- **`scripts/tools/dev/quick_test.py`** — `--show-native` prints discovery JSON (paths empty until you build tools).
 
 ## Why these languages?
 

@@ -9,6 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
+def test_binary_focal_loss_with_logits() -> None:
+    from ViT.losses import binary_focal_loss_with_logits
+
+    logits = torch.tensor([2.0, -2.0], dtype=torch.float32)
+    targets = torch.tensor([1.0, 0.0], dtype=torch.float32)
+    l_focal = binary_focal_loss_with_logits(logits, targets, gamma=2.0)
+    l_plain = binary_focal_loss_with_logits(logits, targets, gamma=0.0)
+    assert l_focal.ndim == 0 and l_plain.ndim == 0
+    assert float(l_plain) > 0
+
+
 def test_pairwise_ranking_loss_prefers_correct_order() -> None:
     from ViT.losses import pairwise_ranking_loss
 

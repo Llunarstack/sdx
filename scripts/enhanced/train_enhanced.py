@@ -28,8 +28,8 @@ from data.enhanced_dataset import EnhancedT2IDataset, collate_enhanced_batch
 from diffusion.gaussian_diffusion import create_diffusion
 from models.enhanced_dit import EnhancedDiT_models
 from training.enhanced_trainer import create_enhanced_trainer
-from utils.error_handling import setup_logging
-from utils.metrics import MetricsTracker, TrainingMetrics
+from utils.training.error_handling import setup_logging
+from utils.training.metrics import MetricsTracker, TrainingMetrics
 
 # Enable TF32 on Ampere+ for speed
 torch.backends.cuda.matmul.allow_tf32 = True

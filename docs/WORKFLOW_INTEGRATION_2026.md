@@ -13,7 +13,7 @@
 
 ## Context
 
-As of **early 2026**, much of the field’s energy has shifted from “make prettier pixels” to **workflow integration** (fits real pipelines) and **mathematical efficiency** (fewer steps, better scaling, less waste). Below are **themes** often discussed in that context — with a **straight mapping to SDX** where applicable ([`utils/architecture_map.py`](../utils/architecture_map.py), extended rows `workflow_*` / `llada_*` / `test_time_*` / `live_grounding_*`).
+As of **early 2026**, much of the field’s energy has shifted from “make prettier pixels” to **workflow integration** (fits real pipelines) and **mathematical efficiency** (fewer steps, better scaling, less waste). Below are **themes** often discussed in that context — with a **straight mapping to SDX** where applicable ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py), extended rows `workflow_*` / `llada_*` / `test_time_*` / `live_grounding_*`).
 
 ---
 
@@ -27,7 +27,7 @@ As of **early 2026**, much of the field’s energy has shifted from “make pret
 **SDX**
 
 - **Native resolution:** `sample.py` **width/height**, **VAE tiling** for large decodes; training **`--resolution-buckets`** ([`data/t2i_dataset.py`](../data/t2i_dataset.py)) for multi-aspect / multi-res **single-GPU** training.
-- **Multi-angle consistency:** **Not** a built-in 3D/pose engine; use **data + captions**, **Control**-style paths where supported, **character lock** helpers ([`utils/character_lock.py`](../utils/character_lock.py)), and **[`docs/LANDSCAPE_2026.md`](LANDSCAPE_2026.md)** for consistency themes.
+- **Multi-angle consistency:** **Not** a built-in 3D/pose engine; use **data + captions**, **Control**-style paths where supported, **character lock** helpers ([`utils/consistency/character_lock.py`](../utils/consistency/character_lock.py)), and **[`docs/LANDSCAPE_2026.md`](LANDSCAPE_2026.md)** for consistency themes.
 
 ---
 
@@ -59,8 +59,8 @@ As of **early 2026**, much of the field’s energy has shifted from “make pret
 **SDX (partial)**
 
 - **Refinement** pass in **`sample.py`** (small **re-noise** + **denoise**).
-- **Multi-candidate + selection:** `--num K` + **`--pick-best`** ([`utils/test_time_pick.py`](../utils/test_time_pick.py)) — e.g. `clip`, `edge`, `ocr`, `combo`, **`combo_exposure`**.
-- **Pipeline wrapper:** [`scripts/tools/orchestrate_pipeline.py`](../scripts/tools/orchestrate_pipeline.py), [`utils/orchestration.py`](../utils/orchestration.py).
+- **Multi-candidate + selection:** `--num K` + **`--pick-best`** ([`utils/quality/test_time_pick.py`](../utils/quality/test_time_pick.py)) — e.g. `clip`, `edge`, `ocr`, `combo`, **`combo_exposure`**.
+- **Pipeline wrapper:** [`scripts/tools/ops/orchestrate_pipeline.py`](../scripts/tools/ops/orchestrate_pipeline.py), [`utils/generation/orchestration.py`](../utils/generation/orchestration.py).
 
 This is **not** a full internal **latent self-critique** loop like a closed proprietary stack — it’s **explicit** test-time **scoring** and **optional** refinement.
 
@@ -75,7 +75,7 @@ This is **not** a full internal **latent self-critique** loop like a closed prop
 
 **SDX (partial)**
 
-- **Merge user facts into the prompt:** [`utils/rag_prompt.py`](../utils/rag_prompt.py) (`merge_facts_into_prompt`, `load_facts_from_jsonl`). **You** supply retrieval; the model sees **frozen** encoders after that.
+- **Merge user facts into the prompt:** [`utils/prompt/rag_prompt.py`](../utils/prompt/rag_prompt.py) (`merge_facts_into_prompt`, `load_facts_from_jsonl`). **You** supply retrieval; the model sees **frozen** encoders after that.
 - **No** built-in web browser or API in core `train.py` / `sample.py`.
 
 ---
@@ -98,4 +98,4 @@ This is **not** a full internal **latent self-critique** loop like a closed prop
 - [`LANDSCAPE_2026.md`](LANDSCAPE_2026.md) — production & authenticity trends  
 - [`ARCHITECTURE_SHIFT_2026.md`](ARCHITECTURE_SHIFT_2026.md) — flow, bridges, hybrid AR+DiT, RAE  
 - [`MODERN_DIFFUSION.md`](MODERN_DIFFUSION.md) — timestep sampling & roadmap  
-- [`utils/architecture_map.py`](../utils/architecture_map.py) — theme IDs + `workflow_*` rows  
+- [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) — theme IDs + `workflow_*` rows  

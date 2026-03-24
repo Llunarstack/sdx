@@ -10,7 +10,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from utils.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
+from utils.architecture.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)
 
@@ -58,17 +58,37 @@ class ViTManifestDataset(Dataset):
       - num_ar_blocks / dit_num_ar_blocks / ar_blocks (optional; 0, 2, or 4 for DiT AR — see docs/AR.md)
     """
 
-    def __init__(self, manifest_jsonl: str, image_root: str = "", image_size: int = 224):
+    def __init__(
+        self,
+        manifest_jsonl: str,
+        image_root: str = "",
+        image_size: int = 224,
+        *,
+        training_augment: bool = False,
+    ):
         self.manifest_path = Path(manifest_jsonl)
         self.image_root = Path(image_root) if image_root else None
         self.samples: List[Dict[str, object]] = []
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((image_size, image_size), interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
-        )
+        if training_augment:
+            self.transform = transforms.Compose(
+                [
+                    transforms.RandomResizedCrop(
+                        image_size, scale=(0.85, 1.0), ratio=(0.9, 1.1), interpolation=transforms.InterpolationMode.BILINEAR
+                    ),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.ColorJitter(brightness=0.08, contrast=0.08, saturation=0.08, hue=0.02),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                ]
+            )
+        else:
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize((image_size, image_size), interpolation=transforms.InterpolationMode.BILINEAR),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                ]
+            )
         self._load()
 
     def _resolve_path(self, p: str) -> Path:

@@ -1,6 +1,6 @@
 """
 Generate an image from a text prompt using a trained checkpoint.
-Supports: prompt, negative prompt, steps, width, height, CFG, scheduler (ddim/euler).
+Supports: prompt, negative prompt, steps, width, height, CFG, timestep schedules (ddim, euler, karras_rho, …) and solvers (ddim, heun).
 Optional: style, control-image, lora, img2img, inpainting, sharpen, contrast, emphasis (word)/[word].
 
 Presets and OP modes:
@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 from typing import Tuple
 
@@ -24,8 +25,10 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.model_presets import apply_op_mode_to_args, apply_preset_to_args
-from diffusion import create_diffusion
-from utils.checkpoint_loading import load_dit_text_checkpoint
+from diffusion import INFERENCE_SOLVERS, create_diffusion, list_timestep_schedules
+from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+from utils.prompt.neg_filter import filter_negative_by_positive
+from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
 
 
 def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
@@ -59,58 +62,6 @@ def load_model_from_ckpt(ckpt_path, device="cuda"):
 _t5_cache = {}
 _T5_CACHE_MAX = 32  # limit entries to avoid unbounded memory
 
-
-def _parse_prompt_emphasis(prompt: str):
-    """Parse (word) -> weight 1.2, [word] -> 0.8. Returns (cleaned_prompt, segments) with segments = [(start, end, weight), ...] in cleaned."""
-    cleaned = ""
-    segments = []
-    parts = re.split(r"(\([^)]*\)|\[[^\]]*\))", prompt)
-    for p in parts:
-        if p.startswith("(") and p.endswith(")"):
-            content = p[1:-1]
-            start = len(cleaned)
-            cleaned += content
-            segments.append((start, len(cleaned), 1.2))
-        elif p.startswith("[") and p.endswith("]"):
-            content = p[1:-1]
-            start = len(cleaned)
-            cleaned += content
-            segments.append((start, len(cleaned), 0.8))
-        else:
-            start = len(cleaned)
-            cleaned += p
-            if p:
-                segments.append((start, len(cleaned), 1.0))
-    return cleaned.strip(), segments
-
-
-def _positive_token_set(text: str) -> set:
-    """Normalize prompt to a set of tokens (comma/space split, lowercased) for conflict detection."""
-    if not (text or text.strip()):
-        return set()
-    tokens = []
-    for part in text.split(","):
-        tokens.extend(part.split())
-    return {t.strip().lower() for t in tokens if t.strip()}
-
-
-def _filter_negative_by_positive(positive: str, negative: str) -> str:
-    """
-    Remove from the negative prompt any token that also appears in the positive,
-    so CFG does not push away from what the user asked for (pos/neg conflict resolution).
-    Splits on comma and space; comparison is case-insensitive.
-    """
-    pos_set = _positive_token_set(positive)
-    if not pos_set:
-        return negative
-    kept = []
-    for part in negative.split(","):
-        words = part.split()
-        filtered_words = [w for w in words if w.strip().lower() not in pos_set]
-        if filtered_words:
-            kept.append(" ".join(filtered_words))
-    result = ", ".join(kept).strip()
-    return result if result else " "
 
 
 def _parse_scale_csv(value: str) -> list:
@@ -258,11 +209,13 @@ def _normalize_list_or_str(v) -> list:
     return []
 
 
-def _sanitize_character_prompt_tokens(tokens: list, negative_tokens: list) -> Tuple[list, list]:
+def _sanitize_character_prompt_tokens(tokens: list, negative_tokens: list, *, uncensored_mode: bool = False) -> Tuple[list, list]:
     """
     Prevent explicitly sexual tokens from being injected.
     If user includes "futa" or similar, we replace with androgynous presentation.
     """
+    if uncensored_mode:
+        return tokens, negative_tokens
     banned_direct = ["futa", "trap"]
     lowered = [t.lower() for t in tokens]
     swapped = False
@@ -281,13 +234,17 @@ def _sanitize_character_prompt_tokens(tokens: list, negative_tokens: list) -> Tu
     return tokens, negative_tokens
 
 
-def _load_character_sheet(sheet_path: str) -> Tuple[str, str]:
+def _load_character_sheet(
+    sheet_path: str, *, uncensored_mode: bool = False, character_strength: float = 1.0
+) -> Tuple[str, str]:
     """
     Load a character sheet JSON file and return (positive_additions, negative_additions).
     Supported keys (all optional):
       - prompt / positive / appearance / style_tags / clothing / accessories
       - negative / negative_prompt
       - gender_presentation: androgynous|male|female
+      - subject_label / character_slot: short name for multi-sheet labeling (e.g. left girl)
+      - spatial_anchor / screen_position: e.g. left side, right foreground, background center
     Values can be strings or lists of strings.
     """
     import json
@@ -298,31 +255,13 @@ def _load_character_sheet(sheet_path: str) -> Tuple[str, str]:
 
     data = json.loads(p.read_text(encoding="utf-8", errors="ignore"))
 
-    positive_tokens: list = []
-    negative_tokens: list = []
+    from utils.consistency.character_customization import build_character_prompt_additions
 
-    positive_tokens.extend(_normalize_list_or_str(data.get("prompt")))
-    positive_tokens.extend(_normalize_list_or_str(data.get("positive")))
-    positive_tokens.extend(_normalize_list_or_str(data.get("appearance")))
-    positive_tokens.extend(_normalize_list_or_str(data.get("style_tags")))
-    positive_tokens.extend(_normalize_list_or_str(data.get("clothing")))
-    positive_tokens.extend(_normalize_list_or_str(data.get("accessories")))
-
-    negative_tokens.extend(_normalize_list_or_str(data.get("negative")))
-    negative_tokens.extend(_normalize_list_or_str(data.get("negative_prompt")))
-
-    gender_pres = str(data.get("gender_presentation", "") or "").strip().lower()
-    if gender_pres in {"androgynous", "androgynous presentation", "gender-ambiguous", "gender ambiguous"}:
-        positive_tokens.append("androgynous presentation")
-    elif gender_pres in {"male", "male-presenting", "man-presenting"}:
-        positive_tokens.append("male-presenting")
-    elif gender_pres in {"female", "female-presenting", "woman-presenting"}:
-        positive_tokens.append("female-presenting")
-
-    positive_tokens, negative_tokens = _sanitize_character_prompt_tokens(positive_tokens, negative_tokens)
-
-    pos = ", ".join([t for t in positive_tokens if t])
-    neg = ", ".join([t for t in negative_tokens if t])
+    pos, neg = build_character_prompt_additions(
+        data,
+        uncensored_mode=uncensored_mode,
+        character_strength=character_strength,
+    )
     return pos, neg
 
 
@@ -339,37 +278,6 @@ def _apply_character_gender_presentation(tokens: list, gender_presentation: str)
     return tokens
 
 
-def _token_weights_from_segments(cleaned: str, segments: list, tokenizer, max_length: int, device):
-    """Return (L,) tensor of per-token weights from segments. Uses offset_mapping if available."""
-    try:
-        enc = tokenizer(
-            [cleaned],
-            padding="max_length",
-            max_length=max_length,
-            truncation=True,
-            return_tensors="pt",
-            return_offsets_mapping=True,
-        )
-    except TypeError:
-        return None
-    offset_mapping = enc.get("offset_mapping")
-    if offset_mapping is None:
-        return None
-    offset_mapping = offset_mapping[0]
-    weights = []
-    for s, e in offset_mapping:
-        if s == 0 and e == 0:  # padding
-            weights.append(1.0)
-            continue
-        w = 1.0
-        for seg_start, seg_end, seg_w in segments:
-            if s < seg_end and e > seg_start:
-                w = seg_w
-                break
-        weights.append(w)
-    return torch.tensor(weights, dtype=torch.float32, device=device)
-
-
 @torch.no_grad()
 def encode_text(
     captions,
@@ -379,6 +287,8 @@ def encode_text(
     max_length=300,
     dtype=torch.float32,
     text_bundle=None,
+    clip_captions=None,
+    segment_texts=None,
 ):
     if text_bundle is not None:
         return text_bundle.encode(
@@ -387,6 +297,14 @@ def encode_text(
             max_length=max_length,
             dtype=dtype,
             train_fusion=False,
+            clip_captions=clip_captions,
+            segment_texts=segment_texts,
+        )
+    if segment_texts is not None:
+        from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
+
+        return encode_t5_segment_concat(
+            segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
         )
     tok = tokenizer(captions, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt")
     input_ids = tok.input_ids.to(device)
@@ -466,10 +384,63 @@ def main():
     )
     parser.add_argument("--contrast", type=float, default=1.0, help="Post-process: contrast factor (1=off)")
     parser.add_argument(
+        "--face-enhance",
+        action="store_true",
+        help="Post-process: OpenCV Haar frontal-face detection + local sharpen/contrast (needs opencv-python, scipy).",
+    )
+    parser.add_argument(
+        "--face-enhance-sharpen",
+        type=float,
+        default=0.35,
+        help="Unsharp strength on detected face patches when --face-enhance.",
+    )
+    parser.add_argument(
+        "--face-enhance-contrast",
+        type=float,
+        default=1.04,
+        help="Micro-contrast factor on face patches (1.0 = off).",
+    )
+    parser.add_argument(
+        "--face-enhance-padding",
+        type=float,
+        default=0.25,
+        help="Expand each face bbox by this fraction of max(w,h).",
+    )
+    parser.add_argument(
+        "--face-enhance-max",
+        type=int,
+        default=4,
+        help="Maximum faces to enhance per output image.",
+    )
+    parser.add_argument(
+        "--post-reference-image",
+        type=str,
+        default="",
+        help="Optional reference image: whole-frame linear RGB blend (weak color/style pull; not identity lock).",
+    )
+    parser.add_argument(
+        "--post-reference-alpha",
+        type=float,
+        default=0.0,
+        help="Blend weight 0–0.5 for --post-reference-image (0 = off).",
+    )
+    parser.add_argument(
+        "--face-restore-shell",
+        type=str,
+        default="",
+        help="After final save, run via shell; substitute {src} and {dst} with the output PNG path (e.g. GFPGAN/ADetailer CLI).",
+    )
+    parser.add_argument(
         "--creativity",
         type=float,
         default=None,
         help="Creativity/diversity 0-1 (only if model was trained with --creativity-embed-dim)",
+    )
+    parser.add_argument(
+        "--creativity-jitter",
+        type=float,
+        default=0.0,
+        help="Std dev of Gaussian noise added to creativity per image (0-1); use with --num >1 for varied batches",
     )
     parser.add_argument(
         "--originality",
@@ -538,13 +509,50 @@ def main():
         "--pbfm-edge-boost", type=float, default=0.0, help="PBFM heuristic: add high-pass drift to x0_pred (0=off)."
     )
     parser.add_argument("--pbfm-edge-kernel", type=int, default=3, help="PBFM high-pass kernel size (odd >=3).")
+    parser.add_argument(
+        "--reference-image",
+        type=str,
+        default="",
+        help="Path to reference image: CLIP vision -> extra cross-attn tokens (IP-Adapter-style; projector is untrained unless --reference-adapter-pt).",
+    )
+    parser.add_argument(
+        "--reference-strength",
+        type=float,
+        default=1.0,
+        help="Scale injected reference tokens (0 disables even if --reference-image is set).",
+    )
+    parser.add_argument("--reference-tokens", type=int, default=4, help="Number of reference tokens to inject.")
+    parser.add_argument(
+        "--reference-clip-model",
+        type=str,
+        default="openai/clip-vit-large-patch14",
+        help="Hugging Face model id for CLIP vision encoding of --reference-image.",
+    )
+    parser.add_argument(
+        "--reference-adapter-pt",
+        type=str,
+        default="",
+        help="Optional .pt state_dict for ReferenceTokenProjector (train separately; strict=False load).",
+    )
+    parser.add_argument(
+        "--sag-blur-sigma",
+        type=float,
+        default=0.0,
+        help="Blur-based self-attention guidance: Gaussian blur sigma in latent pixels (0=off; try 0.35-0.9).",
+    )
+    parser.add_argument(
+        "--sag-scale",
+        type=float,
+        default=0.0,
+        help="SAG heuristic strength: pred += scale*(pred-pred_on_blurred_latent). Typical 0.12-0.35; ~2× sampling cost.",
+    )
     # Test-time scaling: generate N candidates (--num) and keep the best (§11.3 IMPROVEMENTS.md)
     parser.add_argument(
         "--pick-best",
         type=str,
         default="none",
-        choices=["none", "clip", "edge", "ocr", "combo", "combo_exposure"],
-        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure)",
+        choices=["none", "clip", "edge", "ocr", "combo", "combo_exposure", "combo_structural", "combo_hq"],
+        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq)",
     )
     parser.add_argument(
         "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"
@@ -569,12 +577,35 @@ def main():
     parser.add_argument(
         "--no-cache", action="store_true", help="Disable T5 encoding cache (use when prompt/negative change every run)"
     )
+    _ts_choices = tuple(sorted(list_timestep_schedules()))
     parser.add_argument(
         "--scheduler",
         type=str,
         default="ddim",
-        choices=["ddim", "euler"],
-        help="Sampling scheduler: ddim (default) or euler",
+        choices=_ts_choices,
+        metavar="NAME",
+        help=f"Timestep index schedule (noise→clean path): {', '.join(_ts_choices)}. Composes with --steps and --solver.",
+    )
+    parser.add_argument(
+        "--timestep-schedule",
+        type=str,
+        default=None,
+        choices=_ts_choices,
+        metavar="NAME",
+        help="If set, overrides --scheduler (same names).",
+    )
+    parser.add_argument(
+        "--solver",
+        type=str,
+        default="ddim",
+        choices=tuple(INFERENCE_SOLVERS),
+        help="Update rule: ddim (1 model eval per step) or heun (2 evals/step, often sharper).",
+    )
+    parser.add_argument(
+        "--karras-rho",
+        type=float,
+        default=7.0,
+        help="Exponent ρ for karras_rho schedule only (larger → more emphasis in very noisy σ region).",
     )
     parser.add_argument(
         "--no-neg-filter",
@@ -636,7 +667,44 @@ def main():
         help="Film grain amount when --naturalize (0=off, 0.01-0.03 typical)",
     )
     parser.add_argument(
-        "--anti-bleed",
+        "--naturalize-deep",
+        action="store_true",
+        help="With --naturalize: stronger anti-AI negatives + richer natural-photo prefix (more de-CGI)",
+    )
+    parser.add_argument(
+        "--less-ai",
+        action="store_true",
+        help="Shorthand: --anti-ai-pack lite + --human-media photographic (when those are still none)",
+    )
+    parser.add_argument(
+        "--anti-ai-pack",
+        type=str,
+        default="none",
+        choices=["none", "lite", "strong"],
+        help="Reduce plastic/CGI/oversmooth look via prompt packs (pairs well with --naturalize post-process).",
+    )
+    parser.add_argument(
+        "--human-media",
+        dest="human_media_mode",
+        type=str,
+        default="none",
+        choices=["none", "photographic", "dslr", "film"],
+        help="Bias toward real camera / film capture instead of CG render.",
+    )
+    parser.add_argument(
+        "--lora-scaffold",
+        type=str,
+        default="none",
+        choices=["none", "blend", "character_first", "style_first"],
+        help="Prompt scaffolding when using --lora (fusion / character vs style priority).",
+    )
+    parser.add_argument(
+        "--lora-scaffold-auto",
+        action="store_true",
+        help="If any --lora is set and --lora-scaffold is none, use blend scaffolding.",
+    )
+    parser.add_argument(
+         "--anti-bleed",
         action="store_true",
         help="Reduce concept/color bleeding: add distinct-colors positive and color-bleed negative",
     )
@@ -653,6 +721,326 @@ def main():
     parser.add_argument(
         "--strong-watermark", action="store_true", help="Stronger watermark/logo negative (for stubborn baked-in logos)"
     )
+    parser.add_argument(
+        "--safety-mode",
+        type=str,
+        default="nsfw",
+        choices=["none", "sfw", "nsfw"],
+        help="Content intent mode: sfw/nsfw scaffolding for better adherence. (default: nsfw for uncensored model)",
+    )
+    parser.add_argument(
+        "--pose-mode",
+        type=str,
+        default="none",
+        choices=["none", "complex", "action", "acrobatics"],
+        help="Add pose scaffolding tokens for difficult body compositions.",
+    )
+    parser.add_argument(
+        "--view-angle",
+        type=str,
+        default="none",
+        choices=[
+            "none",
+            "eye_level",
+            "low_angle",
+            "high_angle",
+            "bird_eye",
+            "worm_eye",
+            "dutch",
+            "over_shoulder",
+            "first_person",
+            "third_person",
+        ],
+        help="Camera/viewpoint conditioning for hard perspective shots.",
+    )
+    parser.add_argument(
+        "--subject-sex",
+        type=str,
+        default="none",
+        choices=["none", "female", "male", "mixed", "nonbinary"],
+        help="Anatomy consistency hint for subject sex/presentation.",
+    )
+    parser.add_argument(
+        "--scene-domain",
+        type=str,
+        default="none",
+        choices=["none", "objects", "vehicles", "buildings", "architecture", "mixed"],
+        help="Grounding hints for objects/vehicles/buildings-heavy scenes.",
+    )
+    parser.add_argument(
+        "--clothing-mode",
+        type=str,
+        default="none",
+        choices=["none", "casual", "formal", "streetwear", "fantasy_armor", "swimwear", "lingerie", "nude"],
+        help="Clothing/garment control pack.",
+    )
+    parser.add_argument(
+        "--background-mode",
+        type=str,
+        default="none",
+        choices=["none", "studio", "indoor", "outdoor", "urban", "nature", "minimal"],
+        help="Background/environment stabilization pack.",
+    )
+    parser.add_argument(
+        "--people-layout",
+        type=str,
+        default="none",
+        choices=["none", "solo", "duo", "group_small", "group_large"],
+        help="Multi-person layout control.",
+    )
+    parser.add_argument(
+        "--relationship-mode",
+        type=str,
+        default="none",
+        choices=["none", "neutral", "romantic", "combat", "teamwork"],
+        help="Interaction mode for multiple people.",
+    )
+    parser.add_argument(
+        "--object-layout",
+        type=str,
+        default="none",
+        choices=["none", "foreground_anchor", "rule_of_thirds", "symmetrical", "asymmetrical"],
+        help="Object placement strategy hints.",
+    )
+    parser.add_argument(
+        "--hand-mode",
+        type=str,
+        default="none",
+        choices=["none", "stable", "detailed", "grip"],
+        help="Hand-quality control pack for hard hand generations.",
+    )
+    parser.add_argument(
+        "--pose-naturalness",
+        type=str,
+        default="none",
+        choices=["none", "natural", "dynamic_natural", "intimate_natural"],
+        help="Natural pose/body mechanics pack (works for sfw/nsfw prompts).",
+    )
+    parser.add_argument(
+        "--typography-mode",
+        type=str,
+        default="none",
+        choices=["none", "clean", "poster", "ui"],
+        help="Typography/text rendering control pack.",
+    )
+    parser.add_argument(
+        "--quality-pack",
+        type=str,
+        default="none",
+        choices=[
+            "none",
+            "top",
+            "one_shot",
+            "ultra_clean",
+            "cinematic",
+            "illustrative",
+            "editorial",
+            "micro_detail",
+        ],
+        help="High-quality artifact-control pack. 'top' = score ladder; 'one_shot' = ladder + composition/anatomy first-try tags; 'micro_detail' = texture/material fidelity.",
+    )
+    parser.add_argument(
+        "--adherence-pack",
+        type=str,
+        default="none",
+        choices=["none", "standard", "strict"],
+        help="Prompt adherence scaffolding: literal scene interpretation, fewer missing/wrong props (use with long prompts).",
+    )
+    parser.add_argument(
+        "--lighting-mode",
+        type=str,
+        default="none",
+        choices=["none", "natural_daylight", "studio_softbox", "dramatic_rim", "low_key", "high_key"],
+        help="Lighting stability/style pack.",
+    )
+    parser.add_argument(
+        "--skin-detail-mode",
+        type=str,
+        default="none",
+        choices=["none", "natural_texture", "clean_beauty", "stylized_skin"],
+        help="Skin texture/detail behavior pack.",
+    )
+    parser.add_argument(
+        "--nsfw-pack",
+        type=str,
+        default="none",
+        choices=["none", "soft", "explicit_detail", "romantic", "extreme"],
+        help="Adult-content pose/anatomy stability pack.",
+    )
+    parser.add_argument(
+        "--nsfw-civitai-pack",
+        type=str,
+        default="none",
+        choices=[
+            "none",
+            "hits",
+            "hits_lite",
+            "snippets",
+            "snippets_lite",
+            "action",
+            "complex",
+            "easy",
+            "clothing",
+            "objects",
+            "style",
+        ],
+        help="Extra NSFW pack: hits*=freq CSV tags; snippets*=short name/trigger fragments (deduped vs hits). Stacks with --nsfw-pack when --safety-mode nsfw.",
+    )
+    parser.add_argument(
+        "--civitai-trigger-bank",
+        type=str,
+        default="none",
+        choices=[
+            "none",
+            "light",
+            "medium",
+            "heavy",
+            "frequency_light",
+            "frequency_medium",
+            "frequency_heavy",
+        ],
+        help="Append triggers: light/medium/heavy = CSV row order; frequency_* = top_triggers_by_frequency.txt (requires --safety-mode nsfw).",
+    )
+    parser.add_argument(
+        "--civitai-model-bank-csv",
+        type=str,
+        default="",
+        help="Override CSV path for row-order trigger bank (default: data/civitai/nsfw_illustrious_noobai_models.csv).",
+    )
+    parser.add_argument(
+        "--civitai-frequency-txt",
+        type=str,
+        default="",
+        help="Override path for frequency_* trigger bank (default: data/civitai/top_triggers_by_frequency.txt).",
+    )
+    parser.add_argument(
+        "--sex-position",
+        type=str,
+        default="none",
+        choices=["none", "standing_missionary", "doggy", "cowgirl", "missionary", "spooning", "standing"],
+        help="Specific sex position for extreme scene control.",
+    )
+    parser.add_argument(
+        "--penetration-detail",
+        type=str,
+        default="none",
+        choices=["none", "normal", "deep", "extreme"],
+        help="Level of penetration detail and anatomical exaggeration.",
+    )
+    parser.add_argument(
+        "--body-proportion",
+        type=str,
+        default="none",
+        choices=["none", "realistic", "exaggerated", "hyper"],
+        help="Body proportion style - use 'hyper' for extreme sizes.",
+    )
+    parser.add_argument(
+        "--interaction-intensity",
+        type=str,
+        default="none",
+        choices=["none", "gentle", "passionate", "intense", "extreme"],
+        help="Intensity of sexual interaction.",
+    )
+    parser.add_argument(
+        "--sfw-mood",
+        type=str,
+        default="none",
+        choices=["none", "wholesome", "heroic", "serene", "adventurous", "joyful", "cozy"],
+        help="SFW mood control for wholesome and artistic scenes.",
+    )
+    parser.add_argument(
+        "--sfw-pose",
+        type=str,
+        default="none",
+        choices=["none", "elegant", "heroic", "contemplative", "playful", "dynamic", "relaxed"],
+        help="SFW pose control for elegant and wholesome scenes.",
+    )
+    parser.add_argument(
+        "--sfw-clothing",
+        type=str,
+        default="none",
+        choices=["none", "casual", "elegant", "cozy", "adventurer", "fantasy", "historical", "sporty"],
+        help="SFW clothing control for wholesome outfits.",
+    )
+    parser.add_argument(
+        "--sfw-environment",
+        type=str,
+        default="none",
+        choices=["none", "forest", "cabin", "meadow", "library", "garden", "night"],
+        help="SFW environment control for peaceful scenes.",
+    )
+    parser.add_argument(
+        "--sfw-expression",
+        type=str,
+        default="none",
+        choices=["none", "gentle", "joyful", "curious", "serene", "determined"],
+        help="SFW facial expression control.",
+    )
+    parser.add_argument(
+        "--style-mode",
+        type=str,
+        default="none",
+        choices=["none", "3d", "photoreal", "semi_real", "anime", "painterly", "3d_photoreal"],
+        help="Style adherence control pack for hard styles.",
+    )
+    parser.add_argument(
+        "--style-lock",
+        action="store_true",
+        help="Push consistent single-style rendering and suppress style drift.",
+    )
+    parser.add_argument(
+        "--anti-style-bleed",
+        action="store_true",
+        help="Add negatives to reduce mixed/bleeding styles.",
+    )
+    parser.add_argument(
+        "--composition-mode",
+        type=str,
+        default="none",
+        choices=["none", "single_subject", "group", "multi_character", "scene", "cinematic"],
+        help="Composition stabilizer: use multi_character for 2+ distinct outfits/poses (stronger than group).",
+    )
+    parser.add_argument(
+        "--anti-duplicate-subjects",
+        action="store_true",
+        help="Add negatives to reduce cloned faces/extra heads/duplicate subjects.",
+    )
+    parser.add_argument(
+        "--anti-perspective-drift",
+        action="store_true",
+        help="Add perspective/scale stability cues to reduce warped geometry.",
+    )
+    parser.add_argument(
+        "--cleanup-conflicting-tags",
+        action="store_true",
+        help="Remove obvious contradictory prompt tags (keeps earlier tag).",
+    )
+    parser.add_argument(
+        "--auto-content-fix",
+        dest="auto_content_fix",
+        action="store_true",
+        help="Auto-infer domain, view, pose, composition (1girl solo), hands, lighting from keywords (default: on).",
+    )
+    parser.add_argument(
+        "--no-auto-content-fix",
+        dest="auto_content_fix",
+        action="store_false",
+        help="Disable automatic keyword inference for content controls.",
+    )
+    parser.set_defaults(auto_content_fix=True)
+    parser.add_argument(
+        "--one-shot-boost",
+        dest="one_shot_boost",
+        action="store_true",
+        help="Add one-shot composition/anatomy/scaffolding to pos+neg (default: on).",
+    )
+    parser.add_argument(
+        "--no-one-shot-boost",
+        dest="one_shot_boost",
+        action="store_false",
+        help="Disable extra one-shot scaffolding tokens.",
+    )
+    parser.set_defaults(one_shot_boost=True)
     parser.add_argument(
         "--gender-swap",
         action="store_true",
@@ -674,7 +1062,12 @@ def main():
         "--character-sheet",
         type=str,
         default="",
-        help="Path to character sheet JSON to inject appearance tokens into prompt",
+        help="Path(s) to character sheet JSON (comma-separated for multi-character) to inject identity tokens.",
+    )
+    parser.add_argument(
+        "--label-multi-character-sheets",
+        action="store_true",
+        help="With 2+ --character-sheet paths, wrap each sheet as (character N: ...) for clearer T5 separation.",
     )
     parser.add_argument(
         "--character-prompt-extra", type=str, default="", help="Extra character tokens appended to prompt"
@@ -684,6 +1077,30 @@ def main():
         type=str,
         default="",
         help="Extra negative tokens to append for the character (applied after defaults)",
+    )
+    parser.add_argument(
+        "--scene-blueprint",
+        type=str,
+        default="",
+        help="Path to JSON scene blueprint for deep structured scene customization.",
+    )
+    parser.add_argument(
+        "--scene-blueprint-strength",
+        type=float,
+        default=1.0,
+        help="Blueprint emphasis strength (0.5-2.0).",
+    )
+    parser.add_argument(
+        "--character-strength",
+        type=float,
+        default=1.0,
+        help="Character identity strength (0.5-2.0): higher reinforces profile traits.",
+    )
+    parser.add_argument(
+        "--uncensored-mode",
+        action="store_true",
+        default=True,
+        help="Disable character-sheet safety sanitization and avoid anti-explicit negative injections. (enabled by default)",
     )
     parser.add_argument(
         "--preset",
@@ -699,6 +1116,22 @@ def main():
         choices=["portrait", "fullbody", "anime_char"],
         help="High-level OP mode (applied after preset)",
     )
+    parser.add_argument(
+        "--prompt-layout",
+        type=str,
+        default="",
+        help="JSON file: layered prompt (intent/subjects/scene/camera/…). See utils/prompt/prompt_layout.py and examples/prompt_layout.example.json",
+    )
+    parser.add_argument(
+        "--t5-layout-encode",
+        type=str,
+        default="auto",
+        choices=["auto", "flat", "blocks", "segmented"],
+        help="With --prompt-layout: how T5 reads the positive (frozen encoder; clearer section boundaries). "
+        "auto=blocks when layout is used else flat. segmented=concat tokenized sections, one forward. "
+        "Triple mode + layout: CLIP-L and CLIP-bigG use a labeled compact caption (same string for both); "
+        "T5 uses blocks/segmented/flat per this flag. Use flat if you rely on (word)/[word] emphasis.",
+    )
     args = parser.parse_args()
 
     # Apply preset and OP mode as soft defaults (only for unset args)
@@ -709,8 +1142,11 @@ def main():
 
     has_tags = bool(getattr(args, "tags", "").strip() or getattr(args, "tags_file", "").strip())
     has_prompt_file = bool(getattr(args, "prompt_file", "").strip())
-    if not (args.prompt or has_tags or has_prompt_file):
-        parser.error("Provide at least one of --prompt, --prompt-file, --tags, or --tags-file")
+    has_prompt_layout = bool(getattr(args, "prompt_layout", "").strip())
+    if not (args.prompt or has_tags or has_prompt_file or has_prompt_layout):
+        parser.error(
+            "Provide at least one of --prompt, --prompt-file, --tags, --tags-file, or --prompt-layout"
+        )
 
     # Build effective prompt from --prompt-file, --tags / --tags-file, and optional --lora-trigger
     if has_prompt_file:
@@ -745,7 +1181,29 @@ def main():
     if getattr(args, "lora_trigger", "").strip() and args.lora:
         trigger = args.lora_trigger.strip()
         prompt_for_encoding = f"{trigger}, {prompt_for_encoding}" if prompt_for_encoding else trigger
-    if getattr(args, "subject_first", False) and prompt_for_encoding:
+
+    args._prompt_layout_negative = ""
+    args._used_prompt_layout = False
+    args._layout_compiled = None
+    if has_prompt_layout:
+        try:
+            from utils.prompt.prompt_layout import load_prompt_layout_file, merge_prompt_with_layout
+
+            compiled = load_prompt_layout_file(str(args.prompt_layout).strip())
+            args._prompt_layout_negative = compiled.negative or ""
+            args._used_prompt_layout = True
+            args._layout_compiled = compiled
+            prompt_for_encoding = merge_prompt_with_layout(
+                compiled.positive, prompt_for_encoding, layout_first=True
+            )
+        except Exception as e:
+            print(f"Warning: --prompt-layout failed: {e}", file=sys.stderr)
+
+    if (
+        getattr(args, "subject_first", False)
+        and prompt_for_encoding
+        and not getattr(args, "_used_prompt_layout", False)
+    ):
         from data.caption_utils import prompt_from_tags
 
         parts = [p.strip() for p in prompt_for_encoding.split(",") if p.strip()]
@@ -772,11 +1230,44 @@ def main():
     character_positive_additions = ""
     character_negative_additions = ""
     if getattr(args, "character_sheet", "").strip():
-        try:
-            character_positive_additions, character_negative_additions = _load_character_sheet(args.character_sheet)
-        except Exception as e:
-            print(f"Warning: failed to load --character-sheet: {e}", file=sys.stderr)
-            character_positive_additions, character_negative_additions = "", ""
+        pos_all = []
+        neg_all = []
+        sheet_paths = [s.strip() for s in str(args.character_sheet).split(",") if s.strip()]
+        for sp in sheet_paths:
+            try:
+                pos_i, neg_i = _load_character_sheet(
+                    sp,
+                    uncensored_mode=bool(getattr(args, "uncensored_mode", False)),
+                    character_strength=float(getattr(args, "character_strength", 1.0)),
+                )
+                if pos_i:
+                    pos_all.append(pos_i)
+                if neg_i:
+                    neg_all.append(neg_i)
+            except Exception as e:
+                print(f"Warning: failed to load --character-sheet '{sp}': {e}", file=sys.stderr)
+        use_labels = bool(getattr(args, "label_multi_character_sheets", False)) or (
+            len(sheet_paths) >= 2 and str(getattr(args, "composition_mode", "none") or "none") == "multi_character"
+        )
+        if use_labels and len(pos_all) >= 2:
+            from utils.prompt.multi_subject import (
+                merge_character_sheet_negatives,
+                merge_character_sheet_positives,
+                multi_sheet_extra_negatives_csv,
+            )
+
+            character_positive_additions = merge_character_sheet_positives(pos_all)
+            character_negative_additions = merge_character_sheet_negatives(neg_all)
+            extra_neg = multi_sheet_extra_negatives_csv()
+            if extra_neg:
+                character_negative_additions = (
+                    f"{character_negative_additions}, {extra_neg}".strip(", ")
+                    if character_negative_additions
+                    else extra_neg
+                )
+        else:
+            character_positive_additions = ", ".join([x for x in pos_all if x]).strip(", ")
+            character_negative_additions = ", ".join([x for x in neg_all if x]).strip(", ")
     if getattr(args, "character_negative_extra", "").strip():
         character_negative_additions = f"{character_negative_additions}, {args.character_negative_extra}".strip(", ")
     if getattr(args, "character_prompt_extra", "").strip():
@@ -786,6 +1277,25 @@ def main():
         args.prompt = f"{args.prompt}, {character_positive_additions}"
     elif character_positive_additions:
         args.prompt = character_positive_additions
+
+    # Structured scene blueprint injection (actors, relations, camera, composition, constraints).
+    scene_positive_additions = ""
+    scene_negative_additions = ""
+    if getattr(args, "scene_blueprint", "").strip():
+        try:
+            from utils.prompt.scene_blueprint import load_scene_blueprint
+
+            scene_positive_additions, scene_negative_additions = load_scene_blueprint(
+                args.scene_blueprint,
+                strength=float(getattr(args, "scene_blueprint_strength", 1.0)),
+            )
+        except Exception as e:
+            print(f"Warning: failed to load --scene-blueprint: {e}", file=sys.stderr)
+            scene_positive_additions, scene_negative_additions = "", ""
+    if scene_positive_additions and getattr(args, "prompt", ""):
+        args.prompt = f"{args.prompt}, {scene_positive_additions}"
+    elif scene_positive_additions:
+        args.prompt = scene_positive_additions
 
     if getattr(args, "hard_style", None):
         try:
@@ -801,11 +1311,17 @@ def main():
 
     if getattr(args, "naturalize", False) and args.prompt:
         try:
-            from config.prompt_domains import NATURAL_LOOK_POSITIVE
+            from config.prompt_domains import NATURAL_LOOK_POSITIVE, NATURAL_LOOK_POSITIVE_DEEP
 
-            args.prompt = f"{NATURAL_LOOK_POSITIVE}, {args.prompt}"
+            _nat_pre = NATURAL_LOOK_POSITIVE_DEEP if getattr(args, "naturalize_deep", False) else NATURAL_LOOK_POSITIVE
+            args.prompt = f"{_nat_pre}, {args.prompt}"
         except ImportError:
-            pass
+            try:
+                from config.prompt_domains import NATURAL_LOOK_POSITIVE
+
+                args.prompt = f"{NATURAL_LOOK_POSITIVE}, {args.prompt}"
+            except ImportError:
+                pass
     if getattr(args, "anti_bleed", False) and args.prompt:
         try:
             from config.prompt_domains import CONCEPT_BLEEDING_POSITIVE
@@ -821,58 +1337,14 @@ def main():
         except ImportError:
             pass
 
-    # Originality / novelty: inject a few deterministic "unique composition" tokens near the
-    # start of the prompt (after subject/people descriptor tags) and, if supported, auto-set
-    # the model's creativity embedding.
+    # Originality / novelty: inject composition tokens (shared with train.py originality augment).
     if getattr(args, "originality", 0.0) and args.prompt:
         try:
-            from config.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
-            from data.caption_utils import (
-                AGE_TAGS,
-                ANATOMY_FRAMING_TAGS,
-                BODY_PART_TAGS,
-                BUILD_BODY_TAGS,
-                HEIGHT_TAGS,
-                SUBJECT_PREFIXES,
-            )
+            from utils.prompt.originality_augment import inject_originality_tokens
 
-            strength = float(args.originality)
-            strength = max(0.0, min(1.0, strength))
-
-            tokens = ORIGINALITY_POSITIVE_TOKENS
-            if tokens:
-                k = 1 + int(round(strength * 3))
-                k = max(1, min(k, len(tokens)))
-                rng = np.random.default_rng(args.seed)
-                chosen = list(rng.choice(tokens, size=k, replace=False))
-
-                parts = [p.strip() for p in args.prompt.split(",") if p.strip()]
-                person_terms = (
-                    list(SUBJECT_PREFIXES)
-                    + list(AGE_TAGS)
-                    + list(HEIGHT_TAGS)
-                    + list(BUILD_BODY_TAGS)
-                    + list(ANATOMY_FRAMING_TAGS)
-                    + list(BODY_PART_TAGS)
-                )
-
-                def _norm(x: str) -> str:
-                    return x.lower().strip().replace("_", " ")
-
-                person_norm = [_norm(t) for t in person_terms]
-
-                def _is_person_term(tag: str) -> bool:
-                    t = _norm(tag)
-                    return any(t == pt or t.startswith(pt + " ") for pt in person_norm)
-
-                insert_at = 0
-                while insert_at < len(parts) and _is_person_term(parts[insert_at]):
-                    insert_at += 1
-
-                parts[insert_at:insert_at] = chosen
-                args.prompt = ", ".join(parts)
-
-            # Auto-set creativity embedding when user didn't set it.
+            strength = max(0.0, min(1.0, float(args.originality)))
+            rng = np.random.default_rng(int(args.seed) + int(1000 * strength))
+            args.prompt = inject_originality_tokens(args.prompt, strength, rng)
             if getattr(args, "creativity", None) is None:
                 args.creativity = strength
         except Exception:
@@ -889,6 +1361,9 @@ def main():
                 torch.use_deterministic_algorithms(True, warn_only=True)
             except Exception:
                 pass
+    elif device.type == "cuda":
+        # Fixed latent shapes across steps: pick faster conv algorithms (not bit-reproducible).
+        torch.backends.cudnn.benchmark = True
 
     print("Loading checkpoint and encoders...")
     model, cfg, rae_bridge, fusion_sd = load_model_from_ckpt(args.ckpt, device)
@@ -909,7 +1384,7 @@ def main():
 
     from diffusers import AutoencoderKL, AutoencoderRAE
     from transformers import AutoTokenizer, T5EncoderModel
-    from utils.text_encoder_bundle import attach_fusion_weights, load_text_encoder_bundle
+    from utils.modeling.text_encoder_bundle import attach_fusion_weights, load_text_encoder_bundle
 
     text_bundle = None
     if str(getattr(cfg, "text_encoder_mode", "t5") or "t5").lower() == "triple":
@@ -996,7 +1471,7 @@ def main():
         print("Note: --pick-best only applies with --num >= 2; ignoring.", file=sys.stderr)
     # Resolve emphasis (word)/[word] first so we have prompt_to_encode for conflict filter
     if "(" in args.prompt or "[" in args.prompt:
-        prompt_to_encode, _emphasis_segments = _parse_prompt_emphasis(args.prompt)
+        prompt_to_encode, _emphasis_segments = parse_prompt_emphasis(args.prompt)
     else:
         prompt_to_encode, _emphasis_segments = args.prompt, []
     if getattr(args, "boost_quality", False) and prompt_to_encode.strip():
@@ -1015,7 +1490,7 @@ def main():
         prompt_to_encode = _maybe_append_text_says(prompt_to_encode, expected_texts)
         args.prompt = prompt_to_encode
     try:
-        from config.prompt_domains import ANTI_AI_LOOK_NEGATIVE
+        from config.prompt_domains import ANTI_AI_LOOK_NEGATIVE, ANTI_AI_LOOK_NEGATIVE_STRONG
 
         from config import DEFAULT_NEGATIVE_PROMPT, TEXT_IN_IMAGE_NEGATIVE, TEXT_IN_IMAGE_PHRASES
     except ImportError:
@@ -1027,8 +1502,10 @@ def main():
         ANTI_AI_LOOK_NEGATIVE = (
             "oversaturated, plastic skin, smooth skin, airbrushed, waxy, doll-like, synthetic, artificial, CGI, uncanny"
         )
+        ANTI_AI_LOOK_NEGATIVE_STRONG = ANTI_AI_LOOK_NEGATIVE
     # When user wants text in the image (sign, lettering, etc.), use a negative that avoids bad text but doesn't suppress desired text
     user_neg = (args.negative_prompt or "").strip()
+    layout_neg = (getattr(args, "_prompt_layout_negative", None) or "").strip()
     if user_neg:
         negative_text_raw = user_neg
     elif getattr(args, "text_in_image", False):
@@ -1042,8 +1519,13 @@ def main():
             )
         else:
             negative_text_raw = DEFAULT_NEGATIVE_PROMPT
+    if layout_neg:
+        negative_text_raw = (
+            f"{negative_text_raw}, {layout_neg}".strip().strip(",") if negative_text_raw else layout_neg
+        )
     if getattr(args, "naturalize", False):
-        negative_text_raw = f"{negative_text_raw}, {ANTI_AI_LOOK_NEGATIVE}".strip()
+        _anti_nat = ANTI_AI_LOOK_NEGATIVE_STRONG if getattr(args, "naturalize_deep", False) else ANTI_AI_LOOK_NEGATIVE
+        negative_text_raw = f"{negative_text_raw}, {_anti_nat}".strip()
     if getattr(args, "anti_bleed", False):
         try:
             from config.prompt_domains import CONCEPT_BLEEDING_NEGATIVE
@@ -1072,15 +1554,139 @@ def main():
             negative_text_raw = f"{negative_text_raw}, {WATERMARK_NEGATIVE_STRONG}".strip()
         except ImportError:
             pass
+    if getattr(args, "less_ai", False):
+        if str(getattr(args, "anti_ai_pack", "none") or "none") == "none":
+            args.anti_ai_pack = "lite"
+        if str(getattr(args, "human_media_mode", "none") or "none") == "none":
+            args.human_media_mode = "photographic"
+    if len(getattr(args, "lora", []) or []) > 1:
+        try:
+            from config.prompt_domains import LORA_STACK_NEGATIVE
+
+            negative_text_raw = f"{negative_text_raw}, {LORA_STACK_NEGATIVE}".strip()
+        except ImportError:
+            pass
+    # Optional prompt controls for hard cases: sfw/nsfw, pose, viewpoint, domain grounding.
+    # Also applies stronger anti-text/logo suppression when text is not desired.
+    try:
+        from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
+
+        scene_domain = str(getattr(args, "scene_domain", "none") or "none")
+        view_angle = str(getattr(args, "view_angle", "none") or "none")
+        pose_mode = str(getattr(args, "pose_mode", "none") or "none")
+        style_mode = str(getattr(args, "style_mode", "none") or "none")
+        safety_mode = str(getattr(args, "safety_mode", "none") or "none")
+        clothing_mode = str(getattr(args, "clothing_mode", "none") or "none")
+        composition_mode = str(getattr(args, "composition_mode", "none") or "none")
+        people_layout = str(getattr(args, "people_layout", "none") or "none")
+        hand_mode = str(getattr(args, "hand_mode", "none") or "none")
+        lighting_mode = str(getattr(args, "lighting_mode", "none") or "none")
+        nsfw_pack = str(getattr(args, "nsfw_pack", "none") or "none")
+        sex_position = str(getattr(args, "sex_position", "none") or "none")
+        human_media_mode = str(getattr(args, "human_media_mode", "none") or "none")
+        anti_ai_pack = str(getattr(args, "anti_ai_pack", "none") or "none")
+        lora_scaffold_ef = str(getattr(args, "lora_scaffold", "none") or "none")
+        adherence_pack = str(getattr(args, "adherence_pack", "none") or "none")
+        if getattr(args, "lora_scaffold_auto", False) and getattr(args, "lora", None) and lora_scaffold_ef == "none":
+            lora_scaffold_ef = "blend"
+        sfw_mood = str(getattr(args, "sfw_mood", "none") or "none")
+        sfw_pose = str(getattr(args, "sfw_pose", "none") or "none")
+        sfw_clothing = str(getattr(args, "sfw_clothing", "none") or "none")
+        sfw_environment = str(getattr(args, "sfw_environment", "none") or "none")
+        sfw_expression = str(getattr(args, "sfw_expression", "none") or "none")
+        if getattr(args, "auto_content_fix", False):
+            inferred = infer_content_controls_from_prompt(prompt_to_encode)
+            if scene_domain == "none":
+                scene_domain = inferred.get("scene_domain", scene_domain)
+            if view_angle == "none":
+                view_angle = inferred.get("view_angle", view_angle)
+            if pose_mode == "none":
+                pose_mode = inferred.get("pose_mode", pose_mode)
+            if style_mode == "none":
+                style_mode = inferred.get("style_mode", style_mode)
+            if safety_mode == "none" and inferred.get("safety_mode"):
+                safety_mode = inferred["safety_mode"]
+            if composition_mode == "none" and inferred.get("composition_mode"):
+                composition_mode = inferred["composition_mode"]
+            if people_layout == "none" and inferred.get("people_layout"):
+                people_layout = inferred["people_layout"]
+            if hand_mode == "none" and inferred.get("hand_mode"):
+                hand_mode = inferred["hand_mode"]
+            if lighting_mode == "none" and inferred.get("lighting_mode"):
+                lighting_mode = inferred["lighting_mode"]
+            if clothing_mode == "none" and inferred.get("clothing_mode"):
+                clothing_mode = inferred["clothing_mode"]
+            if nsfw_pack == "none" and inferred.get("nsfw_pack"):
+                nsfw_pack = inferred["nsfw_pack"]
+            if sex_position == "none" and inferred.get("sex_position"):
+                sex_position = inferred["sex_position"]
+            if human_media_mode == "none" and inferred.get("human_media_mode"):
+                human_media_mode = inferred["human_media_mode"]
+            if adherence_pack == "none" and inferred.get("adherence_pack"):
+                adherence_pack = str(inferred["adherence_pack"])
+
+        prompt_to_encode, negative_text_raw = apply_content_controls(
+            prompt_to_encode,
+            negative_text_raw,
+            safety_mode=safety_mode,
+            pose_mode=pose_mode,
+            view_angle=view_angle,
+            subject_sex=str(getattr(args, "subject_sex", "none") or "none"),
+            scene_domain=scene_domain,
+            clothing_mode=clothing_mode,
+            background_mode=str(getattr(args, "background_mode", "none") or "none"),
+            people_layout=people_layout,
+            relationship_mode=str(getattr(args, "relationship_mode", "none") or "none"),
+            object_layout=str(getattr(args, "object_layout", "none") or "none"),
+            hand_mode=hand_mode,
+            pose_naturalness=str(getattr(args, "pose_naturalness", "none") or "none"),
+            typography_mode=str(getattr(args, "typography_mode", "none") or "none"),
+            quality_pack=str(getattr(args, "quality_pack", "none") or "none"),
+            lighting_mode=lighting_mode,
+            skin_detail_mode=str(getattr(args, "skin_detail_mode", "none") or "none"),
+            nsfw_pack=nsfw_pack,
+            sex_position=sex_position,
+            penetration_detail=str(getattr(args, "penetration_detail", "none") or "none"),
+            body_proportion=str(getattr(args, "body_proportion", "none") or "none"),
+            interaction_intensity=str(getattr(args, "interaction_intensity", "none") or "none"),
+            sfw_mood=sfw_mood,
+            sfw_pose=sfw_pose,
+            sfw_clothing=sfw_clothing,
+            sfw_environment=sfw_environment,
+            sfw_expression=sfw_expression,
+            style_mode=style_mode,
+            style_lock=bool(getattr(args, "style_lock", False)),
+            anti_style_bleed=bool(getattr(args, "anti_style_bleed", False)),
+            composition_mode=composition_mode,
+            anti_duplicate_subjects=bool(getattr(args, "anti_duplicate_subjects", False)),
+            anti_perspective_drift=bool(getattr(args, "anti_perspective_drift", False)),
+            cleanup_conflicting_tags=bool(getattr(args, "cleanup_conflicting_tags", False)),
+            allow_text_in_image=bool(getattr(args, "text_in_image", False)),
+            nsfw_civitai_pack=str(getattr(args, "nsfw_civitai_pack", "none") or "none"),
+            civitai_trigger_bank=str(getattr(args, "civitai_trigger_bank", "none") or "none"),
+            civitai_model_bank_csv=(str(getattr(args, "civitai_model_bank_csv", "") or "").strip() or None),
+            civitai_frequency_txt=(str(getattr(args, "civitai_frequency_txt", "") or "").strip() or None),
+            one_shot_boost=bool(getattr(args, "one_shot_boost", True)),
+            anti_ai_pack=anti_ai_pack,
+            human_media_mode=human_media_mode,
+            lora_scaffold=lora_scaffold_ef,
+            adherence_pack=adherence_pack,
+        )
+    except Exception as e:
+        print(f"Warning: apply_content_controls failed: {e}", file=sys.stderr)
+        if os.environ.get("SDX_DEBUG", "").strip():
+            traceback.print_exc()
     if anatomy_scales or object_scales or scene_scales:
         negative_text_raw = f"{negative_text_raw}, {SCALE_DISTORTION_NEGATIVE}".strip()
     if character_negative_additions:
         negative_text_raw = f"{negative_text_raw}, {character_negative_additions}".strip()
+    if scene_negative_additions:
+        negative_text_raw = f"{negative_text_raw}, {scene_negative_additions}".strip()
     # Pos/neg conflict: remove from negative any token that appears in positive so CFG doesn't fight the user's intent
     if getattr(args, "no_neg_filter", False):
         negative_text = negative_text_raw
     else:
-        negative_text = _filter_negative_by_positive(prompt_to_encode, negative_text_raw)
+        negative_text = filter_negative_by_positive(prompt_to_encode, negative_text_raw)
         if not negative_text.strip():
             negative_text = " "
         if negative_text != negative_text_raw:
@@ -1103,7 +1709,34 @@ def main():
         except Exception:
             pass
     style_key = effective_style if getattr(cfg, "style_embed_dim", 0) else ""
-    cache_key = (prompt_to_encode, negative_text, style_key) if not getattr(args, "no_cache", False) else None
+    compiled_layout = getattr(args, "_layout_compiled", None)
+    raw_t5_layout = str(getattr(args, "t5_layout_encode", "auto") or "auto").lower()
+    if raw_t5_layout == "auto":
+        t5_layout_enc = "blocks" if compiled_layout is not None else "flat"
+    else:
+        t5_layout_enc = raw_t5_layout
+    t5_positive_prompt = prompt_to_encode
+    segment_texts = None
+    clip_caps = None
+    if compiled_layout is not None and t5_layout_enc == "blocks":
+        from utils.prompt.prompt_layout import substitute_compiled_layout_in_t5_prompt
+
+        t5_positive_prompt = substitute_compiled_layout_in_t5_prompt(prompt_to_encode, compiled_layout)
+    elif compiled_layout is not None and t5_layout_enc == "segmented":
+        from utils.prompt.prompt_layout import t5_segment_texts_for_full_prompt
+
+        segment_texts = t5_segment_texts_for_full_prompt(compiled_layout, prompt_to_encode)
+    if text_bundle is not None and compiled_layout is not None:
+        from utils.prompt.prompt_layout import triple_clip_caption
+
+        clip_caps = [triple_clip_caption(compiled_layout, prompt_to_encode)]
+
+    layout_cache_tag = (
+        (t5_layout_enc, str(getattr(args, "prompt_layout", "") or "")) if compiled_layout is not None else ("flat", "")
+    )
+    cache_key = (
+        (prompt_to_encode, negative_text, style_key, layout_cache_tag) if not getattr(args, "no_cache", False) else None
+    )
     if cache_key is not None and cache_key in _t5_cache:
         cond_emb, uncond_emb, style_emb_cached = _t5_cache[cache_key]
         cond_emb = cond_emb.to(device)
@@ -1112,7 +1745,15 @@ def main():
             style_emb_cached = style_emb_cached.to(device)
         print("T5 cache hit.")
     else:
-        cond_emb = encode_text([prompt_to_encode], tokenizer, text_encoder, device, text_bundle=text_bundle)
+        cond_emb = encode_text(
+            [t5_positive_prompt],
+            tokenizer,
+            text_encoder,
+            device,
+            text_bundle=text_bundle,
+            clip_captions=clip_caps,
+            segment_texts=segment_texts,
+        )
         uncond_emb = encode_text([negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle)
         style_emb_cached = None
         if effective_style and getattr(cfg, "style_embed_dim", 0):
@@ -1146,14 +1787,24 @@ def main():
         model_kwargs_cond["style_strength"] = args.style_strength
     # IMPROVEMENTS 2.2: prompt emphasis (word) -> 1.2, [word] -> 0.8
     if _emphasis_segments:
-        tw = _token_weights_from_segments(prompt_to_encode, _emphasis_segments, tokenizer, 300, device)
+        tw = token_weights_from_cleaned_segments(
+            prompt_to_encode, _emphasis_segments, tokenizer, 300, device=device
+        )
         if tw is not None:
             model_kwargs_cond["token_weights"] = tw
 
     # Creativity/diversity knob (only if model has creativity_embed_dim)
     if getattr(cfg, "creativity_embed_dim", 0) and args.creativity is not None:
-        c = max(0.0, min(1.0, float(args.creativity)))
-        model_kwargs_cond["creativity"] = torch.tensor([c], device=device, dtype=cond_emb.dtype)
+        c0 = max(0.0, min(1.0, float(args.creativity)))
+        jitter = max(0.0, float(getattr(args, "creativity_jitter", 0.0) or 0.0))
+        if jitter > 0 and num_gen >= 1:
+            g = torch.Generator(device=device)
+            g.manual_seed(int(args.seed) + 90211)
+            deltas = torch.randn(num_gen, generator=g, device=device, dtype=torch.float32) * jitter
+            cre = (c0 + deltas).clamp(0.0, 1.0).to(dtype=cond_emb.dtype)
+        else:
+            cre = torch.full((num_gen,), c0, device=device, dtype=cond_emb.dtype)
+        model_kwargs_cond["creativity"] = cre
 
     # Control image
     if args.control_image:
@@ -1166,6 +1817,40 @@ def main():
         ctrl = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(device)
         model_kwargs_cond["control_image"] = ctrl
         model_kwargs_cond["control_scale"] = args.control_scale
+
+    ref_path = str(getattr(args, "reference_image", "") or "").strip()
+    ref_strength = float(getattr(args, "reference_strength", 0.0) or 0.0)
+    if ref_path and ref_strength > 0:
+        try:
+            from models.reference_token_projection import ReferenceTokenProjector
+            from utils.generation.clip_reference_embed import encode_reference_image_pil
+
+            pil_r = Image.open(ref_path).convert("RGB")
+            clip_id = str(getattr(args, "reference_clip_model", "") or "openai/clip-vit-large-patch14")
+            emb, clip_dim = encode_reference_image_pil(
+                pil_r, device=device, model_id=clip_id, dtype=torch.float32
+            )
+            if num_gen > 1:
+                emb = emb.expand(num_gen, -1)
+            hs = int(getattr(cfg, "hidden_size", 1152))
+            ntok = max(1, int(getattr(args, "reference_tokens", 4) or 4))
+            proj = ReferenceTokenProjector(clip_dim, hs, ntok).to(device)
+            apt = str(getattr(args, "reference_adapter_pt", "") or "").strip()
+            if apt:
+                sd = torch.load(apt, map_location="cpu", weights_only=False)
+                if isinstance(sd, dict):
+                    if "state_dict" in sd and isinstance(sd["state_dict"], dict):
+                        sd = sd["state_dict"]
+                    elif "projector" in sd and isinstance(sd["projector"], dict):
+                        sd = sd["projector"]
+                proj.load_state_dict(sd, strict=False)
+            proj.eval()
+            with torch.no_grad():
+                rt = proj(emb)
+            model_kwargs_cond["reference_tokens"] = rt
+            model_kwargs_cond["reference_scale"] = ref_strength
+        except Exception as e:
+            print(f"Reference image conditioning skipped: {e}", file=sys.stderr)
 
     # Img2img / from-z / inpainting
     num_timesteps = getattr(cfg, "num_timesteps", 1000)
@@ -1279,6 +1964,9 @@ def main():
         dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
         dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
         scheduler=getattr(args, "scheduler", "ddim"),
+        timestep_schedule=getattr(args, "timestep_schedule", None),
+        solver=getattr(args, "solver", "ddim"),
+        karras_rho=float(getattr(args, "karras_rho", 7.0)),
         inpaint_mask=inpaint_mask_latent,
         inpaint_x0=inpaint_x0,
         inpaint_noise=inpaint_noise,
@@ -1292,6 +1980,8 @@ def main():
         ada_early_exit_min_steps=int(getattr(args, "ada_exit_min_steps", 0)),
         pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
         pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+        sag_blur_sigma=float(getattr(args, "sag_blur_sigma", 0.0) or 0.0),
+        sag_scale=float(getattr(args, "sag_scale", 0.0) or 0.0),
     )
 
     # Optional refinement pass: add a little noise to the final latent and denoise once more.
@@ -1365,13 +2055,36 @@ def main():
                 img_np = naturalize(img_np, grain_amount=grain, micro_contrast=1.02, seed=args.seed + i)
             except Exception:
                 pass
+        if getattr(args, "face_enhance", False):
+            try:
+                from utils.quality.face_region_enhance import enhance_faces_in_rgb
+
+                img_np = enhance_faces_in_rgb(
+                    img_np,
+                    padding=float(getattr(args, "face_enhance_padding", 0.25)),
+                    sharpen_amount=float(getattr(args, "face_enhance_sharpen", 0.35)),
+                    micro_contrast=float(getattr(args, "face_enhance_contrast", 1.04)),
+                    max_faces=int(getattr(args, "face_enhance_max", 4)),
+                )
+            except Exception:
+                pass
+        pr = str(getattr(args, "post_reference_image", "") or "").strip()
+        pa = float(getattr(args, "post_reference_alpha", 0.0) or 0.0)
+        if pr and pa > 0:
+            try:
+                from utils.quality.face_region_enhance import blend_reference_rgb
+
+                ref_np = np.array(Image.open(pr).convert("RGB"))
+                img_np = blend_reference_rgb(img_np, ref_np, alpha=pa)
+            except Exception:
+                pass
         processed.append(img_np)
     saved_imgs = processed
 
     pick_m = (getattr(args, "pick_best", None) or "none").lower()
     best_idx = 0
     if num_gen > 1 and pick_m != "none":
-        from utils.test_time_pick import pick_best_indices
+        from utils.quality.test_time_pick import pick_best_indices
 
         exp_ocr = ""
         if isinstance(expected_texts, list) and expected_texts:
@@ -1412,7 +2125,8 @@ def main():
             f"seed: {args.seed}",
             f"steps: {args.steps}",
             f"cfg_scale: {getattr(args, 'cfg_scale', 7.5)}",
-            f"scheduler: {getattr(args, 'scheduler', 'ddim')}",
+            f"scheduler: {getattr(args, 'timestep_schedule', None) or getattr(args, 'scheduler', 'ddim')}, "
+            f"solver: {getattr(args, 'solver', 'ddim')}",
         ]
         prompt_txt = out_path.parent / f"{stem}.txt"
         prompt_txt.write_text("\n".join(params_lines), encoding="utf-8")
@@ -1429,7 +2143,7 @@ def main():
         try:
             import cv2 as _cv2
             import numpy as _np
-            from utils.text_rendering import create_text_rendering_pipeline
+            from utils.generation.text_rendering import create_text_rendering_pipeline
 
             pipe = create_text_rendering_pipeline()
             text_engine = pipe["engine"]
@@ -1483,7 +2197,11 @@ def main():
                         "--device",
                         args.device,
                         "--scheduler",
-                        getattr(args, "scheduler", "ddim"),
+                        getattr(args, "timestep_schedule", None) or getattr(args, "scheduler", "ddim"),
+                        "--solver",
+                        getattr(args, "solver", "ddim"),
+                        "--karras-rho",
+                        str(getattr(args, "karras_rho", 7.0)),
                         "--cfg-scale",
                         str(getattr(args, "cfg_scale", 7.5)),
                         "--cfg-rescale",
@@ -1551,10 +2269,64 @@ def main():
                         repair_cmd += ["--scene-scale", str(getattr(args, "scene_scale"))]
                     if getattr(args, "character_sheet", ""):
                         repair_cmd += ["--character-sheet", str(getattr(args, "character_sheet"))]
+                    if getattr(args, "label_multi_character_sheets", False):
+                        repair_cmd.append("--label-multi-character-sheets")
                     if getattr(args, "character_prompt_extra", ""):
                         repair_cmd += ["--character-prompt-extra", str(getattr(args, "character_prompt_extra"))]
                     if getattr(args, "character_negative_extra", ""):
                         repair_cmd += ["--character-negative-extra", str(getattr(args, "character_negative_extra"))]
+                    if getattr(args, "prompt_layout", ""):
+                        repair_cmd += ["--prompt-layout", str(getattr(args, "prompt_layout"))]
+                    if str(getattr(args, "t5_layout_encode", "auto") or "auto").lower() != "auto":
+                        repair_cmd += ["--t5-layout-encode", str(getattr(args, "t5_layout_encode"))]
+                    if getattr(args, "scene_blueprint", ""):
+                        repair_cmd += ["--scene-blueprint", str(getattr(args, "scene_blueprint"))]
+                    if float(getattr(args, "scene_blueprint_strength", 1.0)) != 1.0:
+                        repair_cmd += ["--scene-blueprint-strength", str(getattr(args, "scene_blueprint_strength"))]
+                    if float(getattr(args, "character_strength", 1.0)) != 1.0:
+                        repair_cmd += ["--character-strength", str(getattr(args, "character_strength"))]
+                    if bool(getattr(args, "uncensored_mode", False)):
+                        repair_cmd += ["--uncensored-mode"]
+                    if getattr(args, "clothing_mode", "none") != "none":
+                        repair_cmd += ["--clothing-mode", str(getattr(args, "clothing_mode"))]
+                    if getattr(args, "background_mode", "none") != "none":
+                        repair_cmd += ["--background-mode", str(getattr(args, "background_mode"))]
+                    if getattr(args, "people_layout", "none") != "none":
+                        repair_cmd += ["--people-layout", str(getattr(args, "people_layout"))]
+                    if getattr(args, "relationship_mode", "none") != "none":
+                        repair_cmd += ["--relationship-mode", str(getattr(args, "relationship_mode"))]
+                    if getattr(args, "object_layout", "none") != "none":
+                        repair_cmd += ["--object-layout", str(getattr(args, "object_layout"))]
+                    if getattr(args, "hand_mode", "none") != "none":
+                        repair_cmd += ["--hand-mode", str(getattr(args, "hand_mode"))]
+                    if getattr(args, "pose_naturalness", "none") != "none":
+                        repair_cmd += ["--pose-naturalness", str(getattr(args, "pose_naturalness"))]
+                    if getattr(args, "typography_mode", "none") != "none":
+                        repair_cmd += ["--typography-mode", str(getattr(args, "typography_mode"))]
+                    if getattr(args, "quality_pack", "none") != "none":
+                        repair_cmd += ["--quality-pack", str(getattr(args, "quality_pack"))]
+                    if getattr(args, "adherence_pack", "none") != "none":
+                        repair_cmd += ["--adherence-pack", str(getattr(args, "adherence_pack"))]
+                    if getattr(args, "lighting_mode", "none") != "none":
+                        repair_cmd += ["--lighting-mode", str(getattr(args, "lighting_mode"))]
+                    if getattr(args, "skin_detail_mode", "none") != "none":
+                        repair_cmd += ["--skin-detail-mode", str(getattr(args, "skin_detail_mode"))]
+                    if getattr(args, "nsfw_pack", "none") != "none":
+                        repair_cmd += ["--nsfw-pack", str(getattr(args, "nsfw_pack"))]
+                    if getattr(args, "nsfw_civitai_pack", "none") != "none":
+                        repair_cmd += ["--nsfw-civitai-pack", str(getattr(args, "nsfw_civitai_pack"))]
+                    if getattr(args, "civitai_trigger_bank", "none") != "none":
+                        repair_cmd += ["--civitai-trigger-bank", str(getattr(args, "civitai_trigger_bank"))]
+                    if str(getattr(args, "civitai_model_bank_csv", "") or "").strip():
+                        repair_cmd += ["--civitai-model-bank-csv", str(getattr(args, "civitai_model_bank_csv"))]
+                    if str(getattr(args, "civitai_frequency_txt", "") or "").strip():
+                        repair_cmd += ["--civitai-frequency-txt", str(getattr(args, "civitai_frequency_txt"))]
+                    if getattr(args, "style_mode", "none") != "none":
+                        repair_cmd += ["--style-mode", str(getattr(args, "style_mode"))]
+                    if bool(getattr(args, "style_lock", False)):
+                        repair_cmd += ["--style-lock"]
+                    if bool(getattr(args, "anti_style_bleed", False)):
+                        repair_cmd += ["--anti-style-bleed"]
                     if getattr(args, "preset", None):
                         repair_cmd += ["--preset", str(getattr(args, "preset"))]
                     if getattr(args, "op_mode", None):
@@ -1576,6 +2348,48 @@ def main():
                     if getattr(args, "naturalize", False):
                         repair_cmd.append("--naturalize")
                         repair_cmd += ["--naturalize-grain", str(getattr(args, "naturalize_grain", 0.015))]
+                    if getattr(args, "naturalize_deep", False):
+                        repair_cmd.append("--naturalize-deep")
+                    if getattr(args, "face_enhance", False):
+                        repair_cmd.append("--face-enhance")
+                        repair_cmd += ["--face-enhance-sharpen", str(getattr(args, "face_enhance_sharpen", 0.35))]
+                        repair_cmd += ["--face-enhance-contrast", str(getattr(args, "face_enhance_contrast", 1.04))]
+                        repair_cmd += ["--face-enhance-padding", str(getattr(args, "face_enhance_padding", 0.25))]
+                        repair_cmd += ["--face-enhance-max", str(getattr(args, "face_enhance_max", 4))]
+                    pri = str(getattr(args, "post_reference_image", "") or "").strip()
+                    if pri:
+                        repair_cmd += ["--post-reference-image", pri]
+                        repair_cmd += ["--post-reference-alpha", str(float(getattr(args, "post_reference_alpha", 0.0) or 0.0))]
+                    frsh = str(getattr(args, "face_restore_shell", "") or "").strip()
+                    if frsh:
+                        repair_cmd += ["--face-restore-shell", frsh]
+                    rif = str(getattr(args, "reference_image", "") or "").strip()
+                    if rif:
+                        repair_cmd += ["--reference-image", rif]
+                        repair_cmd += ["--reference-strength", str(float(getattr(args, "reference_strength", 1.0) or 0.0))]
+                        repair_cmd += ["--reference-tokens", str(int(getattr(args, "reference_tokens", 4) or 4))]
+                        repair_cmd += [
+                            "--reference-clip-model",
+                            str(getattr(args, "reference_clip_model", "openai/clip-vit-large-patch14")),
+                        ]
+                    rap = str(getattr(args, "reference_adapter_pt", "") or "").strip()
+                    if rap:
+                        repair_cmd += ["--reference-adapter-pt", rap]
+                    if float(getattr(args, "sag_blur_sigma", 0.0) or 0.0) > 0 and float(
+                        getattr(args, "sag_scale", 0.0) or 0.0
+                    ) > 0:
+                        repair_cmd += ["--sag-blur-sigma", str(getattr(args, "sag_blur_sigma", 0.0))]
+                        repair_cmd += ["--sag-scale", str(getattr(args, "sag_scale", 0.0))]
+                    if getattr(args, "less_ai", False):
+                        repair_cmd.append("--less-ai")
+                    if str(getattr(args, "anti_ai_pack", "none") or "none") != "none":
+                        repair_cmd += ["--anti-ai-pack", str(getattr(args, "anti_ai_pack"))]
+                    if str(getattr(args, "human_media_mode", "none") or "none") != "none":
+                        repair_cmd += ["--human-media", str(getattr(args, "human_media_mode"))]
+                    if str(getattr(args, "lora_scaffold", "none") or "none") != "none":
+                        repair_cmd += ["--lora-scaffold", str(getattr(args, "lora_scaffold"))]
+                    if getattr(args, "lora_scaffold_auto", False):
+                        repair_cmd.append("--lora-scaffold-auto")
                     if getattr(args, "anti_bleed", False):
                         repair_cmd.append("--anti-bleed")
                     if getattr(args, "diversity", False):
@@ -1584,6 +2398,10 @@ def main():
                         repair_cmd.append("--anti-artifacts")
                     if getattr(args, "strong_watermark", False):
                         repair_cmd.append("--strong-watermark")
+                    if not getattr(args, "auto_content_fix", True):
+                        repair_cmd.append("--no-auto-content-fix")
+                    if not getattr(args, "one_shot_boost", True):
+                        repair_cmd.append("--no-one-shot-boost")
 
                     print(
                         f"OCR fix: acc={acc:.3f} < {args.ocr_threshold}; repairing with mdm inpainting...",
@@ -1596,6 +2414,14 @@ def main():
                 print(f"OCR fix: acc={acc:.3f} >= {args.ocr_threshold}; done.", file=sys.stderr)
         except Exception as e:
             print(f"OCR fix failed (non-fatal): {e}", file=sys.stderr)
+
+    frs = str(getattr(args, "face_restore_shell", "") or "").strip()
+    if frs:
+        try:
+            cmd = frs.replace("{src}", str(out_path)).replace("{dst}", str(out_path))
+            subprocess.run(cmd, shell=True, check=False)
+        except Exception as e:
+            print(f"face-restore-shell failed: {e}", file=sys.stderr)
 
     # IMPROVEMENTS 9: optional grid image when --num > 1
     if num_gen > 1 and getattr(args, "grid", False) and saved_imgs:

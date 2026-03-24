@@ -1,6 +1,7 @@
 """Diffusion schedules, Gaussian diffusion wrapper, and sampling helpers."""
 
-from .gaussian_diffusion import GaussianDiffusion, create_diffusion
+from .gaussian_diffusion import INFERENCE_SOLVERS, GaussianDiffusion, create_diffusion
+from .inference_timesteps import build_inference_timesteps, list_timestep_schedules
 from .losses import get_loss_weight, get_timestep_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
@@ -9,6 +10,9 @@ from .snr_utils import alpha_cumprod_from_betas, snr_from_alpha_cumprod, snr_fro
 from .timestep_sampling import sample_training_timesteps
 
 __all__ = [
+    "INFERENCE_SOLVERS",
+    "build_inference_timesteps",
+    "list_timestep_schedules",
     "create_diffusion",
     "GaussianDiffusion",
     "get_beta_schedule",

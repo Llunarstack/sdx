@@ -51,25 +51,39 @@ def sigmoid_beta_schedule(
     return _clip_betas(beta)
 
 
+def _squared_cosine_beta_schedule_v2_numpy(num_timesteps: int, max_beta: float = 0.999) -> np.ndarray:
+    """Vectorized reference (same math as the former scalar loop; fast without native)."""
+    n = int(num_timesteps)
+    if n < 1:
+        return np.array([], dtype=np.float64)
+    i = np.arange(n, dtype=np.float64)
+    t1 = i / n
+    t2 = (i + 1) / n
+    ab1 = np.cos((t1 + 0.008) / 1.008 * np.pi * 0.5) ** 2
+    ab2 = np.cos((t2 + 0.008) / 1.008 * np.pi * 0.5) ** 2
+    b = np.minimum(1.0 - ab2 / np.maximum(ab1, 1e-12), float(max_beta))
+    return _clip_betas(b.astype(np.float64))
+
+
 def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999) -> np.ndarray:
     """
     Squared-cosine schedule with small offset (Improved DDPM / diffusers ``squaredcos_cap_v2``).
     ``alpha_bar(t) = cos^2((t + 0.008) / 1.008 * pi / 2)``.
+
+    Uses ``sdx_beta_schedules`` when built; otherwise vectorized NumPy.
     """
-
-    def alpha_bar_fn(t: float) -> float:
-        return float(np.cos((t + 0.008) / 1.008 * np.pi * 0.5) ** 2)
-
     n = int(num_timesteps)
-    betas: list[float] = []
-    for i in range(n):
-        t1 = i / n
-        t2 = (i + 1) / n
-        ab1 = alpha_bar_fn(t1)
-        ab2 = alpha_bar_fn(t2)
-        b = min(1.0 - ab2 / max(ab1, 1e-12), max_beta)
-        betas.append(b)
-    return _clip_betas(np.asarray(betas, dtype=np.float64))
+    if n < 1:
+        return np.array([], dtype=np.float64)
+    try:
+        from sdx_native.beta_schedules_native import squared_cosine_betas_v2_native
+
+        got = squared_cosine_betas_v2_native(n, max_beta)
+        if got is not None and got.shape == (n,):
+            return got
+    except ImportError:
+        pass
+    return _squared_cosine_beta_schedule_v2_numpy(n, max_beta)
 
 
 def get_beta_schedule(schedule_name: str, num_timesteps: int) -> np.ndarray:

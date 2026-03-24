@@ -21,6 +21,12 @@ class TrainConfig:
     # Regional / layout text (JSONL `parts` / `region_captions`) merged into T5 caption — no DiT change
     region_caption_mode: str = "append"  # "append" | "prefix" | "off"
     region_layout_tag: str = "[layout]"  # prefix before regional block; set "" to disable tag
+    # Prepend adherence tags to training captions (stronger literal T5 conditioning; see data/caption_utils.py).
+    boost_adherence_caption: bool = False
+    # NFKC + zero-width strip on training captions (see sdx_native.text_hygiene).
+    caption_unicode_normalize: bool = False
+    # Match sample.py ( ) / [ ] emphasis: strip brackets for T5 and pass DiT token_weights (see utils/prompt/prompt_emphasis.py).
+    train_prompt_emphasis: bool = False
 
     # Model
     model_name: str = "DiT-XL/2-Text"
@@ -83,6 +89,11 @@ class TrainConfig:
     # Creativity/diversity knob (IMPROVEMENTS 8.7): 0 = off; else hidden dim for scalar conditioning (e.g. 64)
     creativity_embed_dim: int = 0
     creativity_max: float = 1.0  # Training: sample creativity in [0, creativity_max]
+    # Extra Gaussian noise on the per-sample creativity scalar (wider training coverage; 0 = off).
+    creativity_jitter_std: float = 0.0
+    # Randomly inject ORIGINALITY_POSITIVE_TOKENS into captions (same insertion rules as sample.py --originality).
+    train_originality_augment_prob: float = 0.0  # 0 = off; try 0.1–0.25
+    train_originality_strength: float = 0.5  # 0–1 maps to how many tokens are inserted
     size_embed_dim: int = (
         0  # PixArt-style (h, w) latent grid -> timestep conditioning; 0 = off (still can infer H,W from x)
     )
@@ -94,12 +105,18 @@ class TrainConfig:
     num_timesteps: int = 1000
     timestep_respacing: str = ""
     beta_schedule: str = "linear"  # linear | cosine | sigmoid | squaredcos_cap_v2
-    prediction_type: str = "epsilon"  # "epsilon" or "v" (velocity, SD2-style)
+    prediction_type: str = "epsilon"  # "epsilon" | "v" (velocity) | "x0" (direct clean latent)
     noise_offset: float = 0.0  # SD/SDXL: shift noise for better light/dark balance (e.g. 0.1)
     min_snr_gamma: float = 5.0  # Min-SNR weighting: cap SNR for loss (0 = off, 5 typical)
     # Timestep loss: "min_snr" | "min_snr_soft" | "unit" | "edm" | "v" | "eps" (non-min modes ignore min_snr_gamma for the weight formula).
     loss_weighting: str = "min_snr"
     loss_weighting_sigma_data: float = 0.5  # For loss_weighting="edm"
+    # Spectral Flow Prediction (SFP) prototype: FFT-weighted MSE on (pred-target) in latent space.
+    # Not Flow Matching; does not change sampling. Ignored when MDM masked training is active (spatial MSE there).
+    spectral_sfp_loss: bool = False
+    spectral_sfp_low_sigma: float = 0.22  # radial width for low-frequency emphasis at high noise
+    spectral_sfp_high_sigma: float = 0.22  # radial width for high-frequency emphasis at low noise
+    spectral_sfp_tau_power: float = 1.0  # sharpen/flatten time blend t/(T-1) (1 = linear)
     # Which diffusion indices t to sample during training (VP-DDPM unchanged; only P(t)).
     # See diffusion/timestep_sampling.py and docs/MODERN_DIFFUSION.md.
     timestep_sample_mode: str = "uniform"  # uniform | logit_normal | high_noise
@@ -181,7 +198,7 @@ class TrainConfig:
     log_images_every: int = 0  # 0 = off; when > 0 and wandb/tb enabled, log a sample image every N steps
     log_images_prompt: str = "a photo of a cat"  # prompt used for log sample image
     dry_run: bool = False  # Run 1 training step and exit (verify setup)
-        # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
+    # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
     save_polyak: int = 0  # if > 0, keep running avg of weights and save as polyak.pt every ckpt_every
 
     # Quality / reproducibility
@@ -257,7 +274,8 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
     return kw
 
 
-# Default configuration instance
+# Optional shared instance for quick scripts; training CLIs should build TrainConfig from args/env.
+# Defaults here can differ from the TrainConfig dataclass field defaults (e.g. global_batch_size).
 cfg = TrainConfig(
     # Enhanced model settings
     model_name="EnhancedDiT-XL/2",

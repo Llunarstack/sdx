@@ -35,6 +35,12 @@ def test_native_stack_status_keys():
     assert "rust_sdx_jsonl_tools" in s
     assert "zig_sdx_pathstat" in s
     assert "repo_root" in s
+    assert "libsdx_inference_timesteps" in s
+    assert "libsdx_beta_schedules" in s
+    assert "jsonl_manifest_pure" in s
+    assert "libsdx_line_stats" in s
+    assert "libsdx_cuda_hwc_to_chw" in s
+    assert "mojo_or_magic_cli" in s
 
 
 def test_latent_lib_fallback():

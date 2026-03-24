@@ -11,12 +11,16 @@ class ViTConfig:
     image_size: int = 224
     batch_size: int = 16
     num_workers: int = 4
+    training_augment: bool = False
 
     # Model
     model_name: str = "vit_base_patch16_224"
     pretrained: bool = True
     text_feat_dim: int = 8
     hidden_dim: int = 256
+    fuse_dropout: float = 0.1
+    text_proj_dropout: float = 0.0
+    backbone_grad_checkpointing: bool = False
     # DiT block-AR regime (0/2/4) as extra ViT conditioner; see utils/ar_dit_vit.py
     use_ar_conditioning: bool = True
     ar_cond_dim: int = 4
@@ -27,6 +31,12 @@ class ViTConfig:
     epochs: int = 5
     quality_loss_weight: float = 1.0
     adherence_loss_weight: float = 1.0
+    # 0 = plain BCE; >0 focal gamma (imbalanced quality labels)
+    focal_loss_gamma: float = 0.0
+    focal_loss_alpha: float | None = None
+    # If True, SmoothL1 on adherence instead of MSE (outlier‑robust)
+    adherence_smooth_l1: bool = False
+    adherence_smooth_l1_beta: float = 0.1
 
     # Runtime
     device: str = "cuda"

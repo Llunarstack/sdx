@@ -64,7 +64,8 @@ T5 and VAE are always loaded from **cfg.text_encoder** and **cfg.vae_model** (Hu
 data_path or manifest_jsonl
     → Text2ImageDataset (data/t2i_dataset.py)
     → collate_t2i → batch { pixel_values, captions, negative_captions, styles, (difficulty), (control_image), (latent_values) }
-    → train.py: encode_text(captions) → T5; encode_images or latent_values → VAE or cache
+    → train.py: encode_text(captions) → T5; optional --train-prompt-emphasis → cleaned captions + token_weights in model_kwargs
+    → encode_images or latent_values → VAE or cache
     → diffusion.training_losses(model, latents, t, model_kwargs)
     → model(x_t, t, **model_kwargs)  [DiT forward]
 ```
@@ -117,8 +118,8 @@ Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` →
 | **scripts/training/self_improve.py** | Checkpoint, prompts or prompts-file | out_dir/images/*.png, out_dir/manifest.jsonl |
 | **scripts/training/precompute_latents.py** | data_path, vae_model | latent_cache_dir/*.pt (per image) |
 | **scripts/setup/clone_repos.ps1 / .sh** | — | external/ (reference repos) |
-| **scripts/tools/ckpt_info.py** | checkpoint path | — (prints config) |
-| **scripts/tools/quick_test.py** | — | — (smoke test) |
+| **scripts/tools/dev/ckpt_info.py** | checkpoint path | — (prints config) |
+| **scripts/tools/dev/quick_test.py** | — | — (smoke test) |
 
 ---
 

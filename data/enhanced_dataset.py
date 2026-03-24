@@ -12,7 +12,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from training.enhanced_trainer import EnhancedTrainingBatch
-from utils.enhanced_utils import SimpleAnatomyValidator, SimpleSceneComposer, SimpleTextEngine
+from utils.architecture.enhanced_utils import SimpleAnatomyValidator, SimpleSceneComposer, SimpleTextEngine
 
 
 class EnhancedT2IDataset(Dataset):

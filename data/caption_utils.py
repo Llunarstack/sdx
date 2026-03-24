@@ -533,6 +533,26 @@ def boost_hard_style_tags(caption: str, repeat_factor: int = 3) -> str:
     return f"{extra}, {caption}".strip()
 
 
+# Prepended during training when ``use_adherence_boost`` is on — nudges T5 toward literal caption following.
+ADHERENCE_TAGS: Tuple[str, ...] = (
+    "faithful to caption",
+    "accurate to description",
+    "all specified details",
+)
+
+
+def prepend_adherence_boost(caption: str, repeat_factor: int = 2) -> str:
+    """
+    Prepend short adherence-oriented tags so long/complex captions anchor on literal conditioning.
+    Use after quality/domain boosts; ``repeat_factor`` duplicates the tag block (default 2 = one repeat).
+    """
+    if not caption.strip():
+        return caption
+    r = max(1, int(repeat_factor))
+    extra = ", ".join(list(ADHERENCE_TAGS) * r)
+    return f"{extra}, {caption}".strip()
+
+
 def boost_quality_tags(caption: str, repeat_factor: int = 3) -> str:
     """
     When quality tags are present, repeat them at the start so the model strongly associates

@@ -10,7 +10,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.style_harmonization import create_style_harmonization_system  # noqa: E402
+from utils.consistency.style_harmonization import create_style_harmonization_system  # noqa: E402
 
 
 def demonstrate_style_conflict_detection():

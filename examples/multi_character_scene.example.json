@@ -1,0 +1,32 @@
+{
+  "quality": ["masterpiece", "best quality"],
+  "composition": ["wide shot", "clear depth", "two distinct silhouettes"],
+  "camera": ["eye level", "medium-wide shot"],
+  "actors": [
+    {
+      "id": "A",
+      "spatial_anchor": "left third of frame, foreground",
+      "wardrobe": ["red hoodie", "black jeans", "white sneakers"],
+      "pose": ["arms crossed", "weight on back foot"],
+      "hair": ["short black hair"],
+      "avoid": ["wrong outfit colors"]
+    },
+    {
+      "id": "B",
+      "spatial_anchor": "right third of frame, slightly behind A",
+      "wardrobe": ["blue summer dress", "sandals"],
+      "pose": ["waving", "smiling at viewer"],
+      "hair": ["long blonde hair in ponytail"],
+      "avoid": ["same clothes as A"]
+    }
+  ],
+  "relations": [
+    {
+      "a": "A",
+      "b": "B",
+      "kind": "facing",
+      "detail": "angled toward each other, not fused"
+    }
+  ],
+  "anti_artifacts": true
+}

@@ -24,7 +24,7 @@ def _resolve_path(image_path: str, manifest_path: Path) -> Path:
 
 
 def main() -> int:
-    from utils.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
+    from utils.architecture.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
 
     from ViT.checkpoint_utils import load_vit_quality_checkpoint
     from ViT.dataset import text_feature_vector
@@ -34,6 +34,12 @@ def main() -> int:
     p.add_argument("--manifest-jsonl", required=True)
     p.add_argument("--out-npz", required=True)
     p.add_argument("--device", default="cuda")
+    p.add_argument(
+        "--default-num-ar-blocks",
+        type=int,
+        default=None,
+        help="When AR conditioning is on and a row has no AR field, use this (0/2/4) instead of 'unknown'",
+    )
     args = p.parse_args()
 
     model, cfg = load_vit_quality_checkpoint(args.ckpt, use_ema=False)
@@ -77,6 +83,10 @@ def main() -> int:
             x = tfm(img).unsqueeze(0).to(device)
             txt = text_feature_vector(str(caption)).unsqueeze(0).to(device)
             ar_b = parse_num_ar_blocks_from_row(row)
+            if use_ar and ar_b == -1 and args.default_num_ar_blocks is not None:
+                from utils.architecture.ar_dit_vit import normalize_num_ar_blocks
+
+                ar_b = normalize_num_ar_blocks(args.default_num_ar_blocks)
             ar_vec = (
                 ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0) if use_ar else None
             )

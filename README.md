@@ -62,7 +62,7 @@
 | **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) · [Sampling](#sampling) |
 | **Honest limits & mitigations** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) (gaps table, fixes) · [docs/COMMON_ISSUES.md](docs/COMMON_ISSUES.md) |
 | **Diffusion upgrade ideas** | [docs/DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md) · [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
-| **Prompt pipeline (modules + flags)** | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) · [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) · `python scripts/tools/preview_generation_prompt.py --help` |
+| **Prompt pipeline (modules + flags)** | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) · [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) · `utils/prompt/prompt_layout.py` · `sample.py --prompt-layout` / `--t5-layout-encode` · `python scripts/tools/preview_generation_prompt.py --help` |
 
 <a id="latest-additions"></a>
 
@@ -81,6 +81,10 @@ High-signal additions to inference, books, packaging, and docs — all on the sa
 | **Gaps vs common T2I failures** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) — structured “what breaks / why / mitigations” (incl. hands, faces, text-in-image, composition). |
 | **Tests** | [`tests/unit/test_reference_tokens_and_sag.py`](tests/unit/test_reference_tokens_and_sag.py), [`tests/unit/test_face_region_enhance.py`](tests/unit/test_face_region_enhance.py), [`tests/unit/test_consistency_helpers.py`](tests/unit/test_consistency_helpers.py), plus existing **`tests/unit/`**, **`tests/integration/`**, **`tests/diffusion/`**. |
 | **Prompt lint (path)** | Canonical script: [`scripts/tools/prompt/prompt_lint.py`](scripts/tools/prompt/prompt_lint.py) (invoked by tooling / CI that still says `prompt_lint`). |
+| **Layered prompts + encoders** | JSON **prompt layout** compiler [`utils/prompt/prompt_layout.py`](utils/prompt/prompt_layout.py) · `sample.py --prompt-layout file.json` · `--t5-layout-encode` (`auto` / `flat` / `blocks` / `segmented`) reshapes how **T5** reads sections. **Triple mode** (`text_encoder_mode=triple`): **CLIP-L** and **CLIP-bigG** get a compact **layout-aware** caption via `triple_clip_caption` while T5 uses the chosen layout mode ([`utils/modeling/text_encoder_bundle.py`](utils/modeling/text_encoder_bundle.py)). |
+| **Native C++ / CUDA builds** | One-shot: **[`scripts/tools/native/build_native.ps1`](scripts/tools/native/build_native.ps1)** (Windows) · **[`scripts/tools/native/build_native.sh`](scripts/tools/native/build_native.sh)** (Linux/macOS). Produces **`sdx_line_stats`** (fast JSONL byte + newline count), optional **`sdx_cuda_hwc_to_chw`** (`cmake -DSDX_BUILD_CUDA=ON`), plus existing latent / timestep / beta DLLs ([`native/cpp/`](native/cpp/)). |
+| **JSONL tools (no Node)** | Former `native/js/*.mjs` replaced by pure Python **[`sdx_native.jsonl_manifest_pure`](native/python/sdx_native/jsonl_manifest_pure.py)** (`python -m sdx_native.jsonl_manifest_pure stat|promptlint …`). |
+| **Mojo (optional)** | **[`native/mojo/`](native/mojo/)** — **Pixi** + Modular conda (`pixi.toml` / `pixi.lock`, **linux-64**). On Windows, **native win-64 Mojo** is not on conda; use **WSL2** and [`native/mojo/install_mojo_wsl.ps1`](native/mojo/install_mojo_wsl.ps1) or `pixi install` + `pixi run mojo-run`. Python helper: [`native/mojo/mojopy/launcher.py`](native/mojo/mojopy/launcher.py). |
 
 ### Platform & repo layout (stable)
 
@@ -167,9 +171,11 @@ torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-si
 | **Full suite** | `pytest tests/ -q` (all `tests/**`, including `unit/`, `integration/`, `diffusion/`) |
 | **Fast unit** | `pytest tests/unit -q` |
 | **Smoke (DiT forward)** | `python scripts/tools/dev/quick_test.py` |
-| **Optional native CLIs** | `python scripts/tools/dev/quick_test.py --show-native` — lists Rust/Zig/Go/Node/`libsdx_latent` if built ([native/README.md](native/README.md)) |
+| **Optional native CLIs** | `python scripts/tools/dev/quick_test.py --show-native` — lists Rust/Zig/Go, C++ DLLs (`libsdx_latent`, `sdx_line_stats`, CUDA HWC, …), Pixi/Mojo hints ([native/README.md](native/README.md)) |
 
-After pulling C++ changes to **`libsdx_latent`**, rebuild in `native/cpp` (`cmake --build build`) so ctypes sees new symbols (e.g. `sdx_latent_numel`).
+**Build native libraries (optional):** `.\scripts\tools\native\build_native.ps1` or `bash scripts/tools/native/build_native.sh` — CMake **Release** for `native/cpp` (set `SDX_BUILD_CUDA=0` to skip nvcc) + **cargo** `sdx-jsonl-tools` when `cargo` is on PATH.
+
+After pulling C++ changes, rebuild `native/cpp` so ctypes picks up new symbols (e.g. `sdx_latent_numel`, `sdx_line_stats`).
 
 ---
 
@@ -226,7 +232,7 @@ You can still get value **without** training a billion-parameter model:
 | :---: | :--- |
 | **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), **AR** blocks, **Supreme** / **Predecessor** variants |
 | **Training** | Pass-based schedule · **EMA** · **best** ckpt · val + early stopping · bf16 · compile · **DDP** · **non-uniform timestep** sampling |
-| **Sampling** | CFG · schedulers · img2img / inpaint · LoRA · control · refinement · **pick-best** · **reference tokens** · **SAG** · **face enhance** / **post-reference** blend |
+| **Sampling** | CFG · **pluggable timestep schedules** + **solvers** (ddim / **heun**) · img2img / inpaint · LoRA · control · refinement · **pick-best** · **reference tokens** · **SAG** · **face enhance** / **post-reference** blend |
 | **Data** | Folders + sidecars or **JSONL** · emphasis · domains · regional captions |
 
 ---
@@ -282,7 +288,7 @@ See **[pipelines/README.md](pipelines/README.md)** · [image_gen](pipelines/imag
 | **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator); **[ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md)** (research + checklist), **[ViT/backbone_presets.py](ViT/backbone_presets.py)** (`timm` names for `--model-name`) | CLI, optional dataset QA |
 | **`scripts/`** | Downloads, tools, Cascade stub | Ops & CI |
 | **`pipelines/`** | **image_gen** vs **book_comic** docs + book workflow script (no second DiT copy) | Contributors, multi-page / OCR workflows |
-| **`native/`** | Fast JSONL / line-FNV / merge CLIs; C++ ``libsdx_latent`` | Optional; **Python bridge** in [`native/python/sdx_native/`](native/python/sdx_native/) (also re-exported as [`utils/native/native_tools.py`](utils/native/native_tools.py) / [`utils/native/latent_geometry.py`](utils/native/latent_geometry.py)); dataset QA only — not required in `train.py` |
+| **`native/`** | Fast JSONL / line-FNV / merge CLIs; C++ **`libsdx_latent`**, **`sdx_line_stats`**, optional **CUDA** HWC→CHW; **Mojo** (Pixi) | Optional; **Python bridge** [`native/python/sdx_native/`](native/python/sdx_native/) (re-exported via [`utils/native/`](utils/native/)); dataset QA and experiments — not required for core `train.py` / `sample.py` |
 | **`toolkit/`** | Training QoL: env report, JSONL digest, seeds, timers | [`toolkit/README.md`](toolkit/README.md) — `python -m toolkit.training.env_health`; optional pip list in `toolkit/extras/requirements-suggested.txt` |
 | **`model/`** | Downloaded HF weights | Paths via `utils/modeling/model_paths.py` |
 
@@ -560,7 +566,7 @@ Run commands from the **repo root** (`sdx/`) so `config`, `data`, `diffusion`, `
 | **NVIDIA GPU wheels** | After `pip install -r requirements.txt`, run **`pip install --force-reinstall -r requirements-cuda128.txt`** — see [Quick start](#quick-start) · `python -m toolkit.training.env_health` |
 | **Download weights** (T5, VAE, optional CLIP/LLM) | `python scripts/download/download_models.py --all` → `model/` |
 | **Curated stack** (T5 + CLIP + DINOv2 + Qwen + Cascade, optional) | `python scripts/download/download_revolutionary_stack.py` — see [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
-| **Optional native tools** (Rust/Zig/C++/Go/Node + Python `sdx_native`) | [native/README.md](native/README.md) · [native/python/README.md](native/python/README.md) |
+| **Optional native tools** (Rust/Zig/C++/Go/CUDA/Mojo + Python `sdx_native`) | [native/README.md](native/README.md) · [native/python/README.md](native/python/README.md) · [native/mojo/README.md](native/mojo/README.md) |
 
 **Clone reference repos** (optional, for reading upstream code):
 
@@ -599,7 +605,7 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | :--- | :--- |
 | [docs/DANBOORU_HF.md](docs/DANBOORU_HF.md) | Hugging Face → JSONL + images; **`hf_download_and_train.py`** one-shot |
 | [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) | Roadmap, quality ideas, implemented vs planned (incl. §12 industry alignment) |
-| [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | Recent diffusion and flow ideas, timestep sampling, paper pointers |
+| [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | ε / v / x₀ vs **flow matching** & **rectified flow** (ecosystem map); timestep sampling; paper pointers |
 | [docs/DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage upgrades: data, latents, conditioning, objectives, inference, alignment |
 | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) | Honest gap analysis: common T2I failure modes and SDX mitigations |
 | [docs/MODEL_ENHANCEMENTS.md](docs/MODEL_ENHANCEMENTS.md) | Shared blocks (RMSNorm, FiLM, DropPath), multimodal cross-attn, RAE scales |
@@ -914,7 +920,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
   --steps 50 --width 256 --height 256 --out out.png
 ```
 
-**Often-used flags**: `--cfg-scale`, `--cfg-rescale`, `--scheduler ddim|euler`, `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, `--style`, `--auto-style-from-prompt`, `--control-image`, `--lora`, `--init-image`, `--mask`, `--inpaint-mode legacy|mdm`, `--sharpen`, `--contrast`, `--preset`, `--op-mode`, `--pick-best`, `--no-refine`, **`--reference-image`** / **`--reference-scale`**, **`--sag-blur-sigma`** / **`--sag-scale`**, **`--face-enhance`**, **`--post-reference-image`**.
+**Often-used flags**: `--cfg-scale`, `--cfg-rescale`, **`--scheduler`** (timestep path: `ddim`, `euler`, **`karras_rho`**, `snr_uniform`, `quad_cosine`), **`--solver ddim|heun`** (Heun = 2 model evals/step, often sharper), **`--karras-rho`** (for `karras_rho` only), **`--timestep-schedule`** (overrides `--scheduler`), `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, …
 
 **Reference conditioning:** pass **`--reference-image path.png`** (and optionally **`--reference-tokens`**, **`--reference-scale`**, **`--clip-reference-model`**) to encode the image with CLIP vision and inject **reference tokens** into the DiT cross-attention — similar in spirit to IP-Adapter, implemented in-repo ([`models/reference_token_projection.py`](models/reference_token_projection.py)). Use **`--reference-scale 0`** to disable injection while keeping other paths unchanged.
 
@@ -1013,7 +1019,7 @@ For `.txt`: line 1 = positive, line 2 = negative.
 | `--refinement-max-t` | 150 | Refinement t cap |
 | `--no-save-best` | False | Disable best-by-train-loss ckpt |
 | `--beta-schedule` | linear | `linear` \| `cosine` \| `sigmoid` \| `squaredcos_cap_v2` |
-| `--prediction-type` | epsilon | `epsilon` or `v` |
+| `--prediction-type` | epsilon | `epsilon` (noise) · `v` (velocity) · `x0` (direct clean latent; must match at sample time) |
 | `--noise-offset` | 0 | SD-style noise offset |
 | `--min-snr-gamma` | 5 | Min-SNR / soft min-SNR weighting (0=off) |
 | `--loss-weighting` | min_snr | `min_snr` \| `min_snr_soft` \| `unit` \| `edm` \| `v` \| `eps` |
@@ -1053,9 +1059,11 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 |:--------|:-----|:------------|
 | Offset noise | `--noise-offset` | Light/dark balance in latents |
 | Min-SNR | `--min-snr-gamma` + `--loss-weighting min_snr` | Per-timestep loss balance |
+| Spectral SFP (prototype) | `--spectral-sfp-loss` | FFT-weighted **pred−target** error; use with **`--prediction-type x0`** to frequency-weight **predicted vs true clean latent** — [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
 | Soft min-SNR | `--loss-weighting min_snr_soft` | Smooth alternative to hard min-SNR (`diffusion/timestep_loss_weight.py`) |
 | Timestep sampling | `--timestep-sample-mode` | Non-uniform training `t` (logit-normal / high-noise bias) — [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
 | V-pred | `--prediction-type v` | Velocity parameterization |
+| x0-pred | `--prediction-type x0` | VP clean-latent target (not Flow Matching); min-SNR + timestep sampling help at high noise (incompatible with ε/v ckpts) |
 | Cosine / sigmoid / squaredcos v2 | `--beta-schedule cosine` (or `sigmoid`, `squaredcos_cap_v2`) | Noise schedule variants (`diffusion/schedules.py`) |
 
 **Sampling:** DDIM-style loop with cond/uncond; use `--cfg-rescale`, `--num`, `--vae-tiling` when needed.
@@ -1138,7 +1146,7 @@ sdx/
 ├── model/            # Downloaded weights (gitignored)
 ├── models/           # dit_text, attention, controlnet, moe, cascaded_multimodal_diffusion, …
 ├── ViT/              # Quality scoring, prompt breakdown, EMA/ranking; EXCELLENCE_VS_DIT.md, backbone_presets.py
-├── native/           # Rust/Zig/C++/Go/Node CLIs + native/python/sdx_native (Python bridge); native/README.md
+├── native/           # Rust/Zig/C++/Go/CUDA/Mojo + native/python/sdx_native; build_native.ps1/.sh; native/README.md
 ├── tests/            # pytest: unit/ integration/ diffusion/ fixtures/ (see tests/unit/README.md)
 ├── scripts/          # see scripts/README.md
 │   ├── cli.py        # optional unified CLI (dataset, config, checkpoints)
