@@ -16,7 +16,7 @@
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-CONTRIBUTING.md-1f6feb?style=flat-square" alt="Contributing"/></a>
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Docs-docs%2FREADME-24292f?style=flat-square&logo=github" alt="Documentation"/></a>
   <a href="docs/IMPROVEMENTS.md"><img src="https://img.shields.io/badge/Roadmap-IMPROVEMENTS-238636?style=flat-square" alt="Roadmap"/></a>
-  <a href="https://github.com/Llunarstack/sdx/releases"><img src="https://img.shields.io/github/v/release/Llunarstack/sdx?label=release&style=flat-square&color=6f42c1" alt="GitHub release"/></a>
+  <a href="https://github.com/Llunarstack/sdx/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-6f42c1?style=flat-square" alt="Release v0.2.0"/></a>
 </p>
 
 <p align="center">
