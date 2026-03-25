@@ -1,5 +1,5 @@
 # Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, ε/v/x0-pred, DDIM, CFG).
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ from .schedules import get_beta_schedule
 from .spectral_sfp import spectral_sfp_per_sample_loss
 
 INFERENCE_SOLVERS = ("ddim", "heun")
+FLOW_INFERENCE_SOLVERS = ("euler", "heun")
 
 
 def create_diffusion(
@@ -100,6 +101,73 @@ class GaussianDiffusion:
         sqrt_one_minus = self.sqrt_one_minus_alpha_cumprod.to(x_start.device)[t][(...,) + (None,) * (x_start.ndim - 1)]
         return sqrt_alpha * x_start + sqrt_one_minus * noise
 
+    def per_sample_training_losses(
+        self,
+        model,
+        x_start,
+        t,
+        model_kwargs=None,
+        noise=None,
+        refinement_prob=0.0,
+        refinement_max_t=150,
+        noise_offset=0.0,
+        min_snr_gamma=5.0,
+        loss_weighting="min_snr",
+        loss_weighting_sigma_data=0.5,
+        use_spectral_sfp_loss=False,
+        spectral_sfp_low_sigma=0.22,
+        spectral_sfp_high_sigma=0.22,
+        spectral_sfp_tau_power=1.0,
+    ):
+        """
+        Same forward as ``training_losses`` but returns per-row loss ``(B,)`` before batch mean.
+        Used for Diffusion-DPO and other per-example objectives.
+        """
+        if model_kwargs is None:
+            model_kwargs = {}
+        B = x_start.shape[0]
+        device = x_start.device
+        if refinement_prob > 0 and refinement_max_t > 0 and torch.rand(1, device=device).item() < refinement_prob:
+            t = torch.randint(0, min(refinement_max_t, self.num_timesteps), (B,), device=device, dtype=t.dtype)
+        if noise is None:
+            noise = torch.randn_like(x_start, device=device, dtype=x_start.dtype)
+        x_t = self.q_sample(x_start, t, noise=noise, noise_offset=noise_offset)
+        model_out = model(x_t, t, **model_kwargs)
+        if model_out.shape != x_start.shape and model_out.shape[1] > x_start.shape[1]:
+            model_out = model_out[:, : x_start.shape[1]]
+        self._to_device(device)
+        sqrt_alpha = self.sqrt_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
+        sqrt_one = self.sqrt_one_minus_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
+        if self.prediction_type == "v":
+            target = sqrt_alpha * noise - sqrt_one * x_start
+        elif self.prediction_type == "x0":
+            target = x_start
+        else:
+            target = noise
+        if use_spectral_sfp_loss:
+            loss = spectral_sfp_per_sample_loss(
+                model_out,
+                target,
+                t,
+                self.num_timesteps,
+                low_sigma=float(spectral_sfp_low_sigma),
+                high_sigma=float(spectral_sfp_high_sigma),
+                tau_power=float(spectral_sfp_tau_power),
+            )
+        else:
+            loss = nn.functional.mse_loss(model_out, target, reduction="none")
+            loss = loss.mean(dim=tuple(range(1, loss.ndim)))
+        snr_t = self.snr.to(device)[t] if hasattr(self, "snr") else None
+        alpha = self.alpha_cumprod.to(device)[t]
+        weight = get_timestep_loss_weight(
+            loss_weighting,
+            snr=snr_t,
+            alpha_cumprod=alpha,
+            min_snr_gamma=min_snr_gamma,
+            loss_weighting_sigma_data=loss_weighting_sigma_data,
+        )
+        return loss * weight
+
     def training_losses(
         self,
         model,
@@ -128,52 +196,24 @@ class GaussianDiffusion:
         """
         if model_kwargs is None:
             model_kwargs = {}
-        B = x_start.shape[0]
         device = x_start.device
-        if refinement_prob > 0 and refinement_max_t > 0 and torch.rand(1, device=device).item() < refinement_prob:
-            t = torch.randint(0, min(refinement_max_t, self.num_timesteps), (B,), device=device, dtype=t.dtype)
-        if noise is None:
-            noise = torch.randn_like(x_start, device=device, dtype=x_start.dtype)
-        x_t = self.q_sample(x_start, t, noise=noise, noise_offset=noise_offset)
-        model_out = model(x_t, t, **model_kwargs)
-        if model_out.shape != x_start.shape and model_out.shape[1] > x_start.shape[1]:
-            model_out = model_out[:, : x_start.shape[1]]
-        # Target: epsilon, v (velocity), or x0. v = sqrt(alpha_bar)*noise - sqrt(1-alpha_bar)*x0
-        self._to_device(device)
-        sqrt_alpha = self.sqrt_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
-        sqrt_one = self.sqrt_one_minus_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
-        if self.prediction_type == "v":
-            target = sqrt_alpha * noise - sqrt_one * x_start
-        elif self.prediction_type == "x0":
-            target = x_start
-        else:
-            target = noise
-        if use_spectral_sfp_loss:
-            loss = spectral_sfp_per_sample_loss(
-                model_out,
-                target,
-                t,
-                self.num_timesteps,
-                low_sigma=float(spectral_sfp_low_sigma),
-                high_sigma=float(spectral_sfp_high_sigma),
-                tau_power=float(spectral_sfp_tau_power),
-            )
-        else:
-            loss = nn.functional.mse_loss(model_out, target, reduction="none")
-            # Per-sample mean (over spatial/channels)
-            loss = loss.mean(dim=tuple(range(1, loss.ndim)))
-        # Timestep loss weighting: min_snr / min_snr_soft / unit / edm / v / eps
-        snr_t = self.snr.to(device)[t] if hasattr(self, "snr") else None
-        alpha = self.alpha_cumprod.to(device)[t]
-        weight = get_timestep_loss_weight(
-            loss_weighting,
-            snr=snr_t,
-            alpha_cumprod=alpha,
+        loss = self.per_sample_training_losses(
+            model,
+            x_start,
+            t,
+            model_kwargs=model_kwargs,
+            noise=noise,
+            refinement_prob=refinement_prob,
+            refinement_max_t=refinement_max_t,
+            noise_offset=noise_offset,
             min_snr_gamma=min_snr_gamma,
+            loss_weighting=loss_weighting,
             loss_weighting_sigma_data=loss_weighting_sigma_data,
+            use_spectral_sfp_loss=use_spectral_sfp_loss,
+            spectral_sfp_low_sigma=spectral_sfp_low_sigma,
+            spectral_sfp_high_sigma=spectral_sfp_high_sigma,
+            spectral_sfp_tau_power=spectral_sfp_tau_power,
         )
-        loss = loss * weight
-        # Aesthetic / sample weighting
         if sample_weights is not None and sample_weights.shape[0] == loss.shape[0]:
             sample_weights = sample_weights.to(device, dtype=loss.dtype)
             loss = (loss * sample_weights).sum() / (sample_weights.sum() + 1e-8)
@@ -255,9 +295,9 @@ class GaussianDiffusion:
     def set_timesteps_from(self, num_inference_steps: int, t_start: int):
         """Img2img / from-z: timesteps from t_start down to 0 (FLUX/SD-style)."""
         t_start = min(max(0, int(t_start)), self.num_timesteps - 1)
-        # Linear spacing from t_start to 0 (inclusive)
+        # High noise → low: first index must be near t_start (matches img2img / hires second pass).
         steps = np.linspace(t_start, 0, num_inference_steps, endpoint=True)
-        self.timesteps = torch.from_numpy(steps.astype(np.int64)[::-1].copy())
+        self.timesteps = torch.from_numpy(steps.astype(np.int64).copy())
         return self.timesteps
 
     def _dynamic_threshold(
@@ -322,6 +362,134 @@ class GaussianDiffusion:
             x_next = x_next + sigma * torch.randn_like(x_t, device=x_t.device, dtype=x_t.dtype)
         return x_next, x_0_pred
 
+    def _sample_loop_flow_matching(
+        self,
+        model,
+        shape,
+        model_kwargs_cond=None,
+        model_kwargs_uncond=None,
+        *,
+        cfg_scale: float = 7.5,
+        cfg_rescale: float = 0.0,
+        num_inference_steps: int = 50,
+        flow_solver: str = "euler",
+        device="cuda",
+        dtype=torch.float32,
+        x_init=None,
+        start_timestep=None,
+        speculative_draft_cfg_scale: float = 0.0,
+        speculative_close_thresh: float = 0.0,
+        speculative_blend: float = 0.35,
+        dynamic_threshold_percentile: float = 0.0,
+        dynamic_threshold_type: str = "percentile",
+        dynamic_threshold_value: float = 0.0,
+        flow_init_noise: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Sample to match ``diffusion.flow_matching.flow_matching_per_sample_losses`` training:
+
+        - Interpolation ``x = (1-s) x_0 + s \\epsilon`` with ``s \\in [0,1]``, ``t = \\mathrm{round}(s(T-1))``.
+        - Model predicts velocity ``v \\approx \\epsilon - x_0``; integrate ``\\mathrm{d}x/\\mathrm{d}s = v``
+          from ``s=1`` (noise) to ``s=0`` (clean).
+
+        Returns the final latent (estimated ``x_0``). CFG and optional speculative CFG match ``sample_loop``.
+        """
+        model_kwargs_cond = model_kwargs_cond or {}
+        model_kwargs_uncond = model_kwargs_uncond or {}
+        T = int(self.num_timesteps)
+        denom = max(T - 1, 1)
+        n = max(1, int(num_inference_steps))
+        B = int(shape[0])
+        fs = str(flow_solver).lower().strip()
+
+        if x_init is not None and start_timestep is not None:
+            t0 = int(start_timestep)
+            t0 = max(0, min(T - 1, t0))
+            s0 = float(t0) / float(denom)
+            x0_hint = x_init.to(device=device, dtype=dtype)
+            z = torch.randn(shape, device=device, dtype=dtype)
+            if x0_hint.shape != z.shape:
+                raise ValueError("flow_matching_sample: x_init must match sample shape for img2img-style start.")
+            x = (1.0 - s0) * x0_hint + s0 * z
+            s_vals = torch.linspace(s0, 0.0, n + 1, device=device, dtype=torch.float64)
+        else:
+            if flow_init_noise is not None:
+                x = flow_init_noise.to(device=device, dtype=dtype)
+                if tuple(x.shape) != tuple(shape):
+                    raise ValueError(f"flow_init_noise shape {tuple(x.shape)} != sample shape {tuple(shape)}")
+            else:
+                x = torch.randn(shape, device=device, dtype=dtype)
+            s_vals = torch.linspace(1.0, 0.0, n + 1, device=device, dtype=torch.float64)
+
+        cfg_box = [float(cfg_scale)]
+        spec_draft = float(speculative_draft_cfg_scale)
+        spec_thr = float(speculative_close_thresh)
+        spec_blend = float(speculative_blend)
+        use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
+
+        def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
+            cs = cfg_box[0]
+            if use_spec_cfg and cs != 1.0 and cs > 0 and model_kwargs_uncond:
+                from utils.generation.speculative_denoise import speculative_cfg_prediction
+
+                return speculative_cfg_prediction(
+                    model,
+                    x_in,
+                    t_batch,
+                    model_kwargs_cond=model_kwargs_cond,
+                    model_kwargs_uncond=model_kwargs_uncond,
+                    cfg_scale=cs,
+                    draft_cfg_scale=spec_draft,
+                    cfg_rescale=float(cfg_rescale),
+                    close_thresh=spec_thr,
+                    blend_on_close=spec_blend,
+                )
+            if cs != 1.0 and cs > 0 and model_kwargs_uncond:
+                out_cond = model(x_in, t_batch, **model_kwargs_cond)
+                out_uncond = model(x_in, t_batch, **model_kwargs_uncond)
+                if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
+                    out_cond, out_uncond = out_cond[:, : x_in.shape[1]], out_uncond[:, : x_in.shape[1]]
+                delta = out_cond - out_uncond
+                if cfg_rescale > 0:
+                    sig = delta.std() + 1e-8
+                    scale = max(sig / cfg_rescale, 1.0)
+                    delta = delta / scale
+                return out_uncond + cs * delta
+            o = model(x_in, t_batch, **model_kwargs_cond)
+            if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
+                o = o[:, : x_in.shape[1]]
+            return o
+
+        def _t_batch_from_s(s: float) -> torch.Tensor:
+            ti = int(round(float(s) * float(denom)))
+            ti = max(0, min(T - 1, ti))
+            return torch.full((B,), ti, device=device, dtype=torch.long)
+
+        for i in range(n):
+            s_cur = float(s_vals[i].item())
+            s_next = float(s_vals[i + 1].item())
+            ds = s_next - s_cur
+            t_b = _t_batch_from_s(s_cur)
+            v1 = _model_prediction(x, t_b)
+            if fs == "heun":
+                x_pred = x + v1 * ds
+                t_b2 = _t_batch_from_s(s_next)
+                v2 = _model_prediction(x_pred, t_b2)
+                x = x + 0.5 * (v1 + v2) * ds
+            else:
+                x = x + v1 * ds
+
+        if dynamic_threshold_percentile > 0 or (
+            dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
+        ):
+            x = self._dynamic_threshold(
+                x,
+                percentile=dynamic_threshold_percentile,
+                threshold_type=dynamic_threshold_type,
+                threshold_value=dynamic_threshold_value,
+            )
+        return x
+
     def sample_loop(
         self,
         model,
@@ -361,9 +529,28 @@ class GaussianDiffusion:
         # amplifies high-frequency structure vs a smoothed baseline. Costs ~2× forwards when enabled.
         sag_blur_sigma: float = 0.0,
         sag_scale: float = 0.0,
+        volatile_cfg_boost: float = 0.0,
+        volatile_cfg_quantile: float = 0.72,
+        volatile_cfg_window: int = 6,
+        # Optional: decode x0_pred periodically (caller supplies CLIP/VLM fn) and boost CFG when score is low.
+        periodic_alignment_interval: int = 0,
+        periodic_alignment_threshold: float = 0.0,
+        periodic_alignment_cfg_boost: float = 0.0,
+        periodic_alignment_fn: Optional[Callable[[int, torch.Tensor], float]] = None,
+        # Speculative CFG: second forward at draft_cfg_scale; blend if |full-draft| mean < close_thresh.
+        speculative_draft_cfg_scale: float = 0.0,
+        speculative_close_thresh: float = 0.0,
+        speculative_blend: float = 0.35,
+        # Rectified-flow path (matches diffusion.flow_matching training); mutually exclusive with VP DDIM updates below.
+        flow_matching_sample: bool = False,
+        flow_solver: str = "euler",
+        flow_init_noise: Optional[torch.Tensor] = None,
     ):
         """
         Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
+
+        When ``flow_matching_sample=True``, runs Euler/Heun integration in ``s`` (see
+        ``_sample_loop_flow_matching``); VP ``scheduler`` / ``solver`` (ddim/heun) are not used.
 
         **Timestep placement** (``scheduler`` or ``timestep_schedule``): chooses discrete
         training indices — ``ddim``, ``euler``, ``karras_rho``, ``snr_uniform``, ``quad_cosine``
@@ -378,16 +565,61 @@ class GaussianDiffusion:
         dynamic_threshold_percentile: if > 0, clamp x_0_pred to this percentile (e.g. 99.5).
         dynamic_threshold_type: "percentile" | "norm" | "spatial_norm" (ControlNet-style).
         dynamic_threshold_value: min norm for norm/spatial_norm (e.g. 1.0).
+
+        volatile_cfg_boost: if > 0, when the latest latent update exceeds a quantile of recent
+        updates, multiply CFG on subsequent steps by (1 + volatile_cfg_boost).
+
+        periodic_alignment_interval: if > 0 and ``periodic_alignment_fn`` is set, every N completed
+        steps call ``fn(step_index, x_0_pred)`` expecting a CLIP-like cosine in roughly [-1, 1].
+        If the value is **below** ``periodic_alignment_threshold``, multiply CFG by
+        (1 + ``periodic_alignment_cfg_boost``) for subsequent steps (multiplicative on current CFG).
+
+        speculative_draft_cfg_scale: if >0 and uncond kwargs exist, run draft CFG forward then full CFG;
+        when predictions are close (mean abs diff < speculative_close_thresh), blend toward draft.
+
+        flow_matching_sample: if True, use rectified-flow sampler (``flow_solver`` = euler | heun).
+
+        flow_init_noise: optional latent at ``s=1`` (same as training ``epsilon``); default is standard Gaussian noise.
         """
         model_kwargs_cond = model_kwargs_cond or {}
         model_kwargs_uncond = model_kwargs_uncond or {}
+        do_inpaint = bool(
+            inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
+        )
+        if flow_matching_sample:
+            if do_inpaint:
+                raise ValueError(
+                    "flow_matching_sample is not compatible with inpaint_freeze_known (VP q_sample trajectory). "
+                    "Use VP sampling or disable structured inpaint."
+                )
+            fs_flow = str(flow_solver).lower().strip()
+            if fs_flow not in FLOW_INFERENCE_SOLVERS:
+                raise ValueError(f"flow_solver must be one of {FLOW_INFERENCE_SOLVERS}, got {flow_solver!r}")
+            return self._sample_loop_flow_matching(
+                model,
+                shape,
+                model_kwargs_cond=model_kwargs_cond,
+                model_kwargs_uncond=model_kwargs_uncond,
+                cfg_scale=float(cfg_scale),
+                cfg_rescale=float(cfg_rescale),
+                num_inference_steps=int(num_inference_steps),
+                flow_solver=fs_flow,
+                device=device,
+                dtype=dtype,
+                x_init=x_init,
+                start_timestep=start_timestep,
+                speculative_draft_cfg_scale=float(speculative_draft_cfg_scale),
+                speculative_close_thresh=float(speculative_close_thresh),
+                speculative_blend=float(speculative_blend),
+                dynamic_threshold_percentile=float(dynamic_threshold_percentile),
+                dynamic_threshold_type=str(dynamic_threshold_type),
+                dynamic_threshold_value=float(dynamic_threshold_value),
+                flow_init_noise=flow_init_noise,
+            )
         ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).lower().strip()
         sol = str(solver).lower().strip()
         if sol not in INFERENCE_SOLVERS:
             raise ValueError(f"Unknown solver {solver!r}. Choose one of: {INFERENCE_SOLVERS}")
-        do_inpaint = bool(
-            inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
-        )
         if do_inpaint:
             inpaint_mask = inpaint_mask.to(device=device, dtype=dtype)
             inpaint_x0 = inpaint_x0.to(device=device, dtype=dtype)
@@ -407,6 +639,19 @@ class GaussianDiffusion:
         early_exit_patience = int(ada_early_exit_patience)
         early_exit_min_steps = int(ada_early_exit_min_steps)
         early_exit_counter = 0
+        cfg_box = [float(cfg_scale)]
+        vol_deltas: list = []
+        v_boost = float(volatile_cfg_boost)
+        v_q = float(volatile_cfg_quantile)
+        v_win = max(2, int(volatile_cfg_window))
+        p_int = int(periodic_alignment_interval)
+        p_thr = float(periodic_alignment_threshold)
+        p_boost = float(periodic_alignment_cfg_boost)
+        p_fn = periodic_alignment_fn
+        spec_draft = float(speculative_draft_cfg_scale)
+        spec_thr = float(speculative_close_thresh)
+        spec_blend = float(speculative_blend)
+        use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
         for i in range(len(timesteps)):
             t = timesteps[i].expand(shape[0])
             t_next = (
@@ -417,7 +662,23 @@ class GaussianDiffusion:
             x_prev = x
 
             def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
-                if cfg_scale != 1.0 and cfg_scale > 0 and model_kwargs_uncond:
+                cs = cfg_box[0]
+                if use_spec_cfg and cs != 1.0 and cs > 0 and model_kwargs_uncond:
+                    from utils.generation.speculative_denoise import speculative_cfg_prediction
+
+                    return speculative_cfg_prediction(
+                        model,
+                        x_in,
+                        t_batch,
+                        model_kwargs_cond=model_kwargs_cond,
+                        model_kwargs_uncond=model_kwargs_uncond,
+                        cfg_scale=cs,
+                        draft_cfg_scale=spec_draft,
+                        cfg_rescale=float(cfg_rescale),
+                        close_thresh=spec_thr,
+                        blend_on_close=spec_blend,
+                    )
+                if cs != 1.0 and cs > 0 and model_kwargs_uncond:
                     out_cond = model(x_in, t_batch, **model_kwargs_cond)
                     out_uncond = model(x_in, t_batch, **model_kwargs_uncond)
                     if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
@@ -427,7 +688,7 @@ class GaussianDiffusion:
                         sig = delta.std() + 1e-8
                         scale = max(sig / cfg_rescale, 1.0)
                         delta = delta / scale
-                    return out_uncond + cfg_scale * delta
+                    return out_uncond + cs * delta
                 o = model(x_in, t_batch, **model_kwargs_cond)
                 if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
                     o = o[:, : x_in.shape[1]]
@@ -473,6 +734,35 @@ class GaussianDiffusion:
                     pbfm_edge_boost=pbfm_edge_boost,
                     pbfm_edge_kernel=pbfm_edge_kernel,
                 )
+                if v_boost > 0.0:
+                    delta_lat_v = (x - x_prev).abs().mean()
+                    try:
+                        dv = float(delta_lat_v.detach().cpu().item())
+                    except Exception:
+                        dv = float(delta_lat_v.detach().mean().item())
+                    vol_deltas.append(dv)
+                    while len(vol_deltas) > v_win:
+                        vol_deltas.pop(0)
+                    if len(vol_deltas) >= 2:
+                        qclip = float(np.clip(v_q, 0.05, 0.95))
+                        thr = float(np.quantile(np.asarray(vol_deltas[:-1], dtype=np.float64), qclip))
+                        if vol_deltas[-1] > thr:
+                            cfg_box[0] = float(cfg_scale) * (1.0 + v_boost)
+                        else:
+                            cfg_box[0] = float(cfg_scale)
+                if (
+                    p_int > 0
+                    and p_fn is not None
+                    and p_boost > 0.0
+                    and x_0_pred is not None
+                    and (i + 1) % p_int == 0
+                ):
+                    try:
+                        sim = float(p_fn(int(i), x_0_pred))
+                        if sim < p_thr:
+                            cfg_box[0] = float(cfg_box[0]) * (1.0 + p_boost)
+                    except Exception:
+                        pass
                 if do_inpaint:
                     # Keep known/unmasked regions consistent with the forward noising trajectory.
                     x_known_next = self.q_sample(inpaint_x0, t_next, noise=inpaint_noise, noise_offset=0.0)

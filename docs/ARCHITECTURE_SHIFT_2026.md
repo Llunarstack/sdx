@@ -2,7 +2,7 @@
 
 **Context:** The field has moved past the first wave of “DiT replaces U-Net” hype into **deeper mathematical and systems refinement**. Pure **noise → image** diffusion is still dominant in production, but **flow matching**, **bridges**, **hybrid AR + diffusion**, **distillation**, and **semantic latents** are the active research and product frontier.
 
-This doc **orients** you to those themes and points to **what SDX already has** vs **future work** — see [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) for a machine-readable map.
+This doc **orients** you to those themes and points to **what SDX already has** vs **future work** — see [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) for a machine-readable map. For a **four-pillar** “planner + critic + frequency + preferences” framing mapped to SDX hooks, see [NEXTGEN_SUPERMODEL_ARCHITECTURE.md](NEXTGEN_SUPERMODEL_ARCHITECTURE.md).
 
 **Disclaimer:** Names (GLM-Image, FLUX.2, etc.) are **illustrative** of categories; release details change weekly.
 
@@ -100,6 +100,9 @@ This doc **orients** you to those themes and points to **what SDX already has** 
 
 ## See also
 
+- [NEXTGEN_SUPERMODEL_ARCHITECTURE.md](NEXTGEN_SUPERMODEL_ARCHITECTURE.md) — four design pillars (planner, critic, Fourier/NOD narrative, DPO) vs SDX status  
+- [CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](CONSISTENCY_FLOW_SPEED_BLUEPRINT.md) — few-step math (consistency-FM, dual-solver narrative, ADD, rectified flow + OT) vs SDX status  
+- [PROMPT_ACCURACY_BLUEPRINT.md](PROMPT_ACCURACY_BLUEPRINT.md) — GLS geometric blueprint, in-loop discriminative correction, FNO/frequency narrative vs SDX  
 - [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) — workflow / efficiency industry narratives + disclaimers  
 - [LANDSCAPE_2026.md](LANDSCAPE_2026.md) — product trends, authenticity, pipelines  
 - [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) — what SDX implements vs research  

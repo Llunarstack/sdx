@@ -26,6 +26,8 @@ def describe_optional_libs() -> Dict[str, Any]:
         "humanize",
         "orjson",
         "psutil",
+        "scipy",
+        "cv2",
         "timm",
         "xformers",
         "triton",

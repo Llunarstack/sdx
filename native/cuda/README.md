@@ -1,9 +1,13 @@
 # CUDA notes (`native/cuda`)
 
-The **compiled** optional kernel lives next to the C++ tree so one CMake project can emit both CPU and GPU DLLs:
+The **compiled** optional kernels live under `native/cpp/cuda/`:
 
-- **Source:** `native/cpp/cuda/hwc_to_chw.cu`
-- **Header:** `native/cpp/include/sdx/hwc_to_chw.h`
+| Library | Role |
+|--------|------|
+| `sdx_cuda_hwc_to_chw` | `hwc_to_chw.cu` — uint8 HWC → float NCHW |
+| `sdx_cuda_ml` | `l2_normalize_rows.cu` — L2-normalize matrix rows (embeddings) |
+
+- **Headers:** `native/cpp/include/sdx/hwc_to_chw.h`, `native/cpp/include/sdx/l2_normalize_rows.h`
 - **Enable:** configure with `-DSDX_BUILD_CUDA=ON` (requires **CUDA Toolkit** / `nvcc` on PATH)
 
 ```bash
@@ -12,7 +16,7 @@ cmake -S . -B build -DSDX_BUILD_CUDA=ON
 cmake --build build --config Release
 ```
 
-**Python:** `from sdx_native.cuda_hwc_to_chw import maybe_u8_hwc_to_chw_f32_cuda, u8_hwc_to_chw_f32_numpy`
+**Python:** `sdx_native.cuda_hwc_to_chw`, `sdx_native.cuda_l2_normalize` (`maybe_l2_normalize_rows_cuda`, NumPy reference).
 
 For **training**, keep using **PyTorch** (`tensor.cuda()`, `permute`, `to(torch.float32)`) — this kernel is for experiments, pre-PyTorch pipelines, or timing layout transforms without the autograd stack.
 

@@ -85,8 +85,27 @@ install(TARGETS sdx_line_stats
   ARCHIVE DESTINATION lib
 )
 
-# Optional CUDA: uint8 NHWC -> float32 NCHW [0,1] for dataloader-style paths (requires nvcc).
-option(SDX_BUILD_CUDA "Build sdx_cuda_hwc_to_chw (requires CUDA toolkit)" OFF)
+# Streaming FNV-1a 64 (manifest fingerprint; matches Python/Zig file mode).
+add_library(sdx_fnv64_file SHARED
+  src/sdx_fnv64_file.cpp
+)
+target_include_directories(sdx_fnv64_file
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_compile_definitions(sdx_fnv64_file PRIVATE SDX_FNV64_FILE_BUILD)
+if(MSVC)
+  target_compile_definitions(sdx_fnv64_file PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+install(TARGETS sdx_fnv64_file
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
+# Optional CUDA: image layout + small ML-style ops (requires nvcc).
+option(SDX_BUILD_CUDA "Build CUDA targets (hwc_to_chw, l2_normalize_rows)" OFF)
 if(SDX_BUILD_CUDA)
   enable_language(CUDA)
   set(CMAKE_CUDA_STANDARD 17)
@@ -108,6 +127,26 @@ if(SDX_BUILD_CUDA)
     target_compile_options(sdx_cuda_hwc_to_chw PRIVATE "-Xcompiler=/utf-8")
   endif()
   install(TARGETS sdx_cuda_hwc_to_chw
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_ml SHARED
+    cuda/l2_normalize_rows.cu
+  )
+  set_property(TARGET sdx_cuda_ml PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_ml PRIVATE SDX_CUDA_L2_BUILD)
+  target_include_directories(sdx_cuda_ml
+    PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_ml PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_ml PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_ml
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

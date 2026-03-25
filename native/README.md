@@ -6,11 +6,11 @@ Small **high-throughput utilities** around the Python training stack. They are *
 
 | Component | Role |
 |-----------|------|
-| **Rust** `rust/sdx-jsonl-tools` | Stream a manifest JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`** (one path per line for shell pipelines), **`dup-image-paths`** (duplicate image keys before dedup). |
+| **Rust** `rust/sdx-jsonl-tools` | JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`**, **`dup-image-paths`**, **`file-fnv`**, **`caption-len-buckets`**. |
 | **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over file bytes (manifest change detection). |
 | **Zig** `zig/sdx-pathstat` | Given a **newline-separated path list**, print `path<TAB>size_bytes<TAB>ok|missing` (fast file-exists + size audit; pair with Rust `image-paths`). |
-| **C++** `cpp/` | `libsdx_latent`, **`sdx_line_stats`** (fast JSONL byte + newline count), inference/beta helpers — **C ABI** for ctypes. |
-| **CUDA** `cpp/cuda/` + [cuda/README.md](cuda/README.md) | Optional **`sdx_cuda_hwc_to_chw`** — uint8 HWC→float NCHW; build with `-DSDX_BUILD_CUDA=ON`. |
+| **C++** `cpp/` | `libsdx_latent`, **`sdx_line_stats`**, **`sdx_fnv64_file`** (FNV-1a stream), inference/beta helpers — **C ABI** for ctypes. |
+| **CUDA** `cpp/cuda/` + [cuda/README.md](cuda/README.md) | Optional **`sdx_cuda_hwc_to_chw`**, **`sdx_cuda_ml`** (L2 row-normalize); build with `-DSDX_BUILD_CUDA=ON`. |
 | **Mojo** `mojo/` + [mojo/README.md](mojo/README.md) | Optional **Modular Mojo** stubs + **Python** `mojopy` launcher for CPU/SIMD experiments. |
 | **Go** `go/sdx-manifest` | Merge multiple JSONL files; optional dedupe by image path (first wins). |
 | **Python** `sdx_native.jsonl_manifest_pure` | Zero-build manifest **stats** + **prompt-lint** (same role as the old `js/*.mjs`; no Node). |

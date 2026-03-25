@@ -43,6 +43,23 @@ from utils.training.config_validator import estimate_memory_usage, validate_trai
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
 from utils.training.metrics import MetricsTracker, log_system_info
 from utils.modeling.model_paths import default_t5_path
+
+
+def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
+    """Sample Gaussian noise and optionally OT-couple it to batch latents (train only)."""
+    reg = float(getattr(cfg, "ot_noise_pair_reg", 0.0) or 0.0)
+    if reg <= 0.0 or latents.shape[0] < 2:
+        return None
+    from utils.training.ot_noise_pairing import pair_noise_to_latents
+
+    n = torch.randn_like(latents, device=device, dtype=latents.dtype)
+    return pair_noise_to_latents(
+        latents,
+        n,
+        reg=reg,
+        n_iters=int(getattr(cfg, "ot_noise_pair_iters", 40)),
+        mode=str(getattr(cfg, "ot_noise_pair_mode", "soft")),
+    )
 from utils.modeling.model_viz import print_model_summary
 from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
 
@@ -305,6 +322,7 @@ def compute_mdm_training_loss(
     mdm_loss_only_masked: bool,
     mdm_min_mask_patches: int,
     spectral_kwargs: Optional[dict] = None,
+    prefetched_noise: Optional[torch.Tensor] = None,
 ):
     """
     Masked Diffusion Models (MDM) style training.
@@ -320,7 +338,10 @@ def compute_mdm_training_loss(
         t = torch.randint(0, min(refinement_max_t, diffusion.num_timesteps), (B,), device=device, dtype=t.dtype)
 
     # Standard forward diffusion for the whole latent (we'll overwrite parts with clean context).
-    noise = torch.randn_like(x_start, device=device, dtype=x_start.dtype)
+    if prefetched_noise is not None:
+        noise = prefetched_noise.to(device=device, dtype=x_start.dtype)
+    else:
+        noise = torch.randn_like(x_start, device=device, dtype=x_start.dtype)
     x_t_full = diffusion.q_sample(x_start, t, noise=noise, noise_offset=noise_offset)
 
     # Random patch masking in latent patch-grid space.
@@ -597,7 +618,49 @@ def eval_val_loss(
             sample_weights = batch.get("sample_weights")
             if sample_weights is not None:
                 sample_weights = sample_weights.to(device)
-            if float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
+            ot_noise_val = _maybe_ot_pair_noise(cfg, latents, device)
+            _sk_v = _spectral_sfp_training_kwargs(cfg)
+            _bw_v = float(getattr(cfg, "bridge_aux_weight", 0.0))
+
+            def _bridge_aux_loss_val() -> torch.Tensor:
+                from diffusion.bridge_training import bridge_aux_vp_loss
+
+                t_br = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                return bridge_aux_vp_loss(
+                    diffusion,
+                    ema_model,
+                    latents,
+                    t_br,
+                    model_kwargs,
+                    mix_lambda=float(getattr(cfg, "bridge_aux_lambda", 0.2)),
+                    noise=None,
+                    noise_offset=getattr(cfg, "noise_offset", 0.0),
+                    min_snr_gamma=getattr(cfg, "min_snr_gamma", 5.0),
+                    loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
+                    loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
+                    **_sk_v,
+                )
+
+            if getattr(cfg, "flow_matching_training", False):
+                from diffusion.flow_matching import flow_matching_per_sample_losses
+
+                eps_v = (
+                    ot_noise_val
+                    if ot_noise_val is not None
+                    else torch.randn_like(latents, device=device, dtype=latents.dtype)
+                )
+                fp_v = flow_matching_per_sample_losses(
+                    ema_model, latents, eps_v, diffusion.num_timesteps, model_kwargs
+                )
+                if sample_weights is not None:
+                    wv = sample_weights.view(-1).to(dtype=fp_v.dtype)
+                    lm_v = (fp_v * wv).sum() / (wv.sum() + 1e-8)
+                else:
+                    lm_v = fp_v.mean()
+                loss_dict = {
+                    "loss": lm_v + _bw_v * _bridge_aux_loss_val() if _bw_v > 0.0 else lm_v
+                }
+            elif float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
                 loss_dict = compute_mdm_training_loss(
                     diffusion,
                     ema_model,
@@ -616,8 +679,11 @@ def eval_val_loss(
                     mdm_patch_size=int(getattr(cfg, "mdm_patch_size", 2)),
                     mdm_loss_only_masked=bool(getattr(cfg, "mdm_loss_only_masked", True)),
                     mdm_min_mask_patches=int(getattr(cfg, "mdm_min_mask_patches", 1)),
-                    spectral_kwargs=_spectral_sfp_training_kwargs(cfg),
+                    spectral_kwargs=_sk_v,
+                    prefetched_noise=ot_noise_val,
                 )
+                if _bw_v > 0.0:
+                    loss_dict = {"loss": loss_dict["loss"] + _bw_v * _bridge_aux_loss_val()}
             else:
                 loss_dict = diffusion.training_losses(
                     ema_model,
@@ -631,8 +697,11 @@ def eval_val_loss(
                     sample_weights=sample_weights,
                     loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
                     loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
-                    **_spectral_sfp_training_kwargs(cfg),
+                    noise=ot_noise_val,
+                    **_sk_v,
                 )
+                if _bw_v > 0.0:
+                    loss_dict = {"loss": loss_dict["loss"] + _bw_v * _bridge_aux_loss_val()}
             total_loss += loss_dict["loss"].mean().item()
         n_batches += 1
     ema_model.train()
@@ -1391,7 +1460,49 @@ def main(cfg: TrainConfig):
                         sample_weights = sample_weights * w
                     else:
                         sample_weights = w
-                if float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
+                ot_noise = _maybe_ot_pair_noise(cfg, latents, device)
+                _sk_tr = _spectral_sfp_training_kwargs(cfg)
+                _bw = float(getattr(cfg, "bridge_aux_weight", 0.0))
+
+                def _bridge_aux_loss() -> torch.Tensor:
+                    from diffusion.bridge_training import bridge_aux_vp_loss
+
+                    t_br = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                    return bridge_aux_vp_loss(
+                        diffusion,
+                        train_model,
+                        latents,
+                        t_br,
+                        model_kwargs,
+                        mix_lambda=float(getattr(cfg, "bridge_aux_lambda", 0.2)),
+                        noise=None,
+                        noise_offset=getattr(cfg, "noise_offset", 0.0),
+                        min_snr_gamma=getattr(cfg, "min_snr_gamma", 5.0),
+                        loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
+                        loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
+                        **_sk_tr,
+                    )
+
+                if getattr(cfg, "flow_matching_training", False):
+                    from diffusion.flow_matching import flow_matching_per_sample_losses
+
+                    eps_fm = (
+                        ot_noise
+                        if ot_noise is not None
+                        else torch.randn_like(latents, device=device, dtype=latents.dtype)
+                    )
+                    fp = flow_matching_per_sample_losses(
+                        train_model, latents, eps_fm, diffusion.num_timesteps, model_kwargs
+                    )
+                    if sample_weights is not None:
+                        w = sample_weights.view(-1).to(dtype=fp.dtype)
+                        loss_main = (fp * w).sum() / (w.sum() + 1e-8)
+                    else:
+                        loss_main = fp.mean()
+                    loss_dict = {
+                        "loss": loss_main + _bw * _bridge_aux_loss() if _bw > 0.0 else loss_main
+                    }
+                elif float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
                     loss_dict = compute_mdm_training_loss(
                         diffusion,
                         train_model,
@@ -1410,8 +1521,11 @@ def main(cfg: TrainConfig):
                         mdm_patch_size=int(getattr(cfg, "mdm_patch_size", 2)),
                         mdm_loss_only_masked=bool(getattr(cfg, "mdm_loss_only_masked", True)),
                         mdm_min_mask_patches=int(getattr(cfg, "mdm_min_mask_patches", 1)),
-                        spectral_kwargs=_spectral_sfp_training_kwargs(cfg),
+                        spectral_kwargs=_sk_tr,
+                        prefetched_noise=ot_noise,
                     )
+                    if _bw > 0.0:
+                        loss_dict = {"loss": loss_dict["loss"] + _bw * _bridge_aux_loss()}
                 else:
                     loss_dict = diffusion.training_losses(
                         train_model,
@@ -1425,8 +1539,11 @@ def main(cfg: TrainConfig):
                         sample_weights=sample_weights,
                         loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
                         loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
-                        **_spectral_sfp_training_kwargs(cfg),
+                        noise=ot_noise,
+                        **_sk_tr,
                     )
+                    if _bw > 0.0:
+                        loss_dict = {"loss": loss_dict["loss"] + _bw * _bridge_aux_loss()}
                 loss = loss_dict["loss"].mean()
                 # MoE router balance auxiliary loss (optional).
                 moe_w = float(getattr(cfg, "moe_balance_loss_weight", 0.0))
@@ -1908,6 +2025,42 @@ if __name__ == "__main__":
         help="Exponent on normalized timestep when blending low vs high frequency weights.",
     )
     parser.add_argument(
+        "--ot-noise-pair-reg",
+        type=float,
+        default=0.0,
+        help="Sinkhorn OT coupling between batch latents and Gaussian noise (0=off; try 0.03–0.1). Experimental.",
+    )
+    parser.add_argument(
+        "--ot-noise-pair-iters",
+        type=int,
+        default=40,
+        help="Sinkhorn iterations for --ot-noise-pair-reg.",
+    )
+    parser.add_argument(
+        "--ot-noise-pair-mode",
+        type=str,
+        default="soft",
+        choices=["soft", "hungarian"],
+        help="soft = P @ noise (GPU); hungarian = min-cost permutation (CPU scipy).",
+    )
+    parser.add_argument(
+        "--flow-matching-training",
+        action="store_true",
+        help="Train with rectified-flow-style velocity loss (incompatible with MDM masked training; not VP sample_loop-compatible).",
+    )
+    parser.add_argument(
+        "--bridge-aux-weight",
+        type=float,
+        default=0.0,
+        help="Add VP auxiliary loss on shuffle-paired latent mix (0=off). See diffusion/bridge_training.py.",
+    )
+    parser.add_argument(
+        "--bridge-aux-lambda",
+        type=float,
+        default=0.2,
+        help="Endpoint mix lambda for --bridge-aux-weight (0–1].",
+    )
+    parser.add_argument(
         "--timestep-sample-mode",
         type=str,
         default="uniform",
@@ -2107,6 +2260,12 @@ if __name__ == "__main__":
         spectral_sfp_low_sigma=float(getattr(args, "spectral_sfp_low_sigma", 0.22)),
         spectral_sfp_high_sigma=float(getattr(args, "spectral_sfp_high_sigma", 0.22)),
         spectral_sfp_tau_power=float(getattr(args, "spectral_sfp_tau_power", 1.0)),
+        ot_noise_pair_reg=float(getattr(args, "ot_noise_pair_reg", 0.0)),
+        ot_noise_pair_iters=int(getattr(args, "ot_noise_pair_iters", 40)),
+        ot_noise_pair_mode=str(getattr(args, "ot_noise_pair_mode", "soft")),
+        flow_matching_training=bool(getattr(args, "flow_matching_training", False)),
+        bridge_aux_weight=float(getattr(args, "bridge_aux_weight", 0.0)),
+        bridge_aux_lambda=float(getattr(args, "bridge_aux_lambda", 0.2)),
         timestep_sample_mode=getattr(args, "timestep_sample_mode", "uniform"),
         timestep_logit_mean=getattr(args, "timestep_logit_mean", 0.0),
         timestep_logit_std=getattr(args, "timestep_logit_std", 1.0),
