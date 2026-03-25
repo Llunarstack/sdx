@@ -3,7 +3,7 @@
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::collections::{HashMap, HashSet};
 
@@ -62,6 +62,20 @@ enum SubCmd {
         path: PathBuf,
         #[arg(long, default_value_t = 20)]
         top: usize,
+    },
+    /// FNV-1a 64 over raw file bytes + newline count (fast manifest fingerprint; no JSON parse).
+    FileFnv {
+        #[arg(value_name = "FILE")]
+        path: PathBuf,
+    },
+    /// Histogram of caption character lengths: bucket ``i`` = rows with ``len`` in ``[i*width, (i+1)*width)``.
+    CaptionLenBuckets {
+        #[arg(value_name = "FILE")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 32)]
+        width: usize,
+        #[arg(long, default_value_t = 128)]
+        buckets: usize,
     },
 }
 
@@ -239,6 +253,79 @@ fn read_lines(path: &PathBuf) -> io::Result<Box<dyn Iterator<Item = io::Result<S
     let f = File::open(path)?;
     let reader = BufReader::new(f);
     Ok(Box::new(reader.lines()))
+}
+
+fn cmd_file_fnv(path: &PathBuf) -> io::Result<i32> {
+    const OFF: u64 = 146959810393466560;
+    const PRIME: u64 = 1099511628211;
+    let mut h = OFF;
+    let mut nbytes = 0u64;
+    let mut newlines = 0u64;
+    let mut f = File::open(path)?;
+    let mut buf = [0u8; 1024 * 1024];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        nbytes += n as u64;
+        for &b in &buf[..n] {
+            h ^= b as u64;
+            h = h.wrapping_mul(PRIME);
+            if b == b'\n' {
+                newlines += 1;
+            }
+        }
+    }
+    println!("file: {}", path.display());
+    println!("fnv1a64: {:x}", h);
+    println!("bytes: {}", nbytes);
+    println!("newlines: {}", newlines);
+    Ok(0)
+}
+
+fn cmd_caption_len_buckets(path: &PathBuf, width: usize, num_buckets: usize) -> io::Result<i32> {
+    if width == 0 || num_buckets == 0 {
+        eprintln!("caption-len-buckets: width and buckets must be > 0");
+        return Ok(2);
+    }
+    let mut buckets = vec![0u64; num_buckets];
+    let mut parsed_with_caption = 0u64;
+    let mut parse_err = 0u64;
+    for line in read_lines(path)? {
+        let line = line?;
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let v: Value = match serde_json::from_str(t) {
+            Ok(x) => x,
+            Err(_) => {
+                parse_err += 1;
+                continue;
+            }
+        };
+        let Some(cap) = caption_key(&v) else {
+            continue;
+        };
+        if cap.is_empty() {
+            continue;
+        }
+        parsed_with_caption += 1;
+        let len = cap.len();
+        let idx = (len / width).min(num_buckets - 1);
+        buckets[idx] += 1;
+    }
+    println!("caption-len-buckets: file {}", path.display());
+    println!("width: {} buckets: {}", width, num_buckets);
+    println!("json_parse_errors: {}", parse_err);
+    println!("rows_with_non_empty_caption: {}", parsed_with_caption);
+    for (i, c) in buckets.iter().enumerate() {
+        let lo = i * width;
+        let hi = (i + 1) * width;
+        println!("bucket [{}..{}): {}", lo, hi, c);
+    }
+    Ok(0)
 }
 
 fn cmd_stats(path: &PathBuf) -> io::Result<i32> {
@@ -450,6 +537,18 @@ fn main() {
         }),
         SubCmd::DupImagePaths { path, top } => cmd_dup_image_paths(&path, top).unwrap_or_else(|e| {
             eprintln!("dup-image-paths: {e}");
+            2
+        }),
+        SubCmd::FileFnv { path } => cmd_file_fnv(&path).unwrap_or_else(|e| {
+            eprintln!("file-fnv: {e}");
+            2
+        }),
+        SubCmd::CaptionLenBuckets {
+            path,
+            width,
+            buckets,
+        } => cmd_caption_len_buckets(&path, width, buckets).unwrap_or_else(|e| {
+            eprintln!("caption-len-buckets: {e}");
             2
         }),
     };

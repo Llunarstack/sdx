@@ -28,7 +28,7 @@
   <a href="#contributing--community">Contribute</a>
 </p>
 
-**Stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · AR blocks · REPA · MoE · MDM · RAE bridge · **reference tokens** (CLIP vision, IP-Adapter-style) · **SAG-style** guided sampling (blur heuristic) · **pick-best** · **face-region post-enhance** · **book/comic** pipelines + **consistency helpers**
+**Stack:** DiT · `GaussianDiffusion` · T5 (optional **triple:** T5 + CLIP-L + CLIP-bigG) · xformers · AR blocks · REPA · MoE · MDM · RAE bridge · **flow matching** (train + matched Euler/Heun sampler) · **VP bridge aux** · **OT noise pairing** · **speculative CFG** inference · **DPO / preference** + **KD** scripts · **reference tokens** (CLIP vision, IP-Adapter-style) · **SAG-style** guided sampling · **pick-best** · **face-region post-enhance** · **book/comic** pipelines + **consistency helpers**
 
 <sub>Caption-driven training · optional **reference image** conditioning at sample time · GPU stack: **`requirements-cuda128.txt`** after base `pip` · quality follows your data and settings</sub>
 
@@ -85,6 +85,13 @@ High-signal additions to inference, books, packaging, and docs — all on the sa
 | **Native C++ / CUDA builds** | One-shot: **[`scripts/tools/native/build_native.ps1`](scripts/tools/native/build_native.ps1)** (Windows) · **[`scripts/tools/native/build_native.sh`](scripts/tools/native/build_native.sh)** (Linux/macOS). Produces **`sdx_line_stats`** (fast JSONL byte + newline count), optional **`sdx_cuda_hwc_to_chw`** (`cmake -DSDX_BUILD_CUDA=ON`), plus existing latent / timestep / beta DLLs ([`native/cpp/`](native/cpp/)). |
 | **JSONL tools (no Node)** | Former `native/js/*.mjs` replaced by pure Python **[`sdx_native.jsonl_manifest_pure`](native/python/sdx_native/jsonl_manifest_pure.py)** (`python -m sdx_native.jsonl_manifest_pure stat|promptlint …`). |
 | **Mojo (optional)** | **[`native/mojo/`](native/mojo/)** — **Pixi** + Modular conda (`pixi.toml` / `pixi.lock`, **linux-64**). On Windows, **native win-64 Mojo** is not on conda; use **WSL2** and [`native/mojo/install_mojo_wsl.ps1`](native/mojo/install_mojo_wsl.ps1) or `pixi install` + `pixi run mojo-run`. Python helper: [`native/mojo/mojopy/launcher.py`](native/mojo/mojopy/launcher.py). |
+| **Flow matching (train + sample)** | **`train.py --flow-matching-training`** — rectified-flow-style velocity loss ([`diffusion/flow_matching.py`](diffusion/flow_matching.py)). **`sample.py --flow-matching-sample`** (or auto when checkpoint embeds `flow_matching_training`) + **`--flow-solver euler|heun`**; **`--force-vp-sample`** to override. Implemented in [`GaussianDiffusion.sample_loop`](diffusion/gaussian_diffusion.py) / `_sample_loop_flow_matching` (optional API: `flow_init_noise=`). **Not** mixable with VP DDIM unless you turn flow off. |
+| **VP bridge auxiliary loss** | **`--bridge-aux-weight`**, **`--bridge-aux-lambda`** — shuffle-paired latent interpolation + standard VP loss as a regularizer ([`diffusion/bridge_training.py`](diffusion/bridge_training.py)). Composes with VP, flow, or MDM main loss. |
+| **OT noise–latent coupling** | **`--ot-noise-pair-reg`**, **`--ot-noise-pair-iters`**, **`--ot-noise-pair-mode soft|hungarian`** ([`utils/training/ot_noise_pairing.py`](utils/training/ot_noise_pairing.py)). |
+| **Speculative CFG (inference)** | **`--speculative-draft-cfg-scale`**, **`--speculative-close-thresh`**, **`--speculative-blend`** — two forwards on the same DiT ([`utils/generation/speculative_denoise.py`](utils/generation/speculative_denoise.py)). |
+| **Preference / distillation scripts** | **[`scripts/tools/training/train_diffusion_dpo.py`](scripts/tools/training/train_diffusion_dpo.py)** — diffusion DPO with frozen ref; uses **triple** text bundle when the ckpt is triple. **[`scripts/tools/training/train_kd_distill.py`](scripts/tools/training/train_kd_distill.py)** — same-arch teacher→student MSE on shared noise / `t`. |
+| **Linear latent bridge (helper)** | [`diffusion/latent_bridge.py`](diffusion/latent_bridge.py) — interp between latents (not the full Schrödinger-bridge trainer). |
+| **Config / tests** | Flow + MDM mutual exclusion in [`utils/training/config_validator.py`](utils/training/config_validator.py). Flow/bridge/speculative: [`tests/diffusion/test_flow_bridge_training.py`](tests/diffusion/test_flow_bridge_training.py); OT, preferences, latent bridge, DPO loss under `tests/unit/`. Theme map: [`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py). **Blueprints:** [docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md), [docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md](docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md), [docs/PROMPT_ACCURACY_BLUEPRINT.md](docs/PROMPT_ACCURACY_BLUEPRINT.md). |
 
 ### Platform & repo layout (stable)
 
@@ -231,8 +238,8 @@ You can still get value **without** training a billion-parameter model:
 | Layer | What you can do |
 | :---: | :--- |
 | **Model** | Text-conditioned **DiT** + cross-attention (**T5**; optional **triple** fusion), **AR** blocks, **Supreme** / **Predecessor** variants |
-| **Training** | Pass-based schedule · **EMA** · **best** ckpt · val + early stopping · bf16 · compile · **DDP** · **non-uniform timestep** sampling |
-| **Sampling** | CFG · **pluggable timestep schedules** + **solvers** (ddim / **heun**) · img2img / inpaint · LoRA · control · refinement · **pick-best** · **reference tokens** · **SAG** · **face enhance** / **post-reference** blend |
+| **Training** | Pass-based schedule · **EMA** · **best** ckpt · val + early stopping · bf16 · compile · **DDP** · **non-uniform timestep** sampling · optional **flow matching** · **bridge aux** · **OT noise pairing** |
+| **Sampling** | CFG · **VP** schedules + **ddim / heun** · optional **flow-matching** Euler/Heun (matched to flow-trained ckpts) · **speculative CFG** · img2img / inpaint · LoRA · control · refinement · **pick-best** · **reference tokens** · **SAG** · **face enhance** / **post-reference** blend |
 | **Data** | Folders + sidecars or **JSONL** · emphasis · domains · regional captions |
 
 ---
@@ -282,7 +289,7 @@ See **[pipelines/README.md](pipelines/README.md)** · [image_gen](pipelines/imag
 |:-----|:-----|:------------|
 | **`config/`** | `TrainConfig`, `get_dit_build_kwargs`, presets | `train.py`, `sample.py`, checkpoints |
 | **`data/`** | `Text2ImageDataset`, captions | `train.py` |
-| **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, **`timestep_sampling`**, respacing | `train.py`, `sample.py` |
+| **`diffusion/`** | `GaussianDiffusion`, schedules, loss weights, **`timestep_sampling`**, **`flow_matching`**, **`bridge_training`**, **`latent_bridge`**, respacing | `train.py`, `sample.py` |
 | **`models/`** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
 | **`utils/`** | Checkpoint load, **`utils/prompt/`** (content controls, neg filter, scene blueprint, RAG), text-encoder bundle, REPA helpers, **`utils/quality/`** (pick-best, face region enhance), metrics | `train.py`, `sample.py`, scripts |
 | **`ViT/`** | Standalone scoring / prompt tools (**not** the DiT generator); **[ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md)** (research + checklist), **[ViT/backbone_presets.py](ViT/backbone_presets.py)** (`timm` names for `--model-name`) | CLI, optional dataset QA |
@@ -527,6 +534,8 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 | **Size conditioning** | `--size-embed-dim` (PixArt-style H,W → timestep) |
 | **Patch SE (zero-init)** | `--patch-se` — starts as identity, learns channel gating |
 | **MDM masking** | `--mdm-mask-ratio`, schedules, inpaint-friendly training |
+| **Flow matching (experimental)** | **`--flow-matching-training`** — velocity MSE vs ε−x₀; **mutually exclusive with MDM** (validator). Pair with **`sample.py --flow-matching-sample`** or rely on ckpt flag. See [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md), [docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md). |
+| **Bridge + OT** | **`--bridge-aux-weight`** / **`--bridge-aux-lambda`**; **`--ot-noise-pair-reg`** (+ iters, mode) |
 
 </details>
 
@@ -542,6 +551,8 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 | **RAE bridge** | Checkpoints can carry `rae_latent_bridge` for non-4ch RAE latents |
 | **Reference image → DiT** | **`--reference-image`** · **`--reference-tokens`** · **`--reference-scale`** · **`--clip-reference-model`** — CLIP vision projected into cross-attn ([`models/dit_text.py`](models/dit_text.py)) |
 | **SAG-style guidance** | **`--sag-blur-sigma`** · **`--sag-scale`** — blur self-attention guidance during [`sample_loop`](diffusion/gaussian_diffusion.py) |
+| **Flow-matching sampler** | When the model was trained with **`--flow-matching-training`**, sampling defaults to the **matched** ODE in **`s`** (`--flow-matching-sample` or implicit from ckpt); **`--flow-solver euler|heun`**; **`--force-vp-sample`** for VP DDIM on a flow ckpt (usually wrong). Dual-stage, hires-fix, and default **`p_step`** refine are skipped or adjusted when flow is on. |
+| **Speculative CFG** | **`--speculative-draft-cfg-scale`**, **`--speculative-close-thresh`**, **`--speculative-blend`** |
 | **Face & pixel polish** | **`--face-enhance`** (+ `--face-enhance-sharpen`, `--face-enhance-contrast`, …) · **`--post-reference-image`** / **`--post-reference-alpha`** |
 | **Originality at sample** | **`--originality 0.3`** (novelty tokens), **`--creativity`** + **`--creativity-jitter`** (batch diversity), **`--diversity`** — see [docs/TRAINING_TEXT_TO_PIXELS.md](docs/TRAINING_TEXT_TO_PIXELS.md) |
 | **Prompt scaffolding** | `utils/prompt/content_controls.py`: `--safety-mode`, `--one-shot-boost`, `--auto-content-fix`, `--less-ai`, `--anti-ai-pack`, `--human-media`, `--lora-scaffold`, Civitai packs — see **[docs/PROMPT_STACK.md](docs/PROMPT_STACK.md)** |
@@ -773,7 +784,10 @@ Below: files that participate in each loop. For a full repo index see **[`docs/F
 
 | File | Role |
 |:-----|:-----|
-| [`diffusion/gaussian_diffusion.py`](diffusion/gaussian_diffusion.py) | **`GaussianDiffusion`**: forward `q_sample`, **`training_losses`** (ε/v target, timestep weights), DDIM/DDPM-style sampling, CFG helpers used at train/samp boundaries. |
+| [`diffusion/gaussian_diffusion.py`](diffusion/gaussian_diffusion.py) | **`GaussianDiffusion`**: forward `q_sample`, **`training_losses`**, **`sample_loop`** (VP + optional **`flow_matching_sample`** path), DDIM/DDPM-style VP sampling, CFG / speculative hooks. |
+| [`diffusion/flow_matching.py`](diffusion/flow_matching.py) | Per-sample velocity MSE (training) — paired with flow sampler at inference. |
+| [`diffusion/bridge_training.py`](diffusion/bridge_training.py) | Shuffle-pair **VP** auxiliary loss for training regularization. |
+| [`diffusion/latent_bridge.py`](diffusion/latent_bridge.py) | Linear latent interpolation helper. |
 | [`diffusion/schedules.py`](diffusion/schedules.py) | VP **β schedules**: linear, cosine, sigmoid, `squaredcos_cap_v2` — used when constructing diffusion. |
 | [`diffusion/timestep_loss_weight.py`](diffusion/timestep_loss_weight.py) | **`get_timestep_loss_weight`**: min-SNR, **soft** min-SNR, or EDM-style weights — shared with MDM loss in `train.py`. |
 | [`diffusion/loss_weighting.py`](diffusion/loss_weighting.py) | EDM / v / eps **sigma-based** weights when `loss_weighting` is not min-SNR. |
@@ -920,7 +934,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
   --steps 50 --width 256 --height 256 --out out.png
 ```
 
-**Often-used flags**: `--cfg-scale`, `--cfg-rescale`, **`--scheduler`** (timestep path: `ddim`, `euler`, **`karras_rho`**, `snr_uniform`, `quad_cosine`), **`--solver ddim|heun`** (Heun = 2 model evals/step, often sharper), **`--karras-rho`** (for `karras_rho` only), **`--timestep-schedule`** (overrides `--scheduler`), `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, …
+**Often-used flags**: `--cfg-scale`, `--cfg-rescale`, **`--scheduler`** (timestep path: `ddim`, `euler`, **`karras_rho`**, `snr_uniform`, `quad_cosine`), **`--solver ddim|heun`** (Heun = 2 model evals/step, often sharper), **`--karras-rho`** (for `karras_rho` only), **`--timestep-schedule`** (overrides `--scheduler`), **`--flow-matching-sample`**, **`--flow-solver euler|heun`**, **`--force-vp-sample`**, **`--speculative-*`**, `--num N`, `--grid`, `--vae-tiling`, `--deterministic`, …
 
 **Reference conditioning:** pass **`--reference-image path.png`** (and optionally **`--reference-tokens`**, **`--reference-scale`**, **`--clip-reference-model`**) to encode the image with CLIP vision and inject **reference tokens** into the DiT cross-attention — similar in spirit to IP-Adapter, implemented in-repo ([`models/reference_token_projection.py`](models/reference_token_projection.py)). Use **`--reference-scale 0`** to disable injection while keeping other paths unchanged.
 
@@ -1026,6 +1040,12 @@ For `.txt`: line 1 = positive, line 2 = negative.
 | `--timestep-sample-mode` | uniform | `uniform` \| `logit_normal` (SD3-style) \| `high_noise` |
 | `--timestep-logit-mean` | 0 | For `logit_normal` mode |
 | `--timestep-logit-std` | 1 | For `logit_normal` mode |
+| `--flow-matching-training` | False | Rectified-flow-style velocity loss (incompatible with MDM) |
+| `--bridge-aux-weight` | 0 | VP shuffle-pair auxiliary loss (see `diffusion/bridge_training.py`) |
+| `--bridge-aux-lambda` | 0.2 | Mix weight for bridge endpoints `(0,1]` |
+| `--ot-noise-pair-reg` | 0 | Sinkhorn OT coupling latents↔noise (0=off) |
+| `--ot-noise-pair-iters` | 40 | Sinkhorn iterations |
+| `--ot-noise-pair-mode` | soft | `soft` \| `hungarian` |
 | `--resume` | None | Resume path |
 | `--val-split` | 0 | Val fraction |
 | `--val-every` | 2000 | Val frequency |
@@ -1102,6 +1122,7 @@ Training options aligned with common Stable Diffusion / SDXL practice (offset no
 | AdaGen / PBFM | `sample.py` `--ada-early-exit`, `--pbfm-edge-boost`, … |
 | Test-time pick | `--num 4 --pick-best clip\|edge\|ocr\|combo` |
 | Reference tokens + SAG + face post | `sample.py` `--reference-image`, `--sag-blur-sigma`, `--face-enhance`, `--post-reference-image` — [Sampling](#sampling) |
+| Flow / bridge / OT / DPO / KD | `train.py` flags above; `sample.py` flow + speculative CFG; **`scripts/tools/training/train_diffusion_dpo.py`**, **`train_kd_distill.py`** |
 | RAE bridge | Train with RAE + bridge; ckpt stores `rae_latent_bridge` |
 | Safetensors export | `scripts/tools/export/export_safetensors.py` |
 

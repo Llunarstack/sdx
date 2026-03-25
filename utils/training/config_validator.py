@@ -15,8 +15,12 @@ class ConfigValidationError(Exception):
     pass
 
 
-def validate_train_config(cfg: TrainConfig) -> List[str]:
-    """Validate training configuration and return list of warnings/errors."""
+def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> List[str]:
+    """
+    Validate training configuration and return list of warnings/errors.
+
+    ``require_cuda``: when False, missing CUDA becomes a WARNING (for dry-runs / CI / docs tooling).
+    """
     warnings = []
     errors = []
 
@@ -86,6 +90,29 @@ def validate_train_config(cfg: TrainConfig) -> List[str]:
             errors.append("num_register_tokens is not supported together with num_ar_blocks>0 (AR mask mismatch).")
         if kv_merge_factor > 1:
             errors.append("kv_merge_factor>1 is not supported together with num_ar_blocks>0 (AR mask mismatch).")
+
+    ot_reg = float(getattr(cfg, "ot_noise_pair_reg", 0.0))
+    if ot_reg < 0:
+        errors.append(f"ot_noise_pair_reg must be >= 0, got: {ot_reg}")
+    ot_mode = str(getattr(cfg, "ot_noise_pair_mode", "soft"))
+    if ot_mode not in {"soft", "hungarian"}:
+        errors.append(f"ot_noise_pair_mode must be soft|hungarian, got: {ot_mode}")
+    ot_iters = int(getattr(cfg, "ot_noise_pair_iters", 40))
+    if ot_iters < 1:
+        errors.append(f"ot_noise_pair_iters must be >= 1, got: {ot_iters}")
+
+    flow_fm = bool(getattr(cfg, "flow_matching_training", False))
+    mdm_on = float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0.0 or bool(getattr(cfg, "mdm_mask_schedule", None))
+    if flow_fm and mdm_on:
+        errors.append(
+            "flow_matching_training cannot be used together with MDM masked training (mdm_mask_ratio / mdm_mask_schedule)."
+        )
+    baw = float(getattr(cfg, "bridge_aux_weight", 0.0))
+    if baw < 0:
+        errors.append(f"bridge_aux_weight must be >= 0, got: {baw}")
+    bal = float(getattr(cfg, "bridge_aux_lambda", 0.2))
+    if bal <= 0.0 or bal > 1.0:
+        errors.append(f"bridge_aux_lambda must be in (0, 1], got: {bal}")
 
     # Training length validation
     if cfg.passes <= 0 and cfg.max_steps <= 0 and cfg.epochs <= 0:
@@ -171,9 +198,57 @@ def validate_train_config(cfg: TrainConfig) -> List[str]:
     if getattr(cfg, "moe_balance_loss_weight", 0.0) < 0:
         errors.append("moe_balance_loss_weight must be >= 0")
 
+    # Latent grid / model IO sanity (catches bad JSON exports early)
+    if int(cfg.image_size) < 8 or int(cfg.image_size) % 8 != 0:
+        errors.append(
+            f"image_size must be >= 8 and a multiple of 8 (VAE latent alignment); got {cfg.image_size}"
+        )
+
+    te = str(getattr(cfg, "text_encoder", "") or "").strip()
+    if not te:
+        errors.append("text_encoder must be a non-empty Hugging Face id or local path")
+
+    vm = str(getattr(cfg, "vae_model", "") or "").strip()
+    if not vm:
+        errors.append("vae_model must be a non-empty Hugging Face id or local path")
+
+    if ae_type == "kl" and float(getattr(cfg, "latent_scale", 0.18215)) <= 0:
+        errors.append("latent_scale must be > 0 when autoencoder_type is kl")
+
+    pred_t = str(getattr(cfg, "prediction_type", "epsilon") or "").lower().strip()
+    if pred_t not in ("epsilon", "v", "x0"):
+        errors.append(f"prediction_type must be epsilon | v | x0; got {pred_t!r}")
+
+    beta = str(getattr(cfg, "beta_schedule", "linear") or "").lower().strip()
+    if beta not in ("linear", "cosine", "sigmoid", "squaredcos_cap_v2"):
+        warnings.append(
+            f"Unusual beta_schedule {beta!r}; supported in-repo: linear, cosine, sigmoid, squaredcos_cap_v2"
+        )
+
+    buckets = getattr(cfg, "resolution_buckets", None)
+    if buckets:
+        for pair in buckets:
+            if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+                errors.append(f"resolution_buckets entries must be (H, W) pairs; got {pair!r}")
+                break
+            hi, wi = int(pair[0]), int(pair[1])
+            if hi < 8 or wi < 8 or hi % 8 != 0 or wi % 8 != 0:
+                errors.append(
+                    f"resolution_buckets (H, W) must be >= 8 and multiples of 8; got ({hi}, {wi})"
+                )
+                break
+
+    crop_mode = str(getattr(cfg, "crop_mode", "center") or "center").lower().strip()
+    if crop_mode not in ("center", "random", "largest_center"):
+        errors.append(f"crop_mode must be center | random | largest_center; got {crop_mode!r}")
+
     # Hardware validation
     if not torch.cuda.is_available():
-        errors.append("CUDA is required but not available")
+        msg = "CUDA is required for the default training pipeline but is not available"
+        if require_cuda:
+            errors.append(msg)
+        else:
+            warnings.append(msg)
 
     # Combine errors and warnings
     issues = []
@@ -265,25 +340,46 @@ def suggest_optimizations(cfg: TrainConfig, available_vram_gb: Optional[float] =
 
 
 def validate_inference_args(args) -> List[str]:
-    """Validate inference arguments."""
+    """
+    Validate inference-style arguments (e.g. ``sample.py`` namespace).
+
+    Width/height ``0`` means “use model native size” (same as CLI defaults).
+    """
     issues = []
 
-    if not Path(args.ckpt).exists():
-        issues.append(f"ERROR: Checkpoint not found: {args.ckpt}")
+    ckpt = getattr(args, "ckpt", None)
+    if ckpt:
+        if not Path(str(ckpt)).exists():
+            issues.append(f"ERROR: Checkpoint not found: {ckpt}")
 
-    if args.width <= 0 or args.height <= 0:
-        issues.append("ERROR: Width and height must be positive")
+    w = int(getattr(args, "width", 0) or 0)
+    h = int(getattr(args, "height", 0) or 0)
+    if w > 0 and h > 0:
+        if w % 8 != 0 or h % 8 != 0:
+            issues.append("WARNING: Width and height should be multiples of 8 for VAE alignment")
+    elif (w > 0) ^ (h > 0):
+        issues.append("WARNING: Set both --width and --height or leave both 0 for model native resolution")
 
-    if args.width % 8 != 0 or args.height % 8 != 0:
-        issues.append("WARNING: Width and height should be multiples of 8 for VAE")
-
-    if args.steps <= 0:
+    steps = int(getattr(args, "steps", 0) or 0)
+    if steps <= 0:
         issues.append("ERROR: Number of steps must be positive")
 
-    if args.cfg_scale < 1.0:
+    cfg_scale = float(getattr(args, "cfg_scale", 7.5) or 7.5)
+    if cfg_scale < 1.0:
         issues.append("WARNING: CFG scale < 1.0 may produce poor results")
 
-    if args.cfg_scale > 20.0:
+    if cfg_scale > 20.0:
         issues.append("WARNING: Very high CFG scale may cause artifacts")
+
+    cm = int(getattr(args, "clip_monitor_every", 0) or 0)
+    if cm < 0:
+        issues.append("ERROR: --clip-monitor-every must be >= 0")
+    if cm > 0:
+        if float(getattr(args, "clip_monitor_cfg_boost", 0.0) or 0.0) <= 0.0:
+            issues.append("WARNING: --clip-monitor-every > 0 but --clip-monitor-cfg-boost is 0 (monitor has no effect)")
+
+    sc = float(getattr(args, "spectral_coherence_latent", 0.0) or 0.0)
+    if sc < 0.0 or sc > 1.0:
+        issues.append("WARNING: --spectral-coherence-latent is usually in [0, 1]")
 
     return issues

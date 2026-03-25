@@ -80,6 +80,7 @@ Used well, the **discriminative** stack doesn’t replace DiT — it **amplifies
 
 ## See also
 
+- [ViT/VIT_G_ARCHITECTURE_VISION.md](VIT_G_ARCHITECTURE_VISION.md) — external “ViT-G” *generator* architecture sketch vs this repo’s **scoring** ViT (foveation, dual-stream, NOF, speculative steps — **not implemented** as one stack)  
 - [ViT/README.md](README.md) — CLI and JSONL format  
 - [ViT/backbone_presets.py](backbone_presets.py) — suggested `timm` names  
 - [docs/MODEL_STACK.md](../docs/MODEL_STACK.md) — DINOv2, CLIP, triple encoder  

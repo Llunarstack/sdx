@@ -1,7 +1,11 @@
 """
 Generate an image from a text prompt using a trained checkpoint.
 Supports: prompt, negative prompt, steps, width, height, CFG, timestep schedules (ddim, euler, karras_rho, …) and solvers (ddim, heun).
-Optional: style, control-image, lora, img2img, inpainting, sharpen, contrast, emphasis (word)/[word].
+Optional: style, control-image, lora, img2img, inpainting, dual-stage layout (coarse latent then detail pass),
+hires-fix (latent upscale + refine), volatile CFG (spike-aware guidance), CLIP-guard extra denoise,
+CLIP monitor (mid-loop CFG boost on low cosine), spectral-coherence latent (FFT lowfreq blend),
+domain latent prior, sharpen, contrast, saturation, clarity / tone-punch / chroma-smooth / polish /
+finishing-preset (cross-style post), emphasis (word)/[word].
 
 Presets and OP modes:
 - --preset sdxl|flux|anime|zit: apply a model-style preset from config.model_presets.
@@ -384,6 +388,43 @@ def main():
     )
     parser.add_argument("--contrast", type=float, default=1.0, help="Post-process: contrast factor (1=off)")
     parser.add_argument(
+        "--saturation",
+        type=float,
+        default=1.0,
+        help="Post-process: color saturation (1=off; 1.05–1.15 adds pop via PIL Color enhance)",
+    )
+    parser.add_argument(
+        "--clarity",
+        type=float,
+        default=0.0,
+        help="Post-process: luminance-only unsharp (0–1; sharper micro-detail, fewer RGB halos; needs scipy).",
+    )
+    parser.add_argument(
+        "--tone-punch",
+        type=float,
+        default=0.0,
+        help="Post-process: gentle S-curve on luminance only (0–0.35; depth without crushing color).",
+    )
+    parser.add_argument(
+        "--chroma-smooth",
+        type=float,
+        default=0.0,
+        help="Post-process: light chroma blur to calm noise in flats/skin/cel fills (0–0.45).",
+    )
+    parser.add_argument(
+        "--polish",
+        type=float,
+        default=0.0,
+        help="Post-process: one-knob combo (S-curve + chroma smooth + luma clarity + tiny grain); 0.4–0.65 typical.",
+    )
+    parser.add_argument(
+        "--finishing-preset",
+        type=str,
+        default="none",
+        choices=["none", "photo", "anime", "illustration", "characters", "painterly"],
+        help="Adds baseline clarity/tone/chroma-smooth amounts on top of explicit flags (style-aware defaults).",
+    )
+    parser.add_argument(
         "--face-enhance",
         action="store_true",
         help="Post-process: OpenCV Haar frontal-face detection + local sharpen/contrast (needs opencv-python, scipy).",
@@ -457,6 +498,36 @@ def main():
     parser.add_argument("--no-refine", action="store_true", help="Disable refinement pass (raw/imperfect look, faster)")
     parser.add_argument(
         "--refine-t", type=int, default=50, help="Refinement noise level t (small t fixes imperfections; e.g. 50)"
+    )
+    parser.add_argument(
+        "--hires-fix",
+        action="store_true",
+        help="After main sample: bicubic upscale latent then short denoise (A1111-style). Best with SD KL VAE; "
+        "needs variable-res DiT or size_embed. Skipped for RAE, img2img, from-z, inpaint.",
+    )
+    parser.add_argument(
+        "--hires-scale",
+        type=float,
+        default=1.5,
+        help="When --hires-fix and no --width/--height: target side = round(image_size * this).",
+    )
+    parser.add_argument(
+        "--hires-steps",
+        type=int,
+        default=15,
+        help="Denoising steps for the hires latent pass.",
+    )
+    parser.add_argument(
+        "--hires-strength",
+        type=float,
+        default=0.35,
+        help="Noise level 0–1 for hires pass (forward noise from upscaled latent); ~0.3–0.5 typical.",
+    )
+    parser.add_argument(
+        "--hires-cfg-scale",
+        type=float,
+        default=-1.0,
+        help="CFG during hires pass; <0 means use same as --cfg-scale.",
     )
     parser.add_argument(
         "--dynamic-threshold-percentile",
@@ -545,6 +616,135 @@ def main():
         type=float,
         default=0.0,
         help="SAG heuristic strength: pred += scale*(pred-pred_on_blurred_latent). Typical 0.12-0.35; ~2× sampling cost.",
+    )
+    parser.add_argument(
+        "--volatile-cfg-boost",
+        type=float,
+        default=0.0,
+        help="When latent update spikes vs recent steps, multiply CFG on following steps by (1+this). "
+        "Inference-only heuristic (AdaBlock-style idea); try 0.08–0.18.",
+    )
+    parser.add_argument(
+        "--volatile-cfg-quantile",
+        type=float,
+        default=0.72,
+        help="Quantile of recent latent deltas; above it counts as a spike (with --volatile-cfg-boost > 0).",
+    )
+    parser.add_argument(
+        "--volatile-cfg-window",
+        type=int,
+        default=6,
+        help="Rolling window length for volatile CFG heuristic (>=2).",
+    )
+    parser.add_argument(
+        "--dual-stage-layout",
+        action="store_true",
+        help="Layout-first: denoise at lower latent res, upscale, then short high-res pass (KL VAE, no img2img/inpaint).",
+    )
+    parser.add_argument(
+        "--dual-stage-div",
+        type=int,
+        default=2,
+        help="Latent side divisor for layout stage (2 => half spatial resolution).",
+    )
+    parser.add_argument("--dual-layout-steps", type=int, default=24, help="Denoising steps for coarse layout stage.")
+    parser.add_argument("--dual-detail-steps", type=int, default=20, help="Denoising steps after latent upscale.")
+    parser.add_argument(
+        "--dual-detail-strength",
+        type=float,
+        default=0.38,
+        help="Noise level 0–1 when re-noising upscaled latent before detail stage.",
+    )
+    parser.add_argument(
+        "--clip-guard-threshold",
+        type=float,
+        default=0.0,
+        help="If >0: decode preview, CLIP cosine vs prompt; below threshold run short extra denoise (needs transformers). Try 0.20–0.28.",
+    )
+    parser.add_argument(
+        "--clip-guard-model",
+        type=str,
+        default="openai/clip-vit-base-patch32",
+        help="HF CLIP model id for --clip-guard-threshold.",
+    )
+    parser.add_argument(
+        "--clip-guard-t-frac",
+        type=float,
+        default=0.22,
+        help="Timestep fraction for CLIP-guard re-noising before refine loop.",
+    )
+    parser.add_argument("--clip-guard-steps", type=int, default=12, help="Steps for CLIP-guard extra sample_loop.")
+    parser.add_argument(
+        "--clip-monitor-every",
+        type=int,
+        default=0,
+        help="If >0: decode x0_pred every N denoise steps, CLIP cosine vs prompt; below --clip-monitor-threshold "
+        "multiply CFG by (1 + --clip-monitor-cfg-boost). Very slow (uses --clip-guard-model). 0=off.",
+    )
+    parser.add_argument(
+        "--clip-monitor-threshold",
+        type=float,
+        default=0.22,
+        help="CLIP cosine threshold for --clip-monitor-every (same scale as --clip-guard-threshold; try 0.18–0.28).",
+    )
+    parser.add_argument(
+        "--clip-monitor-cfg-boost",
+        type=float,
+        default=0.12,
+        help="CFG multiplicative boost when CLIP cosine drops below --clip-monitor-threshold (only with --clip-monitor-every > 0).",
+    )
+    parser.add_argument(
+        "--speculative-draft-cfg-scale",
+        type=float,
+        default=0.0,
+        help="Experimental: two CFG forwards (draft at this scale, then full). 0=off. Needs classifier-free uncond kwargs.",
+    )
+    parser.add_argument(
+        "--speculative-close-thresh",
+        type=float,
+        default=0.0,
+        help="If >0: when mean |full_pred - draft_pred| is below this, blend toward draft (see --speculative-blend).",
+    )
+    parser.add_argument(
+        "--speculative-blend",
+        type=float,
+        default=0.35,
+        help="Blend weight toward draft when close (0–1). Only used when --speculative-close-thresh > 0.",
+    )
+    parser.add_argument(
+        "--flow-matching-sample",
+        action="store_true",
+        help="Rectified-flow Euler/Heun sampler (matches --flow-matching-training). Auto-on if checkpoint was flow-trained.",
+    )
+    parser.add_argument(
+        "--force-vp-sample",
+        action="store_true",
+        help="Use VP DDIM sampler even when checkpoint has flow_matching_training (debug / wrong ckpt).",
+    )
+    parser.add_argument(
+        "--flow-solver",
+        type=str,
+        default="euler",
+        choices=["euler", "heun"],
+        help="ODE solver when using flow-matching sampling.",
+    )
+    parser.add_argument(
+        "--domain-prior-latent",
+        type=float,
+        default=0.0,
+        help="Latent high-frequency emphasis before decode (0=off; try 0.03–0.08).",
+    )
+    parser.add_argument(
+        "--spectral-coherence-latent",
+        type=float,
+        default=0.0,
+        help="FFT low-frequency blend on final latent before decode (0=off; try 0.05–0.2). See inference_research_hooks.spectral_latent_lowfreq_blend.",
+    )
+    parser.add_argument(
+        "--spectral-coherence-cutoff",
+        type=float,
+        default=0.15,
+        help="Normalized radial cutoff for --spectral-coherence-latent (smaller = tighter low-pass).",
     )
     # Test-time scaling: generate N candidates (--num) and keep the best (§11.3 IMPROVEMENTS.md)
     parser.add_argument(
@@ -1854,6 +2054,15 @@ def main():
 
     # Img2img / from-z / inpainting
     num_timesteps = getattr(cfg, "num_timesteps", 1000)
+    use_flow_sample = bool(getattr(args, "flow_matching_sample", False)) or (
+        bool(getattr(cfg, "flow_matching_training", False)) and not bool(getattr(args, "force_vp_sample", False))
+    )
+    if use_flow_sample and args.mask:
+        print(
+            "Flow sampling disabled: structured inpaint uses VP q_sample; use --force-vp-sample or drop --mask.",
+            file=sys.stderr,
+        )
+        use_flow_sample = False
     x_init = None
     start_timestep = None
     inpaint_mask_latent = None
@@ -1867,7 +2076,13 @@ def main():
         x_init = _maybe_rae_to_dit(x_init, ae_type, rae_bridge)
         start_timestep = int(args.strength * num_timesteps)
         start_timestep = min(max(1, start_timestep), num_timesteps - 1)
-        x_init = diffusion.q_sample(x_init, torch.tensor([start_timestep], device=device).expand(x_init.shape[0]))
+        if use_flow_sample:
+            den_fm = max(num_timesteps - 1, 1)
+            s0 = float(start_timestep) / float(den_fm)
+            z_fm = torch.randn_like(x_init, device=device, dtype=x_init.dtype)
+            x_init = (1.0 - s0) * x_init + s0 * z_fm
+        else:
+            x_init = diffusion.q_sample(x_init, torch.tensor([start_timestep], device=device).expand(x_init.shape[0]))
         print(f"From-z: strength={args.strength} -> t_start={start_timestep}")
     elif args.init_image:
         pil_init = Image.open(args.init_image).convert("RGB")
@@ -1913,7 +2128,13 @@ def main():
                 x_init = mask_latent * noise + (1 - mask_latent) * x_t_full
             print(f"Inpainting: strength={args.strength} -> t_start={start_timestep}")
         else:
-            x_init = diffusion.q_sample(z0, torch.tensor([start_timestep], device=device).expand(z0.shape[0]))
+            if use_flow_sample:
+                den_fm = max(num_timesteps - 1, 1)
+                s0 = float(start_timestep) / float(den_fm)
+                z_fm = torch.randn_like(z0, device=device, dtype=z0.dtype)
+                x_init = (1.0 - s0) * z0 + s0 * z_fm
+            else:
+                x_init = diffusion.q_sample(z0, torch.tensor([start_timestep], device=device).expand(z0.shape[0]))
             print(f"Img2img: strength={args.strength} -> t_start={start_timestep}")
 
     shape = (num_gen, 4, latent_size, latent_size)
@@ -1946,31 +2167,31 @@ def main():
             f"High CFG ({cfg_scale}): auto-enabled cfg_rescale=0.7 and dynamic_threshold_percentile=99.5 to reduce oversaturation.",
             file=sys.stderr,
         )
-    print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
-    x0 = diffusion.sample_loop(
-        model,
-        shape,
-        model_kwargs_cond=model_kwargs_cond,
-        model_kwargs_uncond=model_kwargs_uncond,
-        cfg_scale=cfg_scale,
-        cfg_rescale=cfg_rescale,
-        num_inference_steps=args.steps,
-        eta=0.0,
-        device=device,
-        dtype=torch.float32,
-        x_init=x_init,
-        start_timestep=start_timestep,
-        dynamic_threshold_percentile=dyn_thresh_p,
-        dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
-        dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
-        scheduler=getattr(args, "scheduler", "ddim"),
-        timestep_schedule=getattr(args, "timestep_schedule", None),
-        solver=getattr(args, "solver", "ddim"),
-        karras_rho=float(getattr(args, "karras_rho", 7.0)),
-        inpaint_mask=inpaint_mask_latent,
-        inpaint_x0=inpaint_x0,
-        inpaint_noise=inpaint_noise,
-        inpaint_freeze_known=(args.mask and args.inpaint_mode == "mdm"),
+    _vol_kw = dict(
+        volatile_cfg_boost=float(getattr(args, "volatile_cfg_boost", 0.0) or 0.0),
+        volatile_cfg_quantile=float(getattr(args, "volatile_cfg_quantile", 0.72) or 0.72),
+        volatile_cfg_window=int(getattr(args, "volatile_cfg_window", 6) or 6),
+    )
+    _spec_kw = dict(
+        speculative_draft_cfg_scale=float(getattr(args, "speculative_draft_cfg_scale", 0.0) or 0.0),
+        speculative_close_thresh=float(getattr(args, "speculative_close_thresh", 0.0) or 0.0),
+        speculative_blend=float(getattr(args, "speculative_blend", 0.35) or 0.35),
+    )
+    _flow_kw = dict(
+        flow_matching_sample=bool(use_flow_sample),
+        flow_solver=str(getattr(args, "flow_solver", "euler") or "euler"),
+    )
+    if use_flow_sample:
+        print(
+            f"Using flow-matching sampler (solver={_flow_kw['flow_solver']}); "
+            "pair with checkpoints trained using --flow-matching-training.",
+            file=sys.stderr,
+        )
+    _sag_kw = dict(
+        sag_blur_sigma=float(getattr(args, "sag_blur_sigma", 0.0) or 0.0),
+        sag_scale=float(getattr(args, "sag_scale", 0.0) or 0.0),
+    )
+    _ada_kw = dict(
         ada_early_exit_delta_threshold=(
             getattr(args, "ada_exit_delta_threshold", 0.0) if getattr(args, "ada_early_exit", False) else 0.0
         ),
@@ -1978,15 +2199,413 @@ def main():
             int(getattr(args, "ada_exit_patience", 0)) if getattr(args, "ada_early_exit", False) else 0
         ),
         ada_early_exit_min_steps=int(getattr(args, "ada_exit_min_steps", 0)),
-        pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
-        pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
-        sag_blur_sigma=float(getattr(args, "sag_blur_sigma", 0.0) or 0.0),
-        sag_scale=float(getattr(args, "sag_scale", 0.0) or 0.0),
     )
+
+    _clip_mon_n = int(getattr(args, "clip_monitor_every", 0) or 0)
+    if _clip_mon_n > 0:
+        from utils.generation.clip_alignment import latent_x0_clip_cosine
+
+        _cm_thr = float(getattr(args, "clip_monitor_threshold", 0.22) or 0.22)
+        _cm_boost = float(getattr(args, "clip_monitor_cfg_boost", 0.12) or 0.12)
+        _cm_model = str(getattr(args, "clip_guard_model", "openai/clip-vit-base-patch32"))
+
+        def _periodic_clip_fn(_step_i: int, x0p: torch.Tensor) -> float:
+            return latent_x0_clip_cosine(
+                x0p,
+                prompt=prompt_to_encode,
+                model_id=_cm_model,
+                device=device,
+                vae=vae,
+                latent_scale=latent_scale,
+                ae_type=ae_type,
+                rae_bridge=rae_bridge,
+            )
+
+        _periodic_kw = dict(
+            periodic_alignment_interval=_clip_mon_n,
+            periodic_alignment_threshold=_cm_thr,
+            periodic_alignment_cfg_boost=_cm_boost,
+            periodic_alignment_fn=_periodic_clip_fn,
+        )
+    else:
+        _periodic_kw = dict(
+            periodic_alignment_interval=0,
+            periodic_alignment_threshold=0.0,
+            periodic_alignment_cfg_boost=0.0,
+            periodic_alignment_fn=None,
+        )
+
+    dual_stage = bool(getattr(args, "dual_stage_layout", False))
+    if use_flow_sample and dual_stage:
+        print("Dual-stage layout disabled: second stage uses VP re-noising (incompatible with flow sampler).", file=sys.stderr)
+        dual_stage = False
+    if dual_stage:
+        if ae_type != "kl" or args.mask or args.init_image or args.init_latent or x_init is not None:
+            print("Dual-stage layout disabled (need KL VAE, no inpaint/img2img/from-z/init).", file=sys.stderr)
+            dual_stage = False
+    plan_ds = None
+    if dual_stage:
+        from utils.generation.inference_research_hooks import apply_size_embed_to_model_kwargs, plan_dual_stage_latents
+
+        try:
+            plan_ds = plan_dual_stage_latents(
+                image_size,
+                layout_scale_div=int(getattr(args, "dual_stage_div", 2) or 2),
+                layout_steps=int(getattr(args, "dual_layout_steps", 24) or 24),
+                detail_steps=int(getattr(args, "dual_detail_steps", 20) or 20),
+            )
+        except ValueError as e:
+            print(f"Dual-stage skipped: {e}", file=sys.stderr)
+            dual_stage = False
+
+    if dual_stage and plan_ds is not None:
+        ch, cw = plan_ds.layout_latent_hw
+        fh, fw = plan_ds.target_latent_hw
+        shape_c = (num_gen, 4, ch, cw)
+        mk_c1, mk_u1 = apply_size_embed_to_model_kwargs(
+            model_kwargs_cond,
+            model_kwargs_uncond,
+            cfg=cfg,
+            cond_emb=cond_emb,
+            latent_h=ch,
+            latent_w=cw,
+            device=device,
+        )
+        if args.control_image:
+            pil_c = Image.open(args.control_image).convert("RGB")
+            pil_c = pil_c.resize((cw * 8, ch * 8), Image.Resampling.LANCZOS)
+            arr_c = np.array(pil_c).astype(np.float32) / 255.0
+            arr_c = (arr_c - 0.5) / 0.5
+            mk_c1 = dict(mk_c1)
+            mk_c1["control_image"] = torch.from_numpy(arr_c).permute(2, 0, 1).unsqueeze(0).to(device)
+            mk_c1["control_scale"] = args.control_scale
+        print(
+            f"Dual-stage: layout latent {ch}x{cw} ({plan_ds.layout_steps} steps) -> {fh}x{fw} ({plan_ds.detail_steps} steps)...",
+            file=sys.stderr,
+        )
+        with torch.no_grad():
+            x0 = diffusion.sample_loop(
+                model,
+                shape_c,
+                model_kwargs_cond=mk_c1,
+                model_kwargs_uncond=mk_u1,
+                cfg_scale=cfg_scale,
+                cfg_rescale=cfg_rescale,
+                num_inference_steps=plan_ds.layout_steps,
+                eta=0.0,
+                device=device,
+                dtype=torch.float32,
+                x_init=None,
+                start_timestep=None,
+                dynamic_threshold_percentile=dyn_thresh_p,
+                dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                scheduler=getattr(args, "scheduler", "ddim"),
+                timestep_schedule=getattr(args, "timestep_schedule", None),
+                solver=getattr(args, "solver", "ddim"),
+                karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                inpaint_mask=None,
+                inpaint_x0=None,
+                inpaint_noise=None,
+                inpaint_freeze_known=False,
+                ada_early_exit_delta_threshold=0.0,
+                ada_early_exit_patience=0,
+                ada_early_exit_min_steps=0,
+                pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                **_sag_kw,
+                **_vol_kw,
+                **_spec_kw,
+                **_flow_kw,
+                **_periodic_kw,
+            )
+            x0_up = torch.nn.functional.interpolate(
+                x0.float(), size=(fh, fw), mode="bicubic", align_corners=False
+            ).to(dtype=x0.dtype)
+            t_d = int(float(getattr(args, "dual_detail_strength", 0.38)) * (num_timesteps - 1))
+            t_d = min(max(1, t_d), num_timesteps - 1)
+            noise_d = torch.randn_like(x0_up, device=device, dtype=x0.dtype)
+            t_batch = torch.tensor([t_d], device=device, dtype=torch.long).expand(x0_up.shape[0])
+            x_hinit = diffusion.q_sample(x0_up, t_batch, noise=noise_d)
+            mk_c2, mk_u2 = apply_size_embed_to_model_kwargs(
+                model_kwargs_cond,
+                model_kwargs_uncond,
+                cfg=cfg,
+                cond_emb=cond_emb,
+                latent_h=fh,
+                latent_w=fw,
+                device=device,
+            )
+            if args.control_image:
+                pil_cf = Image.open(args.control_image).convert("RGB")
+                if pil_cf.size != (image_size, image_size):
+                    pil_cf = pil_cf.resize((image_size, image_size), Image.Resampling.LANCZOS)
+                arr_cf = np.array(pil_cf).astype(np.float32) / 255.0
+                arr_cf = (arr_cf - 0.5) / 0.5
+                mk_c2 = dict(mk_c2)
+                mk_c2["control_image"] = torch.from_numpy(arr_cf).permute(2, 0, 1).unsqueeze(0).to(device)
+                mk_c2["control_scale"] = args.control_scale
+            shape_f = (num_gen, 4, fh, fw)
+            x0 = diffusion.sample_loop(
+                model,
+                shape_f,
+                model_kwargs_cond=mk_c2,
+                model_kwargs_uncond=mk_u2,
+                cfg_scale=cfg_scale,
+                cfg_rescale=cfg_rescale,
+                num_inference_steps=plan_ds.detail_steps,
+                eta=0.0,
+                device=device,
+                dtype=torch.float32,
+                x_init=x_hinit,
+                start_timestep=t_d,
+                dynamic_threshold_percentile=dyn_thresh_p,
+                dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                scheduler="euler",
+                timestep_schedule=None,
+                solver=getattr(args, "solver", "ddim"),
+                karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                inpaint_mask=None,
+                inpaint_x0=None,
+                inpaint_noise=None,
+                inpaint_freeze_known=False,
+                ada_early_exit_delta_threshold=0.0,
+                ada_early_exit_patience=0,
+                ada_early_exit_min_steps=0,
+                pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                sag_blur_sigma=0.0,
+                sag_scale=0.0,
+                **_vol_kw,
+                **_spec_kw,
+                **_flow_kw,
+                **_periodic_kw,
+            )
+    else:
+        print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
+        x0 = diffusion.sample_loop(
+            model,
+            shape,
+            model_kwargs_cond=model_kwargs_cond,
+            model_kwargs_uncond=model_kwargs_uncond,
+            cfg_scale=cfg_scale,
+            cfg_rescale=cfg_rescale,
+            num_inference_steps=args.steps,
+            eta=0.0,
+            device=device,
+            dtype=torch.float32,
+            x_init=x_init,
+            start_timestep=start_timestep,
+            dynamic_threshold_percentile=dyn_thresh_p,
+            dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+            dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+            scheduler=getattr(args, "scheduler", "ddim"),
+            timestep_schedule=getattr(args, "timestep_schedule", None),
+            solver=getattr(args, "solver", "ddim"),
+            karras_rho=float(getattr(args, "karras_rho", 7.0)),
+            inpaint_mask=inpaint_mask_latent,
+            inpaint_x0=inpaint_x0,
+            inpaint_noise=inpaint_noise,
+            inpaint_freeze_known=(args.mask and args.inpaint_mode == "mdm"),
+            pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+            pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+            **_sag_kw,
+            **_vol_kw,
+            **_spec_kw,
+            **_flow_kw,
+            **_ada_kw,
+            **_periodic_kw,
+        )
+
+    if float(getattr(args, "clip_guard_threshold", 0.0) or 0.0) > 0.0:
+        try:
+            from utils.generation.clip_alignment import maybe_clip_refine_latent
+
+            def _clip_refiner(xc: torch.Tensor, t_s: int, n_st: int) -> torch.Tensor:
+                if use_flow_sample:
+                    den_r = max(num_timesteps - 1, 1)
+                    s0 = float(t_s) / float(den_r)
+                    noise2 = torch.randn_like(xc, device=device, dtype=xc.dtype)
+                    xi2 = (1.0 - s0) * xc + s0 * noise2
+                else:
+                    noise2 = torch.randn_like(xc, device=device, dtype=xc.dtype)
+                    tb2 = torch.tensor([t_s], device=device, dtype=torch.long).expand(xc.shape[0])
+                    xi2 = diffusion.q_sample(xc, tb2, noise=noise2)
+                return diffusion.sample_loop(
+                    model,
+                    xc.shape,
+                    model_kwargs_cond=model_kwargs_cond,
+                    model_kwargs_uncond=model_kwargs_uncond,
+                    cfg_scale=cfg_scale,
+                    cfg_rescale=cfg_rescale,
+                    num_inference_steps=max(4, int(n_st)),
+                    eta=0.0,
+                    device=device,
+                    dtype=torch.float32,
+                    x_init=xi2,
+                    start_timestep=t_s,
+                    dynamic_threshold_percentile=dyn_thresh_p,
+                    dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                    dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                    scheduler="euler",
+                    timestep_schedule=None,
+                    solver=getattr(args, "solver", "ddim"),
+                    karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                    inpaint_mask=None,
+                    inpaint_x0=None,
+                    inpaint_noise=None,
+                    inpaint_freeze_known=False,
+                    ada_early_exit_delta_threshold=0.0,
+                    ada_early_exit_patience=0,
+                    ada_early_exit_min_steps=0,
+                    pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                    pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                    sag_blur_sigma=0.0,
+                    sag_scale=0.0,
+                    **_vol_kw,
+                    **_spec_kw,
+                    **_flow_kw,
+                )
+
+            x0 = maybe_clip_refine_latent(
+                x0,
+                prompt=prompt_to_encode,
+                sim_threshold=float(getattr(args, "clip_guard_threshold", 0.0)),
+                model_id=str(getattr(args, "clip_guard_model", "openai/clip-vit-base-patch32")),
+                device=device,
+                vae=vae,
+                latent_scale=latent_scale,
+                ae_type=ae_type,
+                rae_bridge=rae_bridge,
+                num_timesteps=num_timesteps,
+                t_frac=float(getattr(args, "clip_guard_t_frac", 0.22)),
+                refine_steps=int(getattr(args, "clip_guard_steps", 12)),
+                refiner=_clip_refiner,
+            )
+        except Exception as e:
+            print(f"CLIP guard refine skipped: {e}", file=sys.stderr)
+
+    if float(getattr(args, "domain_prior_latent", 0.0) or 0.0) > 0.0:
+        try:
+            from utils.generation.inference_research_hooks import highfreq_layout_prior
+
+            x0 = highfreq_layout_prior(x0, strength=float(getattr(args, "domain_prior_latent", 0.0)))
+        except Exception:
+            pass
+
+    if float(getattr(args, "spectral_coherence_latent", 0.0) or 0.0) > 0.0:
+        try:
+            from utils.generation.inference_research_hooks import spectral_latent_lowfreq_blend
+
+            x0 = spectral_latent_lowfreq_blend(
+                x0,
+                strength=float(getattr(args, "spectral_coherence_latent", 0.0)),
+                cutoff_frac=float(getattr(args, "spectral_coherence_cutoff", 0.15) or 0.15),
+            )
+        except Exception:
+            pass
+
+    # Latent-space hires fix: upscale clean latent, re-noise, short CFG denoise (works best with flexible DiT + KL VAE).
+    if getattr(args, "hires_fix", False):
+        if use_flow_sample:
+            print("Hires-fix skipped: incompatible with flow-matching sampler (VP re-noising).", file=sys.stderr)
+        elif ae_type != "kl":
+            print("Hires-fix skipped: only supported for KL VAE checkpoints.", file=sys.stderr)
+        elif args.mask or args.init_image or args.init_latent:
+            print("Hires-fix skipped: not combined with inpaint / img2img / from-z.", file=sys.stderr)
+        else:
+            hs_scale = float(getattr(args, "hires_scale", 1.5) or 1.5)
+            if int(getattr(args, "width", 0) or 0) > 0 or int(getattr(args, "height", 0) or 0) > 0:
+                tw_px = int(out_w)
+                th_px = int(out_h)
+            else:
+                tw_px = max(int(out_w), int(round(image_size * max(hs_scale, 1.001))))
+                th_px = max(int(out_h), int(round(image_size * max(hs_scale, 1.001))))
+            tlw = max(1, (tw_px + 7) // 8)
+            tlh = max(1, (th_px + 7) // 8)
+            if tlw <= latent_size and tlh <= latent_size:
+                print(
+                    f"Hires-fix skipped: latent already {latent_size}x{latent_size} (target {tlh}x{tlw}).",
+                    file=sys.stderr,
+                )
+            else:
+                with torch.no_grad():
+                    x0_up = torch.nn.functional.interpolate(
+                        x0.float(), size=(tlh, tlw), mode="bicubic", align_corners=False
+                    ).to(dtype=x0.dtype)
+                    t_hires = int(float(getattr(args, "hires_strength", 0.35)) * (num_timesteps - 1))
+                    t_hires = min(max(1, t_hires), num_timesteps - 1)
+                    noise_h = torch.randn_like(x0_up, device=device, dtype=x0.dtype)
+                    t_batch = torch.tensor([t_hires], device=device, dtype=torch.long).expand(x0_up.shape[0])
+                    x_hinit = diffusion.q_sample(x0_up, t_batch, noise=noise_h)
+                    shape_h = (num_gen, 4, tlh, tlw)
+                    mk_c = dict(model_kwargs_cond)
+                    mk_u = dict(model_kwargs_uncond)
+                    if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
+                        bsz = cond_emb.shape[0]
+                        sz_h = torch.tensor([[float(tlh), float(tlw)]], device=device, dtype=torch.float32).expand(
+                            bsz, -1
+                        )
+                        mk_c["size_embed"] = sz_h
+                        mk_u["size_embed"] = sz_h
+                    if args.control_image:
+                        pil_c = Image.open(args.control_image).convert("RGB")
+                        pil_c = pil_c.resize((tw_px, th_px), Image.Resampling.LANCZOS)
+                        arr_c = np.array(pil_c).astype(np.float32) / 255.0
+                        arr_c = (arr_c - 0.5) / 0.5
+                        ctrl_h = torch.from_numpy(arr_c).permute(2, 0, 1).unsqueeze(0).to(device)
+                        mk_c["control_image"] = ctrl_h
+                    hires_steps = max(1, int(getattr(args, "hires_steps", 15)))
+                    cfg_h = float(getattr(args, "hires_cfg_scale", -1.0))
+                    if cfg_h < 0:
+                        cfg_h = float(cfg_scale)
+                    x0 = diffusion.sample_loop(
+                        model,
+                        shape_h,
+                        model_kwargs_cond=mk_c,
+                        model_kwargs_uncond=mk_u,
+                        cfg_scale=cfg_h,
+                        cfg_rescale=cfg_rescale,
+                        num_inference_steps=hires_steps,
+                        eta=0.0,
+                        device=device,
+                        dtype=torch.float32,
+                        x_init=x_hinit,
+                        start_timestep=t_hires,
+                        dynamic_threshold_percentile=dyn_thresh_p,
+                        dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                        dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                        scheduler="euler",
+                        timestep_schedule=None,
+                        solver=getattr(args, "solver", "ddim"),
+                        karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                        inpaint_mask=None,
+                        inpaint_x0=None,
+                        inpaint_noise=None,
+                        inpaint_freeze_known=False,
+                        ada_early_exit_delta_threshold=0.0,
+                        ada_early_exit_patience=0,
+                        ada_early_exit_min_steps=0,
+                        pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                        pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                        sag_blur_sigma=0.0,
+                        sag_scale=0.0,
+                        volatile_cfg_boost=float(getattr(args, "volatile_cfg_boost", 0.0) or 0.0),
+                        volatile_cfg_quantile=float(getattr(args, "volatile_cfg_quantile", 0.72) or 0.72),
+                        volatile_cfg_window=int(getattr(args, "volatile_cfg_window", 6) or 6),
+                        **_spec_kw,
+                        **_flow_kw,
+                        **_periodic_kw,
+                    )
+                print(
+                    f"Hires-fix: refined latent {tlh}x{tlw} ({hires_steps} steps, t_start={t_hires}, cfg={cfg_h}).",
+                    file=sys.stderr,
+                )
 
     # Optional refinement pass: add a little noise to the final latent and denoise once more.
     # This tends to reduce small artifacts while keeping composition.
-    if not getattr(args, "no_refine", False):
+    if not getattr(args, "no_refine", False) and not use_flow_sample:
         with torch.no_grad():
             t_refine = int(getattr(args, "refine_t", 50))
             t_refine = min(max(0, t_refine), getattr(cfg, "num_timesteps", 1000) - 1)
@@ -2014,11 +2633,15 @@ def main():
         x0 = rae_bridge.dit_to_rae(x0)
     image = vae.decode(x0).sample
     image = (image * 0.5 + 0.5).clamp(0, 1)
-    out_h, out_w = image_size, image_size
+    _, _, dec_h, dec_w = image.shape
+    out_h, out_w = int(dec_h), int(dec_w)
     if args.width > 0 or args.height > 0:
-        out_w = args.width or image_size
-        out_h = args.height or image_size
-        image = torch.nn.functional.interpolate(image, size=(out_h, out_w), mode="bilinear", align_corners=False)
+        out_w = int(args.width or dec_w)
+        out_h = int(args.height or dec_h)
+        if out_w != dec_w or out_h != dec_h:
+            image = torch.nn.functional.interpolate(
+                image, size=(out_h, out_w), mode="bilinear", align_corners=False
+            )
     # Civitai-style tip: non-native resolution often causes blur/artifacts
     if out_w != image_size or out_h != image_size:
         if max(out_w, out_h) > image_size * 1.5 or min(out_w, out_h) < image_size * 0.5:
@@ -2036,13 +2659,49 @@ def main():
     for i in range(num_gen):
         img_np = image[i].permute(1, 2, 0).cpu().numpy()
         img_np = (img_np * 255).round().astype("uint8")
-        if args.contrast != 1.0 or args.sharpen > 0:
+        _sat = float(getattr(args, "saturation", 1.0))
+        _preset = str(getattr(args, "finishing_preset", "none") or "none").lower()
+        _need_finishing = (
+            args.contrast != 1.0
+            or args.sharpen > 0
+            or abs(_sat - 1.0) > 1e-6
+            or float(getattr(args, "clarity", 0.0)) > 0
+            or float(getattr(args, "tone_punch", 0.0)) > 0
+            or float(getattr(args, "chroma_smooth", 0.0)) > 0
+            or float(getattr(args, "polish", 0.0)) > 0
+            or _preset != "none"
+        )
+        if _need_finishing:
             try:
-                from utils.quality import contrast, sharpen
+                from utils.quality import (
+                    FINISHING_PRESET_BASELINES,
+                    chroma_smooth_light,
+                    contrast,
+                    gentle_s_curve_luminance,
+                    luminance_clarity,
+                    polish_pass,
+                    saturation_rgb,
+                    sharpen,
+                )
 
+                _bc, _bt, _bch = FINISHING_PRESET_BASELINES.get(_preset, (0.0, 0.0, 0.0))
+                _eff_clarity = min(0.55, float(getattr(args, "clarity", 0.0)) + _bc)
+                _eff_tone = min(0.42, float(getattr(args, "tone_punch", 0.0)) + _bt)
+                _eff_chroma = min(0.65, float(getattr(args, "chroma_smooth", 0.0)) + _bch)
+                _polish = float(getattr(args, "polish", 0.0))
                 if args.contrast != 1.0:
                     img_np = contrast(img_np.astype(np.float32), factor=args.contrast)
                     img_np = np.clip(img_np, 0, 255).astype(np.uint8)
+                if abs(_sat - 1.0) > 1e-6:
+                    img_np = saturation_rgb(img_np, factor=_sat)
+                if _eff_tone > 0:
+                    img_np = gentle_s_curve_luminance(img_np, strength=_eff_tone)
+                if _eff_chroma > 0:
+                    img_np = chroma_smooth_light(img_np, amount=_eff_chroma)
+                if _eff_clarity > 0:
+                    img_np = luminance_clarity(img_np, amount=_eff_clarity)
+                if _polish > 0:
+                    img_np = polish_pass(img_np, amount=_polish, seed=int(args.seed) + i)
                 if args.sharpen > 0:
                     img_np = sharpen(img_np, amount=args.sharpen)
             except Exception:
@@ -2127,6 +2786,11 @@ def main():
             f"cfg_scale: {getattr(args, 'cfg_scale', 7.5)}",
             f"scheduler: {getattr(args, 'timestep_schedule', None) or getattr(args, 'scheduler', 'ddim')}, "
             f"solver: {getattr(args, 'solver', 'ddim')}",
+            f"hires_fix: {getattr(args, 'hires_fix', False)}, hires_scale: {getattr(args, 'hires_scale', 1.5)}, "
+            f"hires_steps: {getattr(args, 'hires_steps', 15)}, saturation: {getattr(args, 'saturation', 1.0)}",
+            f"finishing_preset: {getattr(args, 'finishing_preset', 'none')}, clarity: {getattr(args, 'clarity', 0.0)}, "
+            f"tone_punch: {getattr(args, 'tone_punch', 0.0)}, chroma_smooth: {getattr(args, 'chroma_smooth', 0.0)}, "
+            f"polish: {getattr(args, 'polish', 0.0)}",
         ]
         prompt_txt = out_path.parent / f"{stem}.txt"
         prompt_txt.write_text("\n".join(params_lines), encoding="utf-8")

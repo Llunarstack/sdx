@@ -24,6 +24,15 @@ def test_build_descending_length():
         assert (d <= 0).all(), name
 
 
+def test_set_timesteps_from_starts_near_t_start():
+    """Img2img / hires second pass: first timestep index must be high noise (near t_start), not ~0."""
+    diff = create_diffusion(num_timesteps=1000, beta_schedule="linear", prediction_type="epsilon")
+    ts = diff.set_timesteps_from(num_inference_steps=10, t_start=400)
+    assert int(ts[0].item()) >= int(ts[-1].item())
+    assert int(ts[0].item()) >= 350, "first step should be noisy"
+    assert int(ts[-1].item()) <= 50, "last step should approach clean"
+
+
 def test_set_timesteps_and_sample_loop_smoke():
     diff = create_diffusion(num_timesteps=50, beta_schedule="linear", prediction_type="epsilon")
     diff.set_timesteps(10, timestep_schedule="karras_rho", karras_rho=5.0)

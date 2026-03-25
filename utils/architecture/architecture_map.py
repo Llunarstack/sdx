@@ -1,6 +1,9 @@
 """
 Map **2026-era architecture themes** (flow matching, hybrid AR+DiT, RAE, distillation, …)
 to **SDX modules and status** — used by docs ([`docs/ARCHITECTURE_SHIFT_2026.md`](../docs/ARCHITECTURE_SHIFT_2026.md),
+[`docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md`](../docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md),
+[`docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md`](../docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md),
+[`docs/PROMPT_ACCURACY_BLUEPRINT.md`](../docs/PROMPT_ACCURACY_BLUEPRINT.md),
 [`docs/DIFFUSION_LEVERAGE_ROADMAP.md`](../docs/DIFFUSION_LEVERAGE_ROADMAP.md),
 [`docs/WORKFLOW_INTEGRATION_2026.md`](../docs/WORKFLOW_INTEGRATION_2026.md))
 and optional introspection / tests.
@@ -39,25 +42,33 @@ THEMES: Tuple[ThemeMapping, ...] = (
     ThemeMapping(
         "flow_matching",
         "Flow matching / rectified flow",
-        ParityStatus.RESEARCH,
-        "VP DDPM + Gaussian diffusion; v-pred and timestep sampling relate; full flow training not drop-in.",
-        ("diffusion/", "docs/MODERN_DIFFUSION.md"),
-        ("--prediction-type v", "--prediction-type x0", "--timestep-sample-mode"),
+        ParityStatus.PARTIAL,
+        "Train: --flow-matching-training + diffusion/flow_matching.py. Sample: sample_loop(..., flow_matching_sample=True) "
+        "or sample.py --flow-matching-sample / auto when checkpoint has flow_matching_training.",
+        (
+            "diffusion/flow_matching.py",
+            "diffusion/gaussian_diffusion.py",
+            "sample.py",
+            "train.py",
+            "docs/MODERN_DIFFUSION.md",
+        ),
+        ("--flow-matching-training", "--flow-matching-sample", "--flow-solver", "--prediction-type v"),
     ),
     ThemeMapping(
         "diffusion_bridges",
         "Diffusion bridges (A→B distributions)",
-        ParityStatus.NOT_IN_REPO,
-        "Standard path is noise→image; img2img/init paths exist in sample but not full bridge training.",
-        ("sample.py", "docs/MODERN_DIFFUSION.md"),
-        (),
+        ParityStatus.PARTIAL,
+        "Linear latent interpolation (diffusion/latent_bridge.py) + optional VP shuffle-pair auxiliary loss in train "
+        "(diffusion/bridge_training.py, --bridge-aux-weight); not a full Schrödinger-bridge trainer.",
+        ("diffusion/latent_bridge.py", "diffusion/bridge_training.py", "train.py", "sample.py", "docs/MODERN_DIFFUSION.md"),
+        ("--bridge-aux-weight", "--bridge-aux-lambda"),
     ),
     ThemeMapping(
         "hybrid_ar_diffusion",
         "Hybrid AR planner + diffusion decoder",
         ParityStatus.PARTIAL,
         "Block-causal DiT (num_ar_blocks) + AR/ViT bridge — not a separate billion-parameter AR image tokenizer.",
-        ("models/attention.py", "models/dit_text.py", "utils/ar_dit_vit.py", "docs/AR.md"),
+        ("models/attention.py", "models/dit_text.py", "utils/architecture/ar_dit_vit.py", "docs/AR.md"),
         ("--num-ar-blocks",),
     ),
     ThemeMapping(
@@ -71,9 +82,10 @@ THEMES: Tuple[ThemeMapping, ...] = (
     ThemeMapping(
         "dmd_distillation",
         "DMD / one-step / consistency distillation",
-        ParityStatus.NOT_IN_REPO,
-        "No DMD trainer; see IMPROVEMENTS for distillation roadmap.",
-        ("docs/IMPROVEMENTS.md",),
+        ParityStatus.PARTIAL,
+        "Same-arch teacher→student MSE on shared (x_t,t) in scripts/tools/training/train_kd_distill.py; "
+        "no DMD / one-step student or ADD.",
+        ("scripts/tools/training/train_kd_distill.py", "docs/IMPROVEMENTS.md"),
         (),
     ),
     ThemeMapping(
@@ -196,6 +208,164 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "sample_loop: pred += sag_scale * (pred - pred(blur(x))); ~2× forwards when sag_scale and sag_blur_sigma > 0.",
         ("diffusion/gaussian_diffusion.py", "diffusion/sampling_utils.py", "sample.py"),
         ("--sag-blur-sigma", "--sag-scale"),
+    ),
+    # --- Next-gen “super-model” pillars (design doc: docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md) ---
+    ThemeMapping(
+        "nextgen_semantic_geometric_dual",
+        "Next-gen: semantic–geometric dual backbone (global planner + DiT)",
+        ParityStatus.PARTIAL,
+        "No separate Mamba architect network; dual-stage layout, block AR, --ssm-every-n mixer, and rich conditioning approximate layout-first→detail.",
+        (
+            "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
+            "sample.py",
+            "utils/generation/inference_research_hooks.py",
+            "models/dit_text.py",
+        ),
+        ("--dual-stage-layout", "--num-ar-blocks", "--ssm-every-n"),
+    ),
+    ThemeMapping(
+        "nextgen_vlm_in_loop_critic",
+        "Next-gen: in-loop VLM / discriminative correction",
+        ParityStatus.PARTIAL,
+        "CLIP guard, optional mid-loop CLIP CFG monitor, volatile CFG; not a full VLM gradient critic or localized rewind.",
+        (
+            "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
+            "utils/generation/clip_alignment.py",
+            "diffusion/gaussian_diffusion.py",
+            "sample.py",
+        ),
+        ("--clip-guard-threshold", "--clip-monitor-every", "--volatile-cfg-boost", "--pick-best"),
+    ),
+    ThemeMapping(
+        "nextgen_fourier_operator_diffusion",
+        "Next-gen: Fourier / neural-operator style diffusion",
+        ParityStatus.PARTIAL,
+        "Spectral SFP loss + inference spectral-coherence latent blend; not full NOD denoising on arbitrary grids.",
+        (
+            "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
+            "diffusion/spectral_sfp.py",
+            "utils/generation/inference_research_hooks.py",
+            "docs/MODERN_DIFFUSION.md",
+        ),
+        ("--spectral-sfp-loss", "--spectral-coherence-latent"),
+    ),
+    ThemeMapping(
+        "nextgen_dpo_image_alignment",
+        "Next-gen: direct preference optimization on images / latents",
+        ParityStatus.PARTIAL,
+        "Stage-2 script train_diffusion_dpo.py + DPO loss + preference JSONL/image dataset; not merged into train.py main loop.",
+        (
+            "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
+            "scripts/tools/training/train_diffusion_dpo.py",
+            "utils/training/diffusion_dpo_loss.py",
+            "utils/training/preference_jsonl.py",
+            "utils/training/preference_image_dataset.py",
+            "diffusion/gaussian_diffusion.py",
+        ),
+        (),
+    ),
+    # --- Fast-gen math blueprint (docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md) ---
+    ThemeMapping(
+        "consistency_flow_matching_velocity",
+        "Consistency / velocity self-consistency on flow fields (Consistency-FM class)",
+        ParityStatus.PARTIAL,
+        "Prototype rectified-flow-style velocity MSE in train (--flow-matching-training, diffusion/flow_matching.py); "
+        "not Consistency-FM trajectory matching and not VP-compatible sampling without a flow sampler.",
+        (
+            "docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md",
+            "diffusion/flow_matching.py",
+            "train.py",
+            "diffusion/gaussian_diffusion.py",
+            "docs/MODERN_DIFFUSION.md",
+        ),
+        ("--flow-matching-training", "--prediction-type v", "--steps"),
+    ),
+    ThemeMapping(
+        "dual_solver_time_warping",
+        "Dual-regime solvers: ε/v/x₀ mixing + log vs linear time (learned τ)",
+        ParityStatus.PARTIAL,
+        "Single prediction type per checkpoint; non-uniform training timesteps (logit_normal, high_noise) — not dynamic dual integrator.",
+        (
+            "docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md",
+            "diffusion/timestep_sampling.py",
+            "train.py",
+            "sample.py",
+        ),
+        ("--prediction-type", "--timestep-sample-mode"),
+    ),
+    ThemeMapping(
+        "add_adversarial_distillation",
+        "Adversarial Diffusion Distillation (ADD-class teacher→student)",
+        ParityStatus.NOT_IN_REPO,
+        "No adversarial distillation or dual-head discriminator student training.",
+        ("docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md", "docs/IMPROVEMENTS.md"),
+        (),
+    ),
+    ThemeMapping(
+        "rectified_flow_ot_coupling",
+        "Rectified flow + OT pairing (Sinkhorn / Hungarian noise–data coupling)",
+        ParityStatus.PARTIAL,
+        "Optional mini-batch OT noise coupling (--ot-noise-pair-reg) and optional flow-matching training path "
+        "(--flow-matching-training); not a full continuous-time rectified-flow ODE trainer + sampler.",
+        (
+            "docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md",
+            "utils/training/ot_noise_pairing.py",
+            "diffusion/flow_matching.py",
+            "train.py",
+            "docs/MODERN_DIFFUSION.md",
+        ),
+        ("--ot-noise-pair-reg", "--ot-noise-pair-mode", "--flow-matching-training"),
+    ),
+    ThemeMapping(
+        "speculative_cfg_denoise",
+        "Speculative draft CFG (two forwards, optional blend when predictions agree)",
+        ParityStatus.PARTIAL,
+        "Same-backbone draft+full CFG in GaussianDiffusion.sample_loop via utils/generation/speculative_denoise.py.",
+        ("utils/generation/speculative_denoise.py", "diffusion/gaussian_diffusion.py", "sample.py"),
+        ("--speculative-draft-cfg-scale", "--speculative-close-thresh", "--speculative-blend"),
+    ),
+    # --- Prompt-accuracy blueprint (docs/PROMPT_ACCURACY_BLUEPRINT.md) ---
+    ThemeMapping(
+        "geometric_latent_split_blueprint",
+        "Geometric–latent split (GLS): structural blueprint before texture",
+        ParityStatus.PARTIAL,
+        "Dual-stage layout and domain/layout priors in hooks; no dedicated depth–normal–edge transformer locked as immutable constraint.",
+        (
+            "docs/PROMPT_ACCURACY_BLUEPRINT.md",
+            "sample.py",
+            "utils/generation/inference_research_hooks.py",
+        ),
+        ("--dual-stage-layout", "--domain-prior-latent"),
+    ),
+    ThemeMapping(
+        "discriminative_denoise_vlm_loop",
+        "Discriminative denoising: VLM / critic in the sampling loop",
+        ParityStatus.PARTIAL,
+        "CLIP guard refine and volatile CFG; no frozen VLM every-k-steps with localized latent rewind / gradient reroll.",
+        (
+            "docs/PROMPT_ACCURACY_BLUEPRINT.md",
+            "utils/generation/clip_alignment.py",
+            "sample.py",
+        ),
+        (
+            "--clip-guard-threshold",
+            "--clip-monitor-every",
+            "--volatile-cfg-boost",
+            "--pick-best",
+        ),
+    ),
+    ThemeMapping(
+        "frequency_domain_global_coherence",
+        "Frequency-domain / FNO-style global coherence (prompt-scale narrative)",
+        ParityStatus.PARTIAL,
+        "Spectral SFP training loss + inference ``--spectral-coherence-latent`` (FFT lowfreq blend); not full FNO denoising forward.",
+        (
+            "docs/PROMPT_ACCURACY_BLUEPRINT.md",
+            "diffusion/spectral_sfp.py",
+            "utils/generation/inference_research_hooks.py",
+            "docs/MODERN_DIFFUSION.md",
+        ),
+        ("--spectral-sfp-loss", "--spectral-coherence-latent"),
     ),
 )
 

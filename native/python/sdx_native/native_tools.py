@@ -142,6 +142,36 @@ def cuda_hwc_to_chw_shared_library_path() -> Optional[Path]:
     return None
 
 
+def cuda_ml_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_ml`` (L2 row normalize; ``-DSDX_BUILD_CUDA=ON``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_ml.dll",
+        cpp / "Debug" / "sdx_cuda_ml.dll",
+        cpp / "libsdx_cuda_ml.so",
+        cpp / "libsdx_cuda_ml.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def fnv64_file_shared_library_path() -> Optional[Path]:
+    """``sdx_fnv64_file`` — streaming FNV-1a 64 + newlines (matches Python ``fnv1a64_file``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_fnv64_file.dll",
+        cpp / "Debug" / "sdx_fnv64_file.dll",
+        cpp / "libsdx_fnv64_file.so",
+        cpp / "libsdx_fnv64_file.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
 def mojo_cli_path() -> str:
     """Modular ``mojo`` or ``magic`` CLI if on PATH."""
     return (shutil.which("mojo") or shutil.which("magic") or "").strip()
@@ -187,6 +217,19 @@ def run_rust_dup_image_paths(
         raise FileNotFoundError("Rust sdx-jsonl-tools not built")
     return subprocess.run(
         [str(exe), "dup-image-paths", str(manifest), "--top", str(top)],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def run_rust_file_fnv(path: Path, *, timeout: float = 3600) -> subprocess.CompletedProcess[str]:
+    """Run ``sdx-jsonl-tools file-fnv`` — raw-byte FNV-1a 64 fingerprint."""
+    exe = rust_jsonl_tools_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-jsonl-tools not built")
+    return subprocess.run(
+        [str(exe), "file-fnv", str(path)],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -426,7 +469,9 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_inference_timesteps": str(inference_timesteps_shared_library_path() or ""),
         "libsdx_beta_schedules": str(beta_schedules_shared_library_path() or ""),
         "libsdx_line_stats": str(line_stats_shared_library_path() or ""),
+        "libsdx_fnv64_file": str(fnv64_file_shared_library_path() or ""),
         "libsdx_cuda_hwc_to_chw": str(cuda_hwc_to_chw_shared_library_path() or ""),
+        "libsdx_cuda_ml": str(cuda_ml_shared_library_path() or ""),
         "mojo_or_magic_cli": mojo_cli_path(),
         "latent_lib_ctypes": get_latent_lib().available,
         "caption_text_hygiene": True,
