@@ -49,7 +49,8 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|-------------|
-| [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — install notes; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
+| [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
+| [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — earlier baseline (2026-03-13). |
 
 ---
 
