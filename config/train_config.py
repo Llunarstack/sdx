@@ -117,6 +117,15 @@ class TrainConfig:
     spectral_sfp_low_sigma: float = 0.22  # radial width for low-frequency emphasis at high noise
     spectral_sfp_high_sigma: float = 0.22  # radial width for high-frequency emphasis at low noise
     spectral_sfp_tau_power: float = 1.0  # sharpen/flatten time blend t/(T-1) (1 = linear)
+    # OT-style noise–latent mini-batch coupling (experimental; see utils/training/ot_noise_pairing.py).
+    ot_noise_pair_reg: float = 0.0  # 0=off; Sinkhorn entropic regularizer (e.g. 0.05)
+    ot_noise_pair_iters: int = 40
+    ot_noise_pair_mode: str = "soft"  # soft | hungarian (hungarian needs scipy)
+    # Rectified-flow-style training (see diffusion/flow_matching.py); mutually exclusive with MDM masked training.
+    flow_matching_training: bool = False
+    # VP bridge auxiliary: shuffle-pair latent mix + standard training_losses (regularizer). Can combine with VP or flow main loss.
+    bridge_aux_weight: float = 0.0  # 0=off; try 0.02–0.15
+    bridge_aux_lambda: float = 0.2  # mix x0 = (1-λ) x + λ shuffle(x); in (0, 1]
     # Which diffusion indices t to sample during training (VP-DDPM unchanged; only P(t)).
     # See diffusion/timestep_sampling.py and docs/MODERN_DIFFUSION.md.
     timestep_sample_mode: str = "uniform"  # uniform | logit_normal | high_noise

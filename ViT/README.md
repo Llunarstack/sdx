@@ -4,6 +4,10 @@
 
 **DiT** = diffusion **generator** in `models/`. **`ViT/`** = **scoring / ranking** on finished images (plus caption features). Stacking them is how you get large gains: clean training data, better best-of-N picks, optional reward finetuning. Read **[EXCELLENCE_VS_DIT.md](EXCELLENCE_VS_DIT.md)** for 2024–2026 paper pointers (Swin-DiT, FiT, LaVin-DiT, PRDP, multiscale IQA) and a practical checklist. Suggested **timm** backbones: **[backbone_presets.py](backbone_presets.py)**.
 
+### Research note: “ViT-G” (hypothetical *generator* — not this package)
+
+Some write-ups use **ViT-G** (*Vision-Intelligence Transformer for **Generation***) for a **hierarchical, foveated, dual-stream** DiT successor (log-polar tokens, neural-operator flow, speculative denoising, manifold + critic losses). That is a **design vision**, **not** what the **`ViT/`** folder implements here. Full narrative, disclaimers, and mapping to **partial** SDX hooks (DiT cross-attn, CLIP guard, spectral SFP, etc.): **[VIT_G_ARCHITECTURE_VISION.md](VIT_G_ARCHITECTURE_VISION.md)**.
+
 ---
 
 This folder is a concrete starter implementation for your **ViT idea**:

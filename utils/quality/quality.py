@@ -181,6 +181,25 @@ def contrast_pil(pil_image, factor: float):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
+def saturation_rgb(image: np.ndarray, factor: float = 1.0) -> np.ndarray:
+    """
+    Color saturation in RGB via PIL. factor 1.0 = unchanged; 1.05–1.2 adds pop without nuking skintones
+    as much as contrast. image: (H, W, 3) uint8 (or float [0,255] coerced).
+    """
+    if abs(float(factor) - 1.0) < 1e-6:
+        return image
+    from PIL import Image, ImageEnhance
+
+    is_uint = image.dtype == np.uint8
+    arr = np.clip(np.asarray(image, dtype=np.float32), 0, 255).astype(np.uint8)
+    pil = Image.fromarray(arr, mode="RGB")
+    out = ImageEnhance.Color(pil).enhance(float(factor))
+    o = np.array(out, dtype=np.uint8)
+    if not is_uint:
+        return o.astype(np.float32)
+    return o
+
+
 def add_motion_blur(
     image: np.ndarray,
     amount: float = 0.12,
@@ -209,6 +228,110 @@ def add_motion_blur(
     if is_uint:
         return out.astype(np.uint8)
     return out
+
+
+def _rgb_to_luminance(rgb: np.ndarray) -> np.ndarray:
+    """rgb float (H,W,3) -> luminance (H,W)."""
+    return rgb[..., 0] * 0.299 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.114
+
+
+def gentle_s_curve_luminance(image: np.ndarray, strength: float = 0.0) -> np.ndarray:
+    """
+    Smoothstep on luminance only, then re-scale RGB to match new luma (hue/sat roughly preserved).
+    strength 0 = off; 0.08–0.25 adds punch for photo/3D; 0.04–0.12 for flat illustration/anime.
+    """
+    if strength <= 0:
+        return image
+    is_uint = image.dtype == np.uint8
+    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
+    lum = _rgb_to_luminance(img)
+    x = np.clip(lum / 255.0, 0.0, 1.0)
+    smooth = 3.0 * x * x - 2.0 * x * x * x
+    st = float(min(1.0, max(0.0, strength)))
+    y = (1.0 - st) * x + st * smooth
+    new_lum = np.clip(y * 255.0, 1e-3, 255.0)
+    scale = new_lum / (lum + 1e-3)
+    out = np.clip(img * scale[..., np.newaxis], 0.0, 255.0)
+    if is_uint:
+        return out.astype(np.uint8)
+    return out
+
+
+def chroma_smooth_light(image: np.ndarray, amount: float = 0.0, sigma: float = 1.15) -> np.ndarray:
+    """
+    Blur chroma (RGB - gray) slightly to reduce speckle/banding in flat fills and skin —
+    helps anime/cel styles and noisy photoreal without nuking edges like full RGB blur.
+    amount 0 = off; 0.08–0.35 typical blend toward blurred chroma.
+    """
+    if amount <= 0:
+        return image
+    try:
+        from scipy.ndimage import gaussian_filter
+    except ImportError:
+        return image
+    is_uint = image.dtype == np.uint8
+    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
+    lum = _rgb_to_luminance(img)
+    gray = np.stack([lum, lum, lum], axis=-1)
+    chroma = img - gray
+    ch_blur = gaussian_filter(chroma, sigma=(sigma, sigma, 0), mode="reflect")
+    a = float(min(0.85, max(0.0, amount)))
+    out = np.clip(gray + (1.0 - a) * chroma + a * ch_blur, 0.0, 255.0)
+    if is_uint:
+        return out.astype(np.uint8)
+    return out
+
+
+def luminance_clarity(image: np.ndarray, amount: float = 0.0, radius: float = 1.0) -> np.ndarray:
+    """
+    Unsharp-mask on luminance only: crisper edges / micro-detail without RGB halos (works across styles).
+    amount 0 = off; 0.08–0.35 typical. Needs scipy (same as sharpen()).
+    """
+    if amount <= 0:
+        return image
+    try:
+        from scipy.ndimage import gaussian_filter
+    except ImportError:
+        return image
+    is_uint = image.dtype == np.uint8
+    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
+    lum = _rgb_to_luminance(img)
+    blur = gaussian_filter(lum, sigma=float(radius), mode="reflect")
+    sharp_lum = lum + float(amount) * (lum - blur)
+    sharp_lum = np.clip(sharp_lum, 1e-3, 255.0)
+    scale = sharp_lum / (lum + 1e-3)
+    out = np.clip(img * scale[..., np.newaxis], 0.0, 255.0)
+    if is_uint:
+        return out.astype(np.uint8)
+    return out
+
+
+def polish_pass(image: np.ndarray, amount: float = 0.0, seed: Optional[int] = None) -> np.ndarray:
+    """
+    One-knob cross-style finish: mild S-curve + chroma smooth + luminance clarity + tiny grain.
+    amount in [0, 1]; try 0.35–0.7. Stacks on top of other passes if you also set --clarity etc.
+    """
+    if amount <= 0:
+        return image
+    a = float(min(1.0, max(0.0, amount)))
+    out = np.asarray(image, dtype=np.uint8) if image.dtype != np.uint8 else image
+    out = gentle_s_curve_luminance(out, strength=0.22 * a)
+    out = chroma_smooth_light(out, amount=0.32 * a, sigma=1.0 + 0.4 * a)
+    out = luminance_clarity(out, amount=0.28 * a, radius=0.85 + 0.35 * a)
+    if a > 0.15:
+        out = add_film_grain(out, amount=0.008 * a, seed=seed)
+    return out
+
+
+# Baseline adds for --finishing-preset (added to explicit --clarity / --tone-punch / --chroma-smooth).
+FINISHING_PRESET_BASELINES = {
+    "none": (0.0, 0.0, 0.0),
+    "photo": (0.16, 0.13, 0.06),
+    "anime": (0.055, 0.045, 0.24),
+    "illustration": (0.11, 0.095, 0.11),
+    "characters": (0.14, 0.075, 0.14),
+    "painterly": (0.10, 0.11, 0.09),
+}
 
 
 def add_lens_glare(

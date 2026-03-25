@@ -44,3 +44,6 @@ native/cpp/cmake-build-*/
 # Go build output next to source (keep native/go/sdx-manifest/*.go tracked)
 native/go/sdx-manifest/sdx-manifest
 native/go/sdx-manifest/sdx-manifest.exe
+
+# Local scratch / error captures
+snippets_err.txt
