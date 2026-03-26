@@ -1,0 +1,255 @@
+pack,mode,tag
+sfw_positive,_,sfw
+sfw_positive,_,safe for work
+sfw_positive,_,tasteful
+sfw_positive,_,non-explicit
+sfw_positive,_,wholesome presentation
+sfw_positive,_,clean composition
+sfw_positive,_,clear focal subject
+sfw_positive,_,single coherent scene
+sfw_positive,_,readable pose
+sfw_positive,_,balanced composition
+sfw_positive,_,expressive eyes
+sfw_positive,_,natural skin texture
+sfw_positive,_,storytelling moment
+sfw_positive,_,atmospheric depth
+sfw_positive,_,environment harmony
+sfw_positive,_,__REF__:best_model_tags
+sfw_positive,_,beautiful lighting
+sfw_positive,_,coherent colors
+sfw_positive,_,elegant
+sfw_positive,_,graceful
+sfw_positive,_,serene mood
+sfw_positive,_,peaceful atmosphere
+sfw_positive,_,heartwarming
+sfw_positive,_,uplifting
+sfw_positive,_,artistic
+sfw_positive,_,emotional depth
+sfw_positive,_,kawaii aesthetic
+sfw_positive,_,cute charm
+sfw_positive,_,character focus
+sfw_positive,_,detailed clothing folds
+sfw_positive,_,detailed background
+sfw_positive,_,concept art
+sfw_positive,_,style consistent
+sfw_positive,_,cinematic composition
+sfw_positive,_,professional finish
+sfw_positive,_,soft diffused light
+sfw_positive,_,warm inviting tones
+sfw_positive,_,pastel palette
+sfw_positive,_,dreamy atmosphere
+sfw_positive,_,idyllic scene
+sfw_positive,_,faithful to the written prompt
+sfw_positive,_,respect the described setting
+sfw_positive,_,consistent with stated wardrobe
+sfw_positive,_,no unrequested characters
+sfw_positive,_,clear prop continuity
+sfw_positive,_,honor age-appropriate wholesome cues
+sfw_negative,_,nsfw
+sfw_negative,_,explicit nudity
+sfw_negative,_,sexual content
+sfw_negative,_,nipples visible
+sfw_negative,_,genitals
+sfw_negative,_,intercourse
+sfw_negative,_,pornographic
+sfw_negative,_,nude
+sfw_negative,_,naked
+sfw_negative,_,fully nude
+sfw_negative,_,lewd
+sfw_negative,_,erotic
+sfw_negative,_,porn
+sfw_negative,_,hentai
+sfw_negative,_,censored
+sfw_negative,_,deformed
+sfw_negative,_,bad anatomy
+sfw_negative,_,bad proportions
+sfw_negative,_,extra limbs
+sfw_negative,_,malformed hands
+sfw_negative,_,extra fingers
+sfw_negative,_,fused fingers
+sfw_negative,_,ugly
+sfw_negative,_,low quality
+sfw_negative,_,blurry
+sfw_negative,_,grainy
+sfw_negative,_,jpeg artifacts
+sfw_negative,_,oversaturated
+sfw_negative,_,distorted
+sfw_negative,_,grotesque
+sfw_negative,_,sexualized minor
+sfw_negative,_,duplicate person
+sfw_negative,_,cloned face
+sfw_negative,_,double head
+sfw_negative,_,watermark
+sfw_negative,_,text overlay
+sfw_negative,_,cropped head
+sfw_negative,_,out of frame
+sfw_negative,_,muddy details
+sfw_negative,_,contradicts the prompt
+sfw_negative,_,invented scene elements
+sfw_negative,_,wrong outfit vs description
+sfw_negative,_,missing described props
+sfw_negative,_,genre drift from brief
+sfw_mood_positive,wholesome,wholesome
+sfw_mood_positive,wholesome,heartwarming
+sfw_mood_positive,wholesome,pure
+sfw_mood_positive,wholesome,innocent
+sfw_mood_positive,wholesome,gentle
+sfw_mood_positive,wholesome,kind
+sfw_mood_positive,heroic,heroic
+sfw_mood_positive,heroic,brave
+sfw_mood_positive,heroic,determined
+sfw_mood_positive,heroic,epic
+sfw_mood_positive,heroic,inspirational
+sfw_mood_positive,heroic,noble
+sfw_mood_positive,serene,serene
+sfw_mood_positive,serene,peaceful
+sfw_mood_positive,serene,calm
+sfw_mood_positive,serene,tranquil
+sfw_mood_positive,serene,meditative
+sfw_mood_positive,serene,zen
+sfw_mood_positive,adventurous,adventurous
+sfw_mood_positive,adventurous,curious
+sfw_mood_positive,adventurous,exploratory
+sfw_mood_positive,adventurous,wonder
+sfw_mood_positive,adventurous,brave explorer
+sfw_mood_positive,joyful,joyful
+sfw_mood_positive,joyful,happy
+sfw_mood_positive,joyful,bright
+sfw_mood_positive,joyful,cheerful
+sfw_mood_positive,joyful,uplifting
+sfw_mood_positive,joyful,radiant
+sfw_mood_positive,cozy,cozy
+sfw_mood_positive,cozy,warm
+sfw_mood_positive,cozy,comforting
+sfw_mood_positive,cozy,homey
+sfw_mood_positive,cozy,intimate
+sfw_mood_positive,cozy,safe
+sfw_mood_positive,wonder,wonder
+sfw_mood_positive,wonder,magical
+sfw_mood_positive,wonder,enchanted
+sfw_mood_positive,wonder,dreamy
+sfw_mood_positive,wonder,fantastical
+sfw_mood_positive,kawaii,kawaii
+sfw_mood_positive,kawaii,cute
+sfw_mood_positive,kawaii,adorable
+sfw_mood_positive,kawaii,chibi style
+sfw_mood_positive,kawaii,pastel aesthetic
+sfw_mood_positive,storybook,storybook illustration
+sfw_mood_positive,storybook,fairytale atmosphere
+sfw_mood_positive,storybook,soft lighting
+sfw_mood_positive,storybook,dreamlike
+sfw_pose_positive,elegant,elegant pose
+sfw_pose_positive,elegant,graceful posture
+sfw_pose_positive,elegant,poised
+sfw_pose_positive,elegant,refined stance
+sfw_pose_positive,elegant,ballet pose
+sfw_pose_positive,heroic,heroic pose
+sfw_pose_positive,heroic,confident stance
+sfw_pose_positive,heroic,powerful presence
+sfw_pose_positive,heroic,dynamic hero pose
+sfw_pose_positive,contemplative,contemplative pose
+sfw_pose_positive,contemplative,thoughtful expression
+sfw_pose_positive,contemplative,introspective
+sfw_pose_positive,contemplative,reading pose
+sfw_pose_positive,playful,playful pose
+sfw_pose_positive,playful,joyful movement
+sfw_pose_positive,playful,lighthearted
+sfw_pose_positive,playful,jumping for joy
+sfw_pose_positive,dynamic,dynamic pose
+sfw_pose_positive,dynamic,action pose
+sfw_pose_positive,dynamic,energetic
+sfw_pose_positive,dynamic,running pose
+sfw_pose_positive,dynamic,dancing pose
+sfw_pose_positive,relaxed,relaxed pose
+sfw_pose_positive,relaxed,natural posture
+sfw_pose_positive,relaxed,comfortable
+sfw_pose_positive,relaxed,sitting peacefully
+sfw_pose_positive,graceful,graceful movement
+sfw_pose_positive,graceful,flowing pose
+sfw_pose_positive,graceful,artistic stance
+sfw_pose_positive,cute,cute pose
+sfw_pose_positive,cute,kawaii pose
+sfw_pose_positive,cute,head tilt
+sfw_pose_positive,cute,peace sign
+sfw_pose_positive,cute,heart hands
+sfw_clothing_positive,casual,casual clothes
+sfw_clothing_positive,casual,everyday wear
+sfw_clothing_positive,casual,t-shirt and jeans
+sfw_clothing_positive,casual,hoodie
+sfw_clothing_positive,casual,sundress
+sfw_clothing_positive,elegant,elegant gown
+sfw_clothing_positive,elegant,formal dress
+sfw_clothing_positive,elegant,evening gown
+sfw_clothing_positive,elegant,sophisticated attire
+sfw_clothing_positive,cozy,cozy sweater
+sfw_clothing_positive,cozy,warm cardigan
+sfw_clothing_positive,cozy,comfortable loungewear
+sfw_clothing_positive,cozy,fluffy robe
+sfw_clothing_positive,adventurer,adventurer outfit
+sfw_clothing_positive,adventurer,travel clothes
+sfw_clothing_positive,adventurer,explorer attire
+sfw_clothing_positive,adventurer,leather jacket
+sfw_clothing_positive,fantasy,fantasy robes
+sfw_clothing_positive,fantasy,mage robes
+sfw_clothing_positive,fantasy,elven clothing
+sfw_clothing_positive,fantasy,princess dress
+sfw_clothing_positive,historical,historical dress
+sfw_clothing_positive,historical,victorian clothing
+sfw_clothing_positive,historical,renaissance attire
+sfw_clothing_positive,historical,kimono
+sfw_clothing_positive,sporty,sporty wear
+sfw_clothing_positive,sporty,athletic outfit
+sfw_clothing_positive,sporty,activewear
+sfw_clothing_positive,sporty,yoga clothes
+sfw_clothing_positive,cute,cute outfit
+sfw_clothing_positive,cute,kawaii fashion
+sfw_clothing_positive,cute,pastel clothes
+sfw_clothing_positive,cute,school uniform
+sfw_clothing_positive,cute,maid outfit
+sfw_clothing_positive,kawaii,kawaii outfit
+sfw_clothing_positive,kawaii,lolita dress
+sfw_clothing_positive,kawaii,pastel goth
+sfw_clothing_positive,kawaii,cute accessories
+sfw_environment_positive,forest,peaceful forest
+sfw_environment_positive,forest,sunlit woods
+sfw_environment_positive,forest,enchanted forest
+sfw_environment_positive,forest,autumn forest
+sfw_environment_positive,cabin,cozy cabin
+sfw_environment_positive,cabin,warm fireplace
+sfw_environment_positive,cabin,rustic interior
+sfw_environment_positive,cabin,mountain cabin
+sfw_environment_positive,meadow,sunlit meadow
+sfw_environment_positive,meadow,flower field
+sfw_environment_positive,meadow,rolling hills
+sfw_environment_positive,meadow,wildflower meadow
+sfw_environment_positive,library,grand library
+sfw_environment_positive,library,quiet study
+sfw_environment_positive,library,bookshelves
+sfw_environment_positive,library,ancient library
+sfw_environment_positive,garden,beautiful garden
+sfw_environment_positive,garden,flower garden
+sfw_environment_positive,garden,zen garden
+sfw_environment_positive,garden,rose garden
+sfw_environment_positive,night,starry night sky
+sfw_environment_positive,night,moonlit landscape
+sfw_environment_positive,night,gentle night
+sfw_environment_positive,night,aurora sky
+sfw_environment_positive,studio,art studio
+sfw_environment_positive,studio,painting studio
+sfw_environment_positive,studio,warm workshop
+sfw_environment_positive,studio,creative space
+sfw_expression_positive,gentle,gentle smile
+sfw_expression_positive,gentle,soft expression
+sfw_expression_positive,gentle,kind eyes
+sfw_expression_positive,joyful,joyful smile
+sfw_expression_positive,joyful,happy expression
+sfw_expression_positive,joyful,bright eyes
+sfw_expression_positive,curious,curious expression
+sfw_expression_positive,curious,wondering look
+sfw_expression_positive,curious,thoughtful gaze
+sfw_expression_positive,serene,serene expression
+sfw_expression_positive,serene,peaceful face
+sfw_expression_positive,serene,calm demeanor
+sfw_expression_positive,determined,determined look
+sfw_expression_positive,determined,focused expression
+sfw_expression_positive,determined,confident

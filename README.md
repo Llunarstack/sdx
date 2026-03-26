@@ -54,15 +54,15 @@
 | :--- | :--- |
 | **Run something now** | [Quick start](#quick-start) — `python scripts/tools/dev/quick_test.py` |
 | **Train (folders or JSONL)** | **[`user_data/train/`](user_data/train/)** — drop images + captions here · [Training](#training) · [Data format](#data-format) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) |
-| **Books / comics / manga** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) |
+| **Books / comics / manga** | [pipelines/book_comic/README.md](pipelines/book_comic/README.md) · [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) (incl. best-output checklist) |
 | **Score or filter data (ViT)** | [ViT/README.md](ViT/README.md) · [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) |
 | **Submit a PR or doc fix** | [Contributing](#contributing--community) · [docs/CODEBASE.md](docs/CODEBASE.md) |
-| **Navigate the tree** | [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
-| **Browse every source file** | **[docs/FILES.md](docs/FILES.md)** — per-file roles; **[docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md)** — folder map |
+| **Navigate the tree** | [docs/CODEBASE.md](docs/CODEBASE.md) · [scripts/README.md](scripts/README.md) · [scripts/tools/README.md](scripts/tools/README.md) |
+| **Browse every source file** | **[docs/FILES.md](docs/FILES.md)** — per-file roles; **[docs/CODEBASE.md](docs/CODEBASE.md)** — top-level folder map |
 | **Understand sampling** | [Architecture](#architecture-and-pipeline) · [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) · [Sampling](#sampling) |
-| **Honest limits & mitigations** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) (gaps table, fixes) · [docs/COMMON_ISSUES.md](docs/COMMON_ISSUES.md) |
+| **Honest limits & mitigations** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) (gaps table, fixes) · [docs/QUALITY_AND_ISSUES.md](docs/QUALITY_AND_ISSUES.md) |
 | **Diffusion upgrade ideas** | [docs/DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md) · [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) |
-| **Prompt pipeline (modules + flags)** | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) · [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) · `utils/prompt/prompt_layout.py` · `sample.py --prompt-layout` / `--t5-layout-encode` · `python scripts/tools/preview_generation_prompt.py --help` |
+| **Prompt pipeline (modules + flags)** | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) · [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) · `utils/prompt/prompt_layout.py` · **`data/prompt_tags/`** (content-control CSVs) · `sample.py --prompt-layout` / `--t5-layout-encode` · `python scripts/tools/preview_generation_prompt.py --help` |
 
 <a id="latest-additions"></a>
 
@@ -77,12 +77,13 @@ High-signal additions to inference, books, packaging, and docs — all on the sa
 | **Face & reference post-process** | **`--face-enhance`** (+ sharpen / contrast / padding / max faces) via [`utils/quality/face_region_enhance.py`](utils/quality/face_region_enhance.py). **`--post-reference-image`** / **`--post-reference-alpha`** for light pixel-space blend after decode. OCR repair paths forward these flags when set. |
 | **NVIDIA install path** | **[`requirements-cuda128.txt`](requirements-cuda128.txt)** — after `requirements.txt`, **`pip install --force-reinstall -r requirements-cuda128.txt`** pulls **torch / torchvision / xformers** from PyTorch’s **cu128** index (avoids CPU-only PyPI torch). **`python -m toolkit.training.env_health`** prints a hint when **`+cpu`** torch is detected ([`toolkit/training/env_health.py`](toolkit/training/env_health.py)). |
 | **Book / comic consistency layer** | [`pipelines/book_comic/consistency_helpers.py`](pipelines/book_comic/consistency_helpers.py) + CLI flags on **`generate_book.py`** (`--consistency-json`, character/costume/props/vehicle/setting/creature/palette/lighting/lettering, negative tiers). Prompt order: narration → **consistency block** → panel → rolling context ([`book_helpers.compose_book_page_prompt`](pipelines/book_comic/book_helpers.py)); rolling context respects **`--page-context-max-chars`** for the **full** composed string. |
-| **Architecture map & 2026 docs** | **[`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)** — themes ↔ repo hooks. **Docs:** [ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md), [WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md), [LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md). **Leverage roadmap:** [DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md). |
+| **Architecture map & 2026 docs** | **[`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)** — themes ↔ repo hooks. **Merged hub:** [LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) · [BLUEPRINTS.md](docs/BLUEPRINTS.md). **Leverage roadmap:** [DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md). |
 | **Gaps vs common T2I failures** | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) — structured “what breaks / why / mitigations” (incl. hands, faces, text-in-image, composition). |
 | **Tests** | [`tests/unit/test_reference_tokens_and_sag.py`](tests/unit/test_reference_tokens_and_sag.py), [`tests/unit/test_face_region_enhance.py`](tests/unit/test_face_region_enhance.py), [`tests/unit/test_consistency_helpers.py`](tests/unit/test_consistency_helpers.py), plus existing **`tests/unit/`**, **`tests/integration/`**, **`tests/diffusion/`**. |
 | **Prompt lint (path)** | Canonical script: [`scripts/tools/prompt/prompt_lint.py`](scripts/tools/prompt/prompt_lint.py) (invoked by tooling / CI that still says `prompt_lint`). |
 | **Layered prompts + encoders** | JSON **prompt layout** compiler [`utils/prompt/prompt_layout.py`](utils/prompt/prompt_layout.py) · `sample.py --prompt-layout file.json` · `--t5-layout-encode` (`auto` / `flat` / `blocks` / `segmented`) reshapes how **T5** reads sections. **Triple mode** (`text_encoder_mode=triple`): **CLIP-L** and **CLIP-bigG** get a compact **layout-aware** caption via `triple_clip_caption` while T5 uses the chosen layout mode ([`utils/modeling/text_encoder_bundle.py`](utils/modeling/text_encoder_bundle.py)). |
-| **Native C++ / CUDA builds** | One-shot: **[`scripts/tools/native/build_native.ps1`](scripts/tools/native/build_native.ps1)** (Windows) · **[`scripts/tools/native/build_native.sh`](scripts/tools/native/build_native.sh)** (Linux/macOS). Produces **`sdx_line_stats`** (fast JSONL byte + newline count), optional **`sdx_cuda_hwc_to_chw`** (`cmake -DSDX_BUILD_CUDA=ON`), plus existing latent / timestep / beta DLLs ([`native/cpp/`](native/cpp/)). |
+| **Native C++ / CUDA builds** | One-shot: **[`scripts/tools/native/build_native.ps1`](scripts/tools/native/build_native.ps1)** (Windows) · **[`scripts/tools/native/build_native.sh`](scripts/tools/native/build_native.sh)** (Linux/macOS). CMake **Release** for `native/cpp` with optional CUDA (`SDX_BUILD_CUDA`, cache-aware rebuild). DLLs include latent / timesteps / betas / line stats / FNV64, plus CUDA targets when enabled (**HWC→CHW**, **L2 rows**, **NF4**, **online SDPA**, **flow-matching velocity**, …). Rust: **`sdx-jsonl-tools`**, **`sdx-noise-schedule`**. See [native/README.md](native/README.md) · [docs/NATIVE_AND_SYSTEM_LIBS.md](docs/NATIVE_AND_SYSTEM_LIBS.md). |
+| **Content controls → CSV tag packs** | Prompt tag banks live under **[`data/prompt_tags/`](data/prompt_tags/)** (numbered `01_…`–`09_…` **`.csv`**, columns `pack`, `mode`, `tag`; **`__REF__:best_model_tags`** splices another pack). Loader: [`utils/prompt/content_control_tag_data.py`](utils/prompt/content_control_tag_data.py) · constants: [`utils/prompt/content_control_tags.py`](utils/prompt/content_control_tags.py) · API + inference: [`utils/prompt/content_controls.py`](utils/prompt/content_controls.py). **Regenerate** from loaded constants: **`python scripts/tools/dump_prompt_tag_csvs.py`**. Expanded rows for **prompt adherence** (standard/strict packs, quality, SFW/NSFW, scene, style, misc pairs). **`import` fails** if `data/prompt_tags` is missing. Tests: [`tests/unit/test_content_controls.py`](tests/unit/test_content_controls.py). |
 | **JSONL tools (no Node)** | Former `native/js/*.mjs` replaced by pure Python **[`sdx_native.jsonl_manifest_pure`](native/python/sdx_native/jsonl_manifest_pure.py)** (`python -m sdx_native.jsonl_manifest_pure stat|promptlint …`). |
 | **Mojo (optional)** | **[`native/mojo/`](native/mojo/)** — **Pixi** + Modular conda (`pixi.toml` / `pixi.lock`, **linux-64**). On Windows, **native win-64 Mojo** is not on conda; use **WSL2** and [`native/mojo/install_mojo_wsl.ps1`](native/mojo/install_mojo_wsl.ps1) or `pixi install` + `pixi run mojo-run`. Python helper: [`native/mojo/mojopy/launcher.py`](native/mojo/mojopy/launcher.py). |
 | **Flow matching (train + sample)** | **`train.py --flow-matching-training`** — rectified-flow-style velocity loss ([`diffusion/flow_matching.py`](diffusion/flow_matching.py)). **`sample.py --flow-matching-sample`** (or auto when checkpoint embeds `flow_matching_training`) + **`--flow-solver euler|heun`**; **`--force-vp-sample`** to override. Implemented in [`GaussianDiffusion.sample_loop`](diffusion/gaussian_diffusion.py) / `_sample_loop_flow_matching` (optional API: `flow_init_noise=`). **Not** mixable with VP DDIM unless you turn flow off. |
@@ -91,7 +92,7 @@ High-signal additions to inference, books, packaging, and docs — all on the sa
 | **Speculative CFG (inference)** | **`--speculative-draft-cfg-scale`**, **`--speculative-close-thresh`**, **`--speculative-blend`** — two forwards on the same DiT ([`utils/generation/speculative_denoise.py`](utils/generation/speculative_denoise.py)). |
 | **Preference / distillation scripts** | **[`scripts/tools/training/train_diffusion_dpo.py`](scripts/tools/training/train_diffusion_dpo.py)** — diffusion DPO with frozen ref; uses **triple** text bundle when the ckpt is triple. **[`scripts/tools/training/train_kd_distill.py`](scripts/tools/training/train_kd_distill.py)** — same-arch teacher→student MSE on shared noise / `t`. |
 | **Linear latent bridge (helper)** | [`diffusion/latent_bridge.py`](diffusion/latent_bridge.py) — interp between latents (not the full Schrödinger-bridge trainer). |
-| **Config / tests** | Flow + MDM mutual exclusion in [`utils/training/config_validator.py`](utils/training/config_validator.py). Flow/bridge/speculative: [`tests/diffusion/test_flow_bridge_training.py`](tests/diffusion/test_flow_bridge_training.py); OT, preferences, latent bridge, DPO loss under `tests/unit/`. Theme map: [`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py). **Blueprints:** [docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md), [docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md](docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md), [docs/PROMPT_ACCURACY_BLUEPRINT.md](docs/PROMPT_ACCURACY_BLUEPRINT.md). |
+| **Config / tests** | Flow + MDM mutual exclusion in [`utils/training/config_validator.py`](utils/training/config_validator.py). Flow/bridge/speculative: [`tests/diffusion/test_flow_bridge_training.py`](tests/diffusion/test_flow_bridge_training.py); OT, preferences, latent bridge, DPO loss under `tests/unit/`. Theme map: [`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py). **Blueprints:** [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md), [docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md](docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md). |
 
 ### Platform & repo layout (stable)
 
@@ -113,7 +114,7 @@ High-signal additions to inference, books, packaging, and docs — all on the sa
 | **Core** | [What’s new](#latest-additions) · [Architecture](#architecture-and-pipeline) · [Highlights](#highlights) · [Quick start](#quick-start) · [Your training data](#your-training-data) |
 | **Train & sample** | [Your training data](#your-training-data) · [Training](#training) · [Training files](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) |
 | **Reference** | [JSONL fields](#data-jsonl-fields) · [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape & architecture 2026](docs/LANDSCAPE_2026.md) · [Research blueprints](docs/BLUEPRINTS.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 <details>
 <summary><strong>Table of contents (same links, expanded)</strong></summary>
@@ -124,7 +125,7 @@ High-signal additions to inference, books, packaging, and docs — all on the sa
 | **Start** | [What’s new](#latest-additions) · [Quick start](#quick-start) · [Setup](#setup) · [Your training data](#your-training-data) · [Data format](#data-format) |
 | **Workflow** | [Architecture](#architecture-and-pipeline) · [Your training data](#your-training-data) · [Training](#training) · [Training files (DiT + ViT)](#training-files-reference-what-each-part-does) · [Timestep sampling](#modern-diffusion-training-timestep-sampling) · [Sampling](#sampling) · [JSONL fields](#data-jsonl-fields) |
 | **Reference** | [Train CLI](#train-cli-quick-reference) · [SDXL-style features](#sdxl-inspired-training-features) · [Extra features](#extra-features) |
-| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape 2026](docs/LANDSCAPE_2026.md) · [Architecture shift 2026](docs/ARCHITECTURE_SHIFT_2026.md) · [Workflow integration 2026](docs/WORKFLOW_INTEGRATION_2026.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
+| **Deep dives** | [Documentation hub](#documentation-hub) · [Landscape & architecture 2026](docs/LANDSCAPE_2026.md) · [Research blueprints](docs/BLUEPRINTS.md) · [Book/comic tech](docs/BOOK_COMIC_TECH.md) · [Project layout](#project-layout) · [Contributing](#contributing--community) · [References](#references) |
 
 </details>
 
@@ -180,7 +181,7 @@ torchrun --nproc_per_node=4 train.py --data-path /path/to/data --global-batch-si
 | **Smoke (DiT forward)** | `python scripts/tools/dev/quick_test.py` |
 | **Optional native CLIs** | `python scripts/tools/dev/quick_test.py --show-native` — lists Rust/Zig/Go, C++ DLLs (`libsdx_latent`, `sdx_line_stats`, CUDA HWC, …), Pixi/Mojo hints ([native/README.md](native/README.md)) |
 
-**Build native libraries (optional):** `.\scripts\tools\native\build_native.ps1` or `bash scripts/tools/native/build_native.sh` — CMake **Release** for `native/cpp` (set `SDX_BUILD_CUDA=0` to skip nvcc) + **cargo** `sdx-jsonl-tools` when `cargo` is on PATH.
+**Build native libraries (optional):** `.\scripts\tools\native\build_native.ps1` or `bash scripts/tools/native/build_native.sh` — CMake **Release** for `native/cpp` (CUDA **auto** if `nvcc` is on PATH; `SDX_BUILD_CUDA=0` off, `=1` force on). If you **change** CUDA on/off, the script **removes `native/cpp/build`** when the cached `SDX_BUILD_CUDA` value disagrees, so you do not get stale CUDA targets. Then **cargo** builds `sdx-jsonl-tools` and `sdx-noise-schedule` when `cargo` is on PATH.
 
 After pulling C++ changes, rebuild `native/cpp` so ctypes picks up new symbols (e.g. `sdx_latent_numel`, `sdx_line_stats`).
 
@@ -498,7 +499,7 @@ flowchart LR
 | :--- | :--- |
 | **Weights** | [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
 | **Every file** | [docs/FILES.md](docs/FILES.md) |
-| **Config, checkpoint, sample** | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) |
+| **Config, checkpoint, sample** | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) §13 |
 
 ---
 
@@ -534,7 +535,7 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 | **Size conditioning** | `--size-embed-dim` (PixArt-style H,W → timestep) |
 | **Patch SE (zero-init)** | `--patch-se` — starts as identity, learns channel gating |
 | **MDM masking** | `--mdm-mask-ratio`, schedules, inpaint-friendly training |
-| **Flow matching (experimental)** | **`--flow-matching-training`** — velocity MSE vs ε−x₀; **mutually exclusive with MDM** (validator). Pair with **`sample.py --flow-matching-sample`** or rely on ckpt flag. See [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md), [docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md). |
+| **Flow matching (experimental)** | **`--flow-matching-training`** — velocity MSE vs ε−x₀; **mutually exclusive with MDM** (validator). Pair with **`sample.py --flow-matching-sample`** or rely on ckpt flag. See [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md), [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md). |
 | **Bridge + OT** | **`--bridge-aux-weight`** / **`--bridge-aux-lambda`**; **`--ot-noise-pair-reg`** (+ iters, mode) |
 
 </details>
@@ -555,7 +556,7 @@ Feature groups below map to flags in `train.py` / `sample.py` and deeper docs.
 | **Speculative CFG** | **`--speculative-draft-cfg-scale`**, **`--speculative-close-thresh`**, **`--speculative-blend`** |
 | **Face & pixel polish** | **`--face-enhance`** (+ `--face-enhance-sharpen`, `--face-enhance-contrast`, …) · **`--post-reference-image`** / **`--post-reference-alpha`** |
 | **Originality at sample** | **`--originality 0.3`** (novelty tokens), **`--creativity`** + **`--creativity-jitter`** (batch diversity), **`--diversity`** — see [docs/TRAINING_TEXT_TO_PIXELS.md](docs/TRAINING_TEXT_TO_PIXELS.md) |
-| **Prompt scaffolding** | `utils/prompt/content_controls.py`: `--safety-mode`, `--one-shot-boost`, `--auto-content-fix`, `--less-ai`, `--anti-ai-pack`, `--human-media`, `--lora-scaffold`, Civitai packs — see **[docs/PROMPT_STACK.md](docs/PROMPT_STACK.md)** |
+| **Prompt scaffolding** | `utils/prompt/content_controls.py` (+ tag data in **`data/prompt_tags/*.csv`** via `content_control_tags.py`): `--safety-mode`, `--one-shot-boost`, `--auto-content-fix`, `--less-ai`, `--anti-ai-pack`, `--human-media`, `--lora-scaffold`, Civitai packs, adherence / quality packs — see **[docs/PROMPT_STACK.md](docs/PROMPT_STACK.md)** |
 | **Preview prompts (no GPU)** | `python scripts/tools/preview_generation_prompt.py --prompt "..."` — mirrors content controls + pos/neg filter |
 
 </details>
@@ -603,10 +604,8 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | :--- | :--- |
 | [user_data/README.md](user_data/README.md) | **Where to put your images** — `user_data/train/` layout + JSONL pointer |
 | [docs/README.md](docs/README.md) | Index of all project docs |
-| [docs/CODEBASE.md](docs/CODEBASE.md) | **Start here for code:** layers, conventions, where to edit |
-| [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) | **Navigate the tree:** folders, entry points, `scripts/` layout |
+| [docs/CODEBASE.md](docs/CODEBASE.md) | **Code + navigation:** layers, conventions, repo tree, `scripts/` layout, contribution rules, where to edit |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — refresh with `python scripts/tools/repo/update_project_structure.py` |
-| [docs/CODEBASE_ORGANIZATION.md](docs/CODEBASE_ORGANIZATION.md) | **Rules of thumb:** layers, where to add code, what stays at repo root |
 | [pipelines/README.md](pipelines/README.md) | **Two product lines:** **image_gen** vs **book_comic** (same engine; split docs + scripts) |
 | [docs/SMOKE_TRAINING.md](docs/SMOKE_TRAINING.md) | Minimal `train.py` loop (synthetic data, `--dry-run`, low VRAM) |
 
@@ -619,24 +618,20 @@ Everything below is indexed in **[docs/README.md](docs/README.md)** — use it a
 | [docs/MODERN_DIFFUSION.md](docs/MODERN_DIFFUSION.md) | ε / v / x₀ vs **flow matching** & **rectified flow** (ecosystem map); timestep sampling; paper pointers |
 | [docs/DIFFUSION_LEVERAGE_ROADMAP.md](docs/DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage upgrades: data, latents, conditioning, objectives, inference, alignment |
 | [docs/MODEL_WEAKNESSES.md](docs/MODEL_WEAKNESSES.md) | Honest gap analysis: common T2I failure modes and SDX mitigations |
-| [docs/MODEL_ENHANCEMENTS.md](docs/MODEL_ENHANCEMENTS.md) | Shared blocks (RMSNorm, FiLM, DropPath), multimodal cross-attn, RAE scales |
-| [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Prompt to T5 to DiT to VAE to image |
+| [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade + shared blocks (RMSNorm, FiLM, cross-attn, RAE scales) |
+| [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Pipeline diagram + prompt → T5 → DiT → VAE walkthrough + config wiring (§13) |
 | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) | **Inference prompt pipeline:** `content_controls`, `neg_filter`, flags, preview CLI |
 | [docs/PROMPT_COOKBOOK.md](docs/PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book) |
-| [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | How config, data, checkpoint, and sampling connect |
-| [docs/CIVITAI_QUALITY_TIPS.md](docs/CIVITAI_QUALITY_TIPS.md) | CFG, hands, resolution, oversaturation |
+| [docs/QUALITY_AND_ISSUES.md](docs/QUALITY_AND_ISSUES.md) | Civitai-style tips + community issue matrix |
 | [docs/AR.md](docs/AR.md) | Block autoregressive modes (0 / 2 / 4) |
 | [docs/STYLE_ARTIST_TAGS.md](docs/STYLE_ARTIST_TAGS.md) | Style and artist tags |
 | [docs/INSPIRATION.md](docs/INSPIRATION.md) | Upstream repos and ideas |
 | [docs/FILES.md](docs/FILES.md) | Full file map |
 | [docs/REGION_CAPTIONS.md](docs/REGION_CAPTIONS.md) | JSONL `parts` and `region_captions` |
-| [docs/MODEL_STACK.md](docs/MODEL_STACK.md) | Local `model/` paths, triple encoders, Qwen, Cascade |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Seeds and determinism |
-| [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Industry context (2026):** authenticity, multi-stage pipelines, 4K/AR, text-in-image, grounding—mapped to SDX |
-| [docs/ARCHITECTURE_SHIFT_2026.md](docs/ARCHITECTURE_SHIFT_2026.md) | **Architecture / research (2026):** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)) |
-| [docs/WORKFLOW_INTEGRATION_2026.md](docs/WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency commentary (2026):** coherency, LLaDA-class ideas, test-time compute, grounding, Mamba — **disclaimers** + SDX ([`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)) |
+| [docs/LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md) | **Merged (2026):** industry snapshot, post-diffusion architecture, workflow + disclaimers ([`utils/architecture/architecture_map.py`](utils/architecture/architecture_map.py)) |
+| [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md) | Flow/solvers/distillation + prompt-accuracy blueprints vs SDX |
 | [docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md) | **Book/comic/manga:** consistency, layout, lettering, presets—mapped to SDX + [prompt_lexicon](pipelines/book_comic/prompt_lexicon.py) |
-| [docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md) | **Production-quality books:** data + training + `--book-accuracy production`, pick-best, OCR/anchoring checklist |
 | [ViT/EXCELLENCE_VS_DIT.md](ViT/EXCELLENCE_VS_DIT.md) | **ViT QA vs DiT generator:** research roadmap (Swin-DiT, FiT, reward/IQA), timm backbones, ensemble with pick-best |
 
 ---
@@ -969,7 +964,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --negative-prompt "..." \
 | [utils/quality/quality.py](utils/quality/quality.py) | Optional sharpen + **naturalize** after each page |
 | [data/caption_utils.py](data/caption_utils.py) | **prepend_quality_if_short** when preset enables it |
 
-**`--book-accuracy`:** `none` (legacy, single sample) \| `fast` \| `balanced` (2 candidates + combo pick + boost + light post) \| `maximum` (4 candidates + stronger post) \| **`production`** (6 candidates + stricter lexicon negatives + strongest default post). Override with `--sample-candidates`, `--pick-best`, `--post-sharpen`, `--cfg-scale`, `--vae-tiling`, etc. Full detail: **[pipelines/book_comic/README.md](pipelines/book_comic/README.md)**. Quality checklist: **[docs/BOOK_MODEL_EXCELLENCE.md](docs/BOOK_MODEL_EXCELLENCE.md)**.
+**`--book-accuracy`:** `none` (legacy, single sample) \| `fast` \| `balanced` (2 candidates + combo pick + boost + light post) \| `maximum` (4 candidates + stronger post) \| **`production`** (6 candidates + stricter lexicon negatives + strongest default post). Override with `--sample-candidates`, `--pick-best`, `--post-sharpen`, `--cfg-scale`, `--vae-tiling`, etc. Full detail: **[pipelines/book_comic/README.md](pipelines/book_comic/README.md)**. Quality checklist: **[docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md)** (section *Best output checklist*).
 
 **Lexicon & layout (2024–2026 patterns):** **`--lexicon-style`** (`shonen`, `shoujo`, `webtoon`, `graphic_novel`, …) augments the page prefix; **`--aspect-preset`** (`webtoon_tall`, `print_manga`, `double_page_spread`, …) sets default width/height; **`--no-lexicon-negative`** disables merged anti-artifact negatives. See **[docs/BOOK_COMIC_TECH.md](docs/BOOK_COMIC_TECH.md)** and **[pipelines/book_comic/prompt_lexicon.py](pipelines/book_comic/prompt_lexicon.py)**.
 

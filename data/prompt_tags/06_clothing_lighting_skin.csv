@@ -1,0 +1,184 @@
+pack,mode,tag
+clothing_positive,casual,casual outfit
+clothing_positive,casual,natural fabric folds
+clothing_positive,casual,realistic cloth drape
+clothing_positive,casual,detailed clothing texture
+clothing_positive,formal,formal outfit
+clothing_positive,formal,tailored clothing
+clothing_positive,formal,clean garment lines
+clothing_positive,formal,elegant dress
+clothing_positive,streetwear,streetwear style
+clothing_positive,streetwear,layered outfit
+clothing_positive,streetwear,distinct garment details
+clothing_positive,streetwear,urban fashion
+clothing_positive,fantasy_armor,fantasy armor
+clothing_positive,fantasy_armor,readable armor segments
+clothing_positive,fantasy_armor,material separation
+clothing_positive,fantasy_armor,ornate armor details
+clothing_positive,swimwear,swimwear
+clothing_positive,swimwear,clean silhouette
+clothing_positive,swimwear,consistent fabric tension
+clothing_positive,swimwear,summer beachwear
+clothing_positive,lingerie,sexy lingerie
+clothing_positive,lingerie,lace lingerie
+clothing_positive,lingerie,sheer fabric
+clothing_positive,lingerie,garter belts
+clothing_positive,lingerie,stockings
+clothing_positive,lingerie,bodysuit
+clothing_positive,lingerie,teddy
+clothing_positive,lingerie,babydoll
+clothing_positive,lingerie,corset
+clothing_positive,lingerie,cage harness
+clothing_positive,torn,torn clothes
+clothing_positive,torn,ripped clothing
+clothing_positive,torn,clothes in tatters
+clothing_positive,torn,partially undressed
+clothing_positive,torn,naked apron
+clothing_positive,armor,fantasy armor
+clothing_positive,armor,revealing armor
+clothing_positive,armor,metal bikini armor
+clothing_positive,armor,leather straps
+clothing_positive,armor,bikini armor
+clothing_positive,nude,completely nude
+clothing_positive,nude,fully naked
+clothing_positive,nude,no clothing
+clothing_positive,nude,bare skin
+clothing_positive,bikini,micro bikini
+clothing_positive,bikini,string bikini
+clothing_positive,bikini,swimsuit pulled aside
+clothing_positive,danbooru,maid outfit
+clothing_positive,danbooru,school uniform
+clothing_positive,danbooru,thighhighs
+clothing_positive,danbooru,garter straps
+clothing_positive,danbooru,fishnets
+clothing_positive,danbooru,latex suit
+clothing_positive,danbooru,leather corset
+clothing_positive,danbooru,pasties
+clothing_positive,danbooru,crotchless panties
+clothing_positive,danbooru,microskirt
+clothing_positive,danbooru,sailor uniform
+clothing_positive,danbooru,cheerleader outfit
+clothing_positive,danbooru,gothic lolita
+clothing_positive,danbooru,nun habit
+clothing_positive,danbooru,shrine maiden
+clothing_positive,danbooru,bikini armor
+clothing_positive,danbooru,miko outfit
+clothing_positive,danbooru,succubus outfit
+clothing_positive,danbooru,demon outfit
+clothing_positive,danbooru,angel outfit
+clothing_positive,danbooru,witch hat and robe
+clothing_positive,danbooru,cat ears and tail
+clothing_positive,danbooru,bunny suit
+clothing_positive,danbooru,maid headdress
+clothing_positive,sfw,casual clothes
+clothing_positive,sfw,elegant gown
+clothing_positive,sfw,adventurer outfit
+clothing_positive,sfw,cozy sweater
+clothing_positive,sfw,historical dress
+clothing_positive,sfw,sportswear
+clothing_positive,sfw,royal attire
+clothing_positive,sfw,fantasy robes
+clothing_positive,sfw,simple tunic
+clothing_positive,sfw,flowing dress
+clothing_positive,sfw,hoodie and shorts
+clothing_positive,sfw,summer dress
+clothing_positive,sfw,winter coat
+clothing_positive,sfw,apron dress
+clothing_positive,sfw,pajamas
+clothing_positive,sfw,uniform
+clothing_positive,sfw,oversized sweater
+clothing_positive,sfw,cardigan
+clothing_positive,sfw,blouse and skirt
+clothing_positive,sfw,sundress
+clothing_positive,sfw,jeans and t-shirt
+clothing_positive,sfw,cute dress
+clothing_positive,sfw,kawaii outfit
+clothing_positive,sfw,pastel clothes
+clothing_negative,casual,melted clothing
+clothing_negative,casual,fused fabric
+clothing_negative,casual,broken seams
+clothing_negative,casual,floating clothes
+clothing_negative,formal,distorted suit
+clothing_negative,formal,warped tie
+clothing_negative,formal,asymmetric lapels
+clothing_negative,streetwear,muddy clothing details
+clothing_negative,streetwear,garment fusion
+clothing_negative,streetwear,texture collapse
+clothing_negative,fantasy_armor,merged armor plates
+clothing_negative,fantasy_armor,floating armor parts
+clothing_negative,fantasy_armor,warped metal
+clothing_negative,swimwear,broken straps
+clothing_negative,swimwear,warped swimsuit geometry
+clothing_negative,lingerie,broken lingerie straps
+clothing_negative,lingerie,warped lace
+clothing_negative,lingerie,plastic looking fabric
+clothing_negative,torn,badly torn clothes
+clothing_negative,torn,inconsistent damage
+clothing_negative,armor,merged armor plates
+clothing_negative,armor,floating armor parts
+clothing_negative,nude,deformed anatomy
+clothing_negative,nude,extra limbs
+clothing_negative,nude,broken joints
+clothing_negative,bikini,broken straps
+clothing_negative,bikini,warped swimsuit geometry
+clothing_negative,bikini,asymmetric cups
+clothing_negative,danbooru,melted costume
+clothing_negative,danbooru,fused fabric
+clothing_negative,danbooru,broken accessories
+clothing_negative,sfw,melted clothing
+clothing_negative,sfw,fused fabric
+clothing_negative,sfw,inconsistent outfit
+lighting_mode_positive,natural_daylight,natural daylight
+lighting_mode_positive,natural_daylight,soft global illumination
+lighting_mode_positive,natural_daylight,plausible bounce light
+lighting_mode_positive,studio_softbox,studio softbox lighting
+lighting_mode_positive,studio_softbox,controlled key/fill ratio
+lighting_mode_positive,studio_softbox,clean light wrap
+lighting_mode_positive,dramatic_rim,dramatic rim light
+lighting_mode_positive,dramatic_rim,directional key light
+lighting_mode_positive,dramatic_rim,cinematic shadow sculpting
+lighting_mode_positive,low_key,low-key lighting
+lighting_mode_positive,low_key,rich shadows
+lighting_mode_positive,low_key,controlled specular highlights
+lighting_mode_positive,high_key,high-key lighting
+lighting_mode_positive,high_key,bright soft tonality
+lighting_mode_positive,high_key,low shadow harshness
+lighting_mode_negative,natural_daylight,unnatural color cast
+lighting_mode_negative,natural_daylight,inconsistent sun direction
+lighting_mode_negative,studio_softbox,harsh mixed lighting
+lighting_mode_negative,studio_softbox,uneven exposure patches
+lighting_mode_negative,dramatic_rim,flat lighting
+lighting_mode_negative,dramatic_rim,unmotivated highlights
+lighting_mode_negative,low_key,crushed blacks
+lighting_mode_negative,low_key,shadow noise blotches
+lighting_mode_negative,high_key,blown highlights
+lighting_mode_negative,high_key,washed-out subject
+skin_detail_positive,natural_texture,natural skin texture
+skin_detail_positive,natural_texture,real pores
+skin_detail_positive,natural_texture,subtle imperfections
+skin_detail_positive,natural_texture,non-waxy skin
+skin_detail_positive,clean_beauty,clean beauty skin
+skin_detail_positive,clean_beauty,balanced skin smoothing
+skin_detail_positive,clean_beauty,retained facial structure
+skin_detail_positive,stylized_skin,stylized skin rendering
+skin_detail_positive,stylized_skin,consistent skin shading language
+skin_detail_negative,natural_texture,waxy skin
+skin_detail_negative,natural_texture,airbrushed plastic skin
+skin_detail_negative,natural_texture,porcelain skin artifact
+skin_detail_negative,clean_beauty,over-smoothed skin
+skin_detail_negative,clean_beauty,loss of facial definition
+skin_detail_negative,stylized_skin,style-inconsistent skin
+skin_detail_negative,stylized_skin,skin shading collapse
+clothing_positive,casual,fabric colors from the prompt
+clothing_positive,formal,lapel and tie as described
+clothing_positive,streetwear,brand-agnostic but silhouette-locked to brief
+clothing_positive,lingerie,set pieces match tag list
+clothing_negative,casual,wrong garment category vs prompt
+clothing_negative,formal,invented pattern not mentioned
+clothing_negative,danbooru,ignored stated accessory
+lighting_mode_positive,studio_softbox,key direction matches prompt
+lighting_mode_positive,dramatic_rim,rim matches stated light source
+lighting_mode_negative,natural_daylight,time of day contradicts prompt
+lighting_mode_negative,studio_softbox,unmotivated fill vs brief
+skin_detail_positive,natural_texture,skin read matches ethnicity and age cues
+skin_detail_negative,natural_texture,ignored freckle or scar note from prompt
