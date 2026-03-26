@@ -1,0 +1,27 @@
+pack,mode,tag
+unwanted_text_negative,_,watermark
+unwanted_text_negative,_,logo
+unwanted_text_negative,_,signature
+unwanted_text_negative,_,brand mark
+unwanted_text_negative,_,caption overlay
+unwanted_text_negative,_,subtitle overlay
+unwanted_text_negative,_,random text
+unwanted_text_negative,_,letters
+unwanted_text_negative,_,numbers
+unwanted_text_negative,_,typography
+conflicting_tag_pairs,_,front view|||back view
+conflicting_tag_pairs,_,bird's-eye view|||worm's-eye view
+conflicting_tag_pairs,_,top-down perspective|||low-angle shot
+conflicting_tag_pairs,_,daylight|||night scene
+conflicting_tag_pairs,_,indoor|||outdoor
+conflicting_tag_pairs,_,single subject|||crowd
+conflicting_tag_pairs,_,photoreal|||toon shading
+conflicting_tag_pairs,_,flat color|||volumetric lighting
+conflicting_tag_pairs,_,monochrome|||rainbow palette
+conflicting_tag_pairs,_,minimalist|||maximalist clutter
+conflicting_tag_pairs,_,vintage film|||neon cyberpunk
+conflicting_tag_pairs,_,macro close-up|||wide establishing shot
+conflicting_tag_pairs,_,symmetrical layout|||chaotic asymmetry
+unwanted_text_negative,_,spurious caption text
+unwanted_text_negative,_,unprompted UI chrome
+unwanted_text_negative,_,fake metadata overlay
