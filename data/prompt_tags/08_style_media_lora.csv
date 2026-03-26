@@ -1,0 +1,106 @@
+pack,mode,tag
+style_positive,3d,3d render
+style_positive,3d,cg render
+style_positive,3d,solid geometry
+style_positive,3d,consistent material shading
+style_positive,3d,octane-style lighting
+style_positive,photoreal,photorealistic
+style_positive,photoreal,real-world textures
+style_positive,photoreal,natural skin/material detail
+style_positive,photoreal,camera-realistic lighting
+style_positive,photoreal,lens-consistent perspective
+style_positive,semi_real,semi-realistic
+style_positive,semi_real,stylized realism
+style_positive,semi_real,balanced stylization and realism
+style_positive,anime,anime style
+style_positive,anime,clean linework
+style_positive,anime,coherent cel-shading
+style_positive,painterly,painterly style
+style_positive,painterly,brushwork detail
+style_positive,painterly,coherent painted textures
+style_positive,3d_photoreal,photorealistic 3d render
+style_positive,3d_photoreal,realistic cg materials
+style_positive,3d_photoreal,cinematic physically based lighting
+style_negative,3d,flat 2d look
+style_negative,3d,painted texture smear
+style_negative,3d,broken geometry
+style_negative,3d,plastic artifacting
+style_negative,photoreal,cartoon look
+style_negative,photoreal,anime lineart
+style_negative,photoreal,cgi plastic skin
+style_negative,photoreal,painterly brush strokes
+style_negative,semi_real,style collapse
+style_negative,semi_real,over-cartooned
+style_negative,semi_real,over-photographic mismatch
+style_negative,anime,photographic pores
+style_negative,anime,uncanny realism
+style_negative,anime,muddy linework
+style_negative,painterly,photo artifacts
+style_negative,painterly,over-sharp photographic texture
+style_negative,painterly,style inconsistency
+style_negative,3d_photoreal,toy-like plastic look
+style_negative,3d_photoreal,flat shading
+style_negative,3d_photoreal,non-physical reflections
+style_lock_positive,_,style consistency
+style_lock_positive,_,single coherent art direction
+style_lock_positive,_,uniform rendering style
+style_lock_negative,_,style bleed
+style_lock_negative,_,mixed incompatible styles
+style_lock_negative,_,style drift
+style_lock_negative,_,visual style inconsistency
+human_media_positive,photographic,authentic photograph
+human_media_positive,photographic,believable exposure
+human_media_positive,photographic,natural dynamic range
+human_media_positive,photographic,real world texture
+human_media_positive,photographic,photographic composition
+human_media_positive,photographic,captured image not rendered
+human_media_positive,dslr,dslr photograph
+human_media_positive,dslr,full frame look
+human_media_positive,dslr,natural lens bokeh
+human_media_positive,dslr,pleasant optical vignette
+human_media_positive,dslr,sharp subject natural falloff
+human_media_positive,dslr,real lens character
+human_media_positive,film,35mm film photograph
+human_media_positive,film,analog film grain
+human_media_positive,film,film color science
+human_media_positive,film,subtle halation
+human_media_positive,film,organic grain structure
+human_media_positive,film,portra palette subtle
+human_media_negative,photographic,cg render
+human_media_negative,photographic,game engine screenshot
+human_media_negative,photographic,3d model turntable
+human_media_negative,photographic,fake hdr
+human_media_negative,dslr,phone computational mush
+human_media_negative,dslr,over processed smartphone hdr
+human_media_negative,film,digital noise pattern
+human_media_negative,film,sensor banding as grain
+lora_scaffold_positive,blend,coherent lora fusion
+lora_scaffold_positive,blend,unified adaptation
+lora_scaffold_positive,blend,single harmonized style
+lora_scaffold_positive,blend,consistent trigger strength feel
+lora_scaffold_positive,character_first,locked character design
+lora_scaffold_positive,character_first,consistent facial structure
+lora_scaffold_positive,character_first,same outfit logic
+lora_scaffold_positive,character_first,character model consistency
+lora_scaffold_positive,style_first,dominant lora style
+lora_scaffold_positive,style_first,style transfer coherence
+lora_scaffold_positive,style_first,clear art direction from trigger
+lora_scaffold_negative,blend,double adaptation clash
+lora_scaffold_negative,blend,split style artifact
+lora_scaffold_negative,blend,muddy lora blend
+lora_scaffold_negative,blend,ghosting from stacked loras
+lora_scaffold_negative,character_first,character face drift
+lora_scaffold_negative,character_first,morphing identity
+lora_scaffold_negative,character_first,inconsistent character
+lora_scaffold_negative,style_first,weak style adherence
+lora_scaffold_negative,style_first,washed lora effect
+lora_scaffold_negative,style_first,conflicting style cues
+style_lock_positive,_,prompt-locked rendering medium
+style_lock_positive,_,no medium swap mid-image
+style_lock_negative,_,medium drift from prompt
+style_positive,photoreal,literal texture scale from brief
+style_negative,anime,style contradicts photoreal request
+human_media_positive,photographic,exposure matches stated lighting words
+human_media_negative,photographic,look contradicts film vs digital cue
+lora_scaffold_positive,blend,prompt weights reflected in fusion
+lora_scaffold_negative,character_first,ignored character tag order

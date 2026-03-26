@@ -1,0 +1,279 @@
+pack,mode,tag
+best_model_tags,_,score_9
+best_model_tags,_,score_8_up
+best_model_tags,_,score_7_up
+best_model_tags,_,masterpiece
+best_model_tags,_,best quality
+best_model_tags,_,amazing quality
+best_model_tags,_,newest
+best_model_tags,_,absurdres
+best_model_tags,_,highres
+best_model_tags,_,extremely detailed
+best_model_tags,_,ultra detailed
+best_model_tags,_,detailed eyes
+best_model_tags,_,detailed face
+best_model_tags,_,detailed hair
+best_model_tags,_,detailed skin
+best_model_tags,_,detailed hands
+best_model_tags,_,detailed background
+best_model_tags,_,fine details
+best_model_tags,_,intricate details
+best_model_tags,_,sharp focus
+best_model_tags,_,volumetric lighting
+best_model_tags,_,cinematic lighting
+best_model_tags,_,professional lighting
+best_model_tags,_,rim lighting
+best_model_tags,_,soft shadows
+best_model_tags,_,depth of field
+best_model_tags,_,dynamic composition
+best_model_tags,_,rule of thirds
+best_model_tags,_,rich colors
+best_model_tags,_,vivid colors
+best_model_tags,_,high contrast
+best_model_tags,_,film grain subtle
+best_model_tags,_,chromatic aberration subtle
+one_shot_positive,_,single subject focus
+one_shot_positive,_,clear hero subject
+one_shot_positive,_,coherent scene
+one_shot_positive,_,consistent lighting direction
+one_shot_positive,_,correct perspective
+one_shot_positive,_,sharp subject
+one_shot_positive,_,well framed
+one_shot_positive,_,complete anatomy in frame
+one_shot_positive,_,natural colors
+one_shot_positive,_,high clarity
+one_shot_positive,_,subject isolation
+one_shot_positive,_,clean silhouette
+one_shot_positive,_,obvious focal point
+one_shot_negative,_,duplicate subject
+one_shot_negative,_,cloned face
+one_shot_negative,_,double head
+one_shot_negative,_,extra arms
+one_shot_negative,_,extra legs
+one_shot_negative,_,missing limbs
+one_shot_negative,_,bad hands
+one_shot_negative,_,mutated hands
+one_shot_negative,_,too many fingers
+one_shot_negative,_,fused fingers
+one_shot_negative,_,blurry
+one_shot_negative,_,out of focus subject
+one_shot_negative,_,muddy details
+one_shot_negative,_,jpeg artifacts
+one_shot_negative,_,worst quality
+one_shot_negative,_,low quality
+one_shot_negative,_,watermark
+one_shot_negative,_,cropped
+one_shot_negative,_,bad anatomy
+one_shot_negative,_,deformed
+one_shot_negative,_,disconnected limbs
+one_shot_negative,_,incoherent background
+one_shot_negative,_,inconsistent lighting
+one_shot_negative,_,visual clutter
+quality_pack_positive,ultra_clean,ultra clean render
+quality_pack_positive,ultra_clean,high micro-contrast
+quality_pack_positive,ultra_clean,fine detail retention
+quality_pack_positive,ultra_clean,artifact-free finish
+quality_pack_positive,cinematic,cinematic grade
+quality_pack_positive,cinematic,filmic contrast
+quality_pack_positive,cinematic,controlled highlight rolloff
+quality_pack_positive,cinematic,depth-rich image
+quality_pack_positive,illustrative,clean stylized rendering
+quality_pack_positive,illustrative,shape readability
+quality_pack_positive,illustrative,crisp silhouette language
+quality_pack_positive,editorial,editorial photography look
+quality_pack_positive,editorial,controlled dynamic range
+quality_pack_positive,editorial,material fidelity
+quality_pack_positive,micro_detail,high frequency detail
+quality_pack_positive,micro_detail,texture fidelity
+quality_pack_positive,micro_detail,material read
+quality_pack_positive,micro_detail,clean micro-contrast
+quality_pack_positive,micro_detail,sharp fine structure
+quality_pack_negative_top,_,worst quality
+quality_pack_negative_top,_,low quality
+quality_pack_negative_top,_,jpeg artifacts
+quality_pack_negative_top,_,blurry
+quality_pack_negative_top,_,noise
+quality_pack_negative_top,_,bad proportions
+quality_pack_negative_top,_,watermark
+quality_pack_negative_top,_,text overlay
+quality_pack_negative_top,_,logo
+quality_pack_negative_top,_,username
+quality_pack_negative_top,_,signature
+quality_pack_negative_top,_,bad hands
+quality_pack_negative_top,_,extra digits
+quality_pack_negative_top,_,mutated hands
+quality_pack_negative_one_shot,_,duplicate subject
+quality_pack_negative_one_shot,_,cloned face
+quality_pack_negative_one_shot,_,double head
+quality_pack_negative_one_shot,_,extra arms
+quality_pack_negative_one_shot,_,extra legs
+quality_pack_negative_one_shot,_,missing limbs
+quality_pack_negative_one_shot,_,bad hands
+quality_pack_negative_one_shot,_,mutated hands
+quality_pack_negative_one_shot,_,too many fingers
+quality_pack_negative_one_shot,_,fused fingers
+quality_pack_negative_one_shot,_,blurry
+quality_pack_negative_one_shot,_,out of focus subject
+quality_pack_negative_one_shot,_,muddy details
+quality_pack_negative_one_shot,_,jpeg artifacts
+quality_pack_negative_one_shot,_,worst quality
+quality_pack_negative_one_shot,_,low quality
+quality_pack_negative_one_shot,_,watermark
+quality_pack_negative_one_shot,_,cropped
+quality_pack_negative_one_shot,_,bad anatomy
+quality_pack_negative_one_shot,_,deformed
+quality_pack_negative_one_shot,_,disconnected limbs
+quality_pack_negative_one_shot,_,incoherent background
+quality_pack_negative_one_shot,_,inconsistent lighting
+quality_pack_negative_one_shot,_,visual clutter
+quality_pack_negative_one_shot,_,bad proportions
+quality_pack_negative_one_shot,_,noise
+quality_pack_negative_one_shot,_,text overlay
+quality_pack_negative_one_shot,_,logo
+quality_pack_negative_one_shot,_,username
+quality_pack_negative_one_shot,_,signature
+quality_pack_negative_one_shot,_,extra digits
+quality_pack_negative,ultra_clean,jpeg artifacts
+quality_pack_negative,ultra_clean,macroblocking
+quality_pack_negative,ultra_clean,banding
+quality_pack_negative,ultra_clean,mushy details
+quality_pack_negative,cinematic,flat tonal range
+quality_pack_negative,cinematic,highlight clipping
+quality_pack_negative,cinematic,crushed shadows
+quality_pack_negative,illustrative,muddy line quality
+quality_pack_negative,illustrative,shape ambiguity
+quality_pack_negative,illustrative,texture soup
+quality_pack_negative,editorial,plastic skin
+quality_pack_negative,editorial,overprocessed skin
+quality_pack_negative,editorial,fake hdr look
+quality_pack_negative,micro_detail,mushy texture
+quality_pack_negative,micro_detail,lost fine detail
+quality_pack_negative,micro_detail,plastic uniform surfaces
+quality_pack_negative,micro_detail,waxy skin everywhere
+quality_pack_negative,micro_detail,smeared micro-detail
+adherence_standard_positive,_,faithful to the prompt
+adherence_standard_positive,_,accurate to description
+adherence_standard_positive,_,all described elements present
+adherence_standard_positive,_,literal scene interpretation
+adherence_standard_positive,_,coherent with written details
+adherence_strict_extra_positive,_,strict prompt adherence
+adherence_strict_extra_positive,_,no invented objects beyond the description
+adherence_strict_extra_positive,_,preserve every mentioned attribute
+adherence_strict_extra_positive,_,exact outfit and props as described
+adherence_standard_negative,_,wrong subject
+adherence_standard_negative,_,missing key elements
+adherence_standard_negative,_,contradicts the description
+adherence_standard_negative,_,omitted props
+adherence_standard_negative,_,ignored clothing details
+adherence_standard_negative,_,wrong outfit
+adherence_standard_negative,_,wrong hair color
+adherence_standard_negative,_,prompt drift
+adherence_strict_extra_negative,_,hallucinated details
+adherence_strict_extra_negative,_,extra subjects not in description
+adherence_strict_extra_negative,_,merged conflicting concepts
+adherence_strict_extra_negative,_,anachronistic props
+adherence_strict_extra_negative,_,inconsistent character identity
+adherence_strict_extra_negative,_,ignored foreground objects
+anti_ai_lite_positive,_,natural skin texture
+anti_ai_lite_positive,_,subtle imperfections
+anti_ai_lite_positive,_,believable shadows
+anti_ai_lite_positive,_,organic micro contrast
+anti_ai_lite_positive,_,real camera response
+anti_ai_strong_extra_positive,_,authentic photograph
+anti_ai_strong_extra_positive,_,candid capture
+anti_ai_strong_extra_positive,_,imperfect but real
+anti_ai_strong_extra_positive,_,natural white balance
+anti_ai_strong_extra_positive,_,shot on real camera
+anti_ai_strong_extra_positive,_,photographic depth
+anti_ai_lite_negative,_,oversaturated
+anti_ai_lite_negative,_,plastic skin
+anti_ai_lite_negative,_,smooth skin
+anti_ai_lite_negative,_,airbrushed
+anti_ai_lite_negative,_,waxy
+anti_ai_lite_negative,_,doll-like
+anti_ai_lite_negative,_,perfect skin
+anti_ai_lite_negative,_,flawless skin
+anti_ai_lite_negative,_,synthetic
+anti_ai_lite_negative,_,artificial
+anti_ai_lite_negative,_,CGI
+anti_ai_lite_negative,_,uncanny
+anti_ai_lite_negative,_,AI generated look
+anti_ai_lite_negative,_,neural render aesthetic
+anti_ai_lite_negative,_,digital art look
+anti_ai_lite_negative,_,porcelain skin
+anti_ai_lite_negative,_,hdr glow
+anti_ai_lite_negative,_,halo artifacts
+anti_ai_lite_negative,_,oversharpened
+anti_ai_lite_negative,_,too perfect symmetry
+anti_ai_lite_negative,_,stock photo stiffness
+anti_ai_lite_negative,_,candy saturation
+anti_ai_lite_negative,_,glossy unreal skin
+anti_ai_strong_extra_negative,_,midjourney aesthetic
+anti_ai_strong_extra_negative,_,generic AI illustration
+anti_ai_strong_extra_negative,_,same face syndrome
+anti_ai_strong_extra_negative,_,floating specular highlights
+anti_ai_strong_extra_negative,_,waxy teeth
+anti_ai_strong_extra_negative,_,dead glassy eyes
+anti_ai_strong_extra_negative,_,uniform poreless skin
+anti_ai_strong_extra_negative,_,beauty filter face
+anti_ai_strong_extra_negative,_,tilt shift miniature fake
+anti_ai_strong_extra_negative,_,fake lens blur
+anti_ai_strong_extra_negative,_,computational hdr
+anti_ai_strong_extra_negative,_,neon edge glow
+anti_ai_strong_extra_negative,_,cfg burn edges
+anti_ai_strong_extra_negative,_,posterization
+anti_ai_strong_extra_negative,_,gradient banding
+adherence_standard_positive,_,follow the caption literally
+adherence_standard_positive,_,respect every named color and material
+adherence_standard_positive,_,preserve stated headcount and roles
+adherence_standard_positive,_,keep background elements from the prompt
+adherence_standard_positive,_,correct handedness and mirroring
+adherence_standard_positive,_,consistent prop placement
+adherence_standard_positive,_,no invented accessories
+adherence_standard_positive,_,match era and setting cues
+adherence_standard_positive,_,honor camera and lens wording
+adherence_strict_extra_positive,_,zero filler objects not in the prompt
+adherence_strict_extra_positive,_,no substitute wardrobe items
+adherence_strict_extra_positive,_,exact palette from the description
+adherence_strict_extra_positive,_,preserve negative space as described
+adherence_strict_extra_positive,_,lock framing to stated crop
+adherence_strict_extra_positive,_,verbatim pose keywords honored
+adherence_strict_extra_positive,_,no genre drift from the brief
+adherence_standard_negative,_,wrong accessory set
+adherence_standard_negative,_,missing stated background object
+adherence_standard_negative,_,invented jewelry or props
+adherence_standard_negative,_,wrong material finish
+adherence_standard_negative,_,ignored symmetry request
+adherence_standard_negative,_,swapped character roles
+adherence_standard_negative,_,extra figures not mentioned
+adherence_standard_negative,_,wrong time of day
+adherence_strict_extra_negative,_,contradictory lighting vs prompt
+adherence_strict_extra_negative,_,hallucinated architecture
+adherence_strict_extra_negative,_,fabric pattern not as described
+adherence_strict_extra_negative,_,wrong vehicle or product model
+adherence_strict_extra_negative,_,ignored explicit color words
+adherence_strict_extra_negative,_,added logos or watermarks
+adherence_strict_extra_negative,_,changed art medium from prompt
+one_shot_positive,_,prompt-faithful composition
+one_shot_positive,_,caption-driven focal hierarchy
+one_shot_positive,_,no orphan props
+one_shot_negative,_,ignored foreground object
+one_shot_negative,_,scene creep beyond the brief
+one_shot_negative,_,wrong focal subject
+best_model_tags,_,tag-accurate rendering
+best_model_tags,_,caption consistency
+best_model_tags,_,literal object inventory
+quality_pack_positive,micro_detail,readable micro surface structure
+quality_pack_positive,micro_detail,edge-accurate small forms
+quality_pack_positive,editorial,faithful material response
+quality_pack_positive,editorial,prompt-locked palette
+quality_pack_positive,ultra_clean,clean edge discipline
+quality_pack_negative,editorial,drifted color grade
+quality_pack_negative,editorial,lost material identity
+quality_pack_negative,micro_detail,smudged fine edges
+quality_pack_negative,micro_detail,ambiguous surface read
+quality_pack_negative,cinematic,unmotivated grade shift
+quality_pack_negative_top,_,ignored composition brief
+quality_pack_negative_top,_,wrong aspect storytelling
+quality_pack_negative_one_shot,_,subject replaced by clutter
+quality_pack_negative_one_shot,_,brief abandoned mid-scene
