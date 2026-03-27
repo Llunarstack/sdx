@@ -11,20 +11,18 @@ Quick links to all project docs, grouped by purpose.
 | [../pipelines/README.md](../pipelines/README.md) | **Two product lines:** `image_gen/` vs `book_comic/` (shared `train.py`; split docs + book script). |
 | [SMOKE_TRAINING.md](SMOKE_TRAINING.md) | Minimal `train.py` run: synthetic data + small DiT + `--dry-run`. |
 | [DANBOORU_HF.md](DANBOORU_HF.md) | Hugging Face Danbooru-style data → JSONL + `train.py`; one-shot `hf_download_and_train.py`. |
-| [CODEBASE.md](CODEBASE.md) | **Start here for code**: layers, conventions, ruff/pytest, where to edit. |
-| [CODEBASE_ORGANIZATION.md](CODEBASE_ORGANIZATION.md) | **Repo structure rules:** layers, where to add code, what not to move without a migration. |
+| [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) | Curated shortlist from provided HF dataset links: primary/secondary/optional picks + initial mix weights. |
+| [CODEBASE.md](CODEBASE.md) | **Start here for code:** layers, conventions, repo tree, `scripts/` layout, contribution rules, ruff/pytest, where to edit. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
-| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Post-diffusion era:** flow matching, bridges, hybrid AR+DiT, Mamba, DMD, RAE — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
-| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Workflow + efficiency narratives:** coherency/4K, LLaDA-class ideas, test-time compute, live grounding, Mamba — **disclaimers** + SDX mapping ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
+| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow/efficiency + disclaimers — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
+| [BLUEPRINTS.md](BLUEPRINTS.md) | **Merged research notes:** few-step flow/solvers/distillation (Part 1) + prompt-accuracy / GLS / frequency (Part 2). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
-| [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) | **Start here to navigate:** top-level tree, `scripts/` layout, where to add code. |
 | [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`scripts/tools/repo/update_project_structure.py`). |
-| [CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect (train → checkpoint → sample). |
-| [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | Generation pipeline: prompt → T5 → diffusion loop → DiT → VAE → image; AR and ported code. |
+| [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | **Merged:** Mermaid/ASCII pipeline diagram, step-by-step generation, config/checkpoint/data wiring (was CONNECTIONS + GENERATION_DIAGRAM + this doc). |
 | [PROMPT_STACK.md](PROMPT_STACK.md) | **Inference text path:** `content_controls` → `neg_filter` → encoder; flag cheat sheet; links to preview CLI. |
 | [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | **Lower-level / native libs:** in-repo Rust/Zig/C++/Go tools + ecosystem picks (image I/O, tokenization, QA) mapped to **quality**, **training**, **prompt adherence**. |
-| [MODEL_ENHANCEMENTS.md](MODEL_ENHANCEMENTS.md) | Shared model blocks (**RMSNorm**, **FiLM**, **DropPath**) + multimodal **cross-attn**, cascade **blend**, **RAE** learnable scales. |
+| [MODEL_STACK.md](MODEL_STACK.md) | Local `model/` paths, triple encoders — plus **model enhancements** (RMSNorm, FiLM, cross-attn, cascade blend, RAE scales). |
 | [../toolkit/README.md](../toolkit/README.md) | **QoL toolkit:** `python -m toolkit.training.env_health`, manifest digest, seeds, step timer, suggested optional pip packages. |
 | [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book). |
 
@@ -40,8 +38,7 @@ Quick links to all project docs, grouped by purpose.
 | [STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md) | Style/artist tags (PixAI, Danbooru): extraction, training, `--auto-style-from-prompt`. |
 | [DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior domains. |
 | [MODEL_WEAKNESSES.md](MODEL_WEAKNESSES.md) | Hands, faces, text, composition: causes and fixes. |
-| [COMMON_ISSUES.md](COMMON_ISSUES.md) | Community issues (SDXL, Flux, Illustrious, NoobAI, Z-Image): concept bleed, plastic skin, repetitive face, artifacts, watermarks, CFG burn, etc. — mitigations and sample.py flags. |
-| [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md) | Civitai-style tips: oversaturation, blur, hands, conflict resolution, text-in-image, hard styles, naturalize. |
+| [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) | **Merged:** Civitai-style sampling fixes + community issue matrix (SDXL, Flux, Z-Image, …) and `sample.py` flags. |
 
 ---
 
@@ -58,11 +55,8 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
-| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 industry context:** production-grade gen, authenticity, system-of-experts pipelines, 4K/aspect, text-in-image, grounding — mapped to SDX ([utils/generation/orchestration.py](../utils/generation/orchestration.py)). |
-| [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | **Research / architecture:** flow matching, diffusion bridges, hybrid AR+DiT, Mamba, distillation, semantic latents — vs SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
-| [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md) | **Industry workflow commentary** (efficiency, grounding, test-time compute) — **disclaimers** + SDX hooks ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
-| [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: consistency, GLIGEN/Control-style ideas, lettering, **prompt_lexicon** + `generate_book` flags. |
-| [BOOK_MODEL_EXCELLENCE.md](BOOK_MODEL_EXCELLENCE.md) | “Best book output” checklist: data, training, `--book-accuracy production`, pick-best, OCR/anchoring. |
+| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 hub (merged):** industry context, post-diffusion architecture themes, workflow integration + disclaimers — mapped to SDX ([utils/generation/orchestration.py](../utils/generation/orchestration.py), [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
+| [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: techniques vs SDX, **prompt_lexicon** + `generate_book` flags, and **best-output checklist** (data, training, production tier, pick-best, OCR). |
 | [../ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | **ViT/ vs DiT:** scoring stack vs generator; Swin-DiT, FiT, reward/IQA papers; timm backbone presets. |
 | [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** and **§12 Industry alignment (2026)**. |
 | [INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos. |
@@ -70,31 +64,22 @@ Quick links to all project docs, grouped by purpose.
 
 ---
 
-## Ecosystem, packages, and frameworks we lean on
+## Important recent additions
 
-SDX is designed to feel familiar if you’ve used other diffusion ecosystems. We explicitly take inspiration from:
-
-- **Python / ML stack**
-  - `torch` — core training and inference.
-  - `transformers` — T5 text encoder.
-  - `diffusers` — reference for schedulers, CFG tricks, SDXL‑style options.
-  - `safetensors` — safe, faster checkpoint / LoRA loading.
-  - `xformers` — memory‑efficient attention (self + cross).
-  - `numpy`, `scipy`, `Pillow` — image & post‑processing utilities.
-
-- **UI / workflow ecosystems (inspiration)**
-  - **AUTOMATIC1111** — prompt patterns, Hi‑Res Fix, face restoration workflows.
-  - **ComfyUI / Forge** — graph‑style pipelines, CFG rescale ideas, ControlNet practices.
-  - **Civitai** — community feedback on oversaturation, artifacts, LoRA quality, orange/green tints.
-  - **PixAI / Flux / Z‑Image** — style control, hard‑style domains, “realism standard”, creative vs rigid behavior.
-
-These are **not all hard dependencies** of SDX, but they inform our defaults, presets, and docs so the model plays nicely with existing tools and best practices.
+| Item | Where |
+|-----|-------|
+| Part-aware / grounding-aware training | [../utils/training/part_aware_training.py](../utils/training/part_aware_training.py), [../data/t2i_dataset.py](../data/t2i_dataset.py), [../train.py](../train.py) |
+| LoRA / DoRA / LyCORIS routing improvements | [../models/lora.py](../models/lora.py), [../sample.py](../sample.py), [../tests/unit/test_lora_adapters.py](../tests/unit/test_lora_adapters.py) |
+| Reproducibility and strict training hygiene | [../train.py](../train.py), [../training/train_cli_parser.py](../training/train_cli_parser.py), [../training/train_args.py](../training/train_args.py) |
+| Dataset shortlist and planning | [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) |
+| Architecture figure generator | [../scripts/tools/dev/generate_sdx_architecture_diagram.py](../scripts/tools/dev/generate_sdx_architecture_diagram.py) |
 
 ---
 
 ## Maintenance / sanity checks
 
 - `scripts/tools/dev/smoke_imports.py` — Import smoke-test for internal modules (catches broken imports early).
+- `scripts/tools/repo/clean_repo_artifacts.py` — Remove generated cache artifacts (`__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.pyc`) from repo tree.
 - `scripts/tools/prompt/tag_coverage.py` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
 - `scripts/tools/spatial_coverage.py` — Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...).
 - `scripts/tools/training_timestep_preview.py` — Preview histograms for `--timestep-sample-mode` (uniform / logit_normal / high_noise) before long training runs.
