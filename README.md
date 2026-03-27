@@ -33,6 +33,55 @@ It is built for iterative research (ablation-friendly) and practical generation 
 
 ---
 
+## Find your path
+
+| Goal | Jump to |
+| :--- | :--- |
+| Start fast | [Quick start](#quick-start) |
+| Understand architecture | [Architecture and pipeline](#architecture-and-pipeline) |
+| Train with latest features | [Training overview](#training-overview) |
+| Sample with style/adapters | [Sampling overview](#sampling-overview) |
+| Organize datasets | [Data formats](#data-formats) |
+| Native acceleration | [Native acceleration and tooling](#native-acceleration-and-tooling) |
+| Explore docs | [Key docs](#key-docs) |
+| Contribute | [Contributors and community](#contributors-and-community) |
+
+---
+
+## Highlights at a glance
+
+| Area | Current capability |
+| :--- | :--- |
+| Core model | DiT text-conditioned generation via `models/dit_text.py` |
+| Text conditioning | T5 default + optional triple encoder mode (T5 + CLIP-L + CLIP-bigG) |
+| Prompt adherence | Part-aware attention grounding + token coverage losses |
+| Adapter system | Multi-LoRA/DoRA/LyCORIS stacking with role budgets and depth routing |
+| Objectives | VP diffusion + flow matching + bridge auxiliary + OT coupling |
+| Inference controls | CFG, flow sample mode, speculative CFG, SAG, reference-token injection |
+| Reliability | Run manifests, config snapshots, optional strict warnings |
+| Performance | bf16, `torch.compile`, gradient checkpointing, DDP-ready |
+
+---
+
+## Why SDX is different
+
+Most repos are either:
+
+- strong research prototypes that are hard to operate, or
+- polished wrappers that hide too much of the actual model stack.
+
+SDX aims for the middle: **research depth + operator clarity**.
+
+| Principle | What it means in practice |
+| :--- | :--- |
+| Transparent internals | Training and sampling stay centered in `train.py` and `sample.py` with explicit module boundaries |
+| Prompt fidelity first | Part-aware grounding, token coverage, and richer prompt-control pathways are native features |
+| Adapter realism | Multi-LoRA/DoRA/LyCORIS routing is treated as a first-class system, not a bolt-on |
+| Reproducibility by default | Run manifests + config snapshots make results easier to track and recover |
+| Evolvable architecture | Flow/bridge/OT and prompt-conditioning improvements can be added without rewriting the stack |
+
+---
+
 ## Architecture and pipeline
 
 **End-to-end:** `data/` -> `train.py` -> checkpoint -> `sample.py` -> images.
@@ -241,6 +290,46 @@ python sample.py \
 
 ---
 
+## Recipe gallery (quick wins)
+
+### 1) Character consistency + style blend
+
+```bash
+python sample.py \
+  --ckpt results/.../best.pt \
+  --prompt "full-body character sheet, front and side views, clean lineart" \
+  --style "anime::0.65 | cel-shaded::0.35" \
+  --lora char_model.safetensors:0.95:character style_pack.safetensors:0.50:style \
+  --lora-stage-policy character_focus \
+  --cfg-scale 5.5 --steps 36 --out character_sheet.png
+```
+
+### 2) Prompt-adherence stress test
+
+```bash
+python sample.py \
+  --ckpt results/.../best.pt \
+  --prompt "red umbrella behind the subject, neon sign text 'OPEN', rainy street reflection" \
+  --negative-prompt "blurry text, malformed letters, extra limbs" \
+  --speculative-draft-cfg-scale 4.5 \
+  --speculative-close-thresh 0.02 \
+  --speculative-blend 0.35 \
+  --steps 42 --out adherence_test.png
+```
+
+### 3) Flow-trained checkpoint inference
+
+```bash
+python sample.py \
+  --ckpt results/.../best.pt \
+  --prompt "cinematic sci-fi alley, volumetric fog, ultra detailed" \
+  --flow-matching-sample \
+  --flow-solver heun \
+  --cfg-scale 6.0 --steps 32 --out flow_sample.png
+```
+
+---
+
 ## Data formats
 
 ### Folder mode
@@ -289,6 +378,25 @@ Details: `native/README.md` and `docs/NATIVE_AND_SYSTEM_LIBS.md`.
 
 ---
 
+## Roadmap momentum
+
+### Shipped recently
+
+- Part-aware data/training path with grounding-aware attention auxiliaries
+- Adapter-router upgrades for multi-style and character-preserving blends
+- Flow/bridge/OT objective support in the core training loop
+- Reproducibility hardening (`run_manifest.json`, config snapshots, strict warning mode)
+- Refreshed architecture and documentation indexing
+
+### High-impact next targets
+
+- Better long-prompt decomposition and cross-token conflict handling
+- Stronger text-in-image reliability and OCR-aware generation loops
+- Richer spatial relationship grounding with cleaner failure diagnostics
+- More automated benchmark suites for adherence/consistency regressions
+
+---
+
 ## Key docs
 
 - Docs hub: `docs/README.md`
@@ -322,10 +430,59 @@ sdx/
 
 ## Contributing
 
-Small focused PRs are preferred. Docs, tests, and tooling changes are welcome.
+Small focused PRs are preferred. Docs, tests, tooling, and quality improvements are all welcome.
 
 - Guide: `CONTRIBUTING.md`
 - Run checks: `pytest tests/ -q`, `ruff check .`
+
+---
+
+## Contributors and community
+
+SDX improves through iterative, practical contributions across model code, prompts, docs, and tooling.
+
+- **Code contributors:** architecture, training loops, sampling controls, native integrations
+- **Research contributors:** objective experiments, prompt-adherence strategies, adapter routing policies
+- **Data contributors:** manifests, curation workflows, quality filters, domain-specific packs
+- **Docs contributors:** guides, examples, failure-mode writeups, reproducibility notes
+
+Good first contribution areas:
+
+- tighten docs for one module (`data/`, `diffusion/`, `models/`, `utils/`)
+- add a focused unit test for a new config/flag path
+- improve CLI UX in `train.py` or `sample.py`
+- benchmark and profile one inference/training path
+
+If you want your contribution reflected in release notes/docs summaries, include a clear short change note in your PR.
+
+---
+
+## FAQ
+
+### Is SDX production-ready?
+
+It is production-oriented in structure and tooling, but quality depends heavily on data curation, training budget, and checkpoints.
+
+### Do I need all native modules to use SDX?
+
+No. Core train/sample paths work without optional native builds. Native modules improve specific workflows and performance paths.
+
+### Is this only for anime/booru?
+
+No. The stack is domain-agnostic; anime/manga is one strong path, but the system supports broader style/object/text domains with proper data mixes.
+
+---
+
+## Acknowledgements and references
+
+SDX is inspired by and interoperates conceptually with the broader diffusion ecosystem.
+
+- [facebookresearch/DiT](https://github.com/facebookresearch/DiT)
+- [lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet)
+- [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
+- [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
+
+See `docs/INSPIRATION.md` for extended context.
 
 ---
 
