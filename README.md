@@ -16,6 +16,17 @@
   <a href="https://github.com/Llunarstack/sdx/releases"><img src="https://img.shields.io/badge/Releases-v0.2.0+-6f42c1?style=flat-square" alt="Releases"/></a>
 </p>
 
+<p align="center">
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#architecture-and-pipeline">Architecture</a> ·
+  <a href="#training-overview">Training</a> ·
+  <a href="#sampling-overview">Sampling</a> ·
+  <a href="#contributors-and-community">Contributors</a> ·
+  <a href="#key-docs">Docs</a>
+</p>
+
+**Stack:** DiT · T5/triple encoders · LoRA/DoRA/LyCORIS routing · flow/bridge/OT objectives · prompt-control stack · native acceleration paths.
+
 </div>
 
 ---
@@ -60,6 +71,20 @@ It is built for iterative research (ablation-friendly) and practical generation 
 | Inference controls | CFG, flow sample mode, speculative CFG, SAG, reference-token injection |
 | Reliability | Run manifests, config snapshots, optional strict warnings |
 | Performance | bf16, `torch.compile`, gradient checkpointing, DDP-ready |
+
+---
+
+## What shipped (detailed)
+
+| Area | What shipped now |
+| :--- | :--- |
+| Part-aware training | Hierarchical caption fields + optional grounding masks + foveated crop path in `data/t2i_dataset.py`; cross-attention grounding + token-coverage auxiliaries in `utils/training/part_aware_training.py`. |
+| Adapter routing | `models/lora.py` now supports stacked LoRA/DoRA/LyCORIS, per-role budgets, depth-aware stage policies, and automatic character/style balancing. |
+| Inference adapter UX | `sample.py` supports `path:scale:role`, role budget overrides, stage-policy selection, and weighted style mixes (`style_a::w | style_b::w`). |
+| Objective stack | Flow matching + bridge auxiliary + OT noise-latent coupling integrated into `train.py` and `diffusion/*`. |
+| Reproducibility | Per-run `run_manifest.json` and `config.train.json` snapshots plus optional strict warning mode in `train.py`. |
+| Prompt adherence path | Prompt controls + negative filtering + adherence auxiliaries are now documented and reflected in architecture/sampling docs. |
+| Documentation quality | Architecture section upgraded with current-model diagrams and richer contributor-facing project context. |
 
 ---
 
@@ -157,6 +182,55 @@ flowchart LR
     S2[Flow-matching sample mode] --> S
     S3[Speculative CFG + SAG] --> S
 ```
+
+<details>
+<summary><strong>Deep-dive diagrams (expanded)</strong></summary>
+
+### Full stack map
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+flowchart TB
+  subgraph DATA["Data + manifests"]
+    D0[Folders / JSONL]
+    D1[caption parsing + emphasis]
+    D2[optional parts / region captions / grounding mask]
+    D0 --> D1 --> D2
+  end
+
+  subgraph TRAIN["train.py"]
+    T0[encode latents]
+    T1[DiT forward]
+    T2[objectives: VP/flow + bridge + OT + adherence aux]
+    T3[EMA + checkpoints + manifests]
+    T0 --> T1 --> T2 --> T3
+  end
+
+  subgraph INFER["sample.py"]
+    S0[prompt + style + adapters]
+    S1[sampler loop]
+    S2[decode + postprocess]
+    S0 --> S1 --> S2
+  end
+
+  DATA --> TRAIN
+  TRAIN --> INFER
+```
+
+### Adapter routing intuition
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+flowchart LR
+  A[Input adapters] --> B[path:scale:role parse]
+  B --> C[Per-layer stacking]
+  C --> D[Role budgets]
+  D --> E[Stage policy<br/>early/mid/late]
+  E --> F[Effective layer scales]
+  F --> G[DiT linear wrappers]
+```
+
+</details>
 
 ---
 
@@ -258,6 +332,22 @@ python train.py --data-path /path/to/data \
   --attn-grounding-loss-weight 0.1 \
   --attn-token-coverage-loss-weight 0.05
 ```
+
+<details>
+<summary><strong>Train CLI quick reference</strong></summary>
+
+| Flag | Purpose |
+| :--- | :--- |
+| `--flow-matching-training` | Enable flow objective path instead of VP main loss |
+| `--bridge-aux-weight` / `--bridge-aux-lambda` | Add bridge regularization |
+| `--ot-noise-pair-reg` | Enable OT noise-latent coupling |
+| `--use-hierarchical-captions` | Enable hierarchical caption composition |
+| `--attn-grounding-loss-weight` | Add grounding attention auxiliary loss |
+| `--attn-token-coverage-loss-weight` | Add token coverage auxiliary loss |
+| `--strict-warnings` | Escalate key warnings to errors |
+| `--no-save-run-manifest` | Disable run manifest snapshot files |
+
+</details>
 
 ---
 
@@ -378,6 +468,21 @@ Details: `native/README.md` and `docs/NATIVE_AND_SYSTEM_LIBS.md`.
 
 ---
 
+## Platform and repo map
+
+| Area | Purpose |
+| :--- | :--- |
+| `config/` | train configuration, model build kwargs, defaults |
+| `data/` | datasets, caption parsing, batching, manifest handling |
+| `diffusion/` | diffusion/flow objectives, schedules, samplers, utility losses |
+| `models/` | DiT core, attention blocks, adapter wrappers, optional experimental modules |
+| `utils/` | training utilities, prompt stack, generation helpers, checkpoint logic |
+| `training/` | train CLI parser + config mapping split from main train loop |
+| `scripts/tools/` | dev, training, native, and repo maintenance utilities |
+| `native/` | C++/CUDA, Rust, Python bridge modules |
+
+---
+
 ## Roadmap momentum
 
 ### Shipped recently
@@ -407,6 +512,19 @@ Details: `native/README.md` and `docs/NATIVE_AND_SYSTEM_LIBS.md`.
 - Diffusion roadmap: `docs/DIFFUSION_LEVERAGE_ROADMAP.md`
 - Model weaknesses and mitigations: `docs/MODEL_WEAKNESSES.md`
 - Dataset shortlist: `docs/HF_DATASET_SHORTLIST.md`
+
+---
+
+## Documentation hub (recommended reading order)
+
+| Step | Read this | Why |
+| :--- | :--- | :--- |
+| 1 | `docs/README.md` | Global index of docs and categories |
+| 2 | `docs/CODEBASE.md` | Learn where things live before changing code |
+| 3 | `docs/HOW_GENERATION_WORKS.md` | End-to-end understanding of train -> checkpoint -> sample |
+| 4 | `docs/PROMPT_STACK.md` | Prompt assembly, controls, and filtering behavior |
+| 5 | `docs/DIFFUSION_LEVERAGE_ROADMAP.md` | High-impact model quality priorities |
+| 6 | `docs/QUALITY_AND_ISSUES.md` | Real failure patterns and practical mitigations |
 
 ---
 
