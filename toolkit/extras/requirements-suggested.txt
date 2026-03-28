@@ -23,3 +23,6 @@
 
 # tensorboard
 # train.py --tensorboard-dir
+
+# qdrant-client
+# Optional vector DB sampling: data/vector_index_sampler.QdrantVectorSampler

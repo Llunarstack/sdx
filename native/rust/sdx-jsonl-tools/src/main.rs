@@ -68,6 +68,11 @@ enum SubCmd {
         #[arg(value_name = "FILE")]
         path: PathBuf,
     },
+    /// Streaming MD5 of raw file bytes (for image dedup; matches Python hashlib.md5).
+    FileMd5 {
+        #[arg(value_name = "FILE")]
+        path: PathBuf,
+    },
     /// Histogram of caption character lengths: bucket ``i`` = rows with ``len`` in ``[i*width, (i+1)*width)``.
     CaptionLenBuckets {
         #[arg(value_name = "FILE")]
@@ -253,6 +258,26 @@ fn read_lines(path: &PathBuf) -> io::Result<Box<dyn Iterator<Item = io::Result<S
     let f = File::open(path)?;
     let reader = BufReader::new(f);
     Ok(Box::new(reader.lines()))
+}
+
+fn cmd_file_md5(path: &PathBuf) -> io::Result<i32> {
+    let mut f = File::open(path)?;
+    let mut ctx = md5::Context::new();
+    let mut buf = [0u8; 1024 * 1024];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        ctx.consume(&buf[..n]);
+    }
+    let md5::Digest(bytes) = ctx.finalize();
+    // Single line: easy for Python `stdout.strip()`
+    for b in &bytes {
+        print!("{:02x}", b);
+    }
+    println!();
+    Ok(0)
 }
 
 fn cmd_file_fnv(path: &PathBuf) -> io::Result<i32> {
@@ -541,6 +566,10 @@ fn main() {
         }),
         SubCmd::FileFnv { path } => cmd_file_fnv(&path).unwrap_or_else(|e| {
             eprintln!("file-fnv: {e}");
+            2
+        }),
+        SubCmd::FileMd5 { path } => cmd_file_md5(&path).unwrap_or_else(|e| {
+            eprintln!("file-md5: {e}");
             2
         }),
         SubCmd::CaptionLenBuckets {

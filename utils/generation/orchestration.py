@@ -38,13 +38,13 @@ DESIGNER = PipelineRole(
 VERIFIER = PipelineRole(
     name="verifier",
     description="Quality and consistency checks: anatomy, sharpness, text OCR match; optional refine.",
-    sdx_module_hint="utils/test_time_pick.py, ViT/, sample.py refinement flags",
+    sdx_module_hint="utils/quality/test_time_pick.py, ViT/, sample.py refinement flags",
 )
 
 REASONER = PipelineRole(
     name="reasoner",
     description="Instruction understanding and grounding: T5 (+ optional CLIP fusion), optional LLM expansion.",
-    sdx_module_hint="utils/text_encoder_bundle.py, utils/llm_client.py, JSONL region_captions",
+    sdx_module_hint="utils/modeling/text_encoder_bundle.py, utils/analysis/llm_client.py, JSONL region_captions",
 )
 
 

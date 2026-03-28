@@ -3,14 +3,18 @@ Fast training for text-conditioned DiT (PixArt/ReVe-style prompt adherence).
 Step-based training (quality improves with steps), refinement (fix imperfections), optional DDP.
 """
 
-import argparse
 import glob
 import itertools
+import json
 import logging
 import math
 import os
+import platform
+import subprocess
 import sys
+import warnings
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from time import time
 from typing import Optional
@@ -42,7 +46,8 @@ from utils.checkpoint.checkpoint_manager import CheckpointManager
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
 from utils.training.metrics import MetricsTracker, log_system_info
-from utils.modeling.model_paths import default_t5_path
+from training.train_args import build_train_config_from_args
+from training.train_cli_parser import build_train_arg_parser
 
 
 def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
@@ -84,6 +89,56 @@ def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
         "spectral_sfp_high_sigma": float(getattr(cfg, "spectral_sfp_high_sigma", 0.22)),
         "spectral_sfp_tau_power": float(getattr(cfg, "spectral_sfp_tau_power", 1.0)),
     }
+
+
+def _safe_git_info(repo_root: Path) -> dict:
+    """Best-effort git metadata for reproducibility manifests."""
+    def _run(args):
+        try:
+            return subprocess.check_output(args, cwd=str(repo_root), text=True, stderr=subprocess.DEVNULL).strip()
+        except Exception:
+            return None
+
+    commit = _run(["git", "rev-parse", "HEAD"])
+    branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    status = _run(["git", "status", "--porcelain"])
+    return {
+        "commit": commit or "unknown",
+        "branch": branch or "unknown",
+        "dirty": bool(status) if status is not None else None,
+    }
+
+
+def _cfg_to_dict(cfg: TrainConfig) -> dict:
+    if hasattr(cfg, "__dict__"):
+        return dict(cfg.__dict__)
+    return {}
+
+
+def _write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger) -> None:
+    repo_root = Path(__file__).resolve().parent
+    cfg_out = exp_dir / "config.train.json"
+    manifest_out = exp_dir / "run_manifest.json"
+    cfg_dict = _cfg_to_dict(cfg)
+    cfg_out.write_text(json.dumps(cfg_dict, indent=2, sort_keys=True), encoding="utf-8")
+    manifest = {
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "command": " ".join(sys.argv),
+        "cwd": str(Path.cwd()),
+        "python": sys.version,
+        "platform": platform.platform(),
+        "torch_version": str(torch.__version__),
+        "cuda_available": bool(torch.cuda.is_available()),
+        "cuda_version": str(getattr(torch.version, "cuda", None)),
+        "cudnn_version": int(torch.backends.cudnn.version() or 0),
+        "world_size": int(getattr(cfg, "world_size", 1)),
+        "local_rank": int(getattr(cfg, "local_rank", 0)),
+        "seed": int(getattr(cfg, "global_seed", 0)),
+        "git": _safe_git_info(repo_root),
+        "config_file": cfg_out.name,
+    }
+    manifest_out.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    logger.info(f"Run manifest saved: {manifest_out}")
 
 
 # Enable TF32 on Ampere+ for speed
@@ -536,6 +591,7 @@ def eval_val_loss(
         negative_captions = batch.get("negative_captions") or [""] * len(captions)
         styles = batch.get("styles") or [""] * len(captions)
         control_images = batch.get("control_image")
+        control_type_ids = batch.get("control_type_id")
         with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
             if "latent_values" in batch:
                 latents = batch["latent_values"].to(device, non_blocking=True).to(torch.bfloat16)
@@ -607,6 +663,8 @@ def eval_val_loss(
             if control_images is not None:
                 model_kwargs["control_image"] = control_images.to(device, non_blocking=True).to(torch.bfloat16)
                 model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
+                if control_type_ids is not None:
+                    model_kwargs["control_type"] = control_type_ids.to(device, non_blocking=True).to(torch.long)
             if getattr(cfg, "creativity_embed_dim", 0) > 0:
                 creativity_max = getattr(cfg, "creativity_max", 1.0)
                 # Val: no creativity_jitter_std (smoother metric; jitter is train-only).
@@ -730,56 +788,6 @@ def get_curriculum_max_length(step: int, steps_list, lengths_list) -> int:
     return out
 
 
-def parse_caption_dropout_schedule(s: Optional[str]):
-    """Parse '0,0.2,10000,0.05' -> [(0, 0.2), (10000, 0.05)]. Returns None if s is None/empty."""
-    if not s or not str(s).strip():
-        return None
-    parts = [x.strip() for x in str(s).split(",") if x.strip()]
-    if len(parts) % 2 != 0:
-        return None
-    out = []
-    for i in range(0, len(parts), 2):
-        out.append((int(parts[i]), float(parts[i + 1])))
-    return out if out else None
-
-
-def parse_resolution_buckets(s: Optional[str]):
-    """
-    Parse ``256,384,512`` (squares) or ``512x768,256x512`` (HxW) into a list of (H, W).
-    Returns None if empty.
-    """
-    if not s or not str(s).strip():
-        return None
-    out = []
-    for part in str(s).split(","):
-        part = part.strip().lower()
-        if not part:
-            continue
-        if "x" in part:
-            a, b = part.split("x", 1)
-            out.append((int(a.strip()), int(b.strip())))
-        else:
-            z = int(part)
-            out.append((z, z))
-    return out or None
-
-
-def parse_mdm_mask_schedule(s: Optional[str]):
-    """
-    Parse '0,0.05,500,0.25,999,0.35' -> [(0,0.05),(500,0.25),(999,0.35)].
-    Returns None if s is None/empty.
-    """
-    if not s or not str(s).strip():
-        return None
-    parts = [x.strip() for x in str(s).split(",") if x.strip()]
-    if len(parts) % 2 != 0:
-        return None
-    out = []
-    for i in range(0, len(parts), 2):
-        out.append((int(float(parts[i])), float(parts[i + 1])))
-    return out if out else None
-
-
 def get_scheduled_caption_dropout(step: int, schedule) -> float:
     """IMPROVEMENTS 1.3: schedule is list of (step, prob). Linear interpolate between points. Returns 0 if schedule None/empty."""
     if not schedule or len(schedule) == 0:
@@ -890,6 +898,13 @@ def main(cfg: TrainConfig):
     # Enhanced error handling and validation
     logger = setup_logging()
 
+    if bool(getattr(cfg, "strict_warnings", False)):
+        warnings.filterwarnings("error", category=UserWarning, module=r"^(train|config|data|diffusion|models|training|utils)(\.|$)")
+        warnings.filterwarnings(
+            "error", category=FutureWarning, module=r"^(train|config|data|diffusion|models|training|utils)(\.|$)"
+        )
+        logger.info("Strict warnings enabled: project UserWarning/FutureWarning are treated as errors.")
+
     # Validate configuration
     logger.info("Validating configuration...")
     config_issues = validate_train_config(cfg)
@@ -955,6 +970,12 @@ def main(cfg: TrainConfig):
     else:
         exp_dir = Path(cfg.results_dir) / "run"
         logger = create_logger(None)
+
+    if rank == 0 and bool(getattr(cfg, "save_run_manifest", True)):
+        try:
+            _write_run_manifest(exp_dir, cfg, logger)
+        except Exception as e:
+            logger.warning(f"Failed to write run manifest: {e}")
 
     # Log GPU memory before loading models
     log_gpu_memory(logger, "Before model loading: ")
@@ -1134,6 +1155,13 @@ def main(cfg: TrainConfig):
         resolution_buckets=res_buckets if res_buckets else None,
         bucket_seed=int(getattr(cfg, "global_seed", 42)),
         bucket_fixed_assign=bucket_fixed_assign,
+        use_hierarchical_captions=bool(getattr(cfg, "use_hierarchical_captions", False)),
+        hierarchical_caption_separator=str(getattr(cfg, "hierarchical_caption_separator", " | ")),
+        hierarchical_drop_global_p=float(getattr(cfg, "hierarchical_caption_drop_global_p", 0.0)),
+        hierarchical_drop_local_p=float(getattr(cfg, "hierarchical_caption_drop_local_p", 0.0)),
+        foveated_train_prob=float(getattr(cfg, "foveated_train_prob", 0.0)),
+        foveated_crop_frac=float(getattr(cfg, "foveated_crop_frac", 0.55)),
+        grounding_mask_soft=bool(getattr(cfg, "grounding_mask_soft", False)),
     )
 
     def _worker_init(worker_id):
@@ -1239,6 +1267,10 @@ def main(cfg: TrainConfig):
     steps = start_step
     log_steps = 0
     running_loss = 0.0
+    running_ag_sum = 0.0
+    running_ag_count = 0
+    running_cov_sum = 0.0
+    running_cov_count = 0
     start_time = time()
     refinement_prob = getattr(cfg, "refinement_prob", 0.0)
     refinement_max_t = getattr(cfg, "refinement_max_t", 150)
@@ -1283,6 +1315,8 @@ def main(cfg: TrainConfig):
         batch_iter = loader
 
         for batch in batch_iter:
+            last_attn_grounding: Optional[float] = None
+            last_attn_cov: Optional[float] = None
             # LR schedule (step-based: cosine after warmup)
             if use_step_based:
                 lr = get_lr_cosine(
@@ -1315,6 +1349,7 @@ def main(cfg: TrainConfig):
             negative_captions = batch.get("negative_captions") or [""] * len(captions)
             styles = batch.get("styles") or [""] * len(captions)
             control_images = batch.get("control_image")
+            control_type_ids = batch.get("control_type_id")
 
             max_caption_len = (
                 get_curriculum_max_length(steps, curriculum_steps, curriculum_lengths) if curriculum_steps else 300
@@ -1432,6 +1467,8 @@ def main(cfg: TrainConfig):
                 if control_images is not None:
                     model_kwargs["control_image"] = control_images.to(device, non_blocking=True).to(torch.bfloat16)
                     model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
+                    if control_type_ids is not None:
+                        model_kwargs["control_type"] = control_type_ids.to(device, non_blocking=True).to(torch.long)
                 if getattr(cfg, "creativity_embed_dim", 0) > 0:
                     creativity_max = getattr(cfg, "creativity_max", 1.0)
                     cj = float(getattr(cfg, "creativity_jitter_std", 0.0))
@@ -1461,6 +1498,27 @@ def main(cfg: TrainConfig):
                     else:
                         sample_weights = w
                 ot_noise = _maybe_ot_pair_noise(cfg, latents, device)
+                attn_gw = float(getattr(cfg, "attn_grounding_loss_weight", 0.0))
+                is_flow = bool(getattr(cfg, "flow_matching_training", False))
+                is_mdm = float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(
+                    cfg, "mdm_mask_schedule", None
+                )
+                gv = batch.get("grounding_mask_valid")
+                has_mask_supervision = "grounding_mask" in batch and (
+                    gv is None or bool(gv.any().item())
+                )
+                use_attn_grounding = (
+                    attn_gw > 0.0
+                    and has_mask_supervision
+                    and not is_flow
+                    and not is_mdm
+                )
+                cov_w = float(getattr(cfg, "attn_token_coverage_loss_weight", 0.0))
+                use_attn_coverage = cov_w > 0.0 and not is_flow and not is_mdm
+                use_attn_aux = use_attn_grounding or use_attn_coverage
+                noise_for_vp = ot_noise
+                if use_attn_aux and noise_for_vp is None:
+                    noise_for_vp = torch.randn_like(latents, device=device, dtype=latents.dtype)
                 _sk_tr = _spectral_sfp_training_kwargs(cfg)
                 _bw = float(getattr(cfg, "bridge_aux_weight", 0.0))
 
@@ -1539,12 +1597,55 @@ def main(cfg: TrainConfig):
                         sample_weights=sample_weights,
                         loss_weighting=getattr(cfg, "loss_weighting", "min_snr"),
                         loss_weighting_sigma_data=getattr(cfg, "loss_weighting_sigma_data", 0.5),
-                        noise=ot_noise,
+                        noise=noise_for_vp if use_attn_grounding else ot_noise,
                         **_sk_tr,
                     )
                     if _bw > 0.0:
                         loss_dict = {"loss": loss_dict["loss"] + _bw * _bridge_aux_loss()}
                 loss = loss_dict["loss"].mean()
+                if use_attn_aux and hasattr(train_model, "num_patches"):
+                    from utils.training.part_aware_training import (
+                        capture_dit_block0_cross_attn,
+                        grounding_loss_from_attn,
+                        token_coverage_loss_from_attn,
+                    )
+
+                    attn_w = capture_dit_block0_cross_attn(
+                        train_model=train_model,
+                        diffusion=diffusion,
+                        latents_bchw=latents,
+                        t=t,
+                        model_kwargs=model_kwargs,
+                        training_noise=noise_for_vp,
+                        noise_offset=float(getattr(cfg, "noise_offset", 0.0)),
+                    )
+                    if use_attn_grounding:
+                        gm = batch["grounding_mask"].to(device=device, dtype=torch.float32)
+                        gv_t = batch.get("grounding_mask_valid")
+                        if gv_t is not None:
+                            gv_t = gv_t.to(device=device)
+                        ag = grounding_loss_from_attn(
+                            attn_w=attn_w,
+                            train_model=train_model,
+                            grounding_mask_b1hw=gm,
+                            token_start=int(getattr(cfg, "attn_grounding_token_start", 0)),
+                            token_end=int(getattr(cfg, "attn_grounding_token_end", 0)),
+                            sample_valid=gv_t,
+                            min_fg_patch_mass=float(getattr(cfg, "attn_grounding_min_fg_patch_mass", 0.0)),
+                        )
+                        loss = loss + attn_gw * ag
+                        last_attn_grounding = float(ag.detach().float().cpu().item())
+                    if use_attn_coverage:
+                        cov = token_coverage_loss_from_attn(
+                            attn_w=attn_w,
+                            token_start=int(getattr(cfg, "attn_grounding_token_start", 0)),
+                            token_end=int(getattr(cfg, "attn_grounding_token_end", 0)),
+                            target_coverage=float(getattr(cfg, "attn_token_coverage_target", 0.025)),
+                            sample_valid=None,
+                            token_weights=token_weights if token_weights is not None else None,
+                        )
+                        loss = loss + cov_w * cov
+                        last_attn_cov = float(cov.detach().float().cpu().item())
                 # MoE router balance auxiliary loss (optional).
                 moe_w = float(getattr(cfg, "moe_balance_loss_weight", 0.0))
                 moe_aux_loss = getattr(train_model, "moe_aux_loss", None)
@@ -1597,6 +1698,12 @@ def main(cfg: TrainConfig):
                             polyak_buf[k].mul_(1.0 - inv_n).add_(sd[k].detach().cpu(), alpha=inv_n)
 
             running_loss += loss.item() * cfg.grad_accum_steps
+            if last_attn_grounding is not None:
+                running_ag_sum += last_attn_grounding
+                running_ag_count += 1
+            if last_attn_cov is not None:
+                running_cov_sum += last_attn_cov
+                running_cov_count += 1
             log_steps += 1
             steps += 1
 
@@ -1611,17 +1718,38 @@ def main(cfg: TrainConfig):
                     avg_loss = t.item() / world_size
                 lr_val = opt.param_groups[0]["lr"] if opt.param_groups else 0.0
                 lr_str = f" lr={lr_val:.2e}" if use_step_based else ""
-                logger.info(f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}")
+                ag_extra = ""
+                avg_ag = None
+                if running_ag_count > 0:
+                    avg_ag = running_ag_sum / running_ag_count
+                    ag_extra = f" attn_grnd={avg_ag:.4f}"
+                cov_extra = ""
+                avg_cov = None
+                if running_cov_count > 0:
+                    avg_cov = running_cov_sum / running_cov_count
+                    cov_extra = f" attn_cov={avg_cov:.4f}"
+                logger.info(
+                    f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}{ag_extra}{cov_extra}"
+                )
                 # IMPROVEMENTS 5.1: TensorBoard / WandB
                 if rank == 0:
                     if tb_writer is not None:
                         tb_writer.add_scalar("loss", avg_loss, steps)
                         tb_writer.add_scalar("lr", lr_val, steps)
+                        if avg_ag is not None:
+                            tb_writer.add_scalar("attn_grounding_aux", avg_ag, steps)
+                        if avg_cov is not None:
+                            tb_writer.add_scalar("attn_token_coverage_aux", avg_cov, steps)
                     if getattr(cfg, "wandb_project", None):
                         try:
                             import wandb
 
-                            wandb.log({"loss": avg_loss, "lr": lr_val, "step": steps}, step=steps)
+                            wl = {"loss": avg_loss, "lr": lr_val, "step": steps}
+                            if avg_ag is not None:
+                                wl["attn_grounding_aux"] = avg_ag
+                            if avg_cov is not None:
+                                wl["attn_token_coverage_aux"] = avg_cov
+                            wandb.log(wl, step=steps)
                         except Exception:
                             pass
                 # IMPROVEMENTS 5.1: log sample images to WandB/TensorBoard every log_images_every steps
@@ -1669,6 +1797,10 @@ def main(cfg: TrainConfig):
                     torch.save(ckpt, path)
                     logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
                 running_loss = 0.0
+                running_ag_sum = 0.0
+                running_ag_count = 0
+                running_cov_sum = 0.0
+                running_cov_count = 0
                 log_steps = 0
                 start_time = time()
 
@@ -1758,536 +1890,7 @@ def main(cfg: TrainConfig):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, default="", help="Image folder or manifest JSONL")
-    parser.add_argument("--manifest-jsonl", type=str, default=None)
-    parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--model", type=str, default="DiT-XL/2-Text")
-    parser.add_argument(
-        "--text-encoder",
-        type=str,
-        default="",
-        help="T5 encoder path or HF id (empty = use model/T5-XXL if present else google/t5-v1_1-xxl)",
-    )
-    parser.add_argument(
-        "--text-encoder-mode",
-        type=str,
-        default="t5",
-        choices=["t5", "triple"],
-        help="t5=T5 only; triple=T5+CLIP-L+CLIP-bigG with trainable fusion (match downloaded model/ stack)",
-    )
-    parser.add_argument(
-        "--clip-text-encoder-l",
-        type=str,
-        default="",
-        help="CLIP-ViT-L/14 folder or HF id (triple mode; empty = default)",
-    )
-    parser.add_argument(
-        "--clip-text-encoder-bigg",
-        type=str,
-        default="",
-        help="CLIP-ViT-bigG/14 folder or HF id (triple mode; empty = default)",
-    )
-    parser.add_argument(
-        "--vae-model",
-        type=str,
-        default="stabilityai/sd-vae-ft-mse",
-        help="Autoencoder model id/path (VAE=AutoencoderKL or RAE=AutoencoderRAE)",
-    )
-    parser.add_argument(
-        "--autoencoder-type",
-        type=str,
-        default="kl",
-        choices=["kl", "rae"],
-        help="Autoencoder type: kl=AutoencoderKL, rae=AutoencoderRAE",
-    )
-    parser.add_argument(
-        "--no-rae-latent-bridge",
-        action="store_true",
-        help="When using RAE with C!=4, error out instead of training RAELatentBridge",
-    )
-    parser.add_argument(
-        "--rae-bridge-cycle-weight", type=float, default=0.01, help="Cycle loss weight for RAELatentBridge (0=off)"
-    )
-    parser.add_argument("--image-size", type=int, default=256)
-    parser.add_argument(
-        "--resolution-buckets",
-        type=str,
-        default="",
-        help="IMPROVEMENTS §1.1: comma-separated sizes, e.g. 256,384,512 or 512x768,256x512 (single-GPU only; no val-split)",
-    )
-    parser.add_argument("--global-batch-size", type=int, default=128)
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--num-workers", type=int, default=8)
-    parser.add_argument("--log-every", type=int, default=50)
-    parser.add_argument("--ckpt-every", type=int, default=5000)
-    parser.add_argument("--no-bf16", action="store_true", help="Disable bf16")
-    parser.add_argument("--no-compile", action="store_true", help="Disable torch.compile")
-    parser.add_argument("--no-grad-checkpoint", action="store_true")
-    parser.add_argument("--num-ar-blocks", type=int, default=0, help="Block-wise AR (0=off, 2 or 4)")
-    parser.add_argument("--no-xformers", action="store_true", help="Disable xformers attention")
-    parser.add_argument(
-        "--passes",
-        type=int,
-        default=0,
-        help="Train for N full passes over the dataset (recommended). Overrides epochs; use with cosine LR.",
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=0,
-        help="Cap steps when using --passes, or raw step limit when passes=0 (0=use epochs).",
-    )
-    parser.add_argument("--min-lr", type=float, default=1e-6, help="Min LR for cosine schedule")
-    parser.add_argument("--lr-warmup-steps", type=int, default=500)
-    parser.add_argument(
-        "--refinement-prob", type=float, default=0.25, help="Prob of training on fix-imperfection (small t)"
-    )
-    parser.add_argument("--refinement-max-t", type=int, default=150)
-    parser.add_argument(
-        "--img2img-prob", type=float, default=0.0, help="Img2img training: prob to use init_image as x_start (0=off)"
-    )
-    # MDM (Masked Diffusion Models)-style masked-patch training
-    parser.add_argument(
-        "--mdm-mask-ratio", type=float, default=0.0, help="MDM training: fraction of latent patches to mask (0=off)"
-    )
-    parser.add_argument(
-        "--mdm-mask-schedule",
-        type=str,
-        default=None,
-        help="MDM training: state-dependent mask ratio schedule as comma pairs: t_step,mask_ratio (e.g. 0,0.05,500,0.25,999,0.35)",
-    )
-    parser.add_argument(
-        "--mdm-patch-size",
-        type=int,
-        default=2,
-        help="MDM training: latent patch size (typically 2, matches DiT patch embed)",
-    )
-    parser.add_argument(
-        "--mdm-min-mask-patches", type=int, default=1, help="MDM training: ensure at least N patches masked per sample"
-    )
-    parser.add_argument(
-        "--no-mdm-loss-only-masked",
-        action="store_true",
-        help="MDM training: include unmasked regions in loss (default is masked-only)",
-    )
-    # MoE DiT upgrade (MLP-only MoE)
-    parser.add_argument("--moe-num-experts", type=int, default=0, help="MoE training: number of FFN experts (0=off)")
-    parser.add_argument("--moe-top-k", type=int, default=2, help="MoE routing: top-k experts per token")
-    parser.add_argument(
-        "--moe-balance-loss-weight", type=float, default=0.0, help="MoE: auxiliary router balance loss weight (0=off)"
-    )
-    parser.add_argument("--no-save-best", action="store_true", help="Disable saving best checkpoint by loss")
-    parser.add_argument(
-        "--negative-prompt-weight", type=float, default=0.5, help="Weight for subtracting negative prompt"
-    )
-    parser.add_argument(
-        "--style-embed-dim", type=int, default=0, help="Style conditioning (same as text_dim, e.g. 4096); 0=off"
-    )
-    parser.add_argument("--style-strength", type=float, default=0.7, help="Style blend strength in training (0.6-0.8)")
-    parser.add_argument("--control-cond-dim", type=int, default=0, help="1=enable ControlNet; 0=off")
-    parser.add_argument("--control-scale", type=float, default=0.85, help="ControlNet strength in training (0.7-1.0)")
-    parser.add_argument(
-        "--creativity-embed-dim", type=int, default=0, help="Creativity/diversity knob (0=off; e.g. 64)"
-    )
-    parser.add_argument("--creativity-max", type=float, default=1.0, help="Training: sample creativity in [0, this]")
-    parser.add_argument(
-        "--size-embed-dim",
-        type=int,
-        default=0,
-        dest="size_embed_dim",
-        help="PixArt-style latent (H,W) -> timestep embed dim (0=off; DiT still sees native res via pos embed)",
-    )
-    parser.add_argument(
-        "--patch-se",
-        action="store_true",
-        dest="patch_se",
-        help="Zero-init patch channel gate after patch embed (identity at init)",
-    )
-    parser.add_argument(
-        "--patch-se-reduction",
-        type=int,
-        default=8,
-        dest="patch_se_reduction",
-        help="Bottleneck divisor for patch SE MLP",
-    )
-    parser.add_argument(
-        "--curriculum-difficulty-steps",
-        type=str,
-        default=None,
-        help="Comma-sep steps for difficulty curriculum (e.g. 0,5000,10000); use with JSONL 'difficulty' 0-1",
-    )
-    parser.add_argument(
-        "--no-difficulty-easy-first", action="store_true", help="If set, late steps prefer easy (default: early=easy)"
-    )
-    parser.add_argument(
-        "--rule-loss-weight", type=float, default=0.0, help="Constitutional/rule auxiliary loss weight (0=off)"
-    )
-    # REPA (Representation Alignment)
-    parser.add_argument("--repa-weight", type=float, default=0.0, help="REPA auxiliary loss weight (0=off)")
-    parser.add_argument(
-        "--repa-encoder-model",
-        type=str,
-        default="facebook/dinov2-base",
-        help="Frozen vision encoder: dinov2* or clip* (HF id)",
-    )
-    parser.add_argument(
-        "--repa-out-dim", type=int, default=768, help="Projection output dim; must match encoder embedding dim"
-    )
-    parser.add_argument(
-        "--repa-projector-hidden-dim", type=int, default=0, help="REPA projector hidden dim (0=linear head)"
-    )
-    # SSM swap (hybrid SSM-like token mixer)
-    parser.add_argument(
-        "--ssm-every-n",
-        type=int,
-        default=0,
-        help="Replace every Nth self-attention block with SSM-like token mixer (0=off).",
-    )
-    parser.add_argument(
-        "--ssm-kernel-size", type=int, default=7, help="SSM token mixer depthwise conv kernel size (odd >=3)."
-    )
-
-    # ViT-Gen features
-    parser.add_argument(
-        "--num-register-tokens",
-        type=int,
-        default=0,
-        help="Append N learnable register tokens to the patch token stream.",
-    )
-    parser.add_argument(
-        "--use-rope", action="store_true", help="Enable RoPE (rotary positional embeddings) in self-attention."
-    )
-    parser.add_argument("--rope-base", type=float, default=10000.0, help="RoPE base frequency (theta).")
-    parser.add_argument(
-        "--kv-merge-factor",
-        type=int,
-        default=1,
-        help="KV pooling factor for hierarchical patch merging in self-attention (1=off).",
-    )
-    parser.add_argument(
-        "--token-routing-enabled", action="store_true", help="Enable soft per-token routing (gating) in DiT blocks."
-    )
-    parser.add_argument(
-        "--token-routing-strength",
-        type=float,
-        default=1.0,
-        help="Token routing strength in [0,1] (higher = more gating).",
-    )
-    parser.add_argument(
-        "--beta-schedule",
-        type=str,
-        default="linear",
-        choices=["linear", "cosine", "sigmoid", "squaredcos_cap_v2"],
-    )
-    parser.add_argument(
-        "--prediction-type",
-        type=str,
-        default="epsilon",
-        choices=["epsilon", "v", "x0"],
-        help="epsilon=noise, v=velocity (SD2-style), x0=direct clean latent (train+sample must match)",
-    )
-    parser.add_argument("--noise-offset", type=float, default=0.0, help="SD-style noise offset (e.g. 0.1)")
-    parser.add_argument("--min-snr-gamma", type=float, default=5.0, help="Min-SNR loss weighting (0=off)")
-    parser.add_argument(
-        "--loss-weighting",
-        type=str,
-        default="min_snr",
-        choices=["min_snr", "min_snr_soft", "unit", "edm", "v", "eps"],
-        help="Timestep loss weight: min_snr | min_snr_soft (smooth) | unit | edm | v | eps",
-    )
-    parser.add_argument(
-        "--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm"
-    )
-    parser.add_argument(
-        "--spectral-sfp-loss",
-        action="store_true",
-        help="Frequency-weighted FFT loss (prototype): emphasize low freqs at high t, high freqs at low t. "
-        "VP-DDPM only; not used with MDM masked loss.",
-    )
-    parser.add_argument(
-        "--spectral-sfp-low-sigma",
-        type=float,
-        default=0.22,
-        help="Radial falloff for low-frequency bin emphasis (see diffusion/spectral_sfp.py).",
-    )
-    parser.add_argument(
-        "--spectral-sfp-high-sigma",
-        type=float,
-        default=0.22,
-        help="Radial falloff for high-frequency bin emphasis.",
-    )
-    parser.add_argument(
-        "--spectral-sfp-tau-power",
-        type=float,
-        default=1.0,
-        help="Exponent on normalized timestep when blending low vs high frequency weights.",
-    )
-    parser.add_argument(
-        "--ot-noise-pair-reg",
-        type=float,
-        default=0.0,
-        help="Sinkhorn OT coupling between batch latents and Gaussian noise (0=off; try 0.03–0.1). Experimental.",
-    )
-    parser.add_argument(
-        "--ot-noise-pair-iters",
-        type=int,
-        default=40,
-        help="Sinkhorn iterations for --ot-noise-pair-reg.",
-    )
-    parser.add_argument(
-        "--ot-noise-pair-mode",
-        type=str,
-        default="soft",
-        choices=["soft", "hungarian"],
-        help="soft = P @ noise (GPU); hungarian = min-cost permutation (CPU scipy).",
-    )
-    parser.add_argument(
-        "--flow-matching-training",
-        action="store_true",
-        help="Train with rectified-flow-style velocity loss (incompatible with MDM masked training; not VP sample_loop-compatible).",
-    )
-    parser.add_argument(
-        "--bridge-aux-weight",
-        type=float,
-        default=0.0,
-        help="Add VP auxiliary loss on shuffle-paired latent mix (0=off). See diffusion/bridge_training.py.",
-    )
-    parser.add_argument(
-        "--bridge-aux-lambda",
-        type=float,
-        default=0.2,
-        help="Endpoint mix lambda for --bridge-aux-weight (0–1].",
-    )
-    parser.add_argument(
-        "--timestep-sample-mode",
-        type=str,
-        default="uniform",
-        choices=["uniform", "logit_normal", "high_noise"],
-        help="Training t distribution: uniform (classic) | logit_normal (SD3-style discrete) | high_noise (Beta bias to large t)",
-    )
-    parser.add_argument(
-        "--timestep-logit-mean",
-        type=float,
-        default=0.0,
-        help="Gaussian mean on logit axis for --timestep-sample-mode logit_normal",
-    )
-    parser.add_argument(
-        "--timestep-logit-std",
-        type=float,
-        default=1.0,
-        help="Gaussian std on logit axis for --timestep-sample-mode logit_normal",
-    )
-    parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint path")
-    parser.add_argument(
-        "--val-split",
-        type=float,
-        default=0.0,
-        help="Fraction of data for validation (e.g. 0.05); 0=off. Enables best-by-val and early stopping.",
-    )
-    parser.add_argument(
-        "--val-every", type=int, default=2000, help="Evaluate val loss every N steps (when val-split > 0)"
-    )
-    parser.add_argument(
-        "--early-stopping-patience", type=int, default=0, help="Stop after N val checks with no improvement; 0=off"
-    )
-    parser.add_argument(
-        "--val-max-batches", type=int, default=None, help="Max val batches per eval (default: full val set)"
-    )
-    parser.add_argument("--deterministic", action="store_true", help="Reproducible training (worker seeds)")
-    parser.add_argument(
-        "--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training"
-    )
-    parser.add_argument("--seed", type=int, default=42)
-    # IMPROVEMENTS from docs
-    parser.add_argument(
-        "--caption-dropout-schedule",
-        type=str,
-        default=None,
-        help="Comma-sep pairs step,prob e.g. 0,0.2,10000,0.05 (decay caption dropout over training)",
-    )
-    parser.add_argument(
-        "--crop-mode",
-        type=str,
-        default="center",
-        choices=["center", "random", "largest_center"],
-        help="Crop strategy for training images (1.2)",
-    )
-    parser.add_argument(
-        "--region-caption-mode",
-        type=str,
-        default="append",
-        choices=["append", "prefix", "off"],
-        help="Merge JSONL parts/region_captions into training caption: append|prefix|off (see docs/REGION_CAPTIONS.md)",
-    )
-    parser.add_argument(
-        "--region-layout-tag",
-        type=str,
-        default="[layout]",
-        help="Tag before regional block in merged caption (empty string to omit)",
-    )
-    parser.add_argument(
-        "--boost-adherence-caption",
-        action="store_true",
-        help="Prepend adherence tags to each training caption (literal prompt following; see caption_utils.prepend_adherence_boost)",
-    )
-    parser.add_argument(
-        "--caption-unicode-normalize",
-        action="store_true",
-        help="NFKC + zero-width strip per caption segment before emphasis/boost (see sdx_native.text_hygiene)",
-    )
-    parser.add_argument(
-        "--train-prompt-emphasis",
-        action="store_true",
-        help="Strip ( )/[ ] from captions for T5 (same as sample.py) and pass DiT token_weights (1.2 / 0.8); triple text appends two 1.0 weights for CLIP tokens",
-    )
-    parser.add_argument(
-        "--train-originality-prob",
-        type=float,
-        default=0.0,
-        help="Per-sample prob to inject novelty phrases (like sample.py --originality); 0=off, try 0.1–0.25",
-    )
-    parser.add_argument(
-        "--train-originality-strength",
-        type=float,
-        default=0.5,
-        help="0–1: how many originality tokens to insert when augment triggers (default 0.5)",
-    )
-    parser.add_argument(
-        "--creativity-jitter-std",
-        type=float,
-        default=0.0,
-        help="Gaussian noise on training creativity scalar when --creativity-embed-dim > 0 (0=off; try 0.05–0.15)",
-    )
-    parser.add_argument(
-        "--save-polyak",
-        type=int,
-        default=0,
-        help="Running avg of last N steps; save as polyak.pt every ckpt-every (0=off)",
-    )
-    parser.add_argument("--wandb-project", type=str, default=None, help="WandB project name (enables WandB logging)")
-    parser.add_argument("--tensorboard-dir", type=str, default=None, help="TensorBoard log dir (enables TensorBoard)")
-    parser.add_argument("--dry-run", action="store_true", help="Run 1 step and exit (verify setup)")
-    parser.add_argument(
-        "--log-images-every", type=int, default=0, help="Log a sample image to WandB/TB every N steps (0=off)"
-    )
-    parser.add_argument(
-        "--log-images-prompt", type=str, default="a photo of a cat", help="Prompt for --log-images-every sample"
-    )
+    parser = build_train_arg_parser()
     args = parser.parse_args()
-
-    cfg = TrainConfig(
-        data_path=args.data_path,
-        manifest_jsonl=args.manifest_jsonl,
-        results_dir=args.results_dir,
-        model_name=args.model,
-        text_encoder=(args.text_encoder or default_t5_path()),
-        text_encoder_mode=str(getattr(args, "text_encoder_mode", "t5")),
-        clip_text_encoder_l=str(getattr(args, "clip_text_encoder_l", "") or ""),
-        clip_text_encoder_bigg=str(getattr(args, "clip_text_encoder_bigg", "") or ""),
-        image_size=args.image_size,
-        resolution_buckets=parse_resolution_buckets(args.resolution_buckets or None),
-        vae_model=args.vae_model,
-        autoencoder_type=args.autoencoder_type,
-        rae_use_latent_bridge=not getattr(args, "no_rae_latent_bridge", False),
-        rae_bridge_cycle_weight=float(getattr(args, "rae_bridge_cycle_weight", 0.01)),
-        global_batch_size=args.global_batch_size,
-        epochs=args.epochs,
-        lr=args.lr,
-        num_workers=args.num_workers,
-        log_every=args.log_every,
-        ckpt_every=args.ckpt_every,
-        use_bf16=not args.no_bf16,
-        use_compile=not args.no_compile,
-        grad_checkpointing=not args.no_grad_checkpoint,
-        global_seed=args.seed,
-        num_ar_blocks=args.num_ar_blocks,
-        use_xformers=not args.no_xformers,
-        passes=args.passes,
-        max_steps=args.max_steps,
-        min_lr=args.min_lr,
-        lr_warmup_steps=args.lr_warmup_steps,
-        refinement_prob=args.refinement_prob,
-        refinement_max_t=args.refinement_max_t,
-        img2img_prob=args.img2img_prob,
-        mdm_mask_ratio=args.mdm_mask_ratio,
-        mdm_mask_schedule=parse_mdm_mask_schedule(getattr(args, "mdm_mask_schedule", None)),
-        mdm_patch_size=args.mdm_patch_size,
-        mdm_min_mask_patches=args.mdm_min_mask_patches,
-        mdm_loss_only_masked=not args.no_mdm_loss_only_masked,
-        moe_num_experts=args.moe_num_experts,
-        moe_top_k=args.moe_top_k,
-        moe_balance_loss_weight=args.moe_balance_loss_weight,
-        save_best=not args.no_save_best,
-        negative_prompt_weight=args.negative_prompt_weight,
-        style_embed_dim=args.style_embed_dim,
-        style_strength=args.style_strength,
-        control_cond_dim=args.control_cond_dim,
-        control_scale=args.control_scale,
-        creativity_embed_dim=args.creativity_embed_dim,
-        creativity_max=args.creativity_max,
-        creativity_jitter_std=float(getattr(args, "creativity_jitter_std", 0.0)),
-        train_originality_augment_prob=float(getattr(args, "train_originality_prob", 0.0)),
-        train_originality_strength=float(getattr(args, "train_originality_strength", 0.5)),
-        size_embed_dim=getattr(args, "size_embed_dim", 0),
-        patch_se=getattr(args, "patch_se", False),
-        patch_se_reduction=getattr(args, "patch_se_reduction", 8),
-        curriculum_difficulty_steps=[int(x.strip()) for x in args.curriculum_difficulty_steps.split(",") if x.strip()]
-        if (getattr(args, "curriculum_difficulty_steps", None) and str(args.curriculum_difficulty_steps).strip())
-        else None,
-        curriculum_difficulty_easy_first=not getattr(args, "no_difficulty_easy_first", False),
-        rule_loss_weight=args.rule_loss_weight,
-        repa_weight=args.repa_weight,
-        repa_encoder_model=args.repa_encoder_model,
-        repa_out_dim=args.repa_out_dim,
-        repa_projector_hidden_dim=args.repa_projector_hidden_dim,
-        ssm_every_n=args.ssm_every_n,
-        ssm_kernel_size=args.ssm_kernel_size,
-        num_register_tokens=args.num_register_tokens,
-        use_rope=args.use_rope,
-        rope_base=args.rope_base,
-        kv_merge_factor=args.kv_merge_factor,
-        token_routing_enabled=args.token_routing_enabled,
-        token_routing_strength=args.token_routing_strength,
-        beta_schedule=args.beta_schedule,
-        prediction_type=args.prediction_type,
-        noise_offset=args.noise_offset,
-        min_snr_gamma=args.min_snr_gamma,
-        loss_weighting=getattr(args, "loss_weighting", "min_snr"),
-        loss_weighting_sigma_data=getattr(args, "loss_weighting_sigma_data", 0.5),
-        spectral_sfp_loss=bool(getattr(args, "spectral_sfp_loss", False)),
-        spectral_sfp_low_sigma=float(getattr(args, "spectral_sfp_low_sigma", 0.22)),
-        spectral_sfp_high_sigma=float(getattr(args, "spectral_sfp_high_sigma", 0.22)),
-        spectral_sfp_tau_power=float(getattr(args, "spectral_sfp_tau_power", 1.0)),
-        ot_noise_pair_reg=float(getattr(args, "ot_noise_pair_reg", 0.0)),
-        ot_noise_pair_iters=int(getattr(args, "ot_noise_pair_iters", 40)),
-        ot_noise_pair_mode=str(getattr(args, "ot_noise_pair_mode", "soft")),
-        flow_matching_training=bool(getattr(args, "flow_matching_training", False)),
-        bridge_aux_weight=float(getattr(args, "bridge_aux_weight", 0.0)),
-        bridge_aux_lambda=float(getattr(args, "bridge_aux_lambda", 0.2)),
-        timestep_sample_mode=getattr(args, "timestep_sample_mode", "uniform"),
-        timestep_logit_mean=getattr(args, "timestep_logit_mean", 0.0),
-        timestep_logit_std=getattr(args, "timestep_logit_std", 1.0),
-        resume=args.resume,
-        val_split=args.val_split,
-        val_every=args.val_every,
-        early_stopping_patience=args.early_stopping_patience,
-        val_max_batches=args.val_max_batches,
-        deterministic=args.deterministic,
-        latent_cache_dir=args.latent_cache_dir,
-        caption_dropout_schedule=parse_caption_dropout_schedule(getattr(args, "caption_dropout_schedule", None)),
-        crop_mode=getattr(args, "crop_mode", "center"),
-        region_caption_mode=getattr(args, "region_caption_mode", "append"),
-        region_layout_tag=getattr(args, "region_layout_tag", "[layout]"),
-        boost_adherence_caption=bool(getattr(args, "boost_adherence_caption", False)),
-        caption_unicode_normalize=bool(getattr(args, "caption_unicode_normalize", False)),
-        train_prompt_emphasis=bool(getattr(args, "train_prompt_emphasis", False)),
-        save_polyak=getattr(args, "save_polyak", 0),
-        wandb_project=getattr(args, "wandb_project", None),
-        tensorboard_dir=getattr(args, "tensorboard_dir", None),
-        dry_run=getattr(args, "dry_run", False),
-        log_images_every=getattr(args, "log_images_every", 0),
-        log_images_prompt=getattr(args, "log_images_prompt", "a photo of a cat"),
-    )
+    cfg = build_train_config_from_args(args)
     main(cfg)

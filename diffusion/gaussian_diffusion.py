@@ -16,6 +16,46 @@ INFERENCE_SOLVERS = ("ddim", "heun")
 FLOW_INFERENCE_SOLVERS = ("euler", "heun")
 
 
+def _control_guidance_scale_for_step(
+    base_scale: float,
+    step_index: int,
+    total_steps: int,
+    *,
+    start: float = 0.0,
+    end: float = 1.0,
+    decay_power: float = 1.0,
+) -> float:
+    """Compute step-wise control scale over denoising progress."""
+    b = float(base_scale)
+    if b <= 0.0 or total_steps <= 0:
+        return 0.0
+    s = float(max(0.0, min(1.0, start)))
+    e = float(max(0.0, min(1.0, end)))
+    if e < s:
+        s, e = e, s
+    if e <= s:
+        return b if step_index <= 0 else 0.0
+    p = 0.0 if total_steps <= 1 else float(step_index) / float(max(total_steps - 1, 1))
+    if p < s or p > e:
+        return 0.0
+    u = (p - s) / max(1e-8, e - s)
+    pow_v = max(1e-6, float(decay_power))
+    w = (1.0 - u) ** pow_v
+    return b * max(0.0, min(1.0, w))
+
+
+def _scale_control_value(control_scale, factor: float):
+    f = float(factor)
+    if torch.is_tensor(control_scale):
+        return control_scale * f
+    if isinstance(control_scale, (list, tuple)):
+        return [float(x) * f for x in control_scale]
+    try:
+        return float(control_scale) * f
+    except Exception:
+        return control_scale
+
+
 def create_diffusion(
     timestep_respacing: str = "",
     num_timesteps: int = 1000,
@@ -384,6 +424,23 @@ class GaussianDiffusion:
         dynamic_threshold_type: str = "percentile",
         dynamic_threshold_value: float = 0.0,
         flow_init_noise: Optional[torch.Tensor] = None,
+        control_guidance_start: float = 0.0,
+        control_guidance_end: float = 1.0,
+        control_guidance_decay: float = 1.0,
+        holy_grail_enable: bool = False,
+        holy_grail_cfg_early_ratio: float = 0.72,
+        holy_grail_cfg_late_ratio: float = 1.0,
+        holy_grail_control_mult: float = 1.0,
+        holy_grail_adapter_mult: float = 1.0,
+        holy_grail_frontload_control: bool = True,
+        holy_grail_late_adapter_boost: float = 1.15,
+        holy_grail_cads_strength: float = 0.0,
+        holy_grail_cads_min_strength: float = 0.0,
+        holy_grail_cads_power: float = 1.0,
+        holy_grail_unsharp_sigma: float = 0.0,
+        holy_grail_unsharp_amount: float = 0.0,
+        holy_grail_clamp_quantile: float = 0.0,
+        holy_grail_clamp_floor: float = 1.0,
     ) -> torch.Tensor:
         """
         Sample to match ``diffusion.flow_matching.flow_matching_per_sample_losses`` training:
@@ -426,27 +483,80 @@ class GaussianDiffusion:
         spec_thr = float(speculative_close_thresh)
         spec_blend = float(speculative_blend)
         use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
+        has_control = "control_image" in model_kwargs_cond
+        base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
+        hg_enabled = bool(holy_grail_enable)
+        if hg_enabled:
+            from diffusion.holy_grail import HolyGrailRecipe, apply_condition_noise, build_holy_grail_step_plan, cads_noise_std
 
-        def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
+            hg_recipe = HolyGrailRecipe(
+                base_cfg=float(cfg_scale),
+                cfg_early_ratio=float(holy_grail_cfg_early_ratio),
+                cfg_late_ratio=float(holy_grail_cfg_late_ratio),
+                control_base_scale=float(holy_grail_control_mult),
+                adapter_base_scale=float(holy_grail_adapter_mult),
+                frontload_control=bool(holy_grail_frontload_control),
+                late_adapter_boost=float(holy_grail_late_adapter_boost),
+            )
+
+        def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor, step_idx: int) -> torch.Tensor:
             cs = cfg_box[0]
-            if use_spec_cfg and cs != 1.0 and cs > 0 and model_kwargs_uncond:
+            mk_c = model_kwargs_cond
+            mk_u = model_kwargs_uncond
+            p = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
+            if hg_enabled:
+                plan = build_holy_grail_step_plan(recipe=hg_recipe, step_index=step_idx, total_steps=n)
+                dyn = 1.0 if float(cfg_scale) == 0.0 else float(cfg_box[0]) / float(cfg_scale)
+                cs = float(plan.cfg_scale) * dyn
+            if has_control:
+                sf = _control_guidance_scale_for_step(
+                    1.0,
+                    step_idx,
+                    n,
+                    start=float(control_guidance_start),
+                    end=float(control_guidance_end),
+                    decay_power=float(control_guidance_decay),
+                )
+                mk_c = dict(model_kwargs_cond)
+                if hg_enabled:
+                    sf = sf * float(plan.control_scale)
+                mk_c["control_scale"] = _scale_control_value(base_control_scale, sf)
+                if hg_enabled and "adapter_scale" in mk_c:
+                    mk_c["adapter_scale"] = _scale_control_value(mk_c.get("adapter_scale", 1.0), plan.adapter_scale)
+                if mk_u and ("control_image" in mk_u or "control_scale" in mk_u):
+                    mk_u = dict(mk_u)
+                    mk_u["control_scale"] = _scale_control_value(mk_u.get("control_scale", base_control_scale), sf)
+                    if hg_enabled and "adapter_scale" in mk_u:
+                        mk_u["adapter_scale"] = _scale_control_value(mk_u.get("adapter_scale", 1.0), plan.adapter_scale)
+            if hg_enabled and float(holy_grail_cads_strength) > 0.0 and "encoder_hidden_states" in mk_c:
+                emb = mk_c.get("encoder_hidden_states", None)
+                if torch.is_tensor(emb):
+                    mk_c = dict(mk_c)
+                    sig = cads_noise_std(
+                        progress=p,
+                        base_strength=float(holy_grail_cads_strength),
+                        min_strength=float(holy_grail_cads_min_strength),
+                        power=float(holy_grail_cads_power),
+                    )
+                    mk_c["encoder_hidden_states"] = apply_condition_noise(emb, std=sig)
+            if use_spec_cfg and cs != 1.0 and cs > 0 and mk_u:
                 from utils.generation.speculative_denoise import speculative_cfg_prediction
 
                 return speculative_cfg_prediction(
                     model,
                     x_in,
                     t_batch,
-                    model_kwargs_cond=model_kwargs_cond,
-                    model_kwargs_uncond=model_kwargs_uncond,
+                    model_kwargs_cond=mk_c,
+                    model_kwargs_uncond=mk_u,
                     cfg_scale=cs,
                     draft_cfg_scale=spec_draft,
                     cfg_rescale=float(cfg_rescale),
                     close_thresh=spec_thr,
                     blend_on_close=spec_blend,
                 )
-            if cs != 1.0 and cs > 0 and model_kwargs_uncond:
-                out_cond = model(x_in, t_batch, **model_kwargs_cond)
-                out_uncond = model(x_in, t_batch, **model_kwargs_uncond)
+            if cs != 1.0 and cs > 0 and mk_u:
+                out_cond = model(x_in, t_batch, **mk_c)
+                out_uncond = model(x_in, t_batch, **mk_u)
                 if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
                     out_cond, out_uncond = out_cond[:, : x_in.shape[1]], out_uncond[:, : x_in.shape[1]]
                 delta = out_cond - out_uncond
@@ -455,7 +565,7 @@ class GaussianDiffusion:
                     scale = max(sig / cfg_rescale, 1.0)
                     delta = delta / scale
                 return out_uncond + cs * delta
-            o = model(x_in, t_batch, **model_kwargs_cond)
+            o = model(x_in, t_batch, **mk_c)
             if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
                 o = o[:, : x_in.shape[1]]
             return o
@@ -470,11 +580,11 @@ class GaussianDiffusion:
             s_next = float(s_vals[i + 1].item())
             ds = s_next - s_cur
             t_b = _t_batch_from_s(s_cur)
-            v1 = _model_prediction(x, t_b)
+            v1 = _model_prediction(x, t_b, i)
             if fs == "heun":
                 x_pred = x + v1 * ds
                 t_b2 = _t_batch_from_s(s_next)
-                v2 = _model_prediction(x_pred, t_b2)
+                v2 = _model_prediction(x_pred, t_b2, min(i + 1, n - 1))
                 x = x + 0.5 * (v1 + v2) * ds
             else:
                 x = x + v1 * ds
@@ -488,6 +598,23 @@ class GaussianDiffusion:
                 threshold_type=dynamic_threshold_type,
                 threshold_value=dynamic_threshold_value,
             )
+        if hg_enabled:
+            if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
+                from diffusion.holy_grail import unsharp_mask_latent
+
+                x = unsharp_mask_latent(
+                    x,
+                    sigma=float(holy_grail_unsharp_sigma),
+                    amount=float(holy_grail_unsharp_amount),
+                )
+            if float(holy_grail_clamp_quantile) > 0.0:
+                from diffusion.holy_grail import dynamic_percentile_clamp
+
+                x = dynamic_percentile_clamp(
+                    x,
+                    quantile=float(holy_grail_clamp_quantile),
+                    floor=float(holy_grail_clamp_floor),
+                )
         return x
 
     def sample_loop(
@@ -541,6 +668,23 @@ class GaussianDiffusion:
         speculative_draft_cfg_scale: float = 0.0,
         speculative_close_thresh: float = 0.0,
         speculative_blend: float = 0.35,
+        control_guidance_start: float = 0.0,
+        control_guidance_end: float = 1.0,
+        control_guidance_decay: float = 1.0,
+        holy_grail_enable: bool = False,
+        holy_grail_cfg_early_ratio: float = 0.72,
+        holy_grail_cfg_late_ratio: float = 1.0,
+        holy_grail_control_mult: float = 1.0,
+        holy_grail_adapter_mult: float = 1.0,
+        holy_grail_frontload_control: bool = True,
+        holy_grail_late_adapter_boost: float = 1.15,
+        holy_grail_cads_strength: float = 0.0,
+        holy_grail_cads_min_strength: float = 0.0,
+        holy_grail_cads_power: float = 1.0,
+        holy_grail_unsharp_sigma: float = 0.0,
+        holy_grail_unsharp_amount: float = 0.0,
+        holy_grail_clamp_quantile: float = 0.0,
+        holy_grail_clamp_floor: float = 1.0,
         # Rectified-flow path (matches diffusion.flow_matching training); mutually exclusive with VP DDIM updates below.
         flow_matching_sample: bool = False,
         flow_solver: str = "euler",
@@ -615,6 +759,23 @@ class GaussianDiffusion:
                 dynamic_threshold_type=str(dynamic_threshold_type),
                 dynamic_threshold_value=float(dynamic_threshold_value),
                 flow_init_noise=flow_init_noise,
+                control_guidance_start=float(control_guidance_start),
+                control_guidance_end=float(control_guidance_end),
+                control_guidance_decay=float(control_guidance_decay),
+                holy_grail_enable=bool(holy_grail_enable),
+                holy_grail_cfg_early_ratio=float(holy_grail_cfg_early_ratio),
+                holy_grail_cfg_late_ratio=float(holy_grail_cfg_late_ratio),
+                holy_grail_control_mult=float(holy_grail_control_mult),
+                holy_grail_adapter_mult=float(holy_grail_adapter_mult),
+                holy_grail_frontload_control=bool(holy_grail_frontload_control),
+                holy_grail_late_adapter_boost=float(holy_grail_late_adapter_boost),
+                holy_grail_cads_strength=float(holy_grail_cads_strength),
+                holy_grail_cads_min_strength=float(holy_grail_cads_min_strength),
+                holy_grail_cads_power=float(holy_grail_cads_power),
+                holy_grail_unsharp_sigma=float(holy_grail_unsharp_sigma),
+                holy_grail_unsharp_amount=float(holy_grail_unsharp_amount),
+                holy_grail_clamp_quantile=float(holy_grail_clamp_quantile),
+                holy_grail_clamp_floor=float(holy_grail_clamp_floor),
             )
         ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).lower().strip()
         sol = str(solver).lower().strip()
@@ -652,6 +813,21 @@ class GaussianDiffusion:
         spec_thr = float(speculative_close_thresh)
         spec_blend = float(speculative_blend)
         use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
+        has_control = "control_image" in model_kwargs_cond
+        base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
+        hg_enabled = bool(holy_grail_enable)
+        if hg_enabled:
+            from diffusion.holy_grail import HolyGrailRecipe, apply_condition_noise, build_holy_grail_step_plan, cads_noise_std
+
+            hg_recipe = HolyGrailRecipe(
+                base_cfg=float(cfg_scale),
+                cfg_early_ratio=float(holy_grail_cfg_early_ratio),
+                cfg_late_ratio=float(holy_grail_cfg_late_ratio),
+                control_base_scale=float(holy_grail_control_mult),
+                adapter_base_scale=float(holy_grail_adapter_mult),
+                frontload_control=bool(holy_grail_frontload_control),
+                late_adapter_boost=float(holy_grail_late_adapter_boost),
+            )
         for i in range(len(timesteps)):
             t = timesteps[i].expand(shape[0])
             t_next = (
@@ -663,24 +839,64 @@ class GaussianDiffusion:
 
             def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
                 cs = cfg_box[0]
-                if use_spec_cfg and cs != 1.0 and cs > 0 and model_kwargs_uncond:
+                mk_c = model_kwargs_cond
+                mk_u = model_kwargs_uncond
+                p = 1.0 if len(timesteps) <= 1 else float(i) / float(max(len(timesteps) - 1, 1))
+                if hg_enabled:
+                    plan = build_holy_grail_step_plan(recipe=hg_recipe, step_index=i, total_steps=len(timesteps))
+                    dyn = 1.0 if float(cfg_scale) == 0.0 else float(cfg_box[0]) / float(cfg_scale)
+                    cs = float(plan.cfg_scale) * dyn
+                if has_control:
+                    sf = _control_guidance_scale_for_step(
+                        1.0,
+                        i,
+                        len(timesteps),
+                        start=float(control_guidance_start),
+                        end=float(control_guidance_end),
+                        decay_power=float(control_guidance_decay),
+                    )
+                    mk_c = dict(model_kwargs_cond)
+                    if hg_enabled:
+                        sf = sf * float(plan.control_scale)
+                    mk_c["control_scale"] = _scale_control_value(base_control_scale, sf)
+                    if hg_enabled and "adapter_scale" in mk_c:
+                        mk_c["adapter_scale"] = _scale_control_value(mk_c.get("adapter_scale", 1.0), plan.adapter_scale)
+                    if mk_u and ("control_image" in mk_u or "control_scale" in mk_u):
+                        mk_u = dict(mk_u)
+                        mk_u["control_scale"] = _scale_control_value(mk_u.get("control_scale", base_control_scale), sf)
+                        if hg_enabled and "adapter_scale" in mk_u:
+                            mk_u["adapter_scale"] = _scale_control_value(
+                                mk_u.get("adapter_scale", 1.0), plan.adapter_scale
+                            )
+                if hg_enabled and float(holy_grail_cads_strength) > 0.0 and "encoder_hidden_states" in mk_c:
+                    emb = mk_c.get("encoder_hidden_states", None)
+                    if torch.is_tensor(emb):
+                        mk_c = dict(mk_c)
+                        sig = cads_noise_std(
+                            progress=p,
+                            base_strength=float(holy_grail_cads_strength),
+                            min_strength=float(holy_grail_cads_min_strength),
+                            power=float(holy_grail_cads_power),
+                        )
+                        mk_c["encoder_hidden_states"] = apply_condition_noise(emb, std=sig)
+                if use_spec_cfg and cs != 1.0 and cs > 0 and mk_u:
                     from utils.generation.speculative_denoise import speculative_cfg_prediction
 
                     return speculative_cfg_prediction(
                         model,
                         x_in,
                         t_batch,
-                        model_kwargs_cond=model_kwargs_cond,
-                        model_kwargs_uncond=model_kwargs_uncond,
+                        model_kwargs_cond=mk_c,
+                        model_kwargs_uncond=mk_u,
                         cfg_scale=cs,
                         draft_cfg_scale=spec_draft,
                         cfg_rescale=float(cfg_rescale),
                         close_thresh=spec_thr,
                         blend_on_close=spec_blend,
                     )
-                if cs != 1.0 and cs > 0 and model_kwargs_uncond:
-                    out_cond = model(x_in, t_batch, **model_kwargs_cond)
-                    out_uncond = model(x_in, t_batch, **model_kwargs_uncond)
+                if cs != 1.0 and cs > 0 and mk_u:
+                    out_cond = model(x_in, t_batch, **mk_c)
+                    out_uncond = model(x_in, t_batch, **mk_u)
                     if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
                         out_cond, out_uncond = out_cond[:, : x_in.shape[1]], out_uncond[:, : x_in.shape[1]]
                     delta = out_cond - out_uncond
@@ -689,7 +905,7 @@ class GaussianDiffusion:
                         scale = max(sig / cfg_rescale, 1.0)
                         delta = delta / scale
                     return out_uncond + cs * delta
-                o = model(x_in, t_batch, **model_kwargs_cond)
+                o = model(x_in, t_batch, **mk_c)
                 if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
                     o = o[:, : x_in.shape[1]]
                 return o
@@ -799,4 +1015,21 @@ class GaussianDiffusion:
                 if do_inpaint:
                     # Force final x0 for known/unmasked regions to match the provided context.
                     x_0_pred = inpaint_mask * x_0_pred + (1.0 - inpaint_mask) * inpaint_x0
+        if hg_enabled and x_0_pred is not None:
+            if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
+                from diffusion.holy_grail import unsharp_mask_latent
+
+                x_0_pred = unsharp_mask_latent(
+                    x_0_pred,
+                    sigma=float(holy_grail_unsharp_sigma),
+                    amount=float(holy_grail_unsharp_amount),
+                )
+            if float(holy_grail_clamp_quantile) > 0.0:
+                from diffusion.holy_grail import dynamic_percentile_clamp
+
+                x_0_pred = dynamic_percentile_clamp(
+                    x_0_pred,
+                    quantile=float(holy_grail_clamp_quantile),
+                    floor=float(holy_grail_clamp_floor),
+                )
         return x_0_pred

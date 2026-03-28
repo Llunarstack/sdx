@@ -192,8 +192,7 @@ def main() -> int:
 
 ## See also
 
-- [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) — how to navigate and where to add code
-- [docs/CODEBASE_ORGANIZATION.md](docs/CODEBASE_ORGANIZATION.md) — layout principles
+- [docs/CODEBASE.md](docs/CODEBASE.md) — navigate the tree, `scripts/` layout, contribution rules
 - [docs/FILES.md](docs/FILES.md) — full file map
 
 """

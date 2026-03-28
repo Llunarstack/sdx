@@ -27,3 +27,4 @@ def test_preference_image_dataset_loads(tmp_path):
     assert row["win"].shape == (3, 8, 8)
     assert row["lose"].shape == (3, 8, 8)
     assert row["prompt"] == "test"
+ 

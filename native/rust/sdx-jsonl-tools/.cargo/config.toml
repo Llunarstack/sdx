@@ -1,0 +1,10 @@
+# Windows default main-thread stack (~1 MiB) is too small for this binary's release-mode
+# clap help / parsing (deeply inlined). Bump stack so `cargo build --release` works reliably.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608"]
+
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-Wl,--stack,8388608"]

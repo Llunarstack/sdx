@@ -3,7 +3,7 @@ Mini-batch **optimal-transport-style** coupling between Gaussian noise and data 
 
 Uses cost ``C_ij = ||vec(x0_i) - vec(eps_j)||^2`` and either **Sinkhorn** (soft ``P @ eps``)
 or **Hungarian** (hard permutation). Intended as an experimental analogue of OT-coupled
-rectified-flow training (see ``docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md``).
+rectified-flow training (see ``docs/BLUEPRINTS.md``).
 
 This does **not** implement full rectified-flow objectives; it only reshapes which noise
 vectors are paired with which latents inside a VP-DDPM training step.

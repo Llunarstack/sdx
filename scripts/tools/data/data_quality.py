@@ -15,6 +15,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+_NATIVE_PY = ROOT / "native" / "python"
+if str(_NATIVE_PY) not in sys.path:
+    sys.path.insert(0, str(_NATIVE_PY))
 
 
 def _perceptual_hash(path: Path, size: int = 8) -> str:
@@ -31,11 +34,26 @@ def _perceptual_hash(path: Path, size: int = 8) -> str:
         return ""
 
 
-def _file_hash(path: Path) -> str:
-    """MD5 of file bytes (fallback when imagehash not available)."""
+def _file_hash(path: Path, *, prefer_native_md5: bool = True) -> str:
+    """
+    MD5 of file bytes (streaming). When Rust ``sdx-jsonl-tools`` is built, uses ``file-md5``
+    (1 MiB chunks, no giant Python allocations). Otherwise ``hashlib`` in 1 MiB chunks.
+    """
     try:
+        from sdx_native.native_tools import file_md5_hex
+
+        return file_md5_hex(path, prefer_native_md5=prefer_native_md5)
+    except Exception:
+        pass
+    try:
+        h = hashlib.md5()
         with open(path, "rb") as f:
-            return hashlib.md5(f.read()).hexdigest()
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                h.update(chunk)
+        return h.hexdigest()
     except Exception:
         return ""
 
@@ -69,6 +87,11 @@ def main():
         action="store_true",
         help="Print Rust JSONL `stats` for a .jsonl input and exit (ignores folder mode and other filters).",
     )
+    parser.add_argument(
+        "--no-native-md5",
+        action="store_true",
+        help="For --dedup md5: use Python hashlib only (skip Rust file-md5 subprocess).",
+    )
     args = parser.parse_args()
 
     inp = Path(args.input)
@@ -80,11 +103,12 @@ def main():
     seen_hashes = set()
     rows = []
     dropped_dup = dropped_caption = dropped_bad = dropped_weight = 0
+    prefer_native_md5 = not args.no_native_md5
 
     if inp.suffix.lower() == ".jsonl":
         if args.native_preflight or args.native_validate:
             try:
-                from utils.native.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats, run_rust_jsonl_validate
+                from sdx_native.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats, run_rust_jsonl_validate
 
                 exe = rust_jsonl_tools_exe()
                 if exe:
@@ -135,9 +159,13 @@ def main():
                     img_path = Path(path)
                     if not img_path.is_absolute():
                         img_path = (inp.parent / img_path).resolve()
-                    h = _perceptual_hash(img_path) if args.dedup == "phash" else _file_hash(img_path)
+                    h = (
+                        _perceptual_hash(img_path)
+                        if args.dedup == "phash"
+                        else _file_hash(img_path, prefer_native_md5=prefer_native_md5)
+                    )
                     if not h and args.dedup == "phash":
-                        h = _file_hash(img_path)
+                        h = _file_hash(img_path, prefer_native_md5=prefer_native_md5)
                     if h and h in seen_hashes:
                         dropped_dup += 1
                         continue
@@ -175,9 +203,13 @@ def main():
                 )
                 path_str = str(img_path)
                 if args.dedup:
-                    h = _perceptual_hash(img_path) if args.dedup == "phash" else _file_hash(img_path)
+                    h = (
+                        _perceptual_hash(img_path)
+                        if args.dedup == "phash"
+                        else _file_hash(img_path, prefer_native_md5=prefer_native_md5)
+                    )
                     if not h and args.dedup == "phash":
-                        h = _file_hash(img_path)
+                        h = _file_hash(img_path, prefer_native_md5=prefer_native_md5)
                     if h and h in seen_hashes:
                         dropped_dup += 1
                         continue

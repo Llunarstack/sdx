@@ -1,0 +1,13 @@
+[package]
+name = "sdx-noise-schedule"
+version = "0.1.0"
+edition = "2021"
+description = "Discrete diffusion noise schedules (linear DDPM betas, cosine alpha_bar) — CSV for analysis / plots"
+license = "MIT"
+
+[[bin]]
+name = "sdx-noise-schedule"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }

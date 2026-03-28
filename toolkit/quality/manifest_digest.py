@@ -72,23 +72,21 @@ def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> Dict[str, Any]:
     }
 
 
-def try_rust_stats(manifest: Path, root: Path) -> str | None:
-    exe = root / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release"
-    candidates = [exe / "sdx-jsonl-tools.exe", exe / "sdx-jsonl-tools"]
-    tool = next((p for p in candidates if p.is_file()), None)
-    if tool is None:
+def try_rust_stats(manifest: Path) -> str | None:
+    """Run ``sdx-jsonl-tools stats`` when the release binary exists (via ``native_tools``)."""
+    _ensure_native_python_path()
+    try:
+        from sdx_native.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats
+    except ImportError:
+        return None
+    if rust_jsonl_tools_exe() is None:
         return None
     try:
-        r = subprocess.run(
-            [str(tool), "stats", str(manifest)],
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
+        r = run_rust_jsonl_stats(manifest, timeout=600)
         if r.returncode != 0:
             return r.stderr or r.stdout or "rust stats failed"
-        return r.stdout.strip()
-    except (OSError, subprocess.TimeoutExpired) as e:
+        return (r.stdout or "").strip()
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as e:
         return str(e)
 
 
@@ -103,11 +101,10 @@ def main() -> int:
         print(f"Not a file: {path}", file=sys.stderr)
         return 1
 
-    root = _ensure_native_python_path()
+    _ensure_native_python_path()
     d = digest_jsonl(path)
     if args.rust_stats:
-        rs = try_rust_stats(path, root)
-        d["rust_stats_stdout"] = rs
+        d["rust_stats_stdout"] = try_rust_stats(path)
 
     if args.json_out:
         print(json.dumps(d, indent=2))

@@ -31,12 +31,12 @@ def test_theme_by_id():
     cf = theme_by_id("consistency_flow_matching_velocity")
     assert cf is not None
     assert cf.status == ParityStatus.PARTIAL
-    assert "CONSISTENCY_FLOW_SPEED_BLUEPRINT.md" in "".join(cf.repo_paths)
+    assert "BLUEPRINTS.md" in "".join(cf.repo_paths)
     assert "flow_matching.py" in "".join(cf.repo_paths)
     pa = theme_by_id("geometric_latent_split_blueprint")
     assert pa is not None
     assert pa.status == ParityStatus.PARTIAL
-    assert "PROMPT_ACCURACY_BLUEPRINT.md" in "".join(pa.repo_paths)
+    assert "BLUEPRINTS.md" in "".join(pa.repo_paths)
 
 
 def test_themes_as_dict_roundtrip_keys():

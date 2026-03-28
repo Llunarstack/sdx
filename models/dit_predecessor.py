@@ -6,10 +6,12 @@ import torch.nn as nn
 from timm.models.vision_transformer import PatchEmbed
 
 from .attention import SSMTokenMixer, create_block_causal_mask_2d, memory_efficient_attention
-from .controlnet import ControlNetEncoder
+from .controlnet import ControlNetEncoder, encode_control_stack, inject_control_tokens
 from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
 from .dit_text import CrossAttention, TextEmbedder
+from .model_enhancements import DropPath
 from .moe import MoEExperts, MoEProjection, MoERouter
+from .vit_next_blocks import LayerScale, apply_topk_token_keep
 
 
 def modulate(x, shift, scale):
@@ -180,6 +182,10 @@ class DiTBlockSupreme(nn.Module):
         ssm_kernel_size: int = 7,
         token_routing_enabled: bool = False,
         token_routing_strength: float = 1.0,
+        token_keep_ratio: float = 1.0,
+        token_keep_min_value: float = 0.0,
+        drop_path: float = 0.0,
+        layerscale_init: float = 0.0,
     ):
         super().__init__()
         self.norm1 = RMSNorm(hidden_size, eps=eps)
@@ -224,6 +230,12 @@ class DiTBlockSupreme(nn.Module):
 
         self.token_routing_enabled = bool(token_routing_enabled)
         self.token_routing_strength = float(token_routing_strength)
+        self.token_keep_ratio = max(0.05, min(1.0, float(token_keep_ratio)))
+        self.token_keep_min_value = max(0.0, min(1.0, float(token_keep_min_value)))
+        self.drop_path = DropPath(float(max(0.0, drop_path))) if float(drop_path) > 0 else nn.Identity()
+        self.ls_attn = LayerScale(hidden_size, float(layerscale_init))
+        self.ls_cross = LayerScale(hidden_size, float(layerscale_init))
+        self.ls_mlp = LayerScale(hidden_size, float(layerscale_init))
         if self.token_routing_enabled:
             s = max(0.0, min(1.0, self.token_routing_strength))
             self.token_routing_strength = s
@@ -254,6 +266,14 @@ class DiTBlockSupreme(nn.Module):
                 token_gate[:, num_patch_tokens:, :] = 1.0
             s = self.token_routing_strength
             token_gate = ((1.0 - s) + s * token_gate).clamp(0.0, 1.0)
+            if self.token_keep_ratio < 1.0:
+                token_gate = apply_topk_token_keep(
+                    token_gate,
+                    token_gate,
+                    keep_ratio=self.token_keep_ratio,
+                    num_patch_tokens=num_patch_tokens,
+                    min_keep_value=self.token_keep_min_value,
+                )
         attn_out = self.attn(
             x_norm,
             attn_mask=attn_mask,
@@ -262,25 +282,25 @@ class DiTBlockSupreme(nn.Module):
             router_override=router_override,
             report_aux_loss=False,
         )
-        x = x + gate_msa.unsqueeze(1) * token_gate * attn_out
-        x = x + token_gate * self.cross_attn(
+        x = x + self.drop_path(self.ls_attn(gate_msa.unsqueeze(1) * token_gate * attn_out))
+        x = x + self.drop_path(self.ls_cross(token_gate * self.cross_attn(
             self.norm_cross(x),
             text_emb,
             use_xformers=use_xformers,
             routing_context=c,
             router_override=router_override,
             report_aux_loss=False,
-        )
+        )))
         mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
         if isinstance(self.mlp, MoEExperts):
-            x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(
+            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
                 mlp_in,
                 routing_context=c,
                 router_override=router_override,
                 report_aux_loss=True,
-            )
+            )))
         else:
-            x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)
+            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
         return x
 
 
@@ -301,6 +321,10 @@ class DiTBlockPredecessor(nn.Module):
         # ViT-Gen features
         token_routing_enabled: bool = False,
         token_routing_strength: float = 1.0,
+        token_keep_ratio: float = 1.0,
+        token_keep_min_value: float = 0.0,
+        drop_path: float = 0.0,
+        layerscale_init: float = 0.0,
     ):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -343,6 +367,12 @@ class DiTBlockPredecessor(nn.Module):
 
         self.token_routing_enabled = bool(token_routing_enabled)
         self.token_routing_strength = float(token_routing_strength)
+        self.token_keep_ratio = max(0.05, min(1.0, float(token_keep_ratio)))
+        self.token_keep_min_value = max(0.0, min(1.0, float(token_keep_min_value)))
+        self.drop_path = DropPath(float(max(0.0, drop_path))) if float(drop_path) > 0 else nn.Identity()
+        self.ls_attn = LayerScale(hidden_size, float(layerscale_init))
+        self.ls_cross = LayerScale(hidden_size, float(layerscale_init))
+        self.ls_mlp = LayerScale(hidden_size, float(layerscale_init))
         if self.token_routing_enabled:
             s = max(0.0, min(1.0, self.token_routing_strength))
             self.token_routing_strength = s
@@ -373,6 +403,14 @@ class DiTBlockPredecessor(nn.Module):
                 token_gate[:, num_patch_tokens:, :] = 1.0
             s = self.token_routing_strength
             token_gate = ((1.0 - s) + s * token_gate).clamp(0.0, 1.0)
+            if self.token_keep_ratio < 1.0:
+                token_gate = apply_topk_token_keep(
+                    token_gate,
+                    token_gate,
+                    keep_ratio=self.token_keep_ratio,
+                    num_patch_tokens=num_patch_tokens,
+                    min_keep_value=self.token_keep_min_value,
+                )
         attn_out = self.attn(
             x_norm,
             attn_mask=attn_mask,
@@ -381,25 +419,25 @@ class DiTBlockPredecessor(nn.Module):
             router_override=router_override,
             report_aux_loss=False,
         )
-        x = x + gate_msa.unsqueeze(1) * token_gate * attn_out
-        x = x + token_gate * self.cross_attn(
+        x = x + self.drop_path(self.ls_attn(gate_msa.unsqueeze(1) * token_gate * attn_out))
+        x = x + self.drop_path(self.ls_cross(token_gate * self.cross_attn(
             self.norm_cross(x),
             text_emb,
             use_xformers=use_xformers,
             routing_context=c,
             router_override=router_override,
             report_aux_loss=False,
-        )
+        )))
         mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
         if isinstance(self.mlp, MoEExperts):
-            x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(
+            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
                 mlp_in,
                 routing_context=c,
                 router_override=router_override,
                 report_aux_loss=True,
-            )
+            )))
         else:
-            x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)
+            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
         return x
 
 
@@ -424,6 +462,7 @@ class DiT_Predecessor_Text(nn.Module):
         use_xformers=True,
         style_embed_dim=0,
         control_cond_dim=0,
+        control_num_types: int = 0,
         creativity_embed_dim=0,
         size_embed_dim=0,
         moe_num_experts: int = 0,
@@ -441,6 +480,10 @@ class DiT_Predecessor_Text(nn.Module):
         kv_merge_factor: int = 1,
         token_routing_enabled: bool = False,
         token_routing_strength: float = 1.0,
+        token_keep_ratio: float = 1.0,
+        token_keep_min_value: float = 0.0,
+        drop_path_rate: float = 0.0,
+        layerscale_init: float = 0.0,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -454,6 +497,7 @@ class DiT_Predecessor_Text(nn.Module):
         self.use_xformers = use_xformers
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
+        self.control_num_types = int(max(0, control_num_types))
         self.creativity_embed_dim = creativity_embed_dim
         self._moe_num_experts = int(moe_num_experts) if moe_num_experts is not None else 0
         self._moe_top_k = int(moe_top_k) if moe_top_k is not None else 2
@@ -494,7 +538,11 @@ class DiT_Predecessor_Text(nn.Module):
             self.creativity_proj = None
         if control_cond_dim > 0:
             self.control_encoder = ControlNetEncoder(
-                control_size=input_size, patch_size=patch_size, in_channels=3, hidden_size=hidden_size
+                control_size=input_size,
+                patch_size=patch_size,
+                in_channels=3,
+                hidden_size=hidden_size,
+                num_control_types=self.control_num_types,
             )
         else:
             self.control_encoder = None
@@ -506,6 +554,10 @@ class DiT_Predecessor_Text(nn.Module):
         self.rope_base = float(rope_base)  # not yet applied in predecessor models
         self.token_routing_enabled = bool(token_routing_enabled)
         self.token_routing_strength = float(token_routing_strength)
+        self.token_keep_ratio = float(token_keep_ratio)
+        self.token_keep_min_value = float(token_keep_min_value)
+        self.drop_path_rate = float(drop_path_rate)
+        self.layerscale_init = float(layerscale_init)
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
@@ -523,6 +575,7 @@ class DiT_Predecessor_Text(nn.Module):
         blocks = []
         for i in range(depth):
             use_ssm = bool(ssm_every_n and int(ssm_every_n) > 0 and (i % int(ssm_every_n) == 0))
+            dp = self.drop_path_rate * (float(i) / float(max(depth - 1, 1)))
             blocks.append(
                 DiTBlockPredecessor(
                     hidden_size,
@@ -535,6 +588,10 @@ class DiT_Predecessor_Text(nn.Module):
                     ssm_kernel_size=ssm_kernel_size,
                     token_routing_enabled=self.token_routing_enabled,
                     token_routing_strength=self.token_routing_strength,
+                    token_keep_ratio=self.token_keep_ratio,
+                    token_keep_min_value=self.token_keep_min_value,
+                    drop_path=dp,
+                    layerscale_init=self.layerscale_init,
                 )
             )
         self.blocks = nn.ModuleList(blocks)
@@ -569,6 +626,8 @@ class DiT_Predecessor_Text(nn.Module):
                 self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1)
             )
             nn.init.zeros_(self.control_encoder.proj.bias)
+            if getattr(self.control_encoder, "type_embed", None) is not None:
+                nn.init.normal_(self.control_encoder.type_embed.weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
         for block in self.blocks:
@@ -601,6 +660,7 @@ class DiT_Predecessor_Text(nn.Module):
         style_embedding=None,
         style_strength=0.7,
         control_image=None,
+        control_type=None,
         control_scale=1.0,
         conditioning_scale=1.0,
         **kwargs,
@@ -609,6 +669,7 @@ class DiT_Predecessor_Text(nn.Module):
         if encoder_hidden_states is None:
             encoder_hidden_states = kwargs.get("y_embed")
         assert encoder_hidden_states is not None, "encoder_hidden_states required"
+        _b, _c_in, h_lat, w_lat = x.shape[0], x.shape[1], int(x.shape[2]), int(x.shape[3])
         if getattr(self, "_moe_layers", None):
             self.moe_aux_loss = None
             for m in self._moe_layers:
@@ -621,10 +682,20 @@ class DiT_Predecessor_Text(nn.Module):
             x = torch.cat([x_patches, reg], dim=1)
         else:
             x = x_patches
-        if control_image is not None and self.control_encoder is not None and control_scale > 0:
-            control_feat = self.control_encoder(control_image)
-            if control_feat.shape[1] == x.shape[1]:
-                x = x + control_scale * control_feat
+        if control_image is not None and self.control_encoder is not None:
+            control_feat = encode_control_stack(
+                self.control_encoder,
+                control_image,
+                target_hw=(h_lat, w_lat),
+                control_type=control_type,
+                control_scale=control_scale,
+            )
+            x = inject_control_tokens(
+                x,
+                control_feat,
+                control_scale=1.0,
+                patch_tokens=self.num_patches,
+            )
         t_emb = self.t_embedder(t)
         text_emb = self.text_embedder(encoder_hidden_states, train=self.training)
         if conditioning_scale != 1.0:
@@ -702,6 +773,7 @@ class DiT_Supreme_Text(nn.Module):
         use_xformers=True,
         style_embed_dim=0,
         control_cond_dim=0,
+        control_num_types: int = 0,
         creativity_embed_dim=0,
         size_embed_dim=0,
         moe_num_experts: int = 0,
@@ -719,6 +791,10 @@ class DiT_Supreme_Text(nn.Module):
         kv_merge_factor: int = 1,
         token_routing_enabled: bool = False,
         token_routing_strength: float = 1.0,
+        token_keep_ratio: float = 1.0,
+        token_keep_min_value: float = 0.0,
+        drop_path_rate: float = 0.0,
+        layerscale_init: float = 0.0,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -732,6 +808,7 @@ class DiT_Supreme_Text(nn.Module):
         self.use_xformers = use_xformers
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
+        self.control_num_types = int(max(0, control_num_types))
         self.creativity_embed_dim = creativity_embed_dim
         self.size_embed_dim = size_embed_dim
         self._moe_num_experts = int(moe_num_experts) if moe_num_experts is not None else 0
@@ -781,7 +858,11 @@ class DiT_Supreme_Text(nn.Module):
             self.size_proj = None
         if control_cond_dim > 0:
             self.control_encoder = ControlNetEncoder(
-                control_size=input_size, patch_size=patch_size, in_channels=3, hidden_size=hidden_size
+                control_size=input_size,
+                patch_size=patch_size,
+                in_channels=3,
+                hidden_size=hidden_size,
+                num_control_types=self.control_num_types,
             )
         else:
             self.control_encoder = None
@@ -793,6 +874,10 @@ class DiT_Supreme_Text(nn.Module):
         self.rope_base = float(rope_base)  # not yet applied in supreme models
         self.token_routing_enabled = bool(token_routing_enabled)
         self.token_routing_strength = float(token_routing_strength)
+        self.token_keep_ratio = float(token_keep_ratio)
+        self.token_keep_min_value = float(token_keep_min_value)
+        self.drop_path_rate = float(drop_path_rate)
+        self.layerscale_init = float(layerscale_init)
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
@@ -808,6 +893,7 @@ class DiT_Supreme_Text(nn.Module):
         blocks = []
         for i in range(depth):
             use_ssm = bool(ssm_every_n and int(ssm_every_n) > 0 and (i % int(ssm_every_n) == 0))
+            dp = self.drop_path_rate * (float(i) / float(max(depth - 1, 1)))
             blocks.append(
                 DiTBlockSupreme(
                     hidden_size,
@@ -820,6 +906,10 @@ class DiT_Supreme_Text(nn.Module):
                     ssm_kernel_size=ssm_kernel_size,
                     token_routing_enabled=self.token_routing_enabled,
                     token_routing_strength=self.token_routing_strength,
+                    token_keep_ratio=self.token_keep_ratio,
+                    token_keep_min_value=self.token_keep_min_value,
+                    drop_path=dp,
+                    layerscale_init=self.layerscale_init,
                 )
             )
         self.blocks = nn.ModuleList(blocks)
@@ -851,6 +941,8 @@ class DiT_Supreme_Text(nn.Module):
                 self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1)
             )
             nn.init.zeros_(self.control_encoder.proj.bias)
+            if getattr(self.control_encoder, "type_embed", None) is not None:
+                nn.init.normal_(self.control_encoder.type_embed.weight, std=0.02)
         if self.size_proj is not None:
             nn.init.normal_(self.size_proj.weight, std=0.02)
             nn.init.zeros_(self.size_proj.bias)
@@ -886,6 +978,7 @@ class DiT_Supreme_Text(nn.Module):
         style_embedding=None,
         style_strength=0.7,
         control_image=None,
+        control_type=None,
         control_scale=1.0,
         conditioning_scale=1.0,
         return_attn=False,
@@ -895,6 +988,7 @@ class DiT_Supreme_Text(nn.Module):
         if encoder_hidden_states is None:
             encoder_hidden_states = kwargs.get("y_embed")
         assert encoder_hidden_states is not None, "encoder_hidden_states required"
+        _b, _c_in, h_lat, w_lat = x.shape[0], x.shape[1], int(x.shape[2]), int(x.shape[3])
         if getattr(self, "_moe_layers", None):
             self.moe_aux_loss = None
             for m in self._moe_layers:
@@ -907,10 +1001,20 @@ class DiT_Supreme_Text(nn.Module):
             x = torch.cat([x_patches, reg], dim=1)
         else:
             x = x_patches
-        if control_image is not None and self.control_encoder is not None and control_scale > 0:
-            control_feat = self.control_encoder(control_image)
-            if control_feat.shape[1] == x.shape[1]:
-                x = x + control_scale * control_feat
+        if control_image is not None and self.control_encoder is not None:
+            control_feat = encode_control_stack(
+                self.control_encoder,
+                control_image,
+                target_hw=(h_lat, w_lat),
+                control_type=control_type,
+                control_scale=control_scale,
+            )
+            x = inject_control_tokens(
+                x,
+                control_feat,
+                control_scale=1.0,
+                patch_tokens=self.num_patches,
+            )
         t_emb = self.t_embedder(t)
         text_emb = self.text_embedder(encoder_hidden_states, train=self.training)
         if conditioning_scale != 1.0:

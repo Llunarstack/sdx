@@ -30,6 +30,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.model_presets import apply_op_mode_to_args, apply_preset_to_args
 from diffusion import INFERENCE_SOLVERS, create_diffusion, list_timestep_schedules
+from diffusion.holy_grail import (
+    apply_holy_grail_preset_to_args,
+    list_holy_grail_presets,
+    recommend_holy_grail_preset,
+    sanitize_holy_grail_kwargs,
+)
+from models.controlnet import control_type_to_id, infer_control_type_from_path
 from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
 from utils.prompt.neg_filter import filter_negative_by_positive
 from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
@@ -79,6 +86,196 @@ def _parse_scale_csv(value: str) -> list:
         if p in allowed and p not in out:
             out.append(p)
     return out
+
+
+def _parse_lora_role_budgets(raw: str) -> dict:
+    """Parse 'character=1.8,style=1.0,detail=0.8' into dict."""
+    out = {}
+    if not raw:
+        return out
+    for part in str(raw).split(","):
+        p = part.strip()
+        if not p or "=" not in p:
+            continue
+        k, v = p.split("=", 1)
+        try:
+            out[str(k).strip().lower()] = float(v.strip())
+        except Exception:
+            continue
+    return out
+
+
+def _parse_lora_role_stage_weights(raw: str) -> dict:
+    """
+    Parse per-role stage multipliers:
+    "character=1.15/1.0/0.85,style=0.9/1.0/1.1"
+    where values are early/mid/late.
+    """
+    out = {}
+    if not raw:
+        return out
+    for part in str(raw).split(","):
+        p = part.strip()
+        if not p or "=" not in p:
+            continue
+        k, v = p.split("=", 1)
+        nums = [x.strip() for x in v.split("/") if x.strip()]
+        if len(nums) != 3:
+            continue
+        try:
+            out[str(k).strip().lower()] = (float(nums[0]), float(nums[1]), float(nums[2]))
+        except Exception:
+            continue
+    return out
+
+
+def _parse_lora_spec(spec: str, *, default_role: str = "style") -> Tuple[str, float, str]:
+    """
+    Parse LoRA/DoRA/LyCORIS spec.
+    Supported:
+      - path
+      - path:scale
+      - path:scale:role
+    """
+    s = str(spec or "").strip()
+    if not s:
+        return "", 0.8, str(default_role or "style").lower()
+    parts = s.split(":")
+    role = str(default_role or "style").strip().lower()
+    if len(parts) >= 3:
+        maybe_role = parts[-1].strip().lower()
+        try:
+            scale = float(parts[-2].strip())
+            path = ":".join(parts[:-2]).strip()
+            if path:
+                return path, scale, maybe_role or role
+        except Exception:
+            pass
+    if len(parts) >= 2:
+        try:
+            scale = float(parts[-1].strip())
+            path = ":".join(parts[:-1]).strip()
+            if path:
+                return path, scale, role
+        except Exception:
+            pass
+    return s, 0.8, role
+
+
+def _parse_weighted_style_mix(raw: str) -> list:
+    """
+    Parse weighted multi-style prompt.
+    Supported forms (segments separated by '|'):
+      - "anime::0.6 | watercolor::0.4"
+      - "anime:0.6 | watercolor:0.4"
+      - "anime | watercolor" (equal weights)
+    Returns list[(text, normalized_weight)].
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return []
+    segs = [p.strip() for p in s.split("|") if p.strip()]
+    out = []
+    for seg in segs:
+        txt = seg
+        w = 1.0
+        if "::" in seg:
+            a, b = seg.rsplit("::", 1)
+            try:
+                w = float(b.strip())
+                txt = a.strip()
+            except Exception:
+                pass
+        elif ":" in seg:
+            a, b = seg.rsplit(":", 1)
+            try:
+                w = float(b.strip())
+                txt = a.strip()
+            except Exception:
+                pass
+        if txt:
+            out.append((txt, max(0.0, float(w))))
+    if not out:
+        return []
+    sw = sum(w for _, w in out)
+    if sw <= 1e-8:
+        n = float(len(out))
+        return [(t, 1.0 / n) for t, _ in out]
+    return [(t, w / sw) for t, w in out]
+
+
+def _parse_control_spec(
+    spec: str,
+    *,
+    default_type: str = "auto",
+    default_scale: float = 0.85,
+) -> Tuple[str, str, float]:
+    """
+    Parse ControlNet spec with Windows-path-safe rules.
+    Supported:
+      - path
+      - path:scale
+      - path:type
+      - path:type:scale
+      - path:scale:type
+    """
+    s = str(spec or "").strip()
+    if not s:
+        return "", str(default_type or "auto").lower(), float(default_scale)
+    parts = s.split(":")
+    ctype = str(default_type or "auto").strip().lower()
+    cscale = float(default_scale)
+    if len(parts) >= 3:
+        a = parts[-2].strip()
+        b = parts[-1].strip().lower()
+        # Try path:scale:type
+        try:
+            sc = float(a)
+            path = ":".join(parts[:-2]).strip()
+            if path:
+                return path, (b or ctype), sc
+        except Exception:
+            pass
+        # Try path:type:scale
+        try:
+            sc = float(parts[-1].strip())
+            path = ":".join(parts[:-2]).strip()
+            t = parts[-2].strip().lower()
+            if path:
+                return path, (t or ctype), sc
+        except Exception:
+            pass
+    if len(parts) >= 2:
+        tail = parts[-1].strip()
+        path = ":".join(parts[:-1]).strip()
+        if path:
+            try:
+                return path, ctype, float(tail)
+            except Exception:
+                return path, tail.lower() or ctype, cscale
+    return s, ctype, cscale
+
+
+def _resize_control_tensor(ctrl: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
+    """Resize control tensor preserving 4D (B,C,H,W) or 5D (B,K,C,H,W) layout."""
+    if ctrl.ndim == 4:
+        return torch.nn.functional.interpolate(
+            ctrl,
+            size=(target_h, target_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+    if ctrl.ndim == 5:
+        b, k, c, h, w = ctrl.shape
+        flat = ctrl.reshape(b * k, c, h, w)
+        out = torch.nn.functional.interpolate(
+            flat,
+            size=(target_h, target_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+        return out.view(b, k, c, target_h, target_w)
+    raise ValueError(f"Unsupported control tensor shape: {tuple(ctrl.shape)}")
 
 
 def _apply_gender_swap(prompt: str) -> str:
@@ -346,13 +543,171 @@ def main():
         help="Extract style/artist from prompt when --style empty (e.g. 'by X', 'style of X', artist tags)",
     )
     parser.add_argument("--control-image", type=str, default="", help="Path to control image (depth/edge/pose)")
+    parser.add_argument(
+        "--control",
+        type=str,
+        nargs="*",
+        default=[],
+        help=(
+            "Stack multiple controls: path, path:scale, path:type, path:type:scale, or path:scale:type. "
+            "Example: --control canny.png:canny:0.8 depth.png:depth:0.6"
+        ),
+    )
+    parser.add_argument(
+        "--control-type",
+        type=str,
+        default="auto",
+        help="Control type: auto|unknown|canny|depth|pose|seg|lineart|scribble|normal|hed",
+    )
     parser.add_argument("--control-scale", type=float, default=0.85, help="ControlNet strength")
+    parser.add_argument(
+        "--control-guidance-start",
+        type=float,
+        default=0.0,
+        help="Control schedule start as denoise progress fraction (0.0 = first step).",
+    )
+    parser.add_argument(
+        "--control-guidance-end",
+        type=float,
+        default=1.0,
+        help="Control schedule end as denoise progress fraction (1.0 = last step).",
+    )
+    parser.add_argument(
+        "--control-guidance-decay",
+        type=float,
+        default=1.0,
+        help="Control decay power in [start,end]: 1=linear, >1 faster fade, <1 slower fade.",
+    )
+    parser.add_argument(
+        "--holy-grail",
+        action="store_true",
+        help="Enable holy-grail adaptive guidance stack (CFG/control scheduling + optional condition annealing/refine).",
+    )
+    parser.add_argument(
+        "--holy-grail-cfg-early-ratio",
+        type=float,
+        default=0.72,
+        help="Holy-grail CFG multiplier ratio at first denoise step.",
+    )
+    parser.add_argument(
+        "--holy-grail-cfg-late-ratio",
+        type=float,
+        default=1.0,
+        help="Holy-grail CFG multiplier ratio at final denoise step.",
+    )
+    parser.add_argument(
+        "--holy-grail-control-mult",
+        type=float,
+        default=1.0,
+        help="Holy-grail multiplier for control scaling policy.",
+    )
+    parser.add_argument(
+        "--holy-grail-adapter-mult",
+        type=float,
+        default=1.0,
+        help="Holy-grail multiplier for adapter scaling policy.",
+    )
+    parser.add_argument(
+        "--holy-grail-no-frontload-control",
+        action="store_true",
+        help="Disable holy-grail control frontloading (use flatter control schedule).",
+    )
+    parser.add_argument(
+        "--holy-grail-late-adapter-boost",
+        type=float,
+        default=1.15,
+        help="Late-step boost factor for adapter scale in holy-grail policy.",
+    )
+    parser.add_argument(
+        "--holy-grail-cads-strength",
+        type=float,
+        default=0.0,
+        help="CADS-style condition noise strength for prompt embeddings (0=off).",
+    )
+    parser.add_argument(
+        "--holy-grail-cads-min-strength",
+        type=float,
+        default=0.0,
+        help="Minimum CADS condition-noise strength near final steps.",
+    )
+    parser.add_argument(
+        "--holy-grail-cads-power",
+        type=float,
+        default=1.0,
+        help="Power for CADS decay curve (higher => faster late-stage decay).",
+    )
+    parser.add_argument(
+        "--holy-grail-unsharp-sigma",
+        type=float,
+        default=0.0,
+        help="Final latent unsharp blur sigma for holy-grail refine (0=off).",
+    )
+    parser.add_argument(
+        "--holy-grail-unsharp-amount",
+        type=float,
+        default=0.0,
+        help="Final latent unsharp amount for holy-grail refine (0=off).",
+    )
+    parser.add_argument(
+        "--holy-grail-clamp-quantile",
+        type=float,
+        default=0.0,
+        help="Final latent dynamic percentile clamp quantile in [0,1] (0=off).",
+    )
+    parser.add_argument(
+        "--holy-grail-clamp-floor",
+        type=float,
+        default=1.0,
+        help="Lower bound for holy-grail dynamic clamp scale.",
+    )
     parser.add_argument(
         "--lora",
         type=str,
         nargs="*",
         default=[],
-        help="LoRA paths (.pt or .safetensors) with optional scale, e.g. path.safetensors path2.pt:0.6",
+        help=(
+            "LoRA/DoRA/LyCORIS specs: path, path:scale, or path:scale:role "
+            "(role examples: character/style/detail/composition)."
+        ),
+    )
+    parser.add_argument(
+        "--no-lora-normalize-scales",
+        action="store_true",
+        help="Disable per-layer multi-LoRA scale normalization (enabled by default for style stability).",
+    )
+    parser.add_argument(
+        "--lora-max-total-scale",
+        type=float,
+        default=1.5,
+        help="Max total absolute adapter scale per layer when stacking LoRA/DoRA/LyCORIS.",
+    )
+    parser.add_argument(
+        "--lora-default-role",
+        type=str,
+        default="style",
+        help="Default adapter role when --lora spec has no :role suffix.",
+    )
+    parser.add_argument(
+        "--lora-role-budgets",
+        type=str,
+        default="character=1.8,style=1.0,detail=0.8,composition=1.0,other=0.8",
+        help="Per-role scale caps used before global cap, e.g. 'character=1.8,style=1.0,detail=0.8'.",
+    )
+    parser.add_argument(
+        "--lora-stage-policy",
+        type=str,
+        default="auto",
+        choices=["off", "auto", "character_focus", "style_focus", "balanced"],
+        help="Depth-aware role routing policy for stacked adapters (early/mid/late layer weighting).",
+    )
+    parser.add_argument(
+        "--lora-role-stage-weights",
+        type=str,
+        default="",
+        help=(
+            "Override per-role early/mid/late multipliers, e.g. "
+            "'character=1.15/1.0/0.85,style=0.9/1.0/1.1'."
+        ),
     )
     parser.add_argument(
         "--lora-trigger",
@@ -1316,6 +1671,14 @@ def main():
         choices=["portrait", "fullbody", "anime_char"],
         help="High-level OP mode (applied after preset)",
     )
+    _hg_preset_choices = ["auto"] + list_holy_grail_presets()
+    parser.add_argument(
+        "--holy-grail-preset",
+        type=str,
+        default=None,
+        choices=_hg_preset_choices,
+        help="Apply a holy-grail preset bundle (auto|balanced|photoreal|anime|illustration|aggressive).",
+    )
     parser.add_argument(
         "--prompt-layout",
         type=str,
@@ -1339,6 +1702,16 @@ def main():
         apply_preset_to_args(args, args.preset)
     if getattr(args, "op_mode", None):
         apply_op_mode_to_args(args, args.op_mode)
+    if getattr(args, "holy_grail_preset", None):
+        hg_name = str(getattr(args, "holy_grail_preset")).strip().lower()
+        if hg_name == "auto":
+            hg_name = recommend_holy_grail_preset(
+                prompt=str(getattr(args, "prompt", "") or ""),
+                style=str(getattr(args, "style", "") or ""),
+                has_control=bool(getattr(args, "control_image", "") or getattr(args, "control", [])),
+                has_lora=bool(getattr(args, "lora", [])),
+            )
+        apply_holy_grail_preset_to_args(args, hg_name)
 
     has_tags = bool(getattr(args, "tags", "").strip() or getattr(args, "tags_file", "").strip())
     has_prompt_file = bool(getattr(args, "prompt_file", "").strip())
@@ -1573,14 +1946,32 @@ def main():
         from models.lora import apply_loras
 
         lora_specs = []
+        role_counts = {}
+        default_role = str(getattr(args, "lora_default_role", "style") or "style").strip().lower()
         for spec in args.lora:
-            if ":" in spec:
-                path, scale = spec.rsplit(":", 1)
-                lora_specs.append((path.strip(), float(scale)))
-            else:
-                lora_specs.append((spec.strip(), 0.8))
-        _, num_keys = apply_loras(model, lora_specs)
-        print(f"Applied {len(lora_specs)} LoRA(s), {num_keys} layer(s)")
+            path, scale, role = _parse_lora_spec(spec, default_role=default_role)
+            role = (role or default_role).strip().lower()
+            lora_specs.append((path.strip(), float(scale), role))
+            role_counts[role] = int(role_counts.get(role, 0)) + 1
+        role_budgets = _parse_lora_role_budgets(getattr(args, "lora_role_budgets", ""))
+        role_stage_weights = _parse_lora_role_stage_weights(getattr(args, "lora_role_stage_weights", ""))
+        stage_policy = str(getattr(args, "lora_stage_policy", "auto") or "auto")
+        _, num_keys = apply_loras(
+            model,
+            lora_specs,
+            normalize_scales=not bool(getattr(args, "no_lora_normalize_scales", False)),
+            max_total_scale=float(getattr(args, "lora_max_total_scale", 1.5)),
+            role_budgets=role_budgets,
+            stage_policy=stage_policy,
+            role_stage_weights=role_stage_weights,
+        )
+        role_mix = ", ".join(f"{k}:{v}" for k, v in sorted(role_counts.items()))
+        print(
+            f"Applied {len(lora_specs)} adapter(s) (LoRA/DoRA/LyCORIS), {num_keys} layer(s), "
+            f"normalize={not bool(getattr(args, 'no_lora_normalize_scales', False))}, "
+            f"max_total={float(getattr(args, 'lora_max_total_scale', 1.5)):.2f}, "
+            f"stage_policy={stage_policy}, roles=[{role_mix}]"
+        )
 
     from diffusers import AutoencoderKL, AutoencoderRAE
     from transformers import AutoTokenizer, T5EncoderModel
@@ -1894,7 +2285,7 @@ def main():
                 f'Negative prompt filtered (conflict resolution): "{negative_text_raw[:60]}{"..." if len(negative_text_raw) > 60 else ""}" -> "{negative_text[:60]}{"..." if len(negative_text) > 60 else ""}"',
                 file=sys.stderr,
             )
-    # Style: explicit --style or auto-extract from prompt (artist/style tags from PixAI, Danbooru, etc.)
+    # Style: explicit --style (supports weighted mix with '|') or auto-extract from prompt.
     effective_style = (args.style or "").strip()
     if getattr(cfg, "style_embed_dim", 0) and not effective_style and getattr(args, "auto_style_from_prompt", False):
         try:
@@ -1908,7 +2299,11 @@ def main():
                 )
         except Exception:
             pass
-    style_key = effective_style if getattr(cfg, "style_embed_dim", 0) else ""
+    style_mix = _parse_weighted_style_mix(effective_style)
+    if style_mix:
+        style_key = "|".join(f"{t}::{w:.4f}" for t, w in style_mix)
+    else:
+        style_key = effective_style if getattr(cfg, "style_embed_dim", 0) else ""
     compiled_layout = getattr(args, "_layout_compiled", None)
     raw_t5_layout = str(getattr(args, "t5_layout_encode", "auto") or "auto").lower()
     if raw_t5_layout == "auto":
@@ -1957,9 +2352,15 @@ def main():
         uncond_emb = encode_text([negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle)
         style_emb_cached = None
         if effective_style and getattr(cfg, "style_embed_dim", 0):
-            style_emb_cached = encode_text(
-                [effective_style], tokenizer, text_encoder, device, text_bundle=text_bundle
-            ).mean(dim=1)
+            if style_mix and len(style_mix) > 1:
+                style_texts = [t for t, _ in style_mix]
+                style_weights = torch.tensor([w for _, w in style_mix], device=device, dtype=torch.float32)
+                style_enc = encode_text(style_texts, tokenizer, text_encoder, device, text_bundle=text_bundle).mean(dim=1)
+                style_emb_cached = (style_enc * style_weights[:, None].to(style_enc.dtype)).sum(dim=0, keepdim=True)
+            else:
+                style_emb_cached = encode_text(
+                    [effective_style], tokenizer, text_encoder, device, text_bundle=text_bundle
+                ).mean(dim=1)
         if cache_key is not None:
             while len(_t5_cache) >= _T5_CACHE_MAX:
                 _t5_cache.pop(next(iter(_t5_cache)))
@@ -2006,17 +2407,50 @@ def main():
             cre = torch.full((num_gen,), c0, device=device, dtype=cond_emb.dtype)
         model_kwargs_cond["creativity"] = cre
 
-    # Control image
+    # Control image(s): supports single --control-image and stacked --control specs.
+    control_specs: list[tuple[str, str, float]] = []
     if args.control_image:
-        pil = Image.open(args.control_image).convert("RGB")
-        w, h = pil.size
-        if w != image_size or h != image_size:
-            pil = pil.resize((image_size, image_size), Image.Resampling.LANCZOS)
-        arr = np.array(pil).astype(np.float32) / 255.0
-        arr = (arr - 0.5) / 0.5
-        ctrl = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(device)
-        model_kwargs_cond["control_image"] = ctrl
-        model_kwargs_cond["control_scale"] = args.control_scale
+        control_specs.append(
+            (
+                str(args.control_image),
+                str(getattr(args, "control_type", "auto") or "auto"),
+                float(getattr(args, "control_scale", 0.85)),
+            )
+        )
+    for raw_spec in list(getattr(args, "control", []) or []):
+        p, t, s = _parse_control_spec(
+            raw_spec,
+            default_type=str(getattr(args, "control_type", "auto") or "auto"),
+            default_scale=float(getattr(args, "control_scale", 0.85)),
+        )
+        if p:
+            control_specs.append((p, t, s))
+    if control_specs:
+        ctrl_tensors = []
+        ctrl_type_ids = []
+        ctrl_scales = []
+        for cpath, ctype_raw, cscale in control_specs:
+            pil = Image.open(cpath).convert("RGB")
+            w, h = pil.size
+            if w != image_size or h != image_size:
+                pil = pil.resize((image_size, image_size), Image.Resampling.LANCZOS)
+            arr = np.array(pil).astype(np.float32) / 255.0
+            arr = (arr - 0.5) / 0.5
+            ctrl_tensors.append(torch.from_numpy(arr).permute(2, 0, 1))
+            ct_name = str(ctype_raw or "auto").strip().lower()
+            if ct_name in {"", "auto"}:
+                ct_name = infer_control_type_from_path(str(cpath))
+            ctrl_type_ids.append(int(control_type_to_id(ct_name)))
+            ctrl_scales.append(float(max(0.0, cscale)))
+        if len(ctrl_tensors) == 1:
+            model_kwargs_cond["control_image"] = ctrl_tensors[0].unsqueeze(0).to(device)
+            model_kwargs_cond["control_scale"] = float(ctrl_scales[0])
+            model_kwargs_cond["control_type"] = torch.tensor([ctrl_type_ids[0]], device=device, dtype=torch.long)
+        else:
+            stack = torch.stack(ctrl_tensors, dim=0).unsqueeze(0).to(device)  # (1, K, C, H, W)
+            model_kwargs_cond["control_image"] = stack
+            model_kwargs_cond["control_scale"] = torch.tensor(ctrl_scales, device=device, dtype=torch.float32)
+            model_kwargs_cond["control_type"] = torch.tensor(ctrl_type_ids, device=device, dtype=torch.long)
 
     ref_path = str(getattr(args, "reference_image", "") or "").strip()
     ref_strength = float(getattr(args, "reference_strength", 0.0) or 0.0)
@@ -2181,6 +2615,30 @@ def main():
         flow_matching_sample=bool(use_flow_sample),
         flow_solver=str(getattr(args, "flow_solver", "euler") or "euler"),
     )
+    _control_kw = dict(
+        control_guidance_start=float(getattr(args, "control_guidance_start", 0.0) or 0.0),
+        control_guidance_end=float(getattr(args, "control_guidance_end", 1.0) or 1.0),
+        control_guidance_decay=float(getattr(args, "control_guidance_decay", 1.0) or 1.0),
+    )
+    _holy_kw = dict(
+        holy_grail_enable=bool(getattr(args, "holy_grail", False)),
+        holy_grail_cfg_early_ratio=float(getattr(args, "holy_grail_cfg_early_ratio", 0.72) or 0.72),
+        holy_grail_cfg_late_ratio=float(getattr(args, "holy_grail_cfg_late_ratio", 1.0) or 1.0),
+        holy_grail_control_mult=float(getattr(args, "holy_grail_control_mult", 1.0) or 1.0),
+        holy_grail_adapter_mult=float(getattr(args, "holy_grail_adapter_mult", 1.0) or 1.0),
+        holy_grail_frontload_control=not bool(getattr(args, "holy_grail_no_frontload_control", False)),
+        holy_grail_late_adapter_boost=float(getattr(args, "holy_grail_late_adapter_boost", 1.15) or 1.15),
+        holy_grail_cads_strength=float(getattr(args, "holy_grail_cads_strength", 0.0) or 0.0),
+        holy_grail_cads_min_strength=float(getattr(args, "holy_grail_cads_min_strength", 0.0) or 0.0),
+        holy_grail_cads_power=float(getattr(args, "holy_grail_cads_power", 1.0) or 1.0),
+        holy_grail_unsharp_sigma=float(getattr(args, "holy_grail_unsharp_sigma", 0.0) or 0.0),
+        holy_grail_unsharp_amount=float(getattr(args, "holy_grail_unsharp_amount", 0.0) or 0.0),
+        holy_grail_clamp_quantile=float(getattr(args, "holy_grail_clamp_quantile", 0.0) or 0.0),
+        holy_grail_clamp_floor=float(getattr(args, "holy_grail_clamp_floor", 1.0) or 1.0),
+    )
+    _holy_kw = sanitize_holy_grail_kwargs(_holy_kw)
+    if _holy_kw["holy_grail_enable"]:
+        print("Holy-grail diffusion policy enabled.", file=sys.stderr)
     if use_flow_sample:
         print(
             f"Using flow-matching sampler (solver={_flow_kw['flow_solver']}); "
@@ -2271,14 +2729,12 @@ def main():
             latent_w=cw,
             device=device,
         )
-        if args.control_image:
-            pil_c = Image.open(args.control_image).convert("RGB")
-            pil_c = pil_c.resize((cw * 8, ch * 8), Image.Resampling.LANCZOS)
-            arr_c = np.array(pil_c).astype(np.float32) / 255.0
-            arr_c = (arr_c - 0.5) / 0.5
+        if "control_image" in model_kwargs_cond:
             mk_c1 = dict(mk_c1)
-            mk_c1["control_image"] = torch.from_numpy(arr_c).permute(2, 0, 1).unsqueeze(0).to(device)
-            mk_c1["control_scale"] = args.control_scale
+            mk_c1["control_image"] = _resize_control_tensor(model_kwargs_cond["control_image"], ch * 8, cw * 8)
+            mk_c1["control_scale"] = model_kwargs_cond.get("control_scale", args.control_scale)
+            if "control_type" in model_kwargs_cond:
+                mk_c1["control_type"] = model_kwargs_cond["control_type"]
         print(
             f"Dual-stage: layout latent {ch}x{cw} ({plan_ds.layout_steps} steps) -> {fh}x{fw} ({plan_ds.detail_steps} steps)...",
             file=sys.stderr,
@@ -2317,6 +2773,8 @@ def main():
                 **_vol_kw,
                 **_spec_kw,
                 **_flow_kw,
+                **_control_kw,
+                **_holy_kw,
                 **_periodic_kw,
             )
             x0_up = torch.nn.functional.interpolate(
@@ -2336,15 +2794,12 @@ def main():
                 latent_w=fw,
                 device=device,
             )
-            if args.control_image:
-                pil_cf = Image.open(args.control_image).convert("RGB")
-                if pil_cf.size != (image_size, image_size):
-                    pil_cf = pil_cf.resize((image_size, image_size), Image.Resampling.LANCZOS)
-                arr_cf = np.array(pil_cf).astype(np.float32) / 255.0
-                arr_cf = (arr_cf - 0.5) / 0.5
+            if "control_image" in model_kwargs_cond:
                 mk_c2 = dict(mk_c2)
-                mk_c2["control_image"] = torch.from_numpy(arr_cf).permute(2, 0, 1).unsqueeze(0).to(device)
-                mk_c2["control_scale"] = args.control_scale
+                mk_c2["control_image"] = _resize_control_tensor(model_kwargs_cond["control_image"], image_size, image_size)
+                mk_c2["control_scale"] = model_kwargs_cond.get("control_scale", args.control_scale)
+                if "control_type" in model_kwargs_cond:
+                    mk_c2["control_type"] = model_kwargs_cond["control_type"]
             shape_f = (num_gen, 4, fh, fw)
             x0 = diffusion.sample_loop(
                 model,
@@ -2380,6 +2835,8 @@ def main():
                 **_vol_kw,
                 **_spec_kw,
                 **_flow_kw,
+                **_control_kw,
+                **_holy_kw,
                 **_periodic_kw,
             )
     else:
@@ -2414,6 +2871,8 @@ def main():
             **_vol_kw,
             **_spec_kw,
             **_flow_kw,
+            **_control_kw,
+            **_holy_kw,
             **_ada_kw,
             **_periodic_kw,
         )
@@ -2466,6 +2925,8 @@ def main():
                     **_vol_kw,
                     **_spec_kw,
                     **_flow_kw,
+                    **_control_kw,
+                    **_holy_kw,
                 )
 
             x0 = maybe_clip_refine_latent(
@@ -2549,13 +3010,11 @@ def main():
                         )
                         mk_c["size_embed"] = sz_h
                         mk_u["size_embed"] = sz_h
-                    if args.control_image:
-                        pil_c = Image.open(args.control_image).convert("RGB")
-                        pil_c = pil_c.resize((tw_px, th_px), Image.Resampling.LANCZOS)
-                        arr_c = np.array(pil_c).astype(np.float32) / 255.0
-                        arr_c = (arr_c - 0.5) / 0.5
-                        ctrl_h = torch.from_numpy(arr_c).permute(2, 0, 1).unsqueeze(0).to(device)
-                        mk_c["control_image"] = ctrl_h
+                    if "control_image" in model_kwargs_cond:
+                        mk_c["control_image"] = _resize_control_tensor(model_kwargs_cond["control_image"], th_px, tw_px)
+                        mk_c["control_scale"] = model_kwargs_cond.get("control_scale", args.control_scale)
+                        if "control_type" in model_kwargs_cond:
+                            mk_c["control_type"] = model_kwargs_cond["control_type"]
                     hires_steps = max(1, int(getattr(args, "hires_steps", 15)))
                     cfg_h = float(getattr(args, "hires_cfg_scale", -1.0))
                     if cfg_h < 0:
@@ -2596,6 +3055,8 @@ def main():
                         volatile_cfg_window=int(getattr(args, "volatile_cfg_window", 6) or 6),
                         **_spec_kw,
                         **_flow_kw,
+                        **_control_kw,
+                        **_holy_kw,
                         **_periodic_kw,
                     )
                 print(
@@ -2995,6 +3456,8 @@ def main():
                         repair_cmd += ["--preset", str(getattr(args, "preset"))]
                     if getattr(args, "op_mode", None):
                         repair_cmd += ["--op-mode", str(getattr(args, "op_mode"))]
+                    if getattr(args, "holy_grail_preset", None):
+                        repair_cmd += ["--holy-grail-preset", str(getattr(args, "holy_grail_preset"))]
                     if getattr(args, "hard_style", None):
                         repair_cmd += ["--hard-style", str(getattr(args, "hard_style"))]
                     if getattr(args, "boost_quality", False):
@@ -3004,9 +3467,54 @@ def main():
                         repair_cmd += ["--style-strength", str(getattr(args, "style_strength", 0.7))]
                     if getattr(args, "control_image", ""):
                         repair_cmd += ["--control-image", str(getattr(args, "control_image"))]
+                        repair_cmd += ["--control-type", str(getattr(args, "control_type", "auto"))]
                         repair_cmd += ["--control-scale", str(getattr(args, "control_scale", 0.85))]
+                        repair_cmd += ["--control-guidance-start", str(getattr(args, "control_guidance_start", 0.0))]
+                        repair_cmd += ["--control-guidance-end", str(getattr(args, "control_guidance_end", 1.0))]
+                        repair_cmd += ["--control-guidance-decay", str(getattr(args, "control_guidance_decay", 1.0))]
+                    if bool(getattr(args, "holy_grail", False)):
+                        repair_cmd.append("--holy-grail")
+                        repair_cmd += ["--holy-grail-cfg-early-ratio", str(getattr(args, "holy_grail_cfg_early_ratio", 0.72))]
+                        repair_cmd += ["--holy-grail-cfg-late-ratio", str(getattr(args, "holy_grail_cfg_late_ratio", 1.0))]
+                        repair_cmd += ["--holy-grail-control-mult", str(getattr(args, "holy_grail_control_mult", 1.0))]
+                        repair_cmd += ["--holy-grail-adapter-mult", str(getattr(args, "holy_grail_adapter_mult", 1.0))]
+                        if bool(getattr(args, "holy_grail_no_frontload_control", False)):
+                            repair_cmd.append("--holy-grail-no-frontload-control")
+                        repair_cmd += [
+                            "--holy-grail-late-adapter-boost",
+                            str(getattr(args, "holy_grail_late_adapter_boost", 1.15)),
+                        ]
+                        repair_cmd += ["--holy-grail-cads-strength", str(getattr(args, "holy_grail_cads_strength", 0.0))]
+                        repair_cmd += [
+                            "--holy-grail-cads-min-strength",
+                            str(getattr(args, "holy_grail_cads_min_strength", 0.0)),
+                        ]
+                        repair_cmd += ["--holy-grail-cads-power", str(getattr(args, "holy_grail_cads_power", 1.0))]
+                        repair_cmd += ["--holy-grail-unsharp-sigma", str(getattr(args, "holy_grail_unsharp_sigma", 0.0))]
+                        repair_cmd += ["--holy-grail-unsharp-amount", str(getattr(args, "holy_grail_unsharp_amount", 0.0))]
+                        repair_cmd += [
+                            "--holy-grail-clamp-quantile",
+                            str(getattr(args, "holy_grail_clamp_quantile", 0.0)),
+                        ]
+                        repair_cmd += ["--holy-grail-clamp-floor", str(getattr(args, "holy_grail_clamp_floor", 1.0))]
+                    if getattr(args, "control", None):
+                        repair_cmd += ["--control"] + [str(x) for x in getattr(args, "control", [])]
                     if getattr(args, "lora", None):
                         repair_cmd += ["--lora"] + [str(x) for x in getattr(args, "lora", [])]
+                        if getattr(args, "no_lora_normalize_scales", False):
+                            repair_cmd.append("--no-lora-normalize-scales")
+                        repair_cmd += ["--lora-max-total-scale", str(getattr(args, "lora_max_total_scale", 1.5))]
+                        if str(getattr(args, "lora_default_role", "style") or "style").strip().lower() != "style":
+                            repair_cmd += ["--lora-default-role", str(getattr(args, "lora_default_role"))]
+                        lrb = str(getattr(args, "lora_role_budgets", "") or "").strip()
+                        if lrb:
+                            repair_cmd += ["--lora-role-budgets", lrb]
+                        lsp = str(getattr(args, "lora_stage_policy", "auto") or "auto").strip().lower()
+                        if lsp and lsp != "auto":
+                            repair_cmd += ["--lora-stage-policy", lsp]
+                        lrsw = str(getattr(args, "lora_role_stage_weights", "") or "").strip()
+                        if lrsw:
+                            repair_cmd += ["--lora-role-stage-weights", lrsw]
                         if getattr(args, "lora_trigger", ""):
                             repair_cmd += ["--lora-trigger", str(getattr(args, "lora_trigger"))]
                     if getattr(args, "naturalize", False):

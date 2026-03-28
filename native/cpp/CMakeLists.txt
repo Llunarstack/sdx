@@ -104,8 +104,27 @@ install(TARGETS sdx_fnv64_file
   ARCHIVE DESTINATION lib
 )
 
+# CPU RMSNorm rows helper (float32, in-place).
+add_library(sdx_rmsnorm_rows_cpu SHARED
+  src/sdx_rmsnorm_rows_cpu.cpp
+)
+target_include_directories(sdx_rmsnorm_rows_cpu
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_definitions(sdx_rmsnorm_rows_cpu PRIVATE SDX_RMSNORM_ROWS_CPU_BUILD)
+if(MSVC)
+  target_compile_definitions(sdx_rmsnorm_rows_cpu PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+install(TARGETS sdx_rmsnorm_rows_cpu
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
 # Optional CUDA: image layout + small ML-style ops (requires nvcc).
-option(SDX_BUILD_CUDA "Build CUDA targets (hwc_to_chw, l2_normalize_rows)" OFF)
+option(SDX_BUILD_CUDA "Build CUDA targets (hwc_to_chw, l2_normalize_rows, flow_matching_velocity, nf4, sdpa_online, rmsnorm, rope, silu_gate)" OFF)
 if(SDX_BUILD_CUDA)
   enable_language(CUDA)
   set(CMAKE_CUDA_STANDARD 17)
@@ -147,6 +166,126 @@ if(SDX_BUILD_CUDA)
     target_compile_options(sdx_cuda_ml PRIVATE "-Xcompiler=/utf-8")
   endif()
   install(TARGETS sdx_cuda_ml
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_flow_matching SHARED
+    cuda/flow_matching_velocity.cu
+  )
+  set_property(TARGET sdx_cuda_flow_matching PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_flow_matching PRIVATE SDX_CUDA_FM_BUILD)
+  target_include_directories(sdx_cuda_flow_matching
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_flow_matching PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_flow_matching PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_flow_matching
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_nf4 SHARED
+    cuda/nf4_dequant.cu
+  )
+  set_property(TARGET sdx_cuda_nf4 PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_nf4 PRIVATE SDX_CUDA_NF4_BUILD)
+  target_include_directories(sdx_cuda_nf4
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_nf4 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_nf4 PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_nf4
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_sdpa_online SHARED
+    cuda/sdpa_online_softmax.cu
+  )
+  set_property(TARGET sdx_cuda_sdpa_online PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_sdpa_online PRIVATE SDX_CUDA_SDPA_BUILD)
+  target_include_directories(sdx_cuda_sdpa_online
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_sdpa_online PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_sdpa_online PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_sdpa_online
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_rmsnorm SHARED
+    cuda/rmsnorm_rows.cu
+  )
+  set_property(TARGET sdx_cuda_rmsnorm PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_rmsnorm PRIVATE SDX_CUDA_RMSNORM_BUILD)
+  target_include_directories(sdx_cuda_rmsnorm
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_rmsnorm PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_rmsnorm PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_rmsnorm
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_rope SHARED
+    cuda/rope_apply.cu
+  )
+  set_property(TARGET sdx_cuda_rope PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_rope PRIVATE SDX_CUDA_ROPE_BUILD)
+  target_include_directories(sdx_cuda_rope
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_rope PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_rope PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_rope
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  add_library(sdx_cuda_silu_gate SHARED
+    cuda/silu_gate.cu
+  )
+  set_property(TARGET sdx_cuda_silu_gate PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_silu_gate PRIVATE SDX_CUDA_SILU_GATE_BUILD)
+  target_include_directories(sdx_cuda_silu_gate
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_silu_gate PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_silu_gate PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_silu_gate
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

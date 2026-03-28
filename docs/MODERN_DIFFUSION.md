@@ -4,7 +4,7 @@ Short survey of **recent directions** and how they relate to **SDX** (VP DDPM + 
 
 For a **prioritized, compounding** list of upgrades (latent stack, conditioning, objectives, distillation, alignment) mapped to repo paths, see **[DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md)**.
 
-For a broader **2026 architecture narrative** (flow matching vs bridges, hybrid AR+DiT, Mamba, DMD, RAE/VLM lines) with an SDX parity table, see **[ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md)** and **[`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)**. For a **few-step / one-step** math blueprint (consistency on flow fields, ADD, OT-coupled rectified flow) mapped to this repo, see **[CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](CONSISTENCY_FLOW_SPEED_BLUEPRINT.md)**. For **prompt-accurate** generation ideas (geometric–latent split, in-loop critics, frequency / FNO narrative), see **[PROMPT_ACCURACY_BLUEPRINT.md](PROMPT_ACCURACY_BLUEPRINT.md)**.
+For **2026 industry + architecture + workflow** context (merged), see **[LANDSCAPE_2026.md](LANDSCAPE_2026.md)** and **[`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)**. For **few-step math** and **prompt-accuracy** blueprints in one place, see **[BLUEPRINTS.md](BLUEPRINTS.md)** (Part 1: flow/solvers/distillation; Part 2: GLS, critics, frequency).
 
 ---
 

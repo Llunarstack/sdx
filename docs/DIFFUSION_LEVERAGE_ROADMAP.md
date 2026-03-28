@@ -2,7 +2,7 @@
 
 **What this doc is:** A **prioritized** list of **model / training / inference** directions that can compound into **large** quality or efficiency gains. “10×” here means **orders-of-magnitude-style improvement across the full stack** (data + representation + objective + sampler + alignment)—not a single architectural swap.
 
-**Companion reads:** [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) (what is already wired), [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) (macro themes), [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) (theme → path map).
+**Companion reads:** [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) (what is already wired), [LANDSCAPE_2026.md](LANDSCAPE_2026.md) (industry + architecture + workflow), [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) (theme → path map).
 
 ---
 
@@ -29,7 +29,7 @@
 | **RAE / semantic latents** | Denoise in a space aligned to **vision semantics**, not only pixel compression. | `--autoencoder-type rae`, `models/rae_latent_bridge.py`, [MODEL_STACK.md](MODEL_STACK.md) | Medium (train stack) |
 | **REPA-style alignment** | Auxiliary loss matches internal DiT states to **frozen ViT/DINO** features. | `--repa-weight`, `train.py`, DiT flags in `models/dit_text.py` | Low–medium (toggle + tune) |
 | **Stronger VAE for text/edges** | Less smear in speech balloons, sharper line art—often **ae** upgrades beat **dit** width. | External VAE swap + compatibility tests in `train.py` / `sample.py` | High if retraining AE |
-| **Multi-scale latent / MAR hybrids** | Coarse tokens + diffusion refine (masked AR in latent) | Not in-repo; overlaps “hybrid AR + diffusion” in [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md) | Research |
+| **Multi-scale latent / MAR hybrids** | Coarse tokens + diffusion refine (masked AR in latent) | Not in-repo; overlaps “hybrid AR + diffusion” in [LANDSCAPE_2026.md](LANDSCAPE_2026.md#post-diffusion-and-structural-shifts-late-20252026) | Research |
 | **Pixel-space DiT (PixelDiT-class)** | Reduce single-VAE bottleneck; heavy compute. | Listed in [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Long-term branch |
 
 ---
@@ -67,7 +67,7 @@
 | **MoE FFN / routed experts** | Scale params without dense FLOPs per token. | `models/dit.py`, `models/dit_text.py` (`moe_num_experts`, aux loss) | Medium |
 | **Block-causal / AR hybrid** | Raster or block order bias for layout coherence. | `--num-ar-blocks`, `models/attention.py`, [AR.md](AR.md) | Medium |
 | **RoPE / register tokens / token routing** | Better long-sequence and capacity use. | Flags on `DiT_Text` (`use_rope`, `num_register_tokens`, routing) | Low–medium |
-| **SSM / Mamba backbone** | Subquadratic sequence models for huge latents. | Not in-repo ([ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md)) | Research |
+| **SSM / Mamba backbone** | Subquadratic sequence models for huge latents. | Not in-repo ([LANDSCAPE_2026.md](LANDSCAPE_2026.md#post-diffusion-and-structural-shifts-late-20252026)) | Research |
 | **Matryoshka / nested depth** | Train shallow→deep (depth growth) for stability. | Trainer schedule change (SANA-style ideas in [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md)) | High |
 
 ---

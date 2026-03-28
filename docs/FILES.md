@@ -8,7 +8,7 @@ All **SDX project files** (what we run and edit) and **key files in external rep
 
 Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` are on the path.
 
-**Quick orientation:** [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) — entry points, `scripts/` layout, contribution targets.
+**Quick orientation:** [CODEBASE.md](CODEBASE.md) — layers, repo tree, entry points, `scripts/` layout, contribution rules.
 
 ### How the tree fits together (runtime)
 
@@ -94,7 +94,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [models/pixart_blocks.py](../models/pixart_blocks.py) | SizeEmbedder, ZeroInitPatchChannelGate, etc. |
 | [models/rae_latent_bridge.py](../models/rae_latent_bridge.py) | RAE ↔ 4ch DiT latent **1×1** bridge + cycle loss. |
 | [models/model_enhancements.py](../models/model_enhancements.py) | **RMSNorm**, **DropPath**, **TokenFiLM**, **SE1x1** — shared blocks for fusion / conditioning. |
-| [models/native_multimodal_transformer.py](../models/native_multimodal_transformer.py) | Vision + text fusion: self-attn stack, optional **cross-attn**, **RMSNorm** out, **FiLM** on vision; see [MODEL_ENHANCEMENTS.md](MODEL_ENHANCEMENTS.md). |
+| [models/native_multimodal_transformer.py](../models/native_multimodal_transformer.py) | Vision + text fusion: self-attn stack, optional **cross-attn**, **RMSNorm** out, **FiLM** on vision; see [MODEL_STACK.md](MODEL_STACK.md). |
 | [models/cascaded_multimodal_diffusion.py](../models/cascaded_multimodal_diffusion.py) | Two-stage DiT + optional bridge wrapper. |
 | [models/attention.py](../models/attention.py) | Attention with xformers / SDPA fallback. |
 | [models/controlnet.py](../models/controlnet.py) | ControlNet conditioning (control image + scale). |
@@ -129,7 +129,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/modeling/nn_inspect.py](../utils/modeling/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/quality/test_time_pick.py](../utils/quality/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | [utils/generation/orchestration.py](../utils/generation/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
-| [utils/architecture/architecture_map.py](../utils/architecture/architecture_map.py) | **2026 architecture themes** → SDX parity (`THEMES`, `theme_by_id`, `themes_as_dict`); see [ARCHITECTURE_SHIFT_2026.md](ARCHITECTURE_SHIFT_2026.md), [WORKFLOW_INTEGRATION_2026.md](WORKFLOW_INTEGRATION_2026.md). |
+| [utils/architecture/architecture_map.py](../utils/architecture/architecture_map.py) | **2026 architecture themes** → SDX parity (`THEMES`, `theme_by_id`, `themes_as_dict`); see [LANDSCAPE_2026.md](LANDSCAPE_2026.md), [BLUEPRINTS.md](BLUEPRINTS.md). |
 | *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
 
 ### ViT (`ViT/`)
@@ -168,8 +168,7 @@ Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imp
 | [pipelines/book_comic/README.md](../pipelines/book_comic/README.md) | Book/comic/manga workflow; canonical [generate_book.py](../pipelines/book_comic/scripts/generate_book.py). |
 | [pipelines/book_comic/book_helpers.py](../pipelines/book_comic/book_helpers.py) | Presets, pick-best + CFG flags for `sample.py`, post-process (quality.py). |
 | [pipelines/book_comic/prompt_lexicon.py](../pipelines/book_comic/prompt_lexicon.py) | Comic/manga **style** snippets, merged negatives, aspect presets, tategaki/SFX hints. |
-| [docs/BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential-art techniques (consistency, layout, lettering) vs SDX modules. |
-| [docs/BOOK_MODEL_EXCELLENCE.md](BOOK_MODEL_EXCELLENCE.md) | Checklist: data, training, `generate_book` flags, pick-best, post-process for “best” book output. |
+| [docs/BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential-art techniques vs SDX + **best output checklist** (data, training, `generate_book`, pick-best, post). |
 | [scripts/tools/book_scene_split.py](../scripts/tools/book_scene_split.py) | `## Page` / `---PAGE---` → `pages.txt` for `generate_book.py`. |
 | [scripts/book/generate_book.py](../scripts/book/generate_book.py) | Thin launcher → `pipelines/book_comic/scripts/generate_book.py`. |
 
@@ -223,26 +222,24 @@ Index: **[scripts/README.md](../scripts/README.md)**. **Tools:** **[scripts/tool
 
 | File | Description |
 |------|-------------|
-| [docs/REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md) | Top-level tree, entry points, `scripts/` layout, where to add code. |
-| [docs/CODEBASE_ORGANIZATION.md](CODEBASE_ORGANIZATION.md) | Principles: core packages vs `scripts/`, contribution targets, anti-patterns. |
-| [docs/CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md) | Civitai-style fixes: oversaturation, blur, bad hands, resolution; sample.py flags and training tips. |
+| [docs/QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) | **Merged:** Civitai-style fixes + community issue matrix; sample.py flags and training tips. |
 | [docs/STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md) | Style/artist tags from PixAI, Danbooru, Gelbooru: extraction, training, `--auto-style-from-prompt`. |
-| [docs/GENERATION_DIAGRAM.md](GENERATION_DIAGRAM.md) | Flowchart: text → T5 → diffusion loop (DiT) → VAE → image; optional img2img, control, LoRA (Mermaid + ASCII). |
 | [docs/REPRODUCIBILITY.md](REPRODUCIBILITY.md) | Same-seed/same-run: `--deterministic`, `--seed`, CUBLAS (sampling and training). |
 | [docs/INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos; optional deps. |
 | [docs/IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, and features from other SD/DiT/FLUX models. |
 | [docs/HARDWARE.md](HARDWARE.md) | PC specs, VRAM, storage for training and full booru scrape. |
 | [docs/AR.md](AR.md) | Block-wise autoregressive (AR): 0 vs 2 vs 4 blocks, raster order, when to use. |
 | [docs/TRAINING_TEXT_TO_PIXELS.md](TRAINING_TEXT_TO_PIXELS.md) | Training mental model: text encoder tokens vs DiT patch tokens; alignment, originality levers. |
-| [docs/CONNECTIONS.md](CONNECTIONS.md) | How config, data, and models connect: TrainConfig → checkpoint → sample/inference; get_dit_build_kwargs; data flow. |
-| [docs/HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | How generation works: prompt → T5 → diffusion loop → DiT denoising → VAE decode → image. |
+| [docs/HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | **Merged:** Mermaid/ASCII pipeline, step-by-step generation, config/checkpoint/data wiring (§13). |
 | [docs/PROMPT_STACK.md](PROMPT_STACK.md) | Inference **text** path before T5: `content_controls`, `neg_filter`, key flags, preview CLI. |
 | [docs/NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | Lower-level libs: in-repo `native/` tools + ecosystem (image I/O, tokenization, QA) vs quality / training / adherence. |
-| [docs/MODEL_ENHANCEMENTS.md](MODEL_ENHANCEMENTS.md) | `model_enhancements.py`, multimodal cross-attn / FiLM / RMSNorm, cascade blend, RAE scales. |
+| [docs/MODEL_STACK.md](MODEL_STACK.md) | Local **`model/`** paths (T5, CLIP, DINOv2, Cascade, …) + **model enhancements** (RMSNorm, FiLM, cross-attn, cascade blend, RAE scales). |
+| [docs/LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow + disclaimers. |
+| [docs/BLUEPRINTS.md](BLUEPRINTS.md) | **Merged** flow/solvers/distillation + prompt-accuracy blueprints. |
 | [docs/PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book workflows). |
 | [docs/DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior: how we handle hard-to-generate domains. |
 | [docs/REGION_CAPTIONS.md](REGION_CAPTIONS.md) | JSONL **`parts`** / **`region_captions`**: merge regional labels into T5 text for layout-aware training. |
-| [docs/MODEL_STACK.md](MODEL_STACK.md) | What lives under **`model/`** (T5, CLIP, DINOv2, Cascade, …) and how it maps to training vs `ViT/`. |
+| [docs/HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) | Curated shortlist from provided Hugging Face dataset links (primary/secondary/optional + suggested mix). |
 | [docs/FILES.md](FILES.md) | This file: project file map and external reference links. |
 
 ---
