@@ -57,7 +57,7 @@ Standard **Diffusion Transformers** often use a **uniform** grid of patch tokens
 
 **Caveat:** “**Perceptual convergence in 1 step**” is a **marketing-grade** claim; real systems need matched training objectives, integrators, and eval.
 
-**SDX today:** VP **DDIM-style** diffusion + optional research hooks ([`utils/generation/inference_research_hooks.py`](../utils/generation/inference_research_hooks.py)); **no** FNO-based generator. See [docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md](../docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md) and [docs/MODERN_DIFFUSION.md](../docs/MODERN_DIFFUSION.md).
+**SDX today:** VP **DDIM-style** diffusion + optional research hooks ([`utils/generation/inference_research_hooks.py`](../utils/generation/inference_research_hooks.py)); **no** FNO-based generator. See [docs/BLUEPRINTS.md](../docs/BLUEPRINTS.md) and [docs/MODERN_DIFFUSION.md](../docs/MODERN_DIFFUSION.md).
 
 ### B. Speculative denoising
 

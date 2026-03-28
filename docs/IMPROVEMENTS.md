@@ -6,7 +6,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 ## Already in place (baseline)
 
-- **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md).
+- **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) (*Civitai-style* section).
 - **Min-SNR weighting** in training — stabilizes learning; avoids overfitting to easy timesteps (SD/SDXL).
 - **Non-uniform training timestep sampling** — `--timestep-sample-mode logit_normal|high_noise` (SD3-style discrete logit-normal or high-noise bias); see [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) and `diffusion/timestep_sampling.py`.
 - **Noise offset** — better light/dark balance in latents (SD/SDXL).
@@ -96,7 +96,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 ### 2.6 Prompt adherence for complex, NSFW, weird prompts — **coded**
 
 - **Idea:** Improve quality and adherence for long/complex prompts, mature content, and surreal/abstract/weird prompts without censoring.
-- **Coded:** (a) **config/prompt_domains.py**: `COMPLEX_PROMPT_TIPS`, `CHALLENGING_PROMPT_TIPS`, and `RECOMMENDED_PROMPTS_BY_DOMAIN` entries for "complex" and "challenging"; (b) **data/caption_utils.py**: domain tags "complex" and "challenging" (surreal, abstract, detailed, etc.) so `boost_domain_tags` reinforces them; `QUALITY_PREFIX` and `prepend_quality_if_short()` for short captions; (c) **sample.py**: `--boost-quality` (prepend "masterpiece, best quality"), long-prompt token count warning (>250 tokens); (d) **docs/CIVITAI_QUALITY_TIPS.md**: sections “Complex and long prompts” and “Challenging content (NSFW, surreal, abstract, weird)” with tips and no-censorship guidance.
+- **Coded:** (a) **config/prompt_domains.py**: `COMPLEX_PROMPT_TIPS`, `CHALLENGING_PROMPT_TIPS`, and `RECOMMENDED_PROMPTS_BY_DOMAIN` entries for "complex" and "challenging"; (b) **data/caption_utils.py**: domain tags "complex" and "challenging" (surreal, abstract, detailed, etc.) so `boost_domain_tags` reinforces them; `QUALITY_PREFIX` and `prepend_quality_if_short()` for short captions; (c) **sample.py**: `--boost-quality` (prepend "masterpiece, best quality"), long-prompt token count warning (>250 tokens); (d) **docs/QUALITY_AND_ISSUES.md** (*Civitai-style* section): sections “Complex and long prompts” and “Challenging content (NSFW, surreal, abstract, weird)” with tips and no-censorship guidance.
 
 ---
 
@@ -294,8 +294,8 @@ Things commonly expected in production or in ComfyUI/A1111 that we don’t have 
 |-----|------------|----------------------|--------|
 | **Alternative samplers** | **Done** — `--scheduler ddim|euler` in sample.py; Euler uses linear timestep spacing. | §2.1 | — |
 | **Prompt emphasis (infer + train)** | **Done** — `(word)` / `[word]` → per-token scale 1.2 / 0.8 (`token_weights`). Training: **`train.py --train-prompt-emphasis`** + [`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py). | §2.2 | — |
-| **Multi-res / aspect bucketing** | Train on 256², 512×256, etc. in one run for better composition | §1.1 | Medium |
-| **Data quality pipeline** | **Done** — `scripts/tools/data/data_quality.py`: dedup (phash/md5), min/max caption length, bad-words, min-weight. | §1.6 | — |
+| **Multi-res / aspect bucketing** | **Partial** — `train.py --resolution-buckets` + `ResolutionBucketBatchSampler`; single-GPU, no val-split with buckets, latent cache off. DDP + buckets not done. | §1.1 | Medium (finish DDP / val) |
+| **Data quality pipeline** | **Done** — `scripts/tools/data/data_quality.py`: dedup (phash/md5), min/max caption length, bad-words, min-weight. MD5 uses Rust **`sdx-jsonl-tools file-md5`** when built (streaming; matches `hashlib`); **`--no-native-md5`** for Python-only. | §1.6 | — |
 | **T5 caching (server)** | **Done** — `sample.py` caches T5 output per (prompt, negative, style); `--no-cache` to disable. | §3.2 | — |
 | **Log sample images (train)** | **Done** — `--log-images-every N` and `--log-images-prompt`; logs to WandB/TensorBoard. | §5.1 | — |
 | **Export ONNX / TensorRT** | **Done** — `scripts/tools/export/export_onnx.py` exports DiT to ONNX; `--dynamic-batch` supported. | §5.2 | — |
@@ -411,4 +411,4 @@ High-signal directions that are **not all implemented** but are **actionable** a
 2. Optional **thin orchestration CLI** under `scripts/tools/` that chains generate → `test_time_pick` → optional refine—keep minimal and tested if added.
 3. Extend **spatial / relation** coverage tools (see [repo README](../README.md#extra-features) “Extra features”) for “blue book under red book” style prompts—aligns with “reasoner” stress tests.
 
-Cross-reference: §11 (insane quality), [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md), [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md).
+Cross-reference: §11 (insane quality), [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md), [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md).

@@ -7,10 +7,11 @@ Small **high-throughput utilities** around the Python training stack. They are *
 | Component | Role |
 |-----------|------|
 | **Rust** `rust/sdx-jsonl-tools` | JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`**, **`dup-image-paths`**, **`file-fnv`**, **`caption-len-buckets`**. |
+| **Rust** `rust/sdx-noise-schedule` | CLI: **linear** / **cosine** VP-DDPM schedule tables (CSV) for analysis vs `diffusion/`. |
 | **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over file bytes (manifest change detection). |
 | **Zig** `zig/sdx-pathstat` | Given a **newline-separated path list**, print `path<TAB>size_bytes<TAB>ok|missing` (fast file-exists + size audit; pair with Rust `image-paths`). |
-| **C++** `cpp/` | `libsdx_latent`, **`sdx_line_stats`**, **`sdx_fnv64_file`** (FNV-1a stream), inference/beta helpers — **C ABI** for ctypes. |
-| **CUDA** `cpp/cuda/` + [cuda/README.md](cuda/README.md) | Optional **`sdx_cuda_hwc_to_chw`**, **`sdx_cuda_ml`** (L2 row-normalize); build with `-DSDX_BUILD_CUDA=ON`. |
+| **C++** `cpp/` | `libsdx_latent`, **`sdx_line_stats`**, **`sdx_fnv64_file`**, inference/beta helpers — **C ABI** for ctypes. **`include/sdx/experimental/`**: **tensor_lite**, **vram_pool_stub**, **augmentor_plugin** (header stubs). |
+| **CUDA** `cpp/cuda/` + [cuda/README.md](cuda/README.md) | Optional **`sdx_cuda_hwc_to_chw`**, **`sdx_cuda_ml`**, **`sdx_cuda_flow_matching`**, **`sdx_cuda_nf4`**, **`sdx_cuda_sdpa_online`** (online-softmax SDPA, head_dim 64); `-DSDX_BUILD_CUDA=ON`. |
 | **Mojo** `mojo/` + [mojo/README.md](mojo/README.md) | Optional **Modular Mojo** stubs + **Python** `mojopy` launcher for CPU/SIMD experiments. |
 | **Go** `go/sdx-manifest` | Merge multiple JSONL files; optional dedupe by image path (first wins). |
 | **Python** `sdx_native.jsonl_manifest_pure` | Zero-build manifest **stats** + **prompt-lint** (same role as the old `js/*.mjs`; no Node). |
@@ -22,6 +23,10 @@ Small **high-throughput utilities** around the Python training stack. They are *
 cd native/rust/sdx-jsonl-tools
 cargo build --release
 # Windows: target/release/sdx-jsonl-tools.exe
+
+cd native/rust/sdx-noise-schedule
+cargo build --release
+# target/release/sdx-noise-schedule linear --steps 1000
 ```
 
 ### Zig (0.13+)
@@ -64,6 +69,7 @@ python -m sdx_native.jsonl_manifest_pure promptlint data/manifest.jsonl
 # CPU-only C++:
 #   $env:SDX_BUILD_CUDA='0'; .\scripts\tools\native\build_native.ps1
 ```
+The script passes ``-DSDX_BUILD_CUDA=ON|OFF`` to CMake with **quoted** arguments so the cache never stores a bogus literal. Invalid or mismatched ``SDX_BUILD_CUDA`` lines in ``CMakeCache.txt`` trigger an automatic ``build/`` delete.
 ```bash
 bash scripts/tools/native/build_native.sh
 ```

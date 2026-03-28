@@ -9,7 +9,7 @@ Sampling: use ``GaussianDiffusion.sample_loop(..., flow_matching_sample=True)`` 
 ``s`` with the same ``t`` index map as training). VP ``sample_loop`` remains the default when this
 flag is off.
 
-See ``docs/MODERN_DIFFUSION.md`` and ``docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md``.
+See ``docs/MODERN_DIFFUSION.md`` and ``docs/BLUEPRINTS.md``.
 """
 
 from __future__ import annotations

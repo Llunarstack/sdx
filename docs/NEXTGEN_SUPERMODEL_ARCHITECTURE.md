@@ -95,7 +95,7 @@
 
 ## See also
 
-- [`ARCHITECTURE_SHIFT_2026.md`](ARCHITECTURE_SHIFT_2026.md) — broader 2025–2026 themes.  
-- [`PROMPT_ACCURACY_BLUEPRINT.md`](PROMPT_ACCURACY_BLUEPRINT.md) — GLS blueprint, in-loop discriminative loops, frequency/FNO narrative (prompt-accuracy framing).  
+- [`LANDSCAPE_2026.md`](LANDSCAPE_2026.md#post-diffusion-and-structural-shifts-late-20252026) — broader 2025–2026 architecture themes.
+- [`BLUEPRINTS.md`](BLUEPRINTS.md#part-2-prompt-accurate-generation-gls-critics-frequency) — GLS, in-loop discriminative loops, frequency/FNO narrative.
 - [`MODERN_DIFFUSION.md`](MODERN_DIFFUSION.md) — VP vs flow, SFP, timestep sampling.  
 - [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py) — machine-readable theme IDs (includes **nextgen_*** entries).

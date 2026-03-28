@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -10,6 +11,24 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _rust_jsonl_tools_exe() -> Path:
+    exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools.exe"
+    if sys.platform != "win32":
+        exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools"
+    return exe
+
+
+def _streaming_md5_hex(path: Path) -> str:
+    h = hashlib.md5()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
 
 
 @pytest.fixture
@@ -31,9 +50,7 @@ def test_python_jsonl_stat_runs(sample_jsonl: Path) -> None:
 
 
 def test_rust_jsonl_tools_stats(sample_jsonl: Path) -> None:
-    exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools.exe"
-    if sys.platform != "win32":
-        exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools"
+    exe = _rust_jsonl_tools_exe()
     if not exe.is_file():
         pytest.skip("build Rust first: cd native/rust/sdx-jsonl-tools && cargo build --release")
     r = subprocess.run(
@@ -47,9 +64,7 @@ def test_rust_jsonl_tools_stats(sample_jsonl: Path) -> None:
 
 
 def test_rust_jsonl_promptlint_runs(sample_jsonl: Path) -> None:
-    exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools.exe"
-    if sys.platform != "win32":
-        exe = ROOT / "native" / "rust" / "sdx-jsonl-tools" / "target" / "release" / "sdx-jsonl-tools"
+    exe = _rust_jsonl_tools_exe()
     if not exe.is_file():
         pytest.skip("build Rust first: cd native/rust/sdx-jsonl-tools && cargo build --release")
     r = subprocess.run(
@@ -61,6 +76,35 @@ def test_rust_jsonl_promptlint_runs(sample_jsonl: Path) -> None:
     assert r.returncode == 0, r.stderr
     assert "promptlint:" in r.stdout
     assert "rows_ok: 2" in r.stdout
+
+
+def test_rust_file_md5_matches_hashlib(tmp_path: Path) -> None:
+    """``sdx-jsonl-tools file-md5`` must match ``hashlib.md5`` (streaming, 1 MiB chunks)."""
+    exe = _rust_jsonl_tools_exe()
+    if not exe.is_file():
+        pytest.skip("build Rust first: cd native/rust/sdx-jsonl-tools && cargo build --release")
+
+    from sdx_native.native_tools import maybe_rust_file_md5_hex, run_rust_file_md5
+
+    empty = tmp_path / "empty.bin"
+    empty.write_bytes(b"")
+    want0 = _streaming_md5_hex(empty)
+    assert want0 == hashlib.md5(b"").hexdigest()
+    r0 = run_rust_file_md5(empty)
+    assert r0.returncode == 0, r0.stderr
+    assert r0.stdout.strip().lower() == want0
+    assert maybe_rust_file_md5_hex(empty) == want0
+
+    small = tmp_path / "small.bin"
+    small.write_bytes(b"hello world\n")
+    want1 = _streaming_md5_hex(small)
+    assert maybe_rust_file_md5_hex(small) == want1
+
+    # Span >1 MiB so Rust/Python streaming paths both see a multi-chunk read.
+    big = tmp_path / "big.bin"
+    big.write_bytes(b"y" * ((1 << 20) + 17_001))
+    want2 = _streaming_md5_hex(big)
+    assert maybe_rust_file_md5_hex(big) == want2
 
 
 def test_cpp_sdx_latent_dll_exists() -> None:

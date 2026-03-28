@@ -39,8 +39,8 @@ extern "C" int sdx_cuda_l2_normalize_rows_f32_host(float *host_data, int n_rows,
     }
     const int threads = 256;
     const int blocks = (n_rows + threads - 1) / threads;
-    const float e = eps > 0.f ? eps : 1e-8f;
-    sdx_k_l2_normalize_rows<<<blocks, threads>>>(d, d, n_rows, dim, e);
+    const float eps_clamped = eps > 0.f ? eps : 1e-8f;
+    sdx_k_l2_normalize_rows<<<blocks, threads>>>(d, d, n_rows, dim, eps_clamped);
     e = cudaGetLastError();
     if (e != cudaSuccess) {
         cudaFree(d);

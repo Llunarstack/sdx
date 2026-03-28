@@ -55,3 +55,19 @@ addopts = "-q"
 filterwarnings = [
   "ignore::DeprecationWarning",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+pretty = true
+show_error_codes = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+check_untyped_defs = true
+files = [
+  "config/train_config.py",
+  "models/lora.py",
+  "training/train_args.py",
+  "training/train_cli_parser.py",
+  "utils/training/part_aware_training.py",
+]

@@ -72,8 +72,7 @@ Full list: `python sample.py --help`.
 ## See also
 
 - [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — diffusion loop + T5 + VAE
-- [CONNECTIONS.md](CONNECTIONS.md) — config ↔ checkpoint ↔ sample
-- [CIVITAI_QUALITY_TIPS.md](CIVITAI_QUALITY_TIPS.md) — CFG, hands, resolution
-- [COMMON_ISSUES.md](COMMON_ISSUES.md) — plastic skin, bleed, watermarks
+- [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — config ↔ checkpoint ↔ sample (§13)
+- [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) — Civitai tips + community issue matrix
 - [scripts/tools/README.md](../scripts/tools/README.md) — `preview_generation_prompt.py`
 - [config/reference/prompt_domains.py](../config/reference/prompt_domains.py) — default negatives and tips

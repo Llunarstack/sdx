@@ -28,10 +28,33 @@ class TrainConfig:
     # Match sample.py ( ) / [ ] emphasis: strip brackets for T5 and pass DiT token_weights (see utils/prompt/prompt_emphasis.py).
     train_prompt_emphasis: bool = False
 
+    # Part-aware / grounding (JSONL: grounding_mask, caption_global, caption_local, entity_captions; see utils/training/part_aware_training.py)
+    attn_grounding_loss_weight: float = 0.0  # VP-DDPM path only; uses DiT block-0 cross-attn; mixed batches OK (see collate grounding_mask_valid)
+    attn_grounding_token_start: int = 0
+    attn_grounding_token_end: int = 0  # 0 = all text positions
+    attn_grounding_min_fg_patch_mass: float = 1e-4  # skip near-empty masks on patch grid (0 = off)
+    use_hierarchical_captions: bool = False
+    hierarchical_caption_separator: str = " | "
+    hierarchical_caption_drop_global_p: float = 0.0
+    hierarchical_caption_drop_local_p: float = 0.0
+    foveated_train_prob: float = 0.0
+    foveated_crop_frac: float = 0.55
+    grounding_mask_soft: bool = False  # keep grayscale 0–1 instead of binarizing at 0.5
+    # Attention/token adherence auxiliary loss (Attend-and-Excite style token coverage).
+    attn_token_coverage_loss_weight: float = 0.0
+    attn_token_coverage_target: float = 0.025
+    # Prompt reinjection + timestep-aware text scaling (training/inference in DiT_Text).
+    prompt_reinject_every_n: int = 0
+    prompt_reinject_alpha: float = 0.0
+    prompt_reinject_decay: float = 1.0
+    prompt_timestep_schedule_enabled: bool = False
+    prompt_early_scale: float = 1.1
+    prompt_late_scale: float = 1.0
+
     # Model
     model_name: str = "DiT-XL/2-Text"
     text_encoder: str = "google/t5-v1_1-xxl"  # T5-XXL like PixArt/ReVe (or local path, e.g. model/T5-XXL)
-    # "t5" = T5 only (default). "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused (see utils/text_encoder_bundle.py).
+    # "t5" = T5 only (default). "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused (see utils/modeling/text_encoder_bundle.py).
     text_encoder_mode: str = "t5"
     clip_text_encoder_l: str = ""  # empty = use utils/model_paths default (local CLIP-ViT-L-14 or HF id)
     clip_text_encoder_bigg: str = ""  # empty = default CLIP-ViT-bigG-14
@@ -75,6 +98,10 @@ class TrainConfig:
     # 4) Cross-scale token routing (soft gating per token; does not change compute graph yet)
     token_routing_enabled: bool = False
     token_routing_strength: float = 1.0
+    token_keep_ratio: float = 1.0  # <=1.0; top-k keep over patch tokens (1.0 = disabled)
+    token_keep_min_value: float = 0.0  # residual gate floor for dropped tokens
+    drop_path_rate: float = 0.0  # stochastic depth across blocks (0=off)
+    layerscale_init: float = 0.0  # >0 enables LayerScale residual gains (e.g. 1e-5)
     # Block-wise AR (ACDiT-style): 0 = full bidirectional; 2 = 2×2 blocks, 4 = 4×4 blocks (raster order).
     # See docs/AR.md for when to use AR and how it affects structure/fixability.
     num_ar_blocks: int = 0
@@ -85,6 +112,7 @@ class TrainConfig:
     style_embed_dim: int = 0  # same as text_dim if style from T5; enables style conditioning
     style_strength: float = 0.7  # blend strength for style (0.6-0.8 recommended)
     control_cond_dim: int = 0  # 1 = enable ControlNet (control image); 0 = off
+    control_num_types: int = 0  # 0 = off; e.g. 9 for unknown/canny/depth/pose/seg/lineart/scribble/normal/hed
     control_scale: float = 0.85  # ControlNet strength (0.7-1.0 recommended)
     # Creativity/diversity knob (IMPROVEMENTS 8.7): 0 = off; else hidden dim for scalar conditioning (e.g. 64)
     creativity_embed_dim: int = 0
@@ -207,6 +235,8 @@ class TrainConfig:
     log_images_every: int = 0  # 0 = off; when > 0 and wandb/tb enabled, log a sample image every N steps
     log_images_prompt: str = "a photo of a cat"  # prompt used for log sample image
     dry_run: bool = False  # Run 1 training step and exit (verify setup)
+    save_run_manifest: bool = True  # Persist run_manifest.json + config.train.json for reproducibility
+    strict_warnings: bool = False  # Escalate project UserWarning/FutureWarning to errors
     # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
     save_polyak: int = 0  # if > 0, keep running avg of weights and save as polyak.pt every ckpt_every
 
@@ -247,6 +277,7 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
         "use_xformers": getattr(cfg, "use_xformers", True),
         "style_embed_dim": getattr(cfg, "style_embed_dim", 0),
         "control_cond_dim": getattr(cfg, "control_cond_dim", 0),
+        "control_num_types": int(getattr(cfg, "control_num_types", 0) or 0),
         "creativity_embed_dim": getattr(cfg, "creativity_embed_dim", 0),
         "size_embed_dim": getattr(cfg, "size_embed_dim", 0),
         "patch_se": bool(getattr(cfg, "patch_se", False)),
@@ -273,6 +304,17 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
         kw["kv_merge_factor"] = int(getattr(cfg, "kv_merge_factor", 1))
         kw["token_routing_enabled"] = bool(getattr(cfg, "token_routing_enabled", False))
         kw["token_routing_strength"] = float(getattr(cfg, "token_routing_strength", 1.0))
+        kw["token_keep_ratio"] = float(getattr(cfg, "token_keep_ratio", 1.0))
+        kw["token_keep_min_value"] = float(getattr(cfg, "token_keep_min_value", 0.0))
+        kw["drop_path_rate"] = float(getattr(cfg, "drop_path_rate", 0.0))
+        kw["layerscale_init"] = float(getattr(cfg, "layerscale_init", 0.0))
+        kw["prompt_reinject_every_n"] = int(getattr(cfg, "prompt_reinject_every_n", 0))
+        kw["prompt_reinject_alpha"] = float(getattr(cfg, "prompt_reinject_alpha", 0.0))
+        kw["prompt_reinject_decay"] = float(getattr(cfg, "prompt_reinject_decay", 1.0))
+        kw["prompt_timestep_schedule_enabled"] = bool(getattr(cfg, "prompt_timestep_schedule_enabled", False))
+        kw["prompt_early_scale"] = float(getattr(cfg, "prompt_early_scale", 1.1))
+        kw["prompt_late_scale"] = float(getattr(cfg, "prompt_late_scale", 1.0))
+        kw["prompt_schedule_num_timesteps"] = int(getattr(cfg, "num_timesteps", 1000))
 
     # MoE DiT upgrade: MLP-only MoE FFN.
     # Only pass MoE kwargs to models that accept them (skip EnhancedDiT).

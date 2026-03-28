@@ -17,11 +17,12 @@ python -m scripts.tools help
 |---------|------------------|
 | `ckpt_info` | `dev/ckpt_info.py` |
 | `smoke_imports`, `quick_test` | `dev/` |
+| `noise_schedule_export` | `training/noise_schedule_export.py` (Rust `sdx-noise-schedule` after `build_native`) |
 | `data_quality`, `manifest_paths`, `jsonl_merge` | `data/` |
 | `prompt_lint`, `tag_coverage` | `prompt/` |
 | `export_onnx`, `export_safetensors` | `export/` |
 | `op_preflight`, `orchestrate_pipeline` | `ops/` |
-| `update_project_structure`, `verify_doc_links` | `repo/` |
+| `update_project_structure`, `verify_doc_links`, `clean_repo_artifacts` | `repo/` |
 
 Equivalent module runs (also valid):
 
@@ -46,4 +47,4 @@ Equivalent module runs (also valid):
 ## See also
 
 - [scripts/README.md](../README.md)
-- [docs/REPOSITORY_STRUCTURE.md](../../docs/REPOSITORY_STRUCTURE.md)
+- [docs/CODEBASE.md](../../docs/CODEBASE.md)

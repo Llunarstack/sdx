@@ -1,13 +1,14 @@
 # Text-to-image dataset: PixAI-style tag prompts + ReVe-style long/complex captions.
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+from models.controlnet import control_type_to_id
 from .caption_utils import (
     add_anti_blending_and_count,
     apply_pixai_emphasis,
@@ -17,6 +18,11 @@ from .caption_utils import (
     merge_region_captions_into_caption,
     normalize_tag_order,
     prepend_adherence_boost,
+)
+from utils.training.part_aware_training import (
+    PartAwareCaptionConfig,
+    apply_part_aware_caption_pipeline,
+    foveated_random_crop_box,
 )
 
 try:
@@ -186,6 +192,14 @@ class Text2ImageDataset(Dataset):
         resolution_buckets: Optional[List[Tuple[int, int]]] = None,
         bucket_seed: int = 42,
         bucket_fixed_assign: bool = False,
+        # Part-aware / grounding (JSONL: grounding_mask, caption_global, caption_local, entity_captions)
+        use_hierarchical_captions: bool = False,
+        hierarchical_caption_separator: str = " | ",
+        hierarchical_drop_global_p: float = 0.0,
+        hierarchical_drop_local_p: float = 0.0,
+        foveated_train_prob: float = 0.0,
+        foveated_crop_frac: float = 0.55,
+        grounding_mask_soft: bool = False,
     ):
         self.data_path = Path(data_path)
         self.extract_style_from_caption = extract_style_from_caption
@@ -212,6 +226,23 @@ class Text2ImageDataset(Dataset):
         )
         self.region_caption_mode = region_caption_mode
         self.region_layout_tag = region_layout_tag
+        self.use_hierarchical_captions = bool(use_hierarchical_captions)
+        self.hierarchical_caption_separator = hierarchical_caption_separator
+        self.hierarchical_drop_global_p = float(hierarchical_drop_global_p)
+        self.hierarchical_drop_local_p = float(hierarchical_drop_local_p)
+        self.foveated_train_prob = float(foveated_train_prob)
+        self.foveated_crop_frac = float(foveated_crop_frac)
+        self.grounding_mask_soft = bool(grounding_mask_soft)
+        self._partaware_caption_cfg = (
+            PartAwareCaptionConfig(
+                use_hierarchical_merge=True,
+                hierarchical_separator=self.hierarchical_caption_separator,
+                hierarchical_drop_global_p=self.hierarchical_drop_global_p,
+                hierarchical_drop_local_p=self.hierarchical_drop_local_p,
+            )
+            if self.use_hierarchical_captions
+            else None
+        )
         self.samples: List[Dict[str, Any]] = []
         self._scan()
         self._bucket_assign: List[int] = [0] * len(self.samples)
@@ -241,6 +272,72 @@ class Text2ImageDataset(Dataset):
             return self._crop_fn(pil, self.image_size)
         return _crop_to_hw(pil, H, W, self.crop_mode)
 
+    def _resolve_aux_path(self, rel: Optional[Union[str, Path]]) -> Optional[Path]:
+        if rel is None:
+            return None
+        s = str(rel).strip()
+        if not s:
+            return None
+        p = Path(s)
+        if p.is_absolute():
+            return p
+        base = self.data_path.parent if self.data_path.suffix.lower() == ".jsonl" else self.data_path
+        return (base / p).resolve()
+
+    def _crop_mask_pil(self, pil_l: Image.Image, idx: int) -> Image.Image:
+        return self._crop_image(pil_l.convert("RGB"), idx).split()[0]
+
+    def _maybe_foveate(
+        self,
+        pil: Image.Image,
+        mask_l: Optional[Image.Image],
+        idx: int,
+        *,
+        skip_foveate: bool = False,
+    ) -> Tuple[Image.Image, Optional[Image.Image]]:
+        H, W = self._hw_for_index(idx)
+        if (
+            skip_foveate
+            or self.foveated_train_prob <= 0
+            or random.random() >= self.foveated_train_prob
+        ):
+            return self._crop_image(pil, idx), (self._crop_mask_pil(mask_l, idx) if mask_l is not None else None)
+        arr = np.array(pil.convert("RGB"))
+        ih, iw = arr.shape[:2]
+        y0, x0, y1, x1 = foveated_random_crop_box(ih, iw, crop_frac=self.foveated_crop_frac)
+        crop = arr[y0:y1, x0:x1]
+        pil_out = Image.fromarray(crop).resize((W, H), Image.BICUBIC)
+        mask_out: Optional[Image.Image] = None
+        if mask_l is not None:
+            ma = np.array(mask_l.convert("L")).astype(np.float32) / 255.0
+            mc = ma[y0:y1, x0:x1]
+            mask_out = Image.fromarray((np.clip(mc, 0.0, 1.0) * 255.0).astype(np.uint8), mode="L")
+            mask_out = mask_out.resize((W, H), Image.NEAREST)
+        return pil_out, mask_out
+
+    def _mask_image_to_tensor(self, mask_l: Image.Image) -> torch.Tensor:
+        m = np.array(mask_l).astype(np.float32) / 255.0
+        if self.grounding_mask_soft:
+            m = np.clip(m, 0.0, 1.0)
+        else:
+            m = (m > 0.5).astype(np.float32)
+        return torch.from_numpy(m).unsqueeze(0)
+
+    def _load_grounding_mask_tensor(
+        self, idx: int, image_path: str, mask_rel: str, *, skip_foveate: bool = False
+    ) -> Optional[torch.Tensor]:
+        rp = self._resolve_aux_path(mask_rel)
+        if rp is None or not rp.exists():
+            return None
+        try:
+            pil = Image.open(image_path).convert("RGB")
+            mask_l = Image.open(rp).convert("L")
+            pil, mask_l = self._maybe_foveate(pil, mask_l, idx, skip_foveate=skip_foveate)
+            del pil  # spatial alignment only
+            return self._mask_image_to_tensor(mask_l)
+        except Exception:
+            return None
+
     def _scan(self):
         if self.data_path.suffix.lower() == ".jsonl":
             import json
@@ -266,9 +363,14 @@ class Text2ImageDataset(Dataset):
                         neg = d.get("negative_caption") or d.get("negative_prompt") or ""
                         style = d.get("style") or ""
                         ctrl = d.get("control_image") or d.get("control_path") or ""
+                        ctrl_type = d.get("control_type") or d.get("control_kind") or d.get("controlnet_type") or ""
                         w = float(d.get("weight", d.get("aesthetic_score", 1.0)))
                         init_img = d.get("init_image") or d.get("init_image_path") or d.get("source_image") or ""
                         difficulty = float(d.get("difficulty", 0.5))
+                        gmask = d.get("grounding_mask") or d.get("mask_path") or ""
+                        cg = d.get("caption_global")
+                        cl = d.get("caption_local")
+                        ec = d.get("entity_captions")
                         self.samples.append(
                             {
                                 "path": path,
@@ -276,10 +378,15 @@ class Text2ImageDataset(Dataset):
                                 "negative_caption": neg,
                                 "style": style,
                                 "control_image": ctrl,
+                                "control_type": ctrl_type,
                                 "init_image": init_img,
                                 "weight": w,
                                 "difficulty": difficulty,
                                 "regions": regions,
+                                "grounding_mask": gmask if isinstance(gmask, str) else "",
+                                "caption_global": cg if isinstance(cg, str) else None,
+                                "caption_local": cl if isinstance(cl, str) else None,
+                                "entity_captions": ec if isinstance(ec, dict) else None,
                             }
                         )
             return
@@ -306,10 +413,15 @@ class Text2ImageDataset(Dataset):
                         "negative_caption": negative_caption,
                         "style": "",
                         "control_image": "",
+                        "control_type": "",
                         "init_image": "",
                         "weight": 1.0,
                         "difficulty": 0.5,
                         "regions": None,
+                        "grounding_mask": "",
+                        "caption_global": None,
+                        "caption_local": None,
+                        "entity_captions": None,
                     }
                 )
 
@@ -351,6 +463,8 @@ class Text2ImageDataset(Dataset):
         s = self.samples[idx]
         path = s["path"]
         raw_caption = s["caption"]
+        if self._partaware_caption_cfg is not None:
+            raw_caption = apply_part_aware_caption_pipeline(raw_caption, s, self._partaware_caption_cfg, rng=random)
         regions = s.get("regions")
         raw_caption = merge_region_captions_into_caption(
             raw_caption,
@@ -378,11 +492,14 @@ class Text2ImageDataset(Dataset):
         if style_text:
             out["style"] = style_text
         ctrl_path = s.get("control_image", "")
+        ctrl_type = s.get("control_type", "")
         if ctrl_path:
             out["control_image_path"] = ctrl_path
         init_path = s.get("init_image", "")
         if init_path:
             out["init_image_path"] = init_path
+        mask_rel = s.get("grounding_mask") or ""
+        skip_fov = bool(ctrl_path) or bool(init_path)
         # Latent cache: load precomputed latent to skip VAE encode
         lp = self._latent_path(path)
         h_i, w_i = self._hw_for_index(idx)
@@ -407,17 +524,32 @@ class Text2ImageDataset(Dataset):
                         ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
                         ctrl_arr = (ctrl_arr - 0.5) / 0.5
                         out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
+                        out["control_type_id"] = int(control_type_to_id(ctrl_type))
                     except Exception:
                         pass
+                if mask_rel:
+                    gm = self._load_grounding_mask_tensor(idx, path, mask_rel, skip_foveate=skip_fov)
+                    if gm is not None:
+                        out["grounding_mask"] = gm
                 return out
             except Exception:
                 pass
         pil = Image.open(path).convert("RGB")
-        pil = self._crop_image(pil, idx)
+        mask_l: Optional[Image.Image] = None
+        if mask_rel:
+            rp = self._resolve_aux_path(mask_rel)
+            if rp is not None and rp.exists():
+                try:
+                    mask_l = Image.open(rp).convert("L")
+                except Exception:
+                    mask_l = None
+        pil, mask_l = self._maybe_foveate(pil, mask_l, idx, skip_foveate=skip_fov)
         img = np.array(pil).astype(np.float32) / 255.0
         img = (img - 0.5) / 0.5
         img = torch.from_numpy(img).permute(2, 0, 1)
         out["pixel_values"] = img
+        if mask_l is not None:
+            out["grounding_mask"] = self._mask_image_to_tensor(mask_l)
         if init_path:
             try:
                 init_pil = Image.open(init_path).convert("RGB")
@@ -434,6 +566,7 @@ class Text2ImageDataset(Dataset):
                 ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
                 ctrl_arr = (ctrl_arr - 0.5) / 0.5
                 out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
+                out["control_type_id"] = int(control_type_to_id(ctrl_type))
             except Exception:
                 pass
         return out
@@ -459,6 +592,20 @@ def collate_t2i(batch: List[Dict]) -> Dict[str, Any]:
         out["latent_values"] = torch.stack([b["latent_values"] for b in batch])
     if all("control_image" in b for b in batch):
         out["control_image"] = torch.stack([b["control_image"] for b in batch])
+        out["control_type_id"] = torch.tensor([int(b.get("control_type_id", 0)) for b in batch], dtype=torch.long)
     if all("init_pixel_values" in b for b in batch):
         out["init_pixel_values"] = torch.stack([b["init_pixel_values"] for b in batch])
+    if any("grounding_mask" in b for b in batch):
+        _, h, w = batch[0]["pixel_values"].shape
+        masks: List[torch.Tensor] = []
+        valid: List[bool] = []
+        for b in batch:
+            if "grounding_mask" in b:
+                masks.append(b["grounding_mask"])
+                valid.append(True)
+            else:
+                masks.append(torch.zeros(1, h, w, dtype=torch.float32))
+                valid.append(False)
+        out["grounding_mask"] = torch.stack(masks)
+        out["grounding_mask_valid"] = torch.tensor(valid, dtype=torch.bool)
     return out

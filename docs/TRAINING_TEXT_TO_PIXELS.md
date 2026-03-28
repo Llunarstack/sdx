@@ -59,7 +59,7 @@ So: the model **learns** which text positions matter for which image regions fro
 |------|--------|
 | Crisper “this part of the prompt → that part of the image” | Better captions; negatives; optional control training; `( )` / `[ ]` at train (`--train-prompt-emphasis`) and sample |
 | More novel / less dataset memorization | Caption dropout; diverse data; `creativity_embed_dim` + `--creativity` / jitter; `--originality` or `--train-originality-prob` |
-| Understand the stack end-to-end | [`docs/HOW_GENERATION_WORKS.md`](HOW_GENERATION_WORKS.md), [`docs/CONNECTIONS.md`](CONNECTIONS.md) |
+| Understand the stack end-to-end | [`docs/HOW_GENERATION_WORKS.md`](HOW_GENERATION_WORKS.md) (diagram + wiring §13) |
 
 ---
 
