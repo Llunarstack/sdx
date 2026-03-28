@@ -481,20 +481,13 @@ python scripts/cli.py validate-setup --config config.py --checkpoint model.pt
 python scripts/cli.py statistics --checkpoint model.pt --output stats.json
 ```
 
-### Integration Testing
+### Sanity checks
 
-Run the integration test to verify all systems work together:
+Run import smoke from repo root:
 
 ```bash
-python tests/test_integration.py
+python scripts/tools/dev/smoke_imports.py
 ```
-
-This tests:
-- All imports and dependencies
-- System initialization
-- Feature interactions
-- Master system functionality
-- CLI integration
 
 ### Performance Optimizations
 
