@@ -27,6 +27,6 @@ All paths are relative to the **repository root**. Prefer running scripts with `
 
 ## See also
 
-- [docs/REPOSITORY_STRUCTURE.md](../docs/REPOSITORY_STRUCTURE.md) — full tree orientation  
+- [docs/CODEBASE.md](../docs/CODEBASE.md) — repo tree, `scripts/` layout, entry points  
 - [docs/FILES.md](../docs/FILES.md) — exhaustive file map  
 - [README.md](../README.md) — main project entry

@@ -8,6 +8,7 @@ Nothing here is required for ``train.py`` / ``sample.py``; failures degrade grac
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import shutil
 import subprocess
@@ -35,6 +36,29 @@ def rust_jsonl_tools_exe() -> Optional[Path]:
         if p.is_file():
             return p
     return None
+
+
+def rust_noise_schedule_exe() -> Optional[Path]:
+    """``sdx-noise-schedule`` release binary if ``cargo build --release`` was run."""
+    base = _release_dir("rust/sdx-noise-schedule/target/release")
+    for n in ("sdx-noise-schedule.exe", "sdx-noise-schedule"):
+        p = base / n
+        if p.is_file():
+            return p
+    return None
+
+
+def run_rust_noise_schedule(args: List[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
+    """Run ``sdx-noise-schedule`` (e.g. ``[\"linear\", \"--steps\", \"1000\"]``)."""
+    exe = rust_noise_schedule_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-noise-schedule not built (cargo build --release in native/rust/sdx-noise-schedule)")
+    return subprocess.run(
+        [str(exe), *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
 
 
 def zig_linecrc_exe() -> Optional[Path]:
@@ -157,6 +181,96 @@ def cuda_ml_shared_library_path() -> Optional[Path]:
     return None
 
 
+def cuda_flow_matching_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_flow_matching`` (velocity residual ``eps - x0``; ``-DSDX_BUILD_CUDA=ON``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_flow_matching.dll",
+        cpp / "Debug" / "sdx_cuda_flow_matching.dll",
+        cpp / "libsdx_cuda_flow_matching.so",
+        cpp / "libsdx_cuda_flow_matching.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_nf4_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_nf4`` (NF4 dequant; ``-DSDX_BUILD_CUDA=ON``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_nf4.dll",
+        cpp / "Debug" / "sdx_cuda_nf4.dll",
+        cpp / "libsdx_cuda_nf4.so",
+        cpp / "libsdx_cuda_nf4.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_sdpa_online_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_sdpa_online`` (online-softmax SDPA, head_dim=64; ``-DSDX_BUILD_CUDA=ON``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_sdpa_online.dll",
+        cpp / "Debug" / "sdx_cuda_sdpa_online.dll",
+        cpp / "libsdx_cuda_sdpa_online.so",
+        cpp / "libsdx_cuda_sdpa_online.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_rmsnorm_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_rmsnorm`` (row-wise RMSNorm; ``-DSDX_BUILD_CUDA=ON``)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_rmsnorm.dll",
+        cpp / "Debug" / "sdx_cuda_rmsnorm.dll",
+        cpp / "libsdx_cuda_rmsnorm.so",
+        cpp / "libsdx_cuda_rmsnorm.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_rope_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_rope`` (interleaved RoPE on host buffers)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_rope.dll",
+        cpp / "Debug" / "sdx_cuda_rope.dll",
+        cpp / "libsdx_cuda_rope.so",
+        cpp / "libsdx_cuda_rope.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_silu_gate_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_silu_gate`` (fused SiLU * gate)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_silu_gate.dll",
+        cpp / "Debug" / "sdx_cuda_silu_gate.dll",
+        cpp / "libsdx_cuda_silu_gate.so",
+        cpp / "libsdx_cuda_silu_gate.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
 def fnv64_file_shared_library_path() -> Optional[Path]:
     """``sdx_fnv64_file`` — streaming FNV-1a 64 + newlines (matches Python ``fnv1a64_file``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
@@ -165,6 +279,21 @@ def fnv64_file_shared_library_path() -> Optional[Path]:
         cpp / "Debug" / "sdx_fnv64_file.dll",
         cpp / "libsdx_fnv64_file.so",
         cpp / "libsdx_fnv64_file.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def rmsnorm_rows_cpu_shared_library_path() -> Optional[Path]:
+    """CPU ``sdx_rmsnorm_rows_cpu`` shared library path, if built."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_rmsnorm_rows_cpu.dll",
+        cpp / "Debug" / "sdx_rmsnorm_rows_cpu.dll",
+        cpp / "libsdx_rmsnorm_rows_cpu.so",
+        cpp / "libsdx_rmsnorm_rows_cpu.dylib",
     ]
     for p in candidates:
         if p.is_file() and p.stat().st_size > 0:
@@ -234,6 +363,67 @@ def run_rust_file_fnv(path: Path, *, timeout: float = 3600) -> subprocess.Comple
         text=True,
         timeout=timeout,
     )
+
+
+def run_rust_file_md5(path: Path, *, timeout: float = 3600) -> subprocess.CompletedProcess[str]:
+    """Run ``sdx-jsonl-tools file-md5`` — streaming MD5 (matches ``hashlib.md5``)."""
+    exe = rust_jsonl_tools_exe()
+    if not exe:
+        raise FileNotFoundError("Rust sdx-jsonl-tools not built")
+    return subprocess.run(
+        [str(exe), "file-md5", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def maybe_rust_file_md5_hex(path: Path, *, timeout: float = 3600) -> Optional[str]:
+    """
+    Return 32-char lowercase hex MD5 if the Rust tool is built and the path is readable.
+
+    Used for large-image dedup without reading the whole file into Python memory.
+    """
+    exe = rust_jsonl_tools_exe()
+    if exe is None or not path.is_file():
+        return None
+    try:
+        r = subprocess.run(
+            [str(exe), "file-md5", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if r.returncode != 0:
+            return None
+        hx = (r.stdout or "").strip().lower()
+        if len(hx) == 32 and all(c in "0123456789abcdef" for c in hx):
+            return hx
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def file_md5_hex(path: Path, *, prefer_native_md5: bool = True) -> str:
+    """
+    MD5 hex digest of file bytes (streaming). Prefers ``file-md5`` subprocess when the Rust
+    tool is built; otherwise ``hashlib`` in 1 MiB chunks. Returns an empty string on failure.
+    """
+    if prefer_native_md5:
+        hx = maybe_rust_file_md5_hex(path)
+        if hx:
+            return hx
+    try:
+        h = hashlib.md5()
+        with path.open("rb") as f:
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return ""
 
 
 def run_zig_pathstat_list(pathlist_file: Path, *, timeout: float = 3600) -> subprocess.CompletedProcess[str]:
@@ -461,6 +651,8 @@ def native_stack_status() -> Dict[str, Any]:
     return {
         "repo_root": str(REPO_ROOT),
         "rust_sdx_jsonl_tools": str(rust_jsonl_tools_exe() or ""),
+        "rust_sdx_noise_schedule": str(rust_noise_schedule_exe() or ""),
+        "rust_file_md5_available": bool(rust_jsonl_tools_exe()),
         "zig_sdx_linecrc": str(zig_linecrc_exe() or ""),
         "zig_sdx_pathstat": str(zig_pathstat_exe() or ""),
         "go_sdx_manifest": str(go_sdx_manifest_exe() or ""),
@@ -470,8 +662,15 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_beta_schedules": str(beta_schedules_shared_library_path() or ""),
         "libsdx_line_stats": str(line_stats_shared_library_path() or ""),
         "libsdx_fnv64_file": str(fnv64_file_shared_library_path() or ""),
+        "libsdx_rmsnorm_rows_cpu": str(rmsnorm_rows_cpu_shared_library_path() or ""),
         "libsdx_cuda_hwc_to_chw": str(cuda_hwc_to_chw_shared_library_path() or ""),
         "libsdx_cuda_ml": str(cuda_ml_shared_library_path() or ""),
+        "libsdx_cuda_flow_matching": str(cuda_flow_matching_shared_library_path() or ""),
+        "libsdx_cuda_nf4": str(cuda_nf4_shared_library_path() or ""),
+        "libsdx_cuda_sdpa_online": str(cuda_sdpa_online_shared_library_path() or ""),
+        "libsdx_cuda_rmsnorm": str(cuda_rmsnorm_shared_library_path() or ""),
+        "libsdx_cuda_rope": str(cuda_rope_shared_library_path() or ""),
+        "libsdx_cuda_silu_gate": str(cuda_silu_gate_shared_library_path() or ""),
         "mojo_or_magic_cli": mojo_cli_path(),
         "latent_lib_ctypes": get_latent_lib().available,
         "caption_text_hygiene": True,

@@ -10,10 +10,12 @@ from .attention import (
     create_block_causal_mask_2d,
     memory_efficient_attention,
 )
-from .controlnet import ControlNetEncoder
+from .controlnet import ControlNetEncoder, encode_control_stack, inject_control_tokens
 from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
+from .model_enhancements import DropPath
 from .moe import MoEFeedForward, MoERouter
 from .pixart_blocks import SizeEmbedder, ZeroInitPatchChannelGate
+from .vit_next_blocks import LayerScale, apply_topk_token_keep
 
 
 def modulate(x, shift, scale):
@@ -117,6 +119,18 @@ class DiTBlockText(nn.Module):
         kv_merge_factor: int = 1,
         token_routing_enabled: bool = False,
         token_routing_strength: float = 1.0,
+        token_keep_ratio: float = 1.0,
+        token_keep_min_value: float = 0.0,
+        drop_path: float = 0.0,
+        layerscale_init: float = 0.0,
+        # Prompt adherence options
+        prompt_reinject_every_n: int = 0,
+        prompt_reinject_alpha: float = 0.0,
+        prompt_reinject_decay: float = 1.0,
+        prompt_timestep_schedule_enabled: bool = False,
+        prompt_early_scale: float = 1.1,
+        prompt_late_scale: float = 1.0,
+        prompt_schedule_num_timesteps: int = 1000,
     ):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -172,7 +186,20 @@ class DiTBlockText(nn.Module):
         # Cross-scale token routing (soft gating per token; does not reduce compute graph yet).
         self.token_routing_enabled = bool(token_routing_enabled)
         self.token_routing_strength = float(token_routing_strength)
+        self.prompt_reinject_every_n = int(prompt_reinject_every_n)
+        self.prompt_reinject_alpha = float(prompt_reinject_alpha)
+        self.prompt_reinject_decay = float(prompt_reinject_decay)
+        self.prompt_timestep_schedule_enabled = bool(prompt_timestep_schedule_enabled)
+        self.prompt_early_scale = float(prompt_early_scale)
+        self.prompt_late_scale = float(prompt_late_scale)
+        self.prompt_schedule_num_timesteps = max(2, int(prompt_schedule_num_timesteps))
         self.token_gate = None
+        self.token_keep_ratio = max(0.05, min(1.0, float(token_keep_ratio)))
+        self.token_keep_min_value = max(0.0, min(1.0, float(token_keep_min_value)))
+        self.drop_path = DropPath(float(max(0.0, drop_path))) if float(drop_path) > 0 else nn.Identity()
+        self.ls_attn = LayerScale(hidden_size, float(layerscale_init))
+        self.ls_cross = LayerScale(hidden_size, float(layerscale_init))
+        self.ls_mlp = LayerScale(hidden_size, float(layerscale_init))
         if self.token_routing_enabled:
             s = max(0.0, min(1.0, self.token_routing_strength))
             self.token_routing_strength = s
@@ -180,6 +207,8 @@ class DiTBlockText(nn.Module):
                 nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6),
                 nn.Linear(hidden_size, 1),
             )
+        else:
+            self.token_router = None
 
     def forward(
         self,
@@ -202,6 +231,14 @@ class DiTBlockText(nn.Module):
                 token_gate[:, num_patch_tokens:, :] = 1.0
             s = self.token_routing_strength
             token_gate = ((1.0 - s) + s * token_gate).clamp(0.0, 1.0)
+            if self.token_keep_ratio < 1.0:
+                token_gate = apply_topk_token_keep(
+                    token_gate,
+                    token_gate,
+                    keep_ratio=self.token_keep_ratio,
+                    num_patch_tokens=num_patch_tokens,
+                    min_keep_value=self.token_keep_min_value,
+                )
         else:
             token_gate = 1.0
 
@@ -216,7 +253,7 @@ class DiTBlockText(nn.Module):
             num_patch_tokens=num_patch_tokens if int(num_patch_tokens) > 0 else None,
         )
 
-        x = x + gate_msa.unsqueeze(1) * token_gate * attn_out
+        x = x + self.drop_path(self.ls_attn(gate_msa.unsqueeze(1) * token_gate * attn_out))
         cross_in = self.norm_cross(x)
         # MLP input is computed after cross-attention modifies `x`.
         if return_attn:
@@ -229,36 +266,36 @@ class DiTBlockText(nn.Module):
                 router_override=router_override,
                 report_aux_loss=False,
             )
-            x = x + token_gate * cross_out
+            x = x + self.drop_path(self.ls_cross(token_gate * cross_out))
             mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
             if isinstance(self.mlp, MoEFeedForward):
-                x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(
+                x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
                     mlp_in,
                     routing_context=c,
                     router_override=router_override,
                     report_aux_loss=True,
-                )
+                )))
             else:
-                x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)
+                x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
             return x, attn_weights
-        x = x + token_gate * self.cross_attn(
+        x = x + self.drop_path(self.ls_cross(token_gate * self.cross_attn(
             cross_in,
             text_emb,
             use_xformers=use_xformers,
             routing_context=c,
             router_override=router_override,
             report_aux_loss=False,
-        )
+        )))
         mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
         if isinstance(self.mlp, MoEFeedForward):
-            x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(
+            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
                 mlp_in,
                 routing_context=c,
                 router_override=router_override,
                 report_aux_loss=True,
-            )
+            )))
         else:
-            x = x + gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)
+            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
         return x
 
 
@@ -302,6 +339,7 @@ class DiT_Text(nn.Module):
         use_xformers=True,
         style_embed_dim=0,
         control_cond_dim=0,
+        control_num_types: int = 0,
         creativity_embed_dim=0,
         size_embed_dim=0,
         patch_se: bool = False,
@@ -321,6 +359,10 @@ class DiT_Text(nn.Module):
         kv_merge_factor: int = 1,
         token_routing_enabled: bool = False,
         token_routing_strength: float = 1.0,
+        token_keep_ratio: float = 1.0,
+        token_keep_min_value: float = 0.0,
+        drop_path_rate: float = 0.0,
+        layerscale_init: float = 0.0,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -334,6 +376,7 @@ class DiT_Text(nn.Module):
         self.use_xformers = use_xformers
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
+        self.control_num_types = int(max(0, control_num_types))
         self.creativity_embed_dim = creativity_embed_dim
         self.size_embed_dim = int(size_embed_dim) if size_embed_dim is not None else 0
         self._moe_num_experts = int(moe_num_experts) if moe_num_experts is not None else 0
@@ -346,6 +389,10 @@ class DiT_Text(nn.Module):
         self.kv_merge_factor = int(kv_merge_factor)
         self.token_routing_enabled = bool(token_routing_enabled)
         self.token_routing_strength = float(token_routing_strength)
+        self.token_keep_ratio = float(token_keep_ratio)
+        self.token_keep_min_value = float(token_keep_min_value)
+        self.drop_path_rate = float(drop_path_rate)
+        self.layerscale_init = float(layerscale_init)
 
         # REPA projector: maps DiT hidden tokens -> vision encoder embedding dim.
         self.repa_out_dim = int(repa_out_dim) if repa_out_dim is not None else 0
@@ -392,7 +439,11 @@ class DiT_Text(nn.Module):
             self.patch_se = ZeroInitPatchChannelGate(hidden_size, reduction=max(2, int(patch_se_reduction)))
         if control_cond_dim > 0:
             self.control_encoder = ControlNetEncoder(
-                control_size=input_size, patch_size=patch_size, in_channels=3, hidden_size=hidden_size
+                control_size=input_size,
+                patch_size=patch_size,
+                in_channels=3,
+                hidden_size=hidden_size,
+                num_control_types=self.control_num_types,
             )
         else:
             self.control_encoder = None
@@ -415,6 +466,7 @@ class DiT_Text(nn.Module):
         blocks = []
         for i in range(depth):
             use_ssm = bool(ssm_every_n and int(ssm_every_n) > 0 and (i % int(ssm_every_n) == 0))
+            dp = self.drop_path_rate * (float(i) / float(max(depth - 1, 1)))
             blocks.append(
                 DiTBlockText(
                     hidden_size,
@@ -430,6 +482,10 @@ class DiT_Text(nn.Module):
                     kv_merge_factor=self.kv_merge_factor,
                     token_routing_enabled=self.token_routing_enabled,
                     token_routing_strength=self.token_routing_strength,
+                    token_keep_ratio=self.token_keep_ratio,
+                    token_keep_min_value=self.token_keep_min_value,
+                    drop_path=dp,
+                    layerscale_init=self.layerscale_init,
                 )
             )
         self.blocks = nn.ModuleList(blocks)
@@ -466,6 +522,8 @@ class DiT_Text(nn.Module):
                 self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1)
             )
             nn.init.zeros_(self.control_encoder.proj.bias)
+            if getattr(self.control_encoder, "type_embed", None) is not None:
+                nn.init.normal_(self.control_encoder.type_embed.weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
         for block in self.blocks:
@@ -499,6 +557,7 @@ class DiT_Text(nn.Module):
         style_embedding=None,
         style_strength=0.7,
         control_image=None,
+        control_type=None,
         control_scale=1.0,
         conditioning_scale=1.0,
         creativity=None,
@@ -524,17 +583,36 @@ class DiT_Text(nn.Module):
             x = torch.cat([x_patches, reg], dim=1)
         else:
             x = x_patches
-        # ControlNet: add structure (edges/depth/pose) without overpowering; blend with control_scale
-        if control_image is not None and self.control_encoder is not None and control_scale > 0:
-            control_feat = self.control_encoder(control_image)
-            if control_feat.shape[1] == x.shape[1]:
-                x = x + control_scale * control_feat
+        # ControlNet: inject into patch tokens only (keeps register tokens intact).
+        if control_image is not None and self.control_encoder is not None:
+            control_feat = encode_control_stack(
+                self.control_encoder,
+                control_image,
+                target_hw=(h_lat, w_lat),
+                control_type=control_type,
+                control_scale=control_scale,
+            )
+            x = inject_control_tokens(
+                x,
+                control_feat,
+                control_scale=1.0,
+                patch_tokens=self.num_patches,
+            )
         if self.patch_se is not None:
             x = self.patch_se(x)
         t_emb = self.t_embedder(t)
         text_emb = self.text_embedder(encoder_hidden_states, train=self.training)
         if conditioning_scale != 1.0:
             text_emb = text_emb * conditioning_scale
+        # Optional timestep-aware text scaling:
+        # high-noise steps get stronger text pull, later steps relax to preserve texture/detail.
+        if bool(kwargs.get("prompt_timestep_schedule_enabled", self.prompt_timestep_schedule_enabled)):
+            early = float(kwargs.get("prompt_early_scale", self.prompt_early_scale))
+            late = float(kwargs.get("prompt_late_scale", self.prompt_late_scale))
+            nt = float(kwargs.get("prompt_schedule_num_timesteps", self.prompt_schedule_num_timesteps))
+            tau = (t.to(text_emb.device).float() / max(1.0, nt - 1.0)).clamp(0.0, 1.0).view(-1, 1, 1)
+            ts = late + (early - late) * tau
+            text_emb = text_emb * ts.to(dtype=text_emb.dtype)
         # IMPROVEMENTS 2.2: per-token emphasis (word) -> 1.2, [word] -> 0.8
         token_weights = kwargs.get("token_weights")
         if token_weights is not None:
@@ -587,14 +665,23 @@ class DiT_Text(nn.Module):
             c = c + cre
         attn_mask = getattr(self, "_ar_mask", None)
         captured_attn = None
+        base_text_emb = text_emb
+        reinject_every = int(kwargs.get("prompt_reinject_every_n", self.prompt_reinject_every_n))
+        reinject_alpha = float(kwargs.get("prompt_reinject_alpha", self.prompt_reinject_alpha))
+        reinject_decay = float(kwargs.get("prompt_reinject_decay", self.prompt_reinject_decay))
         for i, block in enumerate(self.blocks):
+            text_emb_i = text_emb
+            if reinject_every > 0 and reinject_alpha > 0.0 and i > 0 and (i % reinject_every == 0):
+                k = max(0, i // reinject_every - 1)
+                a = reinject_alpha * (reinject_decay**k)
+                text_emb_i = text_emb + float(a) * base_text_emb
             if return_attn and i == 0:
                 if self._grad_checkpointing and self.training:
                     raise NotImplementedError("return_attn with grad_checkpointing")
                 x, captured_attn = block(
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask=attn_mask,
                     use_xformers=self.use_xformers,
                     return_attn=True,
@@ -605,7 +692,7 @@ class DiT_Text(nn.Module):
                     block,
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask,
                     use_reentrant=False,
                     num_patch_tokens=self.num_patches,
@@ -614,7 +701,7 @@ class DiT_Text(nn.Module):
                 x = block(
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask=attn_mask,
                     use_xformers=self.use_xformers,
                     num_patch_tokens=self.num_patches,

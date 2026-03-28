@@ -1,11 +1,9 @@
 """
 Map **2026-era architecture themes** (flow matching, hybrid AR+DiT, RAE, distillation, …)
-to **SDX modules and status** — used by docs ([`docs/ARCHITECTURE_SHIFT_2026.md`](../docs/ARCHITECTURE_SHIFT_2026.md),
+to **SDX modules and status** — used by docs ([`docs/LANDSCAPE_2026.md`](../docs/LANDSCAPE_2026.md),
 [`docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md`](../docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md),
-[`docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md`](../docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md),
-[`docs/PROMPT_ACCURACY_BLUEPRINT.md`](../docs/PROMPT_ACCURACY_BLUEPRINT.md),
-[`docs/DIFFUSION_LEVERAGE_ROADMAP.md`](../docs/DIFFUSION_LEVERAGE_ROADMAP.md),
-[`docs/WORKFLOW_INTEGRATION_2026.md`](../docs/WORKFLOW_INTEGRATION_2026.md))
+[`docs/BLUEPRINTS.md`](../docs/BLUEPRINTS.md),
+[`docs/DIFFUSION_LEVERAGE_ROADMAP.md`](../docs/DIFFUSION_LEVERAGE_ROADMAP.md))
 and optional introspection / tests.
 
 This does **not** implement external models; it documents **where** related ideas exist in-repo.
@@ -109,7 +107,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Physics-informed / physical consistency layers",
         ParityStatus.NOT_IN_REPO,
         "No built-in physics simulator; optional verifier scores (e.g. exposure) in test_time_pick.",
-        ("utils/test_time_pick.py", "docs/LANDSCAPE_2026.md"),
+        ("utils/quality/test_time_pick.py", "docs/LANDSCAPE_2026.md"),
         ("--pick-best combo_exposure",),
     ),
     ThemeMapping(
@@ -117,7 +115,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "RAG-style facts in prompt",
         ParityStatus.IMPLEMENTED,
         "merge_facts_into_prompt and JSONL loaders — no retrieval implementation.",
-        ("utils/rag_prompt.py",),
+        ("utils/prompt/rag_prompt.py",),
         (),
     ),
     ThemeMapping(
@@ -136,13 +134,13 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ("data/t2i_dataset.py", "data/bucket_batch_sampler.py", "train.py"),
         ("--resolution-buckets",),
     ),
-    # --- Workflow / industry commentary (docs/WORKFLOW_INTEGRATION_2026.md) ---
+    # --- Workflow / industry commentary (docs/LANDSCAPE_2026.md) ---
     ThemeMapping(
         "workflow_structural_coherence",
         "Multi-view / structural coherence (industry stacks)",
         ParityStatus.NOT_IN_REPO,
         "No built-in 3D/pose engine; use data, control paths, character_lock, resolution tooling.",
-        ("docs/WORKFLOW_INTEGRATION_2026.md", "utils/character_lock.py"),
+        ("docs/LANDSCAPE_2026.md", "utils/consistency/character_lock.py"),
         (),
     ),
     ThemeMapping(
@@ -150,7 +148,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Discrete diffusion on text / unified LM+image (LLaDA-class ideas)",
         ParityStatus.NOT_IN_REPO,
         "SDX: T5 (AR text encoding) + DiT diffusion — not diffusion over discrete text tokens.",
-        ("docs/WORKFLOW_INTEGRATION_2026.md", "docs/MODERN_DIFFUSION.md"),
+        ("docs/LANDSCAPE_2026.md", "docs/MODERN_DIFFUSION.md"),
         (),
     ),
     ThemeMapping(
@@ -166,7 +164,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Live web grounding during generation",
         ParityStatus.NOT_IN_REPO,
         "rag_prompt merges user-supplied facts; no built-in web retrieval in core train/sample.",
-        ("utils/rag_prompt.py", "docs/WORKFLOW_INTEGRATION_2026.md"),
+        ("utils/prompt/rag_prompt.py", "docs/LANDSCAPE_2026.md"),
         (),
     ),
     ThemeMapping(
@@ -264,7 +262,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ),
         (),
     ),
-    # --- Fast-gen math blueprint (docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md) ---
+    # --- Fast-gen math blueprint (docs/BLUEPRINTS.md) ---
     ThemeMapping(
         "consistency_flow_matching_velocity",
         "Consistency / velocity self-consistency on flow fields (Consistency-FM class)",
@@ -272,7 +270,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Prototype rectified-flow-style velocity MSE in train (--flow-matching-training, diffusion/flow_matching.py); "
         "not Consistency-FM trajectory matching and not VP-compatible sampling without a flow sampler.",
         (
-            "docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md",
+            "docs/BLUEPRINTS.md",
             "diffusion/flow_matching.py",
             "train.py",
             "diffusion/gaussian_diffusion.py",
@@ -286,7 +284,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ParityStatus.PARTIAL,
         "Single prediction type per checkpoint; non-uniform training timesteps (logit_normal, high_noise) — not dynamic dual integrator.",
         (
-            "docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md",
+            "docs/BLUEPRINTS.md",
             "diffusion/timestep_sampling.py",
             "train.py",
             "sample.py",
@@ -298,7 +296,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Adversarial Diffusion Distillation (ADD-class teacher→student)",
         ParityStatus.NOT_IN_REPO,
         "No adversarial distillation or dual-head discriminator student training.",
-        ("docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md", "docs/IMPROVEMENTS.md"),
+        ("docs/BLUEPRINTS.md", "docs/IMPROVEMENTS.md"),
         (),
     ),
     ThemeMapping(
@@ -308,7 +306,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Optional mini-batch OT noise coupling (--ot-noise-pair-reg) and optional flow-matching training path "
         "(--flow-matching-training); not a full continuous-time rectified-flow ODE trainer + sampler.",
         (
-            "docs/CONSISTENCY_FLOW_SPEED_BLUEPRINT.md",
+            "docs/BLUEPRINTS.md",
             "utils/training/ot_noise_pairing.py",
             "diffusion/flow_matching.py",
             "train.py",
@@ -324,14 +322,14 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ("utils/generation/speculative_denoise.py", "diffusion/gaussian_diffusion.py", "sample.py"),
         ("--speculative-draft-cfg-scale", "--speculative-close-thresh", "--speculative-blend"),
     ),
-    # --- Prompt-accuracy blueprint (docs/PROMPT_ACCURACY_BLUEPRINT.md) ---
+    # --- Prompt-accuracy blueprint (docs/BLUEPRINTS.md) ---
     ThemeMapping(
         "geometric_latent_split_blueprint",
         "Geometric–latent split (GLS): structural blueprint before texture",
         ParityStatus.PARTIAL,
         "Dual-stage layout and domain/layout priors in hooks; no dedicated depth–normal–edge transformer locked as immutable constraint.",
         (
-            "docs/PROMPT_ACCURACY_BLUEPRINT.md",
+            "docs/BLUEPRINTS.md",
             "sample.py",
             "utils/generation/inference_research_hooks.py",
         ),
@@ -343,7 +341,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ParityStatus.PARTIAL,
         "CLIP guard refine and volatile CFG; no frozen VLM every-k-steps with localized latent rewind / gradient reroll.",
         (
-            "docs/PROMPT_ACCURACY_BLUEPRINT.md",
+            "docs/BLUEPRINTS.md",
             "utils/generation/clip_alignment.py",
             "sample.py",
         ),
@@ -360,7 +358,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ParityStatus.PARTIAL,
         "Spectral SFP training loss + inference ``--spectral-coherence-latent`` (FFT lowfreq blend); not full FNO denoising forward.",
         (
-            "docs/PROMPT_ACCURACY_BLUEPRINT.md",
+            "docs/BLUEPRINTS.md",
             "diffusion/spectral_sfp.py",
             "utils/generation/inference_research_hooks.py",
             "docs/MODERN_DIFFUSION.md",

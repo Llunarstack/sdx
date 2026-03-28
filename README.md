@@ -68,7 +68,7 @@ It is built for iterative research (ablation-friendly) and practical generation 
 | Prompt adherence | Part-aware attention grounding + token coverage losses |
 | Adapter system | Multi-LoRA/DoRA/LyCORIS stacking with role budgets and depth routing |
 | Objectives | VP diffusion + flow matching + bridge auxiliary + OT coupling |
-| Inference controls | CFG, flow sample mode, speculative CFG, SAG, reference-token injection |
+| Inference controls | CFG, flow sample mode, speculative CFG, SAG, reference-token injection, **holy-grail** adaptive sampling (see below) |
 | Reliability | Run manifests, config snapshots, optional strict warnings |
 | Performance | bf16, `torch.compile`, gradient checkpointing, DDP-ready |
 
@@ -85,6 +85,9 @@ It is built for iterative research (ablation-friendly) and practical generation 
 | Reproducibility | Per-run `run_manifest.json` and `config.train.json` snapshots plus optional strict warning mode in `train.py`. |
 | Prompt adherence path | Prompt controls + negative filtering + adherence auxiliaries are now documented and reflected in architecture/sampling docs. |
 | Documentation quality | Architecture section upgraded with current-model diagrams and richer contributor-facing project context. |
+| **Holy-grail sampling** | `diffusion/holy_grail/`: per-step CFG/control/adapter scheduling, CADS-style condition noise, latent refine + clamp; wired into `diffusion/gaussian_diffusion.py` and `sample.py` (`--holy-grail`, presets, sanitizer). |
+| **Diffusion building blocks** | `diffusion/cfg_schedulers.py`, `diffusion/self_conditioning.py`, `diffusion/consistency_utils.py` for schedules, self-conditioning, and consistency-style helpers (importable from `diffusion`). |
+| **Native ops (optional)** | CUDA/CPU helpers for RMSNorm, RoPE apply, SiLU-gate in `native/` with Python fallbacks in `sdx_native` (see `native/cuda/README.md`). |
 
 ---
 
@@ -305,6 +308,33 @@ python sample.py --ckpt results/.../best.pt --prompt "cinematic portrait, dramat
 - Issue and quality playbook:
   - `docs/QUALITY_AND_ISSUES.md`
 
+### 6) Holy-grail sampling, diffusion utilities, and native extras (recent)
+
+**Holy-grail stack** (`diffusion/holy_grail/` — see `diffusion/holy_grail/README.md`):
+
+- Adaptive per-step **CFG**, **ControlNet scale**, and **adapter** multipliers inside `GaussianDiffusion.sample_loop` (VP and flow paths).
+- **CADS-style** condition annealing: optional Gaussian noise on `encoder_hidden_states` during sampling (`--holy-grail-cads-strength`, etc.).
+- **Presets**: `--holy-grail-preset` with `auto` (heuristic from prompt/style/control/LoRA) or `balanced` \| `photoreal` \| `anime` \| `illustration` \| `aggressive`.
+- **Runtime guard**: `sanitize_holy_grail_kwargs` clamps unsafe values before sampling.
+- **Supporting modules**: attention-entropy CFG ideas, prompt coverage metrics, latent unsharp + dynamic clamp, style/detail routing helpers.
+
+**CLI quick flags** (all opt-in; enable with `--holy-grail` or a preset):
+
+- `--holy-grail` · `--holy-grail-preset auto|…` · `--holy-grail-cfg-early-ratio` / `--holy-grail-cfg-late-ratio`
+- `--holy-grail-control-mult` · `--holy-grail-adapter-mult` · `--holy-grail-late-adapter-boost` · `--holy-grail-no-frontload-control`
+- `--holy-grail-cads-strength` · `--holy-grail-cads-min-strength` · `--holy-grail-cads-power`
+- `--holy-grail-unsharp-sigma` · `--holy-grail-unsharp-amount` · `--holy-grail-clamp-quantile` · `--holy-grail-clamp-floor`
+
+**Extra diffusion modules** (for training/experiments or custom wiring):
+
+- `diffusion/cfg_schedulers.py` — time/SNR-aware CFG schedule helpers
+- `diffusion/self_conditioning.py` — detached self-cond + blend helpers
+- `diffusion/consistency_utils.py` — EMA targets, consistency delta loss, one-step refine
+
+**Tests**: `tests/unit/test_holy_grail_diffusion.py`, `tests/unit/test_holy_grail_presets.py`, `tests/unit/test_diffusion_new_ideas.py`.
+
+**Optional native acceleration**: RMSNorm rows, RoPE apply, SiLU-gate CUDA libraries + NumPy fallbacks (`native/python/sdx_native/`).
+
 ---
 
 ## Training overview
@@ -363,6 +393,7 @@ python train.py --data-path /path/to/data \
 - LoRA/DoRA/LyCORIS stacking with role-aware routing
 - style controls and style mix weighting
 - optional postprocess passes (e.g., face enhancement)
+- **Holy-grail mode**: `--holy-grail` and `--holy-grail-preset auto|balanced|photoreal|anime|illustration|aggressive` (see **Latest model updates → §6**)
 
 Example:
 
@@ -376,6 +407,14 @@ python sample.py \
   --cfg-scale 6.0 \
   --steps 40 \
   --out out.png
+```
+
+Holy-grail one-liner (preset picks heuristics from your prompt/style):
+
+```bash
+python sample.py --ckpt results/.../best.pt \
+  --prompt "photoreal portrait, soft window light" \
+  --holy-grail-preset auto --out holy_grail.png
 ```
 
 ---

@@ -17,7 +17,7 @@ def main():
     ap.add_argument(
         "--show-native",
         action="store_true",
-        help="Print optional native/ tool discovery (Rust, Zig, Go, Node, libsdx_latent) and exit 0.",
+        help="Print optional native/ tool discovery (Rust, Zig, Go, CUDA DLLs, libsdx_latent) and exit 0.",
     )
     args, _unknown = ap.parse_known_args()
     if args.show_native:

@@ -130,7 +130,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 
 ## 9. Community-wide issues (SDXL, Flux, Illustrious, NoobAI, Z-Image)
 
-Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornness, CFG burn, centering bias, distant face meltdown, resolution lock, seed variance, and vocabulary gaps are all documented with **mitigations** (prompt tips, negatives, and sample.py flags) in **[docs/COMMON_ISSUES.md](COMMON_ISSUES.md)**.
+Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornness, CFG burn, centering bias, distant face meltdown, resolution lock, seed variance, and vocabulary gaps are all documented with **mitigations** (prompt tips, negatives, and sample.py flags) in **[docs/QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md)** (*Community model issues*).
 
 **sample.py flags that address these:**
 - `--naturalize` — plastic/AI look (negative + natural prefix + film grain)
@@ -141,13 +141,13 @@ Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornn
 - `--boost-quality` — prompt adherence; `--subject-first` — tag order
 - `--cfg-rescale 0.7`, lower `--cfg-scale` — v-pred burn, oversaturation
 
-**Config:** All related negatives and tip lists are in `config/prompt_domains.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`, `EMOTION_PROMPT_TIPS`, `SPATIAL_AWARENESS_TIPS`). See COMMON_ISSUES.md for the full issue → mitigation table.
+**Config:** All related negatives and tip lists are in `config/prompt_domains.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`, `EMOTION_PROMPT_TIPS`, `SPATIAL_AWARENESS_TIPS`). See [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) (*Community model issues*) for the full issue → mitigation table.
 
 ---
 
 ## 10. Gaps: what frontier models still struggle with — and what SDX does **not** fully solve
 
-This section is the honest complement to §1–9 and [COMMON_ISSUES.md](COMMON_ISSUES.md): **community mitigations** (prompts, negatives, flags) are not the same as a **guaranteed fix**. Below, **“no in-repo fix”** means there is no integrated module that *enforces* correctness; you rely on training data, luck, or external tools.
+This section is the honest complement to §1–9 and [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md): **community mitigations** (prompts, negatives, flags) are not the same as a **guaranteed fix**. Below, **“no in-repo fix”** means there is no integrated module that *enforces* correctness; you rely on training data, luck, or external tools.
 
 ### A. Still fundamentally hard (diffusion + CLIP/T5 blind spots)
 
@@ -179,7 +179,7 @@ These are called out in [IMPROVEMENTS.md](IMPROVEMENTS.md) and [DIFFUSION_LEVERA
 - **Inpaint-aware *training*** (random latent masks) — not wired; inpainting is inference/workflow (`sample.py`, book pipeline).  
 - **DDP + resolution buckets** — buckets exist; multi-GPU + buckets is constrained.  
 - **WebDataset / giant-scale streaming** — optional future in IMPROVEMENTS.  
-- **Live web retrieval** — facts via `utils/rag_prompt.py` only; no built-in crawl.
+- **Live web retrieval** — facts via `utils/prompt/rag_prompt.py` only; no built-in crawl.
 
 ### D. Where to invest if you want to *close* gaps (not just document them)
 
@@ -189,4 +189,4 @@ These are called out in [IMPROVEMENTS.md](IMPROVEMENTS.md) and [DIFFUSION_LEVERA
 4. **Inference control:** SAG / cross-attn hooks in `sample.py` ([IMPROVEMENTS.md](IMPROVEMENTS.md) §2.2).  
 5. **Faces at distance:** optional post-pass script wrapping GFPGAN/CodeFormer or face-region inpaint — **bridge** the doc↔code gap ADetailer users expect.
 
-When you ship a new fix, update **§1–9** or [COMMON_ISSUES.md](COMMON_ISSUES.md) for users, and **`architecture_map.py`** for theme status.
+When you ship a new fix, update **§1–9** or [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) for users, and **`architecture_map.py`** for theme status.
