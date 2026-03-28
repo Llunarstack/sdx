@@ -39,6 +39,7 @@ SDX is a modular text-to-image codebase centered on:
 - `sample.py` for inference and quality controls
 - `models/dit_text.py` for the core DiT
 - optional adapters, controls, and native acceleration
+- **Holy Grail** adaptive sampling: see repo root [`holy_grail/README.md`](holy_grail/README.md) (implementation in [`diffusion/holy_grail/`](diffusion/holy_grail/))
 
 It is built for iterative research (ablation-friendly) and practical generation workflows (books/comics, prompt-heavy generation, multi-adapter style stacks).
 
@@ -54,6 +55,7 @@ It is built for iterative research (ablation-friendly) and practical generation 
 | Sample with style/adapters | [Sampling overview](#sampling-overview) |
 | Organize datasets | [Data formats](#data-formats) |
 | Native acceleration | [Native acceleration and tooling](#native-acceleration-and-tooling) |
+| Holy Grail sampling | [holy_grail/README.md](holy_grail/README.md) → code in `diffusion/holy_grail/` |
 | Explore docs | [Key docs](#key-docs) |
 | Contribute | [Contributors and community](#contributors-and-community) |
 
