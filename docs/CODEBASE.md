@@ -1,6 +1,6 @@
 # Codebase guide
 
-How the SDX repo is organized: **layers**, **repo tree**, **`scripts/` layout**, **contribution rules**, **conventions** (ruff/pytest), and **where to change what**.
+How the SDX repo is organized: **layers**, **repo tree**, **`scripts/` layout**, **contribution rules**, **conventions** (ruff), and **where to change what**.
 
 ---
 
@@ -19,8 +19,6 @@ How the SDX repo is organized: **layers**, **repo tree**, **`scripts/` layout**,
 | **Scripts** | `scripts/` | Downloads, thin `scripts/book/` launcher, one-off tools (not imported as a package) |
 | **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
 | **Toolkit** | `toolkit/` | QoL: env report, seeds, manifest digest, timing, optional-lib hints — [toolkit/README.md](../toolkit/README.md) |
-| **Tests** | `tests/` | PyTest; run from repo root |
-
 End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](FILES.md).
 
 ---
@@ -43,7 +41,7 @@ pip install ruff
 
 ruff format .
 ruff check .
-pytest tests/ -q
+python scripts/tools/dev/smoke_imports.py
 ```
 
 Weights and HF cache live under `model/` (gitignored); paths resolve via `utils/modeling/model_paths.py`.
@@ -84,7 +82,6 @@ sdx/
 ├── ViT/                                # Quality / adherence scoring (not the DiT generator)
 ├── pipelines/                          # image_gen vs book_comic docs + book workflow
 ├── scripts/                            # cli.py, download/, tools/, enhanced/, … (see scripts/README.md)
-├── tests/                              # pytest (see tests/diffusion/ for diffusion unit tests)
 ├── examples/                           # Small usage examples
 ├── native/                             # Optional fast JSONL helpers (Rust, Go, …)
 ├── docs/                               # All markdown documentation
@@ -175,7 +172,6 @@ Keep new work in predictable places so imports and docs stay stable.
 | Multi-page / book workflow | `pipelines/book_comic/` | Canonical script: `pipelines/book_comic/scripts/generate_book.py` |
 | Optional EnhancedDiT workflow | `scripts/enhanced/` | Parallel to main `train.py` |
 | Documentation | `docs/` and link from [docs/README.md](README.md) | |
-| Tests | `tests/test_*.py` | Mirror package structure in name |
 
 ### What we avoid
 

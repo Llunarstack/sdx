@@ -6,7 +6,7 @@
 > python -m scripts.tools update_project_structure
 > ```
 >
-> Generated: **2026-03-28 04:04:01 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-03-28 19:50:40 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -556,89 +556,6 @@ sdx/
 │   ├── cascade_generate.py
 │   ├── cli.py
 │   └── README.md
-├── tests/
-│   ├── diffusion/
-│   │   ├── test_beta_schedules_native_parity.py
-│   │   ├── test_flow_bridge_training.py
-│   │   ├── test_inference_timesteps.py
-│   │   ├── test_inference_timesteps_native_parity.py
-│   │   ├── test_per_sample_training_losses.py
-│   │   ├── test_periodic_clip_monitor_smoke.py
-│   │   ├── test_prediction_types.py
-│   │   ├── test_respace.py
-│   │   ├── test_schedules.py
-│   │   ├── test_spectral_sfp.py
-│   │   ├── test_timestep_loss_weight.py
-│   │   ├── test_timestep_sampling.py
-│   │   └── test_volatile_cfg_smoke.py
-│   ├── fixtures/
-│   ├── integration/
-│   │   ├── README.md
-│   │   └── test_integration.py
-│   ├── unit/
-│   │   ├── README.md
-│   │   ├── test_architecture_map.py
-│   │   ├── test_book_helpers.py
-│   │   ├── test_character_customization.py
-│   │   ├── test_config_validator_extended.py
-│   │   ├── test_consistency_helpers.py
-│   │   ├── test_content_controls.py
-│   │   ├── test_controlnet_integration.py
-│   │   ├── test_danbooru_tag_split.py
-│   │   ├── test_diffusion_dpo_loss.py
-│   │   ├── test_diffusion_new_ideas.py
-│   │   ├── test_face_region_enhance.py
-│   │   ├── test_holy_grail_diffusion.py
-│   │   ├── test_holy_grail_presets.py
-│   │   ├── test_inference_research_hooks.py
-│   │   ├── test_ladd_distillation.py
-│   │   ├── test_latent_bridge.py
-│   │   ├── test_latent_geometry.py
-│   │   ├── test_line_stats_native.py
-│   │   ├── test_lora_adapters.py
-│   │   ├── test_multi_subject.py
-│   │   ├── test_native_cuda_extras.py
-│   │   ├── test_native_cuda_runtime.py
-│   │   ├── test_native_tools.py
-│   │   ├── test_neg_filter.py
-│   │   ├── test_news_features.py
-│   │   ├── test_nf4_codec.py
-│   │   ├── test_originality_augment.py
-│   │   ├── test_ot_noise_pairing.py
-│   │   ├── test_part_aware_training.py
-│   │   ├── test_preference_image_dataset.py
-│   │   ├── test_preference_jsonl.py
-│   │   ├── test_prompt_emphasis.py
-│   │   ├── test_prompt_layout.py
-│   │   ├── test_quality_finishing.py
-│   │   ├── test_reference_tokens_and_sag.py
-│   │   ├── test_scene_blueprint.py
-│   │   ├── test_test_time_pick.py
-│   │   ├── test_text_hygiene.py
-│   │   ├── test_toolkit_basics.py
-│   │   ├── test_train_args_repro_flags.py
-│   │   ├── test_train_config_flow_bridge.py
-│   │   ├── test_vector_index_sampler.py
-│   │   └── test_vit_next_blocks.py
-│   ├── __init__.py
-│   ├── test_book_helpers.py
-│   ├── test_book_scene_split.py
-│   ├── test_dit_architecture.py
-│   ├── test_dit_text_extras.py
-│   ├── test_enhanced_integration.py
-│   ├── test_image_quality_qc.py
-│   ├── test_model_enhancements.py
-│   ├── test_native_helpers.py
-│   ├── test_native_multimodal_cascade.py
-│   ├── test_naturalize_human_art.py
-│   ├── test_orchestration.py
-│   ├── test_prompt_lexicon.py
-│   ├── test_prompt_lint_tool.py
-│   ├── test_rae_bridge.py
-│   ├── test_region_captions.py
-│   ├── test_style_harmonization.py
-│   ├── test_text_encoder_fusion.py
-│   └── test_update_project_structure.py
 ├── toolkit/
 │   ├── extras/
 │   │   └── requirements-suggested.txt
