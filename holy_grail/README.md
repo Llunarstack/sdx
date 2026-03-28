@@ -22,9 +22,3 @@ python sample.py --ckpt …/best.pt --prompt "…" --holy-grail-preset auto --ou
 ```
 
 Full flag list: [diffusion/holy_grail/README.md](../diffusion/holy_grail/README.md) and the main [README.md](../README.md) (section *Latest model updates → §6*).
-
-## Tests
-
-Unit tests: `tests/unit/test_holy_grail_diffusion.py`, `tests/unit/test_holy_grail_presets.py`.
-
-The repo keeps a **`tests/`** tree for CI and regression checks; it is not redundant with this feature.

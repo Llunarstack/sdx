@@ -12,7 +12,7 @@ Quick links to all project docs, grouped by purpose.
 | [SMOKE_TRAINING.md](SMOKE_TRAINING.md) | Minimal `train.py` run: synthetic data + small DiT + `--dry-run`. |
 | [DANBOORU_HF.md](DANBOORU_HF.md) | Hugging Face Danbooru-style data → JSONL + `train.py`; one-shot `hf_download_and_train.py`. |
 | [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) | Curated shortlist from provided HF dataset links: primary/secondary/optional picks + initial mix weights. |
-| [CODEBASE.md](CODEBASE.md) | **Start here for code:** layers, conventions, repo tree, `scripts/` layout, contribution rules, ruff/pytest, where to edit. |
+| [CODEBASE.md](CODEBASE.md) | **Start here for code:** layers, conventions, repo tree, `scripts/` layout, contribution rules, ruff, where to edit. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow/efficiency + disclaimers — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
@@ -69,7 +69,7 @@ Quick links to all project docs, grouped by purpose.
 | Item | Where |
 |-----|-------|
 | Part-aware / grounding-aware training | [../utils/training/part_aware_training.py](../utils/training/part_aware_training.py), [../data/t2i_dataset.py](../data/t2i_dataset.py), [../train.py](../train.py) |
-| LoRA / DoRA / LyCORIS routing improvements | [../models/lora.py](../models/lora.py), [../sample.py](../sample.py), [../tests/unit/test_lora_adapters.py](../tests/unit/test_lora_adapters.py) |
+| LoRA / DoRA / LyCORIS routing improvements | [../models/lora.py](../models/lora.py), [../sample.py](../sample.py) |
 | Reproducibility and strict training hygiene | [../train.py](../train.py), [../training/train_cli_parser.py](../training/train_cli_parser.py), [../training/train_args.py](../training/train_args.py) |
 | Dataset shortlist and planning | [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) |
 | Architecture figure generator | [../scripts/tools/dev/generate_sdx_architecture_diagram.py](../scripts/tools/dev/generate_sdx_architecture_diagram.py) |

@@ -17,7 +17,7 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **config/** | `TrainConfig`, `get_dit_build_kwargs`, presets | `train.py`, `sample.py`, checkpoints |
 | **data/** | `Text2ImageDataset`, captions | `train.py` |
 | **diffusion/** | `GaussianDiffusion`, schedules, loss weights | `train.py`, `sample.py` |
-| **models/** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py`, tests |
+| **models/** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py` |
 | **utils/** | Checkpoint load, text-encoder bundle, REPA helpers, QC, metrics | `train.py`, `sample.py`, scripts |
 | **ViT/** | Standalone ViT scoring / prompt tools (**not** the DiT generator) | CLI + optional dataset QA |
 | **scripts/** | Download, tools, cascade stub | Ops & CI |
@@ -35,8 +35,8 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 |------|-------------|
 | [README.md](../README.md) | Project overview, setup, data format, training, options. |
 | [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** ASCII tree — run `python -m scripts.tools update_project_structure` to refresh. |
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | PR checklist: ruff format/check, pytest, docs. |
-| [pyproject.toml](../pyproject.toml) | Ruff + pytest settings; minimal `[project]` metadata. |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | PR checklist: ruff format/check, manual sanity, docs. |
+| [pyproject.toml](../pyproject.toml) | Ruff settings; minimal `[project]` metadata. |
 | [requirements.txt](../requirements.txt) | Pip dependencies (torch, transformers, diffusers, xformers, etc.). |
 | [requirements-cuda128.txt](../requirements-cuda128.txt) | Optional: reinstall torch/torchvision/xformers from PyTorch’s **cu128** index after `requirements.txt` (avoids CPU-only PyPI torch). |
 | [.editorconfig](../.editorconfig) | Editor defaults (indent, UTF-8, final newline). |

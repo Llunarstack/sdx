@@ -333,8 +333,6 @@ python sample.py --ckpt results/.../best.pt --prompt "cinematic portrait, dramat
 - `diffusion/self_conditioning.py` — detached self-cond + blend helpers
 - `diffusion/consistency_utils.py` — EMA targets, consistency delta loss, one-step refine
 
-**Tests**: `tests/unit/test_holy_grail_diffusion.py`, `tests/unit/test_holy_grail_presets.py`, `tests/unit/test_diffusion_new_ideas.py`.
-
 **Optional native acceleration**: RMSNorm rows, RoPE apply, SiLU-gate CUDA libraries + NumPy fallbacks (`native/python/sdx_native/`).
 
 ---
@@ -589,10 +587,10 @@ sdx/
 
 ## Contributing
 
-Small focused PRs are preferred. Docs, tests, tooling, and quality improvements are all welcome.
+Small focused PRs are preferred. Docs, tooling, and quality improvements are all welcome.
 
 - Guide: `CONTRIBUTING.md`
-- Run checks: `pytest tests/ -q`, `ruff check .`
+- Run checks: `ruff check .` (and `ruff format .` before PRs; see `CONTRIBUTING.md`)
 
 ---
 
@@ -608,7 +606,7 @@ SDX improves through iterative, practical contributions across model code, promp
 Good first contribution areas:
 
 - tighten docs for one module (`data/`, `diffusion/`, `models/`, `utils/`)
-- add a focused unit test for a new config/flag path
+- validate new flags with a short `sample.py` / `train.py` dry run when practical
 - improve CLI UX in `train.py` or `sample.py`
 - benchmark and profile one inference/training path
 
