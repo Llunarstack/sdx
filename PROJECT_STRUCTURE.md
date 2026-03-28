@@ -6,7 +6,7 @@
 > python -m scripts.tools update_project_structure
 > ```
 >
-> Generated: **2026-03-25 16:25:49 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-03-28 04:04:01 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -48,12 +48,35 @@ sdx/
 │   │   └── triggers_unique.txt
 │   ├── danbooru/
 │   │   └── README.md
+│   ├── prompt_tags/
+│   │   ├── 01_scores_quality_adherence.csv
+│   │   ├── 02_sfw.csv
+│   │   ├── 03_nsfw_core.csv
+│   │   ├── 04_scene_people_objects.csv
+│   │   ├── 05_pose_camera_hands.csv
+│   │   ├── 06_clothing_lighting_skin.csv
+│   │   ├── 07_nsfw_detail_poses_env.csv
+│   │   ├── 08_style_media_lora.csv
+│   │   └── 09_misc.csv
 │   ├── __init__.py
 │   ├── bucket_batch_sampler.py
 │   ├── caption_utils.py
 │   ├── enhanced_dataset.py
-│   └── t2i_dataset.py
+│   ├── t2i_dataset.py
+│   └── vector_index_sampler.py
 ├── diffusion/
+│   ├── holy_grail/
+│   │   ├── __init__.py
+│   │   ├── blueprint.py
+│   │   ├── condition_annealing.py
+│   │   ├── guidance_fusion.py
+│   │   ├── latent_refiner.py
+│   │   ├── presets.py
+│   │   ├── prompt_coverage.py
+│   │   ├── README.md
+│   │   ├── recommender.py
+│   │   ├── runtime_guard.py
+│   │   └── style_router.py
 │   ├── losses/
 │   │   ├── __init__.py
 │   │   ├── loss_weighting.py
@@ -61,6 +84,8 @@ sdx/
 │   ├── __init__.py
 │   ├── bridge_training.py
 │   ├── cascaded_multimodal_pipeline.py
+│   ├── cfg_schedulers.py
+│   ├── consistency_utils.py
 │   ├── flow_matching.py
 │   ├── gaussian_diffusion.py
 │   ├── inference_timesteps.py
@@ -70,12 +95,14 @@ sdx/
 │   ├── respace.py
 │   ├── sampling_utils.py
 │   ├── schedules.py
+│   ├── self_conditioning.py
 │   ├── snr_utils.py
 │   ├── spectral_sfp.py
 │   ├── timestep_loss_weight.py
 │   └── timestep_sampling.py
 ├── docs/
 │   ├── api/
+│   ├── assets/
 │   ├── guides/
 │   │   └── CHARACTER_CONSISTENCY_IMPLEMENTATION.md
 │   ├── releases/
@@ -95,6 +122,7 @@ sdx/
 │   ├── ENHANCED_FEATURES.md
 │   ├── FILES.md
 │   ├── HARDWARE.md
+│   ├── HF_DATASET_SHORTLIST.md
 │   ├── HOW_GENERATION_WORKS.md
 │   ├── IMPROVEMENTS.md
 │   ├── INSPIRATION.md
@@ -128,6 +156,8 @@ sdx/
 │   ├── multi_character_scene.example.json
 │   ├── prompt_layout.example.json
 │   └── prompt_layout_group_mansion_nsfw.json
+├── holy_grail/
+│   └── README.md
 ├── models/
 │   ├── __init__.py
 │   ├── attention.py
@@ -143,7 +173,8 @@ sdx/
 │   ├── native_multimodal_transformer.py
 │   ├── pixart_blocks.py
 │   ├── rae_latent_bridge.py
-│   └── reference_token_projection.py
+│   ├── reference_token_projection.py
+│   └── vit_next_blocks.py
 ├── native/
 │   ├── cpp/
 │   │   ├── build/
@@ -163,10 +194,6 @@ sdx/
 │   │   │   │   ├── generate.stamp.list
 │   │   │   │   ├── InstallScripts.json
 │   │   │   │   └── TargetDirectories.txt
-│   │   │   ├── Debug/
-│   │   │   │   ├── sdx_latent.exp
-│   │   │   │   ├── sdx_latent.lib
-│   │   │   │   └── sdx_latent.pdb
 │   │   │   ├── INSTALL.dir/
 │   │   │   │   ├── Debug/
 │   │   │   │   ├── MinSizeRel/
@@ -175,8 +202,22 @@ sdx/
 │   │   │   ├── Release/
 │   │   │   │   ├── sdx_beta_schedules.exp
 │   │   │   │   ├── sdx_beta_schedules.lib
+│   │   │   │   ├── sdx_cuda_flow_matching.exp
+│   │   │   │   ├── sdx_cuda_flow_matching.lib
 │   │   │   │   ├── sdx_cuda_hwc_to_chw.exp
 │   │   │   │   ├── sdx_cuda_hwc_to_chw.lib
+│   │   │   │   ├── sdx_cuda_ml.exp
+│   │   │   │   ├── sdx_cuda_ml.lib
+│   │   │   │   ├── sdx_cuda_nf4.exp
+│   │   │   │   ├── sdx_cuda_nf4.lib
+│   │   │   │   ├── sdx_cuda_rmsnorm.exp
+│   │   │   │   ├── sdx_cuda_rmsnorm.lib
+│   │   │   │   ├── sdx_cuda_rope.exp
+│   │   │   │   ├── sdx_cuda_rope.lib
+│   │   │   │   ├── sdx_cuda_sdpa_online.exp
+│   │   │   │   ├── sdx_cuda_sdpa_online.lib
+│   │   │   │   ├── sdx_cuda_silu_gate.exp
+│   │   │   │   ├── sdx_cuda_silu_gate.lib
 │   │   │   │   ├── sdx_fnv64_file.exp
 │   │   │   │   ├── sdx_fnv64_file.lib
 │   │   │   │   ├── sdx_inference_timesteps.exp
@@ -184,13 +225,50 @@ sdx/
 │   │   │   │   ├── sdx_latent.exp
 │   │   │   │   ├── sdx_latent.lib
 │   │   │   │   ├── sdx_line_stats.exp
-│   │   │   │   └── sdx_line_stats.lib
+│   │   │   │   ├── sdx_line_stats.lib
+│   │   │   │   ├── sdx_rmsnorm_rows_cpu.exp
+│   │   │   │   └── sdx_rmsnorm_rows_cpu.lib
 │   │   │   ├── sdx_beta_schedules.dir/
 │   │   │   │   ├── Debug/
 │   │   │   │   ├── MinSizeRel/
 │   │   │   │   ├── Release/
 │   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_flow_matching.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
 │   │   │   ├── sdx_cuda_hwc_to_chw.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_ml.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_nf4.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_rmsnorm.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_rope.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_sdpa_online.dir/
+│   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── sdx_cuda_silu_gate.dir/
 │   │   │   │   ├── Debug/
 │   │   │   │   ├── MinSizeRel/
 │   │   │   │   ├── Release/
@@ -215,8 +293,12 @@ sdx/
 │   │   │   │   ├── MinSizeRel/
 │   │   │   │   ├── Release/
 │   │   │   │   └── RelWithDebInfo/
-│   │   │   ├── x64/
+│   │   │   ├── sdx_rmsnorm_rows_cpu.dir/
 │   │   │   │   ├── Debug/
+│   │   │   │   ├── MinSizeRel/
+│   │   │   │   ├── Release/
+│   │   │   │   └── RelWithDebInfo/
+│   │   │   ├── x64/
 │   │   │   │   └── Release/
 │   │   │   ├── ZERO_CHECK.dir/
 │   │   │   │   ├── Debug/
@@ -231,8 +313,22 @@ sdx/
 │   │   │   ├── INSTALL.vcxproj.filters
 │   │   │   ├── sdx_beta_schedules.vcxproj
 │   │   │   ├── sdx_beta_schedules.vcxproj.filters
+│   │   │   ├── sdx_cuda_flow_matching.vcxproj
+│   │   │   ├── sdx_cuda_flow_matching.vcxproj.filters
 │   │   │   ├── sdx_cuda_hwc_to_chw.vcxproj
 │   │   │   ├── sdx_cuda_hwc_to_chw.vcxproj.filters
+│   │   │   ├── sdx_cuda_ml.vcxproj
+│   │   │   ├── sdx_cuda_ml.vcxproj.filters
+│   │   │   ├── sdx_cuda_nf4.vcxproj
+│   │   │   ├── sdx_cuda_nf4.vcxproj.filters
+│   │   │   ├── sdx_cuda_rmsnorm.vcxproj
+│   │   │   ├── sdx_cuda_rmsnorm.vcxproj.filters
+│   │   │   ├── sdx_cuda_rope.vcxproj
+│   │   │   ├── sdx_cuda_rope.vcxproj.filters
+│   │   │   ├── sdx_cuda_sdpa_online.vcxproj
+│   │   │   ├── sdx_cuda_sdpa_online.vcxproj.filters
+│   │   │   ├── sdx_cuda_silu_gate.vcxproj
+│   │   │   ├── sdx_cuda_silu_gate.vcxproj.filters
 │   │   │   ├── sdx_fnv64_file.vcxproj
 │   │   │   ├── sdx_fnv64_file.vcxproj.filters
 │   │   │   ├── sdx_inference_timesteps.vcxproj
@@ -242,26 +338,43 @@ sdx/
 │   │   │   ├── sdx_latent.vcxproj.filters
 │   │   │   ├── sdx_line_stats.vcxproj
 │   │   │   ├── sdx_line_stats.vcxproj.filters
+│   │   │   ├── sdx_rmsnorm_rows_cpu.vcxproj
+│   │   │   ├── sdx_rmsnorm_rows_cpu.vcxproj.filters
 │   │   │   ├── ZERO_CHECK.vcxproj
 │   │   │   └── ZERO_CHECK.vcxproj.filters
 │   │   ├── cuda/
+│   │   │   ├── flow_matching_velocity.cu
 │   │   │   ├── hwc_to_chw.cu
-│   │   │   └── l2_normalize_rows.cu
+│   │   │   ├── l2_normalize_rows.cu
+│   │   │   ├── nf4_dequant.cu
+│   │   │   ├── rmsnorm_rows.cu
+│   │   │   ├── rope_apply.cu
+│   │   │   ├── sdpa_online_softmax.cu
+│   │   │   └── silu_gate.cu
 │   │   ├── include/
 │   │   │   └── sdx/
+│   │   │       ├── experimental/
 │   │   │       ├── beta_schedules.h
+│   │   │       ├── flow_matching_velocity.h
 │   │   │       ├── fnv64_file.h
 │   │   │       ├── hwc_to_chw.h
 │   │   │       ├── inference_timesteps.h
 │   │   │       ├── l2_normalize_rows.h
 │   │   │       ├── latent.h
-│   │   │       └── line_stats.h
+│   │   │       ├── line_stats.h
+│   │   │       ├── nf4_dequant.h
+│   │   │       ├── rmsnorm_rows.h
+│   │   │       ├── rmsnorm_rows_cpu.h
+│   │   │       ├── rope_apply.h
+│   │   │       ├── sdpa_online_softmax.h
+│   │   │       └── silu_gate.h
 │   │   ├── src/
 │   │   │   ├── sdx_beta_schedules.cpp
 │   │   │   ├── sdx_fnv64_file.cpp
 │   │   │   ├── sdx_inference_timesteps.cpp
 │   │   │   ├── sdx_latent.cpp
-│   │   │   └── sdx_line_stats.cpp
+│   │   │   ├── sdx_line_stats.cpp
+│   │   │   └── sdx_rmsnorm_rows_cpu.cpp
 │   │   ├── CMakeLists.txt
 │   │   └── README.md
 │   ├── cuda/
@@ -289,16 +402,32 @@ sdx/
 │   │   │   ├── beta_schedules_native.py
 │   │   │   ├── cuda_hwc_to_chw.py
 │   │   │   ├── cuda_l2_normalize.py
+│   │   │   ├── flow_matching_velocity_native.py
 │   │   │   ├── fnv64_file_native.py
 │   │   │   ├── inference_timesteps_native.py
 │   │   │   ├── jsonl_manifest_pure.py
 │   │   │   ├── latent_geometry.py
 │   │   │   ├── line_stats_native.py
 │   │   │   ├── native_tools.py
+│   │   │   ├── nf4_dequant_native.py
+│   │   │   ├── rmsnorm_native.py
+│   │   │   ├── rope_apply_native.py
+│   │   │   ├── sdpa_online_native.py
+│   │   │   ├── silu_gate_native.py
 │   │   │   └── text_hygiene.py
 │   │   └── README.md
 │   ├── rust/
-│   │   └── sdx-jsonl-tools/
+│   │   ├── sdx-jsonl-tools/
+│   │   │   ├── src/
+│   │   │   │   └── main.rs
+│   │   │   ├── target/
+│   │   │   │   ├── debug/
+│   │   │   │   ├── release/
+│   │   │   │   └── CACHEDIR.TAG
+│   │   │   ├── Cargo.lock
+│   │   │   ├── Cargo.toml
+│   │   │   └── README.md
+│   │   └── sdx-noise-schedule/
 │   │       ├── src/
 │   │       │   └── main.rs
 │   │       ├── target/
@@ -364,6 +493,7 @@ sdx/
 │   │   │   ├── __init__.py
 │   │   │   ├── architecture_themes.py
 │   │   │   ├── ckpt_info.py
+│   │   │   ├── generate_sdx_architecture_diagram.py
 │   │   │   ├── quick_test.py
 │   │   │   ├── smoke_imports.py
 │   │   │   └── validate_config_json.py
@@ -384,9 +514,11 @@ sdx/
 │   │   │   └── tag_coverage.py
 │   │   ├── repo/
 │   │   │   ├── __init__.py
+│   │   │   ├── clean_repo_artifacts.py
 │   │   │   ├── update_project_structure.py
 │   │   │   └── verify_doc_links.py
 │   │   ├── training/
+│   │   │   ├── noise_schedule_export.py
 │   │   │   ├── train_diffusion_dpo.py
 │   │   │   └── train_kd_distill.py
 │   │   ├── __init__.py
@@ -397,6 +529,7 @@ sdx/
 │   │   ├── curate_civitai_triggers.py
 │   │   ├── dit_variant_compare.py
 │   │   ├── download_all_danbooru_categorized_tags.py
+│   │   ├── dump_prompt_tag_csvs.py
 │   │   ├── eval_prompts.py
 │   │   ├── extract_civitai_snippets_for_content_controls.py
 │   │   ├── fetch_civitai_nsfw_concepts.py
@@ -450,21 +583,29 @@ sdx/
 │   │   ├── test_config_validator_extended.py
 │   │   ├── test_consistency_helpers.py
 │   │   ├── test_content_controls.py
-│   │   ├── test_cuda_hwc_native.py
-│   │   ├── test_cuda_hwc_numpy.py
+│   │   ├── test_controlnet_integration.py
 │   │   ├── test_danbooru_tag_split.py
 │   │   ├── test_diffusion_dpo_loss.py
+│   │   ├── test_diffusion_new_ideas.py
 │   │   ├── test_face_region_enhance.py
+│   │   ├── test_holy_grail_diffusion.py
+│   │   ├── test_holy_grail_presets.py
 │   │   ├── test_inference_research_hooks.py
+│   │   ├── test_ladd_distillation.py
 │   │   ├── test_latent_bridge.py
 │   │   ├── test_latent_geometry.py
 │   │   ├── test_line_stats_native.py
+│   │   ├── test_lora_adapters.py
 │   │   ├── test_multi_subject.py
+│   │   ├── test_native_cuda_extras.py
+│   │   ├── test_native_cuda_runtime.py
 │   │   ├── test_native_tools.py
 │   │   ├── test_neg_filter.py
 │   │   ├── test_news_features.py
+│   │   ├── test_nf4_codec.py
 │   │   ├── test_originality_augment.py
 │   │   ├── test_ot_noise_pairing.py
+│   │   ├── test_part_aware_training.py
 │   │   ├── test_preference_image_dataset.py
 │   │   ├── test_preference_jsonl.py
 │   │   ├── test_prompt_emphasis.py
@@ -475,17 +616,17 @@ sdx/
 │   │   ├── test_test_time_pick.py
 │   │   ├── test_text_hygiene.py
 │   │   ├── test_toolkit_basics.py
-│   │   └── test_train_config_flow_bridge.py
+│   │   ├── test_train_args_repro_flags.py
+│   │   ├── test_train_config_flow_bridge.py
+│   │   ├── test_vector_index_sampler.py
+│   │   └── test_vit_next_blocks.py
 │   ├── __init__.py
-│   ├── test_ar_dit_vit.py
 │   ├── test_book_helpers.py
 │   ├── test_book_scene_split.py
-│   ├── test_character_consistency.py
 │   ├── test_dit_architecture.py
 │   ├── test_dit_text_extras.py
 │   ├── test_enhanced_integration.py
 │   ├── test_image_quality_qc.py
-│   ├── test_model_creation.py
 │   ├── test_model_enhancements.py
 │   ├── test_native_helpers.py
 │   ├── test_native_multimodal_cascade.py
@@ -497,11 +638,7 @@ sdx/
 │   ├── test_region_captions.py
 │   ├── test_style_harmonization.py
 │   ├── test_text_encoder_fusion.py
-│   ├── test_update_project_structure.py
-│   ├── test_vit_advanced_utils.py
-│   ├── test_vit_backbone_presets.py
-│   ├── test_vit_module_smoke.py
-│   └── test_vit_prompt_system.py
+│   └── test_update_project_structure.py
 ├── toolkit/
 │   ├── extras/
 │   │   └── requirements-suggested.txt
@@ -522,7 +659,9 @@ sdx/
 │   └── README.md
 ├── training/
 │   ├── __init__.py
-│   └── enhanced_trainer.py
+│   ├── enhanced_trainer.py
+│   ├── train_args.py
+│   └── train_cli_parser.py
 ├── user_data/
 │   ├── train/
 │   └── README.md
@@ -579,6 +718,8 @@ sdx/
 │   │   ├── __init__.py
 │   │   ├── advanced_prompting.py
 │   │   ├── civitai_vocab.py
+│   │   ├── content_control_tag_data.py
+│   │   ├── content_control_tags.py
 │   │   ├── content_controls.py
 │   │   ├── multi_subject.py
 │   │   ├── neg_filter.py
@@ -593,13 +734,18 @@ sdx/
 │   │   ├── face_region_enhance.py
 │   │   ├── quality.py
 │   │   └── test_time_pick.py
+│   ├── quantization/
+│   │   ├── __init__.py
+│   │   └── nf4_codec.py
 │   ├── training/
 │   │   ├── __init__.py
 │   │   ├── config_validator.py
 │   │   ├── diffusion_dpo_loss.py
 │   │   ├── error_handling.py
+│   │   ├── ladd_distillation.py
 │   │   ├── metrics.py
 │   │   ├── ot_noise_pairing.py
+│   │   ├── part_aware_training.py
 │   │   ├── preference_image_dataset.py
 │   │   └── preference_jsonl.py
 │   ├── __init__.py
@@ -610,6 +756,7 @@ sdx/
 │   ├── checkpoint_utils.py
 │   ├── config.py
 │   ├── dataset.py
+│   ├── DIT_NEXTGEN_NOTES.md
 │   ├── ema.py
 │   ├── EXCELLENCE_VS_DIT.md
 │   ├── export_embeddings.py
