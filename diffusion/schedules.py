@@ -28,10 +28,24 @@ def _clip_betas(beta: np.ndarray) -> np.ndarray:
 
 
 def linear_beta_schedule(num_timesteps: int) -> np.ndarray:
+    try:
+        from sdx_native.diffusion_math_native import maybe_linear_beta_schedule_rust
+        result = maybe_linear_beta_schedule_rust(int(num_timesteps))
+        if result is not None:
+            return result.astype(np.float64)
+    except Exception:
+        pass
     return np.linspace(0.0001, 0.02, int(num_timesteps), dtype=np.float64)
 
 
 def cosine_beta_schedule(num_timesteps: int) -> np.ndarray:
+    try:
+        from sdx_native.diffusion_math_native import maybe_cosine_beta_schedule_rust
+        result = maybe_cosine_beta_schedule_rust(int(num_timesteps))
+        if result is not None:
+            return _clip_betas(result)
+    except Exception:
+        pass
     steps = np.arange(num_timesteps + 1, dtype=np.float64)
     alpha_bar = np.cos(((steps / num_timesteps) + 0.01) / 1.01 * np.pi * 0.5) ** 2
     alpha_bar = alpha_bar / alpha_bar[0]
@@ -52,7 +66,7 @@ def sigmoid_beta_schedule(
 
 
 def _squared_cosine_beta_schedule_v2_numpy(num_timesteps: int, max_beta: float = 0.999) -> np.ndarray:
-    """Vectorized reference (same math as the former scalar loop; fast without native)."""
+    """Vectorized NumPy fallback."""
     n = int(num_timesteps)
     if n < 1:
         return np.array([], dtype=np.float64)
@@ -70,19 +84,34 @@ def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999)
     Squared-cosine schedule with small offset (Improved DDPM / diffusers ``squaredcos_cap_v2``).
     ``alpha_bar(t) = cos^2((t + 0.008) / 1.008 * pi / 2)``.
 
-    Uses ``sdx_beta_schedules`` when built; otherwise vectorized NumPy.
+    Priority order:
+    1. Rust ``sdx_diffusion_math`` cdylib (fastest, no Python overhead).
+    2. ``sdx_native.beta_schedules_native`` C++ DLL (existing native build).
+    3. Vectorised NumPy fallback.
     """
     n = int(num_timesteps)
     if n < 1:
         return np.array([], dtype=np.float64)
+
+    # 1. Rust cdylib
+    try:
+        from sdx_native.diffusion_math_native import maybe_squaredcos_beta_schedule_v2_rust
+        result = maybe_squaredcos_beta_schedule_v2_rust(n, float(max_beta))
+        if result is not None and result.shape == (n,):
+            return result
+    except Exception:
+        pass
+
+    # 2. Existing C++ DLL
     try:
         from sdx_native.beta_schedules_native import squared_cosine_betas_v2_native
-
         got = squared_cosine_betas_v2_native(n, max_beta)
         if got is not None and got.shape == (n,):
             return got
     except ImportError:
         pass
+
+    # 3. NumPy
     return _squared_cosine_beta_schedule_v2_numpy(n, max_beta)
 
 

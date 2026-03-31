@@ -1,0 +1,12 @@
+[package]
+name = "sdx-diffusion-math"
+version = "0.1.0"
+edition = "2021"
+description = "Fast VP-diffusion math (alpha_cumprod, SNR) exposed as a C ABI cdylib for Python ctypes"
+license = "MIT"
+
+[lib]
+name = "sdx_diffusion_math"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]

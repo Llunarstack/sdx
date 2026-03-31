@@ -15,7 +15,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--text-encoder",
         type=str,
         default="",
-        help="T5 encoder path or HF id (empty = use model/T5-XXL if present else google/t5-v1_1-xxl)",
+        help="T5 encoder path or HF id (empty = use pretrained/T5-XXL if present else google/t5-v1_1-xxl)",
     )
     parser.add_argument(
         "--text-encoder-mode",
@@ -74,6 +74,13 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-compile", action="store_true", help="Disable torch.compile")
     parser.add_argument("--no-grad-checkpoint", action="store_true")
     parser.add_argument("--num-ar-blocks", type=int, default=0, help="Block-wise AR (0=off, 2 or 4)")
+    parser.add_argument(
+        "--ar-block-order",
+        type=str,
+        default="raster",
+        choices=["raster", "zorder"],
+        help="AR macro-block order: raster (row-major) or zorder (Morton). See docs/AR_EXTENSIONS.md",
+    )
     parser.add_argument("--no-xformers", action="store_true", help="Disable xformers attention")
     parser.add_argument(
         "--passes",

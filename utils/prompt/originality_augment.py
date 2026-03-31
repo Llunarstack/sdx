@@ -3,7 +3,7 @@ Inject **originality / novelty** phrases into prompts (same rules as ``sample.py
 
 Used at **inference** and optionally during **training** (``--train-originality-prob``) so the model
 sees compositional variety tokens, not only at sample time. Token list:
-``config.reference.prompt_domains.ORIGINALITY_POSITIVE_TOKENS``.
+``config.defaults.prompt_domains.ORIGINALITY_POSITIVE_TOKENS``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ __all__ = ["inject_originality_tokens", "default_originality_tokens"]
 
 def default_originality_tokens() -> List[str]:
     try:
-        from config.reference.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
+        from config.defaults.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
 
         return list(ORIGINALITY_POSITIVE_TOKENS)
     except ImportError:

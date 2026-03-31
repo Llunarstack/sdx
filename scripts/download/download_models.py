@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Download Hugging Face models for better generation and prompt understanding.
-Saves to model/ (or --model-dir). Defaults are chosen to save disk space.
+Saves to pretrained/ (or --model-dir). Defaults are chosen to save disk space.
 
 - T5 (prompt understanding): --t5 downloads only T5-XXL (best, 4096-dim). Use --t5-xl or --t5-large
   for smaller GPUs (saves ~several GB by not downloading the others).
@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-MODEL_DIR_DEFAULT = os.path.join(ROOT, "model")
+MODEL_DIR_DEFAULT = os.path.join(ROOT, "pretrained")
 
 # Text encoders: better prompt understanding (research: SDXL, FLUX, PixArt use T5-XXL)
 T5_REPOS = [
@@ -90,7 +90,7 @@ def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=
 
 def main():
     parser = argparse.ArgumentParser(description="Download best HF models for image output: T5, VAE, LLMs into model/.")
-    parser.add_argument("--model-dir", type=str, default=MODEL_DIR_DEFAULT, help="Base dir (default: project model/)")
+    parser.add_argument("--model-dir", type=str, default=MODEL_DIR_DEFAULT, help="Base dir (default: project pretrained/)")
     parser.add_argument(
         "--t5", action="store_true", help="Download T5 text encoders: XXL (best), XL, Large (prompt understanding)"
     )

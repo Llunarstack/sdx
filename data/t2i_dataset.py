@@ -452,7 +452,7 @@ class Text2ImageDataset(Dataset):
             caption = ",".join(parts)[: self.max_caption_length]
         return caption.strip(), (negative_caption or "").strip()
 
-    def _latent_path(self, path: str) -> Path:
+    def _latent_path(self, path: str) -> Optional[Path]:
         """Cache key: same name as image but .pt in latent_cache_dir."""
         if not self.latent_cache_dir:
             return None

@@ -26,7 +26,7 @@ This doc ties together the **Python modules** and **CLI flags** that shape the p
 |-------|------|------|
 | Content controls | [`utils/prompt/content_controls.py`](../utils/prompt/content_controls.py) | `apply_content_controls`, `infer_content_controls_from_prompt` |
 | Pos/neg conflict filter | [`utils/prompt/neg_filter.py`](../utils/prompt/neg_filter.py) | `filter_negative_by_positive`, `positive_token_set` |
-| Domain / anti-AI strings | [`config/reference/prompt_domains.py`](../config/reference/prompt_domains.py) | Defaults, `ANTI_AI_*`, `NATURAL_LOOK_*`, `LORA_STACK_NEGATIVE`, tips |
+| Domain / anti-AI strings | [`config/defaults/prompt_domains.py`](../config/defaults/prompt_domains.py) | Defaults, `ANTI_AI_*`, `NATURAL_LOOK_*`, `LORA_STACK_NEGATIVE`, tips |
 | Shims | [`config/prompt_domains.py`](../config/prompt_domains.py) | Re-exports reference module |
 | Sampling CLI | [`sample.py`](../sample.py) | Orchestrates the chain above |
 | Emphasis → token weights | [`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py) | `( )` / `[ ]` parsing + T5 `offset_mapping` weights; **`train.py --train-prompt-emphasis`** for training–inference parity |
@@ -64,7 +64,7 @@ Full list: `python sample.py --help`.
 
 ## Training vs inference
 
-- **Training** uses captions from folders / JSONL (emphasis, regional captions, optional negative fields). Enable **`--boost-adherence-caption`** on `train.py` to prepend adherence tags from [`data/caption_utils.py`](../data/caption_utils.py) (`prepend_adherence_boost`) for stronger literal conditioning. The **same** quality/domain ideas are documented in [MODEL_WEAKNESSES.md](MODEL_WEAKNESSES.md) and [prompt_domains.py](../config/reference/prompt_domains.py) for caption writing.
+- **Training** uses captions from folders / JSONL (emphasis, regional captions, optional negative fields). Enable **`--boost-adherence-caption`** on `train.py` to prepend adherence tags from [`data/caption_utils.py`](../data/caption_utils.py) (`prepend_adherence_boost`) for stronger literal conditioning. The **same** quality/domain ideas are documented in [MODEL_WEAKNESSES.md](MODEL_WEAKNESSES.md) and [prompt_domains.py](../config/defaults/prompt_domains.py) for caption writing.
 - **Inference** adds the dynamic stack above so one checkpoint can be steered without retraining.
 
 ---
@@ -75,4 +75,4 @@ Full list: `python sample.py --help`.
 - [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — config ↔ checkpoint ↔ sample (§13)
 - [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) — Civitai tips + community issue matrix
 - [scripts/tools/README.md](../scripts/tools/README.md) — `preview_generation_prompt.py`
-- [config/reference/prompt_domains.py](../config/reference/prompt_domains.py) — default negatives and tips
+- [config/defaults/prompt_domains.py](../config/defaults/prompt_domains.py) — default negatives and tips

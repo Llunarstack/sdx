@@ -73,7 +73,7 @@ class SceneContext:
 class ConsistencyManager:
     """Manage consistency across multiple generations."""
 
-    def __init__(self, storage_path: str = "./consistency_data"):
+    def __init__(self, storage_path: str = "./assets/consistency"):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
@@ -693,7 +693,7 @@ class ReferenceImageManager:
         return ", ".join(prompt_parts)
 
 
-def create_consistency_system(storage_path: str = "./consistency_data"):
+def create_consistency_system(storage_path: str = "./assets/consistency"):
     """Create complete consistency system."""
     return {
         "consistency_manager": ConsistencyManager(storage_path),
