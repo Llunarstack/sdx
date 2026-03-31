@@ -39,30 +39,38 @@ python train.py --data-path /path/to/data --num-ar-blocks 2
 
 # 4×4 block-wise AR (stronger structure)
 python train.py --data-path /path/to/data --num-ar-blocks 4
+
+# Same block grid, Morton (z-order) macro-block visit order (see docs/AR_EXTENSIONS.md)
+python train.py --data-path /path/to/data --num-ar-blocks 2 --ar-block-order zorder
 ```
 
-The value is stored in the checkpoint config. **You must use the same `num_ar_blocks` at inference** as was used at training (sample.py and inference.py read it from the checkpoint).
+The value is stored in the checkpoint config. **You must use the same `num_ar_blocks` at inference** as was used at training (sample.py and inference.py read it from the checkpoint). **`ar_block_order`** is saved too; inference builds the DiT via `get_dit_build_kwargs`, which restores it (missing older checkpoints default to **`raster`**).
 
 ### Config
 
 In `config/train_config.py`:
 
 - **`num_ar_blocks: int = 0`** — 0 = off, 2 = 2×2 blocks, 4 = 4×4 blocks. Other values (e.g. 3 for 3×3) are supported by the mask code but are less common.
+- **`ar_block_order: str = "raster"`** — macro-block sequence: **`raster`** (row-major blocks) or **`zorder`** (Morton order). See [AR_EXTENSIONS.md](AR_EXTENSIONS.md).
 
 ### Code
 
-- **Mask**: `models/attention.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks)`. Returns an (N, N) float mask with `-inf` where attention is disabled.
-- **DiT**: `models/dit_text.py` and `models/dit_predecessor.py` register `_ar_mask` when `num_ar_blocks > 0` and pass it into every block’s self-attention.
+- **Mask**: `models/attention.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks, block_order=...)`. Core logic: `models/ar_masks_extended.py`. Returns an (N, N) float mask with `-inf` where attention is disabled.
+- **DiT**: `models/dit_text.py` and `models/dit_predecessor.py` (`DiT_Predecessor_Text`, `DiT_Supreme_Text`) register `_ar_mask` when `num_ar_blocks > 0` and pass it into every block’s self-attention.
+
+### Inspect masks
+
+```bash
+python -m scripts.tools ar_mask_inspect --h 32 --w 32 --blocks 2 --compare
+```
 
 ---
 
 ## Block order
 
-Current order is **raster** over blocks:
+Default macro-block order is **raster**: block `(0,0)`, then `(0,1)`, …, then `(1,0)`, `(1,1)`, … — top-left toward bottom-right. Within each macro-block, patch order is also raster.
 
-1. Block (0,0), then (0,1), …, then (1,0), (1,1), …
-
-So “earlier” in AR terms is top-left toward bottom-right. Within a block, patch order is also raster (row by row). This is fixed in the current code; see IMPROVEMENTS.md for ideas (e.g. spiral order, or AR only in early layers).
+Optional **`zorder`**: Morton / z-order over block indices (2D locality–friendly sequence). Training: `--ar-block-order zorder`. Details and extra helpers: **[AR_EXTENSIONS.md](AR_EXTENSIONS.md)**.
 
 ---
 

@@ -1,16 +1,16 @@
-# Local model stack (`model/`)
+# Local model stack (`pretrained/`)
 
-When folders exist under `model/`, paths resolve automatically (see `utils/modeling/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](FILES.md)**.
+When folders exist under `pretrained/`, paths resolve automatically (see `utils/modeling/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](FILES.md)**.
 
 | Role | Folder / default |
 |------|------------------|
-| T5-XXL | `model/T5-XXL` or `google/t5-v1_1-xxl` |
-| CLIP ViT-L/14 | `model/CLIP-ViT-L-14` or `openai/clip-vit-large-patch14` |
-| CLIP ViT-bigG/14 | `model/CLIP-ViT-bigG-14` or LAION hub id |
-| DINOv2 (REPA / ViT) | `model/DINOv2-Large` or `facebook/dinov2-large` |
-| SigLIP | `model/SigLIP-SO400M` |
-| Qwen LLM | `model/Qwen2.5-14B-Instruct` |
-| Stable Cascade | `model/StableCascade-Prior`, `model/StableCascade-Decoder` |
+| T5-XXL | `pretrained/T5-XXL` or `google/t5-v1_1-xxl` |
+| CLIP ViT-L/14 | `pretrained/CLIP-ViT-L-14` or `openai/clip-vit-large-patch14` |
+| CLIP ViT-bigG/14 | `pretrained/CLIP-ViT-bigG-14` or LAION hub id |
+| DINOv2 (REPA / ViT) | `pretrained/DINOv2-Large` or `facebook/dinov2-large` |
+| SigLIP | `pretrained/SigLIP-SO400M` |
+| Qwen LLM | `pretrained/Qwen2.5-14B-Instruct` |
+| Stable Cascade | `pretrained/StableCascade-Prior`, `pretrained/StableCascade-Decoder` |
 
 ## How this maps to the SDX pipeline
 

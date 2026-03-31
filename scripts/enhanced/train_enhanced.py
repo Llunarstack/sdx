@@ -104,7 +104,7 @@ def get_enhanced_config():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--image-size", type=int, default=512)
-    parser.add_argument("--results-dir", type=str, default="./enhanced_results")
+    parser.add_argument("--results-dir", type=str, default="./runs")
 
     args = parser.parse_args()
 

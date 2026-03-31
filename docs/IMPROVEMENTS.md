@@ -232,7 +232,7 @@ Ideas that are uncommon or absent in mainstream DiT/SD/FLUX pipelines—worth ex
 ### 8.7 “Creativity” or diversity knob (temperature by region or step)
 
 - **Idea:** A single scalar (or per-step schedule) that controls how much the model **deviates** from the mode—e.g. higher noise in the sampler, or a learned “diversity” embedding that shifts the distribution. Lets users ask for “safe, on-prompt” vs “weirder, more varied” without changing the prompt. Partially overlaps CFG; explicit “creativity” parameter is rare.
-- **Coded:** `creativity_embed_dim` + per-batch random `creativity` in training; **`--creativity-jitter-std`** widens the training scalar; **`--creativity-jitter`** at sample (esp. `--num` > 1). **`--originality`** / **`--train-originality-prob`** inject `ORIGINALITY_POSITIVE_TOKENS` ([`config/reference/prompt_domains.py`](../config/reference/prompt_domains.py)) via [`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py).
+- **Coded:** `creativity_embed_dim` + per-batch random `creativity` in training; **`--creativity-jitter-std`** widens the training scalar; **`--creativity-jitter`** at sample (esp. `--num` > 1). **`--originality`** / **`--train-originality-prob`** inject `ORIGINALITY_POSITIVE_TOKENS` ([`config/defaults/prompt_domains.py`](../config/defaults/prompt_domains.py)) via [`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py).
 - **Add (future):** Per-step creativity schedule; regional diversity without prompt edits.
 
 ### 8.8 Learning from rejection (negative signal from user feedback)

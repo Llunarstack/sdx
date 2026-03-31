@@ -1,3 +1,3 @@
-"""Compatibility shim — implementation: :mod:`config.reference.pixai_reference`."""
+"""Compatibility shim — implementation: :mod:`config.defaults.pixai_reference`."""
 
-from .reference.pixai_reference import *  # noqa: F403
+from .defaults.pixai_reference import *  # noqa: F403

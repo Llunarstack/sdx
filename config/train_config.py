@@ -1,49 +1,58 @@
-# Training config: single place for hyperparameters (fast + good defaults).
+"""Training configuration — single source of truth for all hyperparameters."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
 @dataclass
 class TrainConfig:
+    # -------------------------------------------------------------------------
     # Data
+    # -------------------------------------------------------------------------
     data_path: str = ""
     manifest_jsonl: Optional[str] = None
     image_size: int = 256
-    # IMPROVEMENTS §1.1: optional list of (H, W); None = single square --image-size
+    # Optional list of (H, W) targets for multi-resolution / aspect-ratio bucketing.
+    # None = single square crop at --image-size.
     resolution_buckets: Optional[List[Tuple[int, int]]] = None
     num_workers: int = 8
     global_batch_size: int = 128
     caption_dropout_prob: float = 0.1
-    # IMPROVEMENTS 1.3: caption dropout schedule (step -> prob); e.g. [(0, 0.2), (10000, 0.05)] = decay from 0.2 to 0.05
-    caption_dropout_schedule: Optional[List[tuple]] = None  # list of (step, prob)
-    # IMPROVEMENTS 1.2: crop mode for training images
+    # Step-dependent caption dropout schedule: list of (step, prob) breakpoints.
+    # Example: [(0, 0.2), (10000, 0.05)] decays from 0.2 to 0.05 over 10k steps.
+    caption_dropout_schedule: Optional[List[tuple]] = None
     crop_mode: str = "center"  # "center" | "random" | "largest_center"
-    # Regional / layout text (JSONL `parts` / `region_captions`) merged into T5 caption — no DiT change
+    # Merge JSONL `parts` / `region_captions` into the T5 caption string.
     region_caption_mode: str = "append"  # "append" | "prefix" | "off"
-    region_layout_tag: str = "[layout]"  # prefix before regional block; set "" to disable tag
-    # Prepend adherence tags to training captions (stronger literal T5 conditioning; see data/caption_utils.py).
+    region_layout_tag: str = "[layout]"  # prefix before regional block; "" to disable
+    # Prepend adherence tags to training captions (see data/caption_utils.py).
     boost_adherence_caption: bool = False
     # NFKC + zero-width strip on training captions (see sdx_native.text_hygiene).
     caption_unicode_normalize: bool = False
-    # Match sample.py ( ) / [ ] emphasis: strip brackets for T5 and pass DiT token_weights (see utils/prompt/prompt_emphasis.py).
+    # Strip ( ) / [ ] emphasis brackets for T5 and pass token_weights to DiT
+    # (see utils/prompt/prompt_emphasis.py).
     train_prompt_emphasis: bool = False
 
-    # Part-aware / grounding (JSONL: grounding_mask, caption_global, caption_local, entity_captions; see utils/training/part_aware_training.py)
-    attn_grounding_loss_weight: float = 0.0  # VP-DDPM path only; uses DiT block-0 cross-attn; mixed batches OK (see collate grounding_mask_valid)
+    # -------------------------------------------------------------------------
+    # Part-aware / grounding
+    # JSONL fields: grounding_mask, caption_global, caption_local, entity_captions
+    # See utils/training/part_aware_training.py
+    # -------------------------------------------------------------------------
+    attn_grounding_loss_weight: float = 0.0  # VP-DDPM only; 0 = off
     attn_grounding_token_start: int = 0
     attn_grounding_token_end: int = 0  # 0 = all text positions
-    attn_grounding_min_fg_patch_mass: float = 1e-4  # skip near-empty masks on patch grid (0 = off)
+    attn_grounding_min_fg_patch_mass: float = 1e-4  # skip near-empty masks (0 = off)
     use_hierarchical_captions: bool = False
     hierarchical_caption_separator: str = " | "
     hierarchical_caption_drop_global_p: float = 0.0
     hierarchical_caption_drop_local_p: float = 0.0
     foveated_train_prob: float = 0.0
     foveated_crop_frac: float = 0.55
-    grounding_mask_soft: bool = False  # keep grayscale 0–1 instead of binarizing at 0.5
-    # Attention/token adherence auxiliary loss (Attend-and-Excite style token coverage).
+    grounding_mask_soft: bool = False  # keep grayscale 0–1 instead of binarising at 0.5
+    # Attend-and-Excite style token coverage auxiliary loss.
     attn_token_coverage_loss_weight: float = 0.0
     attn_token_coverage_target: float = 0.025
-    # Prompt reinjection + timestep-aware text scaling (training/inference in DiT_Text).
+    # Prompt reinjection + timestep-aware text scaling (see DiT_Text).
     prompt_reinject_every_n: int = 0
     prompt_reinject_alpha: float = 0.0
     prompt_reinject_decay: float = 1.0
@@ -51,216 +60,255 @@ class TrainConfig:
     prompt_early_scale: float = 1.1
     prompt_late_scale: float = 1.0
 
+    # -------------------------------------------------------------------------
     # Model
+    # -------------------------------------------------------------------------
     model_name: str = "DiT-XL/2-Text"
-    text_encoder: str = "google/t5-v1_1-xxl"  # T5-XXL like PixArt/ReVe (or local path, e.g. model/T5-XXL)
-    # "t5" = T5 only (default). "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused (see utils/modeling/text_encoder_bundle.py).
+    # T5-XXL like PixArt/ReVe; accepts HF id or local path (e.g. pretrained/T5-XXL).
+    text_encoder: str = "google/t5-v1_1-xxl"
+    # "t5" = T5 only (default).
+    # "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused
+    # (see utils/modeling/text_encoder_bundle.py).
     text_encoder_mode: str = "t5"
-    clip_text_encoder_l: str = ""  # empty = use utils/model_paths default (local CLIP-ViT-L-14 or HF id)
-    clip_text_encoder_bigg: str = ""  # empty = default CLIP-ViT-bigG-14
+    clip_text_encoder_l: str = ""    # empty = resolve via utils/modeling/model_paths.py
+    clip_text_encoder_bigg: str = "" # empty = resolve via utils/modeling/model_paths.py
     vae_model: str = "stabilityai/sd-vae-ft-mse"
-    # Autoencoder type:
-    # - "kl": AutoencoderKL (classic Stable Diffusion VAE)
-    # - "rae": AutoencoderRAE (Representation Autoencoder; diffusion works on its encode()/decode() latents)
+    # "kl"  = AutoencoderKL (classic Stable Diffusion VAE)
+    # "rae" = AutoencoderRAE (Representation Autoencoder)
     autoencoder_type: str = "kl"
     latent_scale: float = 0.18215
-    # When RAE latent channels != 4: train a 1x1 bridge (RAELatentBridge) to/from DiT latents (see models/rae_latent_bridge.py).
+    # When RAE latent channels != 4: train a 1×1 bridge (RAELatentBridge) to/from
+    # DiT latents (see models/rae_latent_bridge.py).
     rae_use_latent_bridge: bool = True
-    rae_bridge_cycle_weight: float = 0.01  # Auxiliary cycle loss z ≈ to_rae(to_dit(z)); 0=off
+    rae_bridge_cycle_weight: float = 0.01  # cycle loss z ≈ to_rae(to_dit(z)); 0 = off
 
-    # --- REPA (Representation Alignment) ---
-    # Optional auxiliary loss to align DiT internal features with a frozen vision encoder
-    # (DINOv2/CLIP). This is the "fast hint" upgrade.
-    repa_weight: float = 0.0  # 0=off
-    # Recommended: one of:
-    # - "facebook/dinov2-base" (768-dim)
-    # - "openai/clip-vit-large-patch14" (768-dim)
-    repa_encoder_model: str = "facebook/dinov2-base"  # or local model/DINOv2-Large
-    # The model's projection head output dim (must match the frozen encoder embedding dim).
-    # For common models: CLIP ViT-L/14 -> 768, DINOv2 base -> 768, DINOv2 large -> 1024.
+    # -------------------------------------------------------------------------
+    # REPA — Representation Alignment auxiliary loss
+    # Aligns DiT internal features with a frozen DINOv2 or CLIP encoder.
+    # -------------------------------------------------------------------------
+    repa_weight: float = 0.0  # 0 = off
+    # Recommended encoders:
+    #   "facebook/dinov2-base"          (768-dim)
+    #   "openai/clip-vit-large-patch14" (768-dim)
+    repa_encoder_model: str = "facebook/dinov2-base"
+    # Must match the frozen encoder embedding dim:
+    #   CLIP ViT-L/14 → 768, DINOv2-base → 768, DINOv2-large → 1024.
     repa_out_dim: int = 768
-    repa_projector_hidden_dim: int = 0  # 0=linear head
+    repa_projector_hidden_dim: int = 0  # 0 = linear projection head
 
-    # --- ViT-Gen / Hybrid SSM swap (token mixer) ---
-    # Replace every Nth self-attention block with a lightweight SSM-like token mixer.
-    ssm_every_n: int = 0  # 0=off
+    # -------------------------------------------------------------------------
+    # Hybrid SSM token mixer
+    # Replace every Nth self-attention block with a lightweight SSM-like mixer.
+    # -------------------------------------------------------------------------
+    ssm_every_n: int = 0  # 0 = off
     ssm_kernel_size: int = 7
 
-    # --- ViT-Gen / Elysium-Flow ViT features ---
-    # 1) Register tokens ("sandwich" scratchpad, simplified: patches + N register tokens)
+    # -------------------------------------------------------------------------
+    # ViT architectural features
+    # -------------------------------------------------------------------------
+    # Register tokens (scratchpad tokens appended to patch sequence).
     num_register_tokens: int = 0
-    # 2) RoPE (rotary positional embeddings) for self-attention (1D index RoPE implementation)
+    # RoPE (rotary positional embeddings) for self-attention.
     use_rope: bool = False
     rope_base: float = 10000.0
-    # 3) Hierarchical Patch Merging 2.0 (KV pooling factor for self-attention keys/values)
-    #    kv_merge_factor=1 disables; e.g. 2 merges each 2x2 patch block into one KV token.
+    # KV pooling factor for self-attention (1 = disabled; 2 = merge 2×2 blocks).
     kv_merge_factor: int = 1
-    # 4) Cross-scale token routing (soft gating per token; does not change compute graph yet)
+    # Soft per-token routing gate (does not change compute graph).
     token_routing_enabled: bool = False
     token_routing_strength: float = 1.0
-    token_keep_ratio: float = 1.0  # <=1.0; top-k keep over patch tokens (1.0 = disabled)
-    token_keep_min_value: float = 0.0  # residual gate floor for dropped tokens
-    drop_path_rate: float = 0.0  # stochastic depth across blocks (0=off)
-    layerscale_init: float = 0.0  # >0 enables LayerScale residual gains (e.g. 1e-5)
-    # Block-wise AR (ACDiT-style): 0 = full bidirectional; 2 = 2×2 blocks, 4 = 4×4 blocks (raster order).
-    # See docs/AR.md for when to use AR and how it affects structure/fixability.
+    token_keep_ratio: float = 1.0       # top-k keep over patch tokens (1.0 = disabled)
+    token_keep_min_value: float = 0.0   # residual gate floor for dropped tokens
+    drop_path_rate: float = 0.0         # stochastic depth (0 = off)
+    layerscale_init: float = 0.0        # > 0 enables LayerScale residual gains (e.g. 1e-5)
+    # Block-wise AR mask (ACDiT-style): 0 = full bidirectional attention.
+    # 2 = 2×2 blocks, 4 = 4×4 blocks in raster order. See docs/AR.md.
     num_ar_blocks: int = 0
+    ar_block_order: str = "raster"  # "raster" | "zorder"
     use_xformers: bool = True
-    # Negative prompt: try really hard not to add those features
     negative_prompt_weight: float = 0.5
-    # No reference image — model excels on dataset only.
-    style_embed_dim: int = 0  # same as text_dim if style from T5; enables style conditioning
-    style_strength: float = 0.7  # blend strength for style (0.6-0.8 recommended)
-    control_cond_dim: int = 0  # 1 = enable ControlNet (control image); 0 = off
-    control_num_types: int = 0  # 0 = off; e.g. 9 for unknown/canny/depth/pose/seg/lineart/scribble/normal/hed
-    control_scale: float = 0.85  # ControlNet strength (0.7-1.0 recommended)
-    # Creativity/diversity knob (IMPROVEMENTS 8.7): 0 = off; else hidden dim for scalar conditioning (e.g. 64)
+    style_embed_dim: int = 0        # > 0 enables T5-encoded style conditioning
+    style_strength: float = 0.7     # blend strength for style (0.6–0.8 recommended)
+    control_cond_dim: int = 0       # 1 = enable ControlNet; 0 = off
+    control_num_types: int = 0      # 0 = off; e.g. 9 for canny/depth/pose/seg/…
+    control_scale: float = 0.85     # ControlNet strength (0.7–1.0 recommended)
+    # Creativity/diversity scalar conditioning (0 = off; set to hidden dim, e.g. 64).
     creativity_embed_dim: int = 0
-    creativity_max: float = 1.0  # Training: sample creativity in [0, creativity_max]
-    # Extra Gaussian noise on the per-sample creativity scalar (wider training coverage; 0 = off).
-    creativity_jitter_std: float = 0.0
-    # Randomly inject ORIGINALITY_POSITIVE_TOKENS into captions (same insertion rules as sample.py --originality).
+    creativity_max: float = 1.0
+    creativity_jitter_std: float = 0.0  # extra noise on creativity scalar during training
+    # Randomly inject originality tokens into captions during training.
     train_originality_augment_prob: float = 0.0  # 0 = off; try 0.1–0.25
-    train_originality_strength: float = 0.5  # 0–1 maps to how many tokens are inserted
-    size_embed_dim: int = (
-        0  # PixArt-style (h, w) latent grid -> timestep conditioning; 0 = off (still can infer H,W from x)
-    )
-    # Optional channel gate on patch tokens after embed (zero-init = identity at start).
+    train_originality_strength: float = 0.5      # 0–1 controls token insertion density
+    # PixArt-style (h, w) latent grid → timestep conditioning (0 = off).
+    size_embed_dim: int = 0
+    # Channel gate on patch tokens after embed (zero-init = identity at start).
     patch_se: bool = False
     patch_se_reduction: int = 8
 
-    # Diffusion (SD/SDXL-style options)
+    # -------------------------------------------------------------------------
+    # Diffusion
+    # -------------------------------------------------------------------------
     num_timesteps: int = 1000
     timestep_respacing: str = ""
-    beta_schedule: str = "linear"  # linear | cosine | sigmoid | squaredcos_cap_v2
-    prediction_type: str = "epsilon"  # "epsilon" | "v" (velocity) | "x0" (direct clean latent)
-    noise_offset: float = 0.0  # SD/SDXL: shift noise for better light/dark balance (e.g. 0.1)
-    min_snr_gamma: float = 5.0  # Min-SNR weighting: cap SNR for loss (0 = off, 5 typical)
-    # Timestep loss: "min_snr" | "min_snr_soft" | "unit" | "edm" | "v" | "eps" (non-min modes ignore min_snr_gamma for the weight formula).
+    beta_schedule: str = "linear"      # "linear" | "cosine" | "sigmoid" | "squaredcos_cap_v2"
+    prediction_type: str = "epsilon"   # "epsilon" | "v" | "x0"
+    noise_offset: float = 0.0          # SD-style noise offset for light/dark balance (e.g. 0.1)
+    min_snr_gamma: float = 5.0         # min-SNR loss cap (0 = off; 5 is typical)
+    # "min_snr" | "min_snr_soft" | "unit" | "edm" | "v" | "eps"
     loss_weighting: str = "min_snr"
-    loss_weighting_sigma_data: float = 0.5  # For loss_weighting="edm"
-    # Spectral Flow Prediction (SFP) prototype: FFT-weighted MSE on (pred-target) in latent space.
-    # Not Flow Matching; does not change sampling. Ignored when MDM masked training is active (spatial MSE there).
+    loss_weighting_sigma_data: float = 0.5  # used when loss_weighting="edm"
+    # Spectral Flow Prediction: FFT-weighted MSE on (pred - target) in latent space.
+    # Ignored when MDM masked training is active.
     spectral_sfp_loss: bool = False
-    spectral_sfp_low_sigma: float = 0.22  # radial width for low-frequency emphasis at high noise
-    spectral_sfp_high_sigma: float = 0.22  # radial width for high-frequency emphasis at low noise
-    spectral_sfp_tau_power: float = 1.0  # sharpen/flatten time blend t/(T-1) (1 = linear)
-    # OT-style noise–latent mini-batch coupling (experimental; see utils/training/ot_noise_pairing.py).
-    ot_noise_pair_reg: float = 0.0  # 0=off; Sinkhorn entropic regularizer (e.g. 0.05)
+    spectral_sfp_low_sigma: float = 0.22
+    spectral_sfp_high_sigma: float = 0.22
+    spectral_sfp_tau_power: float = 1.0
+    # OT noise–latent mini-batch coupling (see utils/training/ot_noise_pairing.py).
+    ot_noise_pair_reg: float = 0.0   # 0 = off; Sinkhorn regulariser (e.g. 0.05)
     ot_noise_pair_iters: int = 40
-    ot_noise_pair_mode: str = "soft"  # soft | hungarian (hungarian needs scipy)
-    # Rectified-flow-style training (see diffusion/flow_matching.py); mutually exclusive with MDM masked training.
+    ot_noise_pair_mode: str = "soft"  # "soft" | "hungarian" (hungarian requires scipy)
+    # Rectified-flow training (see diffusion/flow_matching.py).
+    # Mutually exclusive with MDM masked training.
     flow_matching_training: bool = False
-    # VP bridge auxiliary: shuffle-pair latent mix + standard training_losses (regularizer). Can combine with VP or flow main loss.
-    bridge_aux_weight: float = 0.0  # 0=off; try 0.02–0.15
-    bridge_aux_lambda: float = 0.2  # mix x0 = (1-λ) x + λ shuffle(x); in (0, 1]
-    # Which diffusion indices t to sample during training (VP-DDPM unchanged; only P(t)).
-    # See diffusion/timestep_sampling.py and docs/MODERN_DIFFUSION.md.
-    timestep_sample_mode: str = "uniform"  # uniform | logit_normal | high_noise
-    timestep_logit_mean: float = 0.0  # for logit_normal (SD3-style defaults often 0)
-    timestep_logit_std: float = 1.0  # for logit_normal (SD3-style defaults often 1)
+    # VP bridge auxiliary regulariser (shuffle-pair latent mix).
+    bridge_aux_weight: float = 0.0   # 0 = off; try 0.02–0.15
+    bridge_aux_lambda: float = 0.2   # mix x0 = (1-λ)x + λ·shuffle(x); in (0, 1]
+    # Timestep sampling distribution (see diffusion/timestep_sampling.py).
+    timestep_sample_mode: str = "uniform"  # "uniform" | "logit_normal" | "high_noise"
+    timestep_logit_mean: float = 0.0
+    timestep_logit_std: float = 1.0
 
-    # Training length: prefer passes (N full passes over data), then max_steps, then epochs
-    passes: int = 0  # If > 0, train for this many full passes over dataset (steps = passes * steps_per_epoch)
-    max_steps: int = 0  # Cap when using passes; or raw step limit when passes==0 (0 = use epochs)
-    epochs: int = 100  # Used only when passes==0 and max_steps==0
+    # -------------------------------------------------------------------------
+    # Training length
+    # Priority: passes > max_steps > epochs
+    # -------------------------------------------------------------------------
+    passes: int = 0      # full passes over dataset (steps = passes × steps_per_epoch)
+    max_steps: int = 0   # hard step cap (0 = use epochs)
+    epochs: int = 100    # used only when passes == 0 and max_steps == 0
     lr: float = 1e-4
-    min_lr: float = 1e-6  # Cosine schedule decays to this (avoids collapse)
-    lr_warmup_steps: int = 500  # Linear warmup then cosine
+    min_lr: float = 1e-6        # cosine schedule floor
+    lr_warmup_steps: int = 500  # linear warmup then cosine
     weight_decay: float = 0.01
     max_grad_norm: float = 1.0
     use_bf16: bool = True
     use_compile: bool = True
     grad_accum_steps: int = 1
     grad_checkpointing: bool = True
-    save_best: bool = True  # Save checkpoint when loss is best (so more steps = better saved model)
+    save_best: bool = True  # save checkpoint whenever train loss improves
 
-    # Validation + early stopping: avoid overtraining; "best" = best by val loss
-    val_split: float = 0.0  # Fraction of data for validation (e.g. 0.05); 0 = off
-    val_every: int = 2000  # Evaluate val loss every N steps (when val_split > 0)
-    early_stopping_patience: int = 0  # Stop after this many val checks with no improvement; 0 = off
-    val_max_batches: Optional[int] = None  # Cap val batches per eval (None = full val set)
+    # -------------------------------------------------------------------------
+    # Validation + early stopping
+    # -------------------------------------------------------------------------
+    val_split: float = 0.0          # fraction held out for validation (0 = off)
+    val_every: int = 2000           # evaluate every N steps
+    early_stopping_patience: int = 0  # stop after N val checks with no improvement (0 = off)
+    val_max_batches: Optional[int] = None  # cap val batches per eval (None = full set)
 
-    # Refinement: train model to fix imperfections during generation (unless user wants raw output)
-    refinement_prob: float = 0.25  # Prob of training on "fix small problems" (small t)
-    refinement_max_t: int = 150  # For refinement, t in [0, refinement_max_t]
+    # -------------------------------------------------------------------------
+    # Refinement
+    # -------------------------------------------------------------------------
+    refinement_prob: float = 0.25  # probability of sampling small-t refinement steps
+    refinement_max_t: int = 150    # upper bound for refinement timestep range
 
-    # Img2img training (FLUX/NoobAI/illust): when init_image in data, use it as x_start with this prob
+    # -------------------------------------------------------------------------
+    # Img2img training
+    # -------------------------------------------------------------------------
     img2img_prob: float = 0.0  # 0 = off; e.g. 0.2 to learn image-to-image editing
 
-    # MDM (Masked Diffusion Models)-style training:
-    # Randomly mask latent patches, keep unmasked patches as x0 (clean context),
-    # and compute denoising loss only on masked patches.
-    # This trains the model to better "fill in blanks" during inference inpaint.
-    mdm_mask_ratio: float = 0.0  # 0 = off; e.g. 0.2-0.5
-    # Optional state-dependent schedule for mdm_mask_ratio.
-    # Format: list of (t_step, mask_ratio) where t_step is an integer diffusion timestep index.
+    # -------------------------------------------------------------------------
+    # MDM — Masked Diffusion Models style training
+    # Randomly mask latent patches; model learns to inpaint masked regions.
+    # -------------------------------------------------------------------------
+    mdm_mask_ratio: float = 0.0  # 0 = off; e.g. 0.2–0.5
+    # Step-dependent mask ratio schedule: list of (t_step, mask_ratio) breakpoints.
     # Example: [(0, 0.05), (500, 0.25), (999, 0.35)]
     mdm_mask_schedule: Optional[List[tuple]] = None
-    mdm_patch_size: int = 2  # Latent patch size that corresponds to DiT patch embed (typically 2)
-    mdm_loss_only_masked: bool = True  # If True: loss is averaged only over masked pixels
-    mdm_min_mask_patches: int = 1  # Ensure each sample has at least N masked patches (avoid empty-mask)
+    mdm_patch_size: int = 2         # must match DiT patch embed size (typically 2)
+    mdm_loss_only_masked: bool = True
+    mdm_min_mask_patches: int = 1   # minimum masked patches per sample
 
-    # Mixture-of-Experts (MoE) DiT upgrade (MLP-only MoE).
-    # When moe_num_experts > 0, the FFN/MLP inside DiT blocks is replaced by a sparse MoE FFN.
-    moe_num_experts: int = 0
+    # -------------------------------------------------------------------------
+    # Mixture-of-Experts (MoE) FFN upgrade
+    # -------------------------------------------------------------------------
+    moe_num_experts: int = 0        # 0 = off; replaces dense FFN with sparse MoE
     moe_top_k: int = 2
-    moe_balance_loss_weight: float = 0.0  # if >0, adds router aux loss into training objective
+    moe_balance_loss_weight: float = 0.0  # router load-balancing auxiliary loss
 
-    # Inference: allow_imperfect_output=True means skip refinement pass (user wants raw/fucked look)
     allow_imperfect_output: bool = False
 
-    # Optional curriculum: increase max caption length at these step thresholds (e.g. [5000, 15000, 30000])
-    curriculum_caption_steps: Optional[List[int]] = None
-    curriculum_max_lengths: Optional[List[int]] = None  # e.g. [77, 150, 300]
-    # Difficulty curriculum (IMPROVEMENTS 8.12): steps when to prefer easy vs hard (JSONL "difficulty" 0-1)
+    # -------------------------------------------------------------------------
+    # Curriculum
+    # -------------------------------------------------------------------------
+    # Increase max caption length at these step thresholds.
+    curriculum_caption_steps: Optional[List[int]] = None   # e.g. [5000, 15000, 30000]
+    curriculum_max_lengths: Optional[List[int]] = None     # e.g. [77, 150, 300]
+    # Difficulty curriculum: prefer easy/hard samples at different training stages.
     curriculum_difficulty_steps: Optional[List[int]] = None  # e.g. [0, 5000, 10000]
-    curriculum_difficulty_easy_first: bool = True  # True = early steps prefer low difficulty
+    curriculum_difficulty_easy_first: bool = True
 
-    # Rule-based auxiliary loss (IMPROVEMENTS 8.2): weight for constitutional/rule loss (0 = off)
-    rule_loss_weight: float = 0.0
+    # -------------------------------------------------------------------------
+    # Rule-based auxiliary loss
+    # -------------------------------------------------------------------------
+    rule_loss_weight: float = 0.0  # 0 = off
 
+    # -------------------------------------------------------------------------
     # EMA
+    # -------------------------------------------------------------------------
     ema_decay: float = 0.9999
 
-    # Log / ckpt
+    # -------------------------------------------------------------------------
+    # Logging and checkpointing
+    # -------------------------------------------------------------------------
     results_dir: str = "results"
     log_every: int = 50
     ckpt_every: int = 5000
     global_seed: int = 42
-    resume: Optional[str] = None  # Path to checkpoint to resume from
-    # IMPROVEMENTS 5.1: optional WandB / TensorBoard
-    wandb_project: Optional[str] = None  # e.g. "sdx" to enable WandB
+    resume: Optional[str] = None  # path to checkpoint to resume from
+    wandb_project: Optional[str] = None    # e.g. "sdx" to enable WandB logging
     tensorboard_dir: Optional[str] = None  # e.g. "runs" to enable TensorBoard
-    log_images_every: int = 0  # 0 = off; when > 0 and wandb/tb enabled, log a sample image every N steps
-    log_images_prompt: str = "a photo of a cat"  # prompt used for log sample image
-    dry_run: bool = False  # Run 1 training step and exit (verify setup)
-    save_run_manifest: bool = True  # Persist run_manifest.json + config.train.json for reproducibility
-    strict_warnings: bool = False  # Escalate project UserWarning/FutureWarning to errors
-    # IMPROVEMENTS 1.5: Polyak (running average of last N steps); 0 = off
-    save_polyak: int = 0  # if > 0, keep running avg of weights and save as polyak.pt every ckpt_every
+    log_images_every: int = 0              # 0 = off; log a sample image every N steps
+    log_images_prompt: str = "a photo of a cat"
+    dry_run: bool = False          # run 1 step then exit (verify setup)
+    save_run_manifest: bool = True # persist run_manifest.json + config.train.json
+    strict_warnings: bool = False  # escalate project warnings to errors
+    save_polyak: int = 0           # > 0: keep running avg of weights, save as polyak.pt
 
-    # Quality / reproducibility
-    deterministic: bool = False  # Reproducible training (worker seeds, etc.)
-    latent_cache_dir: Optional[str] = None  # Precomputed latents dir for faster training (optional)
+    # -------------------------------------------------------------------------
+    # Reproducibility
+    # -------------------------------------------------------------------------
+    deterministic: bool = False
+    latent_cache_dir: Optional[str] = None  # precomputed latents for faster training
 
-    # Distributed (set by launcher)
+    # -------------------------------------------------------------------------
+    # Distributed (set by launcher, not CLI)
+    # -------------------------------------------------------------------------
     local_rank: int = 0
     world_size: int = 1
 
     @property
     def latent_size(self) -> int:
+        """Spatial size of VAE latents (image_size // 8)."""
         return self.image_size // 8
 
     @property
     def per_device_batch_size(self) -> int:
+        """Effective per-GPU batch size."""
         return max(1, self.global_batch_size // self.world_size)
 
 
-def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
-    """Single place for DiT build kwargs from config. Used by train.py, sample.py, inference.py, self_improve.py.
-    cfg: TrainConfig or checkpoint config (any object with getattr).
-    class_dropout_prob: None = use cfg.caption_dropout_prob (training); 0.0 for inference.
+def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: Optional[float] = None) -> dict:
+    """Build the keyword-argument dict for DiT model constructors from a config object.
+
+    Works with both ``TrainConfig`` instances and checkpoint config objects (any object
+    supporting ``getattr``).
+
+    Args:
+        cfg: Configuration object.
+        class_dropout_prob: Override caption dropout probability.
+            ``None`` uses ``cfg.caption_dropout_prob`` (training default).
+            Pass ``0.0`` for inference (no dropout).
+
+    Returns:
+        Dict of keyword arguments suitable for ``DiT_models_text[name](**kw)``.
     """
     latent_size = getattr(cfg, "image_size", 256) // 8
     te = getattr(cfg, "text_encoder", "google/t5-v1_1-xxl").lower()
@@ -269,11 +317,12 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
     model_name = str(getattr(cfg, "model_name", ""))
     include_moe = not model_name.startswith("EnhancedDiT")
 
-    kw = {
+    kw: dict = {
         "input_size": latent_size,
         "text_dim": text_dim,
         "class_dropout_prob": dropout,
         "num_ar_blocks": getattr(cfg, "num_ar_blocks", 0),
+        "ar_block_order": str(getattr(cfg, "ar_block_order", "raster") or "raster"),
         "use_xformers": getattr(cfg, "use_xformers", True),
         "style_embed_dim": getattr(cfg, "style_embed_dim", 0),
         "control_cond_dim": getattr(cfg, "control_cond_dim", 0),
@@ -284,20 +333,16 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
         "patch_se_reduction": int(getattr(cfg, "patch_se_reduction", 8)),
     }
 
-    # REPA (Representation Alignment) upgrade:
-    # If enabled, model constructors will create a small projector head.
     repa_w = float(getattr(cfg, "repa_weight", 0.0))
     is_enhanced = model_name.startswith("EnhancedDiT")
     if not is_enhanced:
         kw["repa_out_dim"] = int(getattr(cfg, "repa_out_dim", 768)) if repa_w > 0 else 0
         kw["repa_projector_hidden_dim"] = int(getattr(cfg, "repa_projector_hidden_dim", 0)) if repa_w > 0 else 0
 
-        # SSM swap settings (token mixer)
         ssm_every_n = int(getattr(cfg, "ssm_every_n", 0))
         kw["ssm_every_n"] = ssm_every_n if ssm_every_n > 0 else 0
         kw["ssm_kernel_size"] = int(getattr(cfg, "ssm_kernel_size", 7))
 
-        # ViT-Gen features
         kw["num_register_tokens"] = int(getattr(cfg, "num_register_tokens", 0))
         kw["use_rope"] = bool(getattr(cfg, "use_rope", False))
         kw["rope_base"] = float(getattr(cfg, "rope_base", 10000.0))
@@ -316,8 +361,6 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
         kw["prompt_late_scale"] = float(getattr(cfg, "prompt_late_scale", 1.0))
         kw["prompt_schedule_num_timesteps"] = int(getattr(cfg, "num_timesteps", 1000))
 
-    # MoE DiT upgrade: MLP-only MoE FFN.
-    # Only pass MoE kwargs to models that accept them (skip EnhancedDiT).
     if include_moe:
         kw["moe_num_experts"] = getattr(cfg, "moe_num_experts", 0)
         kw["moe_top_k"] = getattr(cfg, "moe_top_k", 2)
@@ -325,27 +368,23 @@ def get_dit_build_kwargs(cfg, *, class_dropout_prob=None):
     return kw
 
 
-# Optional shared instance for quick scripts; training CLIs should build TrainConfig from args/env.
-# Defaults here can differ from the TrainConfig dataclass field defaults (e.g. global_batch_size).
+# ---------------------------------------------------------------------------
+# Convenience instance for quick scripts.
+# Training CLIs should build TrainConfig from parsed args via train_args.py.
+# ---------------------------------------------------------------------------
 cfg = TrainConfig(
-    # Enhanced model settings
     model_name="EnhancedDiT-XL/2",
     image_size=512,
-    global_batch_size=32,  # Smaller for 3B model
-    lr=5e-5,  # Lower learning rate for large model
+    global_batch_size=32,
+    lr=5e-5,
     epochs=50,
-    # Data settings
     data_path="./data",
     num_workers=4,
-    # Training settings
     use_bf16=True,
     grad_checkpointing=True,
     grad_accum_steps=2,
     max_grad_norm=1.0,
-    # Logging
-    results_dir="./enhanced_results",
+    results_dir="./runs",
     log_every=25,
     ckpt_every=2500,
-    # Enhanced features (will be added by train script)
-    # These will be set by the training script based on command line args
 )

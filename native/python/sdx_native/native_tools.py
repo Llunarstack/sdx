@@ -271,6 +271,67 @@ def cuda_silu_gate_shared_library_path() -> Optional[Path]:
     return None
 
 
+def cuda_gaussian_blur_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_gaussian_blur`` (depthwise Gaussian blur on latents)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_gaussian_blur.dll",
+        cpp / "Debug" / "sdx_cuda_gaussian_blur.dll",
+        cpp / "libsdx_cuda_gaussian_blur.so",
+        cpp / "libsdx_cuda_gaussian_blur.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_percentile_clamp_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_percentile_clamp`` (per-sample percentile clamp)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_percentile_clamp.dll",
+        cpp / "Debug" / "sdx_cuda_percentile_clamp.dll",
+        cpp / "libsdx_cuda_percentile_clamp.so",
+        cpp / "libsdx_cuda_percentile_clamp.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def mask_ops_shared_library_path() -> Optional[Path]:
+    """CPU ``sdx_mask_ops`` (mask → patch weights for part-aware training)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_mask_ops.dll",
+        cpp / "Debug" / "sdx_mask_ops.dll",
+        cpp / "libsdx_mask_ops.so",
+        cpp / "libsdx_mask_ops.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def rust_diffusion_math_shared_library_path() -> Optional[Path]:
+    """Rust ``sdx_diffusion_math`` cdylib (alpha_cumprod, SNR, beta schedules)."""
+    base = REPO_ROOT / "native" / "rust" / "sdx-diffusion-math" / "target"
+    candidates = [
+        base / "release" / "sdx_diffusion_math.dll",
+        base / "release" / "libsdx_diffusion_math.so",
+        base / "release" / "libsdx_diffusion_math.dylib",
+        base / "debug" / "sdx_diffusion_math.dll",
+        base / "debug" / "libsdx_diffusion_math.so",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
 def fnv64_file_shared_library_path() -> Optional[Path]:
     """``sdx_fnv64_file`` — streaming FNV-1a 64 + newlines (matches Python ``fnv1a64_file``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
@@ -671,6 +732,10 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_cuda_rmsnorm": str(cuda_rmsnorm_shared_library_path() or ""),
         "libsdx_cuda_rope": str(cuda_rope_shared_library_path() or ""),
         "libsdx_cuda_silu_gate": str(cuda_silu_gate_shared_library_path() or ""),
+        "libsdx_cuda_gaussian_blur": str(cuda_gaussian_blur_shared_library_path() or ""),
+        "libsdx_cuda_percentile_clamp": str(cuda_percentile_clamp_shared_library_path() or ""),
+        "libsdx_mask_ops": str(mask_ops_shared_library_path() or ""),
+        "libsdx_diffusion_math_rust": str(rust_diffusion_math_shared_library_path() or ""),
         "mojo_or_magic_cli": mojo_cli_path(),
         "latent_lib_ctypes": get_latent_lib().available,
         "caption_text_hygiene": True,

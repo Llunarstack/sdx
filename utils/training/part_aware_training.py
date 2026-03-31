@@ -116,13 +116,45 @@ def image_mask_to_patch_weights(
     num_patches_w: int,
 ) -> torch.Tensor:
     """
-    Downsample a binary/soft mask (B,1,H,W) to (B, N) with N = num_patches_h * num_patches_w
-    using average pool (each patch = mean of pixels).
+    Downsample a binary/soft mask ``(B, 1, H, W)`` to ``(B, N)`` where
+    ``N = num_patches_h * num_patches_w`` using average pooling.
+
+    Uses the native C++ kernel (``sdx_mask_ops``) when built — avoids
+    PyTorch autograd overhead for this pure data-prep operation.
+    Falls back to ``F.adaptive_avg_pool2d`` otherwise.
+
+    Args:
+        mask_b1hw: Float mask tensor of shape ``(B, 1, H, W)``.
+        num_patches_h: Number of patch rows.
+        num_patches_w: Number of patch columns.
+
+    Returns:
+        Patch weight tensor of shape ``(B, num_patches_h * num_patches_w)``.
     """
     if mask_b1hw.dim() != 4 or mask_b1hw.shape[1] != 1:
         raise ValueError("mask_b1hw must be (B, 1, H, W)")
+
+    ph, pw = int(num_patches_h), int(num_patches_w)
+    B, _, H, W = mask_b1hw.shape
+
+    # Try native C++ kernel (no autograd, no Python loop).
+    if H % ph == 0 and W % pw == 0:
+        try:
+            import numpy as np
+            from sdx_native.mask_ops_native import maybe_mask_to_patch_weights_native
+
+            mask_np = mask_b1hw.detach().float().cpu().numpy()
+            result = maybe_mask_to_patch_weights_native(mask_np, ph, pw)
+            if result is not None:
+                return torch.from_numpy(result).to(
+                    device=mask_b1hw.device, dtype=mask_b1hw.dtype
+                )
+        except Exception:
+            pass
+
+    # PyTorch fallback.
     m = mask_b1hw.to(dtype=torch.float32)
-    m = F.adaptive_avg_pool2d(m, (num_patches_h, num_patches_w))
+    m = F.adaptive_avg_pool2d(m, (ph, pw))
     return m.flatten(1)
 
 
@@ -350,14 +382,21 @@ def capture_dit_block0_cross_attn(
     training_noise: torch.Tensor,
     noise_offset: float = 0.0,
 ) -> torch.Tensor:
-    """Run one forward pass at x_t and return block-0 cross-attention (B, heads, N, L)."""
+    """Run one forward pass at x_t and return block-0 cross-attention (B, heads, N, L).
+
+    Note: grad checkpointing is temporarily disabled for this pass because
+    ``return_attn=True`` requires the full forward graph to be materialised.
+    The returned attention tensor is detached — gradients flow through the
+    main training loss, not through this auxiliary capture.
+    """
     mk = dict(model_kwargs)
     mk.pop("return_attn", None)
     was_ckpt = bool(getattr(train_model, "_grad_checkpointing", False))
     if was_ckpt:
         train_model._grad_checkpointing = False
     try:
-        x_t = diffusion.q_sample(latents_bchw, t, noise=training_noise, noise_offset=noise_offset)
+        with torch.no_grad():
+            x_t = diffusion.q_sample(latents_bchw, t, noise=training_noise, noise_offset=noise_offset)
         out = train_model(x_t, t, return_attn=True, **mk)
     finally:
         if was_ckpt:

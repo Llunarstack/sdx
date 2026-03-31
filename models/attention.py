@@ -124,34 +124,20 @@ def create_block_causal_mask(num_patches_per_side: int, num_ar_blocks: int) -> O
     return mask
 
 
-def create_block_causal_mask_2d(h: int, w: int, num_ar_blocks: int) -> torch.Tensor:
+def create_block_causal_mask_2d(
+    h: int,
+    w: int,
+    num_ar_blocks: int,
+    block_order: str = "raster",
+) -> torch.Tensor:
     """
     h, w = patches per side. num_ar_blocks = blocks per dim (e.g. 2 -> 2x2 grid).
-    Returns (N, N) mask: -inf where not allowed. Raster block order + causal within block.
+    block_order: ``raster`` (default) or ``zorder`` (Morton macro-block order). See ``models/ar_masks_extended.py``.
+    Returns (N, N) mask: -inf where not allowed.
     """
-    n = h * w
-    if num_ar_blocks <= 0:
-        return torch.zeros(n, n, dtype=torch.float32)
-    block_h = max(1, (h + num_ar_blocks - 1) // num_ar_blocks)
-    block_w = max(1, (w + num_ar_blocks - 1) // num_ar_blocks)
-    mask = torch.zeros(n, n, dtype=torch.float32)
-    for i in range(h):
-        for j in range(w):
-            idx = i * w + j
-            bi = i // block_h
-            bj = j // block_w
-            block_idx = bi * num_ar_blocks + bj
-            for i2 in range(h):
-                for j2 in range(w):
-                    idx2 = i2 * w + j2
-                    bi2 = i2 // block_h
-                    bj2 = j2 // block_w
-                    block_idx2 = bi2 * num_ar_blocks + bj2
-                    if block_idx2 > block_idx:
-                        mask[idx, idx2] = float("-inf")
-                    elif block_idx2 == block_idx and idx2 > idx:
-                        mask[idx, idx2] = float("-inf")
-    return mask
+    from .ar_masks_extended import create_block_causal_mask_2d as _create_ar_mask_2d
+
+    return _create_ar_mask_2d(h, w, num_ar_blocks, block_order=block_order)
 
 
 class SelfAttention(nn.Module):

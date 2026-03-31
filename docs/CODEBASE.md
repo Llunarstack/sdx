@@ -44,7 +44,7 @@ ruff check .
 python scripts/tools/dev/smoke_imports.py
 ```
 
-Weights and HF cache live under `model/` (gitignored); paths resolve via `utils/modeling/model_paths.py`.
+Weights and HF cache live under `pretrained/` (gitignored); paths resolve via `utils/modeling/model_paths.py`.
 
 ---
 
@@ -85,9 +85,9 @@ sdx/
 ├── examples/                           # Small usage examples
 ├── native/                             # Optional fast JSONL helpers (Rust, Go, …)
 ├── docs/                               # All markdown documentation
-├── user_data/                          # Your images + captions for training (see user_data/README.md)
-├── model/                              # Downloaded weights (gitignored)
-└── consistency_data/                   # Sample JSON for character/style consistency tools
+├── datasets/                          # Your images + captions for training (see datasets/README.md)
+├── pretrained/                              # Downloaded weights (gitignored)
+└── assets/                   # Sample JSON for character/style consistency tools
 ```
 
 ### Entry points (canonical)
@@ -106,7 +106,7 @@ Run from **repo root** so `config`, `data`, `models`, `utils` resolve without ex
 
 | Path | Role |
 |------|------|
-| **`scripts/download/`** | Pull T5, VAE, CLIP, LLM, optional stacks into `model/` |
+| **`scripts/download/`** | Pull T5, VAE, CLIP, LLM, optional stacks into `pretrained/` |
 | **`scripts/setup/`** | Clone upstream repos into `external/` (reference only) |
 | **`scripts/training/`** | HF → JSONL, precompute latents, `hf_download_and_train`, … |
 | **`scripts/tools/`** | Utilities — grouped entrypoints (`dev/`, `data/`, `prompt/`, `ops/`, `export/`, `repo/`) + **`python -m scripts.tools <cmd>`** dispatcher — **[scripts/tools/README.md](../scripts/tools/README.md)** |
@@ -164,7 +164,7 @@ Keep new work in predictable places so imports and docs stay stable.
 |-----------------|----------|-------|
 | New DiT block / attention | `models/` | Register in `models/__init__.py` if new public API |
 | Loss / schedule / diffusion math | `diffusion/` | Keep `GaussianDiffusion` API stable when possible |
-| New prompt lists / presets (not train hyperparams) | `config/reference/` | |
+| New prompt lists / presets (not train hyperparams) | `config/defaults/` | |
 | Dataset field or collate | `data/` | Update `t2i_dataset.py` + docs for JSONL fields |
 | Training flag / config field | `config/train_config.py` + `get_dit_build_kwargs` | Mirror in `sample.py` / checkpoint if needed |
 | Sampling or checkpoint behavior | `sample.py`, `utils/checkpoint/checkpoint_loading.py` | |

@@ -1,3 +1,3 @@
-"""Compatibility shim — implementation: :mod:`config.reference.model_presets`."""
+"""Compatibility shim — implementation: :mod:`config.defaults.model_presets`."""
 
-from .reference.model_presets import *  # noqa: F403
+from .defaults.model_presets import *  # noqa: F403

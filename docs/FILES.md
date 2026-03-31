@@ -24,7 +24,7 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **pipelines/** | **image_gen** vs **book_comic**: per–product-line docs; book script at `pipelines/book_comic/scripts/generate_book.py` | See [pipelines/README.md](../pipelines/README.md) |
 | **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md`, ecosystem map [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
 | **toolkit/** | QoL Python modules: env report, JSONL digest, seeds, timers | [toolkit/README.md](../toolkit/README.md); `python -m toolkit.training.env_health` |
-| **user_data/** | **Your** datasets: `user_data/train/` + sidecar captions (see [user_data/README.md](../user_data/README.md)) | `train.py --data-path user_data/train` |
+| **datasets/** | **Your** datasets: `datasets/train/` + sidecar captions (see [datasets/README.md](../datasets/README.md)) | `train.py --data-path datasets/train` |
 | **model/** | Downloaded HF weights (gitignored) | Resolved via `utils/modeling/model_paths.py` |
 
 End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + diffusion) → checkpoint → sample.py → image**. See [README § Architecture and pipeline](../README.md#architecture-and-pipeline).
@@ -52,7 +52,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [config/README.md](../config/README.md) | Folder layout: `train_config` vs `reference/`. |
 | [config/__init__.py](../config/__init__.py) | Exports `TrainConfig`, `get_dit_build_kwargs`, `DEFAULT_NEGATIVE_PROMPT`. |
 | [config/train_config.py](../config/train_config.py) | TrainConfig + `get_dit_build_kwargs(cfg)`: DiT build args; **`text_encoder_mode`**, **`clip_text_encoder_*`**, RAE/REPA fields. |
-| [config/reference/](../config/reference/) | **Canonical** prompt catalogs, presets, labels (domains, styles, `sample.py` presets, PixAI names). |
+| [config/defaults/](../config/defaults/) | **Canonical** prompt catalogs, presets, labels (domains, styles, `sample.py` presets, PixAI names). |
 | [config/prompt_domains.py](../config/prompt_domains.py) | Shim → `reference/prompt_domains.py` (stable import path). |
 | [config/style_artists.py](../config/style_artists.py) | Shim → `reference/style_artists.py`. |
 | [config/model_presets.py](../config/model_presets.py) | Shim → `reference/model_presets.py`. |
@@ -187,7 +187,7 @@ Index: **[scripts/README.md](../scripts/README.md)**. **Tools:** **[scripts/tool
 | [scripts/download/download_models.py](../scripts/download/download_models.py) | Download best HF models: T5-XXL (text encoder), VAEs (sd-vae-ft-mse, sdxl-vae, sdxl-vae-fp16-fix), LLMs (SmolLM, Qwen2.5-7B). Use `--all` or `--t5` / `--vae` / `--llm` / `--llm-best`. |
 | [scripts/download/download_llm.py](../scripts/download/download_llm.py) | Download a single LLM for prompt expansion (SmolLM2-360M or Qwen2.5-7B with `--best`). |
 | [scripts/download/download_revolutionary_stack.py](../scripts/download/download_revolutionary_stack.py) | Bulk HF snapshot downloads for extended stacks (see `docs/MODEL_STACK.md`). |
-| [scripts/cascade_generate.py](../scripts/cascade_generate.py) | **Stable Cascade** (diffusers) sampling — optional path; uses `model/StableCascade-*` via `utils/model_paths`. |
+| [scripts/cascade_generate.py](../scripts/cascade_generate.py) | **Stable Cascade** (diffusers) sampling — optional path; uses `pretrained/StableCascade-*` via `utils/model_paths`. |
 | — | **self_improve.py** (planned, not in `scripts/training/` on this branch) — see [IMPROVEMENTS.md](IMPROVEMENTS.md) §8.6; use `hf_download_and_train.py` for similar loops. |
 | [scripts/training/precompute_latents.py](../scripts/training/precompute_latents.py) | Precompute VAE latents for faster training. |
 | [scripts/training/hf_export_to_sdx_manifest.py](../scripts/training/hf_export_to_sdx_manifest.py) | HF `datasets` → `manifest.jsonl` + images (Danbooru-style when schema fits). |

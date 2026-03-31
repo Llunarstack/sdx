@@ -21,6 +21,7 @@ _CANONICAL: dict[str, Path] = {
     "ckpt_info": _HERE / "dev" / "ckpt_info.py",
     "smoke_imports": _HERE / "dev" / "smoke_imports.py",
     "quick_test": _HERE / "dev" / "quick_test.py",
+    "ar_mask_inspect": _HERE / "dev" / "ar_mask_inspect.py",
     "noise_schedule_export": _HERE / "training" / "noise_schedule_export.py",
     "data_quality": _HERE / "data" / "data_quality.py",
     "manifest_paths": _HERE / "data" / "manifest_paths.py",

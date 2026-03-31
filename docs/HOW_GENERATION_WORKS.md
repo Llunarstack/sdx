@@ -374,7 +374,7 @@ Model registry: `models/__init__.py` → `DiT_models_text`: `DiT-XL/2-Text` (bas
 | **LoRA** | — | If --lora | — | — |
 | **BLIP / VLM** | — | — | — | Optional (captioner) |
 
-T5 and VAE are always loaded from **cfg.text_encoder** and **cfg.vae_model** (Hugging Face IDs or local paths like `model/T5-XXL`).
+T5 and VAE are always loaded from **cfg.text_encoder** and **cfg.vae_model** (Hugging Face IDs or local paths like `pretrained/T5-XXL`).
 
 ---
 
@@ -396,7 +396,7 @@ data_path or manifest_jsonl
 
 ```
 Checkpoint → cfg + DiT state
-cfg.text_encoder, cfg.vae_model → T5, VAE (from HF or model/)
+cfg.text_encoder, cfg.vae_model → T5, VAE (from HF or pretrained/)
 Prompt → encode_text([prompt]) → cond_emb
 model_kwargs_cond = { encoder_hidden_states: cond_emb, (style), (control_image), (creativity) }
 diffusion.sample_loop(model, shape, model_kwargs_cond, model_kwargs_uncond, ...)
@@ -419,12 +419,12 @@ Write manifest.jsonl + images → use with train.py --manifest-jsonl
 
 | Model | Config key | Default | Can be local |
 |-------|------------|---------|--------------|
-| **T5** | `cfg.text_encoder` | `google/t5-v1_1-xxl` | Yes (e.g. `model/T5-XXL`) |
-| **VAE** | `cfg.vae_model` | `stabilityai/sd-vae-ft-mse` | Yes (e.g. `model/sdxl-vae-fp16-fix`) |
+| **T5** | `cfg.text_encoder` | `google/t5-v1_1-xxl` | Yes (e.g. `pretrained/T5-XXL`) |
+| **VAE** | `cfg.vae_model` | `stabilityai/sd-vae-ft-mse` | Yes (e.g. `pretrained/sdxl-vae-fp16-fix`) |
 | **DiT** | Built from cfg; weights in checkpoint | — | Checkpoint only |
-| **LLM** | Not in cfg | — | `model/SmolLM2-360M-Instruct`, `model/Qwen2.5-7B-Instruct` (for prompt expansion; not used inside train/sample) |
+| **LLM** | Not in cfg | — | `pretrained/SmolLM2-360M-Instruct`, `pretrained/Qwen2.5-7B-Instruct` (for prompt expansion; not used inside train/sample) |
 
-Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` → `model/`.
+Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` → `pretrained/`.
 
 ---
 
@@ -435,8 +435,8 @@ Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` →
 | **train.py** | TrainConfig (args), data_path/manifest_jsonl, optional latent_cache_dir | Checkpoint (model, ema, config, steps), logs |
 | **sample.py** | Checkpoint, prompt, optional style/control/creativity | Image, optional attn .pt |
 | **inference.py** | Checkpoint | Programmatic API (refine, etc.) |
-| **scripts/download/download_models.py** | — | model/T5-XXL, model/sd-vae-ft-mse, model/sdxl-vae*, model/SmolLM*, model/Qwen* |
-| **scripts/download/download_llm.py** | — | model/SmolLM2-360M-Instruct or model/Qwen2.5-7B-Instruct |
+| **scripts/download/download_models.py** | — | pretrained/T5-XXL, pretrained/sd-vae-ft-mse, pretrained/sdxl-vae*, pretrained/SmolLM*, pretrained/Qwen* |
+| **scripts/download/download_llm.py** | — | pretrained/SmolLM2-360M-Instruct or pretrained/Qwen2.5-7B-Instruct |
 | **scripts/training/self_improve.py** | Checkpoint, prompts or prompts-file | out_dir/images/*.png, out_dir/manifest.jsonl |
 | **scripts/training/precompute_latents.py** | data_path, vae_model | latent_cache_dir/*.pt (per image) |
 | **scripts/setup/clone_repos.ps1 / .sh** | — | external/ (reference repos) |
