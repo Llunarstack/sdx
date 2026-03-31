@@ -12,7 +12,7 @@ Put **your** datasets here (this folder is for local use; image files are ignore
 Example:
 
 ```text
-user_data/
+datasets/
   train/                    ← pass this to --data-path
     my_photos/
       img001.png
@@ -27,15 +27,15 @@ user_data/
 Train:
 
 ```bash
-python train.py --data-path user_data/train --results-dir results
+python train.py --data-path datasets/train --results-dir results
 ```
 
 ## JSONL mode
 
-Alternatively use a manifest (one JSON object per line) anywhere under `user_data/` or elsewhere:
+Alternatively use a manifest (one JSON object per line) anywhere under `datasets/` or elsewhere:
 
 ```bash
-python train.py --manifest-jsonl user_data/my_manifest.jsonl --results-dir results
+python train.py --manifest-jsonl datasets/my_manifest.jsonl --results-dir results
 ```
 
 See **[Data format](../README.md#data-format)** in the main README and **[docs/DANBOORU_HF.md](../docs/DANBOORU_HF.md)** for larger-scale prep.

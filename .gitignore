@@ -40,7 +40,7 @@ results/
 output*.png
 
 # Downloaded LLMs (heavy)
-model/
+pretrained/
 
 # Native builds (Rust / Zig / C++)
 native/rust/**/target/

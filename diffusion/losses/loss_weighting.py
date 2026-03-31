@@ -9,7 +9,7 @@ def sigma_from_alpha_cumprod(alpha_cumprod: torch.Tensor) -> torch.Tensor:
 
 
 def unit_weight(sigma: torch.Tensor) -> torch.Tensor:
-    return torch.ones_like(sigma, device=sigma.device, dtype=sigma.dtype)
+    return torch.ones_like(sigma)
 
 
 def edm_weight(sigma: torch.Tensor, sigma_data: float = 0.5) -> torch.Tensor:

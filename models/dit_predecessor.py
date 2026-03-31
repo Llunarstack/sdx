@@ -11,6 +11,7 @@ from .dit import FinalLayer, TimestepEmbedder, get_2d_sincos_pos_embed
 from .dit_text import CrossAttention, TextEmbedder
 from .model_enhancements import DropPath
 from .moe import MoEExperts, MoEProjection, MoERouter
+from .pixart_blocks import SizeEmbedder, ZeroInitPatchChannelGate
 from .vit_next_blocks import LayerScale, apply_topk_token_keep
 
 
@@ -459,12 +460,15 @@ class DiT_Predecessor_Text(nn.Module):
         class_dropout_prob=0.1,
         learn_sigma=True,
         num_ar_blocks=0,
+        ar_block_order: str = "raster",
         use_xformers=True,
         style_embed_dim=0,
         control_cond_dim=0,
         control_num_types: int = 0,
         creativity_embed_dim=0,
         size_embed_dim=0,
+        patch_se: bool = False,
+        patch_se_reduction: int = 8,
         moe_num_experts: int = 0,
         moe_top_k: int = 2,
         # REPA (Representation Alignment)
@@ -484,6 +488,14 @@ class DiT_Predecessor_Text(nn.Module):
         token_keep_min_value: float = 0.0,
         drop_path_rate: float = 0.0,
         layerscale_init: float = 0.0,
+        # Prompt adherence (must match get_dit_build_kwargs)
+        prompt_reinject_every_n: int = 0,
+        prompt_reinject_alpha: float = 0.0,
+        prompt_reinject_decay: float = 1.0,
+        prompt_timestep_schedule_enabled: bool = False,
+        prompt_early_scale: float = 1.1,
+        prompt_late_scale: float = 1.0,
+        prompt_schedule_num_timesteps: int = 1000,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -494,11 +506,13 @@ class DiT_Predecessor_Text(nn.Module):
         self.text_dim = text_dim
         self._grad_checkpointing = False
         self.num_ar_blocks = num_ar_blocks
+        self.ar_block_order = str(ar_block_order or "raster")
         self.use_xformers = use_xformers
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
         self.control_num_types = int(max(0, control_num_types))
         self.creativity_embed_dim = creativity_embed_dim
+        self.size_embed_dim = int(size_embed_dim) if size_embed_dim is not None else 0
         self._moe_num_experts = int(moe_num_experts) if moe_num_experts is not None else 0
         self._moe_top_k = int(moe_top_k) if moe_top_k is not None else 2
 
@@ -536,6 +550,12 @@ class DiT_Predecessor_Text(nn.Module):
             )
         else:
             self.creativity_proj = None
+        if self.size_embed_dim > 0:
+            self.size_embedder = SizeEmbedder(self.size_embed_dim, concat_dims=False)
+            self.size_proj = nn.Linear(self.size_embed_dim, hidden_size)
+        else:
+            self.size_embedder = None
+            self.size_proj = None
         if control_cond_dim > 0:
             self.control_encoder = ControlNetEncoder(
                 control_size=input_size,
@@ -546,6 +566,9 @@ class DiT_Predecessor_Text(nn.Module):
             )
         else:
             self.control_encoder = None
+        self.patch_se = None
+        if patch_se:
+            self.patch_se = ZeroInitPatchChannelGate(hidden_size, reduction=max(2, int(patch_se_reduction)))
         # ViT-Gen feature flags
         self.num_patches = int(self.x_embedder.num_patches)
         self.num_register_tokens = int(num_register_tokens)
@@ -558,6 +581,13 @@ class DiT_Predecessor_Text(nn.Module):
         self.token_keep_min_value = float(token_keep_min_value)
         self.drop_path_rate = float(drop_path_rate)
         self.layerscale_init = float(layerscale_init)
+        self.prompt_reinject_every_n = int(prompt_reinject_every_n)
+        self.prompt_reinject_alpha = float(prompt_reinject_alpha)
+        self.prompt_reinject_decay = float(prompt_reinject_decay)
+        self.prompt_timestep_schedule_enabled = bool(prompt_timestep_schedule_enabled)
+        self.prompt_early_scale = float(prompt_early_scale)
+        self.prompt_late_scale = float(prompt_late_scale)
+        self.prompt_schedule_num_timesteps = max(2, int(prompt_schedule_num_timesteps))
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
@@ -569,7 +599,7 @@ class DiT_Predecessor_Text(nn.Module):
         self.register_buffer("_ar_mask", None)
         if num_ar_blocks > 0:
             p = int(self.num_patches**0.5)
-            self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)
+            self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks, block_order=self.ar_block_order)
 
         # Blocks receive text_emb from text_embedder (already projected to hidden_size), not raw encoder_hidden_states
         blocks = []
@@ -612,8 +642,6 @@ class DiT_Predecessor_Text(nn.Module):
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
         if self.register_tokens is not None:
             nn.init.normal_(self.register_tokens, std=0.02)
-        if self.register_tokens is not None:
-            nn.init.normal_(self.register_tokens, std=0.02)
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)
@@ -621,6 +649,9 @@ class DiT_Predecessor_Text(nn.Module):
         if self.style_proj is not None:
             nn.init.normal_(self.style_proj.weight, std=0.02)
             nn.init.zeros_(self.style_proj.bias)
+        if self.size_proj is not None:
+            nn.init.normal_(self.size_proj.weight, std=0.02)
+            nn.init.zeros_(self.size_proj.bias)
         if self.control_encoder is not None:
             nn.init.xavier_uniform_(
                 self.control_encoder.proj.weight.view(self.control_encoder.proj.weight.shape[0], -1)
@@ -696,10 +727,19 @@ class DiT_Predecessor_Text(nn.Module):
                 control_scale=1.0,
                 patch_tokens=self.num_patches,
             )
+        if self.patch_se is not None:
+            x = self.patch_se(x)
         t_emb = self.t_embedder(t)
         text_emb = self.text_embedder(encoder_hidden_states, train=self.training)
         if conditioning_scale != 1.0:
             text_emb = text_emb * conditioning_scale
+        if bool(kwargs.get("prompt_timestep_schedule_enabled", self.prompt_timestep_schedule_enabled)):
+            early = float(kwargs.get("prompt_early_scale", self.prompt_early_scale))
+            late = float(kwargs.get("prompt_late_scale", self.prompt_late_scale))
+            nt = float(kwargs.get("prompt_schedule_num_timesteps", self.prompt_schedule_num_timesteps))
+            tau = (t.to(text_emb.device).float() / max(1.0, nt - 1.0)).clamp(0.0, 1.0).view(-1, 1, 1)
+            ts = late + (early - late) * tau
+            text_emb = text_emb * ts.to(dtype=text_emb.dtype)
         token_weights = kwargs.get("token_weights")
         if token_weights is not None:
             w = token_weights.to(text_emb.device).to(text_emb.dtype)
@@ -714,19 +754,55 @@ class DiT_Predecessor_Text(nn.Module):
             if style_emb.dim() == 2:
                 style_emb = style_emb.unsqueeze(1).expand(-1, text_emb.size(1), -1)
             text_emb = text_emb + style_strength * style_emb
+        ref_tok = kwargs.get("reference_tokens")
+        if ref_tok is not None:
+            rs = float(kwargs.get("reference_scale", 1.0) or 0.0)
+            if rs > 0.0:
+                rt = ref_tok.to(device=text_emb.device, dtype=text_emb.dtype)
+                if rt.shape[0] != text_emb.shape[0]:
+                    if rt.shape[0] == 1:
+                        rt = rt.expand(text_emb.shape[0], -1, -1)
+                    else:
+                        raise ValueError(
+                            "reference_tokens batch must match encoder_hidden_states batch "
+                            f"({rt.shape[0]} vs {text_emb.shape[0]})"
+                        )
+                text_emb = torch.cat([text_emb, rt * rs], dim=1)
         c = t_emb
+        size_embed = kwargs.get("size_embed")
+        if size_embed is None and self.size_embedder is not None and self.size_proj is not None:
+            size_embed = torch.stack(
+                [
+                    torch.full((_b,), float(h_lat), device=x.device, dtype=torch.float32),
+                    torch.full((_b,), float(w_lat), device=x.device, dtype=torch.float32),
+                ],
+                dim=1,
+            )
+        if size_embed is not None and self.size_embedder is not None and self.size_proj is not None:
+            bs = x.shape[0]
+            size_emb = self.size_embedder(size_embed.to(device=x.device, dtype=torch.float32), bs)
+            c = c + self.size_proj(size_emb.to(dtype=c.dtype))
         creativity = kwargs.get("creativity")
         if creativity is not None and self.creativity_proj is not None:
             cre = self.creativity_proj(creativity.unsqueeze(1).to(c.dtype))
             c = c + cre
         attn_mask = getattr(self, "_ar_mask", None)
-        for block in self.blocks:
+        base_text_emb = text_emb
+        reinject_every = int(kwargs.get("prompt_reinject_every_n", self.prompt_reinject_every_n))
+        reinject_alpha = float(kwargs.get("prompt_reinject_alpha", self.prompt_reinject_alpha))
+        reinject_decay = float(kwargs.get("prompt_reinject_decay", self.prompt_reinject_decay))
+        for i, block in enumerate(self.blocks):
+            text_emb_i = text_emb
+            if reinject_every > 0 and reinject_alpha > 0.0 and i > 0 and (i % reinject_every == 0):
+                k = max(0, i // reinject_every - 1)
+                a = reinject_alpha * (reinject_decay**k)
+                text_emb_i = text_emb + float(a) * base_text_emb
             if self._grad_checkpointing and self.training:
                 x = torch.utils.checkpoint.checkpoint(
                     block,
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask,
                     use_reentrant=False,
                     num_patch_tokens=self.num_patches,
@@ -735,7 +811,7 @@ class DiT_Predecessor_Text(nn.Module):
                 x = block(
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask=attn_mask,
                     use_xformers=self.use_xformers,
                     num_patch_tokens=self.num_patches,
@@ -770,6 +846,7 @@ class DiT_Supreme_Text(nn.Module):
         class_dropout_prob=0.1,
         learn_sigma=True,
         num_ar_blocks=0,
+        ar_block_order: str = "raster",
         use_xformers=True,
         style_embed_dim=0,
         control_cond_dim=0,
@@ -795,6 +872,15 @@ class DiT_Supreme_Text(nn.Module):
         token_keep_min_value: float = 0.0,
         drop_path_rate: float = 0.0,
         layerscale_init: float = 0.0,
+        patch_se: bool = False,
+        patch_se_reduction: int = 8,
+        prompt_reinject_every_n: int = 0,
+        prompt_reinject_alpha: float = 0.0,
+        prompt_reinject_decay: float = 1.0,
+        prompt_timestep_schedule_enabled: bool = False,
+        prompt_early_scale: float = 1.1,
+        prompt_late_scale: float = 1.0,
+        prompt_schedule_num_timesteps: int = 1000,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -805,12 +891,13 @@ class DiT_Supreme_Text(nn.Module):
         self.text_dim = text_dim
         self._grad_checkpointing = False
         self.num_ar_blocks = num_ar_blocks
+        self.ar_block_order = str(ar_block_order or "raster")
         self.use_xformers = use_xformers
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
         self.control_num_types = int(max(0, control_num_types))
         self.creativity_embed_dim = creativity_embed_dim
-        self.size_embed_dim = size_embed_dim
+        self.size_embed_dim = int(size_embed_dim) if size_embed_dim is not None else 0
         self._moe_num_experts = int(moe_num_experts) if moe_num_experts is not None else 0
         self._moe_top_k = int(moe_top_k) if moe_top_k is not None else 2
 
@@ -848,11 +935,9 @@ class DiT_Supreme_Text(nn.Module):
             )
         else:
             self.creativity_proj = None
-        if size_embed_dim > 0:
-            from .pixart_blocks import SizeEmbedder
-
-            self.size_embedder = SizeEmbedder(size_embed_dim, concat_dims=False)
-            self.size_proj = nn.Linear(size_embed_dim, hidden_size)
+        if self.size_embed_dim > 0:
+            self.size_embedder = SizeEmbedder(self.size_embed_dim, concat_dims=False)
+            self.size_proj = nn.Linear(self.size_embed_dim, hidden_size)
         else:
             self.size_embedder = None
             self.size_proj = None
@@ -866,6 +951,9 @@ class DiT_Supreme_Text(nn.Module):
             )
         else:
             self.control_encoder = None
+        self.patch_se = None
+        if patch_se:
+            self.patch_se = ZeroInitPatchChannelGate(hidden_size, reduction=max(2, int(patch_se_reduction)))
         # ViT-Gen feature flags
         self.num_patches = int(self.x_embedder.num_patches)
         self.num_register_tokens = int(num_register_tokens)
@@ -878,6 +966,13 @@ class DiT_Supreme_Text(nn.Module):
         self.token_keep_min_value = float(token_keep_min_value)
         self.drop_path_rate = float(drop_path_rate)
         self.layerscale_init = float(layerscale_init)
+        self.prompt_reinject_every_n = int(prompt_reinject_every_n)
+        self.prompt_reinject_alpha = float(prompt_reinject_alpha)
+        self.prompt_reinject_decay = float(prompt_reinject_decay)
+        self.prompt_timestep_schedule_enabled = bool(prompt_timestep_schedule_enabled)
+        self.prompt_early_scale = float(prompt_early_scale)
+        self.prompt_late_scale = float(prompt_late_scale)
+        self.prompt_schedule_num_timesteps = max(2, int(prompt_schedule_num_timesteps))
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_size), requires_grad=False)
 
@@ -888,7 +983,7 @@ class DiT_Supreme_Text(nn.Module):
         self.register_buffer("_ar_mask", None)
         if num_ar_blocks > 0:
             p = int(self.num_patches**0.5)
-            self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)
+            self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks, block_order=self.ar_block_order)
 
         blocks = []
         for i in range(depth):
@@ -913,7 +1008,6 @@ class DiT_Supreme_Text(nn.Module):
                 )
             )
         self.blocks = nn.ModuleList(blocks)
-        self.use_xformers = use_xformers
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
         self._moe_layers = [m for m in self.modules() if hasattr(m, "last_aux_loss")]
@@ -929,6 +1023,8 @@ class DiT_Supreme_Text(nn.Module):
         self.apply(_basic_init)
         pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        if self.register_tokens is not None:
+            nn.init.normal_(self.register_tokens, std=0.02)
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)
@@ -984,6 +1080,8 @@ class DiT_Supreme_Text(nn.Module):
         return_attn=False,
         **kwargs,
     ):
+        # return_attn is accepted for API parity with DiT_Text; attention capture is not implemented here.
+        _ = return_attn
         self._repa_projected = None
         if encoder_hidden_states is None:
             encoder_hidden_states = kwargs.get("y_embed")
@@ -1015,10 +1113,19 @@ class DiT_Supreme_Text(nn.Module):
                 control_scale=1.0,
                 patch_tokens=self.num_patches,
             )
+        if self.patch_se is not None:
+            x = self.patch_se(x)
         t_emb = self.t_embedder(t)
         text_emb = self.text_embedder(encoder_hidden_states, train=self.training)
         if conditioning_scale != 1.0:
             text_emb = text_emb * conditioning_scale
+        if bool(kwargs.get("prompt_timestep_schedule_enabled", self.prompt_timestep_schedule_enabled)):
+            early = float(kwargs.get("prompt_early_scale", self.prompt_early_scale))
+            late = float(kwargs.get("prompt_late_scale", self.prompt_late_scale))
+            nt = float(kwargs.get("prompt_schedule_num_timesteps", self.prompt_schedule_num_timesteps))
+            tau = (t.to(text_emb.device).float() / max(1.0, nt - 1.0)).clamp(0.0, 1.0).view(-1, 1, 1)
+            ts = late + (early - late) * tau
+            text_emb = text_emb * ts.to(dtype=text_emb.dtype)
         token_weights = kwargs.get("token_weights")
         if token_weights is not None:
             w = token_weights.to(text_emb.device).to(text_emb.dtype)
@@ -1033,24 +1140,55 @@ class DiT_Supreme_Text(nn.Module):
             if style_emb.dim() == 2:
                 style_emb = style_emb.unsqueeze(1).expand(-1, text_emb.size(1), -1)
             text_emb = text_emb + style_strength * style_emb
+        ref_tok = kwargs.get("reference_tokens")
+        if ref_tok is not None:
+            rs = float(kwargs.get("reference_scale", 1.0) or 0.0)
+            if rs > 0.0:
+                rt = ref_tok.to(device=text_emb.device, dtype=text_emb.dtype)
+                if rt.shape[0] != text_emb.shape[0]:
+                    if rt.shape[0] == 1:
+                        rt = rt.expand(text_emb.shape[0], -1, -1)
+                    else:
+                        raise ValueError(
+                            "reference_tokens batch must match encoder_hidden_states batch "
+                            f"({rt.shape[0]} vs {text_emb.shape[0]})"
+                        )
+                text_emb = torch.cat([text_emb, rt * rs], dim=1)
         c = t_emb
         size_embed = kwargs.get("size_embed")
+        if size_embed is None and self.size_embedder is not None and self.size_proj is not None:
+            size_embed = torch.stack(
+                [
+                    torch.full((_b,), float(h_lat), device=x.device, dtype=torch.float32),
+                    torch.full((_b,), float(w_lat), device=x.device, dtype=torch.float32),
+                ],
+                dim=1,
+            )
         if size_embed is not None and self.size_embedder is not None and self.size_proj is not None:
             bs = x.shape[0]
-            size_emb = self.size_embedder(size_embed, bs)
-            c = c + self.size_proj(size_emb)
+            size_emb = self.size_embedder(size_embed.to(device=x.device, dtype=torch.float32), bs)
+            c = c + self.size_proj(size_emb.to(dtype=c.dtype))
         creativity = kwargs.get("creativity")
         if creativity is not None and self.creativity_proj is not None:
             cre = self.creativity_proj(creativity.unsqueeze(1).to(c.dtype))
             c = c + cre
         attn_mask = getattr(self, "_ar_mask", None)
-        for block in self.blocks:
+        base_text_emb = text_emb
+        reinject_every = int(kwargs.get("prompt_reinject_every_n", self.prompt_reinject_every_n))
+        reinject_alpha = float(kwargs.get("prompt_reinject_alpha", self.prompt_reinject_alpha))
+        reinject_decay = float(kwargs.get("prompt_reinject_decay", self.prompt_reinject_decay))
+        for i, block in enumerate(self.blocks):
+            text_emb_i = text_emb
+            if reinject_every > 0 and reinject_alpha > 0.0 and i > 0 and (i % reinject_every == 0):
+                k = max(0, i // reinject_every - 1)
+                a = reinject_alpha * (reinject_decay**k)
+                text_emb_i = text_emb + float(a) * base_text_emb
             if self._grad_checkpointing and self.training:
                 x = torch.utils.checkpoint.checkpoint(
                     block,
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask,
                     use_reentrant=False,
                     num_patch_tokens=self.num_patches,
@@ -1059,7 +1197,7 @@ class DiT_Supreme_Text(nn.Module):
                 x = block(
                     x,
                     c,
-                    text_emb,
+                    text_emb_i,
                     attn_mask=attn_mask,
                     use_xformers=self.use_xformers,
                     num_patch_tokens=self.num_patches,

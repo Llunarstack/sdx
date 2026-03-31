@@ -65,6 +65,8 @@ def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Op
         n_iters=int(getattr(cfg, "ot_noise_pair_iters", 40)),
         mode=str(getattr(cfg, "ot_noise_pair_mode", "soft")),
     )
+
+
 from utils.modeling.model_viz import print_model_summary
 from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
 
@@ -147,7 +149,6 @@ torch.backends.cudnn.allow_tf32 = True
 
 # Lazy heavy imports (T5, VAE) to speed up startup when only parsing args
 _transformers = None
-_diffusers = None
 
 
 def get_rule_loss(batch, pixel_values, vae, device, cfg):
@@ -180,13 +181,11 @@ def _negatives_strip_emphasis(negative_captions, train_prompt_emphasis: bool):
 
 
 def get_t5_and_vae(device, cfg: TrainConfig):
-    global _transformers, _diffusers
+    global _transformers
     if _transformers is None:
         import transformers
 
         _transformers = transformers
-    if _diffusers is None:
-        _diffusers = None
 
     tokenizer = _transformers.AutoTokenizer.from_pretrained(cfg.text_encoder)
     text_encoder = _transformers.T5EncoderModel.from_pretrained(cfg.text_encoder)
@@ -257,22 +256,26 @@ def encode_text(
 
 
 @torch.no_grad()
-def encode_images_vae(images, ae, scale=0.18215):
-    """images: (B,3,H,W) in [-1,1].
+def encode_images_vae(images: torch.Tensor, ae: torch.nn.Module, scale: float = 0.18215) -> torch.Tensor:
+    """Encode images to latents.
 
-    Returns latents:
-    - VAE (AutoencoderKL): (B,4,h,w) = encode().latent_dist.sample() * scale
-    - RAE (AutoencoderRAE): (B,C,h,w) = encode().latent (normalization handled by checkpoint)
+    Args:
+        images: ``(B, 3, H, W)`` float tensor in ``[-1, 1]``.
+        ae: AutoencoderKL or AutoencoderRAE instance.
+        scale: Latent scale factor (VAE only; RAE handles its own normalisation).
+
+    Returns:
+        Latent tensor — ``(B, 4, h, w)`` for KL-VAE, ``(B, C, h, w)`` for RAE.
     """
     enc = ae.encode(images)
     if hasattr(enc, "latent_dist"):
-        latents = enc.latent_dist.sample()
-        return latents * scale
+        return enc.latent_dist.sample() * scale
     if hasattr(enc, "latent"):
         return enc.latent
-    # Fallback: assume VAE-like interface.
-    latents = enc.latent_dist.sample()
-    return latents * scale
+    raise AttributeError(
+        f"Autoencoder encode() returned {type(enc).__name__!r} with neither "
+        "'latent_dist' nor 'latent' attribute. Check your autoencoder type."
+    )
 
 
 # --- REPA (Representation Alignment) helpers ---
@@ -819,51 +822,54 @@ def _log_sample_image(
     rae_bridge=None,
     text_bundle=None,
 ):
-    """Generate one sample with EMA and log to TensorBoard/WandB (IMPROVEMENTS 5.1)."""
+    """Generate one sample with EMA and log to TensorBoard/WandB."""
+    was_training = ema_model.training
     ema_model.eval()
-    demo_prompt = getattr(cfg, "log_images_prompt", "a photo of a cat")
-    with torch.no_grad():
-        enc = encode_text(
-            [demo_prompt],
-            tokenizer,
-            text_encoder,
-            device,
-            max_length=77,
-            dtype=torch.bfloat16,
-            text_bundle=text_bundle,
-            train_fusion=False,
-        )
-        ae_type = getattr(cfg, "autoencoder_type", "kl")
-        latent_scale = getattr(cfg, "latent_scale", 0.18215) if ae_type == "kl" else 1.0
-        image_size = getattr(cfg, "image_size", 256)
-        latent_size = image_size // 8
-        shape = (1, 4, latent_size, latent_size)
-        sample_steps = min(20, getattr(cfg, "num_timesteps", 1000) // 25)
-        mk_cond = {"encoder_hidden_states": enc}
-        if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
-            mk_cond["size_embed"] = torch.tensor(
-                [[float(latent_size), float(latent_size)]], device=device, dtype=torch.float32
+    try:
+        demo_prompt = getattr(cfg, "log_images_prompt", "a photo of a cat")
+        with torch.no_grad():
+            enc = encode_text(
+                [demo_prompt],
+                tokenizer,
+                text_encoder,
+                device,
+                max_length=77,
+                dtype=torch.bfloat16,
+                text_bundle=text_bundle,
+                train_fusion=False,
             )
-        x0 = diffusion.sample_loop(
-            ema_model,
-            shape,
-            model_kwargs_cond=mk_cond,
-            model_kwargs_uncond=None,
-            cfg_scale=7.5,
-            num_inference_steps=sample_steps,
-            eta=0.0,
-            device=device,
-            dtype=torch.float32,
-        )
-        if ae_type == "kl":
-            x0 = x0 / latent_scale
-        elif ae_type == "rae" and rae_bridge is not None:
-            x0 = rae_bridge.dit_to_rae(x0)
-        img = vae.decode(x0).sample
-        img = (img * 0.5 + 0.5).clamp(0, 1)
-        img = img[0].permute(1, 2, 0).cpu().numpy()
-        img = (img * 255).round().astype("uint8")
-    ema_model.train()
+            ae_type = getattr(cfg, "autoencoder_type", "kl")
+            latent_scale = getattr(cfg, "latent_scale", 0.18215) if ae_type == "kl" else 1.0
+            image_size = getattr(cfg, "image_size", 256)
+            latent_size = image_size // 8
+            shape = (1, 4, latent_size, latent_size)
+            sample_steps = min(20, getattr(cfg, "num_timesteps", 1000) // 25)
+            mk_cond = {"encoder_hidden_states": enc}
+            if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
+                mk_cond["size_embed"] = torch.tensor(
+                    [[float(latent_size), float(latent_size)]], device=device, dtype=torch.float32
+                )
+            x0 = diffusion.sample_loop(
+                ema_model,
+                shape,
+                model_kwargs_cond=mk_cond,
+                model_kwargs_uncond=None,
+                cfg_scale=7.5,
+                num_inference_steps=sample_steps,
+                eta=0.0,
+                device=device,
+                dtype=torch.float32,
+            )
+            if ae_type == "kl":
+                x0 = x0 / latent_scale
+            elif ae_type == "rae" and rae_bridge is not None:
+                x0 = rae_bridge.dit_to_rae(x0)
+            img = vae.decode(x0).sample
+            img = (img * 0.5 + 0.5).clamp(0, 1)
+            img = img[0].permute(1, 2, 0).cpu().numpy()
+            img = (img * 255).round().astype("uint8")
+    finally:
+        ema_model.train(was_training)
     if tb_writer is not None:
         tb_writer.add_image("sample", img, steps, dataformats="HWC")
     if getattr(cfg, "wandb_project", None):

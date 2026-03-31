@@ -1,4 +1,4 @@
-"""Resolve local `model/` paths vs Hugging Face hub IDs."""
+"""Resolve local `pretrained/` paths vs Hugging Face hub IDs."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ def repo_root() -> Path:
 
 
 def model_dir() -> Path:
-    return repo_root() / "model"
+    return repo_root() / "pretrained"
 
 
 def resolve_model_path(folder_name: str, hf_fallback: str) -> str:

@@ -336,6 +336,7 @@ class DiT_Text(nn.Module):
         class_dropout_prob=0.1,
         learn_sigma=True,
         num_ar_blocks=0,
+        ar_block_order: str = "raster",
         use_xformers=True,
         style_embed_dim=0,
         control_cond_dim=0,
@@ -363,6 +364,14 @@ class DiT_Text(nn.Module):
         token_keep_min_value: float = 0.0,
         drop_path_rate: float = 0.0,
         layerscale_init: float = 0.0,
+        # Prompt adherence (must match get_dit_build_kwargs)
+        prompt_reinject_every_n: int = 0,
+        prompt_reinject_alpha: float = 0.0,
+        prompt_reinject_decay: float = 1.0,
+        prompt_timestep_schedule_enabled: bool = False,
+        prompt_early_scale: float = 1.1,
+        prompt_late_scale: float = 1.0,
+        prompt_schedule_num_timesteps: int = 1000,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
@@ -373,6 +382,7 @@ class DiT_Text(nn.Module):
         self.text_dim = text_dim
         self._grad_checkpointing = False
         self.num_ar_blocks = num_ar_blocks
+        self.ar_block_order = str(ar_block_order or "raster")
         self.use_xformers = use_xformers
         self.style_embed_dim = style_embed_dim
         self.control_cond_dim = control_cond_dim
@@ -393,6 +403,13 @@ class DiT_Text(nn.Module):
         self.token_keep_min_value = float(token_keep_min_value)
         self.drop_path_rate = float(drop_path_rate)
         self.layerscale_init = float(layerscale_init)
+        self.prompt_reinject_every_n = int(prompt_reinject_every_n)
+        self.prompt_reinject_alpha = float(prompt_reinject_alpha)
+        self.prompt_reinject_decay = float(prompt_reinject_decay)
+        self.prompt_timestep_schedule_enabled = bool(prompt_timestep_schedule_enabled)
+        self.prompt_early_scale = float(prompt_early_scale)
+        self.prompt_late_scale = float(prompt_late_scale)
+        self.prompt_schedule_num_timesteps = max(2, int(prompt_schedule_num_timesteps))
 
         # REPA projector: maps DiT hidden tokens -> vision encoder embedding dim.
         self.repa_out_dim = int(repa_out_dim) if repa_out_dim is not None else 0
@@ -460,7 +477,7 @@ class DiT_Text(nn.Module):
         self.register_buffer("_ar_mask", None)
         if num_ar_blocks > 0:
             p = int(num_patches**0.5)
-            self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)
+            self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks, block_order=self.ar_block_order)
 
         # Blocks receive text_emb from text_embedder (already projected to hidden_size), not raw encoder_hidden_states
         blocks = []

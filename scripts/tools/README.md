@@ -16,7 +16,7 @@ python -m scripts.tools help
 | Command | Canonical script |
 |---------|------------------|
 | `ckpt_info` | `dev/ckpt_info.py` |
-| `smoke_imports`, `quick_test` | `dev/` |
+| `smoke_imports`, `quick_test`, `ar_mask_inspect` | `dev/` |
 | `noise_schedule_export` | `training/noise_schedule_export.py` (Rust `sdx-noise-schedule` after `build_native`) |
 | `data_quality`, `manifest_paths`, `jsonl_merge` | `data/` |
 | `prompt_lint`, `tag_coverage` | `prompt/` |

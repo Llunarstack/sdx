@@ -108,15 +108,26 @@ class GaussianDiffusion:
         self.prediction_type = prediction_type  # "epsilon" | "v" | "x0"
         beta = get_beta_schedule(beta_schedule, num_timesteps)
         alpha = 1.0 - beta
-        alpha_cumprod = np.cumprod(alpha)
+        # Use Rust cdylib when built — avoids NumPy cumprod overhead at startup.
+        try:
+            from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust
+            _ac = maybe_alpha_cumprod_rust(alpha)
+            alpha_cumprod = _ac if _ac is not None else np.cumprod(alpha)
+        except Exception:
+            alpha_cumprod = np.cumprod(alpha)
+        # Use Rust SNR computation when available.
+        try:
+            from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust
+            _snr = maybe_snr_from_alpha_cumprod_rust(alpha_cumprod)
+            snr = _snr if _snr is not None else alpha_cumprod / (1.0 - alpha_cumprod + 1e-8)
+        except Exception:
+            snr = alpha_cumprod / (1.0 - alpha_cumprod + 1e-8)
         alpha_cumprod_prev = np.concatenate([[1.0], alpha_cumprod[:-1]])
         self.beta = torch.from_numpy(beta).float()
         self.alpha_cumprod = torch.from_numpy(alpha_cumprod).float()
         self.alpha_cumprod_prev = torch.from_numpy(alpha_cumprod_prev).float()
         self.sqrt_alpha_cumprod = torch.from_numpy(np.sqrt(alpha_cumprod)).float()
         self.sqrt_one_minus_alpha_cumprod = torch.from_numpy(np.sqrt(1.0 - alpha_cumprod)).float()
-        # For min-SNR weighting: SNR(t) = alpha_cumprod / (1 - alpha_cumprod)
-        snr = alpha_cumprod / (1.0 - alpha_cumprod + 1e-8)
         self.snr = torch.from_numpy(snr).float()
 
     def _to_device(self, device):
@@ -354,8 +365,21 @@ class GaussianDiffusion:
             return spatial_norm_thresholding(x, threshold_value)
         if threshold_type == "percentile" and percentile > 0 and percentile < 100:
             b = x.shape[0]
+            q_val = percentile / 100.0
+            # Use native CUDA percentile clamp when available.
+            try:
+                import numpy as np
+                from sdx_native.percentile_clamp_native import maybe_percentile_clamp_cuda
+                row_len = x.numel() // b
+                x_np = x.detach().float().cpu().numpy().reshape(b, row_len)
+                result = maybe_percentile_clamp_cuda(x_np, q_val, 0.0)
+                if result is not None:
+                    return torch.from_numpy(result).reshape(x.shape).to(device=x.device, dtype=x.dtype)
+            except Exception:
+                pass
+            # PyTorch fallback.
             x_flat = x.reshape(b, -1)
-            q = torch.quantile(x_flat.float(), percentile / 100.0, dim=1, keepdim=True)
+            q = torch.quantile(x_flat.float(), q_val, dim=1, keepdim=True)
             q = q.reshape(b, *([1] * (x.ndim - 1))).to(x.dtype)
             return torch.where(x > q, q, torch.where(x < -q, -q, x))
         return x

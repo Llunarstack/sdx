@@ -80,6 +80,7 @@ def build_train_config_from_args(args) -> TrainConfig:
         grad_checkpointing=not args.no_grad_checkpoint,
         global_seed=args.seed,
         num_ar_blocks=args.num_ar_blocks,
+        ar_block_order=str(getattr(args, "ar_block_order", "raster") or "raster"),
         use_xformers=not args.no_xformers,
         passes=args.passes,
         max_steps=args.max_steps,

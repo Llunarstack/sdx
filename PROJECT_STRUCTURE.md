@@ -33,7 +33,7 @@ sdx/
 │   ├── inference/
 │   ├── models/
 │   └── training/
-├── consistency_data/
+├── assets/
 │   ├── references/
 │   ├── characters.json
 │   ├── scenes.json
@@ -141,7 +141,7 @@ sdx/
 │   ├── SMOKE_TRAINING.md
 │   ├── STYLE_ARTIST_TAGS.md
 │   └── TRAINING_TEXT_TO_PIXELS.md
-├── enhanced_results/
+├── runs/
 │   ├── 000-EnhancedDiT-XL-2/
 │   │   └── checkpoints/
 │   ├── 001-EnhancedDiT-XL-2/
@@ -579,7 +579,7 @@ sdx/
 │   ├── enhanced_trainer.py
 │   ├── train_args.py
 │   └── train_cli_parser.py
-├── user_data/
+├── datasets/
 │   ├── train/
 │   └── README.md
 ├── utils/

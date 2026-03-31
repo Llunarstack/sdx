@@ -123,6 +123,25 @@ install(TARGETS sdx_rmsnorm_rows_cpu
   ARCHIVE DESTINATION lib
 )
 
+# CPU mask → patch-weight helper for part-aware training.
+add_library(sdx_mask_ops SHARED
+  src/sdx_mask_ops.cpp
+)
+target_include_directories(sdx_mask_ops
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_definitions(sdx_mask_ops PRIVATE SDX_MASK_OPS_BUILD)
+if(MSVC)
+  target_compile_definitions(sdx_mask_ops PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+install(TARGETS sdx_mask_ops
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
 # Optional CUDA: image layout + small ML-style ops (requires nvcc).
 option(SDX_BUILD_CUDA "Build CUDA targets (hwc_to_chw, l2_normalize_rows, flow_matching_velocity, nf4, sdpa_online, rmsnorm, rope, silu_gate)" OFF)
 if(SDX_BUILD_CUDA)
@@ -286,6 +305,48 @@ if(SDX_BUILD_CUDA)
     target_compile_options(sdx_cuda_silu_gate PRIVATE "-Xcompiler=/utf-8")
   endif()
   install(TARGETS sdx_cuda_silu_gate
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  # Gaussian blur on latent tensors (B, C, H, W) — used by sampling_utils and holy_grail.
+  add_library(sdx_cuda_gaussian_blur SHARED
+    cuda/gaussian_blur_latent.cu
+  )
+  set_property(TARGET sdx_cuda_gaussian_blur PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_gaussian_blur PRIVATE SDX_CUDA_BLUR_BUILD)
+  target_include_directories(sdx_cuda_gaussian_blur
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_gaussian_blur PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_gaussian_blur PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_gaussian_blur
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  # Per-sample percentile clamp — used by holy_grail/latent_refiner.
+  add_library(sdx_cuda_percentile_clamp SHARED
+    cuda/percentile_clamp.cu
+  )
+  set_property(TARGET sdx_cuda_percentile_clamp PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_percentile_clamp PRIVATE SDX_CUDA_PCLAMP_BUILD)
+  target_include_directories(sdx_cuda_percentile_clamp
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_percentile_clamp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_percentile_clamp PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_percentile_clamp
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

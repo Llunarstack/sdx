@@ -39,6 +39,7 @@ def main():
         "vae_model",
         "latent_scale",
         "num_ar_blocks",
+        "ar_block_order",
         "use_xformers",
         "style_embed_dim",
         "control_cond_dim",

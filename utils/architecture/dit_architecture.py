@@ -69,13 +69,6 @@ def dit_parameter_report(model: nn.Module) -> Dict[str, Any]:
     }
 
 
-def _strip_incompatible_dit_kwargs(model_name: str, kw: Dict[str, Any]) -> None:
-    """Predecessor / Supreme text classes omit ``patch_se`` (see ``dit_predecessor.py``)."""
-    if model_name.startswith("DiT-P") or "Supreme" in model_name:
-        kw.pop("patch_se", None)
-        kw.pop("patch_se_reduction", None)
-
-
 def instantiate_dit_text(
     model_name: str,
     *,
@@ -92,7 +85,6 @@ def instantiate_dit_text(
     kw = default_dit_profile_kwargs(image_size=image_size, text_dim=text_dim)
     if extra_kwargs:
         kw.update(extra_kwargs)
-    _strip_incompatible_dit_kwargs(model_name, kw)
     return DiT_models_text[model_name](**kw)
 
 

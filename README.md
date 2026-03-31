@@ -4,404 +4,167 @@
 
 # SDX
 
-### Text-to-image diffusion transformers for research and production
-
-*One training engine, one sampling engine, modular everything else.*
+### Text-to-image diffusion transformers — research depth, operator clarity
 
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
-  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="License"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"/></a>
+  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.x"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="Apache 2.0"/></a>
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Docs-docs%2FREADME-24292f?style=flat-square&logo=github" alt="Docs"/></a>
-  <a href="https://github.com/Llunarstack/sdx/releases"><img src="https://img.shields.io/badge/Releases-v0.2.0+-6f42c1?style=flat-square" alt="Releases"/></a>
 </p>
 
 <p align="center">
   <a href="#quick-start"><strong>Quick start</strong></a> ·
-  <a href="#architecture-and-pipeline">Architecture</a> ·
-  <a href="#training-overview">Training</a> ·
-  <a href="#sampling-overview">Sampling</a> ·
-  <a href="#contributors-and-community">Contributors</a> ·
+  <a href="#training">Training</a> ·
+  <a href="#sampling">Sampling</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#data-formats">Data formats</a> ·
   <a href="#key-docs">Docs</a>
 </p>
-
-**Stack:** DiT · T5/triple encoders · LoRA/DoRA/LyCORIS routing · flow/bridge/OT objectives · prompt-control stack · native acceleration paths.
 
 </div>
 
 ---
 
-## What SDX is
+SDX is a modular text-to-image training and inference framework built on Diffusion Transformers (DiT). It is designed to be transparent — training lives in `train.py`, sampling in `sample.py`, and every module boundary is explicit.
 
-SDX is a modular text-to-image codebase centered on:
-
-- `train.py` for diffusion/flow training
-- `sample.py` for inference and quality controls
-- `models/dit_text.py` for the core DiT
-- optional adapters, controls, and native acceleration
-- **Holy Grail** adaptive sampling: see repo root [`holy_grail/README.md`](holy_grail/README.md) (implementation in [`diffusion/holy_grail/`](diffusion/holy_grail/))
-
-It is built for iterative research (ablation-friendly) and practical generation workflows (books/comics, prompt-heavy generation, multi-adapter style stacks).
+**Core stack:** DiT · T5 / triple text encoders · LoRA/DoRA/LyCORIS routing · VP diffusion + flow matching + bridge/OT objectives · Holy Grail adaptive sampling · optional native CUDA acceleration.
 
 ---
 
-## Find your path
+## What SDX gives you
 
-| Goal | Jump to |
+| Capability | Details |
 | :--- | :--- |
-| Start fast | [Quick start](#quick-start) |
-| Understand architecture | [Architecture and pipeline](#architecture-and-pipeline) |
-| Train with latest features | [Training overview](#training-overview) |
-| Sample with style/adapters | [Sampling overview](#sampling-overview) |
-| Organize datasets | [Data formats](#data-formats) |
-| Native acceleration | [Native acceleration and tooling](#native-acceleration-and-tooling) |
-| Holy Grail sampling | [holy_grail/README.md](holy_grail/README.md) → code in `diffusion/holy_grail/` |
-| Explore docs | [Key docs](#key-docs) |
-| Contribute | [Contributors and community](#contributors-and-community) |
-
----
-
-## Highlights at a glance
-
-| Area | Current capability |
-| :--- | :--- |
-| Core model | DiT text-conditioned generation via `models/dit_text.py` |
-| Text conditioning | T5 default + optional triple encoder mode (T5 + CLIP-L + CLIP-bigG) |
-| Prompt adherence | Part-aware attention grounding + token coverage losses |
-| Adapter system | Multi-LoRA/DoRA/LyCORIS stacking with role budgets and depth routing |
-| Objectives | VP diffusion + flow matching + bridge auxiliary + OT coupling |
-| Inference controls | CFG, flow sample mode, speculative CFG, SAG, reference-token injection, **holy-grail** adaptive sampling (see below) |
-| Reliability | Run manifests, config snapshots, optional strict warnings |
-| Performance | bf16, `torch.compile`, gradient checkpointing, DDP-ready |
-
----
-
-## What shipped (detailed)
-
-| Area | What shipped now |
-| :--- | :--- |
-| Part-aware training | Hierarchical caption fields + optional grounding masks + foveated crop path in `data/t2i_dataset.py`; cross-attention grounding + token-coverage auxiliaries in `utils/training/part_aware_training.py`. |
-| Adapter routing | `models/lora.py` now supports stacked LoRA/DoRA/LyCORIS, per-role budgets, depth-aware stage policies, and automatic character/style balancing. |
-| Inference adapter UX | `sample.py` supports `path:scale:role`, role budget overrides, stage-policy selection, and weighted style mixes (`style_a::w | style_b::w`). |
-| Objective stack | Flow matching + bridge auxiliary + OT noise-latent coupling integrated into `train.py` and `diffusion/*`. |
-| Reproducibility | Per-run `run_manifest.json` and `config.train.json` snapshots plus optional strict warning mode in `train.py`. |
-| Prompt adherence path | Prompt controls + negative filtering + adherence auxiliaries are now documented and reflected in architecture/sampling docs. |
-| Documentation quality | Architecture section upgraded with current-model diagrams and richer contributor-facing project context. |
-| **Holy-grail sampling** | `diffusion/holy_grail/`: per-step CFG/control/adapter scheduling, CADS-style condition noise, latent refine + clamp; wired into `diffusion/gaussian_diffusion.py` and `sample.py` (`--holy-grail`, presets, sanitizer). |
-| **Diffusion building blocks** | `diffusion/cfg_schedulers.py`, `diffusion/self_conditioning.py`, `diffusion/consistency_utils.py` for schedules, self-conditioning, and consistency-style helpers (importable from `diffusion`). |
-| **Native ops (optional)** | CUDA/CPU helpers for RMSNorm, RoPE apply, SiLU-gate in `native/` with Python fallbacks in `sdx_native` (see `native/cuda/README.md`). |
-
----
-
-## Why SDX is different
-
-Most repos are either:
-
-- strong research prototypes that are hard to operate, or
-- polished wrappers that hide too much of the actual model stack.
-
-SDX aims for the middle: **research depth + operator clarity**.
-
-| Principle | What it means in practice |
-| :--- | :--- |
-| Transparent internals | Training and sampling stay centered in `train.py` and `sample.py` with explicit module boundaries |
-| Prompt fidelity first | Part-aware grounding, token coverage, and richer prompt-control pathways are native features |
-| Adapter realism | Multi-LoRA/DoRA/LyCORIS routing is treated as a first-class system, not a bolt-on |
-| Reproducibility by default | Run manifests + config snapshots make results easier to track and recover |
-| Evolvable architecture | Flow/bridge/OT and prompt-conditioning improvements can be added without rewriting the stack |
-
----
-
-## Architecture and pipeline
-
-**End-to-end:** `data/` -> `train.py` -> checkpoint -> `sample.py` -> images.
-
-### Core pipeline
-
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart LR
-    A[Data manifests + captions + optional masks] --> B[train.py<br/>DiT + diffusion/flow objectives]
-    B --> C[(Checkpoint<br/>EMA + config + manifest)]
-    C --> D[sample.py<br/>CFG + scheduler/solver + controls]
-    D --> E[Images / grids / pick-best]
-
-    style A fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
-    style B fill:#fef9c3,stroke:#ca8a04,color:#713f12
-    style C fill:#f3e8ff,stroke:#9333ea,color:#581c87
-    style D fill:#dcfce7,stroke:#16a34a,color:#14532d
-    style E fill:#fce7f3,stroke:#db2777,color:#831843
-```
-
-### Current model stack (training path)
-
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart TB
-    subgraph DATA["Data + caption pipeline"]
-      D0[Text2ImageDataset]
-      D1[Hierarchical captions<br/>caption_global/local/entity]
-      D2[Optional grounding_mask<br/>+ foveated crop]
-      D0 --> D1 --> D2
-    end
-
-    subgraph COND["Conditioning"]
-      C0[Prompt controls + neg filtering]
-      C1[T5 or triple encoders<br/>T5 + CLIP-L + CLIP-bigG]
-      C2[LoRA/DoRA/LyCORIS router<br/>roles + stage policies]
-      C0 --> C1 --> C2
-    end
-
-    subgraph CORE["DiT core (models/dit_text.py)"]
-      M0[Patch embed + timestep]
-      M1[DiT blocks<br/>self/cross-attn + optional MoE/AR]
-      M2[Head: epsilon / v / flow velocity]
-      M0 --> M1 --> M2
-    end
-
-    subgraph OBJ["Objectives + runtime"]
-      O0[Main diffusion or flow loss]
-      O1[Bridge aux + OT pairing]
-      O2[Part-aware attn grounding + token coverage]
-      O3[bf16 + compile + grad checkpoint + DDP]
-      O0 --> O1 --> O2 --> O3
-    end
-
-    DATA --> CORE
-    COND --> CORE
-    CORE --> OBJ
-```
-
-### Inference controls (sample path)
-
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart LR
-    P[Prompt + style mix] --> S[sample.py sampler loop]
-    R[Reference image tokens] --> S
-    L[LoRA stack<br/>path:scale:role] --> S
-    S --> X[VAE/RAE decode]
-    X --> Y[Post-process + output]
-
-    S1[CFG / schedulers / solvers] --> S
-    S2[Flow-matching sample mode] --> S
-    S3[Speculative CFG + SAG] --> S
-```
-
-<details>
-<summary><strong>Deep-dive diagrams (expanded)</strong></summary>
-
-### Full stack map
-
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart TB
-  subgraph DATA["Data + manifests"]
-    D0[Folders / JSONL]
-    D1[caption parsing + emphasis]
-    D2[optional parts / region captions / grounding mask]
-    D0 --> D1 --> D2
-  end
-
-  subgraph TRAIN["train.py"]
-    T0[encode latents]
-    T1[DiT forward]
-    T2[objectives: VP/flow + bridge + OT + adherence aux]
-    T3[EMA + checkpoints + manifests]
-    T0 --> T1 --> T2 --> T3
-  end
-
-  subgraph INFER["sample.py"]
-    S0[prompt + style + adapters]
-    S1[sampler loop]
-    S2[decode + postprocess]
-    S0 --> S1 --> S2
-  end
-
-  DATA --> TRAIN
-  TRAIN --> INFER
-```
-
-### Adapter routing intuition
-
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart LR
-  A[Input adapters] --> B[path:scale:role parse]
-  B --> C[Per-layer stacking]
-  C --> D[Role budgets]
-  D --> E[Stage policy<br/>early/mid/late]
-  E --> F[Effective layer scales]
-  F --> G[DiT linear wrappers]
-```
-
-</details>
+| **Core model** | DiT with text conditioning via `models/dit_text.py` |
+| **Text encoders** | T5-XXL (default) or triple mode: T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 |
+| **Training objectives** | VP diffusion · flow matching · bridge auxiliary · OT noise-latent coupling |
+| **Prompt adherence** | Part-aware attention grounding + token coverage auxiliary losses |
+| **Adapter system** | Multi-LoRA/DoRA/LyCORIS stacking with per-role budgets and depth routing |
+| **Adaptive sampling** | Holy Grail: per-step CFG/control/adapter scheduling + CADS condition annealing |
+| **Inference controls** | CFG schedulers · speculative CFG · SAG · reference-token injection · img2img |
+| **Reproducibility** | Per-run `run_manifest.json` + `config.train.json` snapshots |
+| **Performance** | bf16 · `torch.compile` · gradient checkpointing · DDP-ready |
 
 ---
 
 ## Quick start
 
 ```bash
+# Install dependencies
 pip install -r requirements.txt
-python scripts/tools/dev/quick_test.py
+
+# Verify your environment
+python -m toolkit.training.env_health
+
+# Train on your dataset
+python train.py --data-path datasets/train --results-dir results
+
+# Sample from a trained checkpoint
+python sample.py \
+  --ckpt results/000-DiT-XL-2-Text/checkpoints/best.pt \
+  --prompt "cinematic portrait, dramatic lighting" \
+  --out out.png
 ```
 
-Optional NVIDIA CUDA 12.8 wheel refresh:
+Optional: refresh to CUDA 12.8 wheels:
 
 ```bash
 pip install --force-reinstall -r requirements-cuda128.txt
-python -m toolkit.training.env_health
-```
-
-Minimal train and sample:
-
-```bash
-python train.py --data-path user_data/train --results-dir results
-python sample.py --ckpt results/.../best.pt --prompt "cinematic portrait, dramatic lighting" --out out.png
 ```
 
 ---
 
-## Latest model updates
+## Training
 
-### 1) Part-aware and grounding-aware training
-
-- Hierarchical captions in `data/t2i_dataset.py`:
-  - `caption_global`, `caption_local`, `entity_captions`
-- Optional grounding masks:
-  - `grounding_mask` support in dataset and batch collation
-- Attention auxiliary losses in `utils/training/part_aware_training.py`:
-  - foreground grounding loss from cross-attn
-  - token coverage loss for prompt adherence
-- Integrated into `train.py` with configurable weights and logging
-
-### 2) LoRA / DoRA / LyCORIS upgrade
-
-- Multi-adapter stacking in `models/lora.py`
-- Per-role budgeting (`character`, `style`, `detail`, `composition`, `other`)
-- Depth-aware routing policies:
-  - `auto`, `character_focus`, `style_focus`, `balanced`
-- Advanced CLI in `sample.py`:
-  - `path:scale:role` adapter specs
-  - role budgets and stage overrides
-  - weighted style blending (`styleA::0.6 | styleB::0.4`)
-
-### 3) Reproducibility and run hygiene
-
-- `train.py` now saves:
-  - `run_manifest.json`
-  - `config.train.json`
-- Optional strict warning policy (`--strict-warnings`)
-- Cleaner train argument split:
-  - `training/train_cli_parser.py`
-  - `training/train_args.py`
-
-### 4) Modern objective stack
-
-- Flow matching (`diffusion/flow_matching.py`)
-- VP bridge auxiliary loss (`diffusion/bridge_training.py`)
-- OT noise-latent pairing (`utils/training/ot_noise_pairing.py`)
-- Prompt-conditioning behavior improvements (reinjection/schedule hooks in config/model path)
-
-### 5) Dataset and quality docs refresh
-
-- Curated dataset planning:
-  - `docs/HF_DATASET_SHORTLIST.md`
-- Issue and quality playbook:
-  - `docs/QUALITY_AND_ISSUES.md`
-
-### 6) Holy-grail sampling, diffusion utilities, and native extras (recent)
-
-**Holy-grail stack** (`diffusion/holy_grail/` — see `diffusion/holy_grail/README.md`):
-
-- Adaptive per-step **CFG**, **ControlNet scale**, and **adapter** multipliers inside `GaussianDiffusion.sample_loop` (VP and flow paths).
-- **CADS-style** condition annealing: optional Gaussian noise on `encoder_hidden_states` during sampling (`--holy-grail-cads-strength`, etc.).
-- **Presets**: `--holy-grail-preset` with `auto` (heuristic from prompt/style/control/LoRA) or `balanced` \| `photoreal` \| `anime` \| `illustration` \| `aggressive`.
-- **Runtime guard**: `sanitize_holy_grail_kwargs` clamps unsafe values before sampling.
-- **Supporting modules**: attention-entropy CFG ideas, prompt coverage metrics, latent unsharp + dynamic clamp, style/detail routing helpers.
-
-**CLI quick flags** (all opt-in; enable with `--holy-grail` or a preset):
-
-- `--holy-grail` · `--holy-grail-preset auto|…` · `--holy-grail-cfg-early-ratio` / `--holy-grail-cfg-late-ratio`
-- `--holy-grail-control-mult` · `--holy-grail-adapter-mult` · `--holy-grail-late-adapter-boost` · `--holy-grail-no-frontload-control`
-- `--holy-grail-cads-strength` · `--holy-grail-cads-min-strength` · `--holy-grail-cads-power`
-- `--holy-grail-unsharp-sigma` · `--holy-grail-unsharp-amount` · `--holy-grail-clamp-quantile` · `--holy-grail-clamp-floor`
-
-**Extra diffusion modules** (for training/experiments or custom wiring):
-
-- `diffusion/cfg_schedulers.py` — time/SNR-aware CFG schedule helpers
-- `diffusion/self_conditioning.py` — detached self-cond + blend helpers
-- `diffusion/consistency_utils.py` — EMA targets, consistency delta loss, one-step refine
-
-**Optional native acceleration**: RMSNorm rows, RoPE apply, SiLU-gate CUDA libraries + NumPy fallbacks (`native/python/sdx_native/`).
-
----
-
-## Training overview
-
-Core training features:
-
-- DiT variants (including AR-capable configurations)
-- T5 or triple text encoders (T5 + CLIP-L + CLIP-bigG)
-- bf16, `torch.compile`, gradient checkpointing, DDP
-- EMA checkpoints, validation split, early stopping
-- optional latent cache and JSONL-driven data pipelines
-
-Useful training examples:
+### Minimal run
 
 ```bash
-# Triple text encoders
-python train.py --data-path /path/to/data --text-encoder-mode triple
+python train.py \
+  --data-path datasets/train \
+  --model DiT-XL/2-Text \
+  --results-dir results
+```
 
-# Flow-matching training
-python train.py --data-path /path/to/data --flow-matching-training
+### Common training recipes
 
-# Part-aware setup with grounding losses
-python train.py --data-path /path/to/data \
+**Flow matching** (recommended for new checkpoints):
+
+```bash
+python train.py \
+  --data-path datasets/train \
+  --flow-matching-training \
+  --results-dir results
+```
+
+**Triple text encoders** (T5 + CLIP-L + CLIP-bigG):
+
+```bash
+python train.py \
+  --data-path datasets/train \
+  --text-encoder-mode triple \
+  --results-dir results
+```
+
+**Part-aware training** with attention grounding:
+
+```bash
+python train.py \
+  --data-path datasets/train \
   --use-hierarchical-captions \
   --attn-grounding-loss-weight 0.1 \
-  --attn-token-coverage-loss-weight 0.05
+  --attn-token-coverage-loss-weight 0.05 \
+  --results-dir results
 ```
 
-<details>
-<summary><strong>Train CLI quick reference</strong></summary>
+**Resume from checkpoint:**
 
-| Flag | Purpose |
-| :--- | :--- |
-| `--flow-matching-training` | Enable flow objective path instead of VP main loss |
-| `--bridge-aux-weight` / `--bridge-aux-lambda` | Add bridge regularization |
-| `--ot-noise-pair-reg` | Enable OT noise-latent coupling |
-| `--use-hierarchical-captions` | Enable hierarchical caption composition |
-| `--attn-grounding-loss-weight` | Add grounding attention auxiliary loss |
-| `--attn-token-coverage-loss-weight` | Add token coverage auxiliary loss |
-| `--strict-warnings` | Escalate key warnings to errors |
-| `--no-save-run-manifest` | Disable run manifest snapshot files |
+```bash
+python train.py \
+  --data-path datasets/train \
+  --resume results/000-DiT-XL-2-Text/checkpoints/best.pt \
+  --results-dir results
+```
 
-</details>
+### Key training flags
+
+| Flag | Default | Purpose |
+| :--- | :--- | :--- |
+| `--model` | `DiT-XL/2-Text` | Model variant |
+| `--text-encoder-mode` | `t5` | `t5` or `triple` |
+| `--flow-matching-training` | off | Use flow objective instead of VP |
+| `--bridge-aux-weight` | `0.0` | Bridge regularization weight |
+| `--ot-noise-pair-reg` | `0.0` | OT noise-latent coupling |
+| `--use-hierarchical-captions` | off | Compose global/local/entity captions |
+| `--attn-grounding-loss-weight` | `0.0` | Foreground attention grounding loss |
+| `--attn-token-coverage-loss-weight` | `0.0` | Token coverage auxiliary loss |
+| `--val-split` | `0.0` | Fraction of data held out for validation |
+| `--early-stopping-patience` | `0` | Stop after N val checks with no improvement |
+| `--grad-checkpointing` | on | Reduce VRAM at cost of speed |
+| `--use-bf16` | on | Mixed precision training |
+| `--strict-warnings` | off | Escalate project warnings to errors |
+
+Run `python train.py --help` for the full list.
 
 ---
 
-## Sampling overview
+## Sampling
 
-`sample.py` supports:
+### Basic usage
 
-- CFG with scheduler/solver controls
-- flow-matching sample mode (`--flow-matching-sample`, `--flow-solver`)
-- speculative CFG controls
-- SAG-style guidance
-- reference image token injection
-- LoRA/DoRA/LyCORIS stacking with role-aware routing
-- style controls and style mix weighting
-- optional postprocess passes (e.g., face enhancement)
-- **Holy-grail mode**: `--holy-grail` and `--holy-grail-preset auto|balanced|photoreal|anime|illustration|aggressive` (see **Latest model updates → §6**)
+```bash
+python sample.py \
+  --ckpt results/.../best.pt \
+  --prompt "your prompt here" \
+  --out out.png
+```
 
-Example:
+### With adapters and style blending
 
 ```bash
 python sample.py \
   --ckpt results/.../best.pt \
   --prompt "hero character, dynamic pose, city at night" \
-  --style "anime::0.7 | cinematic::0.3" \
   --lora char.safetensors:0.9:character style.safetensors:0.6:style \
   --lora-stage-policy auto \
   --cfg-scale 6.0 \
@@ -409,53 +172,110 @@ python sample.py \
   --out out.png
 ```
 
-Holy-grail one-liner (preset picks heuristics from your prompt/style):
+Adapter format: `path:scale:role` where role is one of `character`, `style`, `detail`, `composition`, `other`.
+
+Style blending: `--style "anime::0.7 | cinematic::0.3"` — weights are normalised automatically.
+
+### Holy Grail adaptive sampling
+
+Holy Grail applies per-step CFG, control, and adapter scheduling automatically. Enable with a preset:
 
 ```bash
-python sample.py --ckpt results/.../best.pt \
+python sample.py \
+  --ckpt results/.../best.pt \
   --prompt "photoreal portrait, soft window light" \
-  --holy-grail-preset auto --out holy_grail.png
+  --holy-grail-preset auto \
+  --out out.png
 ```
+
+Available presets: `auto` · `balanced` · `photoreal` · `anime` · `illustration` · `aggressive`
+
+`auto` picks a preset heuristically from your prompt, style, and LoRA roles.
+
+Fine-grained control:
+
+```bash
+python sample.py \
+  --ckpt results/.../best.pt \
+  --prompt "..." \
+  --holy-grail \
+  --holy-grail-cfg-early-ratio 0.72 \
+  --holy-grail-cfg-late-ratio 1.0 \
+  --holy-grail-cads-strength 0.03 \
+  --holy-grail-unsharp-sigma 0.6 \
+  --holy-grail-unsharp-amount 0.18 \
+  --out out.png
+```
+
+See [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) for the full flag reference.
+
+### Flow-trained checkpoint
+
+```bash
+python sample.py \
+  --ckpt results/.../best.pt \
+  --prompt "cinematic sci-fi alley, volumetric fog" \
+  --flow-matching-sample \
+  --flow-solver heun \
+  --cfg-scale 6.0 \
+  --steps 32 \
+  --out out.png
+```
+
+### Key sampling flags
+
+| Flag | Purpose |
+| :--- | :--- |
+| `--cfg-scale` | Classifier-free guidance scale (default: 7.5) |
+| `--steps` | Number of denoising steps |
+| `--scheduler` | Timestep schedule: `ddim`, `euler`, `karras_rho`, etc. |
+| `--solver` | Solver: `ddim` or `heun` |
+| `--negative-prompt` | Negative conditioning text |
+| `--lora` | One or more adapters as `path:scale:role` |
+| `--lora-stage-policy` | Depth routing: `auto`, `character_focus`, `style_focus`, `balanced` |
+| `--flow-matching-sample` | Use flow-matching sampler (for flow-trained checkpoints) |
+| `--holy-grail-preset` | Adaptive sampling preset |
+| `--width` / `--height` | Output resolution (default: model native) |
+| `--seed` | Random seed for reproducibility |
+
+Run `python sample.py --help` for the full list.
 
 ---
 
-## Recipe gallery (quick wins)
+## Architecture
 
-### 1) Character consistency + style blend
+### Pipeline overview
 
-```bash
-python sample.py \
-  --ckpt results/.../best.pt \
-  --prompt "full-body character sheet, front and side views, clean lineart" \
-  --style "anime::0.65 | cel-shaded::0.35" \
-  --lora char_model.safetensors:0.95:character style_pack.safetensors:0.50:style \
-  --lora-stage-policy character_focus \
-  --cfg-scale 5.5 --steps 36 --out character_sheet.png
+```
+datasets/train/  ──►  train.py  ──►  checkpoint/  ──►  sample.py  ──►  images
+                       │                                    │
+                  DiT + diffusion                    CFG + scheduler
+                  objectives                         + adapters
 ```
 
-### 2) Prompt-adherence stress test
+### Model stack
 
-```bash
-python sample.py \
-  --ckpt results/.../best.pt \
-  --prompt "red umbrella behind the subject, neon sign text 'OPEN', rainy street reflection" \
-  --negative-prompt "blurry text, malformed letters, extra limbs" \
-  --speculative-draft-cfg-scale 4.5 \
-  --speculative-close-thresh 0.02 \
-  --speculative-blend 0.35 \
-  --steps 42 --out adherence_test.png
-```
+| Component | Location | Notes |
+| :--- | :--- | :--- |
+| DiT core | `models/dit_text.py` | Patch embed → DiT blocks → head |
+| Text encoders | `utils/modeling/text_encoder_bundle.py` | T5-XXL or T5 + CLIP-L + CLIP-bigG |
+| Adapter routing | `models/lora.py` | LoRA/DoRA/LyCORIS, per-role budgets |
+| ControlNet | `models/controlnet.py` | Optional image conditioning |
+| Diffusion engine | `diffusion/gaussian_diffusion.py` | VP + flow + Holy Grail wiring |
+| Flow matching | `diffusion/flow_matching.py` | Rectified-flow objective |
+| Holy Grail | `diffusion/holy_grail/` | Adaptive per-step scheduling |
+| VAE / RAE | via `diffusers` | Latent encode/decode |
 
-### 3) Flow-trained checkpoint inference
+### Training objectives
 
-```bash
-python sample.py \
-  --ckpt results/.../best.pt \
-  --prompt "cinematic sci-fi alley, volumetric fog, ultra detailed" \
-  --flow-matching-sample \
-  --flow-solver heun \
-  --cfg-scale 6.0 --steps 32 --out flow_sample.png
-```
+SDX supports composable training objectives:
+
+- **VP diffusion** — standard epsilon/v/x0 prediction with min-SNR weighting
+- **Flow matching** — rectified-flow velocity prediction (`--flow-matching-training`)
+- **Bridge auxiliary** — VP bridge regularisation on shuffled latent pairs (`--bridge-aux-weight`)
+- **OT coupling** — optimal-transport noise-latent pairing (`--ot-noise-pair-reg`)
+- **Part-aware losses** — attention grounding + token coverage (`--attn-grounding-loss-weight`)
+- **REPA** — representation alignment with a frozen DINOv2/CLIP encoder (`--repa-weight`)
 
 ---
 
@@ -463,107 +283,73 @@ python sample.py \
 
 ### Folder mode
 
-Place images under `user_data/train/` with sidecar captions:
-
 ```text
-user_data/train/
+datasets/train/
   subject_a/
     img_001.png
-    img_001.txt
+    img_001.txt      ← caption on line 1, optional negative on line 2
+  subject_b/
+    img_002.jpg
+    img_002.txt
 ```
 
-### JSONL mode
+```bash
+python train.py --data-path datasets/train --results-dir results
+```
 
-One object per line:
+### JSONL manifest mode
+
+One JSON object per line:
 
 ```json
-{"image_path": "/abs/path/img.png", "caption": "your caption"}
+{"image_path": "/abs/path/img.png", "caption": "your caption here"}
 ```
 
-Use:
+Extended fields (all optional):
+
+```json
+{
+  "image_path": "/abs/path/img.png",
+  "caption": "main caption",
+  "negative_caption": "blurry, low quality",
+  "caption_global": "scene description",
+  "caption_local": "subject detail",
+  "style": "anime",
+  "grounding_mask": "relative/path/mask.png",
+  "weight": 1.5
+}
+```
 
 ```bash
 python train.py --manifest-jsonl /path/to/manifest.jsonl --results-dir results
 ```
 
-For region/part-level conditioning, include optional `parts`, `region_captions`, and grounding-related fields used by the dataset pipeline.
-
 ---
 
-## Native acceleration and tooling
+## Pretrained weights
 
-Build helpers:
+Download T5, VAE, and optional LLMs into `pretrained/`:
 
-- Windows: `scripts/tools/native/build_native.ps1`
-- Linux/macOS: `scripts/tools/native/build_native.sh`
+```bash
+# Minimal recommended set (T5-XXL + VAE)
+python scripts/download/download_models.py --t5 --vae
 
-Native/tooling areas include:
+# Everything including CLIP and LLM
+python scripts/download/download_models.py --all
 
-- C++/CUDA kernels under `native/cpp/`
-- Rust utilities under `native/rust/`
-- Python bridge under `native/python/sdx_native/`
+# Download a specific LLM for prompt expansion
+python scripts/download/download_llm.py --best
+```
 
-Details: `native/README.md` and `docs/NATIVE_AND_SYSTEM_LIBS.md`.
+Weights are resolved automatically at runtime via `utils/modeling/model_paths.py`. If a local `pretrained/<name>` folder exists and is non-empty, it is used; otherwise the Hugging Face hub ID is used as fallback.
 
----
-
-## Platform and repo map
-
-| Area | Purpose |
-| :--- | :--- |
-| `config/` | train configuration, model build kwargs, defaults |
-| `data/` | datasets, caption parsing, batching, manifest handling |
-| `diffusion/` | diffusion/flow objectives, schedules, samplers, utility losses |
-| `models/` | DiT core, attention blocks, adapter wrappers, optional experimental modules |
-| `utils/` | training utilities, prompt stack, generation helpers, checkpoint logic |
-| `training/` | train CLI parser + config mapping split from main train loop |
-| `scripts/tools/` | dev, training, native, and repo maintenance utilities |
-| `native/` | C++/CUDA, Rust, Python bridge modules |
-
----
-
-## Roadmap momentum
-
-### Shipped recently
-
-- Part-aware data/training path with grounding-aware attention auxiliaries
-- Adapter-router upgrades for multi-style and character-preserving blends
-- Flow/bridge/OT objective support in the core training loop
-- Reproducibility hardening (`run_manifest.json`, config snapshots, strict warning mode)
-- Refreshed architecture and documentation indexing
-
-### High-impact next targets
-
-- Better long-prompt decomposition and cross-token conflict handling
-- Stronger text-in-image reliability and OCR-aware generation loops
-- Richer spatial relationship grounding with cleaner failure diagnostics
-- More automated benchmark suites for adherence/consistency regressions
-
----
-
-## Key docs
-
-- Docs hub: `docs/README.md`
-- Codebase map: `docs/CODEBASE.md`
-- Full file map: `docs/FILES.md`
-- Generation internals: `docs/HOW_GENERATION_WORKS.md`
-- Prompt stack: `docs/PROMPT_STACK.md`
-- Diffusion roadmap: `docs/DIFFUSION_LEVERAGE_ROADMAP.md`
-- Model weaknesses and mitigations: `docs/MODEL_WEAKNESSES.md`
-- Dataset shortlist: `docs/HF_DATASET_SHORTLIST.md`
-
----
-
-## Documentation hub (recommended reading order)
-
-| Step | Read this | Why |
+| Model | Local path | HF fallback |
 | :--- | :--- | :--- |
-| 1 | `docs/README.md` | Global index of docs and categories |
-| 2 | `docs/CODEBASE.md` | Learn where things live before changing code |
-| 3 | `docs/HOW_GENERATION_WORKS.md` | End-to-end understanding of train -> checkpoint -> sample |
-| 4 | `docs/PROMPT_STACK.md` | Prompt assembly, controls, and filtering behavior |
-| 5 | `docs/DIFFUSION_LEVERAGE_ROADMAP.md` | High-impact model quality priorities |
-| 6 | `docs/QUALITY_AND_ISSUES.md` | Real failure patterns and practical mitigations |
+| T5-XXL | `pretrained/T5-XXL` | `google/t5-v1_1-xxl` |
+| CLIP ViT-L/14 | `pretrained/CLIP-ViT-L-14` | `openai/clip-vit-large-patch14` |
+| CLIP ViT-bigG/14 | `pretrained/CLIP-ViT-bigG-14` | `laion/CLIP-ViT-bigG-14-laion2B-39B-b160k` |
+| DINOv2-Large | `pretrained/DINOv2-Large` | `facebook/dinov2-large` |
+| VAE (default) | `pretrained/sd-vae-ft-mse` | `stabilityai/sd-vae-ft-mse` |
 
 ---
 
@@ -571,79 +357,98 @@ Details: `native/README.md` and `docs/NATIVE_AND_SYSTEM_LIBS.md`.
 
 ```text
 sdx/
-  config/       # train config and presets
-  data/         # datasets, caption/manifest processing
-  diffusion/    # diffusion + flow + losses/schedules
-  models/       # DiT, adapters, related modules
-  utils/        # training/generation/checkpoint/prompt utilities
-  train.py
-  sample.py
-  docs/
-  scripts/
-  native/
+├── train.py                  # Main training entry point
+├── sample.py                 # Main inference entry point
+├── inference.py              # Lightweight programmatic inference API
+│
+├── config/                   # TrainConfig dataclass + model build kwargs + defaults
+├── data/                     # Dataset loaders, caption processing, bucket sampler
+├── diffusion/                # Diffusion engine, schedules, losses, Holy Grail
+│   └── holy_grail/           # Adaptive per-step CFG/control/adapter scheduling
+├── models/                   # DiT core, attention, adapters, ControlNet, MoE
+├── training/                 # CLI parser + config mapping (split from train loop)
+├── utils/                    # Training, generation, prompt, checkpoint, modeling utils
+│
+├── scripts/                  # Download, setup, and tooling scripts
+├── native/                   # Optional C++/CUDA/Rust acceleration
+├── ViT/                      # Vision Transformer standalone training module
+├── pipelines/                # High-level generation pipelines (book/comic, etc.)
+├── toolkit/                  # QoL helpers: env health, seeds, timing, manifest digest
+│
+├── pretrained/               # Downloaded model weights (gitignored)
+├── datasets/                 # Your training data (gitignored)
+├── results/                  # Training run outputs (gitignored)
+├── docs/                     # All documentation
+└── external/                 # Reference repos (DiT, ControlNet, Flux, etc.)
 ```
+
+---
+
+## Key docs
+
+| Document | What it covers |
+| :--- | :--- |
+| [`docs/README.md`](docs/README.md) | Full documentation index |
+| [`docs/CODEBASE.md`](docs/CODEBASE.md) | Where things live and why |
+| [`docs/HOW_GENERATION_WORKS.md`](docs/HOW_GENERATION_WORKS.md) | End-to-end train → checkpoint → sample walkthrough |
+| [`docs/PROMPT_STACK.md`](docs/PROMPT_STACK.md) | Prompt assembly, controls, and filtering |
+| [`docs/MODEL_STACK.md`](docs/MODEL_STACK.md) | Model weights, roles, and download paths |
+| [`docs/DIFFUSION_LEVERAGE_ROADMAP.md`](docs/DIFFUSION_LEVERAGE_ROADMAP.md) | High-impact quality priorities |
+| [`docs/MODEL_WEAKNESSES.md`](docs/MODEL_WEAKNESSES.md) | Known failure modes and mitigations |
+| [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
+| [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) | Holy Grail adaptive sampling reference |
 
 ---
 
 ## Contributing
 
-Small focused PRs are preferred. Docs, tooling, and quality improvements are all welcome.
+Small, focused PRs are preferred. Docs, tooling, and quality improvements are all welcome.
 
-- Guide: `CONTRIBUTING.md`
-- Run checks: `ruff check .` (and `ruff format .` before PRs; see `CONTRIBUTING.md`)
+```bash
+# Lint before submitting
+ruff check .
+ruff format .
+```
 
----
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide.
 
-## Contributors and community
-
-SDX improves through iterative, practical contributions across model code, prompts, docs, and tooling.
-
-- **Code contributors:** architecture, training loops, sampling controls, native integrations
-- **Research contributors:** objective experiments, prompt-adherence strategies, adapter routing policies
-- **Data contributors:** manifests, curation workflows, quality filters, domain-specific packs
-- **Docs contributors:** guides, examples, failure-mode writeups, reproducibility notes
-
-Good first contribution areas:
-
-- tighten docs for one module (`data/`, `diffusion/`, `models/`, `utils/`)
-- validate new flags with a short `sample.py` / `train.py` dry run when practical
-- improve CLI UX in `train.py` or `sample.py`
-- benchmark and profile one inference/training path
-
-If you want your contribution reflected in release notes/docs summaries, include a clear short change note in your PR.
+Good first contributions:
+- Tighten docs for one module (`data/`, `diffusion/`, `models/`, `utils/`)
+- Add a dry-run test for a new flag in `sample.py` or `train.py`
+- Improve a CLI help string
+- Profile and document one inference or training path
 
 ---
 
 ## FAQ
 
-### Is SDX production-ready?
+**Is SDX production-ready?**
+The codebase is production-oriented in structure and tooling. Output quality depends on your data, training budget, and checkpoint.
 
-It is production-oriented in structure and tooling, but quality depends heavily on data curation, training budget, and checkpoints.
+**Do I need the native CUDA modules?**
+No. All core train/sample paths work without them. Native modules improve specific performance paths (RMSNorm, RoPE, SiLU-gate).
 
-### Do I need all native modules to use SDX?
+**Is this only for anime/illustration?**
+No. The stack is domain-agnostic. Anime/manga is one well-tested path, but the system supports photoreal, illustration, and other domains with appropriate data.
 
-No. Core train/sample paths work without optional native builds. Native modules improve specific workflows and performance paths.
-
-### Is this only for anime/booru?
-
-No. The stack is domain-agnostic; anime/manga is one strong path, but the system supports broader style/object/text domains with proper data mixes.
+**What is Holy Grail?**
+An adaptive sampling system that schedules CFG scale, ControlNet strength, and adapter multipliers per denoising step — rather than keeping them fixed. See [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md).
 
 ---
 
-## Acknowledgements and references
+## Acknowledgements
 
-SDX is inspired by and interoperates conceptually with the broader diffusion ecosystem.
+SDX builds on ideas from the broader diffusion research community.
 
 - [facebookresearch/DiT](https://github.com/facebookresearch/DiT)
 - [lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet)
 - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
 - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 
-See `docs/INSPIRATION.md` for extended context.
+See [`docs/INSPIRATION.md`](docs/INSPIRATION.md) for extended context.
 
 ---
 
 ## License
 
-Apache 2.0. See `LICENSE`.
-
+Apache 2.0 — see [`LICENSE`](LICENSE).

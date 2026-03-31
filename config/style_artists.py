@@ -1,3 +1,3 @@
-"""Compatibility shim — implementation: :mod:`config.reference.style_artists`."""
+"""Compatibility shim — implementation: :mod:`config.defaults.style_artists`."""
 
-from .reference.style_artists import *  # noqa: F403
+from .defaults.style_artists import *  # noqa: F403

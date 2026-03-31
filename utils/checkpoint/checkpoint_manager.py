@@ -221,9 +221,9 @@ class CheckpointManager:
                     latest_link.unlink()
                 latest_link.symlink_to(latest_target.name)
 
-        except OSError:
-            # Symlinks might not be supported on all systems
-            pass
+        except OSError as exc:
+            # Symlinks are not supported on all platforms (e.g. Windows without developer mode).
+            warnings.warn(f"Could not create checkpoint symlinks: {exc}", UserWarning, stacklevel=2)
 
 
 def merge_checkpoints(
