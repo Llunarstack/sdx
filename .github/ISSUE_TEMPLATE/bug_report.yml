@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible bug in training, sampling, tools, or docs.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please provide enough detail so maintainers can reproduce quickly.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened vs what you expected?
+      placeholder: Clear one-paragraph summary.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Include exact commands and flags.
+      placeholder: |
+        1) ...
+        2) ...
+        3) ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Traceback
+      description: Paste the full error output or attach a gist.
+      render: shell
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / Tag
+      description: `git rev-parse --short HEAD` or release tag
+      placeholder: fcb1666 or v3
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS + Python + CUDA/GPU details
+      placeholder: Windows 11, Python 3.10, CUDA 12.1, RTX 4090
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I can reproduce this on current `main` or latest release.
+          required: true

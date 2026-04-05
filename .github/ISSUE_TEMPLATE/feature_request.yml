@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a new feature or major improvement.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What limitation or user pain are you solving?
+      placeholder: Describe the current gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe your preferred approach.
+      placeholder: Include API/CLI surface if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you evaluate?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and impact
+      description: Which files/modules are likely affected?
+      placeholder: e.g. sample.py, train.py, scripts/tools/...
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I searched existing issues and discussions first.
+          required: true
