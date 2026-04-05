@@ -21,7 +21,7 @@ python -m scripts.tools help
 | `data_quality`, `manifest_paths`, `jsonl_merge` | `data/` |
 | `prompt_lint`, `tag_coverage` | `prompt/` |
 | `export_onnx`, `export_safetensors` | `export/` |
-| `op_preflight`, `orchestrate_pipeline`, `auto_improve_loop`, `startup_readiness` | `ops/` (`auto_improve_loop`: benchmark -> mine prefs -> DPO -> re-benchmark -> optional promote; supports `--iterations N` and hardcase-aware preference remine. `startup_readiness`: no-train environment and launch readiness report with JSON/Markdown output.) |
+| `op_preflight`, `orchestrate_pipeline`, `auto_improve_loop`, `gen_searcher_bridge`, `pretrained_status`, `startup_readiness` | `ops/` (`auto_improve_loop`: benchmark -> mine prefs -> DPO -> re-benchmark -> optional promote; supports `--iterations N` and hardcase-aware preference remine. `gen_searcher_bridge`: convert Gen-Searcher outputs into SDX fact JSONL for grounding + optional local shard verification. `pretrained_status`: report local-vs-HF model resolution + local size summary. `startup_readiness`: no-train environment and launch readiness report with JSON/Markdown output.) |
 | `update_project_structure`, `verify_doc_links`, `clean_repo_artifacts` | `repo/` |
 
 Equivalent module runs (also valid):
