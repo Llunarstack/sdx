@@ -173,6 +173,7 @@ def build_readiness_report(
         status = "partial"
 
     suggestions = [
+        "python -m scripts.tools pretrained_status",
         "python -m scripts.tools benchmark_suite --help",
         "python -m scripts.tools auto_improve_loop --help",
         "python -m pytest -m \"not cuda and not slow\"",

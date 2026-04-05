@@ -79,6 +79,42 @@ def default_gen_searcher_8b_path() -> str:
     return resolve_model_path("GenSearcher-8B", "GenSearcher/Gen-Searcher-8B")
 
 
+def default_image_reward_path() -> str:
+    return resolve_model_path("ImageReward", "zai-org/ImageReward")
+
+
+def default_pickscore_path() -> str:
+    return resolve_model_path("PickScore_v1", "yuvalkirstain/PickScore_v1")
+
+
+def default_grounding_dino_base_path() -> str:
+    return resolve_model_path("GroundingDINO-Base", "IDEA-Research/grounding-dino-base")
+
+
+def default_countgd_path() -> str:
+    return resolve_model_path("CountGD", "nikigoli/CountGD")
+
+
+def default_trocr_large_printed_path() -> str:
+    return resolve_model_path("TrOCR-Large-Printed", "microsoft/trocr-large-printed")
+
+
+def default_perceptclip_iqa_path() -> str:
+    return resolve_model_path("PerceptCLIP_IQA", "PerceptCLIP/PerceptCLIP_IQA")
+
+
+def default_depth_anything_v2_large_path() -> str:
+    return resolve_model_path("Depth-Anything-V2-Large", "depth-anything/Depth-Anything-V2-Large")
+
+
+def default_sam2_hiera_large_path() -> str:
+    return resolve_model_path("SAM2-Hiera-Large", "facebook/sam2-hiera-large-hf")
+
+
+def default_realesrgan_path() -> str:
+    return resolve_model_path("Real-ESRGAN", "ai-forever/Real-ESRGAN")
+
+
 def pretrained_catalog() -> List[Dict[str, str]]:
     """
     Canonical pretrained model map used by SDX.
@@ -100,6 +136,15 @@ def pretrained_catalog() -> List[Dict[str, str]]:
         ("StableCascade-Prior", "stabilityai/stable-cascade-prior", default_cascade_prior_path()),
         ("StableCascade-Decoder", "stabilityai/stable-cascade", default_cascade_decoder_path()),
         ("GenSearcher-8B", "GenSearcher/Gen-Searcher-8B", default_gen_searcher_8b_path()),
+        ("ImageReward", "zai-org/ImageReward", default_image_reward_path()),
+        ("PickScore_v1", "yuvalkirstain/PickScore_v1", default_pickscore_path()),
+        ("GroundingDINO-Base", "IDEA-Research/grounding-dino-base", default_grounding_dino_base_path()),
+        ("CountGD", "nikigoli/CountGD", default_countgd_path()),
+        ("TrOCR-Large-Printed", "microsoft/trocr-large-printed", default_trocr_large_printed_path()),
+        ("PerceptCLIP_IQA", "PerceptCLIP/PerceptCLIP_IQA", default_perceptclip_iqa_path()),
+        ("Depth-Anything-V2-Large", "depth-anything/Depth-Anything-V2-Large", default_depth_anything_v2_large_path()),
+        ("SAM2-Hiera-Large", "facebook/sam2-hiera-large-hf", default_sam2_hiera_large_path()),
+        ("Real-ESRGAN", "ai-forever/Real-ESRGAN", default_realesrgan_path()),
     ]
     out: List[Dict[str, str]] = []
     for name, hf, resolved in rows:
