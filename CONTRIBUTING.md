@@ -15,9 +15,17 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
    ruff format .
    ruff check .
    ```
-3. **Manual sanity** (when you touch training/sampling/core utils): run a minimal `python -m py_compile` on changed modules and/or a short `sample.py` / `train.py` invocation with your new flags if applicable.
-4. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
-5. **Doc links** (if you edit cross-links in markdown)
+3. **Tests** — run the test suite before submitting:
+   ```bash
+   pytest tests/ -v
+   ```
+   For a faster check that doesn't need a GPU:
+   ```bash
+   python scripts/tools/dev/quick_test.py
+   ```
+4. **Manual sanity** (when you touch training/sampling/core utils): run a minimal `python -m py_compile` on changed modules and/or a short `sample.py` / `train.py` invocation with your new flags if applicable.
+5. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
+6. **Doc links** (if you edit cross-links in markdown)
    ```bash
    python scripts/tools/repo/verify_doc_links.py
    ```

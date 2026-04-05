@@ -34,7 +34,7 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List, Optional
+from typing import Any, DefaultDict, List, Optional
 
 BASE = "https://danbooru.donmai.us"
 DEFAULT_UA = "sdx-danbooru-fetch/1.0 (tag export; respect rate limits)"

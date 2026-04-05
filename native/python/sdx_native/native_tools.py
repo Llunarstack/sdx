@@ -48,6 +48,16 @@ def rust_noise_schedule_exe() -> Optional[Path]:
     return None
 
 
+def rust_image_metrics_exe() -> Optional[Path]:
+    """``sdx-image-metrics`` release binary if ``cargo build --release`` was run."""
+    base = _release_dir("rust/sdx-image-metrics/target/release")
+    for n in ("sdx-image-metrics.exe", "sdx-image-metrics"):
+        p = base / n
+        if p.is_file():
+            return p
+    return None
+
+
 def run_rust_noise_schedule(args: List[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
     """Run ``sdx-noise-schedule`` (e.g. ``[\"linear\", \"--steps\", \"1000\"]``)."""
     exe = rust_noise_schedule_exe()
@@ -355,6 +365,36 @@ def rmsnorm_rows_cpu_shared_library_path() -> Optional[Path]:
         cpp / "Debug" / "sdx_rmsnorm_rows_cpu.dll",
         cpp / "libsdx_rmsnorm_rows_cpu.so",
         cpp / "libsdx_rmsnorm_rows_cpu.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def image_metrics_shared_library_path() -> Optional[Path]:
+    """CPU ``sdx_image_metrics`` shared library path, if built."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_image_metrics.dll",
+        cpp / "Debug" / "sdx_image_metrics.dll",
+        cpp / "libsdx_image_metrics.so",
+        cpp / "libsdx_image_metrics.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+def cuda_image_metrics_shared_library_path() -> Optional[Path]:
+    """Optional CUDA ``sdx_cuda_image_metrics`` shared library path, if built."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_cuda_image_metrics.dll",
+        cpp / "Debug" / "sdx_cuda_image_metrics.dll",
+        cpp / "libsdx_cuda_image_metrics.so",
+        cpp / "libsdx_cuda_image_metrics.dylib",
     ]
     for p in candidates:
         if p.is_file() and p.stat().st_size > 0:
@@ -699,12 +739,9 @@ def merge_jsonl_files(
 
 
 def _xxhash_available() -> bool:
-    try:
-        import xxhash  # type: ignore[import-untyped]
+    import importlib.util
 
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("xxhash") is not None
 
 
 def native_stack_status() -> Dict[str, Any]:
@@ -713,6 +750,7 @@ def native_stack_status() -> Dict[str, Any]:
         "repo_root": str(REPO_ROOT),
         "rust_sdx_jsonl_tools": str(rust_jsonl_tools_exe() or ""),
         "rust_sdx_noise_schedule": str(rust_noise_schedule_exe() or ""),
+        "rust_sdx_image_metrics": str(rust_image_metrics_exe() or ""),
         "rust_file_md5_available": bool(rust_jsonl_tools_exe()),
         "zig_sdx_linecrc": str(zig_linecrc_exe() or ""),
         "zig_sdx_pathstat": str(zig_pathstat_exe() or ""),
@@ -724,6 +762,7 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_line_stats": str(line_stats_shared_library_path() or ""),
         "libsdx_fnv64_file": str(fnv64_file_shared_library_path() or ""),
         "libsdx_rmsnorm_rows_cpu": str(rmsnorm_rows_cpu_shared_library_path() or ""),
+        "libsdx_image_metrics": str(image_metrics_shared_library_path() or ""),
         "libsdx_cuda_hwc_to_chw": str(cuda_hwc_to_chw_shared_library_path() or ""),
         "libsdx_cuda_ml": str(cuda_ml_shared_library_path() or ""),
         "libsdx_cuda_flow_matching": str(cuda_flow_matching_shared_library_path() or ""),
@@ -734,6 +773,7 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_cuda_silu_gate": str(cuda_silu_gate_shared_library_path() or ""),
         "libsdx_cuda_gaussian_blur": str(cuda_gaussian_blur_shared_library_path() or ""),
         "libsdx_cuda_percentile_clamp": str(cuda_percentile_clamp_shared_library_path() or ""),
+        "libsdx_cuda_image_metrics": str(cuda_image_metrics_shared_library_path() or ""),
         "libsdx_mask_ops": str(mask_ops_shared_library_path() or ""),
         "libsdx_diffusion_math_rust": str(rust_diffusion_math_shared_library_path() or ""),
         "mojo_or_magic_cli": mojo_cli_path(),

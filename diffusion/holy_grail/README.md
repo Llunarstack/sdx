@@ -10,7 +10,7 @@ This folder is a concentrated playground for high-upside inference/training idea
 - **Style/detail progression router** (`style_router.py`)
 - **Preset bundles + auto recommender** (`presets.py`, `recommender.py`)
 - **Runtime safety sanitizer** (`runtime_guard.py`)
-
+    
 ## Why this exists
 
 Fixed guidance and static condition scaling often leave quality on the table. This package gives a

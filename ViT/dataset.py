@@ -9,7 +9,6 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-
 from utils.architecture.ar_dit_vit import ar_conditioning_vector, parse_num_ar_blocks_from_row
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)

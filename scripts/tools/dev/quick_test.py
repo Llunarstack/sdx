@@ -21,8 +21,9 @@ def main():
     )
     args, _unknown = ap.parse_known_args()
     if args.show_native:
-        from utils.native.native_tools import native_stack_status
         import json as _json
+
+        from utils.native.native_tools import native_stack_status
 
         print(_json.dumps(native_stack_status(), indent=2))
         return 0

@@ -141,7 +141,7 @@ def create_block_causal_mask_2d(
 
 
 class SelfAttention(nn.Module):
-    """Self-attention with xformers/SDPA and optional causal/block-causal mask."""
+    """Self-attention with xformers/SDPA, optional causal/block-causal mask, and optional QK-norm."""
 
     def __init__(
         self,
@@ -154,6 +154,7 @@ class SelfAttention(nn.Module):
         use_rope: bool = False,
         rope_base: float = 10000.0,
         kv_merge_factor: int = 1,
+        qk_norm: bool = False,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -172,6 +173,9 @@ class SelfAttention(nn.Module):
         self.use_rope = bool(use_rope)
         self.rope_base = float(rope_base)
         self.kv_merge_factor = int(kv_merge_factor)
+        # QK-norm (SD3.5-style): normalise Q and K before attention for training stability.
+        self.q_norm = nn.RMSNorm(self.head_dim) if qk_norm else None
+        self.k_norm = nn.RMSNorm(self.head_dim) if qk_norm else None
 
     def forward(
         self,
@@ -186,6 +190,12 @@ class SelfAttention(nn.Module):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
         q, k, v = qkv.unbind(2)
+
+        # QK-norm: normalise per head before attention (SD3.5-style stability).
+        if self.q_norm is not None:
+            q = self.q_norm(q)
+        if self.k_norm is not None:
+            k = self.k_norm(k)
 
         # Hierarchical Patch Merging 2.0: kv pooling for keys/values only.
         # This keeps query resolution intact but reduces KV length for attention.

@@ -10,6 +10,7 @@ buckets; Danbooru-style comma prompts use tag-set matching for count tokens (1gi
 Tag text lives under ``data/prompt_tags/*.csv`` (see ``utils/prompt/content_control_tag_data.py``).
 Regenerate from Python snapshots: ``python scripts/tools/dump_prompt_tag_csvs.py``.
 """
+# ruff: noqa: F405
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ import csv
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .content_control_tags import *  # noqa: F401,F403
+from .content_control_tags import *  # noqa: F401,F403,F405
 
 
 def load_civitai_model_bank_triggers(

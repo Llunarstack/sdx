@@ -553,6 +553,104 @@ def prepend_adherence_boost(caption: str, repeat_factor: int = 2) -> str:
     return f"{extra}, {caption}".strip()
 
 
+def apply_shortcomings_to_caption_pair(
+    caption: str,
+    negative_caption: str,
+    *,
+    mode: str,
+    include_2d: bool,
+) -> Tuple[str, str]:
+    """
+    Append positive/negative fragments from ``config.defaults.ai_image_shortcomings`` (same taxonomy as
+    ``sample.py --shortcomings-mitigation``). ``mode`` is ``none``, ``auto``, or ``all``.
+    """
+    m = (mode or "none").strip().lower()
+    if m not in ("auto", "all") or not (caption or "").strip():
+        return caption, negative_caption
+    try:
+        from config.defaults.ai_image_shortcomings import merge_csv_unique, mitigation_fragments
+
+        pos, neg = mitigation_fragments(caption, m, include_2d_pack=bool(include_2d))
+    except Exception:
+        return caption, negative_caption
+    out_cap = caption
+    out_neg = negative_caption or ""
+    if pos:
+        out_cap = f"{out_cap}, {pos}".strip().strip(",")
+    if neg:
+        out_neg = merge_csv_unique(out_neg, neg)
+    return out_cap, out_neg
+
+
+def apply_art_guidance_to_caption_pair(
+    caption: str,
+    negative_caption: str,
+    *,
+    mode: str,
+    include_photography: bool,
+    anatomy_mode: str,
+) -> Tuple[str, str]:
+    """
+    Append medium-specific positive/negative fragments from ``config.defaults.art_mediums``.
+    Mirrors ``sample.py --art-guidance-mode`` and ``--anatomy-guidance`` behavior.
+    """
+    m = (mode or "none").strip().lower()
+    a = (anatomy_mode or "none").strip().lower()
+    if (m not in ("auto", "all") and a not in ("lite", "strong")) or not (caption or "").strip():
+        return caption, negative_caption
+    try:
+        from config.defaults.art_mediums import guidance_fragments, merge_csv_unique
+
+        pos, neg = guidance_fragments(
+            caption,
+            m,  # type: ignore[arg-type]
+            include_photography=bool(include_photography),
+            anatomy_mode=a,  # type: ignore[arg-type]
+        )
+    except Exception:
+        return caption, negative_caption
+    out_cap = caption
+    out_neg = negative_caption or ""
+    if pos:
+        out_cap = f"{out_cap}, {pos}".strip().strip(",")
+    if neg:
+        out_neg = merge_csv_unique(out_neg, neg)
+    return out_cap, out_neg
+
+
+def apply_style_guidance_to_caption_pair(
+    caption: str,
+    negative_caption: str,
+    *,
+    mode: str,
+    include_artist_refs: bool,
+) -> Tuple[str, str]:
+    """
+    Append style-domain fragments (anime/comic/concept/game/photo language) from
+    ``config.defaults.style_guidance``.
+    """
+    m = (mode or "none").strip().lower()
+    if m not in ("auto", "all") or not (caption or "").strip():
+        return caption, negative_caption
+    try:
+        from config.defaults.style_guidance import merge_csv_unique, style_guidance_fragments
+
+        pos, neg = style_guidance_fragments(
+            caption,
+            m,  # type: ignore[arg-type]
+            include_artist_refs=bool(include_artist_refs),
+        )
+    except Exception:
+        return caption, negative_caption
+    out_cap = caption
+    out_neg = negative_caption or ""
+    if pos:
+        out_cap = f"{out_cap}, {pos}".strip().strip(",")
+    if neg:
+        out_neg = merge_csv_unique(out_neg, neg)
+    return out_cap, out_neg
+
+
 def boost_quality_tags(caption: str, repeat_factor: int = 3) -> str:
     """
     When quality tags are present, repeat them at the start so the model strongly associates

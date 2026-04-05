@@ -13,7 +13,6 @@ import torch
 
 def tensor_chw01_to_pil(t: torch.Tensor):
     """t: (3, H, W) float [0, 1]."""
-    import numpy as np
     from PIL import Image
 
     a = (t.detach().float().cpu().permute(1, 2, 0).numpy() * 255.0).clip(0, 255).astype("uint8")

@@ -10,8 +10,6 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
-from .advanced_inference import ImageEnhancer, PromptOptimizer, QualityAnalyzer
-
 # Import all advanced systems
 from utils.architecture.enhanced_utils import (
     create_advanced_prompting_system,
@@ -21,6 +19,8 @@ from utils.architecture.enhanced_utils import (
     create_precision_control_system,
     create_text_rendering_pipeline,
 )
+
+from .advanced_inference import ImageEnhancer, PromptOptimizer, QualityAnalyzer
 
 
 @dataclass

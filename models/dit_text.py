@@ -23,7 +23,7 @@ def modulate(x, shift, scale):
 
 
 class CrossAttention(nn.Module):
-    """Cross-attention (query=spatial, key/value=text) with xformers when available."""
+    """Cross-attention (query=spatial, key/value=text) with xformers when available, optional QK-norm."""
 
     def __init__(
         self,
@@ -34,6 +34,7 @@ class CrossAttention(nn.Module):
         *,
         moe_num_experts: int = 0,
         moe_top_k: int = 2,
+        qk_norm: bool = False,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -53,6 +54,9 @@ class CrossAttention(nn.Module):
                 top_k=int(moe_top_k),
             )
         self.dropout = nn.Dropout(dropout)
+        # QK-norm for cross-attention (stabilises text-image alignment at high resolutions).
+        self.q_norm = nn.RMSNorm(self.head_dim) if qk_norm else None
+        self.k_norm = nn.RMSNorm(self.head_dim) if qk_norm else None
 
     def forward(
         self,
@@ -69,6 +73,11 @@ class CrossAttention(nn.Module):
         q = self.q_proj(x).reshape(B, N, self.num_heads, self.head_dim)
         k = self.k_proj(text_emb).reshape(B, L, self.num_heads, self.head_dim)
         v = self.v_proj(text_emb).reshape(B, L, self.num_heads, self.head_dim)
+        # QK-norm: normalise per head before attention.
+        if self.q_norm is not None:
+            q = self.q_norm(q)
+        if self.k_norm is not None:
+            k = self.k_norm(k)
         if return_weights:
             q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
             attn = (torch.matmul(q, k.transpose(-2, -1))) * self.scale
@@ -123,6 +132,8 @@ class DiTBlockText(nn.Module):
         token_keep_min_value: float = 0.0,
         drop_path: float = 0.0,
         layerscale_init: float = 0.0,
+        # QK-norm (SD3.5-style training stability)
+        qk_norm: bool = False,
         # Prompt adherence options
         prompt_reinject_every_n: int = 0,
         prompt_reinject_alpha: float = 0.0,
@@ -150,6 +161,7 @@ class DiTBlockText(nn.Module):
                 use_rope=use_rope,
                 rope_base=rope_base,
                 kv_merge_factor=kv_merge_factor,
+                qk_norm=qk_norm,
             )
         self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.cross_attn = CrossAttention(
@@ -158,6 +170,7 @@ class DiTBlockText(nn.Module):
             text_dim,
             moe_num_experts=int(moe_num_experts) if moe_num_experts is not None else 0,
             moe_top_k=int(moe_top_k) if moe_top_k is not None else 2,
+            qk_norm=qk_norm,
         )
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden = int(hidden_size * mlp_ratio)
@@ -350,6 +363,10 @@ class DiT_Text(nn.Module):
         # REPA (Representation Alignment)
         repa_out_dim: int = 0,
         repa_projector_hidden_dim: int = 0,
+        # Which block index to hook for REPA alignment (-1 = after all blocks, default).
+        # E.g. repa_layer=14 on a 28-block model hooks the middle layer where
+        # semantic structure is most developed (per REPA paper findings).
+        repa_layer: int = -1,
         # ViT-Gen / SSM swap:
         ssm_every_n: int = 0,
         ssm_kernel_size: int = 7,
@@ -364,6 +381,9 @@ class DiT_Text(nn.Module):
         token_keep_min_value: float = 0.0,
         drop_path_rate: float = 0.0,
         layerscale_init: float = 0.0,
+        # QK-norm (SD3.5-style): normalise Q and K per head for training stability.
+        # Recommended when training at high resolution or with large batch sizes.
+        qk_norm: bool = False,
         # Prompt adherence (must match get_dit_build_kwargs)
         prompt_reinject_every_n: int = 0,
         prompt_reinject_alpha: float = 0.0,
@@ -403,6 +423,7 @@ class DiT_Text(nn.Module):
         self.token_keep_min_value = float(token_keep_min_value)
         self.drop_path_rate = float(drop_path_rate)
         self.layerscale_init = float(layerscale_init)
+        self.qk_norm = bool(qk_norm)
         self.prompt_reinject_every_n = int(prompt_reinject_every_n)
         self.prompt_reinject_alpha = float(prompt_reinject_alpha)
         self.prompt_reinject_decay = float(prompt_reinject_decay)
@@ -414,6 +435,11 @@ class DiT_Text(nn.Module):
         # REPA projector: maps DiT hidden tokens -> vision encoder embedding dim.
         self.repa_out_dim = int(repa_out_dim) if repa_out_dim is not None else 0
         self.repa_projector_hidden_dim = int(repa_projector_hidden_dim) if repa_projector_hidden_dim is not None else 0
+        # repa_layer: which block index to hook for REPA (-1 = after all blocks).
+        self.repa_layer = int(repa_layer) if repa_layer is not None else -1
+        # Remove the stale init attribute if it was set.
+        if hasattr(self, "_repa_layer_init"):
+            del self._repa_layer_init
         self.repa_head = None
         if self.repa_out_dim > 0:
             if self.repa_projector_hidden_dim > 0:
@@ -503,6 +529,7 @@ class DiT_Text(nn.Module):
                     token_keep_min_value=self.token_keep_min_value,
                     drop_path=dp,
                     layerscale_init=self.layerscale_init,
+                    qk_norm=self.qk_norm,
                 )
             )
         self.blocks = nn.ModuleList(blocks)

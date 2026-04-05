@@ -142,6 +142,25 @@ install(TARGETS sdx_mask_ops
   ARCHIVE DESTINATION lib
 )
 
+# CPU image quality metrics (luma stats, laplacian variance, component counting).
+add_library(sdx_image_metrics SHARED
+  src/sdx_image_metrics.cpp
+)
+target_include_directories(sdx_image_metrics
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_definitions(sdx_image_metrics PRIVATE SDX_IMAGE_METRICS_BUILD)
+if(MSVC)
+  target_compile_definitions(sdx_image_metrics PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+install(TARGETS sdx_image_metrics
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
 # Optional CUDA: image layout + small ML-style ops (requires nvcc).
 option(SDX_BUILD_CUDA "Build CUDA targets (hwc_to_chw, l2_normalize_rows, flow_matching_velocity, nf4, sdpa_online, rmsnorm, rope, silu_gate)" OFF)
 if(SDX_BUILD_CUDA)
@@ -347,6 +366,27 @@ if(SDX_BUILD_CUDA)
     target_compile_options(sdx_cuda_percentile_clamp PRIVATE "-Xcompiler=/utf-8")
   endif()
   install(TARGETS sdx_cuda_percentile_clamp
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+  )
+
+  # CUDA image luma stats + clipping ratio for uint8 HWC host buffers.
+  add_library(sdx_cuda_image_metrics SHARED
+    cuda/image_metrics.cu
+  )
+  set_property(TARGET sdx_cuda_image_metrics PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+  target_compile_definitions(sdx_cuda_image_metrics PRIVATE SDX_CUDA_IMAGE_METRICS_BUILD)
+  target_include_directories(sdx_cuda_image_metrics
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  set_target_properties(sdx_cuda_image_metrics PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  if(MSVC)
+    target_compile_options(sdx_cuda_image_metrics PRIVATE "-Xcompiler=/utf-8")
+  endif()
+  install(TARGETS sdx_cuda_image_metrics
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

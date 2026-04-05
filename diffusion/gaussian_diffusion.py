@@ -368,7 +368,6 @@ class GaussianDiffusion:
             q_val = percentile / 100.0
             # Use native CUDA percentile clamp when available.
             try:
-                import numpy as np
                 from sdx_native.percentile_clamp_native import maybe_percentile_clamp_cuda
                 row_len = x.numel() // b
                 x_np = x.detach().float().cpu().numpy().reshape(b, row_len)
@@ -511,7 +510,12 @@ class GaussianDiffusion:
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         hg_enabled = bool(holy_grail_enable)
         if hg_enabled:
-            from diffusion.holy_grail import HolyGrailRecipe, apply_condition_noise, build_holy_grail_step_plan, cads_noise_std
+            from diffusion.holy_grail import (
+                HolyGrailRecipe,
+                apply_condition_noise,
+                build_holy_grail_step_plan,
+                cads_noise_std,
+            )
 
             hg_recipe = HolyGrailRecipe(
                 base_cfg=float(cfg_scale),
@@ -841,7 +845,12 @@ class GaussianDiffusion:
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         hg_enabled = bool(holy_grail_enable)
         if hg_enabled:
-            from diffusion.holy_grail import HolyGrailRecipe, apply_condition_noise, build_holy_grail_step_plan, cads_noise_std
+            from diffusion.holy_grail import (
+                HolyGrailRecipe,
+                apply_condition_noise,
+                build_holy_grail_step_plan,
+                cads_noise_std,
+            )
 
             hg_recipe = HolyGrailRecipe(
                 base_cfg=float(cfg_scale),
