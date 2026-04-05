@@ -255,6 +255,19 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         help="LayerScale init (e.g. 1e-5). 0 disables LayerScale.",
     )
     parser.add_argument(
+        "--qk-norm",
+        action="store_true",
+        help="Enable QK-norm (SD3.5-style per-head normalisation before attention). "
+             "Improves stability at high resolution. Incompatible with checkpoints trained without it.",
+    )
+    parser.add_argument(
+        "--lora-layers",
+        type=str,
+        default="all",
+        choices=["all", "first", "middle", "last"],
+        help="Restrict LoRA application to a layer group: all (default), first third, middle third, or last third.",
+    )
+    parser.add_argument(
         "--beta-schedule",
         type=str,
         default="linear",
@@ -407,6 +420,58 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--boost-adherence-caption",
         action="store_true",
         help="Prepend adherence tags to each training caption (literal prompt following; see caption_utils.prepend_adherence_boost)",
+    )
+    parser.add_argument(
+        "--train-shortcomings-mitigation",
+        type=str,
+        default="none",
+        choices=["none", "auto", "all"],
+        dest="train_shortcomings_mitigation",
+        help="Per-caption failure-mode hints (docs/COMMON_SHORTCOMINGS_AI_IMAGES.md); auto=keyword match, all=photoreal+digital+CG base pack",
+    )
+    parser.add_argument(
+        "--train-shortcomings-2d",
+        action="store_true",
+        dest="train_shortcomings_2d",
+        help="With --train-shortcomings-mitigation auto|all: include stylized 2D packs (anime/manga/cel)",
+    )
+    parser.add_argument(
+        "--train-art-guidance-mode",
+        type=str,
+        default="none",
+        choices=["none", "auto", "all"],
+        dest="train_art_guidance_mode",
+        help="Artist-first medium guidance per training caption (traditional/digital/photography)",
+    )
+    parser.set_defaults(train_art_guidance_photography=True)
+    parser.add_argument(
+        "--no-train-art-guidance-photography",
+        action="store_false",
+        dest="train_art_guidance_photography",
+        help="Disable photography packs for --train-art-guidance-mode auto|all",
+    )
+    parser.add_argument(
+        "--train-anatomy-guidance",
+        type=str,
+        default="none",
+        choices=["none", "lite", "strong"],
+        dest="train_anatomy_guidance",
+        help="Add anatomy/proportion constraints to training captions",
+    )
+    parser.add_argument(
+        "--train-style-guidance-mode",
+        type=str,
+        default="none",
+        choices=["none", "auto", "all"],
+        dest="train_style_guidance_mode",
+        help="Style-domain guidance for training captions (anime/comic/concept/game/photo language)",
+    )
+    parser.set_defaults(train_style_guidance_artists=True)
+    parser.add_argument(
+        "--no-train-style-guidance-artists",
+        action="store_false",
+        dest="train_style_guidance_artists",
+        help="Disable artist/game-name stabilization cues in train style guidance",
     )
     parser.add_argument(
         "--caption-unicode-normalize",

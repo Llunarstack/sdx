@@ -27,6 +27,13 @@ class BookAccuracyPreset:
     post_grain: float
     post_micro_contrast: float
     prepend_quality_if_short: bool
+    shortcomings_mitigation: str
+    shortcomings_2d: bool
+    art_guidance_mode: str
+    art_guidance_photography: bool
+    anatomy_guidance: str
+    style_guidance_mode: str
+    style_guidance_artists: bool
 
 
 def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
@@ -46,6 +53,13 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
             post_grain=0.0,
             post_micro_contrast=1.0,
             prepend_quality_if_short=False,
+            shortcomings_mitigation="none",
+            shortcomings_2d=False,
+            art_guidance_mode="none",
+            art_guidance_photography=True,
+            anatomy_guidance="none",
+            style_guidance_mode="none",
+            style_guidance_artists=True,
         )
     if n == "balanced":
         return BookAccuracyPreset(
@@ -59,6 +73,13 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
             post_grain=0.012,
             post_micro_contrast=1.02,
             prepend_quality_if_short=True,
+            shortcomings_mitigation="auto",
+            shortcomings_2d=True,
+            art_guidance_mode="auto",
+            art_guidance_photography=True,
+            anatomy_guidance="lite",
+            style_guidance_mode="auto",
+            style_guidance_artists=True,
         )
     if n == "maximum":
         return BookAccuracyPreset(
@@ -72,6 +93,13 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
             post_grain=0.018,
             post_micro_contrast=1.03,
             prepend_quality_if_short=True,
+            shortcomings_mitigation="auto",
+            shortcomings_2d=True,
+            art_guidance_mode="auto",
+            art_guidance_photography=True,
+            anatomy_guidance="lite",
+            style_guidance_mode="auto",
+            style_guidance_artists=True,
         )
     if n == "production":
         # Heaviest test-time stack: more candidates, same pick metric, slightly stronger print polish.
@@ -86,6 +114,13 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
             post_grain=0.022,
             post_micro_contrast=1.04,
             prepend_quality_if_short=True,
+            shortcomings_mitigation="all",
+            shortcomings_2d=True,
+            art_guidance_mode="all",
+            art_guidance_photography=True,
+            anatomy_guidance="strong",
+            style_guidance_mode="all",
+            style_guidance_artists=True,
         )
     # none
     return BookAccuracyPreset(
@@ -99,6 +134,13 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
         post_grain=0.0,
         post_micro_contrast=1.0,
         prepend_quality_if_short=False,
+        shortcomings_mitigation="none",
+        shortcomings_2d=False,
+        art_guidance_mode="none",
+        art_guidance_photography=True,
+        anatomy_guidance="none",
+        style_guidance_mode="none",
+        style_guidance_artists=True,
     )
 
 
@@ -163,6 +205,32 @@ def resolve_book_sample_settings(args: Any) -> BookAccuracyPreset:
     if getattr(args, "no_prepend_quality_if_short", False):
         base = replace(base, prepend_quality_if_short=False)
 
+    sm_raw = getattr(args, "shortcomings_mitigation", "")
+    sm = str(sm_raw or "").strip().lower()
+    if sm in ("none", "auto", "all") and sm:
+        base = replace(base, shortcomings_mitigation=sm)
+    if getattr(args, "shortcomings_2d", False):
+        base = replace(base, shortcomings_2d=True)
+    if getattr(args, "no_shortcomings_2d", False):
+        base = replace(base, shortcomings_2d=False)
+    ag = str(getattr(args, "art_guidance_mode", "") or "").strip().lower()
+    if ag in ("none", "auto", "all") and ag:
+        base = replace(base, art_guidance_mode=ag)
+    if getattr(args, "no_art_guidance_photography", False):
+        base = replace(base, art_guidance_photography=False)
+    if getattr(args, "art_guidance_photography", False):
+        base = replace(base, art_guidance_photography=True)
+    anat = str(getattr(args, "anatomy_guidance", "") or "").strip().lower()
+    if anat in ("none", "lite", "strong") and anat:
+        base = replace(base, anatomy_guidance=anat)
+    sgm = str(getattr(args, "style_guidance_mode", "") or "").strip().lower()
+    if sgm in ("none", "auto", "all") and sgm:
+        base = replace(base, style_guidance_mode=sgm)
+    if getattr(args, "no_style_guidance_artists", False):
+        base = replace(base, style_guidance_artists=False)
+    if getattr(args, "style_guidance_artists", False):
+        base = replace(base, style_guidance_artists=True)
+
     # Multiple candidates need a pick metric.
     if base.sample_candidates > 1 and base.pick_best in ("none", ""):
         base = replace(base, pick_best="combo")
@@ -198,7 +266,15 @@ def expected_text_for_pick(expected_texts: Sequence[str]) -> str:
     return ""
 
 
-def append_sample_py_quality_flags(cmd: List[str], settings: BookAccuracyPreset, *, pick_expected_text: str) -> None:
+def append_sample_py_quality_flags(
+    cmd: List[str],
+    settings: BookAccuracyPreset,
+    *,
+    pick_expected_text: str,
+    pick_expected_count: int = 0,
+    pick_expected_count_target: str = "auto",
+    pick_expected_count_object: str = "",
+) -> None:
     """Mutate *cmd* with flags aligned with ``sample.py`` (test-time pick, CFG helpers, etc.)."""
     cmd.extend(["--num", str(max(1, settings.sample_candidates))])
     cmd.extend(["--pick-best", settings.pick_best or "none"])
@@ -208,10 +284,37 @@ def append_sample_py_quality_flags(cmd: List[str], settings: BookAccuracyPreset,
         cmd.append("--subject-first")
     if settings.save_prompt_sidecar:
         cmd.append("--save-prompt")
+    sm = str(getattr(settings, "shortcomings_mitigation", "none") or "none").lower()
+    if sm in ("auto", "all"):
+        cmd.extend(["--shortcomings-mitigation", sm])
+    if bool(getattr(settings, "shortcomings_2d", False)):
+        cmd.append("--shortcomings-2d")
+    ag = str(getattr(settings, "art_guidance_mode", "none") or "none").lower()
+    if ag in ("auto", "all"):
+        cmd.extend(["--art-guidance-mode", ag])
+    if not bool(getattr(settings, "art_guidance_photography", True)):
+        cmd.append("--no-art-guidance-photography")
+    anat = str(getattr(settings, "anatomy_guidance", "none") or "none").lower()
+    if anat in ("lite", "strong"):
+        cmd.extend(["--anatomy-guidance", anat])
+    sgm = str(getattr(settings, "style_guidance_mode", "none") or "none").lower()
+    if sgm in ("auto", "all"):
+        cmd.extend(["--style-guidance-mode", sgm])
+    if not bool(getattr(settings, "style_guidance_artists", True)):
+        cmd.append("--no-style-guidance-artists")
 
     metric = (settings.pick_best or "").lower()
     if metric in ("ocr", "combo") and pick_expected_text.strip():
         cmd.extend(["--expected-text", pick_expected_text.strip()])
+    if metric == "combo_count":
+        if int(pick_expected_count or 0) > 0:
+            cmd.extend(["--expected-count", str(int(pick_expected_count))])
+        tgt = str(pick_expected_count_target or "auto").strip().lower()
+        if tgt in ("auto", "people", "objects"):
+            cmd.extend(["--expected-count-target", tgt])
+        obj = str(pick_expected_count_object or "").strip()
+        if obj:
+            cmd.extend(["--expected-count-object", obj])
 
 
 def append_optional_sample_flags(
@@ -223,6 +326,8 @@ def append_optional_sample_flags(
     cfg_scale: float,
     cfg_rescale: float,
     dynamic_threshold_percentile: float,
+    resize_mode: str,
+    resize_saliency_face_bias: float,
     grid: bool,
 ) -> None:
     if vae_tiling:
@@ -244,6 +349,11 @@ def append_optional_sample_flags(
                 "percentile",
             ]
         )
+    rm = str(resize_mode or "stretch").strip().lower()
+    if rm in ("stretch", "center_crop", "saliency_crop"):
+        cmd.extend(["--resize-mode", rm])
+    if float(resize_saliency_face_bias or 0.0) > 0:
+        cmd.extend(["--resize-saliency-face-bias", str(float(resize_saliency_face_bias))])
     if grid:
         cmd.append("--grid")
 
@@ -293,6 +403,24 @@ def build_extra_ocr_sample_flags(settings: BookAccuracyPreset) -> List[str]:
         out.append("--boost-quality")
     if settings.subject_first:
         out.append("--subject-first")
+    sm = str(getattr(settings, "shortcomings_mitigation", "none") or "none").lower()
+    if sm in ("auto", "all"):
+        out.extend(["--shortcomings-mitigation", sm])
+    if bool(getattr(settings, "shortcomings_2d", False)):
+        out.append("--shortcomings-2d")
+    ag = str(getattr(settings, "art_guidance_mode", "none") or "none").lower()
+    if ag in ("auto", "all"):
+        out.extend(["--art-guidance-mode", ag])
+    if not bool(getattr(settings, "art_guidance_photography", True)):
+        out.append("--no-art-guidance-photography")
+    anat = str(getattr(settings, "anatomy_guidance", "none") or "none").lower()
+    if anat in ("lite", "strong"):
+        out.extend(["--anatomy-guidance", anat])
+    sgm = str(getattr(settings, "style_guidance_mode", "none") or "none").lower()
+    if sgm in ("auto", "all"):
+        out.extend(["--style-guidance-mode", sgm])
+    if not bool(getattr(settings, "style_guidance_artists", True)):
+        out.append("--no-style-guidance-artists")
     return out
 
 

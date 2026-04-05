@@ -32,6 +32,41 @@ SDX is a modular text-to-image training and inference framework built on Diffusi
 
 ---
 
+## Try it in one command
+
+```bash
+python demo.py
+```
+
+Downloads DiT-XL/2 ImageNet weights from HF automatically and generates a sample image. No checkpoint required.
+
+With your own text-conditioned checkpoint:
+
+```bash
+python demo.py --ckpt results/.../best.pt --prompt "your prompt" --preset auto
+```
+
+---
+
+## Why SDX
+
+Most diffusion repos are either a research prototype that's hard to operate, or a polished wrapper that hides the model stack. SDX sits in the middle.
+
+| | SDX | diffusers DiT | ComfyUI / Forge |
+|---|---|---|---|
+| Training loop | First-class (`train.py`) | Not included | Not included |
+| Sampling controls | Explicit, composable | Wrapped | Node graph |
+| Multi-LoRA routing | Role-aware + depth policies | Basic | Plugin-dependent |
+| Prompt adherence | Grounding losses + token coverage | None | None |
+| Holy Grail adaptive CFG | Built-in | None | None |
+| Flow matching | Native | Separate pipeline | None |
+| Reproducibility | Run manifests + config snapshots | None | None |
+| Native acceleration | CUDA/Rust/C++ with Python fallbacks | Triton/CUDA | Varies |
+
+SDX is for people who want to understand and modify what's happening — not just run it.
+
+---
+
 ## What SDX gives you
 
 | Capability | Details |
@@ -48,14 +83,27 @@ SDX is a modular text-to-image training and inference framework built on Diffusi
 
 ---
 
+## Gallery
+
+> Generate your own gallery: `python scripts/tools/dev/make_gallery.py --ckpt results/.../best.pt`
+>
+> Images will be saved to `docs/assets/gallery/` and a grid to `docs/assets/gallery/gallery_grid.png`.
+
+---
+
 ## Quick start
+
+**GPU requirements:** DiT-XL/2 at 256px needs ~10 GB VRAM for training (batch 8, bf16, grad checkpointing). Run `python -m toolkit.training.env_health` to check your setup and get a memory estimate before starting.
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Verify your environment
+# Check your environment (VRAM estimate, CUDA version, optional deps)
 python -m toolkit.training.env_health
+
+# One-command demo (downloads weights automatically)
+python demo.py
 
 # Train on your dataset
 python train.py --data-path datasets/train --results-dir results
@@ -65,6 +113,20 @@ python sample.py \
   --ckpt results/000-DiT-XL-2-Text/checkpoints/best.pt \
   --prompt "cinematic portrait, dramatic lighting" \
   --out out.png
+```
+
+Verify the setup runs without errors before committing to a full training run:
+
+```bash
+python scripts/tools/dev/quick_test.py
+```
+
+Startup-first readiness report (no training run required):
+
+```bash
+python -m scripts.tools startup_readiness \
+  --out-json startup_readiness_report.json \
+  --out-md startup_readiness_report.md
 ```
 
 Optional: refresh to CUDA 12.8 wheels:
@@ -125,6 +187,45 @@ python train.py \
   --resume results/000-DiT-XL-2-Text/checkpoints/best.pt \
   --results-dir results
 ```
+
+### Multi-GPU (DDP)
+
+SDX uses PyTorch `DistributedDataParallel` and is `torchrun`-compatible:
+
+```bash
+# 2 GPUs on one machine
+torchrun --nproc_per_node=2 train.py --data-path datasets/train --results-dir results
+
+# 4 GPUs
+torchrun --nproc_per_node=4 train.py --data-path datasets/train --global-batch-size 256
+```
+
+Note: `--resolution-buckets` is single-GPU only in the current version.
+
+### Loading existing DiT weights
+
+You can fine-tune from the original `facebookresearch/DiT` ImageNet checkpoints:
+
+```bash
+# Download and convert automatically
+python demo.py --no-download  # skips generation, just converts
+
+# Or convert manually
+python -c "
+from demo import _download_dit_imagenet, _convert_dit_imagenet_to_sdx
+from pathlib import Path
+raw = _download_dit_imagenet(Path('pretrained/dit-xl-2-imagenet'))
+_convert_dit_imagenet_to_sdx(raw, Path('pretrained/dit-xl-2-imagenet/sdx.pt'))
+"
+
+# Fine-tune from the converted checkpoint
+python train.py \
+  --data-path datasets/train \
+  --resume pretrained/dit-xl-2-imagenet/sdx.pt \
+  --results-dir results
+```
+
+Note: the original DiT uses class conditioning (ImageNet 1000 classes), not text. Fine-tuning for text-to-image requires a dataset with captions and enough steps to shift the conditioning pathway.
 
 ### Key training flags
 
@@ -390,12 +491,15 @@ sdx/
 | :--- | :--- |
 | [`docs/README.md`](docs/README.md) | Full documentation index |
 | [`docs/CODEBASE.md`](docs/CODEBASE.md) | Where things live and why |
+| [`scripts/tools/README.md`](scripts/tools/README.md) | Tooling index for benchmarking, auto-improve loop, hardcase mining, and ops checks |
 | [`docs/HOW_GENERATION_WORKS.md`](docs/HOW_GENERATION_WORKS.md) | End-to-end train → checkpoint → sample walkthrough |
 | [`docs/PROMPT_STACK.md`](docs/PROMPT_STACK.md) | Prompt assembly, controls, and filtering |
 | [`docs/MODEL_STACK.md`](docs/MODEL_STACK.md) | Model weights, roles, and download paths |
 | [`docs/DIFFUSION_LEVERAGE_ROADMAP.md`](docs/DIFFUSION_LEVERAGE_ROADMAP.md) | High-impact quality priorities |
 | [`docs/MODEL_WEAKNESSES.md`](docs/MODEL_WEAKNESSES.md) | Known failure modes and mitigations |
+| [`docs/COMMON_SHORTCOMINGS_AI_IMAGES.md`](docs/COMMON_SHORTCOMINGS_AI_IMAGES.md) | Common image-gen failure catalog and mitigation mapping |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
+| [`docs/releases/v3.md`](docs/releases/v3.md) | v3 source release notes (benchmark + hardcase-aware improvement stack) |
 | [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) | Holy Grail adaptive sampling reference |
 
 ---
@@ -408,6 +512,12 @@ Small, focused PRs are preferred. Docs, tooling, and quality improvements are al
 # Lint before submitting
 ruff check .
 ruff format .
+
+# Run the test suite
+pytest tests/ -v
+
+# Quick smoke test (no GPU needed)
+python scripts/tools/dev/quick_test.py
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide.

@@ -19,11 +19,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-
 
 # ---------------------------------------------------------------------------
 # Hierarchical / part-level captions (training-time dropout)
@@ -140,7 +139,6 @@ def image_mask_to_patch_weights(
     # Try native C++ kernel (no autograd, no Python loop).
     if H % ph == 0 and W % pw == 0:
         try:
-            import numpy as np
             from sdx_native.mask_ops_native import maybe_mask_to_patch_weights_native
 
             mask_np = mask_b1hw.detach().float().cpu().numpy()
@@ -182,11 +180,11 @@ def foreground_attention_alignment_loss(
     """
     if attn_weights.dim() != 4:
         raise ValueError("attn_weights must be (B, heads, N, L)")
-    b, h, n, l = attn_weights.shape
+    b, h, n, token_count = attn_weights.shape
     if patch_foreground_b_n.shape[0] != b or patch_foreground_b_n.shape[1] != n:
         raise ValueError(f"mask patch count {patch_foreground_b_n.shape} != attn N={n}")
 
-    te = l if token_end <= 0 else min(token_end, l)
+    te = token_count if token_end <= 0 else min(token_end, token_count)
     ts = max(0, min(token_start, te))
     a = attn_weights[:, :, :, ts:te].mean(dim=(1, 3))  # (B, N)
     a = a.to(dtype=torch.float32)
@@ -220,8 +218,8 @@ def token_coverage_from_cross_attention(attn_weights: torch.Tensor, *, token_sta
     """
     if attn_weights.dim() != 4:
         raise ValueError("attn_weights must be (B, heads, N, L)")
-    _, _, _, l = attn_weights.shape
-    te = l if token_end <= 0 else min(token_end, l)
+    _, _, _, token_count = attn_weights.shape
+    te = token_count if token_end <= 0 else min(token_end, token_count)
     ts = max(0, min(token_start, te))
     a = attn_weights[:, :, :, ts:te].mean(dim=1)  # (B, N, Lt)
     cov = a.max(dim=1).values  # (B, Lt)

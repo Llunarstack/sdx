@@ -597,8 +597,27 @@ def main() -> None:
     parser.add_argument(
         "--pick-best",
         default="auto",
-        choices=["auto", "none", "clip", "edge", "ocr", "combo"],
-        help="Test-time metric (auto = use preset). combo = CLIP+edge(+OCR if expected text).",
+        choices=["auto", "none", "clip", "edge", "ocr", "combo", "combo_count"],
+        help="Test-time metric (auto = use preset). combo = CLIP+edge(+OCR if expected text); combo_count also adds people-count verifier.",
+    )
+    parser.add_argument(
+        "--expected-count",
+        type=int,
+        default=0,
+        help="Optional explicit count target for combo_count (0 = infer from prompt).",
+    )
+    parser.add_argument(
+        "--expected-count-target",
+        type=str,
+        default="auto",
+        choices=["auto", "people", "objects"],
+        help="Count target mode for combo_count.",
+    )
+    parser.add_argument(
+        "--expected-count-object",
+        type=str,
+        default="",
+        help="Optional object hint for combo_count object mode (e.g. coin, candle, window).",
     )
     parser.add_argument("--boost-quality", action="store_true", help="Prepend quality tags (overrides preset off).")
     parser.add_argument("--no-boost-quality", action="store_true", help="Disable boost even if preset would enable it.")
@@ -607,6 +626,66 @@ def main() -> None:
     parser.add_argument("--save-prompt", action="store_true", help="Write .txt sidecar next to each PNG.")
     parser.add_argument("--prepend-quality-if-short", action="store_true", help="Prepend quality if caption is short.")
     parser.add_argument("--no-prepend-quality-if-short", action="store_true")
+    parser.add_argument(
+        "--shortcomings-mitigation",
+        type=str,
+        default="",
+        choices=["", "none", "auto", "all"],
+        help="Override shortcomings pack sent to sample.py (default from --book-accuracy; auto=keyword match, all=full base pack).",
+    )
+    parser.add_argument(
+        "--shortcomings-2d",
+        action="store_true",
+        help="Enable 2D-specific shortcomings packs (anime/manga/cartoon) for page generation and OCR repair.",
+    )
+    parser.add_argument(
+        "--no-shortcomings-2d",
+        action="store_true",
+        help="Disable 2D-specific shortcomings packs even if --book-accuracy preset enables them.",
+    )
+    parser.add_argument(
+        "--art-guidance-mode",
+        type=str,
+        default="",
+        choices=["", "none", "auto", "all"],
+        help="Override artist-first medium packs sent to sample.py (default from --book-accuracy).",
+    )
+    parser.set_defaults(art_guidance_photography=False)
+    parser.add_argument(
+        "--art-guidance-photography",
+        action="store_true",
+        help="Include photography packs for --art-guidance-mode auto|all.",
+    )
+    parser.add_argument(
+        "--no-art-guidance-photography",
+        action="store_true",
+        help="Disable photography packs for --art-guidance-mode auto|all.",
+    )
+    parser.add_argument(
+        "--anatomy-guidance",
+        type=str,
+        default="",
+        choices=["", "none", "lite", "strong"],
+        help="Override anatomy/proportion guidance sent to sample.py (default from --book-accuracy).",
+    )
+    parser.add_argument(
+        "--style-guidance-mode",
+        type=str,
+        default="",
+        choices=["", "none", "auto", "all"],
+        help="Override style-domain guidance sent to sample.py (default from --book-accuracy).",
+    )
+    parser.set_defaults(style_guidance_artists=False)
+    parser.add_argument(
+        "--style-guidance-artists",
+        action="store_true",
+        help="Enable artist/game-name stabilization cues in style guidance.",
+    )
+    parser.add_argument(
+        "--no-style-guidance-artists",
+        action="store_true",
+        help="Disable artist/game-name stabilization cues in style guidance.",
+    )
     parser.add_argument("--vae-tiling", action="store_true", help="Large outputs: tiled VAE decode.")
     parser.add_argument(
         "--pick-clip-model",
@@ -618,6 +697,19 @@ def main() -> None:
     parser.add_argument("--grid", action="store_true", help="Save N-up grid when num>1.")
     parser.add_argument("--cfg-scale", type=float, default=0.0, help="0 = sample.py default.")
     parser.add_argument("--cfg-rescale", type=float, default=0.0, help="0 = off unless sample auto-enables.")
+    parser.add_argument(
+        "--resize-mode",
+        type=str,
+        default="stretch",
+        choices=["stretch", "center_crop", "saliency_crop"],
+        help="When --width/--height are set: how sample.py fits output aspect.",
+    )
+    parser.add_argument(
+        "--resize-saliency-face-bias",
+        type=float,
+        default=0.0,
+        help="Extra face priority for --resize-mode saliency_crop.",
+    )
     parser.add_argument(
         "--dynamic-threshold-percentile",
         type=float,
@@ -693,6 +785,138 @@ def main() -> None:
         action="store_true",
         help="Add strong focal / title-area hint (covers and pin-ups; COVER_SPOTLIGHT_HINT).",
     )
+    parser.add_argument(
+        "--book-style-pack",
+        default="none",
+        choices=["none", "manga_nsfw_action", "webtoon_nsfw_romance", "comic_dialogue_safe", "oc_launch_safe"],
+        help="One-flag style bundle that sets artist/OC/NSFW defaults; explicit flags override.",
+    )
+    parser.add_argument(
+        "--humanize-pack",
+        default="none",
+        choices=["none", "lite", "balanced", "strong", "painterly", "filmic"],
+        help="One-flag bundle for anti-AI humanization hints and negatives.",
+    )
+    parser.add_argument(
+        "--auto-humanize",
+        action="store_true",
+        help="Auto-pick humanization profile from book type/style/safety mode; explicit --humanize-* still override.",
+    )
+    parser.add_argument(
+        "--artist-craft-profile",
+        default="none",
+        choices=["none", "manga_pro", "western_comic_pro", "webtoon_pro", "children_book", "cinematic_storyboard"],
+        help="Artist-facing production helper profile (panel flow, focal hierarchy, readability).",
+    )
+    parser.add_argument(
+        "--artist-pack",
+        default="none",
+        choices=["none", "manga_cinematic", "comic_dialogue", "webtoon_scroll", "storyboard_fast"],
+        help="Preset bundle for artist craft controls; explicit per-control flags override this pack.",
+    )
+    parser.add_argument(
+        "--shot-language",
+        default="none",
+        choices=["none", "mixed", "cinematic", "manga_dynamic", "dialogue_coverage"],
+        help="Shot grammar helper (establishing/medium/close-up rhythm and dialogue coverage).",
+    )
+    parser.add_argument(
+        "--pacing-plan",
+        default="none",
+        choices=["none", "decompressed", "balanced", "compressed"],
+        help="Narrative beat density helper for panel rhythm.",
+    )
+    parser.add_argument(
+        "--lettering-craft",
+        default="none",
+        choices=["none", "standard", "strict"],
+        help="Lettering and balloon placement helper cues.",
+    )
+    parser.add_argument(
+        "--value-plan",
+        default="none",
+        choices=["none", "bw_hierarchy", "color_script"],
+        help="Value structure helper (B/W hierarchy or color script discipline).",
+    )
+    parser.add_argument(
+        "--screentone-plan",
+        default="none",
+        choices=["none", "clean", "dramatic"],
+        help="Screentone/halftone handling helper cues.",
+    )
+    parser.add_argument(
+        "--humanize-profile",
+        default="none",
+        choices=["none", "lite", "balanced", "strong", "painterly", "filmic"],
+        help="Positive humanization profile hint.",
+    )
+    parser.add_argument(
+        "--humanize-imperfection",
+        default="none",
+        choices=["none", "lite", "balanced", "strong"],
+        help="Imperfect hand-made variance level.",
+    )
+    parser.add_argument(
+        "--humanize-materiality",
+        default="none",
+        choices=["none", "paper", "ink_paper", "canvas", "print", "film"],
+        help="Surface/material realism cue for human-made feel.",
+    )
+    parser.add_argument(
+        "--humanize-asymmetry",
+        default="none",
+        choices=["none", "lite", "balanced", "strong"],
+        help="Natural asymmetry cue level.",
+    )
+    parser.add_argument(
+        "--humanize-negative-level",
+        default="none",
+        choices=["none", "lite", "balanced", "strong"],
+        help="Anti-synthetic negative prompt boost level.",
+    )
+    parser.add_argument(
+        "--safety-mode",
+        default="",
+        choices=["", "none", "sfw", "nsfw"],
+        help="Optional override forwarded to sample.py safety scaffolding.",
+    )
+    parser.add_argument(
+        "--nsfw-pack",
+        default="",
+        choices=["", "none", "soft", "explicit_detail", "romantic", "extreme"],
+        help="Optional adult-content stability pack forwarded to sample.py.",
+    )
+    parser.add_argument(
+        "--nsfw-civitai-pack",
+        default="",
+        choices=["", "none", "hits", "hits_lite", "snippets", "snippets_lite", "action", "complex", "easy", "clothing", "objects", "style"],
+        help="Optional Civitai-derived NSFW trigger pack forwarded to sample.py.",
+    )
+    parser.add_argument(
+        "--civitai-trigger-bank",
+        default="",
+        choices=["", "none", "light", "medium", "heavy", "frequency_light", "frequency_medium", "frequency_heavy"],
+        help="Optional trigger bank for sample.py when using --safety-mode nsfw.",
+    )
+    parser.add_argument("--oc-name", default="", help="Original character name/handle for identity locking.")
+    parser.add_argument(
+        "--oc-pack",
+        default="none",
+        choices=["none", "heroine_scifi", "rival_dark", "mentor_classic"],
+        help="Preset OC design bundle; explicit --oc-* flags override this pack.",
+    )
+    parser.add_argument(
+        "--oc-archetype",
+        default="none",
+        choices=["none", "shonen_lead", "cool_rival", "mentor", "antihero", "magical_girl", "noir_detective", "space_pilot"],
+        help="Original character archetype helper preset.",
+    )
+    parser.add_argument("--oc-traits", default="", help="Signature OC traits (hair, eyes, scars, accessories).")
+    parser.add_argument("--oc-wardrobe", default="", help="Consistent outfit/costume anchors for the OC.")
+    parser.add_argument("--oc-silhouette", default="", help="Silhouette language lock (shape identity cues).")
+    parser.add_argument("--oc-color-motifs", default="", help="Color motifs/palette anchors for the OC.")
+    parser.add_argument("--oc-expression-sheet", default="", help="Expression anchors for the OC across scenes.")
+    parser.add_argument("--oc-negative", default="", help="Negative prompt fragment for OC consistency failures.")
 
     parser.add_argument(
         "--chapter-break-every",
@@ -814,6 +1038,37 @@ def main() -> None:
     from pipelines.book_comic import book_helpers, consistency_helpers, prompt_lexicon
 
     settings = book_helpers.resolve_book_sample_settings(args)
+    _style_cfg = prompt_lexicon.resolve_book_style_controls(
+        book_style_pack=str(getattr(args, "book_style_pack", "none") or "none"),
+        artist_pack=str(getattr(args, "artist_pack", "none") or "none"),
+        oc_pack=str(getattr(args, "oc_pack", "none") or "none"),
+        safety_mode=str(getattr(args, "safety_mode", "") or ""),
+        nsfw_pack=str(getattr(args, "nsfw_pack", "") or ""),
+        nsfw_civitai_pack=str(getattr(args, "nsfw_civitai_pack", "") or ""),
+        civitai_trigger_bank=str(getattr(args, "civitai_trigger_bank", "") or ""),
+    )
+    _auto_h = (
+        prompt_lexicon.infer_auto_humanize_controls(
+            book_type=str(getattr(args, "book_type", "manga") or "manga"),
+            lexicon_style=str(getattr(args, "lexicon_style", "none") or "none"),
+            safety_mode=str(_style_cfg.get("safety_mode", "") or ""),
+        )
+        if bool(getattr(args, "auto_humanize", False))
+        else {}
+    )
+    _human_profile_raw = str(getattr(args, "humanize_profile", "none") or "none")
+    _human_imperf_raw = str(getattr(args, "humanize_imperfection", "none") or "none")
+    _human_mat_raw = str(getattr(args, "humanize_materiality", "none") or "none")
+    _human_asym_raw = str(getattr(args, "humanize_asymmetry", "none") or "none")
+    _human_neg_raw = str(getattr(args, "humanize_negative_level", "none") or "none")
+    _human_cfg = prompt_lexicon.resolve_humanize_controls(
+        humanize_pack=str(getattr(args, "humanize_pack", "none") or "none"),
+        humanize_profile=_auto_h.get("humanize_profile", "none") if _human_profile_raw == "none" else _human_profile_raw,
+        imperfection_level=_auto_h.get("imperfection_level", "none") if _human_imperf_raw == "none" else _human_imperf_raw,
+        materiality_mode=_auto_h.get("materiality_mode", "none") if _human_mat_raw == "none" else _human_mat_raw,
+        asymmetry_level=_auto_h.get("asymmetry_level", "none") if _human_asym_raw == "none" else _human_asym_raw,
+        negative_level=_auto_h.get("negative_level", "none") if _human_neg_raw == "none" else _human_neg_raw,
+    )
 
     def _cfg_cmd_tail() -> List[str]:
         tail: List[str] = []
@@ -825,11 +1080,29 @@ def main() -> None:
             cfg_scale=float(getattr(args, "cfg_scale", 0.0) or 0.0),
             cfg_rescale=float(getattr(args, "cfg_rescale", 0.0) or 0.0),
             dynamic_threshold_percentile=float(getattr(args, "dynamic_threshold_percentile", 0.0) or 0.0),
+            resize_mode=str(getattr(args, "resize_mode", "stretch") or "stretch"),
+            resize_saliency_face_bias=float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0),
             grid=bool(getattr(args, "grid", False)),
         )
         return tail
 
-    ocr_extra = book_helpers.build_extra_ocr_sample_flags(settings) + _cfg_cmd_tail()
+    def _nsfw_tail() -> List[str]:
+        tail: List[str] = []
+        sm = str(_style_cfg.get("safety_mode", "") or "").strip().lower()
+        if sm in ("none", "sfw", "nsfw"):
+            tail.extend(["--safety-mode", sm])
+        npack = str(_style_cfg.get("nsfw_pack", "") or "").strip().lower()
+        if npack in ("none", "soft", "explicit_detail", "romantic", "extreme"):
+            tail.extend(["--nsfw-pack", npack])
+        ncp = str(_style_cfg.get("nsfw_civitai_pack", "") or "").strip().lower()
+        if ncp in ("none", "hits", "hits_lite", "snippets", "snippets_lite", "action", "complex", "easy", "clothing", "objects", "style"):
+            tail.extend(["--nsfw-civitai-pack", ncp])
+        ctb = str(_style_cfg.get("civitai_trigger_bank", "") or "").strip().lower()
+        if ctb in ("none", "light", "medium", "heavy", "frequency_light", "frequency_medium", "frequency_heavy"):
+            tail.extend(["--civitai-trigger-bank", ctb])
+        return tail
+
+    ocr_extra = book_helpers.build_extra_ocr_sample_flags(settings) + _cfg_cmd_tail() + _nsfw_tail()
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -870,6 +1143,35 @@ def main() -> None:
         args.width, args.height = aw, ah
 
     panel_hint_str = prompt_lexicon.panel_layout_hint(str(getattr(args, "panel_layout", "none") or "none"))
+    _artist_cfg = prompt_lexicon.resolve_artist_controls(
+        artist_pack=str(_style_cfg.get("artist_pack", "none") or "none"),
+        craft_profile=str(getattr(args, "artist_craft_profile", "none") or "none"),
+        shot_language=str(getattr(args, "shot_language", "none") or "none"),
+        pacing_plan=str(getattr(args, "pacing_plan", "none") or "none"),
+        lettering_craft=str(getattr(args, "lettering_craft", "none") or "none"),
+        value_plan=str(getattr(args, "value_plan", "none") or "none"),
+        screentone_plan=str(getattr(args, "screentone_plan", "none") or "none"),
+    )
+    artist_hint_str = prompt_lexicon.artist_craft_bundle(**_artist_cfg)
+    human_hint_str = prompt_lexicon.humanize_prompt_bundle(
+        humanize_profile=str(_human_cfg.get("humanize_profile", "none") or "none"),
+        imperfection_level=str(_human_cfg.get("imperfection_level", "none") or "none"),
+        materiality_mode=str(_human_cfg.get("materiality_mode", "none") or "none"),
+        asymmetry_level=str(_human_cfg.get("asymmetry_level", "none") or "none"),
+    )
+    panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, artist_hint_str)
+    panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, human_hint_str)
+    _oc_cfg = prompt_lexicon.resolve_oc_controls(
+        oc_pack=str(_style_cfg.get("oc_pack", "none") or "none"),
+        name=str(getattr(args, "oc_name", "") or ""),
+        archetype=str(getattr(args, "oc_archetype", "none") or "none"),
+        visual_traits=str(getattr(args, "oc_traits", "") or ""),
+        wardrobe=str(getattr(args, "oc_wardrobe", "") or ""),
+        silhouette=str(getattr(args, "oc_silhouette", "") or ""),
+        color_motifs=str(getattr(args, "oc_color_motifs", "") or ""),
+        expression_sheet=str(getattr(args, "oc_expression_sheet", "") or ""),
+    )
+    oc_block = prompt_lexicon.original_character_bundle(**_oc_cfg)
     narration_p = (getattr(args, "narration_prefix", "") or "").strip()
 
     consistency_spec: Dict[str, Any] = {}
@@ -935,13 +1237,25 @@ def main() -> None:
     height_arg = args.height
 
     def _merged_negative() -> str:
-        if not getattr(args, "lexicon_negative", True):
-            return (args.negative_prompt or "").strip()
-        return prompt_lexicon.suggest_negative_addon(
+        base = (
+            prompt_lexicon.suggest_negative_addon(
             use_lexicon_negative=True,
             user_negative=(args.negative_prompt or ""),
             production_tier=str(getattr(args, "book_accuracy", "") or "").lower() == "production",
-        ).strip()
+            artist_lettering_strict=str(_artist_cfg.get("lettering_craft", "none") or "none").lower() == "strict",
+            ).strip()
+            if getattr(args, "lexicon_negative", True)
+            else (args.negative_prompt or "").strip()
+        )
+        if consistency_neg_fragment:
+            base = f"{base}, {consistency_neg_fragment}".strip().strip(",")
+        hneg = prompt_lexicon.humanize_negative_addon(str(_human_cfg.get("negative_level", "none") or "none"))
+        if hneg:
+            base = f"{base}, {hneg}".strip().strip(",")
+        oc_neg = str(getattr(args, "oc_negative", "") or "").strip()
+        if oc_neg:
+            base = f"{base}, {oc_neg}".strip().strip(",")
+        return base
 
     def _postprocess_output(path: Path, page_seed: int) -> None:
         book_helpers.apply_postprocess_to_image_file(
@@ -990,8 +1304,16 @@ def main() -> None:
             "--scheduler",
             args.scheduler,
         ]
-        book_helpers.append_sample_py_quality_flags(cmd, settings, pick_expected_text=pick_exp)
+        book_helpers.append_sample_py_quality_flags(
+            cmd,
+            settings,
+            pick_expected_text=pick_exp,
+            pick_expected_count=int(getattr(args, "expected_count", 0) or 0),
+            pick_expected_count_target=str(getattr(args, "expected_count_target", "auto") or "auto"),
+            pick_expected_count_object=str(getattr(args, "expected_count_object", "") or ""),
+        )
         cmd.extend(_cfg_cmd_tail())
+        cmd.extend(_nsfw_tail())
         if args.character_sheet.strip():
             cmd += ["--character-sheet", args.character_sheet]
         if args.character_prompt_extra.strip():
@@ -1037,8 +1359,8 @@ def main() -> None:
         cover_composed = book_helpers.compose_book_page_prompt(
             user_prompt=args.cover_prompt,
             narration_prefix=narration_p,
-            consistency_block=consistency_block,
-            panel_hint="",
+            consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block),
+            panel_hint=prompt_lexicon.merge_prompt_fragments(artist_hint_str, human_hint_str),
             rolling_context="",
         )
         sample_generate(
@@ -1112,7 +1434,7 @@ def main() -> None:
         composed_prompt = book_helpers.compose_book_page_prompt(
             user_prompt=page_prompt,
             narration_prefix=narration_p,
-            consistency_block=consistency_block,
+            consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block),
             panel_hint=panel_hint_str,
             rolling_context=rolling,
         )
@@ -1261,12 +1583,42 @@ def main() -> None:
             "ckpt": args.ckpt,
             "book_type": args.book_type,
             "model_preset": args.model_preset,
+            "book_style_pack": getattr(args, "book_style_pack", ""),
+            "humanize_pack": getattr(args, "humanize_pack", ""),
+            "auto_humanize": bool(getattr(args, "auto_humanize", False)),
             "lexicon_style": getattr(args, "lexicon_style", ""),
+            "artist_pack": getattr(args, "artist_pack", ""),
+            "artist_craft_profile": getattr(args, "artist_craft_profile", ""),
+            "shot_language": getattr(args, "shot_language", ""),
+            "pacing_plan": getattr(args, "pacing_plan", ""),
+            "lettering_craft": getattr(args, "lettering_craft", ""),
+            "value_plan": getattr(args, "value_plan", ""),
+            "screentone_plan": getattr(args, "screentone_plan", ""),
+            "humanize_profile": str(_human_cfg.get("humanize_profile", "none") or "none"),
+            "humanize_imperfection": str(_human_cfg.get("imperfection_level", "none") or "none"),
+            "humanize_materiality": str(_human_cfg.get("materiality_mode", "none") or "none"),
+            "humanize_asymmetry": str(_human_cfg.get("asymmetry_level", "none") or "none"),
+            "humanize_negative_level": str(_human_cfg.get("negative_level", "none") or "none"),
+            "oc_pack": getattr(args, "oc_pack", ""),
             "panel_layout": getattr(args, "panel_layout", ""),
             "narration_prefix": narration_p,
             "consistency_block": consistency_block,
+            "original_character_block": oc_block,
             "consistency_negative_level": consistency_neg_level,
             "consistency_json": cj or None,
+            "safety_mode": str(_style_cfg.get("safety_mode", "") or ""),
+            "nsfw_pack": str(_style_cfg.get("nsfw_pack", "") or ""),
+            "nsfw_civitai_pack": str(_style_cfg.get("nsfw_civitai_pack", "") or ""),
+            "civitai_trigger_bank": str(_style_cfg.get("civitai_trigger_bank", "") or ""),
+            "shortcomings_mitigation": getattr(settings, "shortcomings_mitigation", "none"),
+            "shortcomings_2d": bool(getattr(settings, "shortcomings_2d", False)),
+            "art_guidance_mode": getattr(settings, "art_guidance_mode", "none"),
+            "art_guidance_photography": bool(getattr(settings, "art_guidance_photography", True)),
+            "anatomy_guidance": getattr(settings, "anatomy_guidance", "none"),
+            "style_guidance_mode": getattr(settings, "style_guidance_mode", "none"),
+            "style_guidance_artists": bool(getattr(settings, "style_guidance_artists", True)),
+            "resize_mode": str(getattr(args, "resize_mode", "stretch") or "stretch"),
+            "resize_saliency_face_bias": float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0),
             "chapter_break_every": chapter_every,
             "page_context_previous": context_n,
             "entries": manifest_rows,

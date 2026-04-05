@@ -10,7 +10,6 @@ falling back to pure PyTorch otherwise.
 from __future__ import annotations
 
 import torch
-import torch.nn.functional as F
 
 from diffusion.sampling_utils import gaussian_blur_latent
 
@@ -68,7 +67,6 @@ def dynamic_percentile_clamp(
 
     # Try native CUDA kernel (avoids torch.quantile overhead on small tensors).
     try:
-        import numpy as np
         from sdx_native.percentile_clamp_native import maybe_percentile_clamp_cuda
 
         orig_shape = x.shape

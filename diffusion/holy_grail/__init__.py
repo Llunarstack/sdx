@@ -20,17 +20,17 @@ from .latent_refiner import (
     dynamic_percentile_clamp,
     unsharp_mask_latent,
 )
-from .prompt_coverage import (
-    attention_token_coverage,
-    coverage_shortfall_loss,
-    weighted_patch_alignment_score,
-)
 from .presets import (
     HOLY_GRAIL_PRESETS,
     HolyGrailPreset,
     apply_holy_grail_preset_to_args,
     get_holy_grail_preset,
     list_holy_grail_presets,
+)
+from .prompt_coverage import (
+    attention_token_coverage,
+    coverage_shortfall_loss,
+    weighted_patch_alignment_score,
 )
 from .recommender import recommend_holy_grail_preset
 from .runtime_guard import sanitize_holy_grail_kwargs

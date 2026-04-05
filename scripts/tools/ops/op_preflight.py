@@ -90,7 +90,7 @@ def main() -> None:
 
     if args.native_manifest_check:
         try:
-            from utils.native.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats
+            from utils.native.native_tools import run_rust_jsonl_stats, rust_jsonl_tools_exe
 
             exe = rust_jsonl_tools_exe()
             if exe:

@@ -1,0 +1,11 @@
+[package]
+name = "sdx-image-metrics"
+version = "0.1.0"
+edition = "2021"
+description = "Fast CLI image metrics for SDX native workflows"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+image = "0.25"
+serde_json = "1"

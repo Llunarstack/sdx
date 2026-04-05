@@ -46,6 +46,16 @@ ignore = [
 quote-style = "double"
 docstring-code-format = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "native/python"]
+addopts = "-v --tb=short"
+# Skip GPU tests when CUDA is not available (mark with @pytest.mark.cuda).
+markers = [
+    "cuda: requires a CUDA GPU (skip with -m 'not cuda')",
+    "slow: slow tests skipped by default (run with -m slow)",
+]
+
 [tool.mypy]
 python_version = "3.10"
 pretty = true

@@ -108,7 +108,7 @@ def main():
     if inp.suffix.lower() == ".jsonl":
         if args.native_preflight or args.native_validate:
             try:
-                from sdx_native.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats, run_rust_jsonl_validate
+                from sdx_native.native_tools import run_rust_jsonl_stats, run_rust_jsonl_validate, rust_jsonl_tools_exe
 
                 exe = rust_jsonl_tools_exe()
                 if exe:

@@ -24,9 +24,10 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
-    from config import DEFAULT_NEGATIVE_PROMPT
     from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
     from utils.prompt.neg_filter import filter_negative_by_positive
+
+    from config import DEFAULT_NEGATIVE_PROMPT
 
     p = argparse.ArgumentParser(description="Preview prompts after content_controls (no model load).")
     p.add_argument("--prompt", type=str, required=True)

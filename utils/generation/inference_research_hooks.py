@@ -26,7 +26,6 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 import torch
 import torch.nn.functional as F
 
-
 # ---------------------------------------------------------------------------
 # Dual-stage / layout-first (GLM-Image–style *workflow*, not a full second model)
 # ---------------------------------------------------------------------------

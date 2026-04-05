@@ -74,7 +74,6 @@ def gaussian_blur_latent(x: torch.Tensor, sigma: float) -> torch.Tensor:
 
     # Try native CUDA kernel first (avoids per-call kernel tensor allocation).
     try:
-        import numpy as np
         from sdx_native.gaussian_blur_native import maybe_gaussian_blur_cuda
 
         x_np = x.detach().float().cpu().numpy()

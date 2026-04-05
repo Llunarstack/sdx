@@ -38,6 +38,7 @@ Quick links to all project docs, grouped by purpose.
 | [STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md) | Style/artist tags (PixAI, Danbooru): extraction, training, `--auto-style-from-prompt`. |
 | [DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior domains. |
 | [MODEL_WEAKNESSES.md](MODEL_WEAKNESSES.md) | Hands, faces, text, composition: causes and fixes. |
+| [COMMON_SHORTCOMINGS_AI_IMAGES.md](COMMON_SHORTCOMINGS_AI_IMAGES.md) | Broad guide + `sample.py` / `train.py` / `normalize_captions` wiring for mitigation packs. |
 | [QUALITY_AND_ISSUES.md](QUALITY_AND_ISSUES.md) | **Merged:** Civitai-style sampling fixes + community issue matrix (SDXL, Flux, Z-Image, …) and `sample.py` flags. |
 
 ---
@@ -48,6 +49,7 @@ Quick links to all project docs, grouped by purpose.
 |-----|-------------|
 | [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
 | [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — earlier baseline (2026-03-13). |
+| [releases/v3.md](releases/v3.md) | **v3** — benchmark robustness, hard-case mining, hardcase-aware DPO remine, startup readiness checks. |
 
 ---
 
@@ -73,6 +75,8 @@ Quick links to all project docs, grouped by purpose.
 | Reproducibility and strict training hygiene | [../train.py](../train.py), [../training/train_cli_parser.py](../training/train_cli_parser.py), [../training/train_args.py](../training/train_args.py) |
 | Dataset shortlist and planning | [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) |
 | Architecture figure generator | [../scripts/tools/dev/generate_sdx_architecture_diagram.py](../scripts/tools/dev/generate_sdx_architecture_diagram.py) |
+| Robust benchmark + improvement loop | [../scripts/tools/benchmark_suite.py](../scripts/tools/benchmark_suite.py), [../scripts/tools/ops/auto_improve_loop.py](../scripts/tools/ops/auto_improve_loop.py), [../scripts/tools/training/mine_preference_pairs.py](../scripts/tools/training/mine_preference_pairs.py) |
+| Startup readiness (no-train preflight report) | [../scripts/tools/ops/startup_readiness.py](../scripts/tools/ops/startup_readiness.py) |
 
 ---
 

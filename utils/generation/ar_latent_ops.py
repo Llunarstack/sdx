@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Iterator, List, Tuple
 
 import torch
-
 from models.ar_masks_extended import block_grid_dims
 
 

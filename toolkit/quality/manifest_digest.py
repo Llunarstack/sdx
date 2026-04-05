@@ -76,7 +76,7 @@ def try_rust_stats(manifest: Path) -> str | None:
     """Run ``sdx-jsonl-tools stats`` when the release binary exists (via ``native_tools``)."""
     _ensure_native_python_path()
     try:
-        from sdx_native.native_tools import rust_jsonl_tools_exe, run_rust_jsonl_stats
+        from sdx_native.native_tools import run_rust_jsonl_stats, rust_jsonl_tools_exe
     except ImportError:
         return None
     if rust_jsonl_tools_exe() is None:

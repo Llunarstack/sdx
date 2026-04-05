@@ -42,6 +42,25 @@ from utils.prompt.neg_filter import filter_negative_by_positive
 from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
 
 
+def _configure_stdio_for_console() -> None:
+    """
+    Avoid UnicodeEncodeError on Windows terminals using legacy encodings (e.g. cp1252).
+    This keeps --help and logging robust even when text includes Unicode symbols.
+    """
+    if os.name != "nt":
+        return
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(errors="replace")
+    except Exception:
+        pass
+
+
+_configure_stdio_for_console()
+
+
 def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
     """Map RAE latent (B,C,h,w) to DiT 4-channel space when checkpoint includes RAELatentBridge."""
     if z is None or ae_type != "rae" or rae_bridge is None:
@@ -372,6 +391,33 @@ def _parse_expected_texts(raw: str) -> list:
     return [p for p in parts if p]
 
 
+def _infer_expected_texts_from_prompt(prompt: str) -> list:
+    """
+    Infer likely intended on-image text from quoted fragments in prompt.
+    """
+    p = str(prompt or "")
+    if not p.strip():
+        return []
+    out = []
+    for m in re.finditer(r'"([^"\n]{1,80})"', p):
+        t = (m.group(1) or "").strip()
+        if not t:
+            continue
+        if not re.search(r"[A-Za-z0-9]", t):
+            continue
+        out.append(t)
+    # Keep stable order + de-duplicate.
+    dedup = []
+    seen = set()
+    for t in out:
+        k = t.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        dedup.append(t)
+    return dedup[:4]
+
+
 def _maybe_append_text_says(prompt: str, expected_texts: list) -> str:
     """Ensure prompt contains 'text that says "<t>"' for expected OCR text."""
     p = prompt or ""
@@ -387,6 +433,35 @@ def _maybe_append_text_says(prompt: str, expected_texts: list) -> str:
     # Append in a way our prompt-negative logic understands (TEXT_IN_IMAGE_PHRASES).
     # "text that says" is also used in config defaults.
     return f"{p.strip()}, text that says {quoted}"
+
+
+def _refine_gate_score(
+    *,
+    image_rgb_u8: np.ndarray,
+    expected_texts: list,
+) -> tuple[float, dict]:
+    """
+    Return (score in [0,1], details) where higher means "already good enough".
+    """
+    try:
+        from utils.quality import test_time_pick as _ttp
+    except Exception:
+        return 0.0, {"reason": "metrics_unavailable"}
+    edge = float(_ttp.score_edge_sharpness(image_rgb_u8))
+    exp = float(_ttp.score_exposure_balance(image_rgb_u8))
+    edge_n = float(np.clip(edge / 400.0, 0.0, 1.0))
+    parts = [0.45 * edge_n, 0.45 * exp]
+    details = {"edge_sharpness": edge, "edge_norm": edge_n, "exposure_balance": exp}
+    if expected_texts:
+        try:
+            ocr = float(_ttp.score_ocr_match(image_rgb_u8, str(expected_texts[0])))
+        except Exception:
+            ocr = 0.5
+        details["ocr_match"] = ocr
+        parts.append(0.10 * ocr)
+    score = float(np.clip(sum(parts), 0.0, 1.0))
+    details["score"] = score
+    return score, details
 
 
 SHEET_FUTA_REPLACEMENT = "androgynous presentation"
@@ -532,6 +607,19 @@ def main():
     parser.add_argument("--steps", type=int, default=50, help="Number of inference steps")
     parser.add_argument("--width", type=int, default=0, help="Output width (0 = use model image_size)")
     parser.add_argument("--height", type=int, default=0, help="Output height (0 = use model image_size)")
+    parser.add_argument(
+        "--resize-mode",
+        type=str,
+        default="stretch",
+        choices=["stretch", "center_crop", "saliency_crop"],
+        help="When --width/--height differ from model native: stretch (default), center crop+resize, or saliency crop+resize.",
+    )
+    parser.add_argument(
+        "--resize-saliency-face-bias",
+        type=float,
+        default=0.0,
+        help="Extra face priority for --resize-mode saliency_crop (0 disables face boost).",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
     # Optional (kept; only CFG/sampler/scheduler removed)
@@ -701,6 +789,16 @@ def main():
         help="Depth-aware role routing policy for stacked adapters (early/mid/late layer weighting).",
     )
     parser.add_argument(
+        "--lora-layers",
+        type=str,
+        default="all",
+        choices=["all", "first", "middle", "last"],
+        help=(
+            "Restrict LoRA application to a layer group: all (default), first third (structure/layout), "
+            "middle third (fine detail), or last third (aesthetics/style)."
+        ),
+    )
+    parser.add_argument(
         "--lora-role-stage-weights",
         type=str,
         default="",
@@ -853,6 +951,19 @@ def main():
     parser.add_argument("--no-refine", action="store_true", help="Disable refinement pass (raw/imperfect look, faster)")
     parser.add_argument(
         "--refine-t", type=int, default=50, help="Refinement noise level t (small t fixes imperfections; e.g. 50)"
+    )
+    parser.add_argument(
+        "--refine-gate",
+        type=str,
+        default="off",
+        choices=["off", "auto"],
+        help="Run refinement only when quick quality score is below threshold.",
+    )
+    parser.add_argument(
+        "--refine-gate-threshold",
+        type=float,
+        default=0.62,
+        help="Threshold for --refine-gate auto (higher => refine less often).",
     )
     parser.add_argument(
         "--hires-fix",
@@ -1106,8 +1217,19 @@ def main():
         "--pick-best",
         type=str,
         default="none",
-        choices=["none", "clip", "edge", "ocr", "combo", "combo_exposure", "combo_structural", "combo_hq"],
-        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq)",
+        choices=[
+            "auto",
+            "none",
+            "clip",
+            "edge",
+            "ocr",
+            "combo",
+            "combo_exposure",
+            "combo_structural",
+            "combo_hq",
+            "combo_count",
+        ],
+        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count)",
     )
     parser.add_argument(
         "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"
@@ -1117,6 +1239,49 @@ def main():
         type=str,
         default="openai/clip-vit-base-patch32",
         help="HF model id for --pick-best clip/combo",
+    )
+    parser.add_argument(
+        "--expected-count",
+        type=int,
+        default=0,
+        help="Target people count for --pick-best combo_count (0=auto-infer from prompt).",
+    )
+    parser.add_argument(
+        "--expected-count-target",
+        type=str,
+        default="auto",
+        choices=["auto", "people", "objects"],
+        help="Count verifier target for --pick-best combo_count.",
+    )
+    parser.add_argument(
+        "--expected-count-object",
+        type=str,
+        default="",
+        help="Optional object hint for combo_count object mode (e.g. coin, candle, window).",
+    )
+    parser.add_argument(
+        "--auto-expected-text",
+        action="store_true",
+        default=True,
+        help="If --expected-text is empty, infer quoted text from prompt for OCR/pick-best text scoring.",
+    )
+    parser.add_argument(
+        "--no-auto-expected-text",
+        action="store_false",
+        dest="auto_expected_text",
+        help="Disable prompt-based expected-text inference.",
+    )
+    parser.add_argument(
+        "--auto-constraint-boost",
+        action="store_true",
+        default=True,
+        help="If text/count constraints are detected, auto-raise --num to improve adherence.",
+    )
+    parser.add_argument(
+        "--no-auto-constraint-boost",
+        action="store_false",
+        dest="auto_constraint_boost",
+        help="Disable automatic candidate-count boost for constrained prompts.",
     )
     parser.add_argument(
         "--vae-tiling", action="store_true", help="Enable VAE tiling for decode (lower VRAM for large output)"
@@ -1262,6 +1427,51 @@ def main():
          "--anti-bleed",
         action="store_true",
         help="Reduce concept/color bleeding: add distinct-colors positive and color-bleed negative",
+    )
+    parser.add_argument(
+        "--shortcomings-mitigation",
+        type=str,
+        default="none",
+        choices=["none", "auto", "all"],
+        help="Append prompt/negative hints: photoreal, digital painting/concept/pixel/vector/game art, 3D render (docs/COMMON_SHORTCOMINGS_AI_IMAGES.md); auto=keyword match, all=full base pack",
+    )
+    parser.add_argument(
+        "--shortcomings-2d",
+        action="store_true",
+        help="With --shortcomings-mitigation auto|all: include stylized 2D packs (anime/manga/cel/etc.)",
+    )
+    parser.add_argument(
+        "--art-guidance-mode",
+        type=str,
+        default="none",
+        choices=["none", "auto", "all"],
+        help="Artist-first medium packs (traditional + digital + photo): auto=keyword match, all=full pack",
+    )
+    parser.add_argument(
+        "--no-art-guidance-photography",
+        action="store_true",
+        help="With --art-guidance-mode auto|all: skip photography-specific packs",
+    )
+    parser.add_argument(
+        "--anatomy-guidance",
+        type=str,
+        default="none",
+        choices=["none", "lite", "strong"],
+        help="Extra anatomy/proportion constraints: lite (only if people detected), strong (always)",
+    )
+    parser.add_argument(
+        "--style-guidance-mode",
+        type=str,
+        default="none",
+        choices=["none", "auto", "all"],
+        help="Style-domain guidance (anime/comic/editorial/concept/game/photo language)",
+    )
+    parser.set_defaults(style_guidance_artists=True)
+    parser.add_argument(
+        "--no-style-guidance-artists",
+        action="store_false",
+        dest="style_guidance_artists",
+        help="Disable artist/game-name reference stabilization cues in style guidance",
     )
     parser.add_argument(
         "--diversity",
@@ -1963,6 +2173,7 @@ def main():
             max_total_scale=float(getattr(args, "lora_max_total_scale", 1.5)),
             role_budgets=role_budgets,
             stage_policy=stage_policy,
+            layer_group=str(getattr(args, "lora_layers", "all") or "all"),
             role_stage_weights=role_stage_weights,
         )
         role_mix = ", ".join(f"{k}:{v}" for k, v in sorted(role_counts.items()))
@@ -2075,11 +2286,87 @@ def main():
             prompt_to_encode = f"masterpiece, best quality, {prompt_to_encode}".strip()
 
     expected_texts = _parse_expected_texts(getattr(args, "expected_text", ""))
+    if not expected_texts and bool(getattr(args, "auto_expected_text", True)):
+        expected_texts = _infer_expected_texts_from_prompt(prompt_to_encode)
+        if expected_texts:
+            print(f"Inferred expected text from prompt: {expected_texts}", file=sys.stderr)
+    expected_count = int(getattr(args, "expected_count", 0) or 0)
+    expected_count_target = str(getattr(args, "expected_count_target", "auto") or "auto").lower().strip()
+    if expected_count <= 0:
+        try:
+            from utils.quality.test_time_pick import infer_expected_object_count, infer_expected_people_count
+        except Exception:
+            infer_expected_people_count = None
+            infer_expected_object_count = None
+        if expected_count_target == "objects":
+            if infer_expected_object_count is not None:
+                expected_count, _ = infer_expected_object_count(prompt_to_encode)
+        else:
+            if infer_expected_people_count is not None:
+                expected_count = infer_expected_people_count(prompt_to_encode)
+            if expected_count <= 0 and expected_count_target == "auto" and infer_expected_object_count is not None:
+                expected_count, _ = infer_expected_object_count(prompt_to_encode)
+    if bool(getattr(args, "auto_constraint_boost", True)):
+        has_constraints = bool(expected_texts) or expected_count > 0
+        if has_constraints and num_gen < 4:
+            print(f"Auto constraint boost: num {num_gen} -> 4", file=sys.stderr)
+            num_gen = 4
     if getattr(args, "ocr_fix", False) and expected_texts:
         # Encourage the model not to suppress text and bias toward exact content.
         args.text_in_image = True
         prompt_to_encode = _maybe_append_text_says(prompt_to_encode, expected_texts)
         args.prompt = prompt_to_encode
+    _sm_mode = str(getattr(args, "shortcomings_mitigation", "none") or "none").lower()
+    _ag_mode = str(getattr(args, "art_guidance_mode", "none") or "none").lower()
+    _ag_anat = str(getattr(args, "anatomy_guidance", "none") or "none").lower()
+    _sg_mode = str(getattr(args, "style_guidance_mode", "none") or "none").lower()
+    _ag_pos = ""
+    _ag_neg = ""
+    _sg_pos = ""
+    _sg_neg = ""
+    if _sm_mode in ("auto", "all") and prompt_to_encode.strip():
+        try:
+            from config.ai_image_shortcomings import mitigation_fragments
+
+            _pos_sm, _ = mitigation_fragments(
+                prompt_to_encode,
+                _sm_mode,  # type: ignore[arg-type]
+                include_2d_pack=bool(getattr(args, "shortcomings_2d", False)),
+            )
+            if _pos_sm:
+                prompt_to_encode = f"{prompt_to_encode}, {_pos_sm}".strip().strip(",")
+                args.prompt = prompt_to_encode
+        except Exception:
+            pass
+    if (_ag_mode in ("auto", "all") or _ag_anat in ("lite", "strong")) and prompt_to_encode.strip():
+        try:
+            from config.art_mediums import guidance_fragments
+
+            _ag_pos, _ag_neg = guidance_fragments(
+                prompt_to_encode,
+                _ag_mode,  # type: ignore[arg-type]
+                include_photography=not bool(getattr(args, "no_art_guidance_photography", False)),
+                anatomy_mode=_ag_anat,  # type: ignore[arg-type]
+            )
+            if _ag_pos:
+                prompt_to_encode = f"{prompt_to_encode}, {_ag_pos}".strip().strip(",")
+                args.prompt = prompt_to_encode
+        except Exception:
+            pass
+    if _sg_mode in ("auto", "all") and prompt_to_encode.strip():
+        try:
+            from config.style_guidance import style_guidance_fragments
+
+            _sg_pos, _sg_neg = style_guidance_fragments(
+                prompt_to_encode,
+                _sg_mode,  # type: ignore[arg-type]
+                include_artist_refs=bool(getattr(args, "style_guidance_artists", True)),
+            )
+            if _sg_pos:
+                prompt_to_encode = f"{prompt_to_encode}, {_sg_pos}".strip().strip(",")
+                args.prompt = prompt_to_encode
+        except Exception:
+            pass
     try:
         from config.prompt_domains import ANTI_AI_LOOK_NEGATIVE, ANTI_AI_LOOK_NEGATIVE_STRONG
 
@@ -2145,6 +2432,23 @@ def main():
             negative_text_raw = f"{negative_text_raw}, {WATERMARK_NEGATIVE_STRONG}".strip()
         except ImportError:
             pass
+    if _sm_mode in ("auto", "all"):
+        try:
+            from config.ai_image_shortcomings import mitigation_fragments
+
+            _, _neg_sm = mitigation_fragments(
+                prompt_to_encode,
+                _sm_mode,  # type: ignore[arg-type]
+                include_2d_pack=bool(getattr(args, "shortcomings_2d", False)),
+            )
+            if _neg_sm:
+                negative_text_raw = f"{negative_text_raw}, {_neg_sm}".strip()
+        except Exception:
+            pass
+    if _ag_neg:
+        negative_text_raw = f"{negative_text_raw}, {_ag_neg}".strip()
+    if _sg_neg:
+        negative_text_raw = f"{negative_text_raw}, {_sg_neg}".strip()
     if getattr(args, "less_ai", False):
         if str(getattr(args, "anti_ai_pack", "none") or "none") == "none":
             args.anti_ai_pack = "lite"
@@ -3067,14 +3371,41 @@ def main():
     # Optional refinement pass: add a little noise to the final latent and denoise once more.
     # This tends to reduce small artifacts while keeping composition.
     if not getattr(args, "no_refine", False) and not use_flow_sample:
-        with torch.no_grad():
-            t_refine = int(getattr(args, "refine_t", 50))
-            t_refine = min(max(0, t_refine), getattr(cfg, "num_timesteps", 1000) - 1)
-            t = torch.full((x0.shape[0],), t_refine, device=device, dtype=torch.long)
-            noise = torch.randn_like(x0, device=device)
-            x_t = diffusion.q_sample(x0, t, noise=noise)
-            x0_refined, _ = diffusion.p_step(model, x_t, t, model_kwargs=model_kwargs_cond)
-            x0 = x0_refined
+        run_refine = True
+        if str(getattr(args, "refine_gate", "off") or "off").lower() == "auto":
+            try:
+                with torch.no_grad():
+                    _x0_preview = x0
+                    if ae_type == "kl":
+                        _x0_preview = _x0_preview / latent_scale
+                    elif ae_type == "rae" and rae_bridge is not None:
+                        _x0_preview = rae_bridge.dit_to_rae(_x0_preview)
+                    _im_preview = vae.decode(_x0_preview).sample
+                    _im_preview = (_im_preview * 0.5 + 0.5).clamp(0, 1)
+                    _rgb = (_im_preview[0].permute(1, 2, 0).cpu().numpy() * 255.0).round().astype(np.uint8)
+                    gate_score, gate_details = _refine_gate_score(
+                        image_rgb_u8=_rgb,
+                        expected_texts=expected_texts if isinstance(expected_texts, list) else [],
+                    )
+                    thr = float(getattr(args, "refine_gate_threshold", 0.62) or 0.62)
+                    run_refine = gate_score < thr
+                    print(
+                        f"refine-gate: score={gate_score:.3f} thr={thr:.3f} run_refine={run_refine} details={gate_details}",
+                        file=sys.stderr,
+                    )
+            except Exception as e:
+                # Fallback to existing behavior if gate path fails.
+                print(f"refine-gate fallback: {e}", file=sys.stderr)
+                run_refine = True
+        if run_refine:
+            with torch.no_grad():
+                t_refine = int(getattr(args, "refine_t", 50))
+                t_refine = min(max(0, t_refine), getattr(cfg, "num_timesteps", 1000) - 1)
+                t = torch.full((x0.shape[0],), t_refine, device=device, dtype=torch.long)
+                noise = torch.randn_like(x0, device=device)
+                x_t = diffusion.q_sample(x0, t, noise=noise)
+                x0_refined, _ = diffusion.p_step(model, x_t, t, model_kwargs=model_kwargs_cond)
+                x0 = x0_refined
 
     if args.save_attn:
         with torch.no_grad():
@@ -3099,7 +3430,7 @@ def main():
     if args.width > 0 or args.height > 0:
         out_w = int(args.width or dec_w)
         out_h = int(args.height or dec_h)
-        if out_w != dec_w or out_h != dec_h:
+        if (out_w != dec_w or out_h != dec_h) and str(getattr(args, "resize_mode", "stretch") or "stretch") == "stretch":
             image = torch.nn.functional.interpolate(
                 image, size=(out_h, out_w), mode="bilinear", align_corners=False
             )
@@ -3120,6 +3451,22 @@ def main():
     for i in range(num_gen):
         img_np = image[i].permute(1, 2, 0).cpu().numpy()
         img_np = (img_np * 255).round().astype("uint8")
+        if (out_w != dec_w or out_h != dec_h) and str(getattr(args, "resize_mode", "stretch") or "stretch") != "stretch":
+            try:
+                from utils.image_resize import fit_image_to_size
+
+                img_np = fit_image_to_size(
+                    img_np,
+                    out_h,
+                    out_w,
+                    mode=str(getattr(args, "resize_mode", "stretch") or "stretch"),
+                    saliency_face_bias=float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0),
+                )
+            except Exception as e:
+                print(f"Resize mode fallback to stretch: {e}", file=sys.stderr)
+                img_np = np.array(
+                    Image.fromarray(img_np, mode="RGB").resize((int(out_w), int(out_h)), Image.Resampling.BILINEAR)
+                )
         _sat = float(getattr(args, "saturation", 1.0))
         _preset = str(getattr(args, "finishing_preset", "none") or "none").lower()
         _need_finishing = (
@@ -3202,6 +3549,14 @@ def main():
     saved_imgs = processed
 
     pick_m = (getattr(args, "pick_best", None) or "none").lower()
+    if pick_m == "auto":
+        if isinstance(expected_texts, list) and expected_texts:
+            pick_m = "combo"
+        elif re.search(r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b", str(prompt_to_encode).lower()):
+            pick_m = "combo_count"
+        else:
+            pick_m = "combo_hq"
+        print(f"pick-best auto -> {pick_m}", file=sys.stderr)
     best_idx = 0
     if num_gen > 1 and pick_m != "none":
         from utils.quality.test_time_pick import pick_best_indices
@@ -3216,6 +3571,9 @@ def main():
             str(device),
             exp_ocr,
             getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32"),
+            int(getattr(args, "expected_count", 0) or 0),
+            str(getattr(args, "expected_count_target", "auto") or "auto"),
+            str(getattr(args, "expected_count_object", "") or ""),
         )
         print(f"pick-best ({pick_m}): scores={scores} -> best index {best_idx}")
 
@@ -3353,6 +3711,18 @@ def main():
                         "--ocr-repair-iter",
                         str(int(getattr(args, "ocr_repair_iter", 0)) + 1),
                     ]
+                    if int(getattr(args, "width", 0) or 0) > 0:
+                        repair_cmd += ["--width", str(int(getattr(args, "width", 0) or 0))]
+                    if int(getattr(args, "height", 0) or 0) > 0:
+                        repair_cmd += ["--height", str(int(getattr(args, "height", 0) or 0))]
+                    _rm = str(getattr(args, "resize_mode", "stretch") or "stretch").lower()
+                    if _rm in ("stretch", "center_crop", "saliency_crop"):
+                        repair_cmd += ["--resize-mode", _rm]
+                    if float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0) > 0:
+                        repair_cmd += [
+                            "--resize-saliency-face-bias",
+                            str(float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0)),
+                        ]
 
                     # Forward common generation knobs that impact text quality.
                     if (
@@ -3378,6 +3748,10 @@ def main():
                         repair_cmd.append("--no-refine")
                     if getattr(args, "refine_t", None) is not None:
                         repair_cmd += ["--refine-t", str(getattr(args, "refine_t", 50))]
+                    if str(getattr(args, "refine_gate", "off") or "off").lower() in ("off", "auto"):
+                        repair_cmd += ["--refine-gate", str(getattr(args, "refine_gate", "off"))]
+                    if getattr(args, "refine_gate_threshold", None) is not None:
+                        repair_cmd += ["--refine-gate-threshold", str(getattr(args, "refine_gate_threshold", 0.62))]
                     if getattr(args, "no_neg_filter", False):
                         repair_cmd.append("--no-neg-filter")
                     # Ensure text isn't suppressed.
@@ -3570,6 +3944,24 @@ def main():
                         repair_cmd.append("--anti-artifacts")
                     if getattr(args, "strong_watermark", False):
                         repair_cmd.append("--strong-watermark")
+                    _rsm = str(getattr(args, "shortcomings_mitigation", "none") or "none").lower()
+                    if _rsm in ("auto", "all"):
+                        repair_cmd += ["--shortcomings-mitigation", _rsm]
+                    if getattr(args, "shortcomings_2d", False):
+                        repair_cmd.append("--shortcomings-2d")
+                    _rag = str(getattr(args, "art_guidance_mode", "none") or "none").lower()
+                    if _rag in ("auto", "all"):
+                        repair_cmd += ["--art-guidance-mode", _rag]
+                    if getattr(args, "no_art_guidance_photography", False):
+                        repair_cmd.append("--no-art-guidance-photography")
+                    _anat = str(getattr(args, "anatomy_guidance", "none") or "none").lower()
+                    if _anat in ("lite", "strong"):
+                        repair_cmd += ["--anatomy-guidance", _anat]
+                    _sg = str(getattr(args, "style_guidance_mode", "none") or "none").lower()
+                    if _sg in ("auto", "all"):
+                        repair_cmd += ["--style-guidance-mode", _sg]
+                    if not bool(getattr(args, "style_guidance_artists", True)):
+                        repair_cmd.append("--no-style-guidance-artists")
                     if not getattr(args, "auto_content_fix", True):
                         repair_cmd.append("--no-auto-content-fix")
                     if not getattr(args, "one_shot_boost", True):

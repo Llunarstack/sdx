@@ -1,8 +1,6 @@
 """Diffusion schedules, Gaussian diffusion wrapper, and sampling helpers."""
 
-from .gaussian_diffusion import INFERENCE_SOLVERS, GaussianDiffusion, create_diffusion
-from .inference_timesteps import build_inference_timesteps, list_timestep_schedules
-from .losses import get_loss_weight, get_timestep_loss_weight
+from .attention_steering import ASTConfig, AttentionSteerer, steer_attention
 from .cfg_schedulers import (
     cfg_scale_cosine_ramp,
     cfg_scale_linear,
@@ -14,6 +12,9 @@ from .consistency_utils import (
     one_step_consistency_refine,
     temporal_ema_target,
 )
+from .gaussian_diffusion import INFERENCE_SOLVERS, GaussianDiffusion, create_diffusion
+from .inference_timesteps import build_inference_timesteps, list_timestep_schedules
+from .losses import get_loss_weight, get_timestep_loss_weight
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
 from .schedules import get_beta_schedule
@@ -46,4 +47,7 @@ __all__ = [
     "norm_thresholding",
     "spatial_norm_thresholding",
     "sample_training_timesteps",
+    "ASTConfig",
+    "AttentionSteerer",
+    "steer_attention",
 ]

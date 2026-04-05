@@ -10,14 +10,13 @@ For multi-style prompting with many adapters, optional scale normalization preve
 style blowout when users stack many LoRAs at high strengths.
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-
 
 _DOWN_SUFFIXES = (".lora_down.weight", ".lora_A.weight")
 _UP_SUFFIXES = (".lora_up.weight", ".lora_B.weight")
@@ -285,16 +284,19 @@ def apply_loras(
     role_budgets: Optional[Dict[str, float]] = None,
     stage_policy: str = "auto",
     role_stage_weights: Optional[Dict[str, Tuple[float, float, float]]] = None,
+    layer_group: str = "all",
 ) -> Tuple[nn.Module, int]:
     """
     Apply multiple adapter files with per-adapter scales.
 
-    ``normalize_scales`` keeps total |scale| per layer below ``max_total_scale`` to improve
-    multi-style stability when stacking many style LoRAs/LyCORIS/DoRA adapters.
-    Optional ``role_budgets`` applies per-role caps first (e.g. character/style/detail).
-    ``stage_policy`` can bias roles across depth (early/mid/late). ``auto`` enables
-    character-preserving routing when both character and style roles are present.
-    Returns (model, number_of_linear_layers_touched).
+    ``layer_group``: restrict which depth layers receive adapters.
+    - ``"all"`` (default) — apply to all layers.
+    - ``"first"`` — first third of layers only (structure/layout).
+    - ``"middle"`` — middle third (fine detail).
+    - ``"last"`` — last third (aesthetics/style).
+
+    This maps to the research finding that early DiT layers handle structure,
+    middle layers add detail, and late layers handle aesthetics.
     """
     by_layer: Dict[str, List[Tuple[_AdapterTensors, float, str]]] = {}
     for spec in lora_specs:
@@ -324,6 +326,25 @@ def apply_loras(
     known_indices = [i for i in (_extract_layer_index(k) for k in by_layer.keys()) if i is not None]
     min_idx = min(known_indices) if known_indices else 0
     max_idx = max(known_indices) if known_indices else 0
+
+    # Layer-group filtering: restrict adapters to first/middle/last third of depth.
+    lg = str(layer_group or "all").strip().lower()
+    if lg != "all" and known_indices:
+        depth_range = max_idx - min_idx
+        if depth_range > 0:
+            if lg == "first":
+                cutoff_lo, cutoff_hi = min_idx, min_idx + depth_range // 3
+            elif lg == "last":
+                cutoff_lo, cutoff_hi = min_idx + 2 * (depth_range // 3), max_idx
+            else:  # middle
+                cutoff_lo = min_idx + depth_range // 3
+                cutoff_hi = min_idx + 2 * (depth_range // 3)
+            filtered = {}
+            for k, v in by_layer.items():
+                idx = _extract_layer_index(k)
+                if idx is None or cutoff_lo <= idx <= cutoff_hi:
+                    filtered[k] = v
+            by_layer = filtered
 
     touched = 0
     for base_key, adapters in by_layer.items():

@@ -26,12 +26,11 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
-from torch.utils.data import DataLoader
-
 from config.train_config import get_dit_build_kwargs
 from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from models import DiT_models_text
+from torch.utils.data import DataLoader
 from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
 from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
 
