@@ -34,6 +34,8 @@ _CANONICAL: dict[str, Path] = {
     "op_preflight": _HERE / "ops" / "op_preflight.py",
     "orchestrate_pipeline": _HERE / "ops" / "orchestrate_pipeline.py",
     "auto_improve_loop": _HERE / "ops" / "auto_improve_loop.py",
+    "gen_searcher_bridge": _HERE / "ops" / "gen_searcher_bridge.py",
+    "pretrained_status": _HERE / "ops" / "pretrained_status.py",
     "startup_readiness": _HERE / "ops" / "startup_readiness.py",
     "benchmark_suite": _HERE / "benchmark_suite.py",
     "update_project_structure": _HERE / "repo" / "update_project_structure.py",

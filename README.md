@@ -490,6 +490,7 @@ sdx/
 | Document | What it covers |
 | :--- | :--- |
 | [`docs/README.md`](docs/README.md) | Full documentation index |
+| [`docs/wiki/HOME.md`](docs/wiki/HOME.md) | Repo wiki: architecture, models, training, inference, tools, and native stack |
 | [`docs/CODEBASE.md`](docs/CODEBASE.md) | Where things live and why |
 | [`scripts/tools/README.md`](scripts/tools/README.md) | Tooling index for benchmarking, auto-improve loop, hardcase mining, and ops checks |
 | [`docs/HOW_GENERATION_WORKS.md`](docs/HOW_GENERATION_WORKS.md) | End-to-end train → checkpoint → sample walkthrough |

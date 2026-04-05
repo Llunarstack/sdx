@@ -1369,6 +1369,31 @@ def main():
         "--prompt-file", type=str, default="", help="Read prompt from file (overrides --prompt when set)"
     )
     parser.add_argument(
+        "--agentic-facts-json",
+        type=str,
+        default="",
+        help="Optional JSON/JSONL with retrieved facts (e.g. Gen-Searcher output) merged into prompt before encoding.",
+    )
+    parser.add_argument(
+        "--agentic-facts-format",
+        type=str,
+        default="auto",
+        choices=["auto", "gen_searcher", "jsonl_text"],
+        help="Fact loader mode for --agentic-facts-json.",
+    )
+    parser.add_argument(
+        "--agentic-max-facts",
+        type=int,
+        default=16,
+        help="Max number of retrieved facts to merge into prompt.",
+    )
+    parser.add_argument(
+        "--agentic-facts-max-chars",
+        type=int,
+        default=2400,
+        help="Max total character budget for merged retrieved-facts context block.",
+    )
+    parser.add_argument(
         "--hard-style",
         type=str,
         default=None,
@@ -2276,6 +2301,45 @@ def main():
         prompt_to_encode, _emphasis_segments = parse_prompt_emphasis(args.prompt)
     else:
         prompt_to_encode, _emphasis_segments = args.prompt, []
+    # Optional agentic-search grounding (e.g. Gen-Searcher JSON/JSONL output).
+    facts_path = str(getattr(args, "agentic_facts_json", "") or "").strip()
+    if facts_path:
+        try:
+            from utils.prompt.rag_prompt import (
+                load_facts_from_gen_searcher_json,
+                load_facts_from_jsonl,
+                merge_facts_into_prompt,
+            )
+
+            facts_mode = str(getattr(args, "agentic_facts_format", "auto") or "auto").lower().strip()
+            max_facts = max(1, int(getattr(args, "agentic_max_facts", 16) or 16))
+            max_chars = max(256, int(getattr(args, "agentic_facts_max_chars", 2400) or 2400))
+            facts: list = []
+            if facts_mode in ("auto", "gen_searcher"):
+                facts = load_facts_from_gen_searcher_json(
+                    facts_path,
+                    max_entries=max_facts,
+                )
+            if not facts and facts_mode in ("auto", "jsonl_text"):
+                facts = load_facts_from_jsonl(
+                    facts_path,
+                    max_entries=max_facts,
+                )
+            if facts:
+                prompt_to_encode = merge_facts_into_prompt(
+                    prompt_to_encode,
+                    facts,
+                    max_chars=max_chars,
+                )
+                args.prompt = prompt_to_encode
+                print(
+                    f"Agentic grounding merged {len(facts)} facts from {facts_path}",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"Agentic grounding: no facts found in {facts_path}", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: agentic fact grounding failed: {e}", file=sys.stderr)
     if getattr(args, "boost_quality", False) and prompt_to_encode.strip():
         try:
             from data.caption_utils import QUALITY_PREFIX
