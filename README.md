@@ -450,7 +450,24 @@ Weights are resolved automatically at runtime via `utils/modeling/model_paths.py
 | CLIP ViT-L/14 | `pretrained/CLIP-ViT-L-14` | `openai/clip-vit-large-patch14` |
 | CLIP ViT-bigG/14 | `pretrained/CLIP-ViT-bigG-14` | `laion/CLIP-ViT-bigG-14-laion2B-39B-b160k` |
 | DINOv2-Large | `pretrained/DINOv2-Large` | `facebook/dinov2-large` |
+| DINOv2-Giant | `pretrained/DINOv2-Giant` | `facebook/dinov2-giant` |
+| Gen-Searcher 8B | `pretrained/GenSearcher-8B` | `GenSearcher/Gen-Searcher-8B` |
+| ImageReward | `pretrained/ImageReward` | `zai-org/ImageReward` |
+| PickScore v1 | `pretrained/PickScore_v1` | `yuvalkirstain/PickScore_v1` |
+| GroundingDINO Base | `pretrained/GroundingDINO-Base` | `IDEA-Research/grounding-dino-base` |
+| CountGD | `pretrained/CountGD` | `nikigoli/CountGD` |
+| TrOCR Large Printed | `pretrained/TrOCR-Large-Printed` | `microsoft/trocr-large-printed` |
+| PerceptCLIP IQA | `pretrained/PerceptCLIP_IQA` | `PerceptCLIP/PerceptCLIP_IQA` |
+| Depth Anything V2 Large | `pretrained/Depth-Anything-V2-Large` | `depth-anything/Depth-Anything-V2-Large` |
+| SAM2 Hiera Large | `pretrained/SAM2-Hiera-Large` | `facebook/sam2-hiera-large-hf` |
+| Real-ESRGAN | `pretrained/Real-ESRGAN` | `ai-forever/Real-ESRGAN` |
 | VAE (default) | `pretrained/sd-vae-ft-mse` | `stabilityai/sd-vae-ft-mse` |
+
+Inspect active local-vs-HF model resolution at any time:
+
+```bash
+python -m scripts.tools pretrained_status --out-json pretrained_status.json
+```
 
 ---
 
@@ -490,7 +507,6 @@ sdx/
 | Document | What it covers |
 | :--- | :--- |
 | [`docs/README.md`](docs/README.md) | Full documentation index |
-| [`docs/wiki/HOME.md`](docs/wiki/HOME.md) | Repo wiki: architecture, models, training, inference, tools, and native stack |
 | [`docs/CODEBASE.md`](docs/CODEBASE.md) | Where things live and why |
 | [`scripts/tools/README.md`](scripts/tools/README.md) | Tooling index for benchmarking, auto-improve loop, hardcase mining, and ops checks |
 | [`docs/HOW_GENERATION_WORKS.md`](docs/HOW_GENERATION_WORKS.md) | End-to-end train → checkpoint → sample walkthrough |
