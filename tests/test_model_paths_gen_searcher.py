@@ -45,3 +45,12 @@ def test_pretrained_catalog_has_core_rows():
     assert "StableCascade-Prior" in names
     assert "StableCascade-Decoder" in names
     assert "GenSearcher-8B" in names
+    assert "ImageReward" in names
+    assert "PickScore_v1" in names
+    assert "GroundingDINO-Base" in names
+    assert "CountGD" in names
+    assert "TrOCR-Large-Printed" in names
+    assert "PerceptCLIP_IQA" in names
+    assert "Depth-Anything-V2-Large" in names
+    assert "SAM2-Hiera-Large" in names
+    assert "Real-ESRGAN" in names
