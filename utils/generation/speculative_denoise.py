@@ -10,7 +10,7 @@ Intended for experimentation; tune ``draft_cfg_scale`` and ``blend_if_close`` ca
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import torch
 

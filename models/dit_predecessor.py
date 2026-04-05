@@ -1,6 +1,8 @@
 # DiT Predecessor: transformer with more and better features than DiT.
 # QK-norm (LLaMA/FLUX-style), SwiGLU MLP, AdaLN-Zero, deeper/wider default.
 # Same text conditioning interface as DiT_Text (style, control, negative prompt).
+# Typical generative failure modes (skin tangents, lighting, 2D style drift, etc.):
+#   docs/COMMON_SHORTCOMINGS_AI_IMAGES.md
 import torch
 import torch.nn as nn
 from timm.models.vision_transformer import PatchEmbed

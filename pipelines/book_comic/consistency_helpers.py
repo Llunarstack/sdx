@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, MutableMapping, Optional
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
@@ -122,11 +122,11 @@ def palette_lighting_clause(*, palette: str = "", lighting: str = "") -> str:
     """Color script + light direction (reduces drift when inpaint chain is weak)."""
     bits: List[str] = []
     p = (palette or "").strip()
-    l = (lighting or "").strip()
+    lighting_s = (lighting or "").strip()
     if p:
         bits.append(f"locked color palette: {p}")
-    if l:
-        bits.append(f"consistent lighting: {l}")
+    if lighting_s:
+        bits.append(f"consistent lighting: {lighting_s}")
     if not bits:
         return ""
     bits.append("same color grading across panels")

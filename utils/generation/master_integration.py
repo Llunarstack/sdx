@@ -18,15 +18,16 @@ except ImportError as e:
     print("Make sure you're running from the SDX root directory")
 
 # Advanced feature imports
-from utils.prompt.advanced_prompting import create_advanced_prompting_system
-from .anatomy_correction import create_anatomy_correction_system
-from utils.checkpoint.checkpoint_manager import CheckpointManager
-from utils.training.config_validator import estimate_memory_usage, suggest_optimizations, validate_train_config
-from utils.consistency.consistency_system import create_consistency_system
 from utils.analysis.data_analysis import DatasetAnalyzer
+from utils.checkpoint.checkpoint_manager import CheckpointManager
+from utils.consistency.consistency_system import create_consistency_system
+from utils.prompt.advanced_prompting import create_advanced_prompting_system
+from utils.training.config_validator import estimate_memory_usage, suggest_optimizations, validate_train_config
 from utils.training.error_handling import get_model_info, setup_logging, validate_checkpoint
-from .image_editing import create_editing_pipeline
 from utils.training.metrics import MetricsTracker, log_system_info
+
+from .anatomy_correction import create_anatomy_correction_system
+from .image_editing import create_editing_pipeline
 from .multimodal_generation import GenerationRequest, GenerationResult, create_multimodal_system
 
 # Advanced systems

@@ -32,7 +32,7 @@ def main() -> int:
     p.add_argument("-o", "--out", type=str, default="", help="Write CSV (default: stdout)")
     args = p.parse_args()
 
-    from sdx_native.native_tools import rust_noise_schedule_exe, run_rust_noise_schedule
+    from sdx_native.native_tools import run_rust_noise_schedule, rust_noise_schedule_exe
 
     if rust_noise_schedule_exe() is None:
         print(

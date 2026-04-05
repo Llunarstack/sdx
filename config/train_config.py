@@ -27,6 +27,15 @@ class TrainConfig:
     region_layout_tag: str = "[layout]"  # prefix before regional block; "" to disable
     # Prepend adherence tags to training captions (see data/caption_utils.py).
     boost_adherence_caption: bool = False
+    # Append failure-mode prompt/negative hints per caption (see config.defaults.ai_image_shortcomings).
+    train_shortcomings_mitigation: str = "none"  # "none" | "auto" | "all"
+    train_shortcomings_2d: bool = False
+    # Artist-first medium guidance per caption (see config.defaults.art_mediums).
+    train_art_guidance_mode: str = "none"  # "none" | "auto" | "all"
+    train_art_guidance_photography: bool = True
+    train_anatomy_guidance: str = "none"  # "none" | "lite" | "strong"
+    train_style_guidance_mode: str = "none"  # "none" | "auto" | "all"
+    train_style_guidance_artists: bool = True
     # NFKC + zero-width strip on training captions (see sdx_native.text_hygiene).
     caption_unicode_normalize: bool = False
     # Strip ( ) / [ ] emphasis brackets for T5 and pass token_weights to DiT
@@ -120,6 +129,10 @@ class TrainConfig:
     token_keep_min_value: float = 0.0   # residual gate floor for dropped tokens
     drop_path_rate: float = 0.0         # stochastic depth (0 = off)
     layerscale_init: float = 0.0        # > 0 enables LayerScale residual gains (e.g. 1e-5)
+    # QK-norm (SD3.5-style): normalise Q and K per head before attention.
+    # Improves training stability at high resolution and large batch sizes.
+    # Note: changes model architecture — not compatible with checkpoints trained without it.
+    qk_norm: bool = False
     # Block-wise AR mask (ACDiT-style): 0 = full bidirectional attention.
     # 2 = 2×2 blocks, 4 = 4×4 blocks in raster order. See docs/AR.md.
     num_ar_blocks: int = 0
@@ -353,6 +366,7 @@ def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: Optional[float] = N
         kw["token_keep_min_value"] = float(getattr(cfg, "token_keep_min_value", 0.0))
         kw["drop_path_rate"] = float(getattr(cfg, "drop_path_rate", 0.0))
         kw["layerscale_init"] = float(getattr(cfg, "layerscale_init", 0.0))
+        kw["qk_norm"] = bool(getattr(cfg, "qk_norm", False))
         kw["prompt_reinject_every_n"] = int(getattr(cfg, "prompt_reinject_every_n", 0))
         kw["prompt_reinject_alpha"] = float(getattr(cfg, "prompt_reinject_alpha", 0.0))
         kw["prompt_reinject_decay"] = float(getattr(cfg, "prompt_reinject_decay", 1.0))

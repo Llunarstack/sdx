@@ -15,13 +15,12 @@ from __future__ import annotations
 import csv
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple, Union
+from typing import Dict, List, Sequence, Tuple, Union
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from utils.prompt import content_controls as cc  # noqa: E402
-
 
 Row = Tuple[str, str, str]
 Attr = Union[List[str], Dict[str, List[str]]]

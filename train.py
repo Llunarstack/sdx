@@ -42,12 +42,12 @@ from diffusion.timestep_loss_weight import get_timestep_loss_weight
 from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
 from models.rae_latent_bridge import RAELatentBridge
+from training.train_args import build_train_config_from_args
+from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
 from utils.training.metrics import MetricsTracker, log_system_info
-from training.train_args import build_train_config_from_args
-from training.train_cli_parser import build_train_arg_parser
 
 
 def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
@@ -67,8 +67,8 @@ def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Op
     )
 
 
-from utils.modeling.model_viz import print_model_summary
-from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
+from utils.modeling.model_viz import print_model_summary  # noqa: E402
+from utils.modeling.text_encoder_bundle import load_text_encoder_bundle  # noqa: E402
 
 
 def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
@@ -1157,6 +1157,13 @@ def main(cfg: TrainConfig):
         region_caption_mode=getattr(cfg, "region_caption_mode", "append"),
         region_layout_tag=getattr(cfg, "region_layout_tag", "[layout]"),
         use_adherence_boost=bool(getattr(cfg, "boost_adherence_caption", False)),
+        train_shortcomings_mitigation=str(getattr(cfg, "train_shortcomings_mitigation", "none") or "none"),
+        train_shortcomings_2d=bool(getattr(cfg, "train_shortcomings_2d", False)),
+        train_art_guidance_mode=str(getattr(cfg, "train_art_guidance_mode", "none") or "none"),
+        train_art_guidance_photography=bool(getattr(cfg, "train_art_guidance_photography", True)),
+        train_anatomy_guidance=str(getattr(cfg, "train_anatomy_guidance", "none") or "none"),
+        train_style_guidance_mode=str(getattr(cfg, "train_style_guidance_mode", "none") or "none"),
+        train_style_guidance_artists=bool(getattr(cfg, "train_style_guidance_artists", True)),
         caption_unicode_normalize=bool(getattr(cfg, "caption_unicode_normalize", False)),
         resolution_buckets=res_buckets if res_buckets else None,
         bucket_seed=int(getattr(cfg, "global_seed", 42)),
@@ -1339,7 +1346,6 @@ def main(cfg: TrainConfig):
             captions = batch["captions"]
             if float(getattr(cfg, "train_originality_augment_prob", 0.0)) > 0:
                 import numpy as np
-
                 from utils.prompt.originality_augment import inject_originality_tokens
 
                 prob = float(cfg.train_originality_augment_prob)

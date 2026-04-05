@@ -10,9 +10,56 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 
+try:
+    from utils.native.image_metrics import (
+        maybe_count_components_native,
+        maybe_image_luma_stats_cuda,
+        maybe_image_stats_native,
+    )
+except Exception:  # pragma: no cover - optional native path
+    maybe_image_stats_native = None
+    maybe_image_luma_stats_cuda = None
+    maybe_count_components_native = None
+
 _clip_model = None
 _clip_processor = None
 _clip_model_id = None
+_PEOPLE_WORDS = {
+    "people",
+    "persons",
+    "person",
+    "character",
+    "characters",
+    "subject",
+    "subjects",
+    "man",
+    "men",
+    "woman",
+    "women",
+    "girl",
+    "girls",
+    "boy",
+    "boys",
+    "kid",
+    "kids",
+    "child",
+    "children",
+}
+_WORD_NUMBERS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
 
 
 def _norm01(scores: Sequence[float]) -> List[float]:
@@ -27,6 +74,13 @@ def _norm01(scores: Sequence[float]) -> List[float]:
 
 def score_edge_sharpness(rgb_uint8: np.ndarray) -> float:
     """Higher = sharper (Laplacian variance on grayscale)."""
+    if maybe_image_stats_native is not None:
+        try:
+            st = maybe_image_stats_native(rgb_uint8)
+            if st and "laplacian_var" in st:
+                return float(st["laplacian_var"])
+        except Exception:
+            pass
     try:
         import cv2
     except ImportError:
@@ -104,6 +158,20 @@ def score_exposure_balance(rgb_uint8: np.ndarray) -> float:
     Lightweight verifier score (LANDSCAPE §2): penalize heavy highlight/shadow clipping.
     Higher = more pixels in a mid-tone band (less blown-out / crushed).
     """
+    if maybe_image_luma_stats_cuda is not None:
+        try:
+            stc = maybe_image_luma_stats_cuda(rgb_uint8, clip_low=2, clip_high=253)
+            if stc and "clip_ratio" in stc:
+                return float(np.clip(1.0 - float(stc["clip_ratio"]), 0.0, 1.0))
+        except Exception:
+            pass
+    if maybe_image_stats_native is not None:
+        try:
+            st = maybe_image_stats_native(rgb_uint8, clip_low=2, clip_high=253)
+            if st and "clip_ratio" in st:
+                return float(np.clip(1.0 - float(st["clip_ratio"]), 0.0, 1.0))
+        except Exception:
+            pass
     x = rgb_uint8.astype(np.float32)
     gray = x.mean(axis=-1)
     clipped = np.sum((gray <= 2.0) | (gray >= 253.0))
@@ -157,6 +225,231 @@ def score_color_cast_neutrality(rgb_uint8: np.ndarray) -> float:
     return float(np.clip(1.0 - spread / 80.0, 0.0, 1.0))
 
 
+def score_saturation_balance(rgb_uint8: np.ndarray) -> float:
+    """
+    Heuristic [0,1]: penalize heavily over-saturated results.
+    Higher = more natural saturation balance.
+    """
+    x = rgb_uint8.astype(np.float32)
+    if x.ndim != 3 or x.shape[2] < 3:
+        return 0.5
+    maxc = np.max(x[..., :3], axis=-1)
+    minc = np.min(x[..., :3], axis=-1)
+    sat = np.where(maxc > 1e-6, (maxc - minc) / np.maximum(maxc, 1e-6), 0.0)
+    p95 = float(np.percentile(sat, 95))
+    # Keep a comfortable range around ~0.55; strongly penalize very high saturation tails.
+    if p95 <= 0.55:
+        return 1.0
+    return float(np.clip(1.0 - ((p95 - 0.55) / 0.45), 0.0, 1.0))
+
+
+def infer_expected_people_count(prompt: str) -> int:
+    """
+    Infer intended people count from prompt phrases.
+    Returns 0 when no count intent is detected.
+    """
+    p = (prompt or "").lower()
+    if not p:
+        return 0
+    people_terms = r"(?:people|persons|person|characters?|subjects?|men|women|girls?|boys?|kids?|children)"
+    patterns = [
+        rf"\bexactly\s+(\d+)\s+{people_terms}\b",
+        rf"\b(\d+)\s+{people_terms}\b",
+        r"\b(\d+)girls?\b",
+        r"\b(\d+)boys?\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, p)
+        if m:
+            try:
+                return max(0, int(m.group(1)))
+            except Exception:
+                pass
+    word_terms = "|".join(re.escape(k) for k in _WORD_NUMBERS.keys())
+    m2 = re.search(rf"\b({word_terms})\s+{people_terms}\b", p)
+    if m2:
+        return int(_WORD_NUMBERS.get(m2.group(1), 0))
+    return 0
+
+
+def infer_expected_object_count(prompt: str) -> Tuple[int, str]:
+    """
+    Infer intended repeated non-people object count from prompt text.
+    Returns (count, object_hint). count=0 means no object-count intent detected.
+    """
+    p = (prompt or "").lower()
+    if not p:
+        return 0, ""
+    number_words = "|".join(re.escape(k) for k in _WORD_NUMBERS.keys())
+    # Examples: "exactly 7 coins", "5 candles", "two windows"
+    pats = [
+        r"\bexactly\s+(\d+)\s+([a-z][a-z0-9_-]{2,})\b",
+        r"\b(\d+)\s+([a-z][a-z0-9_-]{2,})\b",
+        rf"\b({number_words})\s+([a-z][a-z0-9_-]{{2,}})\b",
+    ]
+    for pat in pats:
+        m = re.search(pat, p)
+        if not m:
+            continue
+        raw_num = m.group(1)
+        noun = str(m.group(2) or "").strip().lower()
+        if not noun or noun in _PEOPLE_WORDS:
+            continue
+        noun = noun.rstrip("s")
+        try:
+            if raw_num.isdigit():
+                n = int(raw_num)
+            else:
+                n = int(_WORD_NUMBERS.get(raw_num, 0))
+            if n > 0:
+                return n, noun
+        except Exception:
+            pass
+    return 0, ""
+
+
+def estimate_people_count(rgb_uint8: np.ndarray) -> int:
+    """
+    Lightweight heuristic person estimate using OpenCV face/body detectors.
+    """
+    try:
+        import cv2
+    except ImportError:
+        return -1
+    try:
+        gray = cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2GRAY)
+    except Exception:
+        return -1
+
+    faces_n = 0
+    try:
+        face_xml = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        face_cascade = cv2.CascadeClassifier(face_xml)
+        if not face_cascade.empty():
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.12, minNeighbors=4, minSize=(18, 18))
+            faces_n = int(len(faces))
+    except Exception:
+        faces_n = 0
+
+    body_n = 0
+    try:
+        hog = cv2.HOGDescriptor()
+        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        rects, _weights = hog.detectMultiScale(
+            rgb_uint8,
+            winStride=(8, 8),
+            padding=(8, 8),
+            scale=1.05,
+        )
+        body_n = int(len(rects))
+    except Exception:
+        body_n = 0
+
+    if faces_n <= 0 and body_n <= 0:
+        return 0
+    return max(faces_n, body_n)
+
+
+def score_people_count_match(rgb_uint8: np.ndarray, expected_count: int) -> float:
+    """
+    [0,1] score where 1 means estimated people count matches expected exactly.
+    """
+    exp = int(expected_count or 0)
+    if exp <= 0:
+        return 0.5
+    est = estimate_people_count(rgb_uint8)
+    if est < 0:
+        return 0.5
+    err = abs(est - exp)
+    denom = max(1, exp)
+    return float(np.clip(1.0 - (err / denom), 0.0, 1.0))
+
+
+def estimate_object_count(rgb_uint8: np.ndarray, object_hint: str = "") -> int:
+    """
+    Lightweight repeated-object count heuristic.
+    Uses Hough circles for circle-like hints, otherwise connected components.
+    """
+    try:
+        import cv2
+    except ImportError:
+        return -1
+    try:
+        gray = cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2GRAY)
+    except Exception:
+        return -1
+    h, w = gray.shape[:2]
+    hint = (object_hint or "").lower().strip()
+
+    if maybe_count_components_native is not None:
+        try:
+            area_min = max(12, int(h * w * 0.00015))
+            area_max = int(h * w * 0.25)
+            native_count = maybe_count_components_native(
+                rgb_uint8,
+                threshold=140,
+                min_area=area_min,
+                max_area=area_max,
+            )
+            if native_count is not None and native_count >= 0 and hint not in {"coin", "button", "ball", "circle", "bubble"}:
+                return int(native_count)
+        except Exception:
+            pass
+
+    if hint in {"coin", "button", "ball", "circle", "bubble"}:
+        try:
+            blur = cv2.GaussianBlur(gray, (7, 7), 1.2)
+            circles = cv2.HoughCircles(
+                blur,
+                cv2.HOUGH_GRADIENT,
+                dp=1.2,
+                minDist=max(8.0, float(min(h, w)) * 0.025),
+                param1=80,
+                param2=22,
+                minRadius=max(2, int(min(h, w) * 0.008)),
+                maxRadius=max(6, int(min(h, w) * 0.14)),
+            )
+            if circles is not None:
+                return int(circles.shape[1])
+        except Exception:
+            pass
+
+    try:
+        blur = cv2.GaussianBlur(gray, (5, 5), 0.0)
+        _thr, bw = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        kernel = np.ones((3, 3), dtype=np.uint8)
+        bw = cv2.morphologyEx(bw, cv2.MORPH_OPEN, kernel, iterations=1)
+        bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel, iterations=1)
+        n_labels, _labels, stats, _cent = cv2.connectedComponentsWithStats(bw, connectivity=8)
+        if n_labels <= 1:
+            return 0
+        area_min = max(12, int(h * w * 0.00015))
+        area_max = int(h * w * 0.25)
+        keep = 0
+        for i in range(1, n_labels):
+            a = int(stats[i, cv2.CC_STAT_AREA])
+            if area_min <= a <= area_max:
+                keep += 1
+        return int(keep)
+    except Exception:
+        return -1
+
+
+def score_object_count_match(rgb_uint8: np.ndarray, expected_count: int, object_hint: str = "") -> float:
+    """
+    [0,1] score where 1 means estimated object count matches expected exactly.
+    """
+    exp = int(expected_count or 0)
+    if exp <= 0:
+        return 0.5
+    est = estimate_object_count(rgb_uint8, object_hint=object_hint)
+    if est < 0:
+        return 0.5
+    err = abs(est - exp)
+    denom = max(1, exp)
+    return float(np.clip(1.0 - (err / denom), 0.0, 1.0))
+
+
 def pick_best_indices(
     rgb_images: List[np.ndarray],
     prompt: str,
@@ -164,10 +457,13 @@ def pick_best_indices(
     device: str,
     expected_text: str = "",
     clip_model_id: str = "openai/clip-vit-base-patch32",
+    expected_count: int = 0,
+    expected_count_target: str = "auto",
+    expected_count_object: str = "",
 ) -> Tuple[int, List[float]]:
     """
     Return (best_index, raw_scores_one_per_image).
-    metric: none|clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq
+    metric: none|clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count
     """
     metric = (metric or "none").lower().strip()
     n = len(rgb_images)
@@ -219,10 +515,62 @@ def pick_best_indices(
         s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
         s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
         s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
+        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
         combined = [
-            0.30 * c + 0.20 * e + 0.20 * x + 0.15 * t + 0.15 * k
-            for c, e, x, t, k in zip(s_clip, s_edge, s_exp, s_tile, s_cast)
+            0.27 * c + 0.18 * e + 0.18 * x + 0.14 * t + 0.12 * k + 0.11 * s
+            for c, e, x, t, k, s in zip(s_clip, s_edge, s_exp, s_tile, s_cast, s_sat)
         ]
+        return int(np.argmax(combined)), combined
+
+    if metric == "combo_count":
+        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
+        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
+        tgt = str(expected_count_target or "auto").strip().lower()
+        exp_count = int(expected_count or 0)
+        obj_hint = str(expected_count_object or "").strip().lower()
+        use_object_scoring = False
+        # auto => prefer explicit target, else infer people first, then non-people objects.
+        if tgt == "objects":
+            if exp_count <= 0:
+                exp_count, inf_obj = infer_expected_object_count(prompt)
+                if not obj_hint:
+                    obj_hint = inf_obj
+            use_object_scoring = True
+        elif tgt == "people":
+            if exp_count <= 0:
+                exp_count = infer_expected_people_count(prompt)
+            use_object_scoring = False
+        else:
+            if exp_count > 0:
+                # Explicit count in auto mode defaults to people unless object hint exists.
+                use_object_scoring = bool(obj_hint)
+            else:
+                exp_people = infer_expected_people_count(prompt)
+                if exp_people > 0:
+                    exp_count = exp_people
+                    use_object_scoring = False
+                else:
+                    exp_obj, inf_obj = infer_expected_object_count(prompt)
+                    exp_count = exp_obj
+                    obj_hint = obj_hint or inf_obj
+                    use_object_scoring = True
+        if exp_count > 0:
+            if use_object_scoring:
+                s_cnt = _norm01([score_object_count_match(im, exp_count, object_hint=obj_hint) for im in rgb_images])
+            else:
+                s_cnt = _norm01([score_people_count_match(im, exp_count) for im in rgb_images])
+            if expected_text and str(expected_text).strip():
+                s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
+                combined = [0.38 * c + 0.22 * e + 0.30 * n + 0.10 * o for c, e, n, o in zip(s_clip, s_edge, s_cnt, s_ocr)]
+            else:
+                combined = [0.45 * c + 0.25 * e + 0.30 * n for c, e, n in zip(s_clip, s_edge, s_cnt)]
+            return int(np.argmax(combined)), combined
+        # No count target found; fall back to standard combo behavior.
+        if expected_text and str(expected_text).strip():
+            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
+            combined = [0.5 * c + 0.35 * e + 0.15 * o for c, e, o in zip(s_clip, s_edge, s_ocr)]
+        else:
+            combined = [0.65 * c + 0.35 * e for c, e in zip(s_clip, s_edge)]
         return int(np.argmax(combined)), combined
 
     return 0, [0.0] * n

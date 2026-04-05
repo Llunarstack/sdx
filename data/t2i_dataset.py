@@ -5,24 +5,27 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from models.controlnet import control_type_to_id
 from PIL import Image
 from torch.utils.data import Dataset
+from utils.training.part_aware_training import (
+    PartAwareCaptionConfig,
+    apply_part_aware_caption_pipeline,
+    foveated_random_crop_box,
+)
 
-from models.controlnet import control_type_to_id
 from .caption_utils import (
     add_anti_blending_and_count,
+    apply_art_guidance_to_caption_pair,
     apply_pixai_emphasis,
+    apply_shortcomings_to_caption_pair,
+    apply_style_guidance_to_caption_pair,
     boost_domain_tags,
     boost_hard_style_tags,
     boost_quality_tags,
     merge_region_captions_into_caption,
     normalize_tag_order,
     prepend_adherence_boost,
-)
-from utils.training.part_aware_training import (
-    PartAwareCaptionConfig,
-    apply_part_aware_caption_pipeline,
-    foveated_random_crop_box,
 )
 
 try:
@@ -182,6 +185,13 @@ class Text2ImageDataset(Dataset):
         use_tag_order: bool = True,
         use_quality_boost: bool = True,
         use_adherence_boost: bool = False,
+        train_shortcomings_mitigation: str = "none",
+        train_shortcomings_2d: bool = False,
+        train_art_guidance_mode: str = "none",
+        train_art_guidance_photography: bool = True,
+        train_anatomy_guidance: str = "none",
+        train_style_guidance_mode: str = "none",
+        train_style_guidance_artists: bool = True,
         caption_unicode_normalize: bool = False,
         use_anti_blending: bool = True,
         latent_cache_dir: Optional[str] = None,
@@ -219,6 +229,13 @@ class Text2ImageDataset(Dataset):
         self.use_tag_order = use_tag_order
         self.use_quality_boost = use_quality_boost
         self.use_adherence_boost = use_adherence_boost
+        self.train_shortcomings_mitigation = str(train_shortcomings_mitigation or "none").strip().lower()
+        self.train_shortcomings_2d = bool(train_shortcomings_2d)
+        self.train_art_guidance_mode = str(train_art_guidance_mode or "none").strip().lower()
+        self.train_art_guidance_photography = bool(train_art_guidance_photography)
+        self.train_anatomy_guidance = str(train_anatomy_guidance or "none").strip().lower()
+        self.train_style_guidance_mode = str(train_style_guidance_mode or "none").strip().lower()
+        self.train_style_guidance_artists = bool(train_style_guidance_artists)
         self.caption_unicode_normalize = caption_unicode_normalize
         self.use_anti_blending = use_anti_blending
         self._crop_fn = {"center": _center_crop, "random": _random_crop, "largest_center": _largest_center_crop}.get(
@@ -445,6 +462,28 @@ class Text2ImageDataset(Dataset):
             caption = prepend_adherence_boost(caption, repeat_factor=2)
         if self.use_anti_blending:
             caption, negative_caption = add_anti_blending_and_count(caption, negative_caption)
+        if self.train_shortcomings_mitigation in ("auto", "all"):
+            caption, negative_caption = apply_shortcomings_to_caption_pair(
+                caption,
+                negative_caption,
+                mode=self.train_shortcomings_mitigation,
+                include_2d=self.train_shortcomings_2d,
+            )
+        if self.train_art_guidance_mode in ("auto", "all") or self.train_anatomy_guidance in ("lite", "strong"):
+            caption, negative_caption = apply_art_guidance_to_caption_pair(
+                caption,
+                negative_caption,
+                mode=self.train_art_guidance_mode,
+                include_photography=self.train_art_guidance_photography,
+                anatomy_mode=self.train_anatomy_guidance,
+            )
+        if self.train_style_guidance_mode in ("auto", "all"):
+            caption, negative_caption = apply_style_guidance_to_caption_pair(
+                caption,
+                negative_caption,
+                mode=self.train_style_guidance_mode,
+                include_artist_refs=self.train_style_guidance_artists,
+            )
         if self.max_caption_length:
             parts = caption.split(",")
             if self.shuffle_caption_parts and len(parts) > 1:

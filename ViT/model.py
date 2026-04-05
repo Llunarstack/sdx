@@ -6,7 +6,6 @@ import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from utils.architecture.ar_dit_vit import AR_COND_DIM, default_unknown_ar_batch
 
 

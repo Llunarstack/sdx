@@ -13,4 +13,4 @@ _np = Path(__file__).resolve().parents[2] / "native" / "python"
 if str(_np) not in sys.path:
     sys.path.insert(0, str(_np))
 
-from sdx_native.native_tools import *  # noqa: F403
+from sdx_native.native_tools import *  # noqa: E402,F403

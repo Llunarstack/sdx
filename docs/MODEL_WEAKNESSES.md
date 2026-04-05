@@ -123,7 +123,10 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 | Composition       | “clear composition”, “well proportioned” | `NEGATIVE_COMPOSITION`, `ANATOMY_NEGATIVES`     |
 
 **Code/config:**
-- `data/caption_utils.py` — `DOMAIN_TAGS`, `boost_domain_tags`, `NEGATIVE_ANATOMY`, `NEGATIVE_FACE`, `NEGATIVE_COMPOSITION`, `NEGATIVE_QUALITY`, `NEGATIVE_TEXT`, `NEGATIVE_ANATOMY_FULL`
+- `config/defaults/ai_image_shortcomings.py` — taxonomy + `mitigation_fragments` for `sample.py --shortcomings-mitigation` and `train.py --train-shortcomings-mitigation` (photoreal, **digital painting / concept / pixel / vector / game textures**, 3D render, plus optional 2D-anime packs with `--shortcomings-2d` / `--train-shortcomings-2d`; see [COMMON_SHORTCOMINGS_AI_IMAGES.md](COMMON_SHORTCOMINGS_AI_IMAGES.md)).
+- `config/defaults/art_mediums.py` — artist-first medium + anatomy/proportion guidance for `sample.py --art-guidance-mode --anatomy-guidance`, `train.py --train-art-guidance-mode --train-anatomy-guidance`, and book pipeline forwarding.
+- `config/defaults/style_guidance.py` — style-domain + artist/game-name guidance for `sample.py --style-guidance-mode`, `train.py --train-style-guidance-mode`, normalize-captions tooling, and book pipeline forwarding.
+- `data/caption_utils.py` — `DOMAIN_TAGS`, `boost_domain_tags`, `apply_shortcomings_to_caption_pair`, `NEGATIVE_ANATOMY`, `NEGATIVE_FACE`, `NEGATIVE_COMPOSITION`, `NEGATIVE_QUALITY`, `NEGATIVE_TEXT`, `NEGATIVE_ANATOMY_FULL`
 - `config/prompt_domains.py` — `ANATOMY_NEGATIVES`, `HAND_FIX_PROMPT_TIPS`, `PORTRAIT_ASPECT_TIPS`, `RECOMMENDED_NEGATIVE_BY_DOMAIN`
 
 ---
@@ -154,7 +157,7 @@ This section is the honest complement to §1–9 and [QUALITY_AND_ISSUES.md](QUA
 | Problem | Why models fail | What SDX has | What we **don’t** have |
 | :--- | :--- | :--- | :--- |
 | **Arbitrary spelled text** | Text is learned as texture; long strings are unstable. | OCR-guided **repair** when you know the target string (`sample.py` / `generate_book.py` + `utils/generation/text_rendering.py`); lettering negatives; book pipeline expected text. | General “render this exact paragraph” without **known** expected text; no diffusers-style dedicated text renderer layer in-core. |
-| **Exact counts** (“exactly 7 coins”) | No discrete counter in the denoiser. | Dataset-side `add_anti_blending_and_count`, explicit prompt counts, negatives for merging. | **Verifier** or constrained decoding that guarantees cardinality at inference. |
+| **Exact counts** (“exactly 7 coins”) | No discrete counter in the denoiser. | Dataset-side `add_anti_blending_and_count`, explicit prompt counts, negatives for merging, and inference pick-best `--pick-best combo_count` (+ `--expected-count`, `--expected-count-target`, `--expected-count-object`) as lightweight people/simple-object count verification. | No hard cardinality guarantee for arbitrary object classes; still heuristic without constrained decoding/segmentation. |
 | **Fine spatial logic** (“left hand holds blue cup, right waves”) | Conditioning is global; relations are fuzzy. | `SPATIAL_AWARENESS_TIPS`, `--subject-first`, early prompt ordering. | Scene-graph / layout-conditioned attention (ControlNet-class conditioning is only partially exposed via `control_cond_dim` on `DiT_Text` — not a full layout stack). |
 | **Physical plausibility** | No simulation; only statistics of pixels. | Tips, pick-best metrics (`utils/quality/test_time_pick.py`), orchestration hooks. | Physics engine, 3D consistency, reflection law enforcement ([`architecture_map`](../utils/architecture/architecture_map.py): `physical_grounding` = not in repo). |
 | **Identity across unrelated images** | No persistent memory per user. | `--character-sheet`, **`--reference-image`** + CLIP → extra cross-attn tokens (`DiT_Text`), book anchors, `consistency_helpers`. | Strong identity still needs **trained** `--reference-adapter-pt` or LoRA; default projector is randomly initialized. |
@@ -166,7 +169,7 @@ This section is the honest complement to §1–9 and [QUALITY_AND_ISSUES.md](QUA
 | :--- | :--- | :--- |
 | **Hands / anatomy** | `DOMAIN_TAGS`, `NEGATIVE_ANATOMY`, `HAND_FIX_PROMPT_TIPS` | No **auxiliary anatomy loss** or hand keypoint head on the denoiser ([`auxiliary_structure_supervision`](../utils/architecture/architecture_map.py)). |
 | **Distant / small faces** | `DISTANT_FACE_TIPS`, `GARBLED_FACE_TIPS` in `config/prompt_domains.py` | In `sample.py`: **`--face-enhance`** (Haar + local sharpen/contrast), **`--face-restore-shell`** for external GFPGAN/ADetailer CLIs; not a full in-repo face restoration model. |
-| **Composition / cropping** | `NEGATIVE_COMPOSITION`, quality tags | No automatic “subject saliency” crop at inference (training has `crop-mode` only). |
+| **Composition / cropping** | `NEGATIVE_COMPOSITION`, quality tags, inference `--resize-mode center_crop|saliency_crop` (+ `--resize-saliency-face-bias`) | Saliency crop is heuristic (not semantic segmentation/subject detector); complex multi-subject scenes may still need manual framing. |
 | **Style / concept bleeding** | `--anti-bleed`, dataset boosts | No token-level cross-attention steering (SAG / per-token scale) — see [IMPROVEMENTS.md](IMPROVEMENTS.md) §2.2. |
 
 ### C. Training / inference tooling gaps (listed elsewhere, summarized)
