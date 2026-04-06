@@ -1,6 +1,8 @@
 from .advanced_prompting import *  # noqa: F401,F403
+from .auto_oc import *  # noqa: F401,F403
 from .content_controls import *  # noqa: F401,F403
 from .neg_filter import filter_negative_by_positive, positive_token_set  # noqa: F401
+from .photo_realism import *  # noqa: F401,F403
 from .prompt_emphasis import (  # noqa: F401
     batch_encoder_token_weights,
     parse_prompt_emphasis,

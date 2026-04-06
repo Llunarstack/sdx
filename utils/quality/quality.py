@@ -363,3 +363,89 @@ def add_lens_glare(
     if is_uint:
         return out.astype(np.uint8)
     return out
+
+
+def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: float = 0.6) -> np.ndarray:
+    """
+    Lightweight photographic color grading presets.
+    Presets: none|natural|teal_orange|kodak_portra|cinestill_800t|noir_bw|fujifilm_eterna
+    """
+    p = str(preset or "none").lower().strip()
+    if p == "none":
+        return image
+    s = float(min(1.0, max(0.0, strength)))
+    if s <= 0:
+        return image
+
+    is_uint = image.dtype == np.uint8
+    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
+    lum = _rgb_to_luminance(img) / 255.0
+    sh = np.clip(1.0 - lum, 0.0, 1.0)[..., None]
+    hi = np.clip(lum, 0.0, 1.0)[..., None]
+
+    if p == "natural":
+        out = gentle_s_curve_luminance(img, strength=0.08 * s)
+        out = saturation_rgb(out, factor=1.0 + 0.03 * s)
+    elif p == "teal_orange":
+        out = img.copy()
+        out[..., 1] += 7.0 * s * sh[..., 0]
+        out[..., 2] += 13.0 * s * sh[..., 0]
+        out[..., 0] += 14.0 * s * hi[..., 0]
+        out = gentle_s_curve_luminance(out, strength=0.12 * s)
+    elif p == "kodak_portra":
+        out = img.copy()
+        out[..., 0] += 10.0 * s
+        out[..., 1] += 5.0 * s
+        out[..., 2] -= 4.0 * s
+        out = saturation_rgb(out, factor=1.0 - 0.05 * s)
+        out = gentle_s_curve_luminance(out, strength=0.09 * s)
+    elif p == "cinestill_800t":
+        out = img.copy()
+        out[..., 2] += 10.0 * s * sh[..., 0]
+        out[..., 0] += 10.0 * s * hi[..., 0]
+        out = contrast(out, factor=1.0 + 0.05 * s)
+    elif p == "noir_bw":
+        g = _rgb_to_luminance(img)
+        out = np.stack([g, g, g], axis=-1)
+        out = contrast(out, factor=1.0 + 0.14 * s)
+    elif p == "fujifilm_eterna":
+        out = img.copy()
+        out[..., 1] += 5.0 * s
+        out[..., 2] += 2.0 * s
+        out = saturation_rgb(out, factor=1.0 - 0.08 * s)
+        out = gentle_s_curve_luminance(out, strength=0.06 * s)
+    else:
+        out = img
+
+    out = np.clip(np.asarray(out, dtype=np.float32), 0.0, 255.0)
+    return out.astype(np.uint8) if is_uint else out
+
+
+def apply_photo_filter(image: np.ndarray, filter_name: str = "none", strength: float = 0.5, seed: Optional[int] = None) -> np.ndarray:
+    """
+    Lightweight photography filter simulation.
+    Filters: none|pro_mist|polarizer|nd_long_exposure|vintage_diffusion|clean_digital
+    """
+    f = str(filter_name or "none").lower().strip()
+    if f == "none":
+        return image
+    s = float(min(1.0, max(0.0, strength)))
+    if s <= 0:
+        return image
+    out = image
+    if f == "pro_mist":
+        out = add_lens_glare(out, strength=0.05 + 0.09 * s, seed=seed)
+        out = chroma_smooth_light(out, amount=0.10 * s, sigma=1.2)
+        out = contrast(out, factor=1.0 - 0.03 * s)
+    elif f == "polarizer":
+        out = saturation_rgb(out, factor=1.0 + 0.08 * s)
+        out = gentle_s_curve_luminance(out, strength=0.08 * s)
+    elif f == "nd_long_exposure":
+        out = add_motion_blur(out, amount=0.10 + 0.16 * s, angle_deg=0.0, seed=seed)
+    elif f == "vintage_diffusion":
+        out = contrast(out, factor=1.0 - 0.06 * s)
+        out = add_film_grain(out, amount=0.008 + 0.012 * s, seed=seed)
+    elif f == "clean_digital":
+        out = chroma_smooth_light(out, amount=0.08 * s, sigma=0.9)
+        out = luminance_clarity(out, amount=0.08 * s, radius=0.9)
+    return np.clip(np.asarray(out), 0, 255).astype(np.uint8)
