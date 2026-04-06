@@ -1,0 +1,246 @@
+{
+  "models": [
+    {
+      "name": "T5-XXL",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL",
+      "hf_fallback": "google/t5-v1_1-xxl",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL",
+      "is_local": true,
+      "size_gb": 41.483
+    },
+    {
+      "name": "CLIP-ViT-L-14",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CLIP-ViT-L-14",
+      "hf_fallback": "openai/clip-vit-large-patch14",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CLIP-ViT-L-14",
+      "is_local": true,
+      "size_gb": 1.597
+    },
+    {
+      "name": "CLIP-ViT-bigG-14",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CLIP-ViT-bigG-14",
+      "hf_fallback": "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CLIP-ViT-bigG-14",
+      "is_local": true,
+      "size_gb": 18.925
+    },
+    {
+      "name": "DINOv2-Large",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Large",
+      "hf_fallback": "facebook/dinov2-large",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Large",
+      "is_local": true,
+      "size_gb": 1.134
+    },
+    {
+      "name": "DINOv2-Giant",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Giant",
+      "hf_fallback": "facebook/dinov2-giant",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Giant",
+      "is_local": true,
+      "size_gb": 4.234
+    },
+    {
+      "name": "SigLIP-SO400M",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\SigLIP-SO400M",
+      "hf_fallback": "google/siglip-so400m-patch14-384",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\SigLIP-SO400M",
+      "is_local": true,
+      "size_gb": 3.274
+    },
+    {
+      "name": "Qwen2.5-14B-Instruct",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Qwen2.5-14B-Instruct",
+      "hf_fallback": "Qwen/Qwen2.5-14B-Instruct",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Qwen2.5-14B-Instruct",
+      "is_local": true,
+      "size_gb": 27.522
+    },
+    {
+      "name": "StableCascade-Prior",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Prior",
+      "hf_fallback": "stabilityai/stable-cascade-prior",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Prior",
+      "is_local": true,
+      "size_gb": 17.094
+    },
+    {
+      "name": "StableCascade-Decoder",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Decoder",
+      "hf_fallback": "stabilityai/stable-cascade",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Decoder",
+      "is_local": true,
+      "size_gb": 7.279
+    },
+    {
+      "name": "GenSearcher-8B",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GenSearcher-8B",
+      "hf_fallback": "GenSearcher/Gen-Searcher-8B",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GenSearcher-8B",
+      "is_local": true,
+      "size_gb": 16.345,
+      "gen_searcher_ok": true,
+      "gen_searcher_missing": []
+    },
+    {
+      "name": "ImageReward",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\ImageReward",
+      "hf_fallback": "zai-org/ImageReward",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\ImageReward",
+      "is_local": true,
+      "size_gb": 1.664
+    },
+    {
+      "name": "PickScore_v1",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PickScore_v1",
+      "hf_fallback": "yuvalkirstain/PickScore_v1",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PickScore_v1",
+      "is_local": true,
+      "size_gb": 3.677
+    },
+    {
+      "name": "GroundingDINO-Base",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GroundingDINO-Base",
+      "hf_fallback": "IDEA-Research/grounding-dino-base",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GroundingDINO-Base",
+      "is_local": true,
+      "size_gb": 0.87
+    },
+    {
+      "name": "CountGD",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CountGD",
+      "hf_fallback": "nikigoli/CountGD",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CountGD",
+      "is_local": true,
+      "size_gb": 0.873
+    },
+    {
+      "name": "TrOCR-Large-Printed",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\TrOCR-Large-Printed",
+      "hf_fallback": "microsoft/trocr-large-printed",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\TrOCR-Large-Printed",
+      "is_local": true,
+      "size_gb": 2.267
+    },
+    {
+      "name": "PerceptCLIP_IQA",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PerceptCLIP_IQA",
+      "hf_fallback": "PerceptCLIP/PerceptCLIP_IQA",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PerceptCLIP_IQA",
+      "is_local": true,
+      "size_gb": 1.143
+    },
+    {
+      "name": "Depth-Anything-V2-Large",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Depth-Anything-V2-Large",
+      "hf_fallback": "depth-anything/Depth-Anything-V2-Large",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Depth-Anything-V2-Large",
+      "is_local": true,
+      "size_gb": 1.249
+    },
+    {
+      "name": "SAM2-Hiera-Large",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\SAM2-Hiera-Large",
+      "hf_fallback": "facebook/sam2-hiera-large-hf",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\SAM2-Hiera-Large",
+      "is_local": true,
+      "size_gb": 0.836
+    },
+    {
+      "name": "Real-ESRGAN",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Real-ESRGAN",
+      "hf_fallback": "ai-forever/Real-ESRGAN",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Real-ESRGAN",
+      "is_local": true,
+      "size_gb": 0.187
+    },
+    {
+      "name": "LongCLIP-L",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LongCLIP-L",
+      "hf_fallback": "creative-graphic-design/LongCLIP-L",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LongCLIP-L",
+      "is_local": true,
+      "size_gb": 1.598
+    },
+    {
+      "name": "moondream2",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
+      "hf_fallback": "vikhyatk/moondream2",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
+      "is_local": true,
+      "size_gb": 3.592
+    },
+    {
+      "name": "Marigold-Depth-v1-1",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Marigold-Depth-v1-1",
+      "hf_fallback": "prs-eth/marigold-depth-v1-1",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Marigold-Depth-v1-1",
+      "is_local": true,
+      "size_gb": 12.805
+    },
+    {
+      "name": "Marigold-Normals-v1-1",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Marigold-Normals-v1-1",
+      "hf_fallback": "prs-eth/marigold-normals-v1-1",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Marigold-Normals-v1-1",
+      "is_local": true,
+      "size_gb": 14.418
+    },
+    {
+      "name": "TAESD",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\TAESD",
+      "hf_fallback": "madebyollin/taesd",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\TAESD",
+      "is_local": true,
+      "size_gb": 0.027
+    },
+    {
+      "name": "TAESDXL",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\TAESDXL",
+      "hf_fallback": "madebyollin/taesdxl",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\TAESDXL",
+      "is_local": true,
+      "size_gb": 0.027
+    },
+    {
+      "name": "CodeFormer",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CodeFormer",
+      "hf_fallback": "sczhou/CodeFormer",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CodeFormer",
+      "is_local": true,
+      "size_gb": 0.532
+    },
+    {
+      "name": "Consistency-Decoder",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Consistency-Decoder",
+      "hf_fallback": "openai/consistency-decoder",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\Consistency-Decoder",
+      "is_local": true,
+      "size_gb": 2.442
+    },
+    {
+      "name": "ConvNeXtV2-Large",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\ConvNeXtV2-Large",
+      "hf_fallback": "facebook/convnextv2-large-22k-384",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\ConvNeXtV2-Large",
+      "is_local": true,
+      "size_gb": 1.475
+    },
+    {
+      "name": "LAION-Aesthetic-v2",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LAION-Aesthetic-v2",
+      "hf_fallback": "christophschuhmann/improved-aesthetic-predictor",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LAION-Aesthetic-v2",
+      "is_local": true,
+      "size_gb": 0.01
+    },
+    {
+      "name": "AnyDoor-Ref",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
+      "hf_fallback": "camenduru/AnyDoor",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
+      "is_local": true,
+      "size_gb": 10.34
+    }
+  ]
+}
