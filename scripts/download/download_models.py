@@ -17,6 +17,7 @@ To free space after downloading everything, run: python scripts/download/remove_
 import argparse
 import os
 import sys
+import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
@@ -43,6 +44,20 @@ CLIP_REPOS = [
 ]
 LLM_DEFAULT = "HuggingFaceTB/SmolLM2-360M-Instruct"
 LLM_BEST = "Qwen/Qwen2.5-7B-Instruct"
+
+ADVANCED_REPOS = [
+    ("creative-graphic-design/LongCLIP-L", "LongCLIP-L"),
+    ("vikhyatk/moondream2", "moondream2"),
+    ("prs-eth/marigold-depth-v1-1", "Marigold-Depth-v1-1"),
+    ("prs-eth/marigold-normals-v1-1", "Marigold-Normals-v1-1"),
+    ("madebyollin/taesd", "TAESD"),
+    ("madebyollin/taesdxl", "TAESDXL"),
+    ("openai/consistency-decoder", "Consistency-Decoder"),
+    ("facebook/convnextv2-large-22k-384", "ConvNeXtV2-Large"),
+    ("camenduru/improved-aesthetic-predictor", "LAION-Aesthetic-v2"),
+    # Non-standard repo layout but useful for identity-preserving experiments.
+    ("camenduru/AnyDoor", "AnyDoor-Ref"),
+]
 
 # Only download files needed to load the model (no README, .gitattributes, LICENSE, etc.)
 ALLOW_T5 = [
@@ -77,6 +92,27 @@ ALLOW_LLM = [
     "merges.txt",
 ]
 
+ALLOW_ADVANCED_GENERIC = [
+    "config.json",
+    "model_index.json",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "generation_config.json",
+    "*.safetensors",
+    "*.bin",
+    "*.pt",
+    "*.ckpt",
+    "*.pth",
+]
+
+CODEFORMER_FILES = {
+    "weights/CodeFormer/codeformer.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
+    "weights/facelib/detection_Resnet50_Final.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth",
+    "weights/facelib/parsing_parsenet.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth",
+}
+
 
 def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=None):
     from huggingface_hub import snapshot_download
@@ -104,6 +140,11 @@ def main():
     parser.add_argument(
         "--llm-best", action="store_true", help="Download best LLM (Qwen2.5-7B-Instruct) for prompt expansion"
     )
+    parser.add_argument(
+        "--advanced",
+        action="store_true",
+        help="Download advanced optional models (LongCLIP, moondream2, Marigold, TAESD, CodeFormer, ConvNeXtV2, consistency decoder, aesthetic predictor, AnyDoor ref).",
+    )
     parser.add_argument("--all", action="store_true", help="Download all T5 sizes, all VAEs, CLIP, and both LLMs")
     parser.add_argument("--max-workers", type=int, default=4, help="Parallel download workers")
     args = parser.parse_args()
@@ -113,6 +154,7 @@ def main():
     do_clip = args.clip or args.all
     do_llm = args.llm or args.all
     do_llm_best = args.llm_best or args.all
+    do_advanced = args.advanced
 
     try:
         import huggingface_hub  # noqa: F401
@@ -159,8 +201,22 @@ def main():
         download(LLM_BEST, local_dir, args.max_workers, allow_patterns=ALLOW_LLM)
         n += 1
 
+    if do_advanced:
+        for repo_id, folder in ADVANCED_REPOS:
+            local_dir = os.path.join(args.model_dir, folder)
+            print(f"Downloading advanced model (essential files only): {repo_id} -> {local_dir}")
+            download(repo_id, local_dir, args.max_workers, allow_patterns=ALLOW_ADVANCED_GENERIC)
+            n += 1
+        codeformer_root = os.path.join(args.model_dir, "CodeFormer")
+        for rel, url in CODEFORMER_FILES.items():
+            target = os.path.join(codeformer_root, rel)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            print(f"Downloading CodeFormer weight: {url} -> {target}")
+            urllib.request.urlretrieve(url, target)
+        n += 1
+
     if n == 0:
-        print("Choose at least one: --t5, --vae, --clip, --llm, --llm-best, or --all", file=sys.stderr)
+        print("Choose at least one: --t5, --vae, --clip, --llm, --llm-best, --advanced, or --all", file=sys.stderr)
         return 1
 
     print(f"Done. {n} model(s) in {args.model_dir}")
