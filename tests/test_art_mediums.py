@@ -50,3 +50,27 @@ def test_detect_new_storyboard_and_diorama_aliases():
     assert "storyboard_sketch" in ids
     assert "miniature_diorama_photo" in ids
 
+
+def test_guidance_adds_color_theory_and_render_terms_for_2d():
+    pos, neg = guidance_fragments(
+        "digital painting concept art character portrait",
+        "auto",
+        include_photography=False,
+        anatomy_mode="none",
+    )
+    assert "warm-cool balance" in pos.lower()
+    assert "blend-mode discipline" in pos.lower()
+    assert "banded gradients" in neg.lower()
+
+
+def test_guidance_adds_pbr_terms_for_3d():
+    pos, neg = guidance_fragments(
+        "hard surface archviz 3d render",
+        "auto",
+        include_photography=False,
+        anatomy_mode="none",
+    )
+    assert "physically based shading logic" in pos.lower()
+    assert "roughness/metalness" in pos.lower()
+    assert "inconsistent brdf" in neg.lower()
+

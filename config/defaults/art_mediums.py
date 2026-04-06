@@ -320,6 +320,77 @@ ANATOMY_NEG_STRONG = (
     "extra fingers, fused fingers, floating feet"
 )
 
+COLOR_THEORY_CORE_POS = (
+    "strong value grouping, intentional warm-cool balance, controlled saturation hierarchy, "
+    "clear primary-secondary-accent color roles, hue-shifted lights and shadows for material depth"
+)
+COLOR_THEORY_CORE_NEG = (
+    "random palette drift, uncontrolled saturation clipping, value-muddy focal hierarchy, "
+    "flat local color without temperature variation"
+)
+
+TRADITIONAL_COLOR_MIX_POS = (
+    "pigment-aware color mixing, transparent glaze layering, subtractive color behavior, "
+    "edge-softening through wet-in-wet transitions"
+)
+TRADITIONAL_COLOR_MIX_NEG = (
+    "digital plastic gradients in traditional media, impossible pigment behavior, chalky muddy overmixing"
+)
+
+DIGITAL_2D_RENDER_POS = (
+    "clean gradient control, blend-mode discipline, atmospheric perspective color shift by depth, "
+    "rim/bounce light color separation, readable shadow family temperature control"
+)
+DIGITAL_2D_RENDER_NEG = (
+    "banded gradients, uncontrolled overlay-color wash, noisy blend-mode artifacts, over-smoothed value planes"
+)
+
+RENDER_3D_PBR_POS = (
+    "physically based shading logic, coherent roughness/metalness response, global-illumination bounce color, "
+    "subsurface scattering where appropriate, filmic tone mapping with preserved highlight rolloff"
+)
+RENDER_3D_PBR_NEG = (
+    "inconsistent BRDF response, broken roughness-metal balance, plastic fake reflections, "
+    "non-physical shadow color contamination, clipped highlights with no rolloff"
+)
+
+PHOTO_COLOR_GRADE_POS = (
+    "photographic color pipeline consistency, scene-referred exposure logic, highlight/shadow color separation, "
+    "natural white-balance control, restrained cinematic grade"
+)
+PHOTO_COLOR_GRADE_NEG = (
+    "overprocessed HDR look, crushed blacks with neon highlights, white-balance instability, color-channel clipping"
+)
+
+
+def _color_render_fragments(spec_ids: Sequence[str]) -> Tuple[str, str]:
+    """
+    Add medium-aware color theory / shading / rendering guidance.
+    """
+    ids = set(spec_ids)
+    pos_parts: List[str] = [COLOR_THEORY_CORE_POS]
+    neg_parts: List[str] = [COLOR_THEORY_CORE_NEG]
+
+    has_3d = bool(ids & {"hard_surface_3d", "archviz_3d", "toon_3d", "stylized_game_texture"})
+    has_photo = any(i.endswith("_photo") or "photo" in i for i in ids)
+    has_traditional = bool(ids & {"oil_painting", "watercolor", "gouache_acrylic", "pastel_crayon", "tempera_fresco", "ink_wash_calligraphy"})
+    has_digital_2d = bool(ids & {"digital_painting", "concept_matte", "vector_flat", "pixel_art", "anime_digital_render", "matte_concept_dev"})
+
+    if has_traditional:
+        pos_parts.append(TRADITIONAL_COLOR_MIX_POS)
+        neg_parts.append(TRADITIONAL_COLOR_MIX_NEG)
+    if has_digital_2d:
+        pos_parts.append(DIGITAL_2D_RENDER_POS)
+        neg_parts.append(DIGITAL_2D_RENDER_NEG)
+    if has_3d:
+        pos_parts.append(RENDER_3D_PBR_POS)
+        neg_parts.append(RENDER_3D_PBR_NEG)
+    if has_photo:
+        pos_parts.append(PHOTO_COLOR_GRADE_POS)
+        neg_parts.append(PHOTO_COLOR_GRADE_NEG)
+
+    return merge_csv_unique(*pos_parts), merge_csv_unique(*neg_parts)
+
 
 def detect_medium_ids(prompt: str, *, include_photography: bool) -> Tuple[str, ...]:
     if not prompt or not prompt.strip():
@@ -360,8 +431,12 @@ def guidance_fragments(
         specs = [s for s in MEDIUM_SPECS if include_photography or not s.is_photography]
     else:
         specs = [s for s in MEDIUM_SPECS if s.id in detect_medium_ids(prompt, include_photography=include_photography)]
+    spec_ids = tuple(s.id for s in specs)
     pos = merge_csv_unique(*(s.positive_hints for s in specs))
     neg = merge_csv_unique(*(s.negative_hints for s in specs))
+    cpos, cneg = _color_render_fragments(spec_ids)
+    pos = merge_csv_unique(pos, cpos)
+    neg = merge_csv_unique(neg, cneg)
     apos, aneg = _anatomy_fragments(prompt, anatomy_mode)
     return merge_csv_unique(pos, apos), merge_csv_unique(neg, aneg)
 

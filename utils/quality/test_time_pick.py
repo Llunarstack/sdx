@@ -278,6 +278,65 @@ def score_saturation_balance(rgb_uint8: np.ndarray) -> float:
     return float(np.clip(1.0 - ((p95 - 0.55) / 0.45), 0.0, 1.0))
 
 
+def score_dynamic_range_headroom(rgb_uint8: np.ndarray) -> float:
+    """
+    [0,1] score: high when highlights/shadows retain headroom and local contrast is present.
+    """
+    x = rgb_uint8.astype(np.float32)
+    if x.ndim == 3 and x.shape[2] >= 3:
+        lum = 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
+    else:
+        lum = x if x.ndim == 2 else x[..., 0]
+    p1 = float(np.percentile(lum, 1))
+    p99 = float(np.percentile(lum, 99))
+    span = max(0.0, p99 - p1)
+    span_score = float(np.clip(span / 190.0, 0.0, 1.0))
+    clip_penalty = float(np.clip(((2.0 - p1) / 8.0), 0.0, 1.0) + np.clip(((p99 - 253.0) / 8.0), 0.0, 1.0))
+    clip_penalty = min(1.0, clip_penalty)
+    return float(np.clip(0.78 * span_score + 0.22 * (1.0 - clip_penalty), 0.0, 1.0))
+
+
+def score_photographic_detail_balance(rgb_uint8: np.ndarray) -> float:
+    """
+    [0,1] score: prefers realistic detail (not mushy, not over-sharpened halos).
+    """
+    edge = float(score_edge_sharpness(rgb_uint8))
+    # Target Laplacian variance band for photo-like sharpness.
+    if edge <= 35.0:
+        return float(np.clip(edge / 35.0, 0.0, 1.0) * 0.65)
+    if edge <= 220.0:
+        return float(np.clip(0.75 + 0.25 * ((edge - 35.0) / 185.0), 0.0, 1.0))
+    over = min(1.0, (edge - 220.0) / 500.0)
+    return float(np.clip(1.0 - 0.55 * over, 0.0, 1.0))
+
+
+def score_skin_tone_naturalness(rgb_uint8: np.ndarray) -> float:
+    """
+    [0,1] skin-likeness sanity check in YCbCr space for human-photo prompts.
+    Returns neutral 0.5 when no skin-like pixels are present.
+    """
+    x = rgb_uint8.astype(np.float32)
+    if x.ndim != 3 or x.shape[2] < 3:
+        return 0.5
+    r = x[..., 0]
+    g = x[..., 1]
+    b = x[..., 2]
+    y = 0.299 * r + 0.587 * g + 0.114 * b
+    cb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b
+    cr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b
+    # Broad skin cluster bounds.
+    mask = (cb >= 77.0) & (cb <= 135.0) & (cr >= 133.0) & (cr <= 175.0) & (y >= 35.0) & (y <= 235.0)
+    ratio = float(np.mean(mask))
+    if ratio < 0.005:
+        return 0.5
+    # Penalize extremely saturated skin candidates.
+    sat_proxy = np.abs(r - g) + np.abs(g - b)
+    sat_skin = float(np.percentile(sat_proxy[mask], 90)) if np.any(mask) else 0.0
+    sat_score = float(np.clip(1.0 - ((sat_skin - 70.0) / 140.0), 0.0, 1.0))
+    ratio_score = float(np.clip(ratio / 0.18, 0.0, 1.0))
+    return float(np.clip(0.45 + 0.35 * ratio_score + 0.20 * sat_score, 0.0, 1.0))
+
+
 def infer_expected_people_count(prompt: str) -> int:
     """
     Infer intended people count from prompt phrases.
@@ -498,7 +557,7 @@ def pick_best_indices(
 ) -> Tuple[int, List[float]]:
     """
     Return (best_index, raw_scores_one_per_image).
-    metric: none|clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count
+    metric: none|clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count|combo_realism
     """
     metric = (metric or "none").lower().strip()
     n = len(rgb_images)
@@ -603,6 +662,28 @@ def pick_best_indices(
             combined = _weighted_sum([s_clip, s_edge, s_ocr], [0.5, 0.35, 0.15])
         else:
             combined = _weighted_sum([s_clip, s_edge], [0.65, 0.35])
+        return int(np.argmax(combined)), combined
+
+    if metric == "combo_realism":
+        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
+        s_det = _norm01([score_photographic_detail_balance(im) for im in rgb_images])
+        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
+        s_dyn = _norm01([score_dynamic_range_headroom(im) for im in rgb_images])
+        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
+        s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
+        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
+        s_skin = _norm01([score_skin_tone_naturalness(im) for im in rgb_images])
+        if expected_text and str(expected_text).strip():
+            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
+            combined = _weighted_sum(
+                [s_clip, s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin, s_ocr],
+                [0.24, 0.14, 0.14, 0.12, 0.08, 0.08, 0.08, 0.08, 0.04],
+            )
+        else:
+            combined = _weighted_sum(
+                [s_clip, s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin],
+                [0.26, 0.16, 0.15, 0.13, 0.09, 0.08, 0.07, 0.06],
+            )
         return int(np.argmax(combined)), combined
 
     return 0, [0.0] * n
