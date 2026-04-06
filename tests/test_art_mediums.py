@@ -31,3 +31,22 @@ def test_guidance_all_contains_multiple_mediums():
     assert len(pos) > 120
     assert len(neg) > 120
 
+
+def test_detect_new_3d_and_photo_mediums():
+    ids_3d = detect_medium_ids("archviz octane render interior visualization", include_photography=True)
+    assert "archviz_3d" in ids_3d
+    ids_photo = detect_medium_ids("wedding event photo ceremony portrait", include_photography=True)
+    assert "wedding_event_photo" in ids_photo
+
+
+def test_detect_medium_ids_with_aliases():
+    ids = detect_medium_ids("bw film photo and toon-shaded 3d robot scene", include_photography=True)
+    assert "film_bw_photo" in ids
+    assert "toon_3d" in ids
+
+
+def test_detect_new_storyboard_and_diorama_aliases():
+    ids = detect_medium_ids("animatic storyboard for action beats with miniature photo lighting", include_photography=True)
+    assert "storyboard_sketch" in ids
+    assert "miniature_diorama_photo" in ids
+

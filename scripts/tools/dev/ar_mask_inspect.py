@@ -20,7 +20,7 @@ def main() -> int:
         "--order",
         type=str,
         default="raster",
-        choices=("raster", "zorder"),
+        choices=("raster", "zorder", "snake", "spiral"),
         help="Macro-block visit order",
     )
     ap.add_argument("--compare", action="store_true", help="Also print zorder if order=raster (or vice versa)")
@@ -42,7 +42,13 @@ def main() -> int:
     if args.compare:
         import torch
 
-        other = "zorder" if args.order == "raster" else "raster"
+        compare_map = {
+            "raster": "zorder",
+            "zorder": "snake",
+            "snake": "spiral",
+            "spiral": "raster",
+        }
+        other = compare_map.get(args.order, "raster")
         m2 = create_block_causal_mask_2d(args.h, args.w, args.blocks, block_order=other)
         frac2, _ = ar_mask_sparsity_stats(m2)
         same = bool(torch.equal(m, m2))

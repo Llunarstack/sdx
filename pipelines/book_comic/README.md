@@ -98,7 +98,7 @@ Training still uses root `train.py` with your **book/comic/manga** dataset (line
 You can use `pipelines/book_comic/scripts/train_book_model.py` to apply book-oriented training presets and optional native preflight (`Rust sdx-jsonl-tools` + `Zig sdx-linecrc` when built) before launching `train.py`.
 For fully automated runs, `pipelines/book_comic/scripts/prepare_and_train_book.py` can export from Hugging Face, normalize captions with book guidance packs, then launch the trainer in one flow.
 When using caption normalization in that flow, `--train-humanize-pack` can apply anti-synthetic training presets (`lite`, `balanced`, `strong`).
-Book trainers now expose AR controls directly: `--ar-profile auto|none|layout|strong|zorder`, plus explicit `--num-ar-blocks` / `--ar-block-order` overrides (see [../../docs/AR.md](../../docs/AR.md)).
+Book trainers now expose AR controls directly: `--ar-profile auto|none|layout|strong|zorder|vit_layout|vit_strong|comic_snake|cinema_spiral`, plus explicit `--num-ar-blocks` / `--ar-block-order` overrides (`raster|zorder|snake|spiral`) (see [../../docs/AR.md](../../docs/AR.md)).
 Use JSONL fields such as `parts` / `region_captions` when you need layout-aware text—see [docs/REGION_CAPTIONS.md](../../docs/REGION_CAPTIONS.md).
 
 ## Related utilities

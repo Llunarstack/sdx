@@ -78,8 +78,53 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--ar-block-order",
         type=str,
         default="raster",
-        choices=["raster", "zorder"],
-        help="AR macro-block order: raster (row-major) or zorder (Morton). See docs/AR_EXTENSIONS.md",
+        choices=["raster", "zorder", "snake", "spiral"],
+        help="AR macro-block order: raster, zorder (Morton), snake (boustrophedon), spiral. See docs/AR_EXTENSIONS.md",
+    )
+    parser.add_argument(
+        "--ar-curriculum-mode",
+        type=str,
+        default="none",
+        choices=["none", "step", "linear"],
+        help="Runtime AR block curriculum: none=fixed, step=warmup switch, linear=ramp.",
+    )
+    parser.add_argument(
+        "--ar-curriculum-warmup-steps",
+        type=int,
+        default=0,
+        help="Warmup for AR curriculum (used by step mode; fallback ramp length for linear).",
+    )
+    parser.add_argument(
+        "--ar-curriculum-ramp-start",
+        type=int,
+        default=0,
+        help="Linear curriculum ramp start step.",
+    )
+    parser.add_argument(
+        "--ar-curriculum-ramp-end",
+        type=int,
+        default=0,
+        help="Linear curriculum ramp end step (<=0 uses warmup length fallback).",
+    )
+    parser.add_argument(
+        "--ar-curriculum-start-blocks",
+        type=int,
+        default=-1,
+        choices=[-1, 0, 2, 4],
+        help="Start AR blocks for curriculum (-1 defaults to 0).",
+    )
+    parser.add_argument(
+        "--ar-curriculum-target-blocks",
+        type=int,
+        default=-1,
+        choices=[-1, 0, 2, 4],
+        help="Target AR blocks for curriculum (-1 defaults to --num-ar-blocks).",
+    )
+    parser.add_argument(
+        "--ar-order-mix",
+        type=str,
+        default="",
+        help="Comma list of per-step AR traversal orders (subset of raster,zorder,snake,spiral).",
     )
     parser.add_argument("--no-xformers", action="store_true", help="Disable xformers attention")
     parser.add_argument(

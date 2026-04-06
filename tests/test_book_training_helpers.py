@@ -21,6 +21,13 @@ def _args(**overrides):
         ar_profile="auto",
         num_ar_blocks=-1,
         ar_block_order="",
+        ar_curriculum_mode="none",
+        ar_curriculum_warmup_steps=0,
+        ar_curriculum_ramp_start=0,
+        ar_curriculum_ramp_end=0,
+        ar_curriculum_start_blocks=-1,
+        ar_curriculum_target_blocks=-1,
+        ar_order_mix="",
         dry_run=False,
         no_compile=False,
         no_xformers=False,
@@ -39,7 +46,15 @@ def test_preset_for_book_train_production():
 
 
 def test_build_train_command_includes_book_guidance():
-    args = _args(book_train_preset="balanced", manifest_jsonl="data/manifest.jsonl", dry_run=True)
+    args = _args(
+        book_train_preset="balanced",
+        manifest_jsonl="data/manifest.jsonl",
+        dry_run=True,
+        ar_curriculum_mode="linear",
+        ar_curriculum_ramp_start=1000,
+        ar_curriculum_ramp_end=5000,
+        ar_order_mix="raster,zorder",
+    )
     settings = bth.resolve_book_train_settings(args)
     cmd = bth.build_train_command(
         root=Path("c:/repo"),
@@ -55,6 +70,8 @@ def test_build_train_command_includes_book_guidance():
     assert "--use-hierarchical-captions" in cmd
     assert "--num-ar-blocks" in cmd
     assert "--ar-block-order" in cmd
+    assert "--ar-curriculum-mode" in cmd
+    assert "--ar-order-mix" in cmd
     assert "--dry-run" in cmd
     assert "--seed" in cmd
 
@@ -129,7 +146,12 @@ def test_resolve_book_ar_profile_and_explicit_overrides():
     z = bth.resolve_book_ar_profile("zorder")
     assert z["num_ar_blocks"] == 2
     assert z["ar_block_order"] == "zorder"
+    vit = bth.resolve_book_ar_profile("vit_strong")
+    assert vit["num_ar_blocks"] == 4
+    assert vit["ar_block_order"] == "zorder"
+    snake = bth.resolve_book_ar_profile("comic_snake")
+    assert snake["ar_block_order"] == "snake"
 
-    settings = bth.resolve_book_train_settings(_args(ar_profile="layout", num_ar_blocks=4, ar_block_order="zorder"))
+    settings = bth.resolve_book_train_settings(_args(ar_profile="layout", num_ar_blocks=4, ar_block_order="spiral"))
     assert settings.num_ar_blocks == 4
-    assert settings.ar_block_order == "zorder"
+    assert settings.ar_block_order == "spiral"

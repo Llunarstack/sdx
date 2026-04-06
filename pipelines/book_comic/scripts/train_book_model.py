@@ -43,16 +43,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ar-profile",
         type=str,
         default="auto",
-        choices=["auto", "none", "layout", "strong", "zorder"],
-        help="One-flag AR setup: layout=2x2 raster, strong=4x4 raster, zorder=2x2 z-order.",
+        choices=["auto", "none", "layout", "strong", "zorder", "vit_layout", "vit_strong", "comic_snake", "cinema_spiral"],
+        help="One-flag AR setup: classic (layout/strong/zorder) or upgraded (vit_layout/vit_strong/comic_snake/cinema_spiral).",
     )
     p.add_argument("--num-ar-blocks", type=int, default=-1, choices=[-1, 0, 2, 4], help="Explicit AR blocks override.")
     p.add_argument(
         "--ar-block-order",
         type=str,
         default="",
-        choices=["", "raster", "zorder"],
+        choices=["", "raster", "zorder", "snake", "spiral"],
         help="Explicit AR block order override (use with --num-ar-blocks > 0).",
+    )
+    p.add_argument(
+        "--ar-curriculum-mode",
+        type=str,
+        default="none",
+        choices=["none", "step", "linear"],
+        help="Runtime AR curriculum mode forwarded to train.py.",
+    )
+    p.add_argument("--ar-curriculum-warmup-steps", type=int, default=0)
+    p.add_argument("--ar-curriculum-ramp-start", type=int, default=0)
+    p.add_argument("--ar-curriculum-ramp-end", type=int, default=0)
+    p.add_argument("--ar-curriculum-start-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
+    p.add_argument("--ar-curriculum-target-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
+    p.add_argument(
+        "--ar-order-mix",
+        type=str,
+        default="",
+        help="Comma list of AR orders for deterministic step-cycling (e.g. raster,zorder,snake).",
     )
 
     p.add_argument("--num-workers", type=int, default=-1, help="If >=0, forward to train.py --num-workers.")

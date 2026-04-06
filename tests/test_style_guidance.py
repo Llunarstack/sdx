@@ -28,3 +28,23 @@ def test_style_guidance_all_non_empty():
     assert len(pos) > 80
     assert len(neg) > 80
 
+
+def test_detect_new_style_domains():
+    ids = detect_style_ids("baroque surrealist poster graphic with octane render")
+    assert "fine_art_movements" in ids
+    assert "mixed_media_print_styles" in ids
+    assert "render_pipeline_styles" in ids
+
+
+def test_detect_style_ids_with_aliases():
+    ids = detect_style_ids("battle shonen vertical webtoon with bw film look")
+    assert "anime_manga" in ids or "anime_specializations" in ids
+    assert "comic_webtoon_substyles" in ids
+    assert "film_photo_language" in ids
+
+
+def test_detect_new_color_grade_and_hybrid_styles():
+    ids = detect_style_ids("teal orange grade with bleach-bypass mood and anime 3d hybrid framing")
+    assert "cinema_color_grading" in ids
+    assert "anime_hybrid_rendering" in ids
+

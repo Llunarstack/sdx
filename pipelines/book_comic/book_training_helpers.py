@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from utils.native.native_tools import (
+from utils.native import (
     manifest_fingerprint_line,
     native_stack_status,
     run_rust_jsonl_stats,
@@ -118,6 +118,14 @@ def resolve_book_ar_profile(name: str) -> Dict[str, Any]:
         return {"num_ar_blocks": 4, "ar_block_order": "raster"}
     if n == "zorder":
         return {"num_ar_blocks": 2, "ar_block_order": "zorder"}
+    if n == "vit_layout":
+        return {"num_ar_blocks": 2, "ar_block_order": "zorder"}
+    if n == "vit_strong":
+        return {"num_ar_blocks": 4, "ar_block_order": "zorder"}
+    if n == "comic_snake":
+        return {"num_ar_blocks": 2, "ar_block_order": "snake"}
+    if n == "cinema_spiral":
+        return {"num_ar_blocks": 4, "ar_block_order": "spiral"}
     # auto/unknown: do not force anything; keep preset/default behavior.
     return {}
 
@@ -152,7 +160,7 @@ def resolve_book_train_settings(args: Any) -> BookTrainPreset:
     if nab in (0, 2, 4):
         base = replace(base, num_ar_blocks=nab)
     abo = str(getattr(args, "ar_block_order", "") or "").strip().lower()
-    if abo in ("raster", "zorder"):
+    if abo in ("raster", "zorder", "snake", "spiral"):
         base = replace(base, ar_block_order=abo)
     return base
 
@@ -224,6 +232,27 @@ def build_train_command(
         cmd.append("--no-xformers")
     if int(getattr(args, "num_workers", -1)) >= 0:
         cmd.extend(["--num-workers", str(int(getattr(args, "num_workers")))])
+    ar_cm = str(getattr(args, "ar_curriculum_mode", "none") or "none").strip().lower()
+    if ar_cm in ("none", "step", "linear"):
+        cmd.extend(["--ar-curriculum-mode", ar_cm])
+    ar_w = int(getattr(args, "ar_curriculum_warmup_steps", 0) or 0)
+    if ar_w > 0:
+        cmd.extend(["--ar-curriculum-warmup-steps", str(ar_w)])
+    ar_rs = int(getattr(args, "ar_curriculum_ramp_start", 0) or 0)
+    if ar_rs > 0:
+        cmd.extend(["--ar-curriculum-ramp-start", str(ar_rs)])
+    ar_re = int(getattr(args, "ar_curriculum_ramp_end", 0) or 0)
+    if ar_re > 0:
+        cmd.extend(["--ar-curriculum-ramp-end", str(ar_re)])
+    ar_sb = int(getattr(args, "ar_curriculum_start_blocks", -1) or -1)
+    if ar_sb in (0, 2, 4):
+        cmd.extend(["--ar-curriculum-start-blocks", str(ar_sb)])
+    ar_tb = int(getattr(args, "ar_curriculum_target_blocks", -1) or -1)
+    if ar_tb in (0, 2, 4):
+        cmd.extend(["--ar-curriculum-target-blocks", str(ar_tb)])
+    ar_mix = str(getattr(args, "ar_order_mix", "") or "").strip()
+    if ar_mix:
+        cmd.extend(["--ar-order-mix", ar_mix])
 
     cmd.extend(passthrough_train_args)
     return cmd

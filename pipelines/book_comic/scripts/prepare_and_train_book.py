@@ -78,11 +78,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ar-profile",
         type=str,
         default="auto",
-        choices=["auto", "none", "layout", "strong", "zorder"],
-        help="Book trainer AR preset (layout=2x2, strong=4x4, zorder=2x2 Morton).",
+        choices=["auto", "none", "layout", "strong", "zorder", "vit_layout", "vit_strong", "comic_snake", "cinema_spiral"],
+        help="Book trainer AR preset (classic + upgraded ViT-aligned traversal presets).",
     )
     p.add_argument("--num-ar-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
-    p.add_argument("--ar-block-order", type=str, default="", choices=["", "raster", "zorder"])
+    p.add_argument("--ar-block-order", type=str, default="", choices=["", "raster", "zorder", "snake", "spiral"])
+    p.add_argument("--ar-curriculum-mode", type=str, default="none", choices=["none", "step", "linear"])
+    p.add_argument("--ar-curriculum-warmup-steps", type=int, default=0)
+    p.add_argument("--ar-curriculum-ramp-start", type=int, default=0)
+    p.add_argument("--ar-curriculum-ramp-end", type=int, default=0)
+    p.add_argument("--ar-curriculum-start-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
+    p.add_argument("--ar-curriculum-target-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
+    p.add_argument("--ar-order-mix", type=str, default="")
     p.add_argument("--num-workers", type=int, default=-1)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no-compile", action="store_true")
@@ -212,8 +219,22 @@ def main() -> int:
         train_cmd.extend(["--ar-profile", str(args.ar_profile).strip()])
     if int(args.num_ar_blocks) in (0, 2, 4):
         train_cmd.extend(["--num-ar-blocks", str(int(args.num_ar_blocks))])
-    if str(args.ar_block_order).strip() in ("raster", "zorder"):
+    if str(args.ar_block_order).strip() in ("raster", "zorder", "snake", "spiral"):
         train_cmd.extend(["--ar-block-order", str(args.ar_block_order).strip()])
+    if str(args.ar_curriculum_mode).strip() in ("none", "step", "linear"):
+        train_cmd.extend(["--ar-curriculum-mode", str(args.ar_curriculum_mode).strip()])
+    if int(args.ar_curriculum_warmup_steps) > 0:
+        train_cmd.extend(["--ar-curriculum-warmup-steps", str(int(args.ar_curriculum_warmup_steps))])
+    if int(args.ar_curriculum_ramp_start) > 0:
+        train_cmd.extend(["--ar-curriculum-ramp-start", str(int(args.ar_curriculum_ramp_start))])
+    if int(args.ar_curriculum_ramp_end) > 0:
+        train_cmd.extend(["--ar-curriculum-ramp-end", str(int(args.ar_curriculum_ramp_end))])
+    if int(args.ar_curriculum_start_blocks) in (0, 2, 4):
+        train_cmd.extend(["--ar-curriculum-start-blocks", str(int(args.ar_curriculum_start_blocks))])
+    if int(args.ar_curriculum_target_blocks) in (0, 2, 4):
+        train_cmd.extend(["--ar-curriculum-target-blocks", str(int(args.ar_curriculum_target_blocks))])
+    if str(args.ar_order_mix).strip():
+        train_cmd.extend(["--ar-order-mix", str(args.ar_order_mix).strip()])
     if int(args.num_workers) >= 0:
         train_cmd.extend(["--num-workers", str(int(args.num_workers))])
     if bool(args.dry_run):

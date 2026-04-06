@@ -115,3 +115,73 @@ def test_infer_auto_humanize_controls_storyboard_and_nsfw():
         safety_mode="nsfw",
     )
     assert ns["humanize_profile"] == "balanced"
+
+
+def test_resolve_art_medium_controls_pack_and_override():
+    out = prompt_lexicon.resolve_art_medium_controls(
+        art_medium_pack="anime_3d_pro",
+        art_medium_variant="web_comic",
+    )
+    assert out["family"] == "anime_cartoon_webcomic"
+    assert out["variant"] == "web_comic"  # explicit override wins
+
+
+def test_art_medium_bundle_supports_requested_families():
+    digital = prompt_lexicon.art_medium_bundle(
+        family="digital_art",
+        variant="painting",
+    )
+    drawing = prompt_lexicon.art_medium_bundle(
+        family="drawing_art",
+        variant="ink",
+    )
+    p3d = prompt_lexicon.art_medium_bundle(
+        family="digital_3d_art",
+        variant="stylized",
+    )
+    painting = prompt_lexicon.art_medium_bundle(
+        family="painting_art",
+        variant="watercolor",
+    )
+    realistic = prompt_lexicon.art_medium_bundle(
+        family="realistic_art",
+        variant="photoreal",
+    )
+    anime_web = prompt_lexicon.art_medium_bundle(
+        family="anime_cartoon_webcomic",
+        variant="web_comic",
+    )
+    assert "digital painting workflow" in digital
+    assert "ink drawing medium" in drawing
+    assert "stylized 3d art medium" in p3d
+    assert "watercolor painting medium" in painting
+    assert "photoreal medium treatment" in realistic
+    assert "web comic medium" in anime_web
+
+
+def test_art_medium_bundle_supports_mixed_media_family():
+    mixed = prompt_lexicon.art_medium_bundle(
+        family="mixed_media_art",
+        variant="risograph",
+    )
+    assert "risograph print medium" in mixed
+
+
+def test_style_snippet_supports_extended_style_keys():
+    assert "cyberpunk art direction" in prompt_lexicon.style_snippet("cyberpunk")
+    assert "ukiyo-e inspired treatment" in prompt_lexicon.style_snippet("ukiyo_e")
+    assert "octane-like render style" in prompt_lexicon.style_snippet("render_octane")
+
+
+def test_style_snippet_supports_huge_additional_keys():
+    assert "baroque-inspired visual language" in prompt_lexicon.style_snippet("baroque")
+    assert "shonen battle anime style" in prompt_lexicon.style_snippet("anime_shonen_battle")
+    assert "archviz realism style" in prompt_lexicon.style_snippet("archviz_real")
+
+
+def test_resolve_art_medium_controls_with_new_pack():
+    out = prompt_lexicon.resolve_art_medium_controls(
+        art_medium_pack="sports_photo_pro",
+    )
+    assert out["family"] == "realistic_art"
+    assert out["variant"] == "sports_photo"

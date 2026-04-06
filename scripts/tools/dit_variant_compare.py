@@ -47,8 +47,7 @@ def main() -> int:
         instantiate_dit_text,
         list_all_dit_registry_names,
     )
-    from utils.native.latent_geometry import dit_patch_size_from_variant_name
-    from utils.native.native_tools import get_latent_lib
+    from utils.native import dit_patch_size_from_variant_name, get_latent_lib
 
     names = [x.strip() for x in args.models.split(",") if x.strip()]
     if not names:

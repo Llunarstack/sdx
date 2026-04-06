@@ -23,7 +23,7 @@ def main():
     if args.show_native:
         import json as _json
 
-        from utils.native.native_tools import native_stack_status
+        from utils.native import native_stack_status
 
         print(_json.dumps(native_stack_status(), indent=2))
         return 0

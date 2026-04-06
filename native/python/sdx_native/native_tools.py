@@ -387,6 +387,21 @@ def image_metrics_shared_library_path() -> Optional[Path]:
     return None
 
 
+def score_ops_shared_library_path() -> Optional[Path]:
+    """CPU ``sdx_score_ops`` shared library path, if built."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_score_ops.dll",
+        cpp / "Debug" / "sdx_score_ops.dll",
+        cpp / "libsdx_score_ops.so",
+        cpp / "libsdx_score_ops.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
 def cuda_image_metrics_shared_library_path() -> Optional[Path]:
     """Optional CUDA ``sdx_cuda_image_metrics`` shared library path, if built."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
@@ -763,6 +778,7 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_fnv64_file": str(fnv64_file_shared_library_path() or ""),
         "libsdx_rmsnorm_rows_cpu": str(rmsnorm_rows_cpu_shared_library_path() or ""),
         "libsdx_image_metrics": str(image_metrics_shared_library_path() or ""),
+        "libsdx_score_ops": str(score_ops_shared_library_path() or ""),
         "libsdx_cuda_hwc_to_chw": str(cuda_hwc_to_chw_shared_library_path() or ""),
         "libsdx_cuda_ml": str(cuda_ml_shared_library_path() or ""),
         "libsdx_cuda_flow_matching": str(cuda_flow_matching_shared_library_path() or ""),

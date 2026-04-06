@@ -3,13 +3,15 @@ Extended block-causal (AR) self-attention masks for DiT.
 
 - **raster**: blocks visited row-major (default; matches historical SDX behavior).
 - **zorder**: Morton (Z-order) curve over the block grid — different spatial bias, same parameter count.
+- **snake**: boustrophedon row scan (alternating left↔right each block row).
+- **spiral**: outside-in spiral over macro-blocks.
 
 See ``docs/AR.md`` and ``docs/AR_EXTENSIONS.md``.
 """
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
 
@@ -46,6 +48,59 @@ def block_zorder_rank(bi: int, bj: int, num_ar_blocks: int) -> int:
     return _morton_encode_2d(bi, bj, bits)
 
 
+def block_snake_rank(bi: int, bj: int, num_ar_blocks: int) -> int:
+    if (bi % 2) == 0:
+        col = bj
+    else:
+        col = (num_ar_blocks - 1) - bj
+    return bi * num_ar_blocks + col
+
+
+def _spiral_cells(num_ar_blocks: int) -> List[Tuple[int, int]]:
+    out: List[Tuple[int, int]] = []
+    top, left = 0, 0
+    bottom, right = num_ar_blocks - 1, num_ar_blocks - 1
+    while top <= bottom and left <= right:
+        for c in range(left, right + 1):
+            out.append((top, c))
+        top += 1
+        for r in range(top, bottom + 1):
+            out.append((r, right))
+        right -= 1
+        if top <= bottom:
+            for c in range(right, left - 1, -1):
+                out.append((bottom, c))
+            bottom -= 1
+        if left <= right:
+            for r in range(bottom, top - 1, -1):
+                out.append((r, left))
+            left += 1
+    return out
+
+
+def block_spiral_rank(bi: int, bj: int, num_ar_blocks: int) -> int:
+    cells = _spiral_cells(num_ar_blocks)
+    lut = {(r, c): i for i, (r, c) in enumerate(cells)}
+    return int(lut.get((bi, bj), 0))
+
+
+def block_visit_order(num_ar_blocks: int, block_order: str = "raster") -> List[Tuple[int, int]]:
+    order = str(block_order or "raster").strip().lower()
+    cells = [(bi, bj) for bi in range(num_ar_blocks) for bj in range(num_ar_blocks)]
+    if order in ("z", "z-order", "zorder", "morton"):
+        cells.sort(key=lambda t: block_zorder_rank(t[0], t[1], num_ar_blocks))
+        return cells
+    if order in ("snake", "boustrophedon"):
+        cells.sort(key=lambda t: block_snake_rank(t[0], t[1], num_ar_blocks))
+        return cells
+    if order in ("spiral", "snail"):
+        return _spiral_cells(num_ar_blocks)
+    if order in ("raster", "row", "row_major", "default"):
+        cells.sort(key=lambda t: block_raster_rank(t[0], t[1], num_ar_blocks))
+        return cells
+    raise ValueError(f"Unknown block_order {block_order!r}; use raster | zorder | snake | spiral")
+
+
 def create_block_causal_mask_2d(
     h: int,
     w: int,
@@ -59,6 +114,8 @@ def create_block_causal_mask_2d(
     block_order:
         - ``raster``: macro-blocks in row-major order; within-block causal raster by flat index.
         - ``zorder``: macro-blocks ordered by Morton code; within-block same causal rule.
+        - ``snake``: alternating row direction for macro-block traversal.
+        - ``spiral``: outside-in macro-block traversal.
 
     Returns (h*w, h*w) additive mask: 0 = attend, -inf = blocked.
     """
@@ -66,13 +123,8 @@ def create_block_causal_mask_2d(
     if num_ar_blocks <= 0:
         return torch.zeros(n, n, dtype=torch.float32)
 
-    order = str(block_order or "raster").strip().lower()
-    if order in ("z", "z-order", "zorder", "morton"):
-        rank_fn = block_zorder_rank
-    elif order in ("raster", "row", "row_major", "default"):
-        rank_fn = block_raster_rank
-    else:
-        raise ValueError(f"Unknown block_order {block_order!r}; use raster | zorder")
+    order_cells = block_visit_order(num_ar_blocks, block_order=block_order)
+    rank_lut = {(bi, bj): rank for rank, (bi, bj) in enumerate(order_cells)}
 
     bh, bw = block_grid_dims(h, w, num_ar_blocks)
     mask = torch.zeros(n, n, dtype=torch.float32)
@@ -81,12 +133,12 @@ def create_block_causal_mask_2d(
         for j in range(w):
             idx = i * w + j
             bi, bj = i // bh, j // bw
-            br = rank_fn(bi, bj, num_ar_blocks)
+            br = int(rank_lut.get((bi, bj), 0))
             for i2 in range(h):
                 for j2 in range(w):
                     idx2 = i2 * w + j2
                     bi2, bj2 = i2 // bh, j2 // bw
-                    br2 = rank_fn(bi2, bj2, num_ar_blocks)
+                    br2 = int(rank_lut.get((bi2, bj2), 0))
                     if br2 > br:
                         mask[idx, idx2] = float("-inf")
                     elif br2 == br and idx2 > idx:

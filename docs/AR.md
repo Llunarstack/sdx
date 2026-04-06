@@ -42,6 +42,10 @@ python train.py --data-path /path/to/data --num-ar-blocks 4
 
 # Same block grid, Morton (z-order) macro-block visit order (see docs/AR_EXTENSIONS.md)
 python train.py --data-path /path/to/data --num-ar-blocks 2 --ar-block-order zorder
+
+# Upgraded AR traversals
+python train.py --data-path /path/to/data --num-ar-blocks 2 --ar-block-order snake
+python train.py --data-path /path/to/data --num-ar-blocks 4 --ar-block-order spiral
 ```
 
 The value is stored in the checkpoint config. **You must use the same `num_ar_blocks` at inference** as was used at training (sample.py and inference.py read it from the checkpoint). **`ar_block_order`** is saved too; inference builds the DiT via `get_dit_build_kwargs`, which restores it (missing older checkpoints default to **`raster`**).
@@ -51,7 +55,7 @@ The value is stored in the checkpoint config. **You must use the same `num_ar_bl
 In `config/train_config.py`:
 
 - **`num_ar_blocks: int = 0`** — 0 = off, 2 = 2×2 blocks, 4 = 4×4 blocks. Other values (e.g. 3 for 3×3) are supported by the mask code but are less common.
-- **`ar_block_order: str = "raster"`** — macro-block sequence: **`raster`** (row-major blocks) or **`zorder`** (Morton order). See [AR_EXTENSIONS.md](AR_EXTENSIONS.md).
+- **`ar_block_order: str = "raster"`** — macro-block sequence: **`raster`** (row-major), **`zorder`** (Morton), **`snake`** (boustrophedon), or **`spiral`** (outside-in). See [AR_EXTENSIONS.md](AR_EXTENSIONS.md).
 
 ### Code
 
@@ -70,7 +74,24 @@ python -m scripts.tools ar_mask_inspect --h 32 --w 32 --blocks 2 --compare
 
 Default macro-block order is **raster**: block `(0,0)`, then `(0,1)`, …, then `(1,0)`, `(1,1)`, … — top-left toward bottom-right. Within each macro-block, patch order is also raster.
 
-Optional **`zorder`**: Morton / z-order over block indices (2D locality–friendly sequence). Training: `--ar-block-order zorder`. Details and extra helpers: **[AR_EXTENSIONS.md](AR_EXTENSIONS.md)**.
+Optional alternatives:
+- **`zorder`**: Morton / z-order over block indices (2D locality–friendly sequence)
+- **`snake`**: alternating row direction traversal
+- **`spiral`**: outside-in traversal over macro blocks
+
+Training flag: `--ar-block-order ...`. Details and extra helpers: **[AR_EXTENSIONS.md](AR_EXTENSIONS.md)**.
+
+### Runtime curriculum and order-mix
+
+`train.py` also supports runtime AR mutation:
+
+- `--ar-curriculum-mode none|step|linear`
+- `--ar-curriculum-warmup-steps ...`
+- `--ar-curriculum-ramp-start ... --ar-curriculum-ramp-end ...`
+- `--ar-curriculum-start-blocks ... --ar-curriculum-target-blocks ...`
+- `--ar-order-mix raster,zorder,snake,spiral`
+
+This lets training start with full bidirectional attention and progressively move to stronger AR, while optionally cycling traversal order to improve robustness.
 
 ---
 

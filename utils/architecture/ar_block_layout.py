@@ -10,9 +10,10 @@ from typing import Dict, List, Tuple
 
 from models.ar_masks_extended import (
     block_grid_dims,
-    block_raster_rank,
-    block_zorder_rank,
     patch_to_block_indices,
+)
+from models.ar_masks_extended import (
+    block_visit_order as _mask_block_visit_order,
 )
 
 
@@ -36,13 +37,7 @@ def macro_block_centers_patch_space(
 
 def block_visit_order(num_ar_blocks: int, order: str = "raster") -> List[Tuple[int, int]]:
     """Ordered list of (bi, bj) macro-block coordinates."""
-    o = str(order or "raster").strip().lower()
-    cells = [(bi, bj) for bi in range(num_ar_blocks) for bj in range(num_ar_blocks)]
-    if o in ("z", "z-order", "zorder", "morton"):
-        cells.sort(key=lambda t: block_zorder_rank(t[0], t[1], num_ar_blocks))
-    else:
-        cells.sort(key=lambda t: block_raster_rank(t[0], t[1], num_ar_blocks))
-    return cells
+    return _mask_block_visit_order(num_ar_blocks, block_order=order)
 
 
 def patch_block_map(h: int, w: int, num_ar_blocks: int) -> List[Tuple[int, int, int, int]]:

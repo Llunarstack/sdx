@@ -9,7 +9,7 @@ This module does **not** call external APIs; it only returns strings and (w, h) 
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 # ---------------------------------------------------------------------------
 # Negative prompts — reduce typical gen-AI failures on comic/manga pages
@@ -66,6 +66,230 @@ STYLE_SNIPPETS: Dict[str, str] = {
     "editorial": "clear hierarchy, readable at small size, professional print margins implied, balanced negative space",
     "light_novel": "light novel cover illustration, ornate title treatment, character pin-up, publisher-ready layout",
     "yonkoma": "four panel strip, gag beat timing, simple backgrounds, punchline panel emphasis",
+    # Broader modern creation styles
+    "anime_2d": "2d anime look, clean lineart, controlled cel shading, expressive face language, stable style identity",
+    "anime_3d": "3d anime render, toon-shaded forms, clean anime face proportions, stylized but coherent lighting",
+    "cartoon_2d": "2d cartoon style, simplified readable forms, graphic shape language, appealing squash-and-stretch energy",
+    "cartoon_3d": "3d cartoon style, stylized proportions, readable silhouettes, family-film visual clarity",
+    "web_comic": "web comic panel readability, clean dialogue staging, high mobile legibility, consistent episode style",
+    "digital_art": "digital illustration workflow, intentional brush economy, clean layer discipline, focal rendering hierarchy",
+    "digital_3d": "digital 3d artwork, coherent materials, controlled stylization level, lighting consistency across scene assets",
+    "drawing_ink": "drawing-first look, confident line quality, readable construction, purposeful hatch rhythm",
+    "painting_oil": "oil painting treatment, visible brush character, painterly edge variety, intentional value grouping",
+    "painting_watercolor": "watercolor treatment, transparent layering, paper interaction cues, controlled pigment blooms",
+    "realistic_photo": "realistic photographic rendering, plausible optics and depth, natural skin/material texture, grounded light behavior",
+    "realistic_painting": "realist painting treatment, anatomy-accurate forms, nuanced value transitions, observational detail discipline",
+    "fantasy_concept": "fantasy concept-art style, worldbuilding motifs, cinematic atmosphere, disciplined focal hierarchy",
+    "sci_fi_concept": "sci-fi concept-art style, coherent design language, believable tech forms, controlled lighting logic",
+    "cyberpunk": "cyberpunk art direction, neon-accented night palette, atmospheric perspective, layered urban depth",
+    "steampunk": "steampunk visual language, brass/leather material motifs, mechanical ornamentation, period-tech coherence",
+    "noir_comic": "noir comic style, high-contrast chiaroscuro, moody rain-lit environments, strong shadow storytelling",
+    "art_nouveau": "art nouveau style cues, flowing ornamental line rhythm, elegant decorative framing, poster-readability",
+    "ukiyo_e": "ukiyo-e inspired treatment, flat color planes, woodblock-like contour discipline, decorative composition balance",
+    "pixel_retro": "retro pixel style, limited palette design, sprite-readability discipline, clean cluster placement",
+    "voxel_isometric": "isometric voxel style, clean block structure, readable depth layering, stylized world consistency",
+    "clay_stop_motion": "clay/stop-motion inspired style, tactile handcrafted forms, miniature-set lighting cues, material irregularity",
+    "render_octane": "high-fidelity octane-like render style, controlled bloom, cinematic ray-traced reflections, polished material separation",
+    "render_eevee": "fast stylized eevee-like render style, clear shape readability, balanced realtime lighting response",
+    "editorial_fashion_photo": "editorial fashion photo language, controlled styling hierarchy, premium print-ready framing and lighting",
+    "black_white_film": "black-and-white film language, silver-grain tonal rolloff, dramatic monochrome value storytelling",
+    # Fine-art movement inspired
+    "baroque": "baroque-inspired visual language, dramatic chiaroscuro, theatrical composition, rich material depth",
+    "rococo": "rococo-inspired ornamental elegance, pastel luxury palette, refined decorative rhythm, graceful silhouettes",
+    "impressionist": "impressionist-inspired brush economy, atmospheric color vibration, light-first form simplification",
+    "expressionist": "expressionist-inspired emotional distortion, bold contour energy, dramatic color intensity for mood",
+    "cubist": "cubist-inspired geometric decomposition, multi-plane form language, structured abstract readability",
+    "surrealist": "surrealist-inspired dream logic, symbolic juxtaposition, uncanny yet compositionally coherent staging",
+    "art_deco": "art-deco inspired geometry, premium symmetry accents, elegant poster hierarchy, metallic motif discipline",
+    "minimalist": "minimalist style treatment, reduced element count, strong negative space, high intentional composition clarity",
+    "maximalist": "maximalist style treatment, dense ornamental layering, rich texture complexity, disciplined focal hierarchy",
+    # Anime/manga specializations
+    "anime_shonen_battle": "shonen battle anime style, kinetic action framing, impact effects, strong hero-villain silhouette readability",
+    "anime_shojo_romance": "shojo romance anime style, emotive close-up language, soft decorative accents, elegant line rhythm",
+    "anime_seinen_gritty": "seinen gritty anime style, mature tonal control, grounded anatomy, cinematic panel tension",
+    "anime_isekai_fantasy": "isekai fantasy anime style, luminous magical motifs, costume readability, adventurous worldbuilding atmosphere",
+    "anime_mecha": "mecha anime style, machine silhouette clarity, hard-surface readability, dynamic cockpit/action staging",
+    "anime_idol": "idol-anime visual style, polished stage-light color scripting, expressive performance poses, clean fashion detail",
+    # Web/comic and print niches
+    "newspaper_comic": "newspaper comic-strip style, concise panel storytelling, ink-first readability, punchline rhythm clarity",
+    "manga_horror": "horror manga style, psychological contrast staging, unsettling shadow design, tension-focused composition pacing",
+    "retro_pulp_cover": "retro pulp-cover style, bold title-area composition, vintage paint/print texture cues, dramatic color blocks",
+    "poster_graphic": "graphic poster style, clear typographic-safe composition zones, high-impact silhouette hierarchy",
+    # 3d/render specializations
+    "archviz_real": "archviz realism style, clean perspective control, believable material response, premium interior/exterior lighting",
+    "product_cg": "product-CG style, precision form edges, specular discipline, commercial hero-shot clarity",
+    "clay_render_bw": "monochrome clay-render style, form readability first, neutral lighting for silhouette and volume evaluation",
+    "toon_render_hybrid": "toon-render hybrid style, stylized contour logic with controlled realistic light response",
+    # Photography language
+    "film_35mm": "35mm film-photo language, organic grain character, natural highlight rolloff, lens personality cues",
+    "polaroid_vintage": "polaroid-vintage photo style, instant-film tonal character, nostalgic color cast control, analog texture feel",
+    "street_noir_photo": "street noir photo language, wet-night reflections, practical-light contrast drama, candid urban framing",
+    "wildlife_naturalist": "wildlife naturalist photo style, habitat authenticity, natural detail falloff, respectful observational framing",
+}
+
+ART_MEDIUM_VARIANTS: Dict[str, Dict[str, str]] = {
+    "none": {},
+    "digital_art": {
+        "none": "",
+        "painting": "digital painting workflow, textured brush packs with controlled edge variety, layered value design",
+        "cel_shaded": "clean cel-shaded digital workflow, hard-light transitions, graphic shadow shape control",
+        "semi_real": "semi-real digital rendering, believable materials with stylized simplification, controlled detail density",
+        "vector": "vector-illustration workflow, crisp shape intersections, consistent stroke and fill grammar",
+        "pixel": "pixel-art workflow, strict pixel grid discipline, deliberate cluster placement and palette economy",
+        "photobash": "photobash-assisted digital art, coherent blend passes, perspective and lighting unification",
+        "lineart_clean": "clean digital lineart medium, deliberate contour economy, line-weight hierarchy, anti-noise stroke discipline",
+        "comic_halftone": "digital comic-halftone medium, controlled dot-screen texture, print-safe value separation",
+        "matte_concept": "matte concept workflow, large-shape value planning, atmosphere depth stacking, art-directable composition blocks",
+        "anime_render": "anime-oriented digital render workflow, stable face grammar, controlled cel highlights, readable silhouette first",
+        "concept_sheet": "concept-sheet digital workflow, orthographic readability, clean callout zones, design-iteration clarity",
+        "visual_dev": "visual-development medium, exploratory shape language, color-key discipline, iterative scene storytelling",
+        "ui_icon": "ui-icon illustration medium, crisp silhouette simplification, scalable readability, clean vector-informed polish",
+        "storybook_paint": "storybook digital-paint medium, warm narrative color design, readable character staging, print-safe texture discipline",
+    },
+    "drawing_art": {
+        "none": "",
+        "pencil": "pencil drawing medium, graphite pressure variation, clean construction lines, controlled shading planes",
+        "graphite": "graphite drawing finish, smooth-to-grain transition control, realistic tonal buildup",
+        "charcoal": "charcoal drawing look, expressive dark massing, smudge control, directional gesture marks",
+        "ink": "ink drawing medium, confident line economy, varied line weight, intentional black spotting",
+        "pen_ink": "pen-and-ink medium, hatching discipline, contour clarity, crosshatch value control",
+        "marker": "marker drawing medium, layered marker gradients, clear shape blocks, edge cleanliness",
+        "pastel": "pastel drawing medium, powdery pigment texture, soft transitions with controlled accents",
+        "chalk": "chalk drawing medium, matte chalk texture, gestural edges, visible substrate interaction",
+        "crayon": "crayon drawing medium, waxy stroke character, playful texture, color layering marks",
+        "conte": "conte drawing medium, warm earthy marks, expressive pressure variation, controlled smudge transitions",
+        "technical_pen": "technical-pen drawing medium, precise line fidelity, clean construction discipline, measured hatch spacing",
+        "blueprint": "blueprint drafting style, technical line hierarchy, structural annotation feel, clear geometric readability",
+        "gesture": "gesture-drawing medium, rapid pose energy, movement-first line economy, expressive anatomical flow",
+        "life_study": "life-study drawing medium, observational proportion discipline, form-turn shading clarity, subtle line restraint",
+        "crosshatch": "crosshatch-focused drawing medium, directional hatch logic, tonal layering control, contour-readability discipline",
+        "comic_pencil": "comic-pencil medium, construction-to-finish workflow, dynamic figure posing, clear storytelling line rhythm",
+    },
+    "digital_3d_art": {
+        "none": "",
+        "stylized": "stylized 3d art medium, shape-language exaggeration, readable forms, coherent toon-to-pbr balance",
+        "pbr_realistic": "realistic 3d pbr medium, physically plausible roughness/metalness behavior, grounded lighting response",
+        "hard_surface": "hard-surface 3d medium, clean bevel logic, panel breakup discipline, functional mechanical detailing",
+        "character_sculpt": "character sculpt render medium, anatomy-aware forms, clean primary-secondary-tertiary shape hierarchy",
+        "clay_render": "clay render medium, neutral material preview lighting, silhouette and form readability first",
+        "toon_3d": "toon 3d medium, anime/cartoon contour readability, clean ramp shading, controlled specular stylization",
+        "low_poly": "low-poly 3d medium, deliberate faceted geometry language, efficient texture readability",
+        "voxel": "voxel 3d medium, block-structure coherence, grid discipline, stylized volumetric readability",
+        "octane_render": "octane-style render medium, cinematic ray-traced highlights, clean material separation, filmic contrast control",
+        "eevee_render": "eevee-style render medium, stylized realtime lighting, clear silhouette readability, efficient shading clarity",
+        "isometric_3d": "isometric 3d medium, perspective-consistent blockouts, readable elevation layering, gameplay-friendly composition",
+        "kitbash_env": "3d kitbash environment medium, coherent module scale, lighting-unified assembly, believable scene construction",
+        "archviz": "architectural-visualization 3d medium, premium interior/exterior lighting, material plausibility, camera composition discipline",
+        "product_render": "product-render 3d medium, commercial studio-light setup, clean reflections, precise edge readability",
+        "vfx_concept": "vfx-concept 3d medium, cinematic scene blocking, atmosphere layering, film-shot continuity cues",
+        "mecha_3d": "mecha-focused 3d medium, hard-surface hierarchy, panel-seam discipline, readable mechanical articulation",
+    },
+    "painting_art": {
+        "none": "",
+        "oil": "oil painting medium, impasto accents, rich color temperature shifts, painterly edge transitions",
+        "watercolor": "watercolor painting medium, transparent wash layering, pigment pooling control, paper tooth interaction",
+        "gouache": "gouache painting medium, matte opaque planes, decisive shape simplification, controlled edge hierarchy",
+        "acrylic": "acrylic painting medium, opaque layer stacking, crisp-over-soft edge rhythm, color block confidence",
+        "tempera": "tempera painting medium, matte historical finish, fine hatch-texture layering, restrained palette unity",
+        "fresco": "fresco painting medium, wall-plaster texture cues, muted mineral palette, broad-form value masses",
+        "ink_wash": "ink-wash painting medium, tonal brush dilution control, atmospheric gradation, calligraphic flow",
+        "impasto": "impasto-heavy painting medium, thick paint body, tactile stroke relief, directional mark structure",
+        "plein_air": "plein-air painting medium, natural outdoor light observation, fast decisive brush economy, atmospheric color shifts",
+        "digital_oil": "digital-oil painting medium, buttery stroke blending with intentional edge breakup, painterly form modeling",
+        "watercolor_ink": "watercolor-plus-ink medium, transparent wash structure with crisp ink accents, controlled value anchoring",
+        "illustration_poster": "illustration-poster paint medium, strong shape simplification, bold graphic value grouping, print-readability priority",
+        "surreal_paint": "surreal painting medium, dreamlike motif transitions, symbolic compositional logic, controlled uncanny mood",
+        "noir_paint": "noir painting medium, dramatic shadow geometry, moody palette control, cinematic tension framing",
+        "mural": "mural-style painting medium, broad readable forms, public-space composition scale, durable color-block design",
+    },
+    "realistic_art": {
+        "none": "",
+        "photoreal": "photoreal medium treatment, optical realism, physically plausible textures, natural dynamic range",
+        "studio_portrait": "studio portrait realism medium, key-fill-rim discipline, skin microtexture fidelity, lens-aware depth",
+        "cinematic_still": "cinematic still realism medium, motivated practical lighting, filmic composition grammar, tonal rolloff discipline",
+        "documentary": "documentary realism medium, candid behavioral authenticity, environmental storytelling realism",
+        "architecture": "architectural realism medium, vertical perspective discipline, material reflectance plausibility, clean spatial depth",
+        "product": "product realism medium, precise form edges, controlled specular highlights, catalog-quality clarity",
+        "wildlife_macro": "wildlife/macro realism medium, natural detail falloff, authentic microtexture, plausible focal depth",
+        "realism_painting": "realist painting medium, observational proportion accuracy, subtle form modeling, measured brush economy",
+        "street_photo": "street-photography realism medium, candid timing authenticity, grounded environmental perspective, natural light behavior",
+        "fashion_editorial": "fashion-editorial realism medium, controlled studio/location lighting, styling clarity, premium composition polish",
+        "black_white_film": "black-and-white film realism medium, monochrome tonal discipline, silver-grain texture cueing, cinematic contrast control",
+        "drone_landscape": "drone-landscape realism medium, aerial depth layering, believable atmospheric perspective, large-scale scene coherence",
+        "sports_photo": "sports-photography realism medium, action-timing clarity, subject isolation under motion, lens-appropriate compression",
+        "wedding_photo": "wedding-photography realism medium, flattering skin tone rendering, candid emotional timing, premium event-light handling",
+        "food_photo": "food-photography realism medium, appetizing material detail, controlled specular highlights, editorial table composition",
+        "macro_product": "macro product realism medium, microscopic texture clarity, shallow-depth discipline, high-end commercial polish",
+    },
+    "anime_cartoon_webcomic": {
+        "none": "",
+        "anime_2d": "2d anime medium, clean linework, controlled cel shading, stable facial grammar",
+        "anime_3d": "3d anime medium, toon-surface readability, anime-proportion consistency, stylized camera language",
+        "manga_bw": "manga black-and-white medium, screentone discipline, dramatic black placement, panel rhythm clarity",
+        "manhwa_color": "manhwa color medium, clean digital color rendering, webtoon readability, polished character finish",
+        "cartoon_2d": "2d cartoon medium, bold graphic simplification, readable expressions, playful posing language",
+        "cartoon_3d": "3d cartoon medium, appealing stylized volumes, clear silhouette language, family animation polish",
+        "western_comic": "western comic medium, panel storytelling cadence, dynamic figure staging, inking readability",
+        "web_comic": "web comic medium, mobile-first readability, dialogue clarity, consistent episodic visual identity",
+        "webtoon_vertical": "vertical webtoon medium, top-to-bottom beat spacing, scroll-friendly framing, clean dialogue grouping",
+        "chibi": "chibi stylization medium, super-deformed proportions, clear cute silhouette language, comedic timing clarity",
+        "isekai_anime": "isekai anime medium, luminous fantasy atmosphere, clean anime rendering grammar, readable costume motifs",
+        "mecha_anime": "mecha anime medium, mechanical silhouette readability, panel-friendly hard-surface clarity, dynamic action staging",
+        "western_animation": "western animation medium, expressive pose language, clear shape appeal, production-ready color scripting",
+        "gag_strip": "gag-strip comic medium, setup-payoff rhythm clarity, readable expression beats, concise panel storytelling",
+        "anime_movie": "anime-movie style medium, cinematic background painting depth, high-finish keyframe polish, emotive camera language",
+        "anime_tv_clean": "anime-tv clean medium, production-friendly line clarity, efficient cel-value control, stable character-on-model consistency",
+        "manhua": "manhua style medium, polished color rendering, dramatic composition emphasis, serialized readability",
+        "superhero_modern": "modern superhero comic medium, dynamic anatomy exaggeration, impact staging, color-scripted action readability",
+        "indie_webtoon": "indie webtoon medium, distinctive personal line grammar, mobile-first readability, episodic beat consistency",
+    },
+    "mixed_media_art": {
+        "none": "",
+        "collage": "mixed-media collage medium, layered paper/photo fragments, coherent value grouping, intentional cut-edge rhythm",
+        "paper_cut": "paper-cut medium, crisp layered silhouette logic, tactile handcrafted depth, clean color-block readability",
+        "risograph": "risograph print medium, limited-ink palette discipline, registration-character charm, poster-ready graphic clarity",
+        "screenprint": "screenprint medium, bold separations, ink-layer stacking logic, texture-aware flat-shape design",
+        "ink_paint_mix": "ink-plus-paint mixed medium, controlled line-then-mass workflow, material interplay with clear focal priority",
+    },
+}
+
+ART_MEDIUM_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+    "none": {},
+    "digital_painting_pro": {"family": "digital_art", "variant": "painting"},
+    "drawing_ink_pro": {"family": "drawing_art", "variant": "ink"},
+    "stylized_3d_game": {"family": "digital_3d_art", "variant": "stylized"},
+    "pbr_3d_realism": {"family": "digital_3d_art", "variant": "pbr_realistic"},
+    "oil_painting_classic": {"family": "painting_art", "variant": "oil"},
+    "watercolor_storybook": {"family": "painting_art", "variant": "watercolor"},
+    "photo_real_cinematic": {"family": "realistic_art", "variant": "cinematic_still"},
+    "anime_2d_pro": {"family": "anime_cartoon_webcomic", "variant": "anime_2d"},
+    "anime_3d_pro": {"family": "anime_cartoon_webcomic", "variant": "anime_3d"},
+    "cartoon_2d_pro": {"family": "anime_cartoon_webcomic", "variant": "cartoon_2d"},
+    "webcomic_mobile": {"family": "anime_cartoon_webcomic", "variant": "web_comic"},
+    "fantasy_concept_keyart": {"family": "digital_art", "variant": "matte_concept"},
+    "cyberpunk_noir_panel": {"family": "anime_cartoon_webcomic", "variant": "western_comic"},
+    "mecha_anime_action": {"family": "anime_cartoon_webcomic", "variant": "mecha_anime"},
+    "editorial_fashion_real": {"family": "realistic_art", "variant": "fashion_editorial"},
+    "film_noir_bw_real": {"family": "realistic_art", "variant": "black_white_film"},
+    "octane_3d_cinematic": {"family": "digital_3d_art", "variant": "octane_render"},
+    "isometric_voxel_world": {"family": "digital_3d_art", "variant": "voxel"},
+    "mixed_media_collage": {"family": "mixed_media_art", "variant": "collage"},
+    "risograph_poster": {"family": "mixed_media_art", "variant": "risograph"},
+    "concept_sheet_design": {"family": "digital_art", "variant": "concept_sheet"},
+    "visual_dev_story": {"family": "digital_art", "variant": "visual_dev"},
+    "comic_pencil_storyboard": {"family": "drawing_art", "variant": "comic_pencil"},
+    "crosshatch_ink_master": {"family": "drawing_art", "variant": "crosshatch"},
+    "archviz_cinematic": {"family": "digital_3d_art", "variant": "archviz"},
+    "product_cg_studio": {"family": "digital_3d_art", "variant": "product_render"},
+    "mecha_3d_detail": {"family": "digital_3d_art", "variant": "mecha_3d"},
+    "surreal_paint_studio": {"family": "painting_art", "variant": "surreal_paint"},
+    "mural_graphic_large": {"family": "painting_art", "variant": "mural"},
+    "sports_photo_pro": {"family": "realistic_art", "variant": "sports_photo"},
+    "wedding_photo_editorial": {"family": "realistic_art", "variant": "wedding_photo"},
+    "food_photo_editorial": {"family": "realistic_art", "variant": "food_photo"},
+    "anime_movie_keyart": {"family": "anime_cartoon_webcomic", "variant": "anime_movie"},
+    "superhero_action_modern": {"family": "anime_cartoon_webcomic", "variant": "superhero_modern"},
+    "indie_webtoon_episode": {"family": "anime_cartoon_webcomic", "variant": "indie_webtoon"},
 }
 
 # Artist-oriented production bundles inspired by common comic/manga workflows:
@@ -477,6 +701,61 @@ def artist_craft_bundle(
         VALUE_PLAN_HINTS.get((value_plan or "none").lower().strip(), ""),
         SCREENTONE_PLAN_HINTS.get((screentone_plan or "none").lower().strip(), ""),
     ]
+    return merge_prompt_fragments(*bits)
+
+
+def _lookup_medium_hint(family: str, variant: str) -> str:
+    fam = (family or "none").lower().strip()
+    var = (variant or "none").lower().strip()
+    if fam in ART_MEDIUM_VARIANTS and var in ART_MEDIUM_VARIANTS[fam]:
+        return ART_MEDIUM_VARIANTS[fam][var]
+    if var != "none":
+        for fam_map in ART_MEDIUM_VARIANTS.values():
+            if var in fam_map:
+                return fam_map[var]
+    return ""
+
+
+def resolve_art_medium_controls(
+    *,
+    art_medium_pack: str = "none",
+    art_medium_family: str = "none",
+    art_medium_variant: str = "none",
+    art_medium_extra: str = "",
+) -> Dict[str, str]:
+    """
+    Resolve broad art-medium controls from one pack + explicit overrides.
+    """
+    pack = ART_MEDIUM_PACK_PRESETS.get((art_medium_pack or "none").lower().strip(), {})
+    out = {
+        "family": str(pack.get("family", "none")),
+        "variant": str(pack.get("variant", "none")),
+        "extra": "",
+    }
+    if (art_medium_family or "none").lower().strip() != "none":
+        out["family"] = str(art_medium_family).strip()
+    if (art_medium_variant or "none").lower().strip() != "none":
+        out["variant"] = str(art_medium_variant).strip()
+    if str(art_medium_extra).strip():
+        out["extra"] = str(art_medium_extra).strip()
+    return out
+
+
+def art_medium_bundle(
+    *,
+    family: str = "none",
+    variant: str = "none",
+    extra: str = "",
+) -> str:
+    """
+    Build prompt fragments for broad medium families + concrete variants.
+    """
+    bits: List[str] = []
+    hint = _lookup_medium_hint(family, variant)
+    if hint:
+        bits.append(hint)
+    if str(extra).strip():
+        bits.append(str(extra).strip())
     return merge_prompt_fragments(*bits)
 
 
