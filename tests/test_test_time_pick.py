@@ -81,3 +81,11 @@ def test_score_saturation_balance_penalizes_over_saturated():
     s_neutral = test_time_pick.score_saturation_balance(neutral)
     s_oversat = test_time_pick.score_saturation_balance(oversat)
     assert s_neutral > s_oversat
+
+
+def test_weighted_sum_helper_matches_manual():
+    vals = test_time_pick._weighted_sum(
+        [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
+        [0.6, 0.4],
+    )
+    assert vals == [0.8, 1.8, 2.8]

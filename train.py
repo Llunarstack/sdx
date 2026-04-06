@@ -41,10 +41,12 @@ from diffusion import create_diffusion
 from diffusion.timestep_loss_weight import get_timestep_loss_weight
 from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
+from models.attention import create_block_causal_mask_2d
 from models.rae_latent_bridge import RAELatentBridge
 from training.train_args import build_train_config_from_args
 from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
+from utils.training.ar_curriculum import parse_ar_order_mix, resolve_ar_for_step
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
 from utils.training.metrics import MetricsTracker, log_system_info
@@ -91,6 +93,27 @@ def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
         "spectral_sfp_high_sigma": float(getattr(cfg, "spectral_sfp_high_sigma", 0.22)),
         "spectral_sfp_tau_power": float(getattr(cfg, "spectral_sfp_tau_power", 1.0)),
     }
+
+
+def _apply_runtime_ar(raw_model, *, num_ar_blocks: int, ar_block_order: str) -> None:
+    """Update DiT AR regime on a live model (used by curriculum/order-mix training)."""
+    b = int(num_ar_blocks)
+    order = str(ar_block_order or "raster").strip().lower()
+    setattr(raw_model, "num_ar_blocks", b)
+    setattr(raw_model, "ar_block_order", order)
+    if b <= 0:
+        setattr(raw_model, "_ar_mask", None)
+        return
+    n_patches = int(getattr(raw_model, "num_patches", 0) or 0)
+    if n_patches <= 0:
+        setattr(raw_model, "_ar_mask", None)
+        return
+    p = int(round(n_patches**0.5))
+    mask = create_block_causal_mask_2d(p, p, b, block_order=order)
+    ref = getattr(raw_model, "pos_embed", None)
+    if ref is not None and hasattr(ref, "device"):
+        mask = mask.to(device=ref.device)
+    setattr(raw_model, "_ar_mask", mask)
 
 
 def _safe_git_info(repo_root: Path) -> dict:
@@ -1268,9 +1291,45 @@ def main(cfg: TrainConfig):
     else:
         logger.info(f"Epoch-based training: epochs={cfg.epochs}")
 
+    # Dynamic AR schedules can mutate attention masks/orders during training.
+    ar_curriculum_mode = str(getattr(cfg, "ar_curriculum_mode", "none") or "none").strip().lower()
+    ar_order_mix_spec = str(getattr(cfg, "ar_order_mix", "") or "")
+    ar_order_mix_list = parse_ar_order_mix(ar_order_mix_spec)
+    dynamic_ar_runtime = (ar_curriculum_mode != "none") or bool(ar_order_mix_list)
+    raw_model_for_ar = model.module if use_ddp else model
+    last_runtime_ar: Optional[tuple[int, str]] = None
+    if dynamic_ar_runtime:
+        b0, o0 = resolve_ar_for_step(
+            start_step,
+            base_blocks=int(getattr(cfg, "num_ar_blocks", 0)),
+            base_order=str(getattr(cfg, "ar_block_order", "raster") or "raster"),
+            curriculum_mode=ar_curriculum_mode,
+            warmup_steps=int(getattr(cfg, "ar_curriculum_warmup_steps", 0)),
+            ramp_start=int(getattr(cfg, "ar_curriculum_ramp_start", 0)),
+            ramp_end=int(getattr(cfg, "ar_curriculum_ramp_end", 0)),
+            curriculum_start_blocks=int(getattr(cfg, "ar_curriculum_start_blocks", -1)),
+            curriculum_target_blocks=int(getattr(cfg, "ar_curriculum_target_blocks", -1)),
+            order_mix=ar_order_mix_spec,
+        )
+        _apply_runtime_ar(raw_model_for_ar, num_ar_blocks=b0, ar_block_order=o0)
+        last_runtime_ar = (int(b0), str(o0))
+        if rank == 0:
+            logger.info(
+                "Dynamic AR enabled: mode=%s warmup=%d ramp=[%d,%d] mix=%s initial=(blocks=%d order=%s)",
+                ar_curriculum_mode,
+                int(getattr(cfg, "ar_curriculum_warmup_steps", 0)),
+                int(getattr(cfg, "ar_curriculum_ramp_start", 0)),
+                int(getattr(cfg, "ar_curriculum_ramp_end", 0)),
+                ",".join(ar_order_mix_list) if ar_order_mix_list else "(none)",
+                b0,
+                o0,
+            )
+
     # Compile for speed (PyTorch 2+)
     train_model = model
-    if cfg.use_compile and hasattr(torch, "compile"):
+    if dynamic_ar_runtime and cfg.use_compile:
+        logger.warning("Skipping torch.compile because dynamic AR runtime is enabled (curriculum/order-mix).")
+    elif cfg.use_compile and hasattr(torch, "compile"):
         try:
             train_model = torch.compile(model, mode="reduce-overhead")
             logger.info("Model compiled with torch.compile(mode='reduce-overhead')")
@@ -1330,6 +1389,25 @@ def main(cfg: TrainConfig):
         for batch in batch_iter:
             last_attn_grounding: Optional[float] = None
             last_attn_cov: Optional[float] = None
+            if dynamic_ar_runtime:
+                b_now, o_now = resolve_ar_for_step(
+                    steps,
+                    base_blocks=int(getattr(cfg, "num_ar_blocks", 0)),
+                    base_order=str(getattr(cfg, "ar_block_order", "raster") or "raster"),
+                    curriculum_mode=ar_curriculum_mode,
+                    warmup_steps=int(getattr(cfg, "ar_curriculum_warmup_steps", 0)),
+                    ramp_start=int(getattr(cfg, "ar_curriculum_ramp_start", 0)),
+                    ramp_end=int(getattr(cfg, "ar_curriculum_ramp_end", 0)),
+                    curriculum_start_blocks=int(getattr(cfg, "ar_curriculum_start_blocks", -1)),
+                    curriculum_target_blocks=int(getattr(cfg, "ar_curriculum_target_blocks", -1)),
+                    order_mix=ar_order_mix_spec,
+                )
+                curr = (int(b_now), str(o_now))
+                if curr != last_runtime_ar:
+                    _apply_runtime_ar(raw_model_for_ar, num_ar_blocks=curr[0], ar_block_order=curr[1])
+                    last_runtime_ar = curr
+                    if rank == 0:
+                        logger.info("AR runtime update @step=%d -> num_ar_blocks=%d ar_block_order=%s", steps, curr[0], curr[1])
             # LR schedule (step-based: cosine after warmup)
             if use_step_based:
                 lr = get_lr_cosine(

@@ -18,14 +18,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-def _ensure_native_python_path() -> Path:
-    root = Path(__file__).resolve().parents[2]
-    np = root / "native" / "python"
-    if str(np) not in sys.path:
-        sys.path.insert(0, str(np))
-    return root
-
-
 def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> Dict[str, Any]:
     n = 0
     key_counts: Counter[str] = Counter()
@@ -74,9 +66,8 @@ def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> Dict[str, Any]:
 
 def try_rust_stats(manifest: Path) -> str | None:
     """Run ``sdx-jsonl-tools stats`` when the release binary exists (via ``native_tools``)."""
-    _ensure_native_python_path()
     try:
-        from sdx_native.native_tools import run_rust_jsonl_stats, rust_jsonl_tools_exe
+        from utils.native import run_rust_jsonl_stats, rust_jsonl_tools_exe
     except ImportError:
         return None
     if rust_jsonl_tools_exe() is None:
@@ -101,7 +92,6 @@ def main() -> int:
         print(f"Not a file: {path}", file=sys.stderr)
         return 1
 
-    _ensure_native_python_path()
     d = digest_jsonl(path)
     if args.rust_stats:
         d["rust_stats_stdout"] = try_rust_stats(path)

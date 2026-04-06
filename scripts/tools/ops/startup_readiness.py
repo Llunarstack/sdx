@@ -82,7 +82,7 @@ def _gpu_status() -> Dict[str, Any]:
 
 def _gather_native_status() -> Dict[str, Any]:
     try:
-        from utils.native.native_tools import native_stack_status
+        from utils.native import native_stack_status
 
         return dict(native_stack_status())
     except Exception as exc:

@@ -11,7 +11,7 @@ from typing import List, Sequence, Tuple
 import numpy as np
 
 try:
-    from utils.native.image_metrics import (
+    from utils.native import (
         maybe_count_components_native,
         maybe_image_luma_stats_cuda,
         maybe_image_stats_native,
@@ -20,6 +20,12 @@ except Exception:  # pragma: no cover - optional native path
     maybe_image_stats_native = None
     maybe_image_luma_stats_cuda = None
     maybe_count_components_native = None
+
+try:
+    from utils.native import maybe_norm01_native, maybe_weighted_sum_native
+except Exception:  # pragma: no cover - optional native path
+    maybe_norm01_native = None
+    maybe_weighted_sum_native = None
 
 _clip_model = None
 _clip_processor = None
@@ -66,10 +72,39 @@ def _norm01(scores: Sequence[float]) -> List[float]:
     s = list(scores)
     if not s:
         return []
+    if maybe_norm01_native is not None:
+        try:
+            out = maybe_norm01_native([float(x) for x in s])
+            if out is not None and len(out) == len(s):
+                return [float(x) for x in out]
+        except Exception:
+            pass
     lo, hi = min(s), max(s)
     if hi - lo < 1e-8:
         return [0.5] * len(s)
     return [(x - lo) / (hi - lo) for x in s]
+
+
+def _weighted_sum(score_lists: Sequence[Sequence[float]], weights: Sequence[float]) -> List[float]:
+    rows = [list(r) for r in score_lists]
+    if not rows:
+        return []
+    cols = len(rows[0])
+    if any(len(r) != cols for r in rows):
+        raise ValueError("score lists must be rectangular")
+    if len(rows) != len(weights):
+        raise ValueError("weights length must equal number of score lists")
+    if maybe_weighted_sum_native is not None:
+        try:
+            out = maybe_weighted_sum_native(
+                [[float(v) for v in row] for row in rows],
+                [float(w) for w in weights],
+            )
+            if out is not None and len(out) == cols:
+                return [float(x) for x in out]
+        except Exception:
+            pass
+    return [float(sum(float(w) * float(rows[r][c]) for r, w in enumerate(weights))) for c in range(cols)]
 
 
 def score_edge_sharpness(rgb_uint8: np.ndarray) -> float:
@@ -489,16 +524,16 @@ def pick_best_indices(
         s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
         if expected_text and str(expected_text).strip():
             s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            combined = [0.5 * c + 0.35 * e + 0.15 * o for c, e, o in zip(s_clip, s_edge, s_ocr)]
+            combined = _weighted_sum([s_clip, s_edge, s_ocr], [0.5, 0.35, 0.15])
         else:
-            combined = [0.65 * c + 0.35 * e for c, e in zip(s_clip, s_edge)]
+            combined = _weighted_sum([s_clip, s_edge], [0.65, 0.35])
         return int(np.argmax(combined)), combined
 
     if metric == "combo_exposure":
         s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
         s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
         s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        combined = [0.45 * c + 0.30 * e + 0.25 * x for c, e, x in zip(s_clip, s_edge, s_exp)]
+        combined = _weighted_sum([s_clip, s_edge, s_exp], [0.45, 0.30, 0.25])
         return int(np.argmax(combined)), combined
 
     if metric == "combo_structural":
@@ -506,7 +541,7 @@ def pick_best_indices(
         s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
         s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
         s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        combined = [0.35 * c + 0.25 * e + 0.20 * x + 0.20 * t for c, e, x, t in zip(s_clip, s_edge, s_exp, s_tile)]
+        combined = _weighted_sum([s_clip, s_edge, s_exp, s_tile], [0.35, 0.25, 0.20, 0.20])
         return int(np.argmax(combined)), combined
 
     if metric == "combo_hq":
@@ -516,10 +551,7 @@ def pick_best_indices(
         s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
         s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
         s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
-        combined = [
-            0.27 * c + 0.18 * e + 0.18 * x + 0.14 * t + 0.12 * k + 0.11 * s
-            for c, e, x, t, k, s in zip(s_clip, s_edge, s_exp, s_tile, s_cast, s_sat)
-        ]
+        combined = _weighted_sum([s_clip, s_edge, s_exp, s_tile, s_cast, s_sat], [0.27, 0.18, 0.18, 0.14, 0.12, 0.11])
         return int(np.argmax(combined)), combined
 
     if metric == "combo_count":
@@ -561,16 +593,16 @@ def pick_best_indices(
                 s_cnt = _norm01([score_people_count_match(im, exp_count) for im in rgb_images])
             if expected_text and str(expected_text).strip():
                 s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-                combined = [0.38 * c + 0.22 * e + 0.30 * n + 0.10 * o for c, e, n, o in zip(s_clip, s_edge, s_cnt, s_ocr)]
+                combined = _weighted_sum([s_clip, s_edge, s_cnt, s_ocr], [0.38, 0.22, 0.30, 0.10])
             else:
-                combined = [0.45 * c + 0.25 * e + 0.30 * n for c, e, n in zip(s_clip, s_edge, s_cnt)]
+                combined = _weighted_sum([s_clip, s_edge, s_cnt], [0.45, 0.25, 0.30])
             return int(np.argmax(combined)), combined
         # No count target found; fall back to standard combo behavior.
         if expected_text and str(expected_text).strip():
             s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            combined = [0.5 * c + 0.35 * e + 0.15 * o for c, e, o in zip(s_clip, s_edge, s_ocr)]
+            combined = _weighted_sum([s_clip, s_edge, s_ocr], [0.5, 0.35, 0.15])
         else:
-            combined = [0.65 * c + 0.35 * e for c, e in zip(s_clip, s_edge)]
+            combined = _weighted_sum([s_clip, s_edge], [0.65, 0.35])
         return int(np.argmax(combined)), combined
 
     return 0, [0.0] * n

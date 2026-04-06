@@ -42,6 +42,45 @@ def _matches(prompt: str, patterns: Sequence[re.Pattern]) -> bool:
     return any(p.search(prompt) for p in patterns)
 
 
+MEDIUM_ALIAS_TERMS: Dict[str, Tuple[str, ...]] = {
+    "digital painting": ("digital paint", "painted digitally", "procreate painting", "photoshop painting"),
+    "concept art": ("concept key art", "keyframe concept", "environment concept art"),
+    "pixel art": ("pixelart", "retro pixel", "sprite art"),
+    "hard surface": ("hard-surface", "mecha hard surface", "mechanical hard-surface"),
+    "archviz": ("architectural visualization", "arch viz", "interior visualization render"),
+    "toon 3d": ("toon-shaded 3d", "cel-shaded 3d", "cartoon 3d render"),
+    "street photography": ("street photo", "street documentary"),
+    "sports photography": ("sports action photo", "action sports shot"),
+    "wedding photo": ("wedding photography", "bridal photo", "ceremony photo shoot"),
+    "food photography": ("food photo", "culinary photography", "editorial food shot"),
+    "black and white film": ("bw film photo", "black-and-white film", "monochrome analog photo"),
+    "ink wash": ("sumi-e", "sumi e", "brush ink wash"),
+    "storyboard sketch": ("animatic storyboard", "pencil storyboard", "film storyboard sketch"),
+    "ceramic sculpture": ("ceramic art", "clay sculpture", "glazed ceramic sculpture"),
+    "miniature diorama photo": ("miniature photo", "diorama photography", "tabletop diorama shot"),
+}
+
+_MEDIUM_ALIAS_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = tuple(
+    (re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE), canonical)
+    for canonical, aliases in MEDIUM_ALIAS_TERMS.items()
+    for alias in aliases
+)
+
+
+def _expand_medium_aliases(prompt: str) -> str:
+    p = str(prompt or "").strip()
+    if not p:
+        return p
+    found: List[str] = []
+    for pat, canonical in _MEDIUM_ALIAS_PATTERNS:
+        if pat.search(p):
+            found.append(canonical)
+    if not found:
+        return p
+    extras = ", ".join(sorted(set(found)))
+    return f"{p}, {extras}"
+
+
 def merge_csv_unique(*chunks: str) -> str:
     seen = set()
     out: List[str] = []
@@ -92,6 +131,18 @@ MEDIUM_SPECS: Tuple[MediumSpec, ...] = (
         positive_hints="soft pigment grain, directional blending, visible medium texture",
         negative_hints="over-smoothed surface, synthetic gradient plastic look",
     ),
+    MediumSpec(
+        id="tempera_fresco",
+        keywords=("tempera", "fresco", "egg tempera", "wall painting"),
+        positive_hints="matte mineral pigment feel, controlled historical brush layering, stable value grouping",
+        negative_hints="glossy plastic finish, random texture noise, inconsistent surface response",
+    ),
+    MediumSpec(
+        id="ink_wash_calligraphy",
+        keywords=("ink wash", "sumi-e", "calligraphy brush", "brush ink"),
+        positive_hints="intentional brush-pressure rhythm, controlled dilution transitions, elegant negative-space composition",
+        negative_hints="muddy gray soup, chaotic stroke thickness, accidental blot artifacts",
+    ),
     # --- Digital art ---
     MediumSpec(
         id="digital_painting",
@@ -123,6 +174,55 @@ MEDIUM_SPECS: Tuple[MediumSpec, ...] = (
         positive_hints="cohesive hand-painted texture flow, consistent texel density, readable albedo value design",
         negative_hints="random noisy albedo, swimming details, inconsistent brush scale across surfaces",
     ),
+    MediumSpec(
+        id="anime_digital_render",
+        keywords=("anime render", "anime illustration", "cel shading", "toon shading", "anime style"),
+        positive_hints="stable anime facial grammar, controlled cel-value breakup, clean contour readability",
+        negative_hints="anime-realism style drift, muddy cel boundaries, inconsistent eye/line conventions",
+    ),
+    MediumSpec(
+        id="ui_icon_vector",
+        keywords=("ui icon", "icon design", "logo mark", "minimal vector", "flat icon"),
+        positive_hints="crisp vector silhouette logic, scalable shape clarity, consistent corner and stroke rules",
+        negative_hints="blurry edges, uneven stroke widths, accidental texture bleed into flat design",
+    ),
+    MediumSpec(
+        id="matte_concept_dev",
+        keywords=("visual development", "color script", "concept sheet", "keyframe art", "lookdev"),
+        positive_hints="strong composition intent, iterative design readability, coherent mood and color continuity",
+        negative_hints="generic concept mush, unfocused detail clutter, conflicting scene language",
+    ),
+    # --- 3D / render-focused ---
+    MediumSpec(
+        id="hard_surface_3d",
+        keywords=("hard surface", "mecha 3d", "mechanical design", "sci-fi machinery", "cad render"),
+        positive_hints="clean bevel logic, articulated part readability, coherent material break-up",
+        negative_hints="mushy panel seams, random greeble noise, impossible mechanical articulation",
+    ),
+    MediumSpec(
+        id="archviz_3d",
+        keywords=("archviz", "architectural visualization", "interior render", "exterior render", "real estate render"),
+        positive_hints="vertical perspective discipline, believable global illumination, premium material plausibility",
+        negative_hints="warped architecture lines, inconsistent interior lighting, implausible reflective behavior",
+    ),
+    MediumSpec(
+        id="toon_3d",
+        keywords=("toon 3d", "cartoon 3d", "stylized 3d render", "anime 3d"),
+        positive_hints="shape-first stylization, clean toon-ramp transitions, readable silhouette priority",
+        negative_hints="half-toon half-photoreal inconsistencies, noisy specular clutter, unstable contour logic",
+    ),
+    MediumSpec(
+        id="storyboard_sketch",
+        keywords=("storyboard sketch", "storyboard", "animatic", "thumbnail storyboard", "shot sketch"),
+        positive_hints="cinematic shot readability, clear staging arrows and beat intent, disciplined perspective shorthand",
+        negative_hints="ambiguous shot language, cluttered line noise, weak panel-to-panel readability",
+    ),
+    MediumSpec(
+        id="ceramic_sculpture",
+        keywords=("ceramic sculpture", "ceramic art", "clay sculpture", "glazed ceramic", "stoneware sculpture"),
+        positive_hints="material-true clay surface response, believable handcrafted asymmetry, coherent glaze behavior",
+        negative_hints="plastic synthetic surface, impossible glaze reflections, uniform machine-perfect form",
+    ),
     # --- Photography / realism ---
     MediumSpec(
         id="portrait_photo",
@@ -150,6 +250,41 @@ MEDIUM_SPECS: Tuple[MediumSpec, ...] = (
         keywords=("macro photo", "wildlife photo", "nature photo", "telephoto", "close-up photo"),
         positive_hints="optical depth realism, sharp subject isolation, natural texture fidelity and detail falloff",
         negative_hints="uniform fake sharpness, texture hallucination, physically implausible depth",
+        is_photography=True,
+    ),
+    MediumSpec(
+        id="sports_action_photo",
+        keywords=("sports photo", "action photo", "sports photography", "match photo", "stadium photo"),
+        positive_hints="decisive action timing, subject isolation under motion, realistic lens compression behavior",
+        negative_hints="frozen mannequin motion, smeared limbs, unrealistic shutter-motion artifacts",
+        is_photography=True,
+    ),
+    MediumSpec(
+        id="wedding_event_photo",
+        keywords=("wedding photo", "event photo", "ceremony photo", "bridal portrait", "reception photo"),
+        positive_hints="natural candid emotion capture, flattering skin tone handling, coherent event lighting balance",
+        negative_hints="plastic skin retouch, overblown highlights, inconsistent white-balance across subjects",
+        is_photography=True,
+    ),
+    MediumSpec(
+        id="food_product_photo",
+        keywords=("food photo", "food photography", "product photo", "catalog photo", "commercial product"),
+        positive_hints="material appetizing realism, controlled studio highlights, clean composition for commercial read",
+        negative_hints="greasy glare overload, texture mush, physically implausible product reflections",
+        is_photography=True,
+    ),
+    MediumSpec(
+        id="film_bw_photo",
+        keywords=("black and white film", "monochrome film", "35mm film", "analog photo", "film grain"),
+        positive_hints="monochrome tonal discipline, natural film-like grain cadence, cinematic contrast control",
+        negative_hints="flat gray tonality, fake digital crunch, inconsistent grain/noise layering",
+        is_photography=True,
+    ),
+    MediumSpec(
+        id="miniature_diorama_photo",
+        keywords=("miniature diorama photo", "miniature photo", "diorama photography", "tabletop miniature", "scale model photo"),
+        positive_hints="convincing scale cues, controlled macro depth behavior, realistic miniature lighting ratios",
+        negative_hints="scale-breaking blur behavior, toy-like plastic highlights, inconsistent depth-of-field physics",
         is_photography=True,
     ),
 )
@@ -189,6 +324,7 @@ ANATOMY_NEG_STRONG = (
 def detect_medium_ids(prompt: str, *, include_photography: bool) -> Tuple[str, ...]:
     if not prompt or not prompt.strip():
         return ()
+    prompt = _expand_medium_aliases(prompt)
     out: List[str] = []
     for spec in MEDIUM_SPECS:
         if spec.is_photography and not include_photography:

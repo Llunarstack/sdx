@@ -3,7 +3,7 @@
 Merge multiple manifest JSONL files with dedupe (first wins).
 
 Prefers the Go binary ``native/go/sdx-manifest`` if built; otherwise uses
-:func:`utils.native.native_tools.merge_jsonl_files` (pure Python).
+:func:`utils.native.merge_jsonl_files` (pure Python).
 
 Usage (repo root)::
 
@@ -33,7 +33,7 @@ def main() -> int:
     ap.add_argument("inputs", nargs="+", help="Input .jsonl files (order preserved for first-wins)")
     args = ap.parse_args()
 
-    from utils.native.native_tools import merge_jsonl_files
+    from utils.native import merge_jsonl_files
 
     ins = [Path(p) for p in args.inputs]
     for p in ins:

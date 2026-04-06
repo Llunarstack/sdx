@@ -161,6 +161,25 @@ install(TARGETS sdx_image_metrics
   ARCHIVE DESTINATION lib
 )
 
+# CPU score ops (min-max normalization + weighted sum fusion for pick-best).
+add_library(sdx_score_ops SHARED
+  src/sdx_score_ops.cpp
+)
+target_include_directories(sdx_score_ops
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_definitions(sdx_score_ops PRIVATE SDX_SCORE_OPS_BUILD)
+if(MSVC)
+  target_compile_definitions(sdx_score_ops PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+install(TARGETS sdx_score_ops
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
 # Optional CUDA: image layout + small ML-style ops (requires nvcc).
 option(SDX_BUILD_CUDA "Build CUDA targets (hwc_to_chw, l2_normalize_rows, flow_matching_velocity, nf4, sdpa_online, rmsnorm, rope, silu_gate)" OFF)
 if(SDX_BUILD_CUDA)

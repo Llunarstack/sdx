@@ -136,7 +136,16 @@ class TrainConfig:
     # Block-wise AR mask (ACDiT-style): 0 = full bidirectional attention.
     # 2 = 2×2 blocks, 4 = 4×4 blocks in raster order. See docs/AR.md.
     num_ar_blocks: int = 0
-    ar_block_order: str = "raster"  # "raster" | "zorder"
+    ar_block_order: str = "raster"  # "raster" | "zorder" | "snake" | "spiral"
+    # Runtime AR schedule (applied in train loop; can change block count per step).
+    ar_curriculum_mode: str = "none"  # "none" | "step" | "linear"
+    ar_curriculum_warmup_steps: int = 0
+    ar_curriculum_ramp_start: int = 0
+    ar_curriculum_ramp_end: int = 0
+    ar_curriculum_start_blocks: int = -1  # -1 => default to 0
+    ar_curriculum_target_blocks: int = -1  # -1 => default to num_ar_blocks
+    # Per-step deterministic order cycling: "raster,zorder,snake,spiral" (empty = disabled).
+    ar_order_mix: str = ""
     use_xformers: bool = True
     negative_prompt_weight: float = 0.5
     style_embed_dim: int = 0        # > 0 enables T5-encoded style conditioning
