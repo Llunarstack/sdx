@@ -29,6 +29,7 @@ _CANONICAL: dict[str, Path] = {
     "jsonl_merge": _HERE / "data" / "jsonl_merge.py",
     "prompt_lint": _HERE / "prompt" / "prompt_lint.py",
     "tag_coverage": _HERE / "prompt" / "tag_coverage.py",
+    "suggest_style_packs": _HERE / "prompt" / "suggest_style_packs.py",
     "export_onnx": _HERE / "export" / "export_onnx.py",
     "export_safetensors": _HERE / "export" / "export_safetensors.py",
     "op_preflight": _HERE / "ops" / "op_preflight.py",

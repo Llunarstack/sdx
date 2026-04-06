@@ -1228,8 +1228,9 @@ def main():
             "combo_structural",
             "combo_hq",
             "combo_count",
+            "combo_realism",
         ],
-        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count)",
+        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count|combo_realism)",
     )
     parser.add_argument(
         "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"
@@ -1436,6 +1437,92 @@ def main():
         choices=["none", "photographic", "dslr", "film"],
         help="Bias toward real camera / film capture instead of CG render.",
     )
+    parser.add_argument(
+        "--photo-realism-pack",
+        type=str,
+        default="none",
+        choices=["none", "documentary", "cinematic", "studio_portrait", "film_analog", "night_noir", "product_catalog", "fashion_editorial"],
+        help="Photography realism pack for prompt+negative guidance.",
+    )
+    parser.add_argument(
+        "--photo-color-grade",
+        type=str,
+        default="none",
+        choices=["none", "natural", "teal_orange", "kodak_portra", "cinestill_800t", "noir_bw", "fujifilm_eterna"],
+        help="Photography color-grade direction.",
+    )
+    parser.add_argument(
+        "--photo-lighting-technique",
+        type=str,
+        default="none",
+        choices=["none", "three_point", "golden_hour", "overcast_soft", "motivated_practical", "rim_backlight", "butterfly", "rembrandt"],
+        help="Photography lighting-technique cues.",
+    )
+    parser.add_argument(
+        "--photo-filter",
+        type=str,
+        default="none",
+        choices=["none", "pro_mist", "polarizer", "nd_long_exposure", "vintage_diffusion", "clean_digital"],
+        help="Photographic filter-style cues.",
+    )
+    parser.add_argument(
+        "--photo-grain-style",
+        type=str,
+        default="none",
+        choices=["none", "fine_35mm", "medium_35mm", "heavy_16mm", "clean_digital"],
+        help="Photography grain-style cue.",
+    )
+    parser.add_argument(
+        "--photo-realism-strength",
+        type=float,
+        default=1.0,
+        help="Prompt weighting strength for photo-realism cues (0.25-2.0).",
+    )
+    parser.add_argument(
+        "--photo-postprocess",
+        dest="photo_postprocess",
+        action="store_true",
+        help="Apply photography-focused post process (grade/filter/grain) based on selected photo controls (default: on).",
+    )
+    parser.add_argument(
+        "--no-photo-postprocess",
+        dest="photo_postprocess",
+        action="store_false",
+        help="Disable photography post process.",
+    )
+    parser.set_defaults(photo_postprocess=True)
+    parser.add_argument(
+        "--photo-post-strength",
+        type=float,
+        default=0.6,
+        help="Strength for photography post process grade/filter (0-1).",
+    )
+    parser.add_argument(
+        "--auto-photo-realism",
+        dest="auto_photo_realism",
+        action="store_true",
+        help="Auto-infer photo-realism controls from prompt keywords (default: on).",
+    )
+    parser.add_argument(
+        "--no-auto-photo-realism",
+        dest="auto_photo_realism",
+        action="store_false",
+        help="Disable auto photo-realism inference.",
+    )
+    parser.set_defaults(auto_photo_realism=True)
+    parser.add_argument(
+        "--realism-autopilot",
+        dest="realism_autopilot",
+        action="store_true",
+        help="Auto-tune photo post strength, grain, and auto pick-best metric for photographic prompts (default: on).",
+    )
+    parser.add_argument(
+        "--no-realism-autopilot",
+        dest="realism_autopilot",
+        action="store_false",
+        help="Disable realism autopilot.",
+    )
+    parser.set_defaults(realism_autopilot=True)
     parser.add_argument(
         "--lora-scaffold",
         type=str,
@@ -1887,6 +1974,25 @@ def main():
         help="Character identity strength (0.5-2.0): higher reinforces profile traits.",
     )
     parser.add_argument(
+        "--auto-original-character",
+        dest="auto_original_character",
+        action="store_true",
+        help="Auto-synthesize an original character profile when prompt asks for OC/character design (default: on).",
+    )
+    parser.add_argument(
+        "--no-auto-original-character",
+        dest="auto_original_character",
+        action="store_false",
+        help="Disable automatic OC synthesis from prompt intent.",
+    )
+    parser.set_defaults(auto_original_character=True)
+    parser.add_argument(
+        "--auto-oc-seed-offset",
+        type=int,
+        default=0,
+        help="Extra deterministic seed offset for auto-OC synthesis.",
+    )
+    parser.add_argument(
         "--uncensored-mode",
         action="store_true",
         default=True,
@@ -2033,6 +2139,31 @@ def main():
     elif size_tokens:
         args.prompt = size_tokens
 
+    auto_oc_negative_additions = ""
+    if getattr(args, "auto_original_character", True) and getattr(args, "prompt", ""):
+        try:
+            from utils.prompt.auto_oc import infer_auto_original_character
+
+            _auto_profile = infer_auto_original_character(
+                str(getattr(args, "prompt", "") or ""),
+                seed=int(getattr(args, "seed", 0)) + int(getattr(args, "auto_oc_seed_offset", 0)),
+                style_context=", ".join(
+                    [
+                        str(getattr(args, "style", "") or ""),
+                        str(getattr(args, "hard_style", "") or ""),
+                        str(getattr(args, "preset", "") or ""),
+                        str(getattr(args, "op_mode", "") or ""),
+                    ]
+                ),
+            )
+            if _auto_profile is not None and not str(getattr(args, "character_sheet", "") or "").strip():
+                _auto_block = _auto_profile.to_prompt_block()
+                if _auto_block:
+                    args.prompt = f"{args.prompt}, {_auto_block}".strip(", ")
+                auto_oc_negative_additions = str(getattr(_auto_profile, "negative_block", "") or "").strip()
+        except Exception:
+            pass
+
     # Character sheet injection: adds user-defined character appearance tokens to prompt
     # and character-specific negative tokens to discourage drift.
     character_positive_additions = ""
@@ -2078,6 +2209,8 @@ def main():
             character_negative_additions = ", ".join([x for x in neg_all if x]).strip(", ")
     if getattr(args, "character_negative_extra", "").strip():
         character_negative_additions = f"{character_negative_additions}, {args.character_negative_extra}".strip(", ")
+    if auto_oc_negative_additions:
+        character_negative_additions = f"{character_negative_additions}, {auto_oc_negative_additions}".strip(", ")
     if getattr(args, "character_prompt_extra", "").strip():
         character_positive_additions = f"{character_positive_additions}, {args.character_prompt_extra}".strip(", ")
 
@@ -2431,6 +2564,76 @@ def main():
                 args.prompt = prompt_to_encode
         except Exception:
             pass
+    _photo_neg = ""
+    _pr_grade_ef = "none"
+    _pr_filter_ef = "none"
+    _pr_grain_ef = "none"
+    _pr_pack_ef = "none"
+    _is_photo_prompt = False
+    _auto_pick_metric = ""
+    try:
+        from utils.prompt.photo_realism import (
+            infer_photo_realism_controls,
+            is_photographic_prompt,
+            photo_realism_fragments,
+            recommend_photo_post_profile,
+        )
+
+        _pr_pack = str(getattr(args, "photo_realism_pack", "none") or "none")
+        _pr_grade = str(getattr(args, "photo_color_grade", "none") or "none")
+        _pr_light = str(getattr(args, "photo_lighting_technique", "none") or "none")
+        _pr_filter = str(getattr(args, "photo_filter", "none") or "none")
+        _pr_grain = str(getattr(args, "photo_grain_style", "none") or "none")
+        _pr_strength = float(getattr(args, "photo_realism_strength", 1.0) or 1.0)
+        if getattr(args, "auto_photo_realism", True):
+            _pr_inf = infer_photo_realism_controls(prompt_to_encode)
+            if _pr_pack == "none" and _pr_inf.get("photo_realism_pack"):
+                _pr_pack = str(_pr_inf["photo_realism_pack"])
+            if _pr_grade == "none" and _pr_inf.get("photo_color_grade"):
+                _pr_grade = str(_pr_inf["photo_color_grade"])
+            if _pr_light == "none" and _pr_inf.get("photo_lighting_technique"):
+                _pr_light = str(_pr_inf["photo_lighting_technique"])
+            if _pr_filter == "none" and _pr_inf.get("photo_filter"):
+                _pr_filter = str(_pr_inf["photo_filter"])
+        _is_photo_prompt = bool(is_photographic_prompt(prompt_to_encode))
+        _pr_pos, _pr_neg = photo_realism_fragments(
+            photo_realism_pack=_pr_pack,
+            photo_color_grade=_pr_grade,
+            photo_lighting_technique=_pr_light,
+            photo_filter=_pr_filter,
+            photo_grain_style=_pr_grain,
+            strength=_pr_strength,
+        )
+        if _pr_pos:
+            prompt_to_encode = f"{prompt_to_encode}, {_pr_pos}".strip().strip(",")
+            args.prompt = prompt_to_encode
+            # Photo realism cues pair well with camera-media grounding.
+            if str(getattr(args, "human_media_mode", "none") or "none") == "none":
+                args.human_media_mode = "photographic"
+        _pr_grade_ef = str(_pr_grade or "none")
+        _pr_filter_ef = str(_pr_filter or "none")
+        _pr_grain_ef = str(_pr_grain or "none")
+        _pr_pack_ef = str(_pr_pack or "none")
+        if bool(getattr(args, "realism_autopilot", True)) and (_is_photo_prompt or _pr_pack_ef != "none"):
+            _rp = recommend_photo_post_profile(
+                photo_realism_pack=_pr_pack_ef,
+                photo_color_grade=_pr_grade_ef,
+                photo_filter=_pr_filter_ef,
+                photo_grain_style=_pr_grain_ef,
+            )
+            if str(_pr_grain_ef).lower() == "none" and str(_rp.get("photo_grain_style", "none")).lower() != "none":
+                _pr_grain_ef = str(_rp["photo_grain_style"])
+                args.photo_grain_style = _pr_grain_ef
+            if abs(float(getattr(args, "photo_post_strength", 0.6) or 0.6) - 0.6) < 1e-6:
+                try:
+                    args.photo_post_strength = float(_rp.get("photo_post_strength", "0.62"))
+                except Exception:
+                    pass
+            _auto_pick_metric = str(_rp.get("pick_best_metric", "") or "")
+        if _pr_neg:
+            _photo_neg = _pr_neg
+    except Exception:
+        pass
     try:
         from config.prompt_domains import ANTI_AI_LOOK_NEGATIVE, ANTI_AI_LOOK_NEGATIVE_STRONG
 
@@ -2513,6 +2716,8 @@ def main():
         negative_text_raw = f"{negative_text_raw}, {_ag_neg}".strip()
     if _sg_neg:
         negative_text_raw = f"{negative_text_raw}, {_sg_neg}".strip()
+    if _photo_neg:
+        negative_text_raw = f"{negative_text_raw}, {_photo_neg}".strip()
     if getattr(args, "less_ai", False):
         if str(getattr(args, "anti_ai_pack", "none") or "none") == "none":
             args.anti_ai_pack = "lite"
@@ -3578,6 +3783,35 @@ def main():
                     img_np = sharpen(img_np, amount=args.sharpen)
             except Exception:
                 pass
+        _run_photo_post = bool(getattr(args, "photo_postprocess", True)) and (
+            str(_pr_grade_ef).lower() != "none"
+            or str(_pr_filter_ef).lower() != "none"
+            or str(_pr_grain_ef).lower() != "none"
+        )
+        if _run_photo_post:
+            try:
+                from utils.quality import add_film_grain, apply_photo_color_grade, apply_photo_filter
+
+                _pps = float(getattr(args, "photo_post_strength", 0.6) or 0.6)
+                img_np = apply_photo_color_grade(img_np, preset=str(_pr_grade_ef or "none"), strength=_pps)
+                img_np = apply_photo_filter(
+                    img_np,
+                    filter_name=str(_pr_filter_ef or "none"),
+                    strength=_pps,
+                    seed=int(args.seed) + i,
+                )
+                _grain_map = {
+                    "none": 0.0,
+                    "fine_35mm": 0.008,
+                    "medium_35mm": 0.015,
+                    "heavy_16mm": 0.026,
+                    "clean_digital": 0.002,
+                }
+                _g = _grain_map.get(str(_pr_grain_ef or "none").lower(), 0.0)
+                if _g > 0:
+                    img_np = add_film_grain(img_np, amount=float(_g), seed=int(args.seed) + i)
+            except Exception:
+                pass
         if getattr(args, "naturalize", False):
             try:
                 from utils.quality import naturalize
@@ -3614,10 +3848,14 @@ def main():
 
     pick_m = (getattr(args, "pick_best", None) or "none").lower()
     if pick_m == "auto":
-        if isinstance(expected_texts, list) and expected_texts:
+        if bool(getattr(args, "realism_autopilot", True)) and str(_auto_pick_metric).strip():
+            pick_m = str(_auto_pick_metric).strip().lower()
+        elif isinstance(expected_texts, list) and expected_texts:
             pick_m = "combo"
         elif re.search(r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b", str(prompt_to_encode).lower()):
             pick_m = "combo_count"
+        elif _is_photo_prompt or str(_pr_pack_ef).lower() != "none":
+            pick_m = "combo_realism"
         else:
             pick_m = "combo_hq"
         print(f"pick-best auto -> {pick_m}", file=sys.stderr)
@@ -3830,6 +4068,26 @@ def main():
                         repair_cmd += ["--object-scale", str(getattr(args, "object_scale"))]
                     if getattr(args, "scene_scale", ""):
                         repair_cmd += ["--scene-scale", str(getattr(args, "scene_scale"))]
+                    if str(getattr(args, "photo_realism_pack", "none") or "none") != "none":
+                        repair_cmd += ["--photo-realism-pack", str(getattr(args, "photo_realism_pack"))]
+                    if str(getattr(args, "photo_color_grade", "none") or "none") != "none":
+                        repair_cmd += ["--photo-color-grade", str(getattr(args, "photo_color_grade"))]
+                    if str(getattr(args, "photo_lighting_technique", "none") or "none") != "none":
+                        repair_cmd += ["--photo-lighting-technique", str(getattr(args, "photo_lighting_technique"))]
+                    if str(getattr(args, "photo_filter", "none") or "none") != "none":
+                        repair_cmd += ["--photo-filter", str(getattr(args, "photo_filter"))]
+                    if str(getattr(args, "photo_grain_style", "none") or "none") != "none":
+                        repair_cmd += ["--photo-grain-style", str(getattr(args, "photo_grain_style"))]
+                    if float(getattr(args, "photo_realism_strength", 1.0) or 1.0) != 1.0:
+                        repair_cmd += ["--photo-realism-strength", str(getattr(args, "photo_realism_strength"))]
+                    if not bool(getattr(args, "auto_photo_realism", True)):
+                        repair_cmd += ["--no-auto-photo-realism"]
+                    if not bool(getattr(args, "photo_postprocess", True)):
+                        repair_cmd += ["--no-photo-postprocess"]
+                    if float(getattr(args, "photo_post_strength", 0.6) or 0.6) != 0.6:
+                        repair_cmd += ["--photo-post-strength", str(getattr(args, "photo_post_strength"))]
+                    if not bool(getattr(args, "realism_autopilot", True)):
+                        repair_cmd += ["--no-realism-autopilot"]
                     if getattr(args, "character_sheet", ""):
                         repair_cmd += ["--character-sheet", str(getattr(args, "character_sheet"))]
                     if getattr(args, "label_multi_character_sheets", False):

@@ -797,6 +797,24 @@ def main() -> None:
             "polaroid_vintage",
             "street_noir_photo",
             "wildlife_naturalist",
+            "anime_game_toon_pbr",
+            "genshin_like_3d_anime",
+            "honkai_starrail_3d_anime",
+            "zenless_zone_urban_anime",
+            "persona_ui_stylized",
+            "arcane_painterly_3d",
+            "guiltygear_hybrid",
+            "anime_cg_cutscene",
+            "digital_fantasy_splash",
+            "digital_semi_real_portrait",
+            "digital_mobile_game_iconic",
+            "pbr_cinematic_keyart",
+            "stylized_3d_overwatch_like",
+            "unreal_realtime_cinematic",
+            "lineart_character_sheet",
+            "ink_crosshatch_noir",
+            "oil_portrait_classical",
+            "gouache_poster_graphic",
         ],
         help="Append style snippet (ink, pacing, format) to the book-type prefix.",
     )
@@ -840,6 +858,18 @@ def main() -> None:
             "anime_movie_keyart",
             "superhero_action_modern",
             "indie_webtoon_episode",
+            "digital_splash_master",
+            "digital_portrait_master",
+            "mobile_game_illustration_pro",
+            "unreal_cinematic_3d",
+            "anime_game_3d_pro",
+            "hero_stylized_3d_pro",
+            "lineart_sheet_pro",
+            "ink_noir_pro",
+            "storyboard_rough_pro",
+            "oil_portrait_master",
+            "gouache_poster_master",
+            "watercolor_botanical_master",
         ],
         help="One-flag art medium preset pack (digital/drawing/3d/painting/realistic/anime/cartoon/web-comic).",
     )
@@ -871,6 +901,173 @@ def main() -> None:
         default="",
         help="Optional custom medium fragment merged after selected medium family/variant.",
     )
+    parser.add_argument(
+        "--color-render-pack",
+        default="none",
+        choices=[
+            "none",
+            "anime_cel_master",
+            "painting_value_master",
+            "comic_noir_master",
+            "pbr_3d_master",
+            "toon_3d_master",
+            "photo_grade_master",
+            "hybrid_2d3d_master",
+        ],
+        help="One-flag color/render preset for color theory, gradients, shading, and render pipeline cues.",
+    )
+    parser.add_argument(
+        "--color-theory-mode",
+        default="none",
+        choices=[
+            "none",
+            "balanced",
+            "complementary",
+            "split_complementary",
+            "analogous",
+            "triadic",
+            "tetradic",
+            "monochrome",
+            "warm_cool",
+            "gamut_print",
+        ],
+        help="Color theory helper mode (palette relationship and value/saturation orchestration).",
+    )
+    parser.add_argument(
+        "--gradient-blend-mode",
+        default="none",
+        choices=["none", "clean", "painterly", "atmospheric", "toon_steps", "volumetric"],
+        help="Gradient and blend behavior helper mode.",
+    )
+    parser.add_argument(
+        "--shading-technique",
+        default="none",
+        choices=["none", "cel", "soft_painterly", "crosshatch", "chiaroscuro", "pbr", "subsurface"],
+        help="Shading strategy helper mode for 2D/3D/photo outputs.",
+    )
+    parser.add_argument(
+        "--render-pipeline",
+        default="none",
+        choices=["none", "illustration_2d", "anime_2d", "toon_3d", "pbr_3d", "cinematic_photo", "hybrid_2d3d"],
+        help="Render-pipeline language helper across 2D, 3D, and photographic aesthetics.",
+    )
+    parser.add_argument(
+        "--color-render-extra",
+        default="",
+        help="Optional custom color/render fragment merged after selected controls.",
+    )
+    parser.add_argument(
+        "--artist-technique-pack",
+        default="none",
+        choices=["none", "digital_2d_master", "anime_2d_master", "drawing_ink_master", "painting_master", "toon_3d_master", "pbr_3d_master"],
+        help="One-flag artist-technique preset for linework/render/shading/material/composition.",
+    )
+    parser.add_argument(
+        "--linework-technique",
+        default="none",
+        choices=["none", "clean_contour", "expressive_weight", "crosshatch_precision", "sketch_loose", "calligraphic_ink"],
+        help="Linework technique emphasis.",
+    )
+    parser.add_argument(
+        "--rendering-technique",
+        default="none",
+        choices=["none", "cel_anime", "painterly_2d", "toon_3d", "pbr_3d", "hybrid_2d3d"],
+        help="Rendering technique emphasis.",
+    )
+    parser.add_argument(
+        "--shading-technique-plan",
+        default="none",
+        choices=["none", "chiaroscuro", "ambient_occlusion", "rim_bounce", "subsurface_skin", "volumetric_depth"],
+        help="Shading strategy emphasis.",
+    )
+    parser.add_argument(
+        "--material-technique",
+        default="none",
+        choices=["none", "fabric_folds", "metal_surface", "skin_microdetail", "paint_texture", "paper_grain"],
+        help="Material rendering technique emphasis.",
+    )
+    parser.add_argument(
+        "--composition-technique",
+        default="none",
+        choices=["none", "rule_of_thirds", "leading_lines", "depth_layers", "silhouette_focus", "negative_space"],
+        help="Composition technique emphasis.",
+    )
+    parser.add_argument(
+        "--artist-technique-extra",
+        default="",
+        help="Optional extra artist-technique fragment merged after selected technique controls.",
+    )
+    parser.add_argument(
+        "--photo-realism-pack",
+        default="none",
+        choices=["none", "documentary", "cinematic", "studio_portrait", "film_analog", "night_noir", "product_catalog", "fashion_editorial"],
+        help="Photography realism pack forwarded to sample.py.",
+    )
+    parser.add_argument(
+        "--photo-color-grade",
+        default="none",
+        choices=["none", "natural", "teal_orange", "kodak_portra", "cinestill_800t", "noir_bw", "fujifilm_eterna"],
+        help="Photography color-grade profile forwarded to sample.py.",
+    )
+    parser.add_argument(
+        "--photo-lighting-technique",
+        default="none",
+        choices=["none", "three_point", "golden_hour", "overcast_soft", "motivated_practical", "rim_backlight", "butterfly", "rembrandt"],
+        help="Photography lighting technique forwarded to sample.py.",
+    )
+    parser.add_argument(
+        "--photo-filter",
+        default="none",
+        choices=["none", "pro_mist", "polarizer", "nd_long_exposure", "vintage_diffusion", "clean_digital"],
+        help="Photography filter profile forwarded to sample.py.",
+    )
+    parser.add_argument(
+        "--photo-grain-style",
+        default="none",
+        choices=["none", "fine_35mm", "medium_35mm", "heavy_16mm", "clean_digital"],
+        help="Photography grain style forwarded to sample.py.",
+    )
+    parser.add_argument("--photo-realism-strength", type=float, default=1.0, help="Photo realism prompt strength.")
+    parser.set_defaults(auto_photo_realism=True)
+    parser.add_argument(
+        "--auto-photo-realism",
+        dest="auto_photo_realism",
+        action="store_true",
+        help="Auto-infer photo realism controls from prompt keywords in sample.py.",
+    )
+    parser.add_argument(
+        "--no-auto-photo-realism",
+        dest="auto_photo_realism",
+        action="store_false",
+        help="Disable auto photo realism inference in sample.py.",
+    )
+    parser.set_defaults(realism_autopilot=True)
+    parser.add_argument(
+        "--realism-autopilot",
+        dest="realism_autopilot",
+        action="store_true",
+        help="Enable realism autopilot in sample.py (default on).",
+    )
+    parser.add_argument(
+        "--no-realism-autopilot",
+        dest="realism_autopilot",
+        action="store_false",
+        help="Disable realism autopilot in sample.py.",
+    )
+    parser.set_defaults(photo_postprocess=True)
+    parser.add_argument(
+        "--photo-postprocess",
+        dest="photo_postprocess",
+        action="store_true",
+        help="Enable photo postprocess in sample.py (default on).",
+    )
+    parser.add_argument(
+        "--no-photo-postprocess",
+        dest="photo_postprocess",
+        action="store_false",
+        help="Disable photo postprocess in sample.py.",
+    )
+    parser.add_argument("--photo-post-strength", type=float, default=0.6, help="Photo postprocess strength.")
     parser.add_argument(
         "--aspect-preset",
         default="none",
@@ -935,8 +1132,66 @@ def main() -> None:
     parser.add_argument(
         "--artist-pack",
         default="none",
-        choices=["none", "manga_cinematic", "comic_dialogue", "webtoon_scroll", "storyboard_fast"],
+        choices=[
+            "none",
+            "manga_cinematic",
+            "comic_dialogue",
+            "webtoon_scroll",
+            "storyboard_fast",
+            "anime_shinkai_cinematic",
+            "anime_ghibli_story",
+            "anime_trigger_action",
+            "anime_nomura_character",
+            "game_riot_splash",
+            "game_valorant_clean",
+            "game_blizzard_heroic",
+            "game_fromsoftware_dark",
+            "cartoon_pixar_story",
+            "cartoon_disney_staging",
+            "cartoon_network_graphic",
+            "mignola_noir",
+            "alex_ross_painterly",
+            "frazetta_epic",
+            "moebius_worldbuilding",
+            "anime3d_genshin_keyart",
+            "anime3d_hsr_cinematic",
+            "anime3d_zzz_urban",
+            "anime3d_arcane_painterly",
+        ],
         help="Preset bundle for artist craft controls; explicit per-control flags override this pack.",
+    )
+    parser.add_argument(
+        "--artist-style-profile",
+        default="none",
+        choices=[
+            "none",
+            "shinkai_cinematic_anime",
+            "miyazaki_ghibli_storybook",
+            "trigger_dynamic_action",
+            "clamp_fashion_linework",
+            "toriyama_clean_adventure",
+            "otomo_urban_mecha",
+            "nomura_character_design",
+            "shinkawa_brush_stealth",
+            "riot_splash_fantasy",
+            "valorant_clean_shapes",
+            "blizzard_cinematic_heroic",
+            "fromsoftware_dark_fantasy",
+            "zelda_painterly_adventure",
+            "pixar_shape_script",
+            "disney_animation_staging",
+            "cartoon_network_graphic",
+            "nickelodeon_expressive",
+            "mignola_noir_graphic",
+            "alex_ross_painterly_realism",
+            "frazetta_epic_fantasy",
+            "moebius_line_worldbuilding",
+            "niziu_anime_3d_colorist",
+            "reiq_anime_3d_sculpt",
+            "swd3e2_game_anime_hybrid",
+            "alpha_3d_anime_keyart",
+        ],
+        help="Named artist/studio-inspired style profile for anime, game art, cartoons, and comics.",
     )
     parser.add_argument(
         "--shot-language",
@@ -1041,6 +1296,25 @@ def main() -> None:
     parser.add_argument("--oc-color-motifs", default="", help="Color motifs/palette anchors for the OC.")
     parser.add_argument("--oc-expression-sheet", default="", help="Expression anchors for the OC across scenes.")
     parser.add_argument("--oc-negative", default="", help="Negative prompt fragment for OC consistency failures.")
+    parser.add_argument(
+        "--auto-original-character",
+        dest="auto_original_character",
+        action="store_true",
+        help="Auto-synthesize OC profile when cover/page prompts request an original character (default: on).",
+    )
+    parser.add_argument(
+        "--no-auto-original-character",
+        dest="auto_original_character",
+        action="store_false",
+        help="Disable automatic OC synthesis from prompt intent.",
+    )
+    parser.set_defaults(auto_original_character=True)
+    parser.add_argument(
+        "--auto-oc-seed-offset",
+        type=int,
+        default=0,
+        help="Extra deterministic seed offset used by auto-OC synthesis.",
+    )
 
     parser.add_argument(
         "--chapter-break-every",
@@ -1226,7 +1500,38 @@ def main() -> None:
             tail.extend(["--civitai-trigger-bank", ctb])
         return tail
 
-    ocr_extra = book_helpers.build_extra_ocr_sample_flags(settings) + _cfg_cmd_tail() + _nsfw_tail()
+    def _photo_tail() -> List[str]:
+        tail: List[str] = []
+        prp = str(getattr(args, "photo_realism_pack", "none") or "none").strip().lower()
+        if prp != "none":
+            tail.extend(["--photo-realism-pack", prp])
+        prg = str(getattr(args, "photo_color_grade", "none") or "none").strip().lower()
+        if prg != "none":
+            tail.extend(["--photo-color-grade", prg])
+        prl = str(getattr(args, "photo_lighting_technique", "none") or "none").strip().lower()
+        if prl != "none":
+            tail.extend(["--photo-lighting-technique", prl])
+        prf = str(getattr(args, "photo_filter", "none") or "none").strip().lower()
+        if prf != "none":
+            tail.extend(["--photo-filter", prf])
+        prn = str(getattr(args, "photo_grain_style", "none") or "none").strip().lower()
+        if prn != "none":
+            tail.extend(["--photo-grain-style", prn])
+        prs = float(getattr(args, "photo_realism_strength", 1.0) or 1.0)
+        if abs(prs - 1.0) > 1e-6:
+            tail.extend(["--photo-realism-strength", str(prs)])
+        if not bool(getattr(args, "auto_photo_realism", True)):
+            tail.append("--no-auto-photo-realism")
+        if not bool(getattr(args, "photo_postprocess", True)):
+            tail.append("--no-photo-postprocess")
+        pps = float(getattr(args, "photo_post_strength", 0.6) or 0.6)
+        if abs(pps - 0.6) > 1e-6:
+            tail.extend(["--photo-post-strength", str(pps)])
+        if not bool(getattr(args, "realism_autopilot", True)):
+            tail.append("--no-realism-autopilot")
+        return tail
+
+    ocr_extra = book_helpers.build_extra_ocr_sample_flags(settings) + _cfg_cmd_tail() + _nsfw_tail() + _photo_tail()
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1270,6 +1575,7 @@ def main() -> None:
     _artist_cfg = prompt_lexicon.resolve_artist_controls(
         artist_pack=str(_style_cfg.get("artist_pack", "none") or "none"),
         craft_profile=str(getattr(args, "artist_craft_profile", "none") or "none"),
+        artist_style_profile=str(getattr(args, "artist_style_profile", "none") or "none"),
         shot_language=str(getattr(args, "shot_language", "none") or "none"),
         pacing_plan=str(getattr(args, "pacing_plan", "none") or "none"),
         lettering_craft=str(getattr(args, "lettering_craft", "none") or "none"),
@@ -1288,6 +1594,25 @@ def main() -> None:
         variant=str(_medium_cfg.get("variant", "none") or "none"),
         extra=str(_medium_cfg.get("extra", "") or ""),
     )
+    _color_render_cfg = prompt_lexicon.resolve_color_render_controls(
+        color_render_pack=str(getattr(args, "color_render_pack", "none") or "none"),
+        color_theory_mode=str(getattr(args, "color_theory_mode", "none") or "none"),
+        gradient_blend_mode=str(getattr(args, "gradient_blend_mode", "none") or "none"),
+        shading_technique=str(getattr(args, "shading_technique", "none") or "none"),
+        render_pipeline=str(getattr(args, "render_pipeline", "none") or "none"),
+        color_render_extra=str(getattr(args, "color_render_extra", "") or ""),
+    )
+    color_render_hint_str = prompt_lexicon.color_render_bundle(**_color_render_cfg)
+    _technique_cfg = prompt_lexicon.resolve_artist_technique_controls(
+        artist_technique_pack=str(getattr(args, "artist_technique_pack", "none") or "none"),
+        linework_technique=str(getattr(args, "linework_technique", "none") or "none"),
+        rendering_technique=str(getattr(args, "rendering_technique", "none") or "none"),
+        shading_technique_plan=str(getattr(args, "shading_technique_plan", "none") or "none"),
+        material_technique=str(getattr(args, "material_technique", "none") or "none"),
+        composition_technique=str(getattr(args, "composition_technique", "none") or "none"),
+        artist_technique_extra=str(getattr(args, "artist_technique_extra", "") or ""),
+    )
+    technique_hint_str = prompt_lexicon.artist_technique_bundle(**_technique_cfg)
     human_hint_str = prompt_lexicon.humanize_prompt_bundle(
         humanize_profile=str(_human_cfg.get("humanize_profile", "none") or "none"),
         imperfection_level=str(_human_cfg.get("imperfection_level", "none") or "none"),
@@ -1296,16 +1621,80 @@ def main() -> None:
     )
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, artist_hint_str)
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, medium_hint_str)
+    panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, color_render_hint_str)
+    panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, technique_hint_str)
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, human_hint_str)
+    _oc_name = str(getattr(args, "oc_name", "") or "")
+    _oc_archetype = str(getattr(args, "oc_archetype", "none") or "none")
+    _oc_traits = str(getattr(args, "oc_traits", "") or "")
+    _oc_wardrobe = str(getattr(args, "oc_wardrobe", "") or "")
+    _oc_silhouette = str(getattr(args, "oc_silhouette", "") or "")
+    _oc_color_motifs = str(getattr(args, "oc_color_motifs", "") or "")
+    _oc_expression_sheet = str(getattr(args, "oc_expression_sheet", "") or "")
+    _auto_oc_negative = ""
+
+    if bool(getattr(args, "auto_original_character", True)):
+        try:
+            from utils.prompt.auto_oc import infer_auto_original_character
+
+            _seed_parts = [
+                str(getattr(args, "cover_prompt", "") or ""),
+                str(getattr(args, "page_prompt_template", "") or ""),
+            ]
+            _pf = str(getattr(args, "prompts_file", "") or "").strip()
+            if _pf:
+                try:
+                    _specs = _load_prompts_with_expected_from_file(Path(_pf))
+                    if _specs:
+                        _seed_parts.append(str(_specs[0][0] or ""))
+                except Exception:
+                    pass
+            _seed_prompt = ", ".join([x for x in _seed_parts if str(x).strip()])
+            _auto_profile = infer_auto_original_character(
+                _seed_prompt,
+                seed=int(getattr(args, "seed", 0)) + int(getattr(args, "auto_oc_seed_offset", 0)),
+                style_context=", ".join(
+                    [
+                        str(getattr(args, "lexicon_style", "") or ""),
+                        str(getattr(args, "artist_pack", "") or ""),
+                        str(getattr(args, "artist_style_profile", "") or ""),
+                        str(getattr(args, "art_medium_pack", "") or ""),
+                        str(getattr(args, "color_render_pack", "") or ""),
+                    ]
+                ),
+            )
+            _explicit_oc = any(
+                bool(str(v).strip())
+                for v in (
+                    _oc_name,
+                    _oc_traits,
+                    _oc_wardrobe,
+                    _oc_silhouette,
+                    _oc_color_motifs,
+                    _oc_expression_sheet,
+                )
+            ) or (_oc_archetype.lower().strip() != "none")
+            if _auto_profile is not None and not _explicit_oc:
+                _oc_name = str(getattr(_auto_profile, "name", "") or "")
+                _oc_archetype = str(getattr(_auto_profile, "archetype", "none") or "none")
+                _oc_traits = str(getattr(_auto_profile, "visual_traits", "") or "")
+                _oc_wardrobe = str(getattr(_auto_profile, "wardrobe", "") or "")
+                _oc_silhouette = str(getattr(_auto_profile, "silhouette", "") or "")
+                _oc_color_motifs = str(getattr(_auto_profile, "color_motifs", "") or "")
+                _oc_expression_sheet = str(getattr(_auto_profile, "expression_sheet", "") or "")
+                _auto_oc_negative = str(getattr(_auto_profile, "negative_block", "") or "")
+        except Exception:
+            pass
+
     _oc_cfg = prompt_lexicon.resolve_oc_controls(
         oc_pack=str(_style_cfg.get("oc_pack", "none") or "none"),
-        name=str(getattr(args, "oc_name", "") or ""),
-        archetype=str(getattr(args, "oc_archetype", "none") or "none"),
-        visual_traits=str(getattr(args, "oc_traits", "") or ""),
-        wardrobe=str(getattr(args, "oc_wardrobe", "") or ""),
-        silhouette=str(getattr(args, "oc_silhouette", "") or ""),
-        color_motifs=str(getattr(args, "oc_color_motifs", "") or ""),
-        expression_sheet=str(getattr(args, "oc_expression_sheet", "") or ""),
+        name=_oc_name,
+        archetype=_oc_archetype,
+        visual_traits=_oc_traits,
+        wardrobe=_oc_wardrobe,
+        silhouette=_oc_silhouette,
+        color_motifs=_oc_color_motifs,
+        expression_sheet=_oc_expression_sheet,
     )
     oc_block = prompt_lexicon.original_character_bundle(**_oc_cfg)
     narration_p = (getattr(args, "narration_prefix", "") or "").strip()
@@ -1389,6 +1778,8 @@ def main() -> None:
         if hneg:
             base = f"{base}, {hneg}".strip().strip(",")
         oc_neg = str(getattr(args, "oc_negative", "") or "").strip()
+        if _auto_oc_negative:
+            base = f"{base}, {_auto_oc_negative}".strip().strip(",")
         if oc_neg:
             base = f"{base}, {oc_neg}".strip().strip(",")
         return base
@@ -1450,6 +1841,7 @@ def main() -> None:
         )
         cmd.extend(_cfg_cmd_tail())
         cmd.extend(_nsfw_tail())
+        cmd.extend(_photo_tail())
         if args.character_sheet.strip():
             cmd += ["--character-sheet", args.character_sheet]
         if args.character_prompt_extra.strip():
@@ -1727,7 +2119,31 @@ def main() -> None:
             "art_medium_family": str(_medium_cfg.get("family", "none") or "none"),
             "art_medium_variant": str(_medium_cfg.get("variant", "none") or "none"),
             "art_medium_extra": str(_medium_cfg.get("extra", "") or ""),
+            "color_render_pack": getattr(args, "color_render_pack", ""),
+            "color_theory_mode": str(_color_render_cfg.get("color_theory_mode", "none") or "none"),
+            "gradient_blend_mode": str(_color_render_cfg.get("gradient_blend_mode", "none") or "none"),
+            "shading_technique": str(_color_render_cfg.get("shading_technique", "none") or "none"),
+            "render_pipeline": str(_color_render_cfg.get("render_pipeline", "none") or "none"),
+            "color_render_extra": str(_color_render_cfg.get("color_render_extra", "") or ""),
+            "artist_technique_pack": str(getattr(args, "artist_technique_pack", "none") or "none"),
+            "linework_technique": str(_technique_cfg.get("linework_technique", "none") or "none"),
+            "rendering_technique": str(_technique_cfg.get("rendering_technique", "none") or "none"),
+            "shading_technique_plan": str(_technique_cfg.get("shading_technique_plan", "none") or "none"),
+            "material_technique": str(_technique_cfg.get("material_technique", "none") or "none"),
+            "composition_technique": str(_technique_cfg.get("composition_technique", "none") or "none"),
+            "artist_technique_extra": str(_technique_cfg.get("artist_technique_extra", "") or ""),
+            "photo_realism_pack": str(getattr(args, "photo_realism_pack", "none") or "none"),
+            "photo_color_grade": str(getattr(args, "photo_color_grade", "none") or "none"),
+            "photo_lighting_technique": str(getattr(args, "photo_lighting_technique", "none") or "none"),
+            "photo_filter": str(getattr(args, "photo_filter", "none") or "none"),
+            "photo_grain_style": str(getattr(args, "photo_grain_style", "none") or "none"),
+            "photo_realism_strength": float(getattr(args, "photo_realism_strength", 1.0) or 1.0),
+            "auto_photo_realism": bool(getattr(args, "auto_photo_realism", True)),
+            "photo_postprocess": bool(getattr(args, "photo_postprocess", True)),
+            "photo_post_strength": float(getattr(args, "photo_post_strength", 0.6) or 0.6),
+            "realism_autopilot": bool(getattr(args, "realism_autopilot", True)),
             "artist_pack": getattr(args, "artist_pack", ""),
+            "artist_style_profile": str(_artist_cfg.get("artist_style_profile", "none") or "none"),
             "artist_craft_profile": getattr(args, "artist_craft_profile", ""),
             "shot_language": getattr(args, "shot_language", ""),
             "pacing_plan": getattr(args, "pacing_plan", ""),
@@ -1740,6 +2156,8 @@ def main() -> None:
             "humanize_asymmetry": str(_human_cfg.get("asymmetry_level", "none") or "none"),
             "humanize_negative_level": str(_human_cfg.get("negative_level", "none") or "none"),
             "oc_pack": getattr(args, "oc_pack", ""),
+            "auto_original_character": bool(getattr(args, "auto_original_character", True)),
+            "auto_oc_seed_offset": int(getattr(args, "auto_oc_seed_offset", 0) or 0),
             "panel_layout": getattr(args, "panel_layout", ""),
             "narration_prefix": narration_p,
             "consistency_block": consistency_block,

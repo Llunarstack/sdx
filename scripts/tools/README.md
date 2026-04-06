@@ -19,7 +19,7 @@ python -m scripts.tools help
 | `smoke_imports`, `quick_test`, `ar_mask_inspect` | `dev/` |
 | `noise_schedule_export`, `mine_preference_pairs` | `training/` (`mine_preference_pairs` converts benchmark results into DPO-ready JSONL) |
 | `data_quality`, `manifest_paths`, `jsonl_merge` | `data/` |
-| `prompt_lint`, `tag_coverage` | `prompt/` |
+| `prompt_lint`, `tag_coverage`, `suggest_style_packs` | `prompt/` (`suggest_style_packs`: free-text style query -> ranked preset suggestions for `--lexicon-style` / `--art-medium-pack` / `--artist-pack` / `--color-render-pack`). |
 | `export_onnx`, `export_safetensors` | `export/` |
 | `op_preflight`, `orchestrate_pipeline`, `auto_improve_loop`, `gen_searcher_bridge`, `pretrained_status`, `startup_readiness`, `hybrid_dit_vit_generate` | `ops/` (`auto_improve_loop`: benchmark -> mine prefs -> DPO -> re-benchmark -> optional promote; supports `--iterations N` and hardcase-aware preference remine. `gen_searcher_bridge`: convert Gen-Searcher outputs into SDX fact JSONL for grounding + optional local shard verification. `pretrained_status`: report local-vs-HF model resolution + local size summary. `startup_readiness`: no-train environment and launch readiness report with JSON/Markdown output. `hybrid_dit_vit_generate`: DiT(+AR) candidate generation with optional ViT reranking and TCIS iterative consensus mode via `--iterations` + disagreement-aware scoring + optional shape-first scaffold synthesis + Pareto elite selection + OCR/count/saturation-aware consensus + adaptive candidate budget.) |
 | `update_project_structure`, `verify_doc_links`, `clean_repo_artifacts` | `repo/` |

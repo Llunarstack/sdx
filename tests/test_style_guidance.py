@@ -48,3 +48,19 @@ def test_detect_new_color_grade_and_hybrid_styles():
     assert "cinema_color_grading" in ids
     assert "anime_hybrid_rendering" in ids
 
+
+def test_style_guidance_with_game_and_cartoon_artist_refs():
+    pos, neg = style_guidance_fragments(
+        "hero shot in riot splash art and cartoon network style",
+        "none",
+        include_artist_refs=True,
+    )
+    assert "style-faithful" in pos.lower()
+    assert "style token drift" in neg.lower()
+
+
+def test_detect_anime_game_3d_and_booru_styles():
+    ids = detect_style_ids("genshin style anime 3d game render with danbooru tags and masterpiece, highres")
+    assert "anime_game_3d_styles" in ids
+    assert "booru_2d_3d_prompt_style" in ids
+

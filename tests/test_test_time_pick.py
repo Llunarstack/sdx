@@ -89,3 +89,22 @@ def test_weighted_sum_helper_matches_manual():
         [0.6, 0.4],
     )
     assert vals == [0.8, 1.8, 2.8]
+
+
+def test_combo_realism_prefers_candidate_with_better_realism_metrics(monkeypatch):
+    monkeypatch.setattr(test_time_pick, "score_clip_similarity", lambda imgs, prompt, device, model_id: [0.5 for _ in imgs])
+    monkeypatch.setattr(test_time_pick, "score_photographic_detail_balance", lambda im: float(im[0, 0, 0]) / 255.0)
+    monkeypatch.setattr(test_time_pick, "score_exposure_balance", lambda im: float(im[0, 0, 0]) / 255.0)
+    monkeypatch.setattr(test_time_pick, "score_dynamic_range_headroom", lambda im: float(im[0, 0, 0]) / 255.0)
+    monkeypatch.setattr(test_time_pick, "score_tiling_artifact_free", lambda im: float(im[0, 0, 0]) / 255.0)
+    monkeypatch.setattr(test_time_pick, "score_color_cast_neutrality", lambda im: float(im[0, 0, 0]) / 255.0)
+    monkeypatch.setattr(test_time_pick, "score_saturation_balance", lambda im: float(im[0, 0, 0]) / 255.0)
+    monkeypatch.setattr(test_time_pick, "score_skin_tone_naturalness", lambda im: float(im[0, 0, 0]) / 255.0)
+
+    img_low = np.zeros((8, 8, 3), dtype=np.uint8)
+    img_high = np.zeros((8, 8, 3), dtype=np.uint8)
+    img_high[0, 0, 0] = 255
+
+    best, scores = test_time_pick.pick_best_indices([img_low, img_high], "photo portrait", "combo_realism", "cpu")
+    assert best == 1
+    assert scores[1] > scores[0]
