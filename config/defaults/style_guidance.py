@@ -40,6 +40,60 @@ def _matches(prompt: str, patterns: Sequence[re.Pattern]) -> bool:
     return any(p.search(prompt) for p in patterns)
 
 
+STYLE_ALIAS_TERMS: Dict[str, Tuple[str, ...]] = {
+    "shonen": ("battle shonen", "shonen battle", "battle anime"),
+    "shojo romance": ("shoujo romance", "shojo romance anime", "romance shoujo"),
+    "seinen gritty": ("gritty seinen", "seinen dark", "mature seinen"),
+    "mecha anime": ("mecha", "robot anime", "anime mecha"),
+    "webtoon": ("vertical webtoon", "scroll comic", "vertical scroll comic"),
+    "newspaper comic": ("comic strip", "newspaper strip", "daily strip"),
+    "manga horror": ("horror manga", "psychological manga horror"),
+    "baroque": ("baroque painting", "caravaggio style", "dramatic chiaroscuro art"),
+    "impressionist": ("impressionism", "impressionist painting"),
+    "surrealist": ("surrealism", "dreamlike surreal art"),
+    "art nouveau": ("art-nouveau", "nouveau poster style"),
+    "ukiyo-e": ("ukiyoe", "japanese woodblock print"),
+    "octane render": ("octane", "octane-like render"),
+    "eevee render": ("eevee", "blender eevee"),
+    "archviz": ("architectural render", "arch viz", "archviz render"),
+    "product cgi": ("product render", "commercial cgi product"),
+    "clay render": ("clay shaded render", "matcap clay render"),
+    "toon render": ("toon shaded render", "cel rendered 3d"),
+    "mixed media": ("mixed-media", "media collage"),
+    "paper cut": ("paper-cut", "papercut style"),
+    "risograph": ("riso print", "riso style"),
+    "screenprint": ("silk screen print", "silkscreen"),
+    "retro pulp cover": ("pulp cover", "vintage pulp illustration"),
+    "poster graphic": ("graphic poster", "poster design style"),
+    "35mm": ("35 mm film", "35mm film look"),
+    "film still": ("bw film look", "black and white film look", "monochrome film look"),
+    "cinematic grade": ("teal orange grade", "teal-and-orange", "cinematic color grade"),
+    "bleach bypass": ("bleach-bypass", "silver retention look"),
+    "kodachrome": ("kodachrome film look", "kodachrome palette"),
+    "diorama anime": ("anime diorama style", "miniature anime scene"),
+}
+
+_STYLE_ALIAS_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = tuple(
+    (re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE), canonical)
+    for canonical, aliases in STYLE_ALIAS_TERMS.items()
+    for alias in aliases
+)
+
+
+def _expand_style_aliases(prompt: str) -> str:
+    p = str(prompt or "").strip()
+    if not p:
+        return p
+    found: List[str] = []
+    for pat, canonical in _STYLE_ALIAS_PATTERNS:
+        if pat.search(p):
+            found.append(canonical)
+    if not found:
+        return p
+    extras = ", ".join(sorted(set(found)))
+    return f"{p}, {extras}"
+
+
 def merge_csv_unique(*chunks: str) -> str:
     seen = set()
     out: List[str] = []
@@ -111,6 +165,27 @@ ARTIST_REFERENCE_TAGS: Tuple[str, ...] = (
     "overwatch style",
     "genshin impact style",
     "zelda wind waker style",
+    # Additional high-demand style anchors
+    "yoji shinkawa style",
+    "makoto shinkai style",
+    "satoshi kon style",
+    "clamp style",
+    "studio trigger style",
+    "arcanes style",
+    "arcane style",
+    "riot splash art",
+    "fromsoftware style",
+    "dark souls style",
+    "bloodborne style",
+    "elden ring style",
+    "final fantasy style",
+    "persona style",
+    "vaporwave style",
+    "art nouveau style",
+    "ukiyo-e style",
+    "baroque painting style",
+    "impressionist style",
+    "surrealist style",
 )
 
 
@@ -163,6 +238,106 @@ STYLE_SPECS: Tuple[StyleSpec, ...] = (
         positive_hints="photographic composition discipline, coherent lens and exposure language, believable tonal roll-off",
         negative_hints="overprocessed digital crunch, contradictory camera language, fake HDR halos",
     ),
+    StyleSpec(
+        id="anime_specializations",
+        keywords=(
+            "anime movie",
+            "anime tv",
+            "shonen battle",
+            "shojo romance",
+            "seinen gritty",
+            "isekai fantasy",
+            "mecha anime",
+            "idol anime",
+        ),
+        positive_hints="substyle-consistent anime grammar, stable character-on-model identity, controlled emotional staging",
+        negative_hints="mixed incompatible anime substyles, unstable facial grammar, inconsistent line/shading language",
+    ),
+    StyleSpec(
+        id="comic_webtoon_substyles",
+        keywords=(
+            "web comic",
+            "webtoon",
+            "vertical scroll comic",
+            "newspaper comic",
+            "gag strip",
+            "manga horror",
+            "noir comic",
+            "superhero modern",
+        ),
+        positive_hints="format-aware panel rhythm, dialogue-first readability, coherent ink/color language per substyle",
+        negative_hints="format drift across panels, unreadable beat progression, conflicting inking/color conventions",
+    ),
+    StyleSpec(
+        id="fine_art_movements",
+        keywords=(
+            "baroque",
+            "rococo",
+            "impressionist",
+            "expressionist",
+            "cubist",
+            "surrealist",
+            "art deco",
+            "art nouveau",
+            "ukiyo-e",
+        ),
+        positive_hints="movement-faithful motif discipline, coherent historical shape-language cues, style-consistent mark economy",
+        negative_hints="historical-style token soup, mixed era contradictions, decorative overload without focal hierarchy",
+    ),
+    StyleSpec(
+        id="render_pipeline_styles",
+        keywords=(
+            "octane render",
+            "eevee render",
+            "cycles render",
+            "ray traced render",
+            "archviz",
+            "product cgi",
+            "clay render",
+            "toon render",
+        ),
+        positive_hints="renderer-aware material/lighting coherence, stable shading language, consistent post-process treatment",
+        negative_hints="mixed renderer artifacts, contradictory material response, inconsistent light transport cues",
+    ),
+    StyleSpec(
+        id="mixed_media_print_styles",
+        keywords=(
+            "mixed media",
+            "collage",
+            "paper cut",
+            "risograph",
+            "screenprint",
+            "retro pulp cover",
+            "poster graphic",
+        ),
+        positive_hints="print-aware composition hierarchy, deliberate medium texture interplay, clear silhouette-led communication",
+        negative_hints="texture clutter, weak print readability, accidental medium conflicts reducing style clarity",
+    ),
+    StyleSpec(
+        id="cinema_color_grading",
+        keywords=(
+            "cinematic grade",
+            "teal orange",
+            "bleach bypass",
+            "kodachrome",
+            "fujifilm look",
+            "deakins lighting",
+        ),
+        positive_hints="intentional cinematic color separation, coherent filmic contrast mapping, stable highlight roll-off and shadow color logic",
+        negative_hints="random LUT stacking, crushed blacks with clipped highlights, contradictory color grading intent",
+    ),
+    StyleSpec(
+        id="anime_hybrid_rendering",
+        keywords=(
+            "diorama anime",
+            "anime diorama",
+            "2.5d anime",
+            "anime 3d hybrid",
+            "anime cinematic hybrid",
+        ),
+        positive_hints="cohesive 2d-3d anime hybrid grammar, stable character model fidelity, controlled painterly-composited depth cues",
+        negative_hints="disjoint 2d/3d compositing seams, unstable character model in hybrid scenes, mismatched lighting language",
+    ),
 )
 
 STYLE_IDS: Tuple[str, ...] = tuple(s.id for s in STYLE_SPECS)
@@ -173,6 +348,7 @@ _ARTIST_PATTERNS: Tuple[re.Pattern, ...] = tuple(_word_re(a) for a in ARTIST_REF
 def detect_style_ids(prompt: str) -> Tuple[str, ...]:
     if not prompt or not prompt.strip():
         return ()
+    prompt = _expand_style_aliases(prompt)
     out: List[str] = []
     for spec in STYLE_SPECS:
         if _matches(prompt, _STYLE_PATTERNS[spec.id]):
@@ -183,6 +359,7 @@ def detect_style_ids(prompt: str) -> Tuple[str, ...]:
 def _artist_reference_fragments(prompt: str, enabled: bool) -> Tuple[str, str]:
     if not enabled:
         return "", ""
+    prompt = _expand_style_aliases(prompt)
     if _matches(prompt, _ARTIST_PATTERNS):
         return (
             "style-faithful motif consistency, coherent brush/line grammar across the whole frame",

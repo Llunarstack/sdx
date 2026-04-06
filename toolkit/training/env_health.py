@@ -13,20 +13,10 @@ import argparse
 import json
 import platform
 import sys
-from pathlib import Path
 from typing import Any, Dict
 
 
-def _bootstrap_paths() -> None:
-    root = Path(__file__).resolve().parents[2]
-    for sub in ("native/python",):
-        p = root / sub
-        if p.is_dir() and str(p) not in sys.path:
-            sys.path.insert(0, str(p))
-
-
 def collect_env() -> Dict[str, Any]:
-    _bootstrap_paths()
     out: Dict[str, Any] = {
         "platform": platform.platform(),
         "python": sys.version.split()[0],
@@ -80,7 +70,7 @@ def collect_env() -> Dict[str, Any]:
         out["optional_libs"] = {}
 
     try:
-        from sdx_native.native_tools import native_stack_status
+        from utils.native import native_stack_status
 
         out["sdx_native"] = native_stack_status()
     except Exception as e:

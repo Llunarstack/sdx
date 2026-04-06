@@ -78,6 +78,7 @@ SDX is for people who want to understand and modify what's happening — not jus
 | **Adapter system** | Multi-LoRA/DoRA/LyCORIS stacking with per-role budgets and depth routing |
 | **Adaptive sampling** | Holy Grail: per-step CFG/control/adapter scheduling + CADS condition annealing |
 | **Inference controls** | CFG schedulers · speculative CFG · SAG · reference-token injection · img2img |
+| **Hybrid generation loop** | TCIS: DiT(+AR) proposal + ViT committee scoring + iterative self-correction |
 | **Reproducibility** | Per-run `run_manifest.json` + `config.train.json` snapshots |
 | **Performance** | bf16 · `torch.compile` · gradient checkpointing · DDP-ready |
 
@@ -341,6 +342,33 @@ python sample.py \
 
 Run `python sample.py --help` for the full list.
 
+### Hybrid TCIS generation loop (recommended for hard prompts)
+
+Use the dispatcher tool to run iterative generation with consensus scoring, optional shape-first scaffold synthesis, and adaptive candidate budgeting:
+
+```bash
+python -m scripts.tools hybrid_dit_vit_generate \
+  --ckpt results/.../best.pt \
+  --vit-ckpt ViT/runs/best.pt \
+  --prompt "poster with title \"NEON STORM\", exactly 2 characters, full body, cinematic rain" \
+  --out outputs/tcis.png \
+  --num 6 \
+  --iterations 4 \
+  --auto-shape-scaffold \
+  --pareto-elite \
+  --adaptive-num \
+  --reflection-update \
+  --self-correct-prompt \
+  --pick-best combo_hq
+```
+
+TCIS combines:
+- DiT(+AR) multi-candidate proposal
+- ViT quality/adherence committee scoring
+- OCR/count/saturation-aware consensus ranking
+- Pareto elite filtering for multi-objective robustness
+- prompt reflection updates across iterations
+
 ---
 
 ## Architecture
@@ -516,6 +544,7 @@ sdx/
 | [`docs/MODEL_WEAKNESSES.md`](docs/MODEL_WEAKNESSES.md) | Known failure modes and mitigations |
 | [`docs/COMMON_SHORTCOMINGS_AI_IMAGES.md`](docs/COMMON_SHORTCOMINGS_AI_IMAGES.md) | Common image-gen failure catalog and mitigation mapping |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
+| [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
 | [`docs/releases/v3.md`](docs/releases/v3.md) | v3 source release notes (benchmark + hardcase-aware improvement stack) |
 | [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) | Holy Grail adaptive sampling reference |
 

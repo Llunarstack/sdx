@@ -2,6 +2,7 @@
 
 from .cuda_image_metrics_native import maybe_image_luma_stats_cuda
 from .image_metrics_native import maybe_count_components_native, maybe_image_stats_native
+from .score_ops_native import maybe_norm01_native, maybe_weighted_sum_native
 from .latent_geometry import (
     dit_patch_size_from_variant_name,
     latent_numel,
@@ -33,4 +34,6 @@ __all__ = [
     "maybe_count_components_native",
     "maybe_image_stats_native",
     "maybe_image_luma_stats_cuda",
+    "maybe_norm01_native",
+    "maybe_weighted_sum_native",
 ]

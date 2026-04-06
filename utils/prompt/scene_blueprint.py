@@ -164,3 +164,12 @@ def load_scene_blueprint(path: str, strength: float = 1.0) -> Tuple[str, str]:
     if not isinstance(data, dict):
         raise ValueError("scene-blueprint must be a JSON object")
     return _compile_blueprint_dict(data, strength=strength)
+
+
+def compile_scene_blueprint_dict(data: Dict[str, Any], strength: float = 1.0) -> Tuple[str, str]:
+    """
+    Compile an in-memory scene blueprint dict into `(positive_additions, negative_additions)`.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("scene blueprint must be a dict")
+    return _compile_blueprint_dict(data, strength=strength)

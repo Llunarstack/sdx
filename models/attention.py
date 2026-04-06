@@ -132,7 +132,8 @@ def create_block_causal_mask_2d(
 ) -> torch.Tensor:
     """
     h, w = patches per side. num_ar_blocks = blocks per dim (e.g. 2 -> 2x2 grid).
-    block_order: ``raster`` (default) or ``zorder`` (Morton macro-block order). See ``models/ar_masks_extended.py``.
+    block_order: ``raster`` (default), ``zorder`` (Morton), ``snake``, or ``spiral``.
+    See ``models/ar_masks_extended.py``.
     Returns (N, N) mask: -inf where not allowed.
     """
     from .ar_masks_extended import create_block_causal_mask_2d as _create_ar_mask_2d

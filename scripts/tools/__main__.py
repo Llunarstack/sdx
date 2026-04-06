@@ -37,6 +37,7 @@ _CANONICAL: dict[str, Path] = {
     "gen_searcher_bridge": _HERE / "ops" / "gen_searcher_bridge.py",
     "pretrained_status": _HERE / "ops" / "pretrained_status.py",
     "startup_readiness": _HERE / "ops" / "startup_readiness.py",
+    "hybrid_dit_vit_generate": _HERE / "ops" / "hybrid_dit_vit_generate.py",
     "benchmark_suite": _HERE / "benchmark_suite.py",
     "update_project_structure": _HERE / "repo" / "update_project_structure.py",
     "verify_doc_links": _HERE / "repo" / "verify_doc_links.py",
