@@ -50,6 +50,7 @@ Quick links to all project docs, grouped by purpose.
 | [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
 | [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — earlier baseline (2026-03-13). |
 | [releases/v3.md](releases/v3.md) | **v3** — benchmark robustness, hard-case mining, hardcase-aware DPO remine, startup readiness checks. |
+| [releases/v4.md](releases/v4.md) | **v4** — TCIS uncertainty scaling, elite-memory diversity bonus, constraint annealing, and expanded advanced-model wiring. |
 
 ---
 

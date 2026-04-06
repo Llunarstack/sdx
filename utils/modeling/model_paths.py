@@ -115,6 +115,50 @@ def default_realesrgan_path() -> str:
     return resolve_model_path("Real-ESRGAN", "ai-forever/Real-ESRGAN")
 
 
+def default_longclip_l_path() -> str:
+    return resolve_model_path("LongCLIP-L", "creative-graphic-design/LongCLIP-L")
+
+
+def default_moondream2_path() -> str:
+    return resolve_model_path("moondream2", "vikhyatk/moondream2")
+
+
+def default_marigold_depth_path() -> str:
+    return resolve_model_path("Marigold-Depth-v1-1", "prs-eth/marigold-depth-v1-1")
+
+
+def default_marigold_normals_path() -> str:
+    return resolve_model_path("Marigold-Normals-v1-1", "prs-eth/marigold-normals-v1-1")
+
+
+def default_taesd_path() -> str:
+    return resolve_model_path("TAESD", "madebyollin/taesd")
+
+
+def default_taesdxl_path() -> str:
+    return resolve_model_path("TAESDXL", "madebyollin/taesdxl")
+
+
+def default_codeformer_path() -> str:
+    return resolve_model_path("CodeFormer", "sczhou/CodeFormer")
+
+
+def default_consistency_decoder_path() -> str:
+    return resolve_model_path("Consistency-Decoder", "openai/consistency-decoder")
+
+
+def default_convnextv2_large_path() -> str:
+    return resolve_model_path("ConvNeXtV2-Large", "facebook/convnextv2-large-22k-384")
+
+
+def default_laion_aesthetic_v2_path() -> str:
+    return resolve_model_path("LAION-Aesthetic-v2", "camenduru/improved-aesthetic-predictor")
+
+
+def default_anydoor_ref_path() -> str:
+    return resolve_model_path("AnyDoor-Ref", "camenduru/AnyDoor")
+
+
 def pretrained_catalog() -> List[Dict[str, str]]:
     """
     Canonical pretrained model map used by SDX.
@@ -145,6 +189,17 @@ def pretrained_catalog() -> List[Dict[str, str]]:
         ("Depth-Anything-V2-Large", "depth-anything/Depth-Anything-V2-Large", default_depth_anything_v2_large_path()),
         ("SAM2-Hiera-Large", "facebook/sam2-hiera-large-hf", default_sam2_hiera_large_path()),
         ("Real-ESRGAN", "ai-forever/Real-ESRGAN", default_realesrgan_path()),
+        ("LongCLIP-L", "creative-graphic-design/LongCLIP-L", default_longclip_l_path()),
+        ("moondream2", "vikhyatk/moondream2", default_moondream2_path()),
+        ("Marigold-Depth-v1-1", "prs-eth/marigold-depth-v1-1", default_marigold_depth_path()),
+        ("Marigold-Normals-v1-1", "prs-eth/marigold-normals-v1-1", default_marigold_normals_path()),
+        ("TAESD", "madebyollin/taesd", default_taesd_path()),
+        ("TAESDXL", "madebyollin/taesdxl", default_taesdxl_path()),
+        ("CodeFormer", "sczhou/CodeFormer", default_codeformer_path()),
+        ("Consistency-Decoder", "openai/consistency-decoder", default_consistency_decoder_path()),
+        ("ConvNeXtV2-Large", "facebook/convnextv2-large-22k-384", default_convnextv2_large_path()),
+        ("LAION-Aesthetic-v2", "christophschuhmann/improved-aesthetic-predictor", default_laion_aesthetic_v2_path()),
+        ("AnyDoor-Ref", "camenduru/AnyDoor", default_anydoor_ref_path()),
     ]
     out: List[Dict[str, str]] = []
     for name, hf, resolved in rows:

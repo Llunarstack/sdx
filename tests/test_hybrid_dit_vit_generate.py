@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scripts.tools.ops.hybrid_dit_vit_generate import (
     _candidate_paths,
+    anneal_weight,
     consensus_score,
     constraint_consensus_score,
     extract_expected_text,
@@ -13,6 +14,8 @@ from scripts.tools.ops.hybrid_dit_vit_generate import (
     pareto_front_rows,
     reflective_prompt_update,
     seed_for_iteration,
+    signature_novelty,
+    uncertainty_score,
 )
 from utils.prompt.shape_scaffold import compile_shape_scaffold, infer_shape_blueprint
 
@@ -136,3 +139,40 @@ def test_reflective_prompt_update_adds_hints() -> None:
     out = reflective_prompt_update(p, row, enable=True)
     assert out != p
     assert "exact object/person counts" in out
+
+
+def test_anneal_weight_up_down() -> None:
+    base = 0.1
+    up0 = anneal_weight(base, 0, 5, mode="up")
+    up4 = anneal_weight(base, 4, 5, mode="up")
+    dn0 = anneal_weight(base, 0, 5, mode="down")
+    dn4 = anneal_weight(base, 4, 5, mode="down")
+    assert up4 > up0
+    assert dn4 < dn0
+
+
+def test_uncertainty_score_tracks_confidence() -> None:
+    hi = {
+        "vit_consensus_score": 0.92,
+        "vit_quality_prob": 0.92,
+        "vit_adherence_score": 0.91,
+        "ocr_score": 0.9,
+        "count_score": 0.9,
+        "saturation_score": 0.9,
+    }
+    lo = {
+        "vit_consensus_score": 0.42,
+        "vit_quality_prob": 0.9,
+        "vit_adherence_score": 0.4,
+        "ocr_score": 0.3,
+        "count_score": 0.2,
+        "saturation_score": 0.3,
+    }
+    assert uncertainty_score(lo) > uncertainty_score(hi)
+
+
+def test_signature_novelty_increases_with_distance() -> None:
+    mem = [(10.0, 10.0, 10.0, 5.0, 5.0, 5.0)]
+    near = (12.0, 11.0, 10.0, 5.0, 5.0, 5.0)
+    far = (220.0, 210.0, 215.0, 70.0, 68.0, 72.0)
+    assert signature_novelty(far, mem) > signature_novelty(near, mem)
