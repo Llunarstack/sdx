@@ -154,6 +154,76 @@ def next_candidate_budget(current_num: int, best_consensus: float, *, threshold:
     return min(mx, cur + max(1, int(step)))
 
 
+def anneal_weight(base_weight: float, iteration_idx: int, total_iterations: int, mode: str = "up") -> float:
+    base = float(base_weight)
+    mode_n = str(mode or "none").strip().lower()
+    if mode_n in {"none", ""} or int(total_iterations) <= 1:
+        return base
+    t = float(max(0, int(iteration_idx))) / float(max(1, int(total_iterations) - 1))
+    if mode_n == "up":
+        return base * (0.5 + 0.5 * t)
+    if mode_n == "down":
+        return base * (1.0 - 0.5 * t)
+    return base
+
+
+def uncertainty_score(best_row: Dict[str, float], second_row: Dict[str, float] | None = None) -> float:
+    """
+    Estimate decision uncertainty in [0,1]; higher means "spend more compute".
+    """
+    conf = float(best_row.get("vit_consensus_score", 0.0))
+    q = float(best_row.get("vit_quality_prob", 0.0))
+    a = float(best_row.get("vit_adherence_score", 0.0))
+    cmin = min(
+        float(best_row.get("ocr_score", 0.5)),
+        float(best_row.get("count_score", 0.5)),
+        float(best_row.get("saturation_score", 0.5)),
+    )
+    gap = 0.0
+    if second_row is not None:
+        gap = max(0.0, conf - float(second_row.get("vit_consensus_score", 0.0)))
+    gap_term = 1.0 - min(1.0, gap / 0.25)
+    disagree = abs(q - a)
+    u = 0.45 * (1.0 - max(0.0, min(1.0, conf))) + 0.25 * gap_term + 0.2 * disagree + 0.1 * (1.0 - cmin)
+    return float(max(0.0, min(1.0, u)))
+
+
+def image_signature(path: str | Path) -> tuple[float, float, float, float, float, float]:
+    """
+    Tiny image descriptor for diversity memory: mean/std per RGB channel.
+    """
+    import numpy as np
+
+    p = Path(path)
+    img = Image.open(p).convert("RGB").resize((32, 32), resample=Image.BILINEAR)
+    x = np.array(img, dtype=np.float32).reshape(-1, 3)
+    m = x.mean(axis=0)
+    s = x.std(axis=0)
+    return (float(m[0]), float(m[1]), float(m[2]), float(s[0]), float(s[1]), float(s[2]))
+
+
+def signature_novelty(
+    signature: tuple[float, float, float, float, float, float],
+    memory: Sequence[tuple[float, float, float, float, float, float]],
+) -> float:
+    if not memory:
+        return 1.0
+    dists: List[float] = []
+    for m in memory:
+        dm = (
+            abs(signature[0] - m[0])
+            + abs(signature[1] - m[1])
+            + abs(signature[2] - m[2])
+            + abs(signature[3] - m[3])
+            + abs(signature[4] - m[4])
+            + abs(signature[5] - m[5])
+        ) / (6.0 * 255.0)
+        dists.append(float(dm))
+    # Use nearest-memory distance; farther means more novel.
+    nearest = min(dists) if dists else 0.0
+    return float(max(0.0, min(1.0, nearest * 3.0)))
+
+
 def seed_for_iteration(base_seed: int, iteration_idx: int, seed_stride: int) -> int:
     return int(base_seed + max(0, int(iteration_idx)) * max(1, int(seed_stride)))
 
@@ -412,6 +482,12 @@ def main() -> int:
     p.add_argument("--consensus-ocr-weight", type=float, default=0.08)
     p.add_argument("--consensus-count-weight", type=float, default=0.08)
     p.add_argument("--consensus-saturation-weight", type=float, default=0.05)
+    p.add_argument("--constraint-anneal", choices=("none", "up", "down"), default="up")
+    p.add_argument("--elite-memory-size", type=int, default=8, help="Cross-iteration elite memory size for diversity bonus.")
+    p.add_argument("--diversity-bonus-weight", type=float, default=0.05)
+    p.add_argument("--uncertainty-threshold", type=float, default=0.42)
+    p.add_argument("--uncertainty-extra-iterations", type=int, default=1)
+    p.add_argument("--uncertainty-max-iterations", type=int, default=8)
     p.add_argument("--expected-text", type=str, default="", help="Override expected text for OCR scoring.")
     p.add_argument("--expected-people-count", type=int, default=0, help="Override expected people count.")
     p.add_argument("--expected-object-count", type=int, default=0, help="Override expected object count.")
@@ -421,6 +497,7 @@ def main() -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     iterations = max(1, int(args.iterations))
+    iterations_runtime = iterations
     prompt_cur = str(args.prompt)
 
     from utils.architecture.ar_dit_vit import read_num_ar_blocks_from_checkpoint
@@ -432,8 +509,9 @@ def main() -> int:
     iter_reports: List[Dict[str, object]] = []
     global_rows: List[Dict[str, object]] = []
     cur_num = max(1, int(args.num))
-
-    for i in range(iterations):
+    elite_memory: List[tuple[float, float, float, float, float, float]] = []
+    i = 0
+    while i < iterations_runtime:
         seed_i = seed_for_iteration(int(args.seed_start), i, int(args.seed_stride))
         iter_out = out_path.parent / f"{out_path.stem}_iter{i}{out_path.suffix}"
         shape_pos = ""
@@ -478,6 +556,7 @@ def main() -> int:
                     "shape_blueprint": shape_blueprint,
                 }
             )
+            i += 1
             continue
 
         cand = [p for p in _candidate_paths(iter_out, int(cur_num)) if p.is_file()]
@@ -496,6 +575,7 @@ def main() -> int:
                     "shape_blueprint": shape_blueprint,
                 }
             )
+            i += 1
             continue
 
         exp_text = str(args.expected_text or "").strip() or extract_expected_text(prompt_cur)
@@ -524,9 +604,24 @@ def main() -> int:
             vit_quality_weight=float(args.vit_quality_weight),
             vit_adherence_weight=float(args.vit_adherence_weight),
             vit_disagreement_penalty=float(args.vit_disagreement_penalty),
-            consensus_ocr_weight=float(args.consensus_ocr_weight),
-            consensus_count_weight=float(args.consensus_count_weight),
-            consensus_saturation_weight=float(args.consensus_saturation_weight),
+            consensus_ocr_weight=anneal_weight(
+                float(args.consensus_ocr_weight),
+                i,
+                iterations_runtime,
+                mode=str(args.constraint_anneal),
+            ),
+            consensus_count_weight=anneal_weight(
+                float(args.consensus_count_weight),
+                i,
+                iterations_runtime,
+                mode=str(args.constraint_anneal),
+            ),
+            consensus_saturation_weight=anneal_weight(
+                float(args.consensus_saturation_weight),
+                i,
+                iterations_runtime,
+                mode=str(args.constraint_anneal),
+            ),
             expected_text=exp_text,
             expected_people_count=exp_people,
             expected_object_count=int(exp_obj),
@@ -535,6 +630,7 @@ def main() -> int:
         if not rows:
             print("[hybrid_dit_vit] ViT produced no scores in this iteration; keeping DiT output.")
             Image.open(iter_out).convert("RGB").save(out_path)
+            i += 1
             continue
 
         selection_pool = list(rows)
@@ -551,10 +647,35 @@ def main() -> int:
             k = max(1, int(args.pareto_topk))
             selection_pool = pareto[:k] if pareto else selection_pool
 
+        # V4: Cross-iteration elite memory adds diversity pressure.
+        selection_pool_enriched: List[Dict[str, float]] = []
+        for r in selection_pool:
+            rr = dict(r)
+            bonus = 0.0
+            try:
+                sig = image_signature(str(rr["path"]))
+                bonus = signature_novelty(sig, elite_memory)
+            except Exception:
+                bonus = 0.0
+            rr["v4_diversity_bonus"] = float(bonus)
+            rr["v4_final_score"] = float(rr.get("vit_consensus_score", 0.0)) + float(args.diversity_bonus_weight) * float(
+                bonus
+            )
+            selection_pool_enriched.append(rr)
+        selection_pool_enriched.sort(key=lambda r: float(r.get("v4_final_score", 0.0)), reverse=True)
+        selection_pool = selection_pool_enriched or selection_pool
+
         best = dict(selection_pool[0])
         best_path = Path(str(best["path"]))
         if best_path.is_file():
             Image.open(best_path).convert("RGB").save(out_path)
+            try:
+                elite_memory.append(image_signature(best_path))
+                k_mem = max(1, int(args.elite_memory_size))
+                if len(elite_memory) > k_mem:
+                    elite_memory = elite_memory[-k_mem:]
+            except Exception:
+                pass
 
         prompt_next = maybe_self_correct_prompt(
             prompt_cur,
@@ -572,6 +693,8 @@ def main() -> int:
             "vit_adherence_score": float(best.get("vit_adherence_score", 0.0)),
             "vit_fused_score": float(best.get("vit_fused_score", 0.0)),
             "vit_consensus_score": float(best.get("vit_consensus_score", 0.0)),
+            "v4_final_score": float(best.get("v4_final_score", best.get("vit_consensus_score", 0.0))),
+            "v4_diversity_bonus": float(best.get("v4_diversity_bonus", 0.0)),
             "ocr_score": float(best.get("ocr_score", 0.5)),
             "count_score": float(best.get("count_score", 0.5)),
             "saturation_score": float(best.get("saturation_score", 0.5)),
@@ -590,8 +713,12 @@ def main() -> int:
         row_with_iter = dict(best)
         row_with_iter["iteration"] = i
         row_with_iter["seed"] = seed_i
+        row_with_iter["v4_final_score"] = float(best.get("v4_final_score", best.get("vit_consensus_score", 0.0)))
         global_rows.append(row_with_iter)
         prompt_cur = prompt_next
+        second_row = selection_pool[1] if len(selection_pool) > 1 else None
+        u = uncertainty_score(best, second_row)
+        iter_report["v4_uncertainty"] = float(u)
         if bool(args.adaptive_num):
             cur_num = next_candidate_budget(
                 cur_num,
@@ -600,9 +727,19 @@ def main() -> int:
                 step=int(args.adaptive_step),
                 max_num=int(args.adaptive_max_num),
             )
+        if (
+            float(u) >= float(args.uncertainty_threshold)
+            and iterations_runtime < int(args.uncertainty_max_iterations)
+            and int(args.uncertainty_extra_iterations) > 0
+        ):
+            iterations_runtime = min(
+                int(args.uncertainty_max_iterations),
+                iterations_runtime + int(args.uncertainty_extra_iterations),
+            )
+        i += 1
 
     if global_rows:
-        global_rows.sort(key=lambda r: float(r.get("vit_consensus_score", 0.0)), reverse=True)
+        global_rows.sort(key=lambda r: float(r.get("v4_final_score", r.get("vit_consensus_score", 0.0))), reverse=True)
         best_global = global_rows[0]
         best_global_path = Path(str(best_global["path"]))
         if best_global_path.is_file():
@@ -618,7 +755,8 @@ def main() -> int:
         json.dumps(
             {
                 "mode": "tcis",
-                "iterations": iterations,
+                "iterations_requested": iterations,
+                "iterations_effective": iterations_runtime,
                 "vit_enabled": bool(str(args.vit_ckpt).strip()),
                 "iter_reports": iter_reports,
                 "global_best": global_rows[0] if global_rows else None,

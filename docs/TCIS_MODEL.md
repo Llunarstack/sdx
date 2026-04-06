@@ -38,6 +38,9 @@ The penalty term prefers candidates where both heads agree, reducing fragile "lo
   - `--pareto-elite`
   - `--pareto-topk`
   - `--adaptive-num` / `--adaptive-threshold` / `--adaptive-max-num`
+  - `--constraint-anneal`
+  - `--uncertainty-threshold` / `--uncertainty-extra-iterations` / `--uncertainty-max-iterations`
+  - `--elite-memory-size` / `--diversity-bonus-weight`
   - `--reflection-update`
   - `--self-correct-prompt`
   - `--self-correct-threshold`
@@ -73,9 +76,11 @@ python -m scripts.tools hybrid_dit_vit_generate \
 - Cleaner "best of N" decisions due to disagreement-aware ranking.
 - Improved constraint handling via OCR/count/saturation-aware consensus.
 - More robust elite selection with Pareto-front filtering.
+- Better failure recovery via uncertainty-triggered test-time scaling.
+- Less mode collapse in iterative loops through elite-memory diversity bonuses.
 
 ## Next upgrades
 
-- Add count/text constraints directly into consensus score (OCR + count verifier).
-- Add Pareto-front candidate retention between iterations.
+- Add branch-level prompt search (2-3 prompt branches per iteration with budget cap).
+- Add richer diversity embeddings (CLIP-image novelty instead of color-signature novelty).
 - Distill TCIS choices into a train-time preference set for DPO.

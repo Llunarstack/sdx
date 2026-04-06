@@ -54,3 +54,14 @@ def test_pretrained_catalog_has_core_rows():
     assert "Depth-Anything-V2-Large" in names
     assert "SAM2-Hiera-Large" in names
     assert "Real-ESRGAN" in names
+    assert "LongCLIP-L" in names
+    assert "moondream2" in names
+    assert "Marigold-Depth-v1-1" in names
+    assert "Marigold-Normals-v1-1" in names
+    assert "TAESD" in names
+    assert "TAESDXL" in names
+    assert "CodeFormer" in names
+    assert "Consistency-Decoder" in names
+    assert "ConvNeXtV2-Large" in names
+    assert "LAION-Aesthetic-v2" in names
+    assert "AnyDoor-Ref" in names

@@ -11,6 +11,15 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | SigLIP | `pretrained/SigLIP-SO400M` |
 | Qwen LLM | `pretrained/Qwen2.5-14B-Instruct` |
 | Stable Cascade | `pretrained/StableCascade-Prior`, `pretrained/StableCascade-Decoder` |
+| LongCLIP-L (long prompts) | `pretrained/LongCLIP-L` or `creative-graphic-design/LongCLIP-L` |
+| moondream2 (caption/VQA helper) | `pretrained/moondream2` or `vikhyatk/moondream2` |
+| Marigold depth/normals | `pretrained/Marigold-Depth-v1-1`, `pretrained/Marigold-Normals-v1-1` |
+| TAESD / TAESDXL (fast preview VAE) | `pretrained/TAESD`, `pretrained/TAESDXL` |
+| Consistency Decoder | `pretrained/Consistency-Decoder` or `openai/consistency-decoder` |
+| ConvNeXtV2-Large | `pretrained/ConvNeXtV2-Large` |
+| LAION Aesthetic v2 | `pretrained/LAION-Aesthetic-v2` |
+| CodeFormer (face restore helper) | `pretrained/CodeFormer` |
+| AnyDoor reference weights | `pretrained/AnyDoor-Ref` |
 
 ## How this maps to the SDX pipeline
 
@@ -35,6 +44,7 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 
 - **Qwen prompt expansion:** `utils/analysis/llm_client.py` (`load_qwen_causal_lm`, `expand_prompt_qwen`).
 - **Stable Cascade (Diffusers):** `python scripts/cascade_generate.py --prompt "..."` — separate from DiT; does not share the DiT forward pass.
+- **Advanced optional downloads:** `python scripts/download/download_models.py --advanced` to fetch LongCLIP/moondream2/Marigold/TAESD/CodeFormer/Consistency-Decoder/ConvNeXtV2/LAION Aesthetic v2/AnyDoor reference.
 
 ---
 

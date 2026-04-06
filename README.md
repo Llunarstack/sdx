@@ -357,6 +357,11 @@ python -m scripts.tools hybrid_dit_vit_generate \
   --auto-shape-scaffold \
   --pareto-elite \
   --adaptive-num \
+  --constraint-anneal up \
+  --uncertainty-threshold 0.42 \
+  --uncertainty-extra-iterations 1 \
+  --elite-memory-size 8 \
+  --diversity-bonus-weight 0.05 \
   --reflection-update \
   --self-correct-prompt \
   --pick-best combo_hq
@@ -368,6 +373,8 @@ TCIS combines:
 - OCR/count/saturation-aware consensus ranking
 - Pareto elite filtering for multi-objective robustness
 - prompt reflection updates across iterations
+- uncertainty-triggered extra iteration budget (test-time scaling)
+- cross-iteration elite memory with diversity bonus (v4)
 
 ---
 
@@ -466,6 +473,9 @@ python scripts/download/download_models.py --t5 --vae
 # Everything including CLIP and LLM
 python scripts/download/download_models.py --all
 
+# Optional advanced stack (LongCLIP, moondream2, Marigold, TAESD, CodeFormer, etc.)
+python scripts/download/download_models.py --advanced
+
 # Download a specific LLM for prompt expansion
 python scripts/download/download_llm.py --best
 ```
@@ -489,6 +499,17 @@ Weights are resolved automatically at runtime via `utils/modeling/model_paths.py
 | Depth Anything V2 Large | `pretrained/Depth-Anything-V2-Large` | `depth-anything/Depth-Anything-V2-Large` |
 | SAM2 Hiera Large | `pretrained/SAM2-Hiera-Large` | `facebook/sam2-hiera-large-hf` |
 | Real-ESRGAN | `pretrained/Real-ESRGAN` | `ai-forever/Real-ESRGAN` |
+| LongCLIP-L | `pretrained/LongCLIP-L` | `creative-graphic-design/LongCLIP-L` |
+| moondream2 | `pretrained/moondream2` | `vikhyatk/moondream2` |
+| Marigold Depth v1.1 | `pretrained/Marigold-Depth-v1-1` | `prs-eth/marigold-depth-v1-1` |
+| Marigold Normals v1.1 | `pretrained/Marigold-Normals-v1-1` | `prs-eth/marigold-normals-v1-1` |
+| TAESD | `pretrained/TAESD` | `madebyollin/taesd` |
+| TAESDXL | `pretrained/TAESDXL` | `madebyollin/taesdxl` |
+| CodeFormer | `pretrained/CodeFormer` | `sczhou/CodeFormer` |
+| Consistency Decoder | `pretrained/Consistency-Decoder` | `openai/consistency-decoder` |
+| ConvNeXtV2 Large | `pretrained/ConvNeXtV2-Large` | `facebook/convnextv2-large-22k-384` |
+| LAION Aesthetic v2 | `pretrained/LAION-Aesthetic-v2` | `camenduru/improved-aesthetic-predictor` |
+| AnyDoor (reference) | `pretrained/AnyDoor-Ref` | `camenduru/AnyDoor` |
 | VAE (default) | `pretrained/sd-vae-ft-mse` | `stabilityai/sd-vae-ft-mse` |
 
 Inspect active local-vs-HF model resolution at any time:
@@ -545,6 +566,7 @@ sdx/
 | [`docs/COMMON_SHORTCOMINGS_AI_IMAGES.md`](docs/COMMON_SHORTCOMINGS_AI_IMAGES.md) | Common image-gen failure catalog and mitigation mapping |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
+| [`docs/releases/v4.md`](docs/releases/v4.md) | v4 release: uncertainty-scaled TCIS, elite-memory diversity bonus, and annealed constraint consensus |
 | [`docs/releases/v3.md`](docs/releases/v3.md) | v3 source release notes (benchmark + hardcase-aware improvement stack) |
 | [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) | Holy Grail adaptive sampling reference |
 
