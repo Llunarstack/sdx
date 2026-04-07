@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
 Regenerate ``data/prompt_tags/*.csv`` from the in-module Python definitions in
-``utils.prompt.content_controls``.
+``utils.prompt.content_controls``, plus ``12_artist_composition.csv`` (round-trip from
+tables already loaded from disk — keep that file as the source of truth for artist
+composition tags).
 
 Run from repo root::
 
-    python scripts/tools/dump_prompt_tag_csvs.py
+    python -m scripts.tools dump_prompt_tag_csvs
 
 Afterwards, trim ``content_controls.py`` tag literals if you migrate to CSV-only loads.
 """
@@ -187,6 +189,16 @@ def main() -> None:
     for a, b in cc._CONFLICTING_TAG_PAIRS:
         r9.append(("conflicting_tag_pairs", "_", f"{a}|||{b}"))
     write_csv(out_dir / "09_misc.csv", r9)
+
+    # --- 12_artist_composition.csv (round-trip loaded tables; edit the CSV, then re-run dump to normalize) ---
+    from utils.prompt import content_control_tags as cct
+
+    r12: List[Row] = []
+    pos_art = {k: v for k, v in cct._ARTIST_COMPOSITION_POSITIVE.items() if k != "none"}
+    neg_art = {k: v for k, v in cct._ARTIST_COMPOSITION_NEGATIVE.items() if k != "none"}
+    r12 += _rows_from_dict("artist_composition_positive", pos_art)
+    r12 += _rows_from_dict("artist_composition_negative", neg_art)
+    write_csv(out_dir / "12_artist_composition.csv", r12)
 
     print(f"Wrote CSVs under {out_dir}")
 
