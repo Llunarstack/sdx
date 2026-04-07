@@ -133,16 +133,16 @@ def image_mask_to_patch_weights(
     if mask_b1hw.dim() != 4 or mask_b1hw.shape[1] != 1:
         raise ValueError("mask_b1hw must be (B, 1, H, W)")
 
-    ph, pw = int(num_patches_h), int(num_patches_w)
-    B, _, H, W = mask_b1hw.shape
+    patch_rows, patch_cols = int(num_patches_h), int(num_patches_w)
+    _, _, height, width = mask_b1hw.shape
 
     # Try native C++ kernel (no autograd, no Python loop).
-    if H % ph == 0 and W % pw == 0:
+    if height % patch_rows == 0 and width % patch_cols == 0:
         try:
             from sdx_native.mask_ops_native import maybe_mask_to_patch_weights_native
 
             mask_np = mask_b1hw.detach().float().cpu().numpy()
-            result = maybe_mask_to_patch_weights_native(mask_np, ph, pw)
+            result = maybe_mask_to_patch_weights_native(mask_np, patch_rows, patch_cols)
             if result is not None:
                 return torch.from_numpy(result).to(
                     device=mask_b1hw.device, dtype=mask_b1hw.dtype
@@ -151,9 +151,9 @@ def image_mask_to_patch_weights(
             pass
 
     # PyTorch fallback.
-    m = mask_b1hw.to(dtype=torch.float32)
-    m = F.adaptive_avg_pool2d(m, (ph, pw))
-    return m.flatten(1)
+    mask_float = mask_b1hw.to(dtype=torch.float32)
+    pooled_mask = F.adaptive_avg_pool2d(mask_float, (patch_rows, patch_cols))
+    return pooled_mask.flatten(1)
 
 
 def foreground_attention_alignment_loss(
@@ -180,31 +180,33 @@ def foreground_attention_alignment_loss(
     """
     if attn_weights.dim() != 4:
         raise ValueError("attn_weights must be (B, heads, N, L)")
-    b, h, n, token_count = attn_weights.shape
-    if patch_foreground_b_n.shape[0] != b or patch_foreground_b_n.shape[1] != n:
-        raise ValueError(f"mask patch count {patch_foreground_b_n.shape} != attn N={n}")
+    batch_size, _, patch_count, token_count = attn_weights.shape
+    if patch_foreground_b_n.shape[0] != batch_size or patch_foreground_b_n.shape[1] != patch_count:
+        raise ValueError(f"mask patch count {patch_foreground_b_n.shape} != attn N={patch_count}")
 
-    te = token_count if token_end <= 0 else min(token_end, token_count)
-    ts = max(0, min(token_start, te))
-    a = attn_weights[:, :, :, ts:te].mean(dim=(1, 3))  # (B, N)
-    a = a.to(dtype=torch.float32)
-    m = patch_foreground_b_n.to(device=a.device, dtype=a.dtype).clamp(0.0, 1.0)
+    token_end_idx = token_count if token_end <= 0 else min(token_end, token_count)
+    token_start_idx = max(0, min(token_start, token_end_idx))
+    attention_patch_mean = attn_weights[:, :, :, token_start_idx:token_end_idx].mean(dim=(1, 3))  # (B, N)
+    attention_patch_mean = attention_patch_mean.to(dtype=torch.float32)
+    patch_foreground = patch_foreground_b_n.to(device=attention_patch_mean.device, dtype=attention_patch_mean.dtype).clamp(
+        0.0, 1.0
+    )
 
-    row_ok = torch.ones(b, device=a.device, dtype=torch.bool)
+    row_ok = torch.ones(batch_size, device=attention_patch_mean.device, dtype=torch.bool)
     if sample_valid is not None:
-        sv = sample_valid.to(device=a.device)
-        if sv.shape != (b,):
-            raise ValueError(f"sample_valid must be (B,), got {sv.shape}")
-        row_ok = row_ok & sv
+        sample_valid_mask = sample_valid.to(device=attention_patch_mean.device)
+        if sample_valid_mask.shape != (batch_size,):
+            raise ValueError(f"sample_valid must be (B,), got {sample_valid_mask.shape}")
+        row_ok = row_ok & sample_valid_mask
     if min_fg_patch_mass and float(min_fg_patch_mass) > 0:
-        row_ok = row_ok & (m.sum(dim=1) >= float(min_fg_patch_mass))
+        row_ok = row_ok & (patch_foreground.sum(dim=1) >= float(min_fg_patch_mass))
 
-    a_n = a / (a.sum(dim=1, keepdim=True) + eps)
-    m_n = m / (m.sum(dim=1, keepdim=True) + eps)
-    cos = (a_n * m_n).sum(dim=1)
-    per = 1.0 - cos
+    attention_norm = attention_patch_mean / (attention_patch_mean.sum(dim=1, keepdim=True) + eps)
+    foreground_norm = patch_foreground / (patch_foreground.sum(dim=1, keepdim=True) + eps)
+    cosine_similarity = (attention_norm * foreground_norm).sum(dim=1)
+    per_sample_loss = 1.0 - cosine_similarity
     if row_ok.any():
-        return per[row_ok].mean()
+        return per_sample_loss[row_ok].mean()
     # No valid rows: zero loss but keep grad path through attention (e.g. DDP / compile).
     return attn_weights.mean() * 0.0
 
@@ -219,11 +221,11 @@ def token_coverage_from_cross_attention(attn_weights: torch.Tensor, *, token_sta
     if attn_weights.dim() != 4:
         raise ValueError("attn_weights must be (B, heads, N, L)")
     _, _, _, token_count = attn_weights.shape
-    te = token_count if token_end <= 0 else min(token_end, token_count)
-    ts = max(0, min(token_start, te))
-    a = attn_weights[:, :, :, ts:te].mean(dim=1)  # (B, N, Lt)
-    cov = a.max(dim=1).values  # (B, Lt)
-    return cov
+    token_end_idx = token_count if token_end <= 0 else min(token_end, token_count)
+    token_start_idx = max(0, min(token_start, token_end_idx))
+    attention_mean = attn_weights[:, :, :, token_start_idx:token_end_idx].mean(dim=1)  # (B, N, Lt)
+    token_coverage = attention_mean.max(dim=1).values  # (B, Lt)
+    return token_coverage
 
 
 def token_coverage_loss(
@@ -240,23 +242,23 @@ def token_coverage_loss(
 
     Loss = mean(relu(target_coverage - coverage_token)), optionally weighted by token_weights.
     """
-    cov = token_coverage_from_cross_attention(attn_weights, token_start=token_start, token_end=token_end)  # (B, Lt)
-    per_tok = torch.relu(float(target_coverage) - cov)
+    token_coverage = token_coverage_from_cross_attention(attn_weights, token_start=token_start, token_end=token_end)  # (B, Lt)
+    per_token_loss = torch.relu(float(target_coverage) - token_coverage)
     if token_weights is not None:
-        tw = token_weights.to(device=per_tok.device, dtype=per_tok.dtype)
-        te = tw.shape[1] if token_end <= 0 else min(token_end, tw.shape[1])
-        ts = max(0, min(token_start, te))
-        tw = tw[:, ts:te]
-        if tw.shape == per_tok.shape:
-            per_tok = per_tok * tw
-    per = per_tok.mean(dim=1)
+        token_weight_values = token_weights.to(device=per_token_loss.device, dtype=per_token_loss.dtype)
+        token_end_idx = token_weight_values.shape[1] if token_end <= 0 else min(token_end, token_weight_values.shape[1])
+        token_start_idx = max(0, min(token_start, token_end_idx))
+        token_weight_values = token_weight_values[:, token_start_idx:token_end_idx]
+        if token_weight_values.shape == per_token_loss.shape:
+            per_token_loss = per_token_loss * token_weight_values
+    per_sample_loss = per_token_loss.mean(dim=1)
     if sample_valid is not None:
-        sv = sample_valid.to(device=per.device)
-        if sv.shape == per.shape and sv.any():
-            return per[sv].mean()
-        if sv.shape == per.shape:
+        sample_valid_mask = sample_valid.to(device=per_sample_loss.device)
+        if sample_valid_mask.shape == per_sample_loss.shape and sample_valid_mask.any():
+            return per_sample_loss[sample_valid_mask].mean()
+        if sample_valid_mask.shape == per_sample_loss.shape:
             return attn_weights.mean() * 0.0
-    return per.mean()
+    return per_sample_loss.mean()
 
 
 # ---------------------------------------------------------------------------

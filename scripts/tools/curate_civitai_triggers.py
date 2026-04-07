@@ -7,7 +7,7 @@ Rebuild Civitai-derived tag files from the model bank CSV:
 
 Run from repo root after ``fetch_civitai_nsfw_concepts.py``::
 
-    python scripts/tools/curate_civitai_triggers.py
+    python -m scripts.tools curate_civitai_triggers
 """
 
 from __future__ import annotations
@@ -45,12 +45,12 @@ def _write_vocab_py(out: Path, hot: list[str]) -> None:
         "",
         "Regenerate after refreshing the CSV::",
         "",
-        "    python scripts/tools/curate_civitai_triggers.py",
+        "    python -m scripts.tools curate_civitai_triggers",
         '"""',
         "",
         "from __future__ import annotations",
         "",
-        "# Regenerate: python scripts/tools/curate_civitai_triggers.py",
+        "# Regenerate: python -m scripts.tools curate_civitai_triggers",
         "CIVITAI_HOT_TAGS = [",
     ]
     for t in hot:

@@ -9,7 +9,7 @@ Input line format: name<TAB>post_count<TAB>deprecated  (only the first column is
 
 Examples::
 
-    python scripts/tools/split_danbooru_general_tags.py \\
+    python -m scripts.tools split_danbooru_general_tags \\
         --general data/danbooru/tags/raw/general.txt \\
         --rules data/danbooru/general_subsplit_rules.json \\
         --out-dir data/danbooru/tags/buckets

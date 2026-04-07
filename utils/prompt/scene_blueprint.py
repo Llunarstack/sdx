@@ -4,14 +4,16 @@ Structured scene blueprint -> prompt controls.
 The goal is maximum controllability without relying on brittle free-text prompts.
 Users can define actors, scene layout, camera, pose intent, object placement, and
 size/relationship constraints in JSON; this module compiles that into positive and
-negative prompt additions.
+negative prompt additions. For classical composition scaffolding at inference, use
+``sample.py --artist-composition`` (rule of thirds, perspective, notan, etc.).
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
+
+from utils.runtime.jsonutil import loads as json_loads
 
 
 def _as_list(value: Any) -> List[str]:
@@ -160,7 +162,7 @@ def load_scene_blueprint(path: str, strength: float = 1.0) -> Tuple[str, str]:
     p = Path(path)
     if not p.exists():
         raise ValueError(f"scene-blueprint not found: {p}")
-    data = json.loads(p.read_text(encoding="utf-8", errors="ignore"))
+    data = json_loads(p.read_text(encoding="utf-8", errors="ignore"))
     if not isinstance(data, dict):
         raise ValueError("scene-blueprint must be a JSON object")
     return _compile_blueprint_dict(data, strength=strength)

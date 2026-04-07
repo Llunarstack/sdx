@@ -333,8 +333,12 @@ def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: Optional[float] = N
         Dict of keyword arguments suitable for ``DiT_models_text[name](**kw)``.
     """
     latent_size = getattr(cfg, "image_size", 256) // 8
-    te = getattr(cfg, "text_encoder", "google/t5-v1_1-xxl").lower()
-    text_dim = 4096 if "xxl" in te else (1024 if "xl" in te and "xxl" not in te else 768)
+    text_encoder_name_lower = getattr(cfg, "text_encoder", "google/t5-v1_1-xxl").lower()
+    text_dim = (
+        4096
+        if "xxl" in text_encoder_name_lower
+        else (1024 if "xl" in text_encoder_name_lower and "xxl" not in text_encoder_name_lower else 768)
+    )
     dropout = class_dropout_prob if class_dropout_prob is not None else getattr(cfg, "caption_dropout_prob", 0.1)
     model_name = str(getattr(cfg, "model_name", ""))
     include_moe = not model_name.startswith("EnhancedDiT")

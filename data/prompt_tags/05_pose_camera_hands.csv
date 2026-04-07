@@ -1,33 +1,136 @@
 pack,mode,tag
 pose_positive,complex,dynamic full-body pose
+pose_positive,complex,strong dynamic full-body pose
+pose_positive,complex,more dynamic full-body pose
+pose_positive,complex,dynamic full-body pose discipline
 pose_positive,complex,balanced anatomy
+pose_positive,complex,strong balanced anatomy
+pose_positive,complex,more balanced anatomy
+pose_positive,complex,balance and stabilityd anatomy
+pose_positive,complex,balanced anatomy discipline
 pose_positive,complex,clear limb placement
+pose_positive,complex,strong limb placement
+pose_positive,complex,more clear limb placement
+pose_positive,complex,clear limb placement discipline
 pose_positive,complex,foreshortening
+pose_positive,complex,strong foreshortening
+pose_positive,complex,foreshortening discipline
+pose_positive,complex,prompt-specified limb arrangement
+pose_positive,complex,strong prompt-specified limb arrangement
+pose_positive,complex,more prompt-specified limb arrangement
+pose_positive,complex,prompt-specified limb arrangement discipline
 pose_positive,action,action pose
+pose_positive,action,strong action pose
+pose_positive,action,more action pose
+pose_positive,action,action pose discipline
 pose_positive,action,dynamic motion
+pose_positive,action,strong dynamic motion
+pose_positive,action,more dynamic motion
+pose_positive,action,dynamic motion discipline
 pose_positive,action,clear body mechanics
+pose_positive,action,strong body mechanics
+pose_positive,action,more clear body mechanics
+pose_positive,action,clear body mechanics discipline
 pose_positive,action,balanced center of gravity
+pose_positive,action,strong balanced center of gravity
+pose_positive,action,more balanced center of gravity
+pose_positive,action,balance and stabilityd center of gravity
+pose_positive,action,balanced center of gravity discipline
+pose_positive,action,motion matches action words
+pose_positive,action,strong motion matches action words
+pose_positive,action,more motion matches action words
+pose_positive,action,motion matches action words discipline
 pose_positive,acrobatics,acrobatic pose
+pose_positive,acrobatics,strong acrobatic pose
+pose_positive,acrobatics,more acrobatic pose
+pose_positive,acrobatics,acrobatic pose discipline
 pose_positive,acrobatics,extreme perspective pose
+pose_positive,acrobatics,strong extreme perspective pose
+pose_positive,acrobatics,more extreme perspective pose
+pose_positive,acrobatics,perspective consistency
+pose_positive,acrobatics,extreme perspective pose discipline
 pose_positive,acrobatics,clear limb articulation
+pose_positive,acrobatics,strong limb articulation
+pose_positive,acrobatics,more clear limb articulation
+pose_positive,acrobatics,clear limb articulation discipline
 pose_positive,acrobatics,anatomical coherence
+pose_positive,acrobatics,strong anatomical coherence
+pose_positive,acrobatics,more anatomical coherence
+pose_positive,acrobatics,anatomical coherence discipline
 pose_negative_shared,_,broken limbs
+pose_negative_shared,_,strong broken limbs
+pose_negative_shared,_,more broken limbs
+pose_negative_shared,_,broken limbs discipline
 pose_negative_shared,_,disconnected joints
+pose_negative_shared,_,strong disconnected joints
+pose_negative_shared,_,more disconnected joints
+pose_negative_shared,_,disconnected joints discipline
 pose_negative_shared,_,extra arms
+pose_negative_shared,_,strong extra arms
+pose_negative_shared,_,more extra arms
+pose_negative_shared,_,extra arms discipline
 pose_negative_shared,_,extra legs
+pose_negative_shared,_,strong extra legs
+pose_negative_shared,_,more extra legs
+pose_negative_shared,_,extra legs discipline
 pose_negative_shared,_,twisted anatomy
+pose_negative_shared,_,strong twisted anatomy
+pose_negative_shared,_,more twisted anatomy
+pose_negative_shared,_,twisted anatomy discipline
 angle_positive,eye_level,eye-level shot
+angle_positive,eye_level,strong eye-level shot
+angle_positive,eye_level,more eye-level shot
+angle_positive,eye_level,eye-level shot discipline
 angle_positive,eye_level,natural perspective
+angle_positive,eye_level,strong natural perspective
+angle_positive,eye_level,more natural perspective
+angle_positive,eye_level,perspective consistency
+angle_positive,eye_level,natural perspective discipline
+angle_positive,eye_level,framing matches crop words
+angle_positive,eye_level,strong framing matches crop words
+angle_positive,eye_level,more framing matches crop words
+angle_positive,eye_level,framing matches crop words discipline
 angle_positive,low_angle,low-angle shot
+angle_positive,low_angle,strong low-angle shot
+angle_positive,low_angle,more low-angle shot
+angle_positive,low_angle,low-angle shot discipline
 angle_positive,low_angle,upward perspective
+angle_positive,low_angle,strong upward perspective
+angle_positive,low_angle,more upward perspective
+angle_positive,low_angle,perspective consistency
+angle_positive,low_angle,upward perspective discipline
 angle_positive,low_angle,correct foreshortening
+angle_positive,low_angle,strong correct foreshortening
+angle_positive,low_angle,more correct foreshortening
+angle_positive,low_angle,correct foreshortening discipline
 angle_positive,high_angle,high-angle shot
+angle_positive,high_angle,strong high-angle shot
+angle_positive,high_angle,more high-angle shot
+angle_positive,high_angle,high-angle shot discipline
 angle_positive,high_angle,top-down perspective
+angle_positive,high_angle,strong top-down perspective
+angle_positive,high_angle,more top-down perspective
+angle_positive,high_angle,perspective consistency
+angle_positive,high_angle,top-down perspective discipline
 angle_positive,bird_eye,bird's-eye view
+angle_positive,bird_eye,strong bird's-eye view
+angle_positive,bird_eye,more bird's-eye view
+angle_positive,bird_eye,bird's-eye view discipline
 angle_positive,bird_eye,overhead shot
+angle_positive,bird_eye,strong overhead shot
+angle_positive,bird_eye,more overhead shot
+angle_positive,bird_eye,overhead shot discipline
 angle_positive,bird_eye,coherent top-down geometry
+angle_positive,bird_eye,strong coherent top-down geometry
+angle_positive,bird_eye,more coherent top-down geometry
+angle_positive,bird_eye,coherent top-down geometry discipline
 angle_positive,worm_eye,worm's-eye view
+angle_positive,worm_eye,strong worm's-eye view
+angle_positive,worm_eye,more worm's-eye view
+angle_positive,worm_eye,worm's-eye view discipline
 angle_positive,worm_eye,extreme low-angle perspective
+angle_positive,worm_eye,strong extreme low-angle perspective
+angle_positive,worm_eye,more extreme low-angle perspective
 angle_positive,dutch,dutch angle
 angle_positive,dutch,tilted camera
 angle_positive,dutch,intentional composition tilt
@@ -36,11 +139,13 @@ angle_positive,over_shoulder,foreground shoulder framing
 angle_positive,first_person,first-person POV
 angle_positive,first_person,point-of-view shot
 angle_positive,first_person,hands in foreground
+angle_positive,first_person,POV matches prompt stance
 angle_positive,third_person,third-person viewpoint
 angle_positive,third_person,camera behind subject
 angle_negative_shared,_,impossible perspective
 angle_negative_shared,_,warped viewpoint
 angle_negative_shared,_,broken vanishing point
+angle_negative_shared,_,camera angle contradicts prompt
 sex_view_positive,female,female anatomy consistency
 sex_view_positive,female,correct female body proportions
 sex_view_positive,male,male anatomy consistency
@@ -57,6 +162,7 @@ hand_positive,detailed,detailed hands
 hand_positive,detailed,defined knuckles
 hand_positive,detailed,natural finger joints
 hand_positive,detailed,visible fingernails
+hand_positive,detailed,finger count matches gesture description
 hand_positive,grip,hands holding object
 hand_positive,grip,physically plausible grip
 hand_positive,grip,clear contact points
@@ -67,6 +173,7 @@ hand_negative,stable,broken hands
 hand_negative,detailed,melted fingers
 hand_negative,detailed,deformed knuckles
 hand_negative,detailed,finger blobs
+hand_negative,detailed,wrong hand pose vs prompt
 hand_negative,grip,floating hands
 hand_negative,grip,object-hand clipping
 hand_negative,grip,impossible grip
@@ -74,6 +181,7 @@ pose_naturalness_positive,natural,natural body posture
 pose_naturalness_positive,natural,realistic weight distribution
 pose_naturalness_positive,natural,anatomically plausible joint angles
 pose_naturalness_positive,natural,relaxed non-stiff pose
+pose_naturalness_positive,natural,weight believable per prompt
 pose_naturalness_positive,dynamic_natural,dynamic but physically plausible pose
 pose_naturalness_positive,dynamic_natural,grounded center of mass
 pose_naturalness_positive,dynamic_natural,natural limb articulation
@@ -90,6 +198,7 @@ pose_naturalness_negative,dynamic_natural,impossible action pose
 pose_naturalness_negative,dynamic_natural,off-balance body
 pose_naturalness_negative,dynamic_natural,dislocated limbs
 pose_naturalness_negative,dynamic_natural,unnatural contortion
+pose_naturalness_negative,dynamic_natural,pose ignores physics note in prompt
 pose_naturalness_negative,intimate_natural,anatomy merge
 pose_naturalness_negative,intimate_natural,impossible body contact
 pose_naturalness_negative,intimate_natural,fused torsos
@@ -114,12 +223,3 @@ typography_negative,poster,letter overlap artifacts
 typography_negative,ui,ui gibberish text
 typography_negative,ui,icon-text overlap
 typography_negative,ui,misaligned labels
-pose_positive,complex,prompt-specified limb arrangement
-pose_positive,action,motion matches action words
-angle_positive,eye_level,framing matches crop words
-angle_positive,first_person,POV matches prompt stance
-angle_negative_shared,_,camera angle contradicts prompt
-hand_positive,detailed,finger count matches gesture description
-hand_negative,detailed,wrong hand pose vs prompt
-pose_naturalness_positive,natural,weight believable per prompt
-pose_naturalness_negative,dynamic_natural,pose ignores physics note in prompt

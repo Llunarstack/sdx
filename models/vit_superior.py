@@ -58,9 +58,9 @@ class AdaLNModulation(nn.Module):
     def forward(self, x: torch.Tensor, c: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """Returns (x_normed, shift_attn, scale_attn, gate_attn, shift_ffn, scale_ffn, gate_ffn)."""
         params = self.adaLN_modulation(c).chunk(6, dim=-1)
-        shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = params
-        x_normed = modulate(self.norm(x), shift_a, scale_a)
-        return x_normed, gate_a, shift_f, scale_f, gate_f
+        shift_attn, scale_attn, gate_attn, shift_ffn, scale_ffn, gate_ffn = params
+        x_normed = modulate(self.norm(x), shift_attn, scale_attn)
+        return x_normed, gate_attn, shift_ffn, scale_ffn, gate_ffn
 
 
 # ---------------------------------------------------------------------------
@@ -148,13 +148,13 @@ class SwiGLUFFN(nn.Module):
         inner = int(hidden_size * expansion)
         # Round to multiple of 64 for efficiency
         inner = (inner + 63) // 64 * 64
-        self.w1 = nn.Linear(hidden_size, inner, bias=False)
-        self.w2 = nn.Linear(hidden_size, inner, bias=False)
-        self.w3 = nn.Linear(inner, hidden_size, bias=False)
-        nn.init.zeros_(self.w3.weight)
+        self.gate_proj = nn.Linear(hidden_size, inner, bias=False)
+        self.value_proj = nn.Linear(hidden_size, inner, bias=False)
+        self.out_proj = nn.Linear(inner, hidden_size, bias=False)
+        nn.init.zeros_(self.out_proj.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.w3(F.silu(self.w1(x)) * self.w2(x))
+        return self.out_proj(F.silu(self.gate_proj(x)) * self.value_proj(x))
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ class SuperiorViTBlock(nn.Module):
             timestep: (B,) diffusion timestep for TACA temperature.
         """
         # AdaLN modulation
-        x_normed, gate_a, shift_f, scale_f, gate_f = self.adaLN(x, c)
+        x_normed, gate_attn, shift_ffn, scale_ffn, gate_ffn = self.adaLN(x, c)
 
         # Self-attention
         if self.use_linear_attn or self.use_window_attn:
@@ -264,7 +264,7 @@ class SuperiorViTBlock(nn.Module):
         else:
             attn_out = self.attn(x_normed, height, width)
 
-        x = x + self.drop_path(gate_a.unsqueeze(1) * self.ls_attn(attn_out))
+        x = x + self.drop_path(gate_attn.unsqueeze(1) * self.ls_attn(attn_out))
 
         # Cross-attention (TACA)
         if self.use_taca and text_emb is not None:
@@ -272,8 +272,8 @@ class SuperiorViTBlock(nn.Module):
             x = x + self.drop_path(self.cross_attn(x_cross, text_emb, timestep))
 
         # FFN
-        x_ffn = modulate(self.norm2(x), shift_f, scale_f)
-        x = x + self.drop_path(gate_f.unsqueeze(1) * self.ls_ffn(self.ffn(x_ffn)))
+        x_ffn = modulate(self.norm2(x), shift_ffn, scale_ffn)
+        x = x + self.drop_path(gate_ffn.unsqueeze(1) * self.ls_ffn(self.ffn(x_ffn)))
 
         return x
 

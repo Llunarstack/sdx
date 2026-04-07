@@ -2,6 +2,8 @@
 
 How the SDX repo is organized: **layers**, **repo tree**, **`scripts/` layout**, **contribution rules**, **conventions** (ruff), and **where to change what**.
 
+Canonical folder classification and migration map: [CANONICAL_STRUCTURE.md](CANONICAL_STRUCTURE.md).
+
 ---
 
 ## Layers (mental model)
@@ -14,7 +16,7 @@ How the SDX repo is organized: **layers**, **repo tree**, **`scripts/` layout**,
 | **Diffusion** | `diffusion/` | Noise schedules, `GaussianDiffusion`, sampling utilities |
 | **Models** | `models/` | DiT, ControlNet, MoE, RAE bridge, multimodal fusion; shared blocks in [`model_enhancements.py`](../models/model_enhancements.py) — see [MODEL_STACK.md](MODEL_STACK.md) |
 | **Utils** | `utils/` | Checkpoints, text encoders, REPA, pick-best, **`utils/prompt/`** (content controls, neg filter, blueprint, RAG), lint, LLM client |
-| **ViT tools** | `ViT/` | **Separate** from the generator: quality scoring, ranking, prompt tools |
+| **ViT tools** | `vit_quality/` (canonical), `ViT/` (compat) | **Separate** from the generator: quality scoring, ranking, prompt tools |
 | **Pipelines** | `pipelines/` | **image_gen** vs **book_comic** docs; book workflow script (`pipelines/book_comic/scripts/generate_book.py`); not a second copy of DiT |
 | **Scripts** | `scripts/` | Downloads, thin `scripts/book/` launcher, one-off tools (not imported as a package) |
 | **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
@@ -41,7 +43,7 @@ pip install ruff
 
 ruff format .
 ruff check .
-python scripts/tools/dev/smoke_imports.py
+python -m scripts.tools smoke_imports
 ```
 
 Weights and HF cache live under `pretrained/` (gitignored); paths resolve via `utils/modeling/model_paths.py`.
@@ -55,7 +57,7 @@ Weights and HF cache live under `pretrained/` (gitignored); paths resolve via `u
 | Training hyperparameters / DiT flags | `config/train_config.py`, `train.py` argparse |
 | Caption & JSONL behavior | `data/t2i_dataset.py`, `data/caption_utils.py`; Unicode hygiene [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py), CLI [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py), `train.py --caption-unicode-normalize` |
 | Diffusion / schedulers | `diffusion/gaussian_diffusion.py`, `diffusion/respace.py` |
-| DiT architecture | `models/dit_text.py`, `models/dit_predecessor.py` |
+| DiT architecture | `models/dit_text.py`, `models/dit_text_variants.py` |
 | Sampling CLI | `sample.py` |
 | Prompt scaffolding (SFW/NSFW, quality, de-AI, LoRA hints) | `utils/prompt/content_controls.py`, `utils/prompt/neg_filter.py` — overview [PROMPT_STACK.md](PROMPT_STACK.md) |
 | Checkpoint load / fusion | `utils/checkpoint/checkpoint_loading.py`, `utils/modeling/text_encoder_bundle.py` |
@@ -79,7 +81,8 @@ sdx/
 ├── models/                             # DiT, ControlNet, MoE, RAE bridge, multimodal scaffolds
 ├── utils/                              # Checkpoints, text encoders, quality, pick-best, …
 ├── training/                           # Enhanced trainer module (used by scripts below)
-├── ViT/                                # Quality / adherence scoring (not the DiT generator)
+├── vit_quality/                        # Canonical quality / adherence scoring package
+├── ViT/                                # Legacy compatibility path
 ├── pipelines/                          # image_gen vs book_comic docs + book workflow
 ├── scripts/                            # cli.py, download/, tools/, enhanced/, … (see scripts/README.md)
 ├── examples/                           # Small usage examples
@@ -98,7 +101,7 @@ sdx/
 | Sample / generate | `python sample.py …` |
 | Programmatic API | `python inference.py` or import from repo root |
 | Book / comic pages | `python pipelines/book_comic/scripts/generate_book.py …` |
-| ViT dataset QA / scores | `python ViT/train.py` · `ViT/infer.py` |
+| ViT dataset QA / scores | `python -m vit_quality.train` · `python -m vit_quality.infer` |
 
 Run from **repo root** so `config`, `data`, `models`, `utils` resolve without extra `PYTHONPATH`.
 
@@ -138,7 +141,7 @@ Keep new work in predictable places so imports and docs stay stable.
 1. **Core library stays importable from repo root** — `train.py`, `sample.py`, and packages `config`, `data`, `diffusion`, `models`, `utils` are the stable API.
 2. **One optional script layer** — `scripts/` holds downloads, training helpers, tools, enhanced DiT, and **`scripts/cli.py`**. Nothing in `scripts/` is imported by `train.py` at import time for the default path.
 3. **Product lines are documented, not duplicated** — `pipelines/image_gen` vs `pipelines/book_comic` share the same `train.py` / checkpoints; only docs and orchestration differ.
-4. **ViT vs DiT** — `ViT/` is **scoring / QA**, not the diffusion generator. See [ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md).
+4. **ViT vs DiT** — `vit_quality/` (and legacy `ViT/`) is **scoring / QA**, not the diffusion generator. See [ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md).
 
 ### Layer diagram
 

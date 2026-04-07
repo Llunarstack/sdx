@@ -52,6 +52,44 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--normalize-captions", action="store_true", help="Run normalize_captions before training.")
     p.add_argument("--normalized-manifest-name", type=str, default="manifest_book_norm.jsonl")
     p.add_argument(
+        "--normalize-captions-unicode",
+        action="store_true",
+        help="Before other caption transforms: NFKC + zero-width strip via sdx_native.",
+    )
+    p.add_argument(
+        "--normalize-captions-workers",
+        type=int,
+        default=0,
+        help="If >0, parallelize caption normalization (ProcessPool).",
+    )
+    p.add_argument(
+        "--manifest-gate",
+        action="store_true",
+        help="Run manifest_gate (prompt lint + hygiene + optional image QC) before filtering/normalizing.",
+    )
+    p.add_argument("--manifest-gate-image-qc", action="store_true")
+    p.add_argument("--manifest-gate-image-root", type=str, default="")
+    p.add_argument("--manifest-gate-sample", type=int, default=0)
+    p.add_argument("--manifest-gate-min-sharpness", type=float, default=0.0)
+    p.add_argument("--manifest-gate-min-contrast", type=float, default=0.0)
+    p.add_argument("--manifest-gate-max-caption-tokens", type=int, default=0)
+    p.add_argument("--manifest-gate-fail-on-overlap", action="store_true")
+    p.add_argument("--manifest-gate-report-dups", action="store_true")
+    p.add_argument("--manifest-gate-fail-on-dup-groups", type=int, default=0)
+
+    p.add_argument(
+        "--filter-manifest",
+        action="store_true",
+        help="Run data_quality to dedupe/filter manifest before normalization/training.",
+    )
+    p.add_argument("--filter-out-name", type=str, default="manifest_quality.jsonl")
+    p.add_argument("--filter-dedup", type=str, default="", choices=["", "phash", "md5"])
+    p.add_argument("--filter-min-caption-len", type=int, default=0)
+    p.add_argument("--filter-max-caption-len", type=int, default=0)
+    p.add_argument("--filter-bad-words", type=str, default="")
+    p.add_argument("--filter-min-weight", type=float, default=0.0)
+    p.add_argument("--filter-native-validate", action="store_true")
+    p.add_argument(
         "--train-humanize-pack",
         type=str,
         default="none",
@@ -155,6 +193,67 @@ def main() -> int:
             return 2
         manifest = Path(args.manifest_jsonl)
 
+    # Stage 2a: optional manifest gate + filter/dedupe
+    if bool(getattr(args, "manifest_gate", False)):
+        gate_cmd: list[str] = [
+            py,
+            "-m",
+            "scripts.tools",
+            "manifest_gate",
+            str(manifest),
+            "--min-caption-len-chars",
+            str(int(args.manifest_min_caption_len) if hasattr(args, "manifest_min_caption_len") else 0),
+            "--max-caption-tokens",
+            str(int(getattr(args, "manifest_gate_max_caption_tokens", 0) or 0)),
+        ]
+        if bool(getattr(args, "manifest_gate_fail_on_overlap", False)):
+            gate_cmd.append("--fail-on-overlap")
+        if bool(getattr(args, "manifest_gate_report_dups", False)):
+            gate_cmd.append("--report-dups")
+        if int(getattr(args, "manifest_gate_fail_on_dup_groups", 0) or 0) > 0:
+            gate_cmd.extend(["--fail-on-dup-groups", str(int(getattr(args, "manifest_gate_fail_on_dup_groups"))) ])
+        if bool(getattr(args, "manifest_gate_image_qc", False)):
+            gate_cmd.append("--image-qc")
+            if str(getattr(args, "manifest_gate_image_root", "") or "").strip():
+                gate_cmd.extend(["--image-root", str(getattr(args, "manifest_gate_image_root")).strip()])
+            if int(getattr(args, "manifest_gate_sample", 0) or 0) > 0:
+                gate_cmd.extend(["--sample", str(int(getattr(args, "manifest_gate_sample"))) ])
+            if float(getattr(args, "manifest_gate_min_sharpness", 0.0) or 0.0) > 0.0:
+                gate_cmd.extend(["--min-sharpness", str(float(getattr(args, "manifest_gate_min_sharpness"))) ])
+            if float(getattr(args, "manifest_gate_min_contrast", 0.0) or 0.0) > 0.0:
+                gate_cmd.extend(["--min-contrast", str(float(getattr(args, "manifest_gate_min_contrast"))) ])
+        rc = _run(gate_cmd, cwd=ROOT, label="Manifest gate")
+        if rc != 0:
+            return rc
+
+    if bool(getattr(args, "filter_manifest", False)):
+        filtered_manifest = out_dir / str(getattr(args, "filter_out_name", "manifest_quality.jsonl"))
+        dq_cmd: list[str] = [
+            py,
+            "-m",
+            "scripts.tools",
+            "data_quality",
+            str(manifest),
+            "--out",
+            str(filtered_manifest),
+        ]
+        if str(getattr(args, "filter_dedup", "") or "").strip():
+            dq_cmd.extend(["--dedup", str(getattr(args, "filter_dedup")).strip()])
+        if int(getattr(args, "filter_min_caption_len", 0) or 0) > 0:
+            dq_cmd.extend(["--min-caption-len", str(int(getattr(args, "filter_min_caption_len"))) ])
+        if int(getattr(args, "filter_max_caption_len", 0) or 0) > 0:
+            dq_cmd.extend(["--max-caption-len", str(int(getattr(args, "filter_max_caption_len"))) ])
+        if str(getattr(args, "filter_bad_words", "") or "").strip():
+            dq_cmd.extend(["--bad-words", str(getattr(args, "filter_bad_words")).strip()])
+        if float(getattr(args, "filter_min_weight", 0.0) or 0.0) > 0.0:
+            dq_cmd.extend(["--min-weight", str(float(getattr(args, "filter_min_weight"))) ])
+        if bool(getattr(args, "filter_native_validate", False)):
+            dq_cmd.append("--native-validate")
+        rc = _run(dq_cmd, cwd=ROOT, label="Manifest filter/dedupe")
+        if rc != 0:
+            return rc
+        manifest = filtered_manifest
+
     # Stage 2: optional caption normalization
     if bool(args.normalize_captions):
         _humanize = resolve_train_humanization_pack(str(getattr(args, "train_humanize_pack", "none") or "none"))
@@ -174,6 +273,8 @@ def main() -> int:
             python_exe=py,
             inp_manifest=manifest,
             out_manifest=normalized_manifest,
+            unicode_normalize=bool(getattr(args, "normalize_captions_unicode", False)),
+            workers=int(getattr(args, "normalize_captions_workers", 0) or 0),
             shortcomings_mitigation=shortcomings_mitigation,
             shortcomings_2d=shortcomings_2d,
             art_guidance_mode=art_guidance_mode,

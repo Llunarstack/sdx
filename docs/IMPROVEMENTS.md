@@ -278,8 +278,8 @@ Ideas that are uncommon or absent in mainstream DiT/SD/FLUX pipelines—worth ex
 - **Export safetensors:** **Done** — `scripts/tools/export/export_safetensors.py` saves DiT `state_dict` to `.safetensors` for ComfyUI / other tools.
 - **WandB or TensorBoard:** **Done** — `--wandb-project`, `--tensorboard-dir` in train.py (see 5.1).
 - **Default negative prompt:** Done — when `--negative-prompt` is empty, sample.py uses `config.prompt_domains.DEFAULT_NEGATIVE_PROMPT`.
-- **Checkpoint inspector:** Done — `python scripts/tools/dev/ckpt_info.py path/to/best.pt` prints config and steps; `--keys` lists checkpoint keys.
-- **Smoke test:** Done — `python scripts/tools/dev/quick_test.py` runs one forward pass to verify imports and model.
+- **Checkpoint inspector:** Done — `python -m scripts.tools ckpt_info path/to/best.pt` prints config and steps; `--keys` lists checkpoint keys.
+- **Smoke test:** Done — `python -m scripts.tools quick_test` runs one forward pass to verify imports and model.
 - **Dry-run training:** **Done** — `--dry-run` runs one step and exits (sets max_steps=1).
 - **.env.example:** **Done** — `.env.example` documents `HF_TOKEN` and `CUDA_VISIBLE_DEVICES`; copy to `.env` (in .gitignore).
 - **Reproducible sampling:** **Done** — `sample.py --deterministic` sets cudnn deterministic + benchmark off and (when supported) deterministic algorithms so same seed → same image.

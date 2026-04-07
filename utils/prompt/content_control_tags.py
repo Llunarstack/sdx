@@ -3,7 +3,7 @@ Tag lists/dicts for ``content_controls``, loaded from ``data/prompt_tags/*.csv``
 
 Regenerate CSVs from the repo root::
 
-    python scripts/tools/dump_prompt_tag_csvs.py
+    python -m scripts.tools dump_prompt_tag_csvs
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ __all__ = (
     "_ADVANCED_POSE_POSITIVE",
     "_ANGLE_NEGATIVE",
     "_ANGLE_POSITIVE",
+    "_ARTIST_COMPOSITION_NEGATIVE",
+    "_ARTIST_COMPOSITION_POSITIVE",
     "_ANTI_AI_LITE_NEGATIVE",
     "_ANTI_AI_LITE_POSITIVE",
     "_ANTI_AI_STRONG_EXTRA_NEGATIVE",
@@ -111,7 +113,7 @@ _TAG_TABLES = load_tag_tables(default_tag_data_dir())
 if not _TAG_TABLES:
     raise FileNotFoundError(
         f"Missing content-control tag CSVs under {default_tag_data_dir()}. "
-        "Run: python scripts/tools/dump_prompt_tag_csvs.py"
+        "Run: python -m scripts.tools dump_prompt_tag_csvs"
     )
 
 
@@ -234,6 +236,8 @@ _STYLE_LOCK_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "style_lock_negative")
 _UNWANTED_TEXT_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "unwanted_text_negative")
 _COMPOSITION_POSITIVE: Dict[str, List[str]] = dict_pack(_TAG_TABLES, "composition_positive")
 _COMPOSITION_NEGATIVE: Dict[str, List[str]] = dict_pack(_TAG_TABLES, "composition_negative")
+_ARTIST_COMPOSITION_POSITIVE: Dict[str, List[str]] = _dn("artist_composition_positive")
+_ARTIST_COMPOSITION_NEGATIVE: Dict[str, List[str]] = _dn("artist_composition_negative")
 _PERSPECTIVE_STABILITY_POSITIVE: List[str] = flat_pack(_TAG_TABLES, "perspective_stability_positive")
 _PERSPECTIVE_STABILITY_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "perspective_stability_negative")
 _DUPLICATE_SUBJECT_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "duplicate_subject_negative")

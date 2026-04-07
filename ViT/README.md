@@ -10,7 +10,7 @@ Some write-ups use **ViT-G** (*Vision-Intelligence Transformer for **Generation*
 
 ---
 
-This folder is a concrete starter implementation for your **ViT idea**:
+This folder is the **legacy compatibility surface** for your ViT idea:
 
 - train a Vision Transformer to score:
   - **quality** (`quality_label` -> binary)
@@ -19,18 +19,9 @@ This folder is a concrete starter implementation for your **ViT idea**:
 
 ## Files
 
-- `config.py` - dataclass for ViT training config
-- `dataset.py` - JSONL dataset reader + text feature vector
-- `model.py` - `ViTQualityAdherenceModel` with dual heads
-- `losses.py` - pairwise ranking loss for stronger ordering
-- `ema.py` - exponential moving average model weights
-- `tta.py` - test-time augmentation inference helper
-- `prompt_system.py` - prompt decomposition (add vs avoid) + compose negative-in-positive
-- `prompt_tool.py` - CLI for single prompt or JSONL prompt-plan augmentation
-- `train.py` - training loop, saves `best.pt`/`last.pt` (+ optional `best_ema.pt`)
-- `infer.py` - annotate manifest rows with ViT scores (+ optional TTA / EMA)
-- `rank.py` - rank/filter scored manifests by weighted final score
-- `export_embeddings.py` - export fused ViT embeddings to `.npz` for retrieval
+- `config.py`, `losses.py`, `ema.py`, `tta.py`, `prompt_system.py` - thin compatibility re-exports to canonical `vit_quality/*`.
+- `prompt_tool.py`, `rank.py` - thin launchers to canonical `vit_quality` CLIs.
+- Docs in this folder describe the ViT scorer concept, but canonical implementation lives in `vit_quality/`.
 
 ## Expected JSONL fields
 
@@ -43,14 +34,14 @@ Optional labels (for supervised training):
 - `adherence_score` (or `prompt_adherence`) in `[0,1]`
 
 **DiT block-AR alignment** (recommended when images come from AR-trained DiT): set one of
-`num_ar_blocks`, `dit_num_ar_blocks`, or `ar_blocks` to **`0`**, **`2`**, or **`4`** (same meaning as root `train.py --num-ar-blocks`). Missing → **unknown** regime. By default the ViT fuses a 4-D one-hot with caption features; use **`--no-ar-conditioning`** to match old checkpoints that only use 8-D text features. See **`docs/AR.md`** § ViT scorer alignment and **`utils/architecture/ar_dit_vit.py`**.
+`num_ar_blocks`, `dit_num_ar_blocks`, or `ar_blocks` to **`0`**, **`2`**, or **`4`** (same meaning as root `train.py --num-ar-blocks`). Missing → **unknown** regime. By default the ViT fuses a 4-D one-hot with caption features; use **`--no-ar-conditioning`** to match old checkpoints that only use 8-D text features. See **`docs/AR.md`** § ViT scorer alignment and **`utils/architecture/ar_block_conditioning.py`**.
 
 **Training fixes & options (2026):** the trainer now passes **`ar_conditioning`** from each batch into the model (previously only inference did). New flags: **`--train-augment`** (crop/flip/jitter), **`--focal-loss-gamma`** / **`--focal-loss-alpha`** (imbalanced quality labels), **`--adherence-smooth-l1`** (outlier‑robust adherence), **`--fuse-dropout`**, **`--text-proj-dropout`**, **`--backbone-grad-checkpointing`** (VRAM). Checkpoint `config` stores these for `infer.py` / `load_vit_quality_checkpoint`.
 
 ## Train
 
 ```bash
-python ViT/train.py \
+python -m vit_quality.train \
   --manifest-jsonl data/manifest.jsonl \
   --out-dir vit_runs \
   --epochs 5 \
@@ -61,16 +52,16 @@ python ViT/train.py \
 Stronger backbone (VRAM permitting):
 
 ```bash
-python ViT/train.py --manifest-jsonl data/manifest.jsonl --out-dir vit_runs \
+python -m vit_quality.train --manifest-jsonl data/manifest.jsonl --out-dir vit_runs \
   --model-name vit_large_patch16_224 --batch-size 8
 ```
 
-Run `python ViT/train.py --help` for a list of suggested `--model-name` values (from `backbone_presets.py`).
+Run `python -m vit_quality.train --help` for a list of suggested `--model-name` values (from `backbone_presets.py`).
 
 ## Infer
 
 ```bash
-python ViT/infer.py \
+python -m vit_quality.infer \
   --ckpt vit_runs/best.pt \
   --manifest-jsonl data/manifest.jsonl \
   --out data/manifest_vit_scored.jsonl \
@@ -78,12 +69,12 @@ python ViT/infer.py \
   --tta
 ```
 
-If the ViT checkpoint has **AR conditioning** (`use_ar_conditioning`) and your JSONL rows omit `num_ar_blocks`, add **`--default-num-ar-blocks 0`** (Meta/Facebook DiT–style full attention) or **`2`/`4`** to match your SDX DiT run. Same flag on **`export_embeddings.py`**. Prefer tagging manifests with `scripts/tools/data/ar_tag_manifest.py` when mixing generators; see **`docs/AR.md`**.
+If the ViT checkpoint has **AR conditioning** (`use_ar_conditioning`) and your JSONL rows omit `num_ar_blocks`, add **`--default-num-ar-blocks 0`** (Meta/Facebook DiT–style full attention) or **`2`/`4`** to match your SDX DiT run. Same flag on **`export_embeddings.py`**. Prefer tagging manifests with `python -m scripts.tools ar_tag_manifest` when mixing generators; see **`docs/AR.md`**.
 
 ## Rank best rows
 
 ```bash
-python ViT/rank.py \
+python -m vit_quality.rank \
   --input data/manifest_vit_scored.jsonl \
   --output data/manifest_vit_ranked.jsonl \
   --quality-weight 0.6 \
@@ -94,7 +85,7 @@ python ViT/rank.py \
 ## Export embeddings (retrieval/rerank)
 
 ```bash
-python ViT/export_embeddings.py \
+python -m vit_quality.export_embeddings \
   --ckpt vit_runs/best.pt \
   --manifest-jsonl data/manifest.jsonl \
   --out-npz data/vit_embeddings.npz
@@ -103,12 +94,12 @@ python ViT/export_embeddings.py \
 ## Prompt system (negative inside positive)
 
 ```bash
-python ViT/prompt_tool.py \
+python -m vit_quality.prompt_tool \
   --prompt "1girl, cinematic light, no blurry, without watermark, sharp eyes"
 ```
 
 ```bash
-python ViT/prompt_tool.py \
+python -m vit_quality.prompt_tool \
   --json-in data/manifest.jsonl \
   --json-out data/manifest.prompt_plan.jsonl
 ```

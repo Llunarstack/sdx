@@ -10,10 +10,12 @@ finishing-preset (cross-style post), emphasis (word)/[word].
 Presets and OP modes:
 - --preset sdxl|flux|anime|zit: apply a model-style preset from config.model_presets.
 - --op-mode portrait|fullbody|anime_char: apply a high-level OP bundle on top.
+
+Profiling (optional): pass ``--profile-out PATH`` (plus ``--profile-sort cumulative|tottime|...``,
+``--profile-top N``) to write cProfile ``.prof`` and a text summary next to PATH.
 """
 
 import argparse
-import json
 import os
 import re
 import subprocess
@@ -25,6 +27,7 @@ from typing import Tuple
 import numpy as np
 import torch
 from PIL import Image
+from utils.runtime.jsonutil import loads as json_loads
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -382,7 +385,7 @@ def _parse_expected_texts(raw: str) -> list:
         return []
     try:
         if raw.startswith("["):
-            data = json.loads(raw)
+            data = json_loads(raw)
             if isinstance(data, list):
                 return [str(x).strip() for x in data if str(x).strip()]
     except Exception:
@@ -523,13 +526,11 @@ def _load_character_sheet(
       - spatial_anchor / screen_position: e.g. left side, right foreground, background center
     Values can be strings or lists of strings.
     """
-    import json
-
     p = Path(sheet_path)
     if not p.exists():
         raise ValueError(f"character-sheet not found: {p}")
 
-    data = json.loads(p.read_text(encoding="utf-8", errors="ignore"))
+    data = json_loads(p.read_text(encoding="utf-8", errors="ignore"))
 
     from utils.consistency.character_customization import build_character_prompt_additions
 
@@ -1160,6 +1161,13 @@ def main():
         help="CFG multiplicative boost when CLIP cosine drops below --clip-monitor-threshold (only with --clip-monitor-every > 0).",
     )
     parser.add_argument(
+        "--clip-monitor-rewind",
+        type=float,
+        default=0.0,
+        help="If >0 and --clip-monitor-every >0: soft-rewind latent when CLIP cosine drops below threshold. "
+        "Applies x = (1-s)*x + s*x_prev (0–1). Try 0.15–0.4. Costs no extra forwards.",
+    )
+    parser.add_argument(
         "--speculative-draft-cfg-scale",
         type=float,
         default=0.0,
@@ -1212,7 +1220,7 @@ def main():
         default=0.15,
         help="Normalized radial cutoff for --spectral-coherence-latent (smaller = tighter low-pass).",
     )
-    # Test-time scaling: generate N candidates (--num) and keep the best (§11.3 IMPROVEMENTS.md)
+    # Test-time scaling: generate N candidates (--num) and keep the best (see IMPROVEMENTS.md)
     parser.add_argument(
         "--pick-best",
         type=str,
@@ -1223,14 +1231,21 @@ def main():
             "clip",
             "edge",
             "ocr",
+            "vit",
+            "aesthetic",
             "combo",
+            "combo_vit",
+            "combo_vit_hq",
+            "combo_vit_realism",
+            "combo_count_vit",
             "combo_exposure",
             "combo_structural",
             "combo_hq",
             "combo_count",
             "combo_realism",
+            "aesthetic_realism",
         ],
-        help="With --num > 1, score candidates and save the best to --out (clip|edge|ocr|combo|combo_exposure|combo_structural|combo_hq|combo_count|combo_realism)",
+        help="With --num > 1, score candidates; see IMPROVEMENTS.md. Includes aesthetic, aesthetic_realism, combo_vit_*.",
     )
     parser.add_argument(
         "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"
@@ -1240,6 +1255,78 @@ def main():
         type=str,
         default="openai/clip-vit-base-patch32",
         help="HF model id for --pick-best clip/combo",
+    )
+    parser.add_argument(
+        "--pick-vit-ckpt",
+        type=str,
+        default="",
+        help="Optional vit_quality checkpoint (best.pt) for vit / combo_vit / combo_vit_* / combo_count_vit.",
+    )
+    parser.add_argument(
+        "--pick-vit-use-adherence",
+        action="store_true",
+        help="When using --pick-best vit/combo_vit: blend in the adherence head (quality*0.65 + adherence*0.35).",
+    )
+    parser.add_argument(
+        "--pick-auto-no-clip",
+        action="store_true",
+        help="With --pick-best auto: avoid CLIP in the default/photo branches (aesthetic, aesthetic_realism, ocr; combo_count still uses CLIP).",
+    )
+    parser.add_argument(
+        "--pick-report-json",
+        type=str,
+        default="",
+        help="Optional path to write a JSON sidecar with pick/beam scores + chosen indices (useful for debugging and preference mining).",
+    )
+    # Beam-style partial denoise search: run a few steps for N candidates, score previews, continue only the best.
+    parser.add_argument(
+        "--beam-width",
+        type=int,
+        default=0,
+        help="If >0 (and --num=1): run a partial denoise for this many candidates, score previews, continue from the best. "
+        "This is like diffusion beam search; compute-heavy but high leverage.",
+    )
+    parser.add_argument(
+        "--beam-steps",
+        type=int,
+        default=0,
+        help="How many early denoise steps to run in the beam stage (try 6–14). Only used when --beam-width > 0.",
+    )
+    parser.add_argument(
+        "--beam-metric",
+        type=str,
+        default="",
+        help="Metric for beam previews (defaults to --pick-best, else combo_vit_hq if --pick-vit-ckpt, else combo_vit).",
+    )
+    parser.add_argument(
+        "--beam2-width",
+        type=int,
+        default=0,
+        help="Optional second-stage micro-beam (after some denoise): branch from current latent into N variants and re-pick.",
+    )
+    parser.add_argument(
+        "--beam2-steps",
+        type=int,
+        default=0,
+        help="How many steps to run in the second-stage micro-beam (try 4–10). Only used when --beam2-width > 0.",
+    )
+    parser.add_argument(
+        "--beam2-at-frac",
+        type=float,
+        default=0.65,
+        help="When to run micro-beam, as a fraction of total steps (0–1). Example 0.65 means after ~65%% of steps.",
+    )
+    parser.add_argument(
+        "--beam2-noise",
+        type=float,
+        default=0.03,
+        help="Stddev of Gaussian noise added to the mid-latent to create micro-beam branches (try 0.01–0.06).",
+    )
+    parser.add_argument(
+        "--beam2-metric",
+        type=str,
+        default="",
+        help="Metric used for micro-beam pick (defaults to --beam-metric if set, else combo_vit).",
     )
     parser.add_argument(
         "--expected-count",
@@ -1878,6 +1965,13 @@ def main():
         help="Composition stabilizer: use multi_character for 2+ distinct outfits/poses (stronger than group).",
     )
     parser.add_argument(
+        "--artist-composition",
+        type=str,
+        default="none",
+        choices=["none", "lite", "standard", "perspective", "classical", "full"],
+        help="Classical art composition tags: rule of thirds / golden ratio / perspective / notan / S-curve (stacks with --composition-mode).",
+    )
+    parser.add_argument(
         "--anti-duplicate-subjects",
         action="store_true",
         help="Add negatives to reduce cloned faces/extra heads/duplicate subjects.",
@@ -2037,6 +2131,13 @@ def main():
         "T5 uses blocks/segmented/flat per this flag. Use flat if you rely on (word)/[word] emphasis.",
     )
     args = parser.parse_args()
+    pick_report: dict = {
+        "prompt": str(getattr(args, "prompt", "") or ""),
+        "negative_prompt": str(getattr(args, "negative_prompt", "") or ""),
+        "seed": int(getattr(args, "seed", 0) or 0),
+        "steps": int(getattr(args, "steps", 0) or 0),
+        "num": int(getattr(args, "num", 0) or 0),
+    }
 
     # Apply preset and OP mode as soft defaults (only for unset args)
     if getattr(args, "preset", None):
@@ -2742,6 +2843,7 @@ def main():
         safety_mode = str(getattr(args, "safety_mode", "none") or "none")
         clothing_mode = str(getattr(args, "clothing_mode", "none") or "none")
         composition_mode = str(getattr(args, "composition_mode", "none") or "none")
+        artist_composition = str(getattr(args, "artist_composition", "none") or "none")
         people_layout = str(getattr(args, "people_layout", "none") or "none")
         hand_mode = str(getattr(args, "hand_mode", "none") or "none")
         lighting_mode = str(getattr(args, "lighting_mode", "none") or "none")
@@ -2772,6 +2874,8 @@ def main():
                 safety_mode = inferred["safety_mode"]
             if composition_mode == "none" and inferred.get("composition_mode"):
                 composition_mode = inferred["composition_mode"]
+            if artist_composition == "none" and inferred.get("artist_composition"):
+                artist_composition = inferred["artist_composition"]
             if people_layout == "none" and inferred.get("people_layout"):
                 people_layout = inferred["people_layout"]
             if hand_mode == "none" and inferred.get("hand_mode"):
@@ -2822,6 +2926,7 @@ def main():
             style_lock=bool(getattr(args, "style_lock", False)),
             anti_style_bleed=bool(getattr(args, "anti_style_bleed", False)),
             composition_mode=composition_mode,
+            artist_composition=artist_composition,
             anti_duplicate_subjects=bool(getattr(args, "anti_duplicate_subjects", False)),
             anti_perspective_drift=bool(getattr(args, "anti_perspective_drift", False)),
             cleanup_conflicting_tags=bool(getattr(args, "cleanup_conflicting_tags", False)),
@@ -3238,6 +3343,7 @@ def main():
 
         _cm_thr = float(getattr(args, "clip_monitor_threshold", 0.22) or 0.22)
         _cm_boost = float(getattr(args, "clip_monitor_cfg_boost", 0.12) or 0.12)
+        _cm_rewind = float(getattr(args, "clip_monitor_rewind", 0.0) or 0.0)
         _cm_model = str(getattr(args, "clip_guard_model", "openai/clip-vit-base-patch32"))
 
         def _periodic_clip_fn(_step_i: int, x0p: torch.Tensor) -> float:
@@ -3257,6 +3363,7 @@ def main():
             periodic_alignment_threshold=_cm_thr,
             periodic_alignment_cfg_boost=_cm_boost,
             periodic_alignment_fn=_periodic_clip_fn,
+            periodic_alignment_rewind_strength=_cm_rewind,
         )
     else:
         _periodic_kw = dict(
@@ -3264,6 +3371,7 @@ def main():
             periodic_alignment_threshold=0.0,
             periodic_alignment_cfg_boost=0.0,
             periodic_alignment_fn=None,
+            periodic_alignment_rewind_strength=0.0,
         )
 
     dual_stage = bool(getattr(args, "dual_stage_layout", False))
@@ -3414,6 +3522,283 @@ def main():
             )
     else:
         print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
+        beam_w = int(getattr(args, "beam_width", 0) or 0)
+        beam_steps = int(getattr(args, "beam_steps", 0) or 0)
+        do_beam = (
+            beam_w > 1
+            and beam_steps > 0
+            and int(num_gen) == 1
+            and not bool(use_flow_sample)
+            and x_init is None
+            and start_timestep is None
+            and inpaint_mask_latent is None
+            and inpaint_x0 is None
+            and inpaint_noise is None
+        )
+
+        if do_beam:
+            try:
+                from utils.quality.test_time_pick import pick_best_indices
+
+                pick_m0 = (str(getattr(args, "beam_metric", "") or "")).strip().lower()
+                if not pick_m0 or pick_m0 in ("auto", "none"):
+                    pick_m0 = (str(getattr(args, "pick_best", "") or "")).strip().lower()
+                if not pick_m0 or pick_m0 in ("auto", "none"):
+                    pick_m0 = (
+                        "combo_vit_hq" if str(getattr(args, "pick_vit_ckpt", "") or "").strip() else "combo_vit"
+                    )
+                print(f"Beam search: width={beam_w} steps={beam_steps} metric={pick_m0}", file=sys.stderr)
+
+                shape_b = (beam_w, shape[1], shape[2], shape[3])
+                with torch.no_grad():
+                    x_t, x0_pred, t_resume = diffusion.sample_loop(
+                        model,
+                        shape_b,
+                        model_kwargs_cond=model_kwargs_cond,
+                        model_kwargs_uncond=model_kwargs_uncond,
+                        cfg_scale=cfg_scale,
+                        cfg_rescale=cfg_rescale,
+                        num_inference_steps=beam_steps,
+                        eta=0.0,
+                        device=device,
+                        dtype=torch.float32,
+                        x_init=None,
+                        start_timestep=None,
+                        dynamic_threshold_percentile=dyn_thresh_p,
+                        dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                        dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                        scheduler=getattr(args, "scheduler", "ddim"),
+                        timestep_schedule=getattr(args, "timestep_schedule", None),
+                        solver=getattr(args, "solver", "ddim"),
+                        karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                        inpaint_mask=None,
+                        inpaint_x0=None,
+                        inpaint_noise=None,
+                        inpaint_freeze_known=False,
+                        pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                        pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                        **_sag_kw,
+                        **_vol_kw,
+                        **_spec_kw,
+                        **_flow_kw,
+                        **_control_kw,
+                        **_holy_kw,
+                        **_ada_kw,
+                        **_periodic_kw,
+                        return_intermediate_state=True,
+                    )
+
+                    # Decode cheap previews from x0_pred for scoring.
+                    x0p = x0_pred
+                    if ae_type == "kl":
+                        x0p = x0p / latent_scale
+                    elif ae_type == "rae" and rae_bridge is not None:
+                        x0p = rae_bridge.dit_to_rae(x0p)
+                    im = vae.decode(x0p).sample
+                    im = (im * 0.5 + 0.5).clamp(0, 1)
+                    rgb_list = []
+                    for bi in range(im.shape[0]):
+                        arr = im[bi].permute(1, 2, 0).detach().cpu().numpy()
+                        rgb_list.append((arr * 255).round().astype("uint8"))
+
+                    exp_ocr = ""
+                    if isinstance(expected_texts, list) and expected_texts:
+                        exp_ocr = str(expected_texts[0])
+                    best_i, scores = pick_best_indices(
+                        rgb_list,
+                        prompt_to_encode,
+                        pick_m0,
+                        str(device),
+                        exp_ocr,
+                        getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32"),
+                        int(getattr(args, "expected_count", 0) or 0),
+                        str(getattr(args, "expected_count_target", "auto") or "auto"),
+                        str(getattr(args, "expected_count_object", "") or ""),
+                        str(getattr(args, "pick_vit_ckpt", "") or ""),
+                        bool(getattr(args, "pick_vit_use_adherence", False)),
+                    )
+                    print(f"beam scores={scores} -> keep {best_i} resume_t={t_resume}", file=sys.stderr)
+                    pick_report["beam1"] = {
+                        "metric": pick_m0,
+                        "scores": [float(x) for x in scores],
+                        "best_index": int(best_i),
+                        "resume_t": int(t_resume),
+                        "beam_width": int(beam_w),
+                        "beam_steps": int(beam_steps),
+                    }
+                    x_init = x_t[best_i : best_i + 1].contiguous()
+                    start_timestep = int(t_resume)
+                    shape = (1, shape[1], shape[2], shape[3])
+            except Exception as e:
+                print(f"Beam search disabled (fallback): {e}", file=sys.stderr)
+
+        steps_main = int(args.steps)
+        if do_beam and beam_steps > 0 and x_init is not None and start_timestep is not None:
+            steps_main = max(1, int(args.steps) - int(beam_steps))
+
+        # Optional second-stage micro-beam: branch from a mid-latent and re-pick.
+        beam2_w = int(getattr(args, "beam2_width", 0) or 0)
+        beam2_steps = int(getattr(args, "beam2_steps", 0) or 0)
+        beam2_at = float(getattr(args, "beam2_at_frac", 0.65) or 0.65)
+        beam2_noise = float(getattr(args, "beam2_noise", 0.03) or 0.03)
+        do_beam2 = (
+            beam2_w > 1
+            and beam2_steps > 0
+            and int(num_gen) == 1
+            and not bool(use_flow_sample)
+            and inpaint_mask_latent is None
+            and inpaint_x0 is None
+            and inpaint_noise is None
+            and (x_init is None) == (start_timestep is None)
+        )
+
+        if do_beam2 and steps_main >= (beam2_steps + 2):
+            try:
+                from utils.quality.test_time_pick import pick_best_indices
+
+                pick_m2 = (str(getattr(args, "beam2_metric", "") or "")).strip().lower()
+                if not pick_m2 or pick_m2 in ("auto", "none"):
+                    pick_m2 = (str(getattr(args, "beam_metric", "") or "")).strip().lower()
+                if not pick_m2 or pick_m2 in ("auto", "none"):
+                    pick_m2 = (str(getattr(args, "pick_best", "") or "")).strip().lower()
+                if not pick_m2 or pick_m2 in ("auto", "none"):
+                    pick_m2 = (
+                        "combo_vit_hq" if str(getattr(args, "pick_vit_ckpt", "") or "").strip() else "combo_vit"
+                    )
+
+                split = int(round(float(steps_main) * float(min(0.95, max(0.05, beam2_at)))))
+                split = max(1, min(split, steps_main - (beam2_steps + 1)))
+                with torch.no_grad():
+                    # Run up to the split point and capture latent state.
+                    x_mid, x0_mid, t_mid = diffusion.sample_loop(
+                        model,
+                        shape,
+                        model_kwargs_cond=model_kwargs_cond,
+                        model_kwargs_uncond=model_kwargs_uncond,
+                        cfg_scale=cfg_scale,
+                        cfg_rescale=cfg_rescale,
+                        num_inference_steps=split,
+                        eta=0.0,
+                        device=device,
+                        dtype=torch.float32,
+                        x_init=x_init,
+                        start_timestep=start_timestep,
+                        dynamic_threshold_percentile=dyn_thresh_p,
+                        dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                        dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                        scheduler=getattr(args, "scheduler", "ddim"),
+                        timestep_schedule=getattr(args, "timestep_schedule", None),
+                        solver=getattr(args, "solver", "ddim"),
+                        karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                        inpaint_mask=None,
+                        inpaint_x0=None,
+                        inpaint_noise=None,
+                        inpaint_freeze_known=False,
+                        pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                        pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                        **_sag_kw,
+                        **_vol_kw,
+                        **_spec_kw,
+                        **_flow_kw,
+                        **_control_kw,
+                        **_holy_kw,
+                        **_ada_kw,
+                        **_periodic_kw,
+                        return_intermediate_state=True,
+                    )
+
+                    # Branch into beam2 variants with small noise around x_mid.
+                    x_seed = x_mid.expand(beam2_w, -1, -1, -1).contiguous()
+                    if beam2_noise > 0.0:
+                        x_seed = x_seed + beam2_noise * torch.randn_like(x_seed, device=device, dtype=x_seed.dtype)
+                    shape2 = (beam2_w, shape[1], shape[2], shape[3])
+                    x2, x0_2, t2 = diffusion.sample_loop(
+                        model,
+                        shape2,
+                        model_kwargs_cond=model_kwargs_cond,
+                        model_kwargs_uncond=model_kwargs_uncond,
+                        cfg_scale=cfg_scale,
+                        cfg_rescale=cfg_rescale,
+                        num_inference_steps=beam2_steps,
+                        eta=0.0,
+                        device=device,
+                        dtype=torch.float32,
+                        x_init=x_seed,
+                        start_timestep=int(t_mid),
+                        dynamic_threshold_percentile=dyn_thresh_p,
+                        dynamic_threshold_type=getattr(args, "dynamic_threshold_type", "percentile"),
+                        dynamic_threshold_value=getattr(args, "dynamic_threshold_value", 0.0),
+                        scheduler=getattr(args, "scheduler", "ddim"),
+                        timestep_schedule=getattr(args, "timestep_schedule", None),
+                        solver=getattr(args, "solver", "ddim"),
+                        karras_rho=float(getattr(args, "karras_rho", 7.0)),
+                        inpaint_mask=None,
+                        inpaint_x0=None,
+                        inpaint_noise=None,
+                        inpaint_freeze_known=False,
+                        pbfm_edge_boost=float(getattr(args, "pbfm_edge_boost", 0.0)),
+                        pbfm_edge_kernel=int(getattr(args, "pbfm_edge_kernel", 3)),
+                        **_sag_kw,
+                        **_vol_kw,
+                        **_spec_kw,
+                        **_flow_kw,
+                        **_control_kw,
+                        **_holy_kw,
+                        **_ada_kw,
+                        **_periodic_kw,
+                        return_intermediate_state=True,
+                    )
+
+                    # Decode previews from x0_2 and pick best.
+                    x0p2 = x0_2
+                    if ae_type == "kl":
+                        x0p2 = x0p2 / latent_scale
+                    elif ae_type == "rae" and rae_bridge is not None:
+                        x0p2 = rae_bridge.dit_to_rae(x0p2)
+                    im2 = vae.decode(x0p2).sample
+                    im2 = (im2 * 0.5 + 0.5).clamp(0, 1)
+                    rgb2 = []
+                    for bi in range(im2.shape[0]):
+                        arr = im2[bi].permute(1, 2, 0).detach().cpu().numpy()
+                        rgb2.append((arr * 255).round().astype("uint8"))
+                    exp_ocr2 = ""
+                    if isinstance(expected_texts, list) and expected_texts:
+                        exp_ocr2 = str(expected_texts[0])
+                    best2, scores2 = pick_best_indices(
+                        rgb2,
+                        prompt_to_encode,
+                        pick_m2,
+                        str(device),
+                        exp_ocr2,
+                        getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32"),
+                        int(getattr(args, "expected_count", 0) or 0),
+                        str(getattr(args, "expected_count_target", "auto") or "auto"),
+                        str(getattr(args, "expected_count_object", "") or ""),
+                        str(getattr(args, "pick_vit_ckpt", "") or ""),
+                        bool(getattr(args, "pick_vit_use_adherence", False)),
+                    )
+                    print(
+                        f"Micro-beam: split={split}/{steps_main} width={beam2_w} steps={beam2_steps} "
+                        f"metric={pick_m2} scores={scores2} -> keep {best2} resume_t={t2}",
+                        file=sys.stderr,
+                    )
+                    pick_report["beam2"] = {
+                        "metric": pick_m2,
+                        "scores": [float(x) for x in scores2],
+                        "best_index": int(best2),
+                        "resume_t": int(t2),
+                        "beam2_width": int(beam2_w),
+                        "beam2_steps": int(beam2_steps),
+                        "beam2_at_frac": float(beam2_at),
+                        "beam2_noise": float(beam2_noise),
+                        "split_steps": int(split),
+                    }
+                    x_init = x2[best2 : best2 + 1].contiguous()
+                    start_timestep = int(t2)
+                    steps_main = max(1, int(steps_main) - int(split) - int(beam2_steps))
+            except Exception as e:
+                print(f"Micro-beam disabled (fallback): {e}", file=sys.stderr)
+
         x0 = diffusion.sample_loop(
             model,
             shape,
@@ -3421,7 +3806,7 @@ def main():
             model_kwargs_uncond=model_kwargs_uncond,
             cfg_scale=cfg_scale,
             cfg_rescale=cfg_rescale,
-            num_inference_steps=args.steps,
+            num_inference_steps=steps_main,
             eta=0.0,
             device=device,
             dtype=torch.float32,
@@ -3850,6 +4235,30 @@ def main():
     if pick_m == "auto":
         if bool(getattr(args, "realism_autopilot", True)) and str(_auto_pick_metric).strip():
             pick_m = str(_auto_pick_metric).strip().lower()
+        elif str(getattr(args, "pick_vit_ckpt", "") or "").strip():
+            if isinstance(expected_texts, list) and expected_texts:
+                pick_m = "combo_vit_realism"
+            elif re.search(
+                r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b",
+                str(prompt_to_encode).lower(),
+            ):
+                pick_m = "combo_count_vit"
+            elif _is_photo_prompt or str(_pr_pack_ef).lower() != "none":
+                pick_m = "combo_vit_realism"
+            else:
+                pick_m = "combo_vit_hq"
+        elif bool(getattr(args, "pick_auto_no_clip", False)):
+            if isinstance(expected_texts, list) and expected_texts:
+                pick_m = "ocr"
+            elif re.search(
+                r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b",
+                str(prompt_to_encode).lower(),
+            ):
+                pick_m = "combo_count"
+            elif _is_photo_prompt or str(_pr_pack_ef).lower() != "none":
+                pick_m = "aesthetic_realism"
+            else:
+                pick_m = "aesthetic"
         elif isinstance(expected_texts, list) and expected_texts:
             pick_m = "combo"
         elif re.search(r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b", str(prompt_to_encode).lower()):
@@ -3876,8 +4285,23 @@ def main():
             int(getattr(args, "expected_count", 0) or 0),
             str(getattr(args, "expected_count_target", "auto") or "auto"),
             str(getattr(args, "expected_count_object", "") or ""),
+            str(getattr(args, "pick_vit_ckpt", "") or ""),
+            bool(getattr(args, "pick_vit_use_adherence", False)),
         )
         print(f"pick-best ({pick_m}): scores={scores} -> best index {best_idx}")
+        pick_report["pick_best"] = {
+            "metric": str(pick_m),
+            "scores": [float(x) for x in scores],
+            "best_index": int(best_idx),
+            "expected_text": str(exp_ocr or ""),
+            "expected_count": int(getattr(args, "expected_count", 0) or 0),
+            "expected_count_target": str(getattr(args, "expected_count_target", "auto") or "auto"),
+            "expected_count_object": str(getattr(args, "expected_count_object", "") or ""),
+            "pick_clip_model": str(getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32") or ""),
+            "pick_vit_ckpt": str(getattr(args, "pick_vit_ckpt", "") or ""),
+            "pick_vit_use_adherence": bool(getattr(args, "pick_vit_use_adherence", False)),
+            "pick_auto_no_clip": bool(getattr(args, "pick_auto_no_clip", False)),
+        }
 
     if getattr(args, "pick_save_all", False) and num_gen > 1:
         for i in range(num_gen):
@@ -3916,6 +4340,17 @@ def main():
         prompt_txt = out_path.parent / f"{stem}.txt"
         prompt_txt.write_text("\n".join(params_lines), encoding="utf-8")
         print(f"Saved params: {prompt_txt}")
+
+    if str(getattr(args, "pick_report_json", "") or "").strip():
+        try:
+            import json as _json
+
+            rp = Path(str(getattr(args, "pick_report_json", "") or "")).expanduser()
+            rp.parent.mkdir(parents=True, exist_ok=True)
+            rp.write_text(_json.dumps(pick_report, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"Saved pick report: {rp}")
+        except Exception as e:
+            print(f"pick-report-json: failed to write ({e})", file=sys.stderr)
 
     # Optional: OCR validate + iterative inpainting to fix text rendering.
     if (
@@ -4118,6 +4553,8 @@ def main():
                         repair_cmd += ["--relationship-mode", str(getattr(args, "relationship_mode"))]
                     if getattr(args, "object_layout", "none") != "none":
                         repair_cmd += ["--object-layout", str(getattr(args, "object_layout"))]
+                    if getattr(args, "artist_composition", "none") != "none":
+                        repair_cmd += ["--artist-composition", str(getattr(args, "artist_composition"))]
                     if getattr(args, "hand_mode", "none") != "none":
                         repair_cmd += ["--hand-mode", str(getattr(args, "hand_mode"))]
                     if getattr(args, "pose_naturalness", "none") != "none":
@@ -4327,4 +4764,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from utils.runtime.profiling import consume_profile_args, run_with_cprofile
+
+    _argv, _pcfg = consume_profile_args(sys.argv)
+    sys.argv = _argv
+    if _pcfg is not None:
+        run_with_cprofile(main, _pcfg)
+    else:
+        main()

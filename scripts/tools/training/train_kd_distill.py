@@ -8,7 +8,7 @@ standard VP ``q_sample`` noise. Useful for slight smoothing / same-arch distilla
 
 Example::
 
-    python scripts/tools/training/train_kd_distill.py \\
+    python -m scripts.tools train_kd_distill \\
         --teacher-ckpt results/best.pt \\
         --data data/manifest.jsonl \\
         --out results/kd_student.pt \\

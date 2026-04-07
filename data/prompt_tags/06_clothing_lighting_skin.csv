@@ -1,36 +1,140 @@
 pack,mode,tag
 clothing_positive,casual,casual outfit
+clothing_positive,casual,strong casual outfit
+clothing_positive,casual,more casual outfit
+clothing_positive,casual,casual outfit discipline
 clothing_positive,casual,natural fabric folds
+clothing_positive,casual,strong natural fabric folds
+clothing_positive,casual,more natural fabric folds
+clothing_positive,casual,natural fabric folds discipline
 clothing_positive,casual,realistic cloth drape
+clothing_positive,casual,strong realistic cloth drape
+clothing_positive,casual,more realistic cloth drape
+clothing_positive,casual,realistic cloth drape discipline
 clothing_positive,casual,detailed clothing texture
+clothing_positive,casual,strong detailed clothing texture
+clothing_positive,casual,more detailed clothing texture
+clothing_positive,casual,detailed clothing texture discipline
+clothing_positive,casual,fabric colors from the prompt
+clothing_positive,casual,strong fabric colors from the prompt
+clothing_positive,casual,more fabric colors from the prompt
+clothing_positive,casual,fabric colors from the prompt discipline
 clothing_positive,formal,formal outfit
+clothing_positive,formal,strong formal outfit
+clothing_positive,formal,more formal outfit
+clothing_positive,formal,formal outfit discipline
 clothing_positive,formal,tailored clothing
+clothing_positive,formal,strong tailored clothing
+clothing_positive,formal,more tailored clothing
+clothing_positive,formal,tailored clothing discipline
 clothing_positive,formal,clean garment lines
+clothing_positive,formal,strong clean garment lines
+clothing_positive,formal,more clean garment lines
+clothing_positive,formal,clean garment lines discipline
 clothing_positive,formal,elegant dress
+clothing_positive,formal,strong elegant dress
+clothing_positive,formal,more elegant dress
+clothing_positive,formal,elegant dress discipline
+clothing_positive,formal,lapel and tie as described
+clothing_positive,formal,strong lapel and tie as described
+clothing_positive,formal,more lapel and tie as described
+clothing_positive,formal,lapel and tie as described discipline
 clothing_positive,streetwear,streetwear style
+clothing_positive,streetwear,strong streetwear style
+clothing_positive,streetwear,more streetwear style
+clothing_positive,streetwear,streetwear style discipline
 clothing_positive,streetwear,layered outfit
+clothing_positive,streetwear,strong layered outfit
+clothing_positive,streetwear,more layered outfit
+clothing_positive,streetwear,layered outfit discipline
 clothing_positive,streetwear,distinct garment details
+clothing_positive,streetwear,strong distinct garment details
+clothing_positive,streetwear,more distinct garment details
+clothing_positive,streetwear,distinct garment details discipline
 clothing_positive,streetwear,urban fashion
+clothing_positive,streetwear,strong urban fashion
+clothing_positive,streetwear,more urban fashion
+clothing_positive,streetwear,urban fashion discipline
+clothing_positive,streetwear,brand-agnostic but silhouette-locked to brief
+clothing_positive,streetwear,strong brand-agnostic but silhouette-locked to brief
+clothing_positive,streetwear,more brand-agnostic but silhouette-locked to brief
+clothing_positive,streetwear,brand-agnostic but silhouette-locked to brief discipline
 clothing_positive,fantasy_armor,fantasy armor
+clothing_positive,fantasy_armor,strong fantasy armor
+clothing_positive,fantasy_armor,more fantasy armor
+clothing_positive,fantasy_armor,fantasy armor discipline
 clothing_positive,fantasy_armor,readable armor segments
+clothing_positive,fantasy_armor,strong readable armor segments
+clothing_positive,fantasy_armor,more readable armor segments
+clothing_positive,fantasy_armor,readable armor segments discipline
 clothing_positive,fantasy_armor,material separation
+clothing_positive,fantasy_armor,strong material separation
+clothing_positive,fantasy_armor,more material separation
+clothing_positive,fantasy_armor,material separation discipline
 clothing_positive,fantasy_armor,ornate armor details
+clothing_positive,fantasy_armor,strong ornate armor details
+clothing_positive,fantasy_armor,more ornate armor details
+clothing_positive,fantasy_armor,ornate armor details discipline
 clothing_positive,swimwear,swimwear
+clothing_positive,swimwear,strong swimwear
+clothing_positive,swimwear,swimwear discipline
 clothing_positive,swimwear,clean silhouette
+clothing_positive,swimwear,strong clean silhouette
+clothing_positive,swimwear,more clean silhouette
+clothing_positive,swimwear,clean silhouette discipline
 clothing_positive,swimwear,consistent fabric tension
+clothing_positive,swimwear,strong consistent fabric tension
+clothing_positive,swimwear,more consistent fabric tension
+clothing_positive,swimwear,consistent fabric tension discipline
 clothing_positive,swimwear,summer beachwear
+clothing_positive,swimwear,strong summer beachwear
+clothing_positive,swimwear,more summer beachwear
+clothing_positive,swimwear,summer beachwear discipline
 clothing_positive,lingerie,sexy lingerie
+clothing_positive,lingerie,strong sexy lingerie
+clothing_positive,lingerie,more sexy lingerie
+clothing_positive,lingerie,sexy lingerie discipline
 clothing_positive,lingerie,lace lingerie
+clothing_positive,lingerie,strong lace lingerie
+clothing_positive,lingerie,more lace lingerie
+clothing_positive,lingerie,lace lingerie discipline
 clothing_positive,lingerie,sheer fabric
+clothing_positive,lingerie,strong sheer fabric
+clothing_positive,lingerie,more sheer fabric
+clothing_positive,lingerie,sheer fabric discipline
 clothing_positive,lingerie,garter belts
+clothing_positive,lingerie,strong garter belts
+clothing_positive,lingerie,more garter belts
+clothing_positive,lingerie,garter belts discipline
 clothing_positive,lingerie,stockings
+clothing_positive,lingerie,strong stockings
+clothing_positive,lingerie,stockings discipline
 clothing_positive,lingerie,bodysuit
+clothing_positive,lingerie,strong bodysuit
+clothing_positive,lingerie,bodysuit discipline
 clothing_positive,lingerie,teddy
+clothing_positive,lingerie,strong teddy
+clothing_positive,lingerie,teddy discipline
 clothing_positive,lingerie,babydoll
+clothing_positive,lingerie,strong babydoll
+clothing_positive,lingerie,babydoll discipline
 clothing_positive,lingerie,corset
+clothing_positive,lingerie,strong corset
+clothing_positive,lingerie,corset discipline
 clothing_positive,lingerie,cage harness
+clothing_positive,lingerie,strong cage harness
+clothing_positive,lingerie,more cage harness
+clothing_positive,lingerie,cage harness discipline
+clothing_positive,lingerie,set pieces match tag list
+clothing_positive,lingerie,strong set pieces match tag list
+clothing_positive,lingerie,more set pieces match tag list
+clothing_positive,lingerie,set pieces match tag list discipline
 clothing_positive,torn,torn clothes
+clothing_positive,torn,strong torn clothes
+clothing_positive,torn,more torn clothes
+clothing_positive,torn,torn clothes discipline
 clothing_positive,torn,ripped clothing
+clothing_positive,torn,strong ripped clothing
 clothing_positive,torn,clothes in tatters
 clothing_positive,torn,partially undressed
 clothing_positive,torn,naked apron
@@ -98,9 +202,11 @@ clothing_negative,casual,melted clothing
 clothing_negative,casual,fused fabric
 clothing_negative,casual,broken seams
 clothing_negative,casual,floating clothes
+clothing_negative,casual,wrong garment category vs prompt
 clothing_negative,formal,distorted suit
 clothing_negative,formal,warped tie
 clothing_negative,formal,asymmetric lapels
+clothing_negative,formal,invented pattern not mentioned
 clothing_negative,streetwear,muddy clothing details
 clothing_negative,streetwear,garment fusion
 clothing_negative,streetwear,texture collapse
@@ -125,6 +231,7 @@ clothing_negative,bikini,asymmetric cups
 clothing_negative,danbooru,melted costume
 clothing_negative,danbooru,fused fabric
 clothing_negative,danbooru,broken accessories
+clothing_negative,danbooru,ignored stated accessory
 clothing_negative,sfw,melted clothing
 clothing_negative,sfw,fused fabric
 clothing_negative,sfw,inconsistent outfit
@@ -134,9 +241,11 @@ lighting_mode_positive,natural_daylight,plausible bounce light
 lighting_mode_positive,studio_softbox,studio softbox lighting
 lighting_mode_positive,studio_softbox,controlled key/fill ratio
 lighting_mode_positive,studio_softbox,clean light wrap
+lighting_mode_positive,studio_softbox,key direction matches prompt
 lighting_mode_positive,dramatic_rim,dramatic rim light
 lighting_mode_positive,dramatic_rim,directional key light
 lighting_mode_positive,dramatic_rim,cinematic shadow sculpting
+lighting_mode_positive,dramatic_rim,rim matches stated light source
 lighting_mode_positive,low_key,low-key lighting
 lighting_mode_positive,low_key,rich shadows
 lighting_mode_positive,low_key,controlled specular highlights
@@ -145,8 +254,10 @@ lighting_mode_positive,high_key,bright soft tonality
 lighting_mode_positive,high_key,low shadow harshness
 lighting_mode_negative,natural_daylight,unnatural color cast
 lighting_mode_negative,natural_daylight,inconsistent sun direction
+lighting_mode_negative,natural_daylight,time of day contradicts prompt
 lighting_mode_negative,studio_softbox,harsh mixed lighting
 lighting_mode_negative,studio_softbox,uneven exposure patches
+lighting_mode_negative,studio_softbox,unmotivated fill vs brief
 lighting_mode_negative,dramatic_rim,flat lighting
 lighting_mode_negative,dramatic_rim,unmotivated highlights
 lighting_mode_negative,low_key,crushed blacks
@@ -157,6 +268,7 @@ skin_detail_positive,natural_texture,natural skin texture
 skin_detail_positive,natural_texture,real pores
 skin_detail_positive,natural_texture,subtle imperfections
 skin_detail_positive,natural_texture,non-waxy skin
+skin_detail_positive,natural_texture,skin read matches ethnicity and age cues
 skin_detail_positive,clean_beauty,clean beauty skin
 skin_detail_positive,clean_beauty,balanced skin smoothing
 skin_detail_positive,clean_beauty,retained facial structure
@@ -165,20 +277,8 @@ skin_detail_positive,stylized_skin,consistent skin shading language
 skin_detail_negative,natural_texture,waxy skin
 skin_detail_negative,natural_texture,airbrushed plastic skin
 skin_detail_negative,natural_texture,porcelain skin artifact
+skin_detail_negative,natural_texture,ignored freckle or scar note from prompt
 skin_detail_negative,clean_beauty,over-smoothed skin
 skin_detail_negative,clean_beauty,loss of facial definition
 skin_detail_negative,stylized_skin,style-inconsistent skin
 skin_detail_negative,stylized_skin,skin shading collapse
-clothing_positive,casual,fabric colors from the prompt
-clothing_positive,formal,lapel and tie as described
-clothing_positive,streetwear,brand-agnostic but silhouette-locked to brief
-clothing_positive,lingerie,set pieces match tag list
-clothing_negative,casual,wrong garment category vs prompt
-clothing_negative,formal,invented pattern not mentioned
-clothing_negative,danbooru,ignored stated accessory
-lighting_mode_positive,studio_softbox,key direction matches prompt
-lighting_mode_positive,dramatic_rim,rim matches stated light source
-lighting_mode_negative,natural_daylight,time of day contradicts prompt
-lighting_mode_negative,studio_softbox,unmotivated fill vs brief
-skin_detail_positive,natural_texture,skin read matches ethnicity and age cues
-skin_detail_negative,natural_texture,ignored freckle or scar note from prompt

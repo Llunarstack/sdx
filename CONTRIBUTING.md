@@ -21,13 +21,13 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
    ```
    For a faster check that doesn't need a GPU:
    ```bash
-   python scripts/tools/dev/quick_test.py
+   python -m scripts.tools quick_test
    ```
 4. **Manual sanity** (when you touch training/sampling/core utils): run a minimal `python -m py_compile` on changed modules and/or a short `sample.py` / `train.py` invocation with your new flags if applicable.
 5. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
 6. **Doc links** (if you edit cross-links in markdown)
    ```bash
-   python scripts/tools/repo/verify_doc_links.py
+   python -m scripts.tools verify_doc_links
    ```
 
 ## Style

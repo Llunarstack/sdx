@@ -7,8 +7,8 @@ Rust ``sdx-jsonl-tools prompt-lint`` and Python ``sdx_native.jsonl_manifest_pure
 
 Usage (repo root on PYTHONPATH; ``native/python`` for ``sdx_native``)::
 
-  python scripts/tools/data/caption_hygiene.py data/manifest.jsonl --report-dups --max-overlap-show 15
-  python scripts/tools/data/caption_hygiene.py data/manifest.jsonl --normalize-samples 5
+  python -m scripts.tools caption_hygiene data/manifest.jsonl --report-dups --max-overlap-show 15
+  python -m scripts.tools caption_hygiene data/manifest.jsonl --normalize-samples 5
 """
 
 from __future__ import annotations

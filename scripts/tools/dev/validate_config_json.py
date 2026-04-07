@@ -3,8 +3,8 @@
 Validate a JSON-serialized TrainConfig (or subset) against ``validate_train_config``.
 
 Usage (repo root):
-  python scripts/tools/dev/validate_config_json.py path/to/config.json
-  python scripts/tools/dev/validate_config_json.py path/to/config.json --no-cuda-check
+  python -m scripts.tools validate_config_json path/to/config.json
+  python -m scripts.tools validate_config_json path/to/config.json --no-cuda-check
 
 Exit code 0 if no ERROR lines; 1 if any ERROR; still prints WARNINGs.
 """

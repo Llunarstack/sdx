@@ -19,7 +19,7 @@ back to labeling ``raw/general.txt`` as category ``general``.
 
 Usage::
 
-    python scripts/tools/merge_danbooru_categorized_tags.py \\
+    python -m scripts.tools merge_danbooru_categorized_tags \\
         --out data/danbooru/tags/all_tags_categorized.txt
 """
 

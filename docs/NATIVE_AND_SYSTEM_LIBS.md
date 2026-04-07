@@ -78,7 +78,7 @@ These are **optional**; Python paths work without them. They help **data quality
 | Module / tool | Role |
 |----------------|------|
 | [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py) | **NFKC** normalization, zero-width strip, comma-segment trim, **SHA256** or **xxhash** caption fingerprints, pos/neg token overlap helper |
-| [`utils/native/text_hygiene.py`](../utils/native/text_hygiene.py) | Shim → `sdx_native.text_hygiene` |
+| [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py) | Canonical Python bridge for `sdx_native.text_hygiene` |
 | [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py) | JSONL CLI: `--report-dups`, `--report-overlap`, `--normalize-samples` |
 | Training | `train.py --caption-unicode-normalize` → `TrainConfig.caption_unicode_normalize` → `Text2ImageDataset(caption_unicode_normalize=True)` |
 

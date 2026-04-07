@@ -23,15 +23,22 @@ def dpo_preference_loss(
     implicit_logp_ref_lose: torch.Tensor,
     *,
     beta: float = 5000.0,
+    logit_clip: float | None = None,
 ) -> torch.Tensor:
     """
     Standard DPO loss on implicit log-probabilities (higher = more preferred).
 
     Typically ``implicit_logp_* = -mse`` or ``-0.5 * mse / sigma^2`` from a denoising step.
     Reference terms are usually ``.detach()`` so only the policy (student) is trained.
+
+    ``logit_clip``: if set (positive), clamp the scaled log-odds before ``logsigmoid`` so large
+    ``beta`` or noisy surrogate losses cannot explode gradients (diffusion DPO stability).
     """
     b = float(beta)
     pi = b * ((implicit_logp_win - implicit_logp_lose) - (implicit_logp_ref_win - implicit_logp_ref_lose))
+    if logit_clip is not None and float(logit_clip) > 0.0:
+        c = float(logit_clip)
+        pi = pi.clamp(-c, c)
     return -F.logsigmoid(pi).mean()
 
 

@@ -14,8 +14,8 @@ Respect Danbooru: use a descriptive User-Agent, keep ``--sleep`` reasonable, opt
 
 Examples::
 
-    python scripts/tools/fetch_danbooru_tags.py --out-dir data/danbooru/tags/raw --max-pages 5
-    python scripts/tools/fetch_danbooru_tags.py --out-dir data/danbooru/tags/raw --sleep 0.5
+    python -m scripts.tools fetch_danbooru_tags --out-dir data/danbooru/tags/raw --max-pages 5
+    python -m scripts.tools fetch_danbooru_tags --out-dir data/danbooru/tags/raw --sleep 0.5
 
 Environment:
     DANBOORU_USERNAME + DANBOORU_API_KEY  -> HTTP basic auth (higher rate limits for account holders).

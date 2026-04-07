@@ -23,8 +23,8 @@ The ordered query list lives in `scripts/tools/fetch_civitai_nsfw_concepts.py` a
 ## Refresh the bank
 
 ```bash
-python scripts/tools/fetch_civitai_nsfw_concepts.py --preset extended --max-batches-per-query 8 --sleep 0.2 --out data/civitai/nsfw_illustrious_noobai_models.csv
-python scripts/tools/curate_civitai_triggers.py --names-out data/civitai/model_names.txt
+python -m scripts.tools fetch_civitai_nsfw_concepts --preset extended --max-batches-per-query 8 --sleep 0.2 --out data/civitai/nsfw_illustrious_noobai_models.csv
+python -m scripts.tools curate_civitai_triggers --names-out data/civitai/model_names.txt
 ```
 
 Increase `--max-batches-per-query` for deeper coverage (more API calls).
