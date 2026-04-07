@@ -1,0 +1,158 @@
+pack,mode,tag
+artist_composition_positive,lite,rule of thirds composition
+artist_composition_positive,lite,clear focal point
+artist_composition_positive,lite,intentional visual hierarchy
+artist_composition_positive,lite,balanced negative space
+artist_composition_positive,lite,readable silhouette separation
+artist_composition_positive,lite,triangular grouping of subjects
+artist_composition_positive,lite,gestalt closure friendly shapes
+artist_composition_positive,lite,clear eye entry path
+artist_composition_positive,standard,rule of thirds composition
+artist_composition_positive,standard,clear focal point
+artist_composition_positive,standard,intentional visual hierarchy
+artist_composition_positive,standard,balanced negative space
+artist_composition_positive,standard,readable silhouette separation
+artist_composition_positive,standard,golden ratio friendly framing
+artist_composition_positive,standard,leading lines guiding the eye
+artist_composition_positive,standard,foreground midground background layers
+artist_composition_positive,standard,dynamic asymmetrical balance
+artist_composition_positive,standard,rhythm in shapes and value masses
+artist_composition_positive,standard,cohesive color harmony in the layout
+artist_composition_positive,standard,golden spiral friendly focal placement
+artist_composition_positive,standard,repetition with variation in motifs
+artist_composition_positive,standard,enclosure and framing hierarchy
+artist_composition_positive,standard,diagonal thrust with visual counterbalance
+artist_composition_positive,standard,subframing supports primary subject
+artist_composition_positive,standard,picture plane clarity
+artist_composition_positive,standard,unity with variety in the layout
+artist_composition_positive,perspective,consistent linear perspective
+artist_composition_positive,perspective,clear horizon line
+artist_composition_positive,perspective,stable vanishing point
+artist_composition_positive,perspective,orthogonal architectural perspective
+artist_composition_positive,perspective,scale diminution with distance
+artist_composition_positive,perspective,atmospheric perspective depth
+artist_composition_positive,perspective,eye level relationship to ground plane
+artist_composition_positive,perspective,natural foreshortening
+artist_composition_positive,perspective,one point perspective cues
+artist_composition_positive,perspective,two point perspective cues
+artist_composition_positive,perspective,three point perspective cues
+artist_composition_positive,perspective,overlapping forms show depth order
+artist_composition_positive,perspective,unified shadow direction for light logic
+artist_composition_positive,perspective,curvilinear perspective consistency
+artist_composition_positive,perspective,convincing ground plane contact
+artist_composition_positive,perspective,object overlap obeys spatial depth
+artist_composition_positive,classical,academic composition discipline
+artist_composition_positive,classical,S-curve rhythm in forms
+artist_composition_positive,classical,dynamic symmetry
+artist_composition_positive,classical,chiaroscuro friendly value grouping
+artist_composition_positive,classical,notan readable lights and darks
+artist_composition_positive,classical,arabesque flow between masses
+artist_composition_positive,classical,figure ground clarity
+artist_composition_positive,classical,lost and found edge rhythm
+artist_composition_positive,classical,pyramidal mass composition
+artist_composition_positive,classical,repoussoir framing depth
+artist_composition_positive,classical,classical economy of shapes
+artist_composition_positive,classical,bilateral symmetry used with intent
+artist_composition_positive,classical,classical balance of light and dark masses
+artist_composition_positive,full,rule of thirds composition
+artist_composition_positive,full,clear focal point
+artist_composition_positive,full,intentional visual hierarchy
+artist_composition_positive,full,balanced negative space
+artist_composition_positive,full,readable silhouette separation
+artist_composition_positive,full,triangular grouping of subjects
+artist_composition_positive,full,gestalt closure friendly shapes
+artist_composition_positive,full,clear eye entry path
+artist_composition_positive,full,golden ratio friendly framing
+artist_composition_positive,full,leading lines guiding the eye
+artist_composition_positive,full,foreground midground background layers
+artist_composition_positive,full,dynamic asymmetrical balance
+artist_composition_positive,full,rhythm in shapes and value masses
+artist_composition_positive,full,cohesive color harmony in the layout
+artist_composition_positive,full,golden spiral friendly focal placement
+artist_composition_positive,full,repetition with variation in motifs
+artist_composition_positive,full,enclosure and framing hierarchy
+artist_composition_positive,full,diagonal thrust with visual counterbalance
+artist_composition_positive,full,subframing supports primary subject
+artist_composition_positive,full,picture plane clarity
+artist_composition_positive,full,unity with variety in the layout
+artist_composition_positive,full,consistent linear perspective
+artist_composition_positive,full,clear horizon line
+artist_composition_positive,full,stable vanishing point
+artist_composition_positive,full,orthogonal architectural perspective
+artist_composition_positive,full,scale diminution with distance
+artist_composition_positive,full,atmospheric perspective depth
+artist_composition_positive,full,eye level relationship to ground plane
+artist_composition_positive,full,natural foreshortening
+artist_composition_positive,full,one point perspective cues
+artist_composition_positive,full,two point perspective cues
+artist_composition_positive,full,three point perspective cues
+artist_composition_positive,full,overlapping forms show depth order
+artist_composition_positive,full,unified shadow direction for light logic
+artist_composition_positive,full,curvilinear perspective consistency
+artist_composition_positive,full,convincing ground plane contact
+artist_composition_positive,full,object overlap obeys spatial depth
+artist_composition_positive,full,academic composition discipline
+artist_composition_positive,full,S-curve rhythm in forms
+artist_composition_positive,full,dynamic symmetry
+artist_composition_positive,full,chiaroscuro friendly value grouping
+artist_composition_positive,full,notan readable lights and darks
+artist_composition_positive,full,arabesque flow between masses
+artist_composition_positive,full,figure ground clarity
+artist_composition_positive,full,lost and found edge rhythm
+artist_composition_positive,full,pyramidal mass composition
+artist_composition_positive,full,repoussoir framing depth
+artist_composition_positive,full,classical economy of shapes
+artist_composition_positive,full,bilateral symmetry used with intent
+artist_composition_positive,full,classical balance of light and dark masses
+artist_composition_negative,lite,muddy focal point
+artist_composition_negative,lite,unclear subject hierarchy
+artist_composition_negative,lite,competing focal points
+artist_composition_negative,lite,dead corner visual traps
+artist_composition_negative,standard,muddy focal point
+artist_composition_negative,standard,unclear subject hierarchy
+artist_composition_negative,standard,tangent edges at frame border
+artist_composition_negative,standard,flat muddy composition
+artist_composition_negative,standard,cluttered visual noise
+artist_composition_negative,standard,accidental center bullseye stiffness
+artist_composition_negative,standard,weak framing hierarchy
+artist_composition_negative,standard,motif repetition without variation
+artist_composition_negative,standard,ambiguous subframes
+artist_composition_negative,perspective,conflicting vanishing points
+artist_composition_negative,perspective,warped perspective grid
+artist_composition_negative,perspective,impossible geometry
+artist_composition_negative,perspective,broken horizon continuity
+artist_composition_negative,perspective,scale inconsistency in depth
+artist_composition_negative,perspective,shadow direction contradicts light source
+artist_composition_negative,perspective,overlapping depth order contradictions
+artist_composition_negative,perspective,floating objects with no ground contact
+artist_composition_negative,classical,chaotic value pattern
+artist_composition_negative,classical,stiff frozen symmetry
+artist_composition_negative,classical,merged ambiguous masses
+artist_composition_negative,classical,all edges equally sharp clutter
+artist_composition_negative,classical,decorative symmetry without purpose
+artist_composition_negative,classical,flat graphic shapes without mass
+artist_composition_negative,full,muddy focal point
+artist_composition_negative,full,unclear subject hierarchy
+artist_composition_negative,full,competing focal points
+artist_composition_negative,full,dead corner visual traps
+artist_composition_negative,full,tangent edges at frame border
+artist_composition_negative,full,flat muddy composition
+artist_composition_negative,full,cluttered visual noise
+artist_composition_negative,full,accidental center bullseye stiffness
+artist_composition_negative,full,weak framing hierarchy
+artist_composition_negative,full,motif repetition without variation
+artist_composition_negative,full,ambiguous subframes
+artist_composition_negative,full,conflicting vanishing points
+artist_composition_negative,full,warped perspective grid
+artist_composition_negative,full,impossible geometry
+artist_composition_negative,full,broken horizon continuity
+artist_composition_negative,full,scale inconsistency in depth
+artist_composition_negative,full,shadow direction contradicts light source
+artist_composition_negative,full,overlapping depth order contradictions
+artist_composition_negative,full,floating objects with no ground contact
+artist_composition_negative,full,chaotic value pattern
+artist_composition_negative,full,stiff frozen symmetry
+artist_composition_negative,full,merged ambiguous masses
+artist_composition_negative,full,all edges equally sharp clutter
+artist_composition_negative,full,decorative symmetry without purpose
+artist_composition_negative,full,flat graphic shapes without mass
