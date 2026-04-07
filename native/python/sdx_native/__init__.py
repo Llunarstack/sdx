@@ -2,7 +2,7 @@
 
 from .cuda_image_metrics_native import maybe_image_luma_stats_cuda
 from .image_metrics_native import maybe_count_components_native, maybe_image_stats_native
-from .score_ops_native import maybe_norm01_native, maybe_weighted_sum_native
+from .jsonl_caption_hygiene import normalize_jsonl_caption_fields, normalize_manifest_jsonl
 from .latent_geometry import (
     dit_patch_size_from_variant_name,
     latent_numel,
@@ -12,6 +12,7 @@ from .latent_geometry import (
 )
 from .rmsnorm_native import maybe_rmsnorm_rows_cuda
 from .rope_apply_native import maybe_apply_rope_interleaved_cuda
+from .score_ops_native import maybe_norm01_native, maybe_weighted_sum_native
 from .silu_gate_native import maybe_silu_gate_cuda
 from .text_hygiene import (
     caption_fingerprint,
@@ -24,6 +25,8 @@ __all__ = [
     "dit_patch_size_from_variant_name",
     "latent_numel",
     "latent_spatial_size",
+    "normalize_jsonl_caption_fields",
+    "normalize_manifest_jsonl",
     "normalize_caption_for_training",
     "num_patch_tokens",
     "patch_grid_dim",

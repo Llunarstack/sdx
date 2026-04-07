@@ -486,7 +486,7 @@ python scripts/cli.py statistics --checkpoint model.pt --output stats.json
 Run import smoke from repo root:
 
 ```bash
-python scripts/tools/dev/smoke_imports.py
+python -m scripts.tools smoke_imports
 ```
 
 ### Performance Optimizations

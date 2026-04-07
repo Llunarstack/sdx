@@ -24,8 +24,8 @@ python -m toolkit.quality.manifest_digest data/manifest.jsonl
 
 ## Related repo tools
 
-- **Caption / manifest QA:** `scripts/tools/data/caption_hygiene.py`, `data_quality.py`, `native/` Rust tools  
-- **ViT:** `ViT/train.py`, `ViT/infer.py`  
+- **Caption / manifest QA:** `python -m scripts.tools caption_hygiene`, `python -m scripts.tools data_quality`, `native/` Rust tools  
+- **ViT:** `python -m vit_quality.train`, `python -m vit_quality.infer`
 - **Docs:** [CODEBASE.md](../docs/CODEBASE.md), [NATIVE_AND_SYSTEM_LIBS.md](../docs/NATIVE_AND_SYSTEM_LIBS.md)
 
 ---

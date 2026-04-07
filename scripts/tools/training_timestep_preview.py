@@ -5,8 +5,8 @@ Useful when tuning `--timestep-sample-mode` / FasterDiT-style SNR–timestep thi
 see how often the model will see small vs large `t` before starting a long run.
 
 Usage (from repo root):
-    python scripts/tools/training_timestep_preview.py
-    python scripts/tools/training_timestep_preview.py --modes uniform,logit_normal,high_noise --samples 200000
+    python -m scripts.tools training_timestep_preview
+    python -m scripts.tools training_timestep_preview --modes uniform,logit_normal,high_noise --samples 200000
 """
 
 from __future__ import annotations

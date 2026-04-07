@@ -1,11 +1,13 @@
 """
 Fast training for text-conditioned DiT (PixArt/ReVe-style prompt adherence).
 Step-based training (quality improves with steps), refinement (fix imperfections), optional DDP.
+
+Optional profiling: ``--profile-out PATH`` (and ``--profile-sort``, ``--profile-top``) writes cProfile
+output plus a sorted text summary (same convention as sample.py).
 """
 
 import glob
 import itertools
-import json
 import logging
 import math
 import os
@@ -38,7 +40,7 @@ except ImportError:
 
 from data import ResolutionBucketBatchSampler, Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
-from diffusion.timestep_loss_weight import get_timestep_loss_weight
+from diffusion.losses.timestep_loss_weight import get_timestep_loss_weight
 from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
 from models.attention import create_block_causal_mask_2d
@@ -46,6 +48,7 @@ from models.rae_latent_bridge import RAELatentBridge
 from training.train_args import build_train_config_from_args
 from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
+from utils.runtime.jsonutil import dumps as json_dumps
 from utils.training.ar_curriculum import parse_ar_order_mix, resolve_ar_for_step
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
@@ -73,8 +76,8 @@ from utils.modeling.model_viz import print_model_summary  # noqa: E402
 from utils.modeling.text_encoder_bundle import load_text_encoder_bundle  # noqa: E402
 
 
-def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
-    """Integer diffusion indices for training batch (see ``timestep_sample_mode``)."""
+def _sample_training_timesteps(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
+    """Integer diffusion timestep indices for a training batch."""
     return sample_training_timesteps(
         batch_size,
         int(num_timesteps),
@@ -85,7 +88,7 @@ def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.d
     )
 
 
-def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
+def _spectral_flow_prediction_training_kwargs(cfg: TrainConfig) -> dict:
     """Kwargs for ``GaussianDiffusion.training_losses`` (SFP prototype; ignored for MDM masked path)."""
     return {
         "use_spectral_sfp_loss": bool(getattr(cfg, "spectral_sfp_loss", False)),
@@ -93,6 +96,16 @@ def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
         "spectral_sfp_high_sigma": float(getattr(cfg, "spectral_sfp_high_sigma", 0.22)),
         "spectral_sfp_tau_power": float(getattr(cfg, "spectral_sfp_tau_power", 1.0)),
     }
+
+
+def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
+    """Backward-compatible alias for `_sample_training_timesteps`."""
+    return _sample_training_timesteps(cfg, num_timesteps, batch_size, device)
+
+
+def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
+    """Backward-compatible alias for `_spectral_flow_prediction_training_kwargs`."""
+    return _spectral_flow_prediction_training_kwargs(cfg)
 
 
 def _apply_runtime_ar(raw_model, *, num_ar_blocks: int, ar_block_order: str) -> None:
@@ -145,7 +158,7 @@ def _write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger)
     cfg_out = exp_dir / "config.train.json"
     manifest_out = exp_dir / "run_manifest.json"
     cfg_dict = _cfg_to_dict(cfg)
-    cfg_out.write_text(json.dumps(cfg_dict, indent=2, sort_keys=True), encoding="utf-8")
+    cfg_out.write_text(json_dumps(cfg_dict, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
     manifest = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "command": " ".join(sys.argv),
@@ -162,7 +175,7 @@ def _write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger)
         "git": _safe_git_info(repo_root),
         "config_file": cfg_out.name,
     }
-    manifest_out.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    manifest_out.write_text(json_dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
     logger.info(f"Run manifest saved: {manifest_out}")
 
 
@@ -675,7 +688,7 @@ def eval_val_loss(
                     train_fusion=False,
                 )
                 style_embedding = style_embedding.mean(dim=1)
-            t = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
+            t = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
             model_kwargs = {
                 "encoder_hidden_states": encoder_hidden,
                 "encoder_hidden_states_negative": encoder_hidden_neg,
@@ -703,13 +716,13 @@ def eval_val_loss(
             if sample_weights is not None:
                 sample_weights = sample_weights.to(device)
             ot_noise_val = _maybe_ot_pair_noise(cfg, latents, device)
-            _sk_v = _spectral_sfp_training_kwargs(cfg)
+            _sk_v = _spectral_flow_prediction_training_kwargs(cfg)
             _bw_v = float(getattr(cfg, "bridge_aux_weight", 0.0))
 
             def _bridge_aux_loss_val() -> torch.Tensor:
                 from diffusion.bridge_training import bridge_aux_vp_loss
 
-                t_br = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                t_br = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
                 return bridge_aux_vp_loss(
                     diffusion,
                     ema_model,
@@ -1543,7 +1556,7 @@ def main(cfg: TrainConfig):
                     z_cycle = latents_raw.detach()
                 else:
                     z_cycle = None
-                t = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                t = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
                 model_kwargs = {
                     "encoder_hidden_states": encoder_hidden,
                     "encoder_hidden_states_negative": encoder_hidden_neg,
@@ -1609,13 +1622,13 @@ def main(cfg: TrainConfig):
                 noise_for_vp = ot_noise
                 if use_attn_aux and noise_for_vp is None:
                     noise_for_vp = torch.randn_like(latents, device=device, dtype=latents.dtype)
-                _sk_tr = _spectral_sfp_training_kwargs(cfg)
+                _sk_tr = _spectral_flow_prediction_training_kwargs(cfg)
                 _bw = float(getattr(cfg, "bridge_aux_weight", 0.0))
 
                 def _bridge_aux_loss() -> torch.Tensor:
                     from diffusion.bridge_training import bridge_aux_vp_loss
 
-                    t_br = _sample_training_t(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                    t_br = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
                     return bridge_aux_vp_loss(
                         diffusion,
                         train_model,
@@ -1767,10 +1780,10 @@ def main(cfg: TrainConfig):
             if (steps + 1) % cfg.grad_accum_steps == 0:
                 if cfg.max_grad_norm > 0:
                     scaler.unscale_(opt)
-                    _gparams = list(model.parameters())
+                    gradient_params = list(model.parameters())
                     if rae_bridge is not None:
-                        _gparams += list(rae_bridge.parameters())
-                    torch.nn.utils.clip_grad_norm_(_gparams, cfg.max_grad_norm)
+                        gradient_params += list(rae_bridge.parameters())
+                    torch.nn.utils.clip_grad_norm_(gradient_params, cfg.max_grad_norm)
                 scaler.step(opt)
                 scaler.update()
                 opt.zero_grad()
@@ -1980,7 +1993,18 @@ def main(cfg: TrainConfig):
 
 
 if __name__ == "__main__":
-    parser = build_train_arg_parser()
-    args = parser.parse_args()
-    cfg = build_train_config_from_args(args)
-    main(cfg)
+    from utils.runtime.profiling import consume_profile_args, run_with_cprofile
+
+    _argv, _pcfg = consume_profile_args(sys.argv)
+    sys.argv = _argv
+
+    def _train_entry() -> None:
+        parser = build_train_arg_parser()
+        args = parser.parse_args()
+        cfg = build_train_config_from_args(args)
+        main(cfg)
+
+    if _pcfg is not None:
+        run_with_cprofile(_train_entry, _pcfg)
+    else:
+        _train_entry()

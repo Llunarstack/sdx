@@ -1,8 +1,8 @@
 # ViT stack vs DiT — how to get “100×” leverage (research + SDX)
 
-**Important distinction:** **`ViT/` in this repo is not a replacement for the DiT generator.**  
+**Important distinction:** **the ViT scorer stack in this repo is not a replacement for the DiT generator.**  
 - **DiT** (`models/dit_text.py`, `train.py`): *generates* latents → images (diffusion).  
-- **`ViT/`** (`ViT/model.py`): *scores* images + captions (quality, adherence) for **dataset QA**, **filtering**, **retrieval**, and **best-of-N** — same *role* as a reward model or IQA network, not the same loss as diffusion.
+- **`vit_quality/`** (`vit_quality/model.py`): *scores* images + captions (quality, adherence) for **dataset QA**, **filtering**, **retrieval**, and **best-of-N** — same *role* as a reward model or IQA network, not the same loss as diffusion.
 
 So “100× better than DiT” in practice means: **stack a strong discriminative stack on top of (or beside) DiT** so that *training data*, *sampling selection*, and *optional finetuning* compound — not swapping ViT for DiT inside the denoiser (that would be a different project).
 
@@ -39,7 +39,7 @@ These target **generation** (replace or extend `DiT_Text`), not the `ViT/` QA mo
 | **Multiscale + attention** | Coarse/fine cues for blind IQA | **MS-SCANet**-style multiscale transformers (e.g. arXiv [2602.04032](https://arxiv.org/abs/2602.04032)) |
 | **Ranking + consistency** | Relative ranking losses, augmentation robustness | ADTRS-style relative ranking + self-consistency (arXiv [2409.07115](https://arxiv.org/abs/2409.07115)) |
 
-*Integration path:* same as current `ViT/losses.py` ranking loss — increase **pairwise / listwise** data and consider **multi-scale inputs** (future code: second branch or higher `image_size`).
+*Integration path:* same as current `vit_quality/losses.py` ranking loss — increase **pairwise / listwise** data and consider **multi-scale inputs** (future code: second branch or higher `image_size`).
 
 ---
 
@@ -47,10 +47,10 @@ These target **generation** (replace or extend `DiT_Text`), not the `ViT/` QA mo
 
 ### Short term (no new architectures)
 
-1. **Stronger timm backbone** — use `ViT/backbone_presets.py` candidates (`vit_large_*`, `swin_*`, `convnext_*`) with `--model-name` in `ViT/train.py`.
+1. **Stronger timm backbone** — use `vit_quality/backbone_presets.py` candidates (`vit_large_*`, `swin_*`, `convnext_*`) with `--model-name` in `python -m vit_quality.train`.
 2. **More ranking supervision** — raise `--ranking-loss-weight`, curate *pairs* (same prompt, better/worse image).
-3. **EMA + TTA** — already in `ViT/ema.py`, `ViT/tta.py`; keep for inference stability.
-4. **Bigger `text_feat_dim` + richer `text_feature_vector`** — if captions carry structure, upgrade the text side (see `ViT/dataset.py`) so adherence isn’t from 8 random dims.
+3. **EMA + TTA** — already in `vit_quality/ema.py`, `vit_quality/tta.py`; keep for inference stability.
+4. **Bigger `text_feat_dim` + richer `text_feature_vector`** — if captions carry structure, upgrade the text side (see `vit_quality/dataset.py`) so adherence isn’t from 8 random dims.
 5. **Wire into sampling** — merge ViT scores with `utils/quality/test_time_pick.py` / `sample.py --pick-best` (ensemble: CLIP + edge + OCR + ViT).
 
 ### Medium term
@@ -61,7 +61,7 @@ These target **generation** (replace or extend `DiT_Text`), not the `ViT/` QA mo
 
 ### Long term
 
-9. **Swin-DiT / FiT-style** changes land in **`models/`** DiT, not in `ViT/` QA.
+9. **Swin-DiT / FiT-style** changes land in **`models/`** DiT, not in `vit_quality/` QA.
 10. **Reward finetuning** — export ViT as one channel in PRDP/DRaFT-style pipelines (external or future `scripts/training/`).
 
 ---
@@ -71,7 +71,7 @@ These target **generation** (replace or extend `DiT_Text`), not the `ViT/` QA mo
 ```text
 DiT  ──generates──►  images
                       │
-ViT / CLIP / OCR  ──scores──►  filter data · pick-best · (optional) RLHF
+vit_quality / CLIP / OCR  ──scores──►  filter data · pick-best · (optional) RLHF
 ```
 
 Used well, the **discriminative** stack doesn’t replace DiT — it **amplifies** every DiT sample by choosing better data and better outputs.
@@ -81,7 +81,7 @@ Used well, the **discriminative** stack doesn’t replace DiT — it **amplifies
 ## See also
 
 - [ViT/VIT_G_ARCHITECTURE_VISION.md](VIT_G_ARCHITECTURE_VISION.md) — external “ViT-G” *generator* architecture sketch vs this repo’s **scoring** ViT (foveation, dual-stream, NOF, speculative steps — **not implemented** as one stack)  
-- [ViT/README.md](README.md) — CLI and JSONL format  
-- [ViT/backbone_presets.py](backbone_presets.py) — suggested `timm` names  
+- [ViT/README.md](README.md) — compatibility docs + canonical CLI paths  
+- [vit_quality/backbone_presets.py](../vit_quality/backbone_presets.py) — suggested `timm` names  
 - [docs/MODEL_STACK.md](../docs/MODEL_STACK.md) — DINOv2, CLIP, triple encoder  
 - [README.md § Who is who](../README.md#who-is-who-easy-to-confuse) — DiT vs `ViT/` package

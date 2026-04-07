@@ -288,15 +288,15 @@ def _score_candidates_with_vit(
     expected_object_hint: str,
 ) -> List[Dict[str, float]]:
     import numpy as np
-    from utils.architecture.ar_dit_vit import ar_conditioning_vector, normalize_num_ar_blocks
+    from utils.architecture.ar_block_conditioning import ar_conditioning_vector, normalize_num_ar_blocks
     from utils.quality.test_time_pick import (
         score_object_count_match,
         score_ocr_match,
         score_people_count_match,
         score_saturation_balance,
     )
-    from ViT.checkpoint_utils import load_vit_quality_checkpoint
-    from ViT.dataset import text_feature_vector
+    from vit_quality.checkpoint_utils import load_vit_quality_checkpoint
+    from vit_quality.dataset import text_feature_vector
 
     model, _cfg = load_vit_quality_checkpoint(vit_ckpt, use_ema=bool(vit_use_ema))
     device = torch.device(vit_device if torch.cuda.is_available() else "cpu")
@@ -500,7 +500,7 @@ def main() -> int:
     iterations_runtime = iterations
     prompt_cur = str(args.prompt)
 
-    from utils.architecture.ar_dit_vit import read_num_ar_blocks_from_checkpoint
+    from utils.architecture.ar_block_conditioning import read_num_ar_blocks_from_checkpoint
 
     default_ar = read_num_ar_blocks_from_checkpoint(args.ckpt)
     if default_ar < 0:

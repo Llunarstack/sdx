@@ -188,7 +188,7 @@ Commercial stacks and names change quickly. Treat the following as **examples** 
 | **AR “planner” + diffusion decoder** | **Autoregressive** module outputs **coarse semantic tokens** (layout, relations); **DiT / diffusion** refines **texture and detail**. | Addresses **spatial logic** (“X under Y”), **long text**, and **instruction-heavy** prompts. |
 | **Block-causal / raster AR in DiT** | Causal attention over **patches or blocks** so generation has a **sequence** bias without a separate tokenizer stack. | Lighter-weight hybrid than a full 9B AR image tokenizer — **controllable** in open-source. |
 
-**SDX today:** **`num_ar_blocks`** (0 / 2 / 4 / …), block masks in `models/attention.py`, [docs/AR.md](AR.md), **`utils/architecture/ar_dit_vit.py`** for ViT alignment. This is **one** credible open-source angle on “AR + diffusion” — not a full GLM-Image-style discrete token LM. **Status:** partial (DiT-native AR, not separate AR tokenizer).
+**SDX today:** **`num_ar_blocks`** (0 / 2 / 4 / …), block masks in `models/attention.py`, [docs/AR.md](AR.md), **`utils/architecture/ar_block_conditioning.py`** for ViT alignment. This is **one** credible open-source angle on “AR + diffusion” — not a full GLM-Image-style discrete token LM. **Status:** partial (DiT-native AR, not separate AR tokenizer).
 
 ---
 

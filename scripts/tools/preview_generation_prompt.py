@@ -7,8 +7,8 @@ naturalize prefix, boost-quality, emphasis weights). Use for tuning --safety-mod
 --anti-ai-pack, --human-media, Civitai packs, etc.
 
 Usage:
-  python scripts/tools/preview_generation_prompt.py --prompt "1girl, red dress" --safety-mode nsfw
-  SDX_DEBUG=1 python scripts/tools/preview_generation_prompt.py --prompt "..." --less-ai
+  python -m scripts.tools preview_generation_prompt --prompt "1girl, red dress" --safety-mode nsfw
+  SDX_DEBUG=1 python -m scripts.tools preview_generation_prompt --prompt "..." --less-ai
 """
 
 from __future__ import annotations
@@ -52,6 +52,12 @@ def main() -> int:
     p.add_argument("--view-angle", type=str, default="none")
     p.add_argument("--style-mode", type=str, default="none")
     p.add_argument("--composition-mode", type=str, default="none")
+    p.add_argument(
+        "--artist-composition",
+        type=str,
+        default="none",
+        choices=["none", "lite", "standard", "perspective", "classical", "full"],
+    )
     p.add_argument("--people-layout", type=str, default="none")
     p.add_argument("--hand-mode", type=str, default="none")
     p.add_argument("--lighting-mode", type=str, default="none")
@@ -98,6 +104,7 @@ def main() -> int:
     safety_mode = str(args.safety_mode or "none")
     clothing_mode = str(args.clothing_mode or "none")
     composition_mode = str(args.composition_mode or "none")
+    artist_composition = str(getattr(args, "artist_composition", "none") or "none")
     people_layout = str(args.people_layout or "none")
     hand_mode = str(args.hand_mode or "none")
     lighting_mode = str(args.lighting_mode or "none")
@@ -119,6 +126,8 @@ def main() -> int:
             safety_mode = inferred["safety_mode"]
         if composition_mode == "none" and inferred.get("composition_mode"):
             composition_mode = inferred["composition_mode"]
+        if artist_composition == "none" and inferred.get("artist_composition"):
+            artist_composition = inferred["artist_composition"]
         if people_layout == "none" and inferred.get("people_layout"):
             people_layout = inferred["people_layout"]
         if hand_mode == "none" and inferred.get("hand_mode"):
@@ -173,6 +182,7 @@ def main() -> int:
             style_lock=bool(args.style_lock),
             anti_style_bleed=bool(args.anti_style_bleed),
             composition_mode=composition_mode,
+            artist_composition=artist_composition,
             anti_duplicate_subjects=bool(args.anti_duplicate_subjects),
             anti_perspective_drift=bool(args.anti_perspective_drift),
             cleanup_conflicting_tags=bool(args.cleanup_conflicting_tags),

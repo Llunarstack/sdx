@@ -38,7 +38,7 @@ This doc ties together the **Python modules** and **CLI flags** that shape the p
 ## Preview without a GPU
 
 ```bash
-python scripts/tools/preview_generation_prompt.py --prompt "1girl, red dress" --safety-mode nsfw --less-ai
+python -m scripts.tools preview_generation_prompt --prompt "1girl, red dress" --safety-mode nsfw --less-ai
 ```
 
 Prints **effective positive / negative** after content controls + the same conflict filter as `sample.py` (subset of flags; no checkpoint). See [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md).

@@ -1,0 +1,7 @@
+# Optional speedups (install on top of requirements.txt):
+#   pip install -r requirements-perf.txt
+#
+# - orjson: used by utils.runtime.jsonutil for JSONL / manifest IO when callers use UTF-8 output
+#   (ensure_ascii=False) or for jsonutil.loads everywhere it is wired.
+
+orjson>=3.9.0,<4

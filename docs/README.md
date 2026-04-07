@@ -13,12 +13,13 @@ Quick links to all project docs, grouped by purpose.
 | [DANBOORU_HF.md](DANBOORU_HF.md) | Hugging Face Danbooru-style data → JSONL + `train.py`; one-shot `hf_download_and_train.py`. |
 | [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) | Curated shortlist from provided HF dataset links: primary/secondary/optional picks + initial mix weights. |
 | [CODEBASE.md](CODEBASE.md) | **Start here for code:** layers, conventions, repo tree, `scripts/` layout, contribution rules, ruff, where to edit. |
+| [CANONICAL_STRUCTURE.md](CANONICAL_STRUCTURE.md) | Canonical-vs-compat folder map and migration table for professional naming/layout. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow/efficiency + disclaimers — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BLUEPRINTS.md](BLUEPRINTS.md) | **Merged research notes:** few-step flow/solvers/distillation (Part 1) + prompt-accuracy / GLS / frequency (Part 2). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
-| [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`scripts/tools/repo/update_project_structure.py`). |
+| [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`python -m scripts.tools update_project_structure`). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | **Merged:** Mermaid/ASCII pipeline diagram, step-by-step generation, config/checkpoint/data wiring (was CONNECTIONS + GENERATION_DIAGRAM + this doc). |
 | [PROMPT_STACK.md](PROMPT_STACK.md) | **Inference text path:** `content_controls` → `neg_filter` → encoder; flag cheat sheet; links to preview CLI. |
 | [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | **Lower-level / native libs:** in-repo Rust/Zig/C++/Go tools + ecosystem picks (image I/O, tokenization, QA) mapped to **quality**, **training**, **prompt adherence**. |
@@ -60,7 +61,7 @@ Quick links to all project docs, grouped by purpose.
 |-----|--------------|
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 hub (merged):** industry context, post-diffusion architecture themes, workflow integration + disclaimers — mapped to SDX ([utils/generation/orchestration.py](../utils/generation/orchestration.py), [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: techniques vs SDX, **prompt_lexicon** + `generate_book` flags, and **best-output checklist** (data, training, production tier, pick-best, OCR). |
-| [../ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | **ViT/ vs DiT:** scoring stack vs generator; Swin-DiT, FiT, reward/IQA papers; timm backbone presets. |
+| [../ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | **ViT quality scoring vs DiT generation deep-dive:** conceptual comparison doc under legacy `ViT/`; canonical package/runtime path is `vit_quality/`. |
 | [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** and **§12 Industry alignment (2026)**. |
 | [INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos. |
 | [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy‑paste prompt recipes using presets, op‑modes, hard styles, and all the quality flags. |
@@ -83,16 +84,16 @@ Quick links to all project docs, grouped by purpose.
 
 ## Maintenance / sanity checks
 
-- `scripts/tools/dev/smoke_imports.py` — Import smoke-test for internal modules (catches broken imports early).
-- `scripts/tools/repo/clean_repo_artifacts.py` — Remove generated cache artifacts (`__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.pyc`) from repo tree.
-- `scripts/tools/prompt/tag_coverage.py` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
-- `scripts/tools/spatial_coverage.py` — Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...).
-- `scripts/tools/training_timestep_preview.py` — Preview histograms for `--timestep-sample-mode` (uniform / logit_normal / high_noise) before long training runs.
-- `scripts/tools/dit_variant_compare.py` — Parameter counts and FP32/BF16 GiB estimates for DiT / EnhancedDiT registry names.
-- `scripts/tools/vit_inspect.py` — Inspect ViT quality checkpoints (config + optional module tree via `utils/modeling/nn_inspect.py`).
-- `scripts/tools/ops/op_preflight.py` — One-shot “coverage + thresholds” gate (PASS/FAIL) before training.
-- `scripts/tools/complex_prompt_coverage.py` — Check coverage for clothes/weapons/food/text/foreground/background/weird/NSFW categories.
-- `scripts/tools/prompt_gap_scout.py` — Analyze a single prompt and suggest missing tricky category keywords.
+- `python -m scripts.tools smoke_imports` — Import smoke-test for internal modules (catches broken imports early).
+- `python -m scripts.tools clean_repo_artifacts` — Remove generated cache artifacts (`__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.pyc`) from repo tree.
+- `python -m scripts.tools tag_coverage` — Scan a JSONL manifest for hard-style/person/anatomy/concept-bleed tag coverage.
+- `python -m scripts.tools spatial_coverage` — Scan a JSONL manifest for spatial-wording coverage (`behind`, `next to`, `under`, `left of`, ...).
+- `python -m scripts.tools training_timestep_preview` — Preview histograms for `--timestep-sample-mode` (uniform / logit_normal / high_noise) before long training runs.
+- `python -m scripts.tools dit_variant_compare` — Parameter counts and FP32/BF16 GiB estimates for DiT / EnhancedDiT registry names.
+- `python -m scripts.tools vit_inspect` — Inspect ViT quality checkpoints (config + optional module tree via `utils/modeling/nn_inspect.py`).
+- `python -m scripts.tools op_preflight` — One-shot “coverage + thresholds” gate (PASS/FAIL) before training.
+- `python -m scripts.tools complex_prompt_coverage` — Check coverage for clothes/weapons/food/text/foreground/background/weird/NSFW categories.
+- `python -m scripts.tools prompt_gap_scout` — Analyze a single prompt and suggest missing tricky category keywords.
 - [`scripts/tools/preview_generation_prompt.py`](../scripts/tools/preview_generation_prompt.py) — Print effective positive/negative after `content_controls` + neg filter (no checkpoint).
 
 Run from repo root so `config`, `data`, `diffusion`, `models`, `utils` are on `sys.path`.

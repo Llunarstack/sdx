@@ -12,44 +12,44 @@ def parse_caption_dropout_schedule(s: Optional[str]):
     """Parse '0,0.2,10000,0.05' -> [(0, 0.2), (10000, 0.05)]. Returns None if s is None/empty."""
     if not s or not str(s).strip():
         return None
-    parts = [x.strip() for x in str(s).split(",") if x.strip()]
-    if len(parts) % 2 != 0:
+    values = [value.strip() for value in str(s).split(",") if value.strip()]
+    if len(values) % 2 != 0:
         return None
-    out = []
-    for i in range(0, len(parts), 2):
-        out.append((int(parts[i]), float(parts[i + 1])))
-    return out if out else None
+    schedule = []
+    for index in range(0, len(values), 2):
+        schedule.append((int(values[index]), float(values[index + 1])))
+    return schedule if schedule else None
 
 
 def parse_resolution_buckets(s: Optional[str]):
     """Parse ``256,384`` or ``512x768,256x512`` into list[(H, W)] or None."""
     if not s or not str(s).strip():
         return None
-    out = []
-    for part in str(s).split(","):
-        part = part.strip().lower()
-        if not part:
+    buckets = []
+    for raw_bucket in str(s).split(","):
+        bucket_value = raw_bucket.strip().lower()
+        if not bucket_value:
             continue
-        if "x" in part:
-            a, b = part.split("x", 1)
-            out.append((int(a.strip()), int(b.strip())))
+        if "x" in bucket_value:
+            height_str, width_str = bucket_value.split("x", 1)
+            buckets.append((int(height_str.strip()), int(width_str.strip())))
         else:
-            z = int(part)
-            out.append((z, z))
-    return out or None
+            edge = int(bucket_value)
+            buckets.append((edge, edge))
+    return buckets or None
 
 
 def parse_mdm_mask_schedule(s: Optional[str]):
     """Parse '0,0.05,500,0.25' -> [(0,0.05),(500,0.25)] or None."""
     if not s or not str(s).strip():
         return None
-    parts = [x.strip() for x in str(s).split(",") if x.strip()]
-    if len(parts) % 2 != 0:
+    values = [value.strip() for value in str(s).split(",") if value.strip()]
+    if len(values) % 2 != 0:
         return None
-    out = []
-    for i in range(0, len(parts), 2):
-        out.append((int(float(parts[i])), float(parts[i + 1])))
-    return out if out else None
+    schedule = []
+    for index in range(0, len(values), 2):
+        schedule.append((int(float(values[index])), float(values[index + 1])))
+    return schedule if schedule else None
 
 
 def build_train_config_from_args(args) -> TrainConfig:

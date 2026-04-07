@@ -7,7 +7,7 @@ Use this when you want a **real** `train.py` run on a **tiny** dataset and **sma
 From the repo root:
 
 ```bash
-python scripts/tools/make_smoke_dataset.py --out data/smoke_tiny
+python -m scripts.tools make_smoke_dataset --out data/smoke_tiny
 ```
 
 This writes a few synthetic PNGs and `.txt` captions under **`data/smoke_tiny/train/`** (folder layout required by `Text2ImageDataset`).
@@ -60,4 +60,4 @@ python train.py ^
 - Process starts, loads encoders/VAE, runs forward + backward at least once, exits without crash.
 - You are **not** expecting good images from synthetic data—only that the **stack is wired**.
 
-For forward-only checks without data, use `python scripts/tools/dev/quick_test.py`.
+For forward-only checks without data, use `python -m scripts.tools quick_test`.

@@ -60,7 +60,7 @@ In `config/train_config.py`:
 ### Code
 
 - **Mask**: `models/attention.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks, block_order=...)`. Core logic: `models/ar_masks_extended.py`. Returns an (N, N) float mask with `-inf` where attention is disabled.
-- **DiT**: `models/dit_text.py` and `models/dit_predecessor.py` (`DiT_Predecessor_Text`, `DiT_Supreme_Text`) register `_ar_mask` when `num_ar_blocks > 0` and pass it into every block’s self-attention.
+- **DiT**: `models/dit_text.py` and `models/dit_text_variants.py` (`DiT_Predecessor_Text`, `DiT_Supreme_Text`) register `_ar_mask` when `num_ar_blocks > 0` and pass it into every block’s self-attention.
 
 ### Inspect masks
 
@@ -117,13 +117,13 @@ The AR mask is built for a **square** patch grid (e.g. 32×32 patches for 256×2
 
 The **`ViT/`** module scores finished images. If your **generator** was trained with `num_ar_blocks` 0, 2, or 4, failure modes differ slightly from full bidirectional DiT. To keep ViT scores **calibrated** to the layout the image came from:
 
-1. **Training ViT** (`ViT/train.py`): **AR conditioning is on by default**. Put the same regime on each JSONL row the model should learn:
+1. **Training ViT** (`python -m vit_quality.train`): **AR conditioning is on by default**. Put the same regime on each JSONL row the model should learn:
    - **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`** — integer **`0`**, **`2`**, or **`4`**. Missing or invalid → **unknown** bucket (4th one-hot).
 2. **Older ViT checkpoints** (no `use_ar_conditioning` in saved config) load as **text-only** (8-D caption features only). Use **`--no-ar-conditioning`** when training if you need weights compatible with that layout, or retrain with AR fields in the manifest.
-3. **Inference** (`ViT/infer.py`, `ViT/export_embeddings.py`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` / `generator_num_ar_blocks` is read (including optional nested blobs like `dit_config`) and fused with caption features. Omitted → **unknown** one-hot unless you pass **`--default-num-ar-blocks 0|2|4`** (e.g. whole manifest is from one DiT run).
+3. **Inference** (`python -m vit_quality.infer`, `python -m vit_quality.export_embeddings`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` / `generator_num_ar_blocks` is read (including optional nested blobs like `dit_config`) and fused with caption features. Omitted → **unknown** one-hot unless you pass **`--default-num-ar-blocks 0|2|4`** (e.g. whole manifest is from one DiT run).
 
 4. **Facebook / Meta DiT** (`facebookresearch/DiT`): vanilla checkpoints are **full bidirectional** → use **`num_ar_blocks = 0`** for ViT alignment. Only use `2`/`4` if you trained an SDX-compatible fork with the same block-causal mask API.
 
-5. **Tag manifests from a DiT `.pt`**: `python scripts/tools/data/ar_tag_manifest.py --dit-ckpt path/to/best.pt --manifest-jsonl data/in.jsonl --out data/out.jsonl` (or `--num-ar-blocks 2` without reading a file). Sets `num_ar_blocks`, mirrors `dit_num_ar_blocks`, and adds `ar_regime` (`full_bidirectional`, `block_ar_2x2`, …).
+5. **Tag manifests from a DiT `.pt`**: `python -m scripts.tools ar_tag_manifest --dit-ckpt path/to/best.pt --manifest-jsonl data/in.jsonl --out data/out.jsonl` (or `--num-ar-blocks 2` without reading a file). Sets `num_ar_blocks`, mirrors `dit_num_ar_blocks`, and adds `ar_regime` (`full_bidirectional`, `block_ar_2x2`, …).
 
-Bridge code: **`utils/architecture/ar_dit_vit.py`** (`ar_conditioning_vector`, `parse_num_ar_blocks_from_row`, `read_num_ar_blocks_from_checkpoint`, `tag_manifest_row_ar`, `batch_ar_conditioning`).
+Bridge code: **`utils/architecture/ar_block_conditioning.py`** (`ar_conditioning_vector`, `parse_num_ar_blocks_from_row`, `read_num_ar_blocks_from_checkpoint`, `tag_manifest_row_ar`, `batch_ar_conditioning`).

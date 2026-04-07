@@ -71,6 +71,18 @@ def main():
     parser.add_argument("--max-caption-len", type=int, default=0, help="Drop rows with caption length > N (0=off)")
     parser.add_argument("--bad-words", type=str, default="", help="Comma-sep words; drop if caption contains any")
     parser.add_argument("--min-weight", type=float, default=0.0, help="Drop rows with weight/aesthetic_score < N")
+    parser.add_argument(
+        "--min-clip-sim",
+        type=float,
+        default=0.0,
+        help="If >0: drop rows that have clip_sim below this (ignores rows without clip_sim). Use manifest_enrich first.",
+    )
+    parser.add_argument(
+        "--min-aesthetic-proxy",
+        type=float,
+        default=0.0,
+        help="If >0: drop rows with aesthetic_proxy below this (ignores rows without key). Use manifest_enrich first.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Only print counts, do not write output")
     parser.add_argument(
         "--native-preflight",
@@ -102,7 +114,7 @@ def main():
     bad_set = set(x.strip().lower() for x in args.bad_words.split(",") if x.strip()) if args.bad_words else set()
     seen_hashes = set()
     rows = []
-    dropped_dup = dropped_caption = dropped_bad = dropped_weight = 0
+    dropped_dup = dropped_caption = dropped_bad = dropped_weight = dropped_clip = dropped_aes = 0
     prefer_native_md5 = not args.no_native_md5
 
     if inp.suffix.lower() == ".jsonl":
@@ -187,6 +199,20 @@ def main():
                 if args.min_weight > 0 and w < args.min_weight:
                     dropped_weight += 1
                     continue
+                if args.min_clip_sim > 0.0 and "clip_sim" in d:
+                    try:
+                        if float(d["clip_sim"]) < float(args.min_clip_sim):
+                            dropped_clip += 1
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+                if args.min_aesthetic_proxy > 0.0 and "aesthetic_proxy" in d:
+                    try:
+                        if float(d["aesthetic_proxy"]) < float(args.min_aesthetic_proxy):
+                            dropped_aes += 1
+                            continue
+                    except (TypeError, ValueError):
+                        pass
                 rows.append(d)
     else:
         # Folder: list images and optional .txt captions (no dedup by caption across files)
@@ -227,7 +253,8 @@ def main():
                 rows.append({"image_path": path_str, "caption": cap})
 
     print(
-        f"Kept: {len(rows)}, dropped: dup={dropped_dup} caption={dropped_caption} bad_words={dropped_bad} weight={dropped_weight}",
+        f"Kept: {len(rows)}, dropped: dup={dropped_dup} caption={dropped_caption} bad_words={dropped_bad} "
+        f"weight={dropped_weight} clip_sim={dropped_clip} aesthetic_proxy={dropped_aes}",
         file=sys.stderr,
     )
     if args.dry_run:

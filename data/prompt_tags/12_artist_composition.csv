@@ -1,30 +1,144 @@
 pack,mode,tag
 artist_composition_positive,lite,rule of thirds composition
+artist_composition_positive,lite,strong rule of thirds composition
+artist_composition_positive,lite,more rule of thirds composition
+artist_composition_positive,lite,rule of thirds composition discipline
 artist_composition_positive,lite,clear focal point
+artist_composition_positive,lite,strong focal point
+artist_composition_positive,lite,more clear focal point
+artist_composition_positive,lite,clear focal point discipline
 artist_composition_positive,lite,intentional visual hierarchy
+artist_composition_positive,lite,more intentional visual hierarchy
+artist_composition_positive,lite,intentional visual hierarchy and readability
+artist_composition_positive,lite,intentional visual hierarchy discipline
 artist_composition_positive,lite,balanced negative space
+artist_composition_positive,lite,strong balanced negative space
+artist_composition_positive,lite,more balanced negative space
+artist_composition_positive,lite,balance and stabilityd negative space
+artist_composition_positive,lite,balanced negative space discipline
 artist_composition_positive,lite,readable silhouette separation
+artist_composition_positive,lite,strong readable silhouette separation
+artist_composition_positive,lite,more readable silhouette separation
+artist_composition_positive,lite,readable silhouette separation discipline
 artist_composition_positive,lite,triangular grouping of subjects
+artist_composition_positive,lite,strong triangular grouping of subjects
+artist_composition_positive,lite,more triangular grouping of subjects
+artist_composition_positive,lite,triangular grouping of subjects discipline
 artist_composition_positive,lite,gestalt closure friendly shapes
+artist_composition_positive,lite,gestalt closure shapes
+artist_composition_positive,lite,strong gestalt closure friendly shapes
+artist_composition_positive,lite,more gestalt closure friendly shapes
+artist_composition_positive,lite,gestalt closure friendly shapes discipline
 artist_composition_positive,lite,clear eye entry path
+artist_composition_positive,lite,strong eye entry path
+artist_composition_positive,lite,more clear eye entry path
+artist_composition_positive,lite,clear eye entry path discipline
+artist_composition_positive,lite,clear value read at thumbnail
+artist_composition_positive,lite,strong value read at thumbnail
+artist_composition_positive,lite,more clear value read at thumbnail
+artist_composition_positive,lite,clear value read at thumbnail discipline
+artist_composition_positive,lite,big medium small shape design
+artist_composition_positive,lite,strong big medium small shape design
+artist_composition_positive,lite,more big medium small shape design
+artist_composition_positive,lite,big medium small shape design discipline
+artist_composition_positive,lite,rule of odds grouping
+artist_composition_positive,lite,strong rule of odds grouping
+artist_composition_positive,lite,more rule of odds grouping
+artist_composition_positive,lite,rule of odds grouping discipline
+artist_composition_positive,lite,dominant shape language
+artist_composition_positive,lite,strong dominant shape language
+artist_composition_positive,lite,more dominant shape language
+artist_composition_positive,lite,dominant shape language discipline
 artist_composition_positive,standard,rule of thirds composition
+artist_composition_positive,standard,strong rule of thirds composition
+artist_composition_positive,standard,more rule of thirds composition
+artist_composition_positive,standard,rule of thirds composition discipline
 artist_composition_positive,standard,clear focal point
+artist_composition_positive,standard,strong focal point
+artist_composition_positive,standard,more clear focal point
+artist_composition_positive,standard,clear focal point discipline
 artist_composition_positive,standard,intentional visual hierarchy
+artist_composition_positive,standard,more intentional visual hierarchy
+artist_composition_positive,standard,intentional visual hierarchy and readability
+artist_composition_positive,standard,intentional visual hierarchy discipline
 artist_composition_positive,standard,balanced negative space
+artist_composition_positive,standard,strong balanced negative space
+artist_composition_positive,standard,more balanced negative space
+artist_composition_positive,standard,balance and stabilityd negative space
+artist_composition_positive,standard,balanced negative space discipline
 artist_composition_positive,standard,readable silhouette separation
+artist_composition_positive,standard,strong readable silhouette separation
+artist_composition_positive,standard,more readable silhouette separation
+artist_composition_positive,standard,readable silhouette separation discipline
 artist_composition_positive,standard,golden ratio friendly framing
+artist_composition_positive,standard,golden ratio framing
+artist_composition_positive,standard,strong golden ratio friendly framing
+artist_composition_positive,standard,more golden ratio friendly framing
+artist_composition_positive,standard,golden ratio friendly framing discipline
 artist_composition_positive,standard,leading lines guiding the eye
+artist_composition_positive,standard,strong leading lines guiding the eye
+artist_composition_positive,standard,more leading lines guiding the eye
+artist_composition_positive,standard,leading lines guiding the eye discipline
 artist_composition_positive,standard,foreground midground background layers
+artist_composition_positive,standard,strong foreground midground background layers
+artist_composition_positive,standard,more foreground midground background layers
+artist_composition_positive,standard,foreground midground background layers discipline
 artist_composition_positive,standard,dynamic asymmetrical balance
+artist_composition_positive,standard,strong dynamic asymmetrical balance
+artist_composition_positive,standard,more dynamic asymmetrical balance
+artist_composition_positive,standard,dynamic asymmetrical balance and stability
+artist_composition_positive,standard,dynamic asymmetrical balance discipline
 artist_composition_positive,standard,rhythm in shapes and value masses
+artist_composition_positive,standard,strong rhythm in shapes and value masses
+artist_composition_positive,standard,more rhythm in shapes and value masses
+artist_composition_positive,standard,rhythm in shapes and value masses discipline
 artist_composition_positive,standard,cohesive color harmony in the layout
+artist_composition_positive,standard,strong cohesive color harmony in the layout
+artist_composition_positive,standard,more cohesive color harmony in the layout
+artist_composition_positive,standard,cohesive color harmony in the layout discipline
 artist_composition_positive,standard,golden spiral friendly focal placement
+artist_composition_positive,standard,golden spiral focal placement
+artist_composition_positive,standard,strong golden spiral friendly focal placement
+artist_composition_positive,standard,more golden spiral friendly focal placement
+artist_composition_positive,standard,golden spiral friendly focal placement discipline
 artist_composition_positive,standard,repetition with variation in motifs
+artist_composition_positive,standard,strong repetition with variation in motifs
+artist_composition_positive,standard,more repetition with variation in motifs
+artist_composition_positive,standard,repetition with variation in motifs discipline
 artist_composition_positive,standard,enclosure and framing hierarchy
+artist_composition_positive,standard,strong enclosure and framing hierarchy
+artist_composition_positive,standard,more enclosure and framing hierarchy
+artist_composition_positive,standard,enclosure and framing hierarchy and readability
+artist_composition_positive,standard,enclosure and framing hierarchy discipline
 artist_composition_positive,standard,diagonal thrust with visual counterbalance
+artist_composition_positive,standard,strong diagonal thrust with visual counterbalance
+artist_composition_positive,standard,more diagonal thrust with visual counterbalance
+artist_composition_positive,standard,diagonal thrust with visual counterbalance and stability
+artist_composition_positive,standard,diagonal thrust with visual counterbalance discipline
 artist_composition_positive,standard,subframing supports primary subject
+artist_composition_positive,standard,strong subframing supports primary subject
+artist_composition_positive,standard,more subframing supports primary subject
+artist_composition_positive,standard,subframing supports primary subject discipline
 artist_composition_positive,standard,picture plane clarity
+artist_composition_positive,standard,strong picture plane clarity
+artist_composition_positive,standard,more picture plane clarity
+artist_composition_positive,standard,picture plane clarity discipline
 artist_composition_positive,standard,unity with variety in the layout
+artist_composition_positive,standard,strong unity with variety in the layout
+artist_composition_positive,standard,more unity with variety in the layout
+artist_composition_positive,standard,unity with variety in the layout discipline
+artist_composition_positive,standard,dominant subdominant subordinate
+artist_composition_positive,standard,strong dominant subdominant subordinate
+artist_composition_positive,standard,more dominant subdominant subordinate
+artist_composition_positive,standard,visual weight balance across frame
+artist_composition_positive,standard,controlled saturation hierarchy
+artist_composition_positive,standard,warm cool color temperature contrast
+artist_composition_positive,standard,shape value color unity
+artist_composition_positive,standard,simplified background value masses
+artist_composition_positive,standard,clear secondary focal support
+artist_composition_positive,standard,intentional cropping and cutoff
+artist_composition_positive,standard,rhythm of light accents
+artist_composition_positive,standard,rest area for the eye
 artist_composition_positive,perspective,consistent linear perspective
 artist_composition_positive,perspective,clear horizon line
 artist_composition_positive,perspective,stable vanishing point
@@ -41,6 +155,11 @@ artist_composition_positive,perspective,unified shadow direction for light logic
 artist_composition_positive,perspective,curvilinear perspective consistency
 artist_composition_positive,perspective,convincing ground plane contact
 artist_composition_positive,perspective,object overlap obeys spatial depth
+artist_composition_positive,perspective,consistent scale landmarks
+artist_composition_positive,perspective,verticals converge consistently
+artist_composition_positive,perspective,level camera avoids unintended tilt
+artist_composition_positive,perspective,depth cues via size overlap and contrast
+artist_composition_positive,perspective,horizon line matches viewpoint intent
 artist_composition_positive,classical,academic composition discipline
 artist_composition_positive,classical,S-curve rhythm in forms
 artist_composition_positive,classical,dynamic symmetry
@@ -54,6 +173,13 @@ artist_composition_positive,classical,repoussoir framing depth
 artist_composition_positive,classical,classical economy of shapes
 artist_composition_positive,classical,bilateral symmetry used with intent
 artist_composition_positive,classical,classical balance of light and dark masses
+artist_composition_positive,classical,armature of the rectangle
+artist_composition_positive,classical,classical line of action
+artist_composition_positive,classical,massing before detail
+artist_composition_positive,classical,economy of detail at focal point
+artist_composition_positive,classical,edge hierarchy supports focal point
+artist_composition_positive,classical,simplify into two or three value groups
+artist_composition_positive,classical,silhouette design reads clearly
 artist_composition_positive,full,rule of thirds composition
 artist_composition_positive,full,clear focal point
 artist_composition_positive,full,intentional visual hierarchy
@@ -62,6 +188,10 @@ artist_composition_positive,full,readable silhouette separation
 artist_composition_positive,full,triangular grouping of subjects
 artist_composition_positive,full,gestalt closure friendly shapes
 artist_composition_positive,full,clear eye entry path
+artist_composition_positive,full,clear value read at thumbnail
+artist_composition_positive,full,big medium small shape design
+artist_composition_positive,full,rule of odds grouping
+artist_composition_positive,full,dominant shape language
 artist_composition_positive,full,golden ratio friendly framing
 artist_composition_positive,full,leading lines guiding the eye
 artist_composition_positive,full,foreground midground background layers
@@ -75,6 +205,16 @@ artist_composition_positive,full,diagonal thrust with visual counterbalance
 artist_composition_positive,full,subframing supports primary subject
 artist_composition_positive,full,picture plane clarity
 artist_composition_positive,full,unity with variety in the layout
+artist_composition_positive,full,dominant subdominant subordinate
+artist_composition_positive,full,visual weight balance across frame
+artist_composition_positive,full,controlled saturation hierarchy
+artist_composition_positive,full,warm cool color temperature contrast
+artist_composition_positive,full,shape value color unity
+artist_composition_positive,full,simplified background value masses
+artist_composition_positive,full,clear secondary focal support
+artist_composition_positive,full,intentional cropping and cutoff
+artist_composition_positive,full,rhythm of light accents
+artist_composition_positive,full,rest area for the eye
 artist_composition_positive,full,consistent linear perspective
 artist_composition_positive,full,clear horizon line
 artist_composition_positive,full,stable vanishing point
@@ -91,6 +231,11 @@ artist_composition_positive,full,unified shadow direction for light logic
 artist_composition_positive,full,curvilinear perspective consistency
 artist_composition_positive,full,convincing ground plane contact
 artist_composition_positive,full,object overlap obeys spatial depth
+artist_composition_positive,full,consistent scale landmarks
+artist_composition_positive,full,verticals converge consistently
+artist_composition_positive,full,level camera avoids unintended tilt
+artist_composition_positive,full,depth cues via size overlap and contrast
+artist_composition_positive,full,horizon line matches viewpoint intent
 artist_composition_positive,full,academic composition discipline
 artist_composition_positive,full,S-curve rhythm in forms
 artist_composition_positive,full,dynamic symmetry
@@ -104,10 +249,21 @@ artist_composition_positive,full,repoussoir framing depth
 artist_composition_positive,full,classical economy of shapes
 artist_composition_positive,full,bilateral symmetry used with intent
 artist_composition_positive,full,classical balance of light and dark masses
+artist_composition_positive,full,armature of the rectangle
+artist_composition_positive,full,classical line of action
+artist_composition_positive,full,massing before detail
+artist_composition_positive,full,economy of detail at focal point
+artist_composition_positive,full,edge hierarchy supports focal point
+artist_composition_positive,full,simplify into two or three value groups
+artist_composition_positive,full,silhouette design reads clearly
 artist_composition_negative,lite,muddy focal point
 artist_composition_negative,lite,unclear subject hierarchy
 artist_composition_negative,lite,competing focal points
 artist_composition_negative,lite,dead corner visual traps
+artist_composition_negative,lite,no clear focal point
+artist_composition_negative,lite,confusing silhouette read
+artist_composition_negative,lite,equal spacing everywhere
+artist_composition_negative,lite,aimless eye wandering
 artist_composition_negative,standard,muddy focal point
 artist_composition_negative,standard,unclear subject hierarchy
 artist_composition_negative,standard,tangent edges at frame border
@@ -117,6 +273,13 @@ artist_composition_negative,standard,accidental center bullseye stiffness
 artist_composition_negative,standard,weak framing hierarchy
 artist_composition_negative,standard,motif repetition without variation
 artist_composition_negative,standard,ambiguous subframes
+artist_composition_negative,standard,no dominant subdominant structure
+artist_composition_negative,standard,busy background competes with subject
+artist_composition_negative,standard,overly centered static framing
+artist_composition_negative,standard,twinning mirrored elements by accident
+artist_composition_negative,standard,value contrast everywhere no hierarchy
+artist_composition_negative,standard,saturation everywhere no hierarchy
+artist_composition_negative,standard,cropping cuts important forms awkwardly
 artist_composition_negative,perspective,conflicting vanishing points
 artist_composition_negative,perspective,warped perspective grid
 artist_composition_negative,perspective,impossible geometry
@@ -125,16 +288,27 @@ artist_composition_negative,perspective,scale inconsistency in depth
 artist_composition_negative,perspective,shadow direction contradicts light source
 artist_composition_negative,perspective,overlapping depth order contradictions
 artist_composition_negative,perspective,floating objects with no ground contact
+artist_composition_negative,perspective,verticals tilt inconsistently
+artist_composition_negative,perspective,depth cues contradict each other
+artist_composition_negative,perspective,camera height inconsistent with horizon
 artist_composition_negative,classical,chaotic value pattern
 artist_composition_negative,classical,stiff frozen symmetry
 artist_composition_negative,classical,merged ambiguous masses
 artist_composition_negative,classical,all edges equally sharp clutter
 artist_composition_negative,classical,decorative symmetry without purpose
 artist_composition_negative,classical,flat graphic shapes without mass
+artist_composition_negative,classical,too much detail everywhere
+artist_composition_negative,classical,edge noise everywhere
+artist_composition_negative,classical,massing breaks into small fragments
+artist_composition_negative,classical,values too close no notan read
 artist_composition_negative,full,muddy focal point
 artist_composition_negative,full,unclear subject hierarchy
 artist_composition_negative,full,competing focal points
 artist_composition_negative,full,dead corner visual traps
+artist_composition_negative,full,no clear focal point
+artist_composition_negative,full,confusing silhouette read
+artist_composition_negative,full,equal spacing everywhere
+artist_composition_negative,full,aimless eye wandering
 artist_composition_negative,full,tangent edges at frame border
 artist_composition_negative,full,flat muddy composition
 artist_composition_negative,full,cluttered visual noise
@@ -142,6 +316,13 @@ artist_composition_negative,full,accidental center bullseye stiffness
 artist_composition_negative,full,weak framing hierarchy
 artist_composition_negative,full,motif repetition without variation
 artist_composition_negative,full,ambiguous subframes
+artist_composition_negative,full,no dominant subdominant structure
+artist_composition_negative,full,busy background competes with subject
+artist_composition_negative,full,overly centered static framing
+artist_composition_negative,full,twinning mirrored elements by accident
+artist_composition_negative,full,value contrast everywhere no hierarchy
+artist_composition_negative,full,saturation everywhere no hierarchy
+artist_composition_negative,full,cropping cuts important forms awkwardly
 artist_composition_negative,full,conflicting vanishing points
 artist_composition_negative,full,warped perspective grid
 artist_composition_negative,full,impossible geometry
@@ -150,9 +331,16 @@ artist_composition_negative,full,scale inconsistency in depth
 artist_composition_negative,full,shadow direction contradicts light source
 artist_composition_negative,full,overlapping depth order contradictions
 artist_composition_negative,full,floating objects with no ground contact
+artist_composition_negative,full,verticals tilt inconsistently
+artist_composition_negative,full,depth cues contradict each other
+artist_composition_negative,full,camera height inconsistent with horizon
 artist_composition_negative,full,chaotic value pattern
 artist_composition_negative,full,stiff frozen symmetry
 artist_composition_negative,full,merged ambiguous masses
 artist_composition_negative,full,all edges equally sharp clutter
 artist_composition_negative,full,decorative symmetry without purpose
 artist_composition_negative,full,flat graphic shapes without mass
+artist_composition_negative,full,too much detail everywhere
+artist_composition_negative,full,edge noise everywhere
+artist_composition_negative,full,massing breaks into small fragments
+artist_composition_negative,full,values too close no notan read

@@ -19,7 +19,8 @@ Run commands from repo root so `config`, `data`, `diffusion`, `models`, `utils` 
 | **diffusion/** | `GaussianDiffusion`, schedules, loss weights | `train.py`, `sample.py` |
 | **models/** | DiT, ControlNet, MoE, RAE bridge, optional cascaded / multimodal **scaffolds** | `train.py`, `sample.py` |
 | **utils/** | Checkpoint load, text-encoder bundle, REPA helpers, QC, metrics | `train.py`, `sample.py`, scripts |
-| **ViT/** | Standalone ViT scoring / prompt tools (**not** the DiT generator) | CLI + optional dataset QA |
+| **vit_quality/** | Canonical ViT scoring / prompt tools (**not** the DiT generator) | CLI + optional dataset QA |
+| **ViT/** | Legacy compatibility package for existing scripts/imports | Backward compatibility |
 | **scripts/** | Download, tools, cascade stub | Ops & CI |
 | **pipelines/** | **image_gen** vs **book_comic**: per–product-line docs; book script at `pipelines/book_comic/scripts/generate_book.py` | See [pipelines/README.md](../pipelines/README.md) |
 | **native/** | Fast JSONL / manifest helpers (Rust, Go, Node, …) | Optional; see `native/README.md`, ecosystem map [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
@@ -49,14 +50,14 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 
 | File | Description |
 |------|-------------|
-| [config/README.md](../config/README.md) | Folder layout: `train_config` vs `reference/`. |
+| [config/README.md](../config/README.md) | Folder layout: `train_config` plus canonical catalogs under `config/defaults/`. |
 | [config/__init__.py](../config/__init__.py) | Exports `TrainConfig`, `get_dit_build_kwargs`, `DEFAULT_NEGATIVE_PROMPT`. |
 | [config/train_config.py](../config/train_config.py) | TrainConfig + `get_dit_build_kwargs(cfg)`: DiT build args; **`text_encoder_mode`**, **`clip_text_encoder_*`**, RAE/REPA fields. |
 | [config/defaults/](../config/defaults/) | **Canonical** prompt catalogs, presets, labels (domains, styles, `sample.py` presets, PixAI names). |
-| [config/prompt_domains.py](../config/prompt_domains.py) | Shim → `reference/prompt_domains.py` (stable import path). |
-| [config/style_artists.py](../config/style_artists.py) | Shim → `reference/style_artists.py`. |
-| [config/model_presets.py](../config/model_presets.py) | Shim → `reference/model_presets.py`. |
-| [config/pixai_reference.py](../config/pixai_reference.py) | Shim → `reference/pixai_reference.py`. |
+| [config/prompt_domains.py](../config/prompt_domains.py) | Shim → `defaults/prompt_domains.py` (stable import path). |
+| [config/style_artists.py](../config/style_artists.py) | Shim → `defaults/style_artists.py`. |
+| [config/model_presets.py](../config/model_presets.py) | Shim → `defaults/model_presets.py`. |
+| [config/pixai_reference.py](../config/pixai_reference.py) | Shim → `defaults/pixai_reference.py`. |
 
 ### Data
 
@@ -90,7 +91,8 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [models/__init__.py](../models/__init__.py) | Exports DiT registry, `DiT_XL_2_Text`, EnhancedDiT, **RAELatentBridge**, **NativeMultimodalTransformer**, **CascadedMultimodalDiffusion**. |
 | [models/dit.py](../models/dit.py) | Base DiT (patch embed, timestep embed, adaLN blocks); from Meta DiT. |
 | [models/dit_text.py](../models/dit_text.py) | T5-conditioned DiT (cross-attention, caption); ViT-Gen options (RoPE, registers, KV-merge). |
-| [models/dit_predecessor.py](../models/dit_predecessor.py) | DiT-P / Supreme variants; QK-norm, SwiGLU, AdaLN-Zero; REPA projector when enabled. |
+| [models/dit_text_variants.py](../models/dit_text_variants.py) | Canonical module for DiT-P / Supreme text variants (QK-norm, SwiGLU, AdaLN-Zero, REPA). |
+| [models/dit_predecessor.py](../models/dit_predecessor.py) | Legacy module path kept for compatibility. |
 | [models/pixart_blocks.py](../models/pixart_blocks.py) | SizeEmbedder, ZeroInitPatchChannelGate, etc. |
 | [models/rae_latent_bridge.py](../models/rae_latent_bridge.py) | RAE ↔ 4ch DiT latent **1×1** bridge + cycle loss. |
 | [models/model_enhancements.py](../models/model_enhancements.py) | **RMSNorm**, **DropPath**, **TokenFiLM**, **SE1x1** — shared blocks for fusion / conditioning. |
@@ -120,28 +122,26 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/checkpoint/checkpoint_manager.py](../utils/checkpoint/checkpoint_manager.py) | Checkpoint rotation / save helpers. |
 | [utils/training/metrics.py](../utils/training/metrics.py) | FLOPs / logging helpers. |
 | [utils/architecture/dit_architecture.py](../utils/architecture/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
-| [utils/architecture/ar_dit_vit.py](../utils/architecture/ar_dit_vit.py) | DiT **block-AR** regime ↔ ViT: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](AR.md). |
+| [utils/architecture/ar_block_conditioning.py](../utils/architecture/ar_block_conditioning.py) | Canonical DiT **block-AR** regime ↔ ViT bridge: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](AR.md). |
 | [native/python/sdx_native/latent_geometry.py](../native/python/sdx_native/latent_geometry.py) | Latent / DiT **patch token** math (pure Python; matches `native/cpp` C ABI). |
 | [native/python/sdx_native/text_hygiene.py](../native/python/sdx_native/text_hygiene.py) | Caption **NFKC** + zero-width strip, fingerprints (SHA256 / optional xxhash), pos/neg overlap; training flag `--caption-unicode-normalize`. |
 | [native/python/sdx_native/native_tools.py](../native/python/sdx_native/native_tools.py) | Optional **`native/`** tool discovery (Rust/Zig/Go/Node), FNV manifest fingerprints, JSONL merge, ctypes `libsdx_latent`. |
-| [utils/native/latent_geometry.py](../utils/native/latent_geometry.py) | Shim → `sdx_native.latent_geometry`. |
-| [utils/native/native_tools.py](../utils/native/native_tools.py) | Shim → `sdx_native.native_tools`. |
+| [native/python/sdx_native/latent_geometry.py](../native/python/sdx_native/latent_geometry.py) | Canonical Python bridge module for latent geometry helpers (`sdx_native.latent_geometry`). |
+| [native/python/sdx_native/native_tools.py](../native/python/sdx_native/native_tools.py) | Canonical Python bridge module for native helper discovery/runtime wrappers (`sdx_native.native_tools`). |
 | [utils/modeling/nn_inspect.py](../utils/modeling/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/quality/test_time_pick.py](../utils/quality/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | [utils/generation/orchestration.py](../utils/generation/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](LANDSCAPE_2026.md). |
 | [utils/architecture/architecture_map.py](../utils/architecture/architecture_map.py) | **2026 architecture themes** → SDX parity (`THEMES`, `theme_by_id`, `themes_as_dict`); see [LANDSCAPE_2026.md](LANDSCAPE_2026.md), [BLUEPRINTS.md](BLUEPRINTS.md). |
 | *(other `utils/*.py`)* | Advanced inference, anatomy, character consistency, multimodal stubs, etc. |
 
-### ViT (`ViT/`)
+### ViT (`vit_quality/`)
 
 | File | Description |
 |------|-------------|
-| [ViT/README.md](../ViT/README.md) | ViT quality + adherence; train / infer / rank / embeddings / prompt system. |
-| [ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | ViT vs DiT roles; research roadmap (Swin-DiT, FiT, reward finetuning, IQA); practical checklist. |
-| [ViT/backbone_presets.py](../ViT/backbone_presets.py) | Suggested timm model names for `--model-name`. |
-| [ViT/train.py](../ViT/train.py), [ViT/infer.py](../ViT/infer.py) | Train or score JSONL (**separate** from repo-root DiT `train.py`). |
-| [ViT/checkpoint_utils.py](../ViT/checkpoint_utils.py) | `load_vit_quality_checkpoint`, `vit_model_parameter_report` for tools and `infer.py`. |
-| [ViT/prompt_system.py](../ViT/prompt_system.py), [ViT/prompt_tool.py](../ViT/prompt_tool.py) | “Negative inside positive” prompt decomposition. |
+| [vit_quality/__init__.py](../vit_quality/__init__.py) | Canonical ViT quality/adherence package export surface. |
+| [vit_quality/train.py](../vit_quality/train.py), [vit_quality/infer.py](../vit_quality/infer.py) | Canonical module paths for train/score tooling. |
+| [vit_quality/checkpoint_utils.py](../vit_quality/checkpoint_utils.py) | Canonical import path for checkpoint loading/reporting helpers. |
+| [ViT/README.md](../ViT/README.md) | Legacy compatibility docs for `ViT/` shims/launchers; canonical runtime path is `vit_quality/`. |
 
 ### Toolkit (`toolkit/`)
 
@@ -344,7 +344,7 @@ Cloned into `external/` by [scripts/setup/clone_repos.ps1](../scripts/setup/clon
 - **Training:** [train.py](../train.py) · [config/train_config.py](../config/train_config.py)
 - **Sampling:** [sample.py](../sample.py) · [inference.py](../inference.py)
 - **Diffusion:** [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) · [diffusion/respace.py](../diffusion/respace.py) · [diffusion/sampling_utils.py](../diffusion/sampling_utils.py) · [diffusion/loss_weighting.py](../diffusion/loss_weighting.py) · [diffusion/timestep_sampling.py](../diffusion/timestep_sampling.py)
-- **Models:** [models/dit_text.py](../models/dit_text.py) · [models/dit_predecessor.py](../models/dit_predecessor.py) · [models/pixart_blocks.py](../models/pixart_blocks.py) (SizeEmbedder, ported from PixArt)
+- **Models:** [models/dit_text.py](../models/dit_text.py) · [models/dit_text_variants.py](../models/dit_text_variants.py) · [models/pixart_blocks.py](../models/pixart_blocks.py) (SizeEmbedder, ported from PixArt)
 - **Data:** [data/t2i_dataset.py](../data/t2i_dataset.py) · [data/caption_utils.py](../data/caption_utils.py)
 - **Docs:** [README](../README.md) · [REGION_CAPTIONS](REGION_CAPTIONS.md) · [MODEL_STACK](MODEL_STACK.md) · [INSPIRATION](INSPIRATION.md) · [IMPROVEMENTS](IMPROVEMENTS.md) · [HARDWARE](HARDWARE.md)
 - **Weights / paths:** [docs/MODEL_STACK.md](MODEL_STACK.md) · [utils/modeling/model_paths.py](../utils/modeling/model_paths.py)

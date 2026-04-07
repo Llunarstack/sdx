@@ -16,13 +16,13 @@ This folder holds **metadata exported from the [Civitai public REST API](https:/
 **Single search** (one `query=`, e.g. only `nsfw`):
 
 ```bash
-python scripts/tools/fetch_civitai_nsfw_concepts.py --out data/civitai/nsfw_illustrious_noobai_models.csv --max-batches 40 --sleep 0.25
+python -m scripts.tools fetch_civitai_nsfw_concepts --out data/civitai/nsfw_illustrious_noobai_models.csv --max-batches 40 --sleep 0.25
 ```
 
 **Extended merge** — many site-style searches (see [`SEARCHES.md`](SEARCHES.md)), merged + deduped by model id, still filtered to **Illustrious / NoobAI**:
 
 ```bash
-python scripts/tools/fetch_civitai_nsfw_concepts.py --preset extended --max-batches-per-query 8 --sleep 0.2 --out data/civitai/nsfw_illustrious_noobai_models.csv
+python -m scripts.tools fetch_civitai_nsfw_concepts --preset extended --max-batches-per-query 8 --sleep 0.2 --out data/civitai/nsfw_illustrious_noobai_models.csv
 ```
 
 Add more terms: `--extra-queries "foo,bar"`.
@@ -30,7 +30,7 @@ Add more terms: `--extra-queries "foo,bar"`.
 Then rebuild frequency list + embedded hot tags + optional name list:
 
 ```bash
-python scripts/tools/curate_civitai_triggers.py --names-out data/civitai/model_names.txt
+python -m scripts.tools curate_civitai_triggers --names-out data/civitai/model_names.txt
 ```
 
 This updates:

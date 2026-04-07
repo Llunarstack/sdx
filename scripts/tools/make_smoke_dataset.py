@@ -5,7 +5,7 @@ Create a tiny folder of synthetic PNGs + sidecar captions for **smoke-testing** 
 No real photos required—just enough files for the dataloader to iterate.
 
 Usage (repo root):
-    python scripts/tools/make_smoke_dataset.py --out data/smoke_tiny
+    python -m scripts.tools make_smoke_dataset --out data/smoke_tiny
     python train.py --data-path data/smoke_tiny --results-dir results/smoke --model DiT-B/2-Text \\
         --image-size 256 --global-batch-size 1 --max-steps 2 --no-compile --num-workers 0 --dry-run
 

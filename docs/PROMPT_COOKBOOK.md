@@ -2,7 +2,7 @@
 
 Short, opinionated recipes that use the flags and presets you’ve added (`--preset`, `--op-mode`, `--hard-style`, `--naturalize`, `--anti-bleed`, `--diversity`, etc.).
 
-**How the prompt is built (modules and order):** see **[PROMPT_STACK.md](PROMPT_STACK.md)**. **Preview without sampling:** `python scripts/tools/preview_generation_prompt.py --prompt "..."`.
+**How the prompt is built (modules and order):** see **[PROMPT_STACK.md](PROMPT_STACK.md)**. **Preview without sampling:** `python -m scripts.tools preview_generation_prompt --prompt "..."`.
 
 All examples assume:
 
@@ -122,7 +122,7 @@ Tips (from `FULL_BODY_AND_TWO_HEAD_TIPS`):
 Use the seed explorer script to rapidly try many seeds with presets:
 
 ```bash
-python -m scripts.tools.seed_explorer \
+python -m scripts.tools seed_explorer \
   --ckpt results/.../best.pt \
   --prompt "portrait of a woman, studio lighting" \
   --preset sdxl \
@@ -144,7 +144,7 @@ Pick the best seed(s) and re‑run `sample.py` with your favorite settings.
 Run a fixed prompt set so you can compare checkpoints/presets quickly:
 
 ```bash
-python -m scripts.tools.eval_prompts \
+python -m scripts.tools eval_prompts \
   --ckpt results/.../best.pt \
   --preset sdxl \
   --op-mode portrait \
@@ -160,7 +160,7 @@ This writes `eval_prompts/sdxl_v1/index.json` plus PNGs for each prompt.
 If you have a big JSONL manifest, normalize tag order and apply hard-style/quality boosting in one pass:
 
 ```bash
-python -m scripts.tools.normalize_captions \
+python -m scripts.tools normalize_captions \
   --in manifest.jsonl \
   --out manifest_normalized.jsonl
 ```

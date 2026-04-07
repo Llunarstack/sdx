@@ -3,9 +3,9 @@
 Compare DiT (and optional EnhancedDiT) text variant sizes without training.
 
 Usage (repo root):
-    python scripts/tools/dit_variant_compare.py
-    python scripts/tools/dit_variant_compare.py --image-size 512
-    python scripts/tools/dit_variant_compare.py --models DiT-B/2-Text,DiT-XL/2-Text
+    python -m scripts.tools dit_variant_compare
+    python -m scripts.tools dit_variant_compare --image-size 512
+    python -m scripts.tools dit_variant_compare --models DiT-B/2-Text,DiT-XL/2-Text
 """
 
 from __future__ import annotations

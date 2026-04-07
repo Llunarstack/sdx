@@ -1,40 +1,139 @@
 pack,mode,tag
 nsfw_positive,_,nsfw
+nsfw_positive,_,strong nsfw
+nsfw_positive,_,nsfw discipline
 nsfw_positive,_,adult content
+nsfw_positive,_,strong adult content
+nsfw_positive,_,more adult content
+nsfw_positive,_,adult content discipline
 nsfw_positive,_,anatomically coherent
+nsfw_positive,_,strong anatomically coherent
+nsfw_positive,_,more anatomically coherent
+nsfw_positive,_,anatomically coherent discipline
 nsfw_positive,_,clear body structure
+nsfw_positive,_,strong body structure
+nsfw_positive,_,more clear body structure
+nsfw_positive,_,clear body structure discipline
 nsfw_positive,_,detailed anatomy
+nsfw_positive,_,strong detailed anatomy
+nsfw_positive,_,more detailed anatomy
+nsfw_positive,_,detailed anatomy discipline
 nsfw_positive,_,natural proportions
+nsfw_positive,_,strong natural proportions
+nsfw_positive,_,more natural proportions
+nsfw_positive,_,natural proportions discipline
 nsfw_positive,_,explicit detail
+nsfw_positive,_,strong explicit detail
+nsfw_positive,_,more explicit detail
+nsfw_positive,_,explicit detail discipline
 nsfw_positive,_,uncensored
+nsfw_positive,_,strong uncensored
+nsfw_positive,_,uncensored discipline
 nsfw_positive,_,single clear subject
+nsfw_positive,_,strong single clear subject
+nsfw_positive,_,more single clear subject
+nsfw_positive,_,single clear subject discipline
 nsfw_positive,_,coherent pose
+nsfw_positive,_,strong coherent pose
+nsfw_positive,_,more coherent pose
+nsfw_positive,_,coherent pose discipline
 nsfw_positive,_,readable silhouettes
+nsfw_positive,_,strong readable silhouettes
+nsfw_positive,_,more readable silhouettes
+nsfw_positive,_,readable silhouettes discipline
 nsfw_positive,_,grounded lighting on body
+nsfw_positive,_,strong grounded lighting on body
+nsfw_positive,_,more grounded lighting on body
+nsfw_positive,_,grounded lighting on body discipline
 nsfw_positive,_,eye contact clarity
+nsfw_positive,_,strong eye contact clarity
+nsfw_positive,_,more eye contact clarity
+nsfw_positive,_,eye contact clarity discipline
 nsfw_positive,_,natural skin texture
+nsfw_positive,_,strong natural skin texture
+nsfw_positive,_,more natural skin texture
+nsfw_positive,_,natural skin texture discipline
 nsfw_positive,_,complete figure in frame
+nsfw_positive,_,strong complete figure in frame
+nsfw_positive,_,more complete figure in frame
+nsfw_positive,_,complete figure in frame discipline
 nsfw_positive,_,__REF__:best_model_tags
+nsfw_positive,_,strong __REF__:best_model_tags
 nsfw_positive,_,anatomy matches the pose description
+nsfw_positive,_,strong anatomy matches the pose description
+nsfw_positive,_,more anatomy matches the pose description
+nsfw_positive,_,anatomy matches the pose description discipline
 nsfw_positive,_,interaction matches the prompt
+nsfw_positive,_,strong interaction matches the prompt
+nsfw_positive,_,more interaction matches the prompt
+nsfw_positive,_,interaction matches the prompt discipline
 nsfw_positive,_,no extra partners unless specified
+nsfw_positive,_,strong no extra partners unless specified
+nsfw_positive,_,more no extra partners unless specified
+nsfw_positive,_,no extra partners unless specified discipline
 nsfw_positive,_,environment matches the caption
+nsfw_positive,_,strong environment matches the caption
+nsfw_positive,_,more environment matches the caption
+nsfw_positive,_,environment matches the caption discipline
 nsfw_positive,_,lighting consistent with stated mood
+nsfw_positive,_,strong lighting consistent with stated mood
+nsfw_positive,_,more lighting consistent with stated mood
+nsfw_positive,_,lighting consistent with stated mood discipline
 nsfw_positive,_,props from the prompt only
+nsfw_positive,_,strong props from the prompt only
+nsfw_positive,_,more props from the prompt only
+nsfw_positive,_,props from the prompt only discipline
 nsfw_negative,_,censorship bars
+nsfw_negative,_,strong censorship bars
+nsfw_negative,_,more censorship bars
+nsfw_negative,_,censorship bars discipline
 nsfw_negative,_,mosaic censor
+nsfw_negative,_,strong mosaic censor
+nsfw_negative,_,more mosaic censor
+nsfw_negative,_,mosaic censor discipline
 nsfw_negative,_,cropped anatomy
+nsfw_negative,_,strong cropped anatomy
+nsfw_negative,_,more cropped anatomy
+nsfw_negative,_,cropped anatomy discipline
 nsfw_negative,_,sfw
+nsfw_negative,_,strong sfw
+nsfw_negative,_,sfw discipline
 nsfw_negative,_,censored
+nsfw_negative,_,strong censored
+nsfw_negative,_,censored discipline
 nsfw_negative,_,bar over
+nsfw_negative,_,strong bar over
+nsfw_negative,_,more bar over
+nsfw_negative,_,bar over discipline
 nsfw_negative,_,pixelated
+nsfw_negative,_,strong pixelated
+nsfw_negative,_,pixelated discipline
 nsfw_negative,_,blurred private parts
+nsfw_negative,_,strong blurred private parts
+nsfw_negative,_,more blurred private parts
+nsfw_negative,_,blurred private parts discipline
 nsfw_negative,_,bad hands
+nsfw_negative,_,strong bad hands
+nsfw_negative,_,more bad hands
+nsfw_negative,_,bad hands discipline
 nsfw_negative,_,mutated hands
+nsfw_negative,_,strong mutated hands
+nsfw_negative,_,more mutated hands
+nsfw_negative,_,mutated hands discipline
 nsfw_negative,_,extra fingers
+nsfw_negative,_,strong extra fingers
+nsfw_negative,_,more extra fingers
+nsfw_negative,_,extra fingers discipline
 nsfw_negative,_,fused fingers
+nsfw_negative,_,strong fused fingers
+nsfw_negative,_,more fused fingers
+nsfw_negative,_,fused fingers discipline
 nsfw_negative,_,duplicate body
+nsfw_negative,_,strong duplicate body
+nsfw_negative,_,more duplicate body
+nsfw_negative,_,duplicate body discipline
 nsfw_negative,_,cloned face
+nsfw_negative,_,strong cloned face
 nsfw_negative,_,fused bodies
 nsfw_negative,_,incoherent pose
 nsfw_negative,_,muddy low contrast
@@ -355,49 +454,49 @@ nsfw_civitai_negative,hits,tag soup artifact
 nsfw_civitai_negative,hits,incoherent anatomy with crowd tags
 nsfw_civitai_negative,hits,extra limbs
 nsfw_civitai_negative,hits,bad hands
+nsfw_civitai_negative,hits,prompt drift
+nsfw_civitai_negative,hits,wrong tag emphasis
 nsfw_civitai_negative,hits_lite,wrong eye color
 nsfw_civitai_negative,hits_lite,extra limbs
 nsfw_civitai_negative,hits_lite,bad hands
+nsfw_civitai_negative,hits_lite,prompt drift
 nsfw_civitai_negative,snippets,contradictory outfit tags
 nsfw_civitai_negative,snippets,tag collision
 nsfw_civitai_negative,snippets,incoherent props
 nsfw_civitai_negative,snippets,wrong horn count
 nsfw_civitai_negative,snippets,broken costume geometry
+nsfw_civitai_negative,snippets,ignored outfit keywords
 nsfw_civitai_negative,snippets_lite,contradictory outfit tags
 nsfw_civitai_negative,snippets_lite,tag collision
 nsfw_civitai_negative,snippets_lite,broken costume geometry
+nsfw_civitai_negative,snippets_lite,ignored outfit keywords
 nsfw_civitai_negative,action,bad anatomy
 nsfw_civitai_negative,action,extra limbs
 nsfw_civitai_negative,action,floating body
 nsfw_civitai_negative,action,deformed pose
+nsfw_civitai_negative,action,pose contradicts prompt
 nsfw_civitai_negative,complex,censorship bars
 nsfw_civitai_negative,complex,mosaic censor
 nsfw_civitai_negative,complex,blurred private parts
 nsfw_civitai_negative,complex,impossible anatomy
 nsfw_civitai_negative,complex,fused bodies
+nsfw_civitai_negative,complex,wrong position vs caption
 nsfw_civitai_negative,clothing,melted clothing
 nsfw_civitai_negative,clothing,fused fabric
 nsfw_civitai_negative,clothing,broken straps
 nsfw_civitai_negative,clothing,plastic looking outfit
+nsfw_civitai_negative,clothing,wardrobe drift from tags
 nsfw_civitai_negative,objects,floating toy
 nsfw_civitai_negative,objects,broken toy
 nsfw_civitai_negative,objects,warped dildo
 nsfw_civitai_negative,objects,missing object
+nsfw_civitai_negative,objects,unrequested toy or prop
 nsfw_civitai_negative,style,flat expression
 nsfw_civitai_negative,style,dead eyes
 nsfw_civitai_negative,style,no emotion
 nsfw_civitai_negative,style,plastic skin
 nsfw_civitai_negative,style,bad lighting
-nsfw_civitai_negative,hits,prompt drift
-nsfw_civitai_negative,hits,wrong tag emphasis
-nsfw_civitai_negative,hits_lite,prompt drift
-nsfw_civitai_negative,snippets,ignored outfit keywords
-nsfw_civitai_negative,snippets_lite,ignored outfit keywords
-nsfw_civitai_negative,action,pose contradicts prompt
-nsfw_civitai_negative,complex,wrong position vs caption
 nsfw_civitai_negative,easy,scene creep beyond brief
-nsfw_civitai_negative,clothing,wardrobe drift from tags
-nsfw_civitai_negative,objects,unrequested toy or prop
 civitai_snippet_tags,_,hat
 civitai_snippet_tags,_,white skirt
 civitai_snippet_tags,_,black pants

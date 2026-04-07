@@ -692,6 +692,7 @@ class GaussianDiffusion:
         periodic_alignment_threshold: float = 0.0,
         periodic_alignment_cfg_boost: float = 0.0,
         periodic_alignment_fn: Optional[Callable[[int, torch.Tensor], float]] = None,
+        periodic_alignment_rewind_strength: float = 0.0,
         # Speculative CFG: second forward at draft_cfg_scale; blend if |full-draft| mean < close_thresh.
         speculative_draft_cfg_scale: float = 0.0,
         speculative_close_thresh: float = 0.0,
@@ -717,6 +718,7 @@ class GaussianDiffusion:
         flow_matching_sample: bool = False,
         flow_solver: str = "euler",
         flow_init_noise: Optional[torch.Tensor] = None,
+        return_intermediate_state: bool = False,
     ):
         """
         Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
@@ -745,6 +747,8 @@ class GaussianDiffusion:
         steps call ``fn(step_index, x_0_pred)`` expecting a CLIP-like cosine in roughly [-1, 1].
         If the value is **below** ``periodic_alignment_threshold``, multiply CFG by
         (1 + ``periodic_alignment_cfg_boost``) for subsequent steps (multiplicative on current CFG).
+        If ``periodic_alignment_rewind_strength`` > 0, also apply a *soft rewind* to the latent by
+        mixing the post-step latent with the pre-step latent: ``x = (1-s)*x + s*x_prev``.
 
         speculative_draft_cfg_scale: if >0 and uncond kwargs exist, run draft CFG forward then full CFG;
         when predictions are close (mean abs diff < speculative_close_thresh), blend toward draft.
@@ -752,6 +756,10 @@ class GaussianDiffusion:
         flow_matching_sample: if True, use rectified-flow sampler (``flow_solver`` = euler | heun).
 
         flow_init_noise: optional latent at ``s=1`` (same as training ``epsilon``); default is standard Gaussian noise.
+
+        return_intermediate_state: if True, return a tuple ``(x_t, x0_pred, t_start)`` where ``x_t`` is the
+        *current* latent at the end of this loop, and ``t_start`` is the timestep index you can pass back into
+        ``start_timestep`` to resume sampling from ``x_init=x_t``. This is intended for beam-style partial denoise.
         """
         model_kwargs_cond = model_kwargs_cond or {}
         model_kwargs_uncond = model_kwargs_uncond or {}
@@ -759,6 +767,8 @@ class GaussianDiffusion:
             inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
         )
         if flow_matching_sample:
+            if return_intermediate_state:
+                raise ValueError("return_intermediate_state is not supported for flow_matching_sample")
             if do_inpaint:
                 raise ValueError(
                     "flow_matching_sample is not compatible with inpaint_freeze_known (VP q_sample trajectory). "
@@ -824,6 +834,7 @@ class GaussianDiffusion:
                 karras_rho=float(karras_rho),
             ).to(device)
         x_0_pred = None
+        last_t_next_val: int = 0
         early_exit_enabled = float(ada_early_exit_delta_threshold) > 0.0 and int(ada_early_exit_patience) > 0
         early_exit_patience = int(ada_early_exit_patience)
         early_exit_min_steps = int(ada_early_exit_min_steps)
@@ -837,6 +848,7 @@ class GaussianDiffusion:
         p_thr = float(periodic_alignment_threshold)
         p_boost = float(periodic_alignment_cfg_boost)
         p_fn = periodic_alignment_fn
+        p_rewind = float(periodic_alignment_rewind_strength)
         spec_draft = float(speculative_draft_cfg_scale)
         spec_thr = float(speculative_close_thresh)
         spec_blend = float(speculative_blend)
@@ -868,6 +880,10 @@ class GaussianDiffusion:
                 if i + 1 < len(timesteps)
                 else torch.zeros(shape[0], device=device, dtype=torch.long)
             )
+            try:
+                last_t_next_val = int(t_next[0].detach().item())
+            except Exception:
+                last_t_next_val = int(t_next[0])
             x_prev = x
 
             def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
@@ -1010,6 +1026,9 @@ class GaussianDiffusion:
                         sim = float(p_fn(int(i), x_0_pred))
                         if sim < p_thr:
                             cfg_box[0] = float(cfg_box[0]) * (1.0 + p_boost)
+                            if p_rewind > 0.0:
+                                s = float(min(1.0, max(0.0, p_rewind)))
+                                x = (1.0 - s) * x + s * x_prev
                     except Exception:
                         pass
                 if do_inpaint:
@@ -1065,4 +1084,6 @@ class GaussianDiffusion:
                     quantile=float(holy_grail_clamp_quantile),
                     floor=float(holy_grail_clamp_floor),
                 )
+        if return_intermediate_state:
+            return x, x_0_pred, int(last_t_next_val)
         return x_0_pred

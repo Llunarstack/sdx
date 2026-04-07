@@ -20,11 +20,11 @@ def resolve_model_path(folder_name: str, hf_fallback: str) -> str:
     If `model/<folder_name>` exists and is non-empty, use it.
     Otherwise return `hf_fallback` (hub id).
     """
-    local = model_dir() / folder_name
-    if local.is_dir():
+    local_model_path = model_dir() / folder_name
+    if local_model_path.is_dir():
         try:
-            if any(local.iterdir()):
-                return str(local)
+            if any(local_model_path.iterdir()):
+                return str(local_model_path)
         except OSError:
             pass
     return hf_fallback
@@ -169,7 +169,7 @@ def pretrained_catalog() -> List[Dict[str, str]]:
       - hf_fallback
       - resolved
     """
-    rows = [
+    catalog_rows = [
         ("T5-XXL", "google/t5-v1_1-xxl", default_t5_path()),
         ("CLIP-ViT-L-14", "openai/clip-vit-large-patch14", default_clip_l_path()),
         ("CLIP-ViT-bigG-14", "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", default_clip_bigg_path()),
@@ -201,17 +201,17 @@ def pretrained_catalog() -> List[Dict[str, str]]:
         ("LAION-Aesthetic-v2", "christophschuhmann/improved-aesthetic-predictor", default_laion_aesthetic_v2_path()),
         ("AnyDoor-Ref", "camenduru/AnyDoor", default_anydoor_ref_path()),
     ]
-    out: List[Dict[str, str]] = []
-    for name, hf, resolved in rows:
-        out.append(
+    catalog: List[Dict[str, str]] = []
+    for name, hf_fallback, resolved_path in catalog_rows:
+        catalog.append(
             {
                 "name": name,
                 "local_folder": str(model_dir() / name),
-                "hf_fallback": hf,
-                "resolved": str(resolved),
+                "hf_fallback": hf_fallback,
+                "resolved": str(resolved_path),
             }
         )
-    return out
+    return catalog
 
 
 def verify_gen_searcher_8b_local(path: str) -> Dict[str, object]:
@@ -224,7 +224,7 @@ def verify_gen_searcher_8b_local(path: str) -> Dict[str, object]:
       - missing (list[str])
       - found_shards (list[str])
     """
-    p = Path(path)
+    base_path = Path(path)
     required: List[str] = [
         "config.json",
         "generation_config.json",
@@ -243,15 +243,15 @@ def verify_gen_searcher_8b_local(path: str) -> Dict[str, object]:
         "preprocessor_config.json",
         "video_preprocessor_config.json",
     ]
-    if not p.is_dir():
+    if not base_path.is_dir():
         return {
             "is_local_dir": False,
             "all_required_present": False,
             "missing": list(required),
             "found_shards": [],
         }
-    missing = [n for n in required if not (p / n).is_file()]
-    found_shards = sorted([x.name for x in p.glob("model-*-of-*.safetensors") if x.is_file()])
+    missing = [filename for filename in required if not (base_path / filename).is_file()]
+    found_shards = sorted([file_path.name for file_path in base_path.glob("model-*-of-*.safetensors") if file_path.is_file()])
     return {
         "is_local_dir": True,
         "all_required_present": len(missing) == 0,

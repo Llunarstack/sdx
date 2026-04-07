@@ -20,12 +20,12 @@ def load_dit_text_checkpoint(
 
     Returns: (model, config, rae_bridge_or_none, model_name, text_encoder_fusion_sd_or_none)
     """
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = ckpt.get("config")
-    if cfg is None:
+    checkpoint_data = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    config = checkpoint_data.get("config")
+    if config is None:
         raise ValueError("Checkpoint must contain config")
 
-    model_name = getattr(cfg, "model_name", "DiT-XL/2-Text")
+    model_name = getattr(config, "model_name", "DiT-XL/2-Text")
     if reject_enhanced and str(model_name).startswith("EnhancedDiT"):
         raise ValueError(
             "This checkpoint is an EnhancedDiT model, which is not compatible with sample.py (DiT-Text/T5 sampler).\n"
@@ -34,21 +34,21 @@ def load_dit_text_checkpoint(
             "Or train a DiT-*-Text checkpoint with train.py to use sample.py."
         )
 
-    model_fn = DiT_models_text.get(model_name) or DiT_models_text["DiT-XL/2-Text"]
-    model = model_fn(**get_dit_build_kwargs(cfg, class_dropout_prob=0.0))
-    state = ckpt.get("ema") or ckpt.get("model")
-    model.load_state_dict(state, strict=True)
+    model_builder = DiT_models_text.get(model_name) or DiT_models_text["DiT-XL/2-Text"]
+    model = model_builder(**get_dit_build_kwargs(config, class_dropout_prob=0.0))
+    model_state_dict = checkpoint_data.get("ema") or checkpoint_data.get("model")
+    model.load_state_dict(model_state_dict, strict=True)
     model = model.to(device).eval()
 
     rae_bridge = None
-    sd_b = ckpt.get("rae_latent_bridge")
-    if isinstance(sd_b, dict) and sd_b.get("to_dit.weight") is not None:
-        rae_c = int(sd_b["to_dit.weight"].shape[1])
-        rae_bridge = RAELatentBridge(rae_c, 4)
-        rae_bridge.load_state_dict(sd_b, strict=True)
+    rae_bridge_state_dict = checkpoint_data.get("rae_latent_bridge")
+    if isinstance(rae_bridge_state_dict, dict) and rae_bridge_state_dict.get("to_dit.weight") is not None:
+        rae_channels = int(rae_bridge_state_dict["to_dit.weight"].shape[1])
+        rae_bridge = RAELatentBridge(rae_channels, 4)
+        rae_bridge.load_state_dict(rae_bridge_state_dict, strict=True)
         rae_bridge = rae_bridge.to(device).eval()
 
-    fusion_sd = ckpt.get("text_encoder_fusion")
-    if not isinstance(fusion_sd, dict):
-        fusion_sd = None
-    return model, cfg, rae_bridge, str(model_name), fusion_sd
+    fusion_state_dict = checkpoint_data.get("text_encoder_fusion")
+    if not isinstance(fusion_state_dict, dict):
+        fusion_state_dict = None
+    return model, config, rae_bridge, str(model_name), fusion_state_dict
