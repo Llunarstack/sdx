@@ -3,7 +3,7 @@
 One-off / dev helper: mine short snippets from the Civitai CSV for pasting into content_controls.
 
 Usage:
-  python scripts/tools/extract_civitai_snippets_for_content_controls.py > snippets.txt
+  python -m scripts.tools extract_civitai_snippets_for_content_controls > snippets.txt
 """
 
 from __future__ import annotations

@@ -209,7 +209,9 @@ def main() -> int:
         # 2) DPO stage-2.
         dpo_cmd = [
             sys.executable,
-            str(root / "scripts" / "tools" / "training" / "train_diffusion_dpo.py"),
+            "-m",
+            "scripts.tools",
+            "train_diffusion_dpo",
             "--ckpt",
             str(current_base),
             "--preference-jsonl",

@@ -1,40 +1,142 @@
 pack,mode,tag
 style_positive,3d,3d render
+style_positive,3d,strong 3d render
+style_positive,3d,more 3d render
+style_positive,3d,3d render discipline
 style_positive,3d,cg render
+style_positive,3d,strong cg render
+style_positive,3d,more cg render
+style_positive,3d,cg render discipline
 style_positive,3d,solid geometry
+style_positive,3d,strong solid geometry
+style_positive,3d,more solid geometry
+style_positive,3d,solid geometry discipline
 style_positive,3d,consistent material shading
+style_positive,3d,strong consistent material shading
+style_positive,3d,more consistent material shading
+style_positive,3d,consistent material shading discipline
 style_positive,3d,octane-style lighting
+style_positive,3d,strong octane-style lighting
+style_positive,3d,more octane-style lighting
+style_positive,3d,octane-style lighting discipline
 style_positive,photoreal,photorealistic
+style_positive,photoreal,strong photorealistic
+style_positive,photoreal,photorealistic discipline
 style_positive,photoreal,real-world textures
+style_positive,photoreal,strong real-world textures
+style_positive,photoreal,more real-world textures
+style_positive,photoreal,real-world textures discipline
 style_positive,photoreal,natural skin/material detail
+style_positive,photoreal,strong natural skin/material detail
+style_positive,photoreal,more natural skin/material detail
+style_positive,photoreal,natural skin/material detail discipline
 style_positive,photoreal,camera-realistic lighting
+style_positive,photoreal,strong camera-realistic lighting
+style_positive,photoreal,more camera-realistic lighting
+style_positive,photoreal,camera-realistic lighting discipline
 style_positive,photoreal,lens-consistent perspective
+style_positive,photoreal,strong lens-consistent perspective
+style_positive,photoreal,more lens-consistent perspective
+style_positive,photoreal,perspective consistency
+style_positive,photoreal,lens-consistent perspective discipline
+style_positive,photoreal,literal texture scale from brief
+style_positive,photoreal,strong literal texture scale from brief
+style_positive,photoreal,more literal texture scale from brief
+style_positive,photoreal,literal texture scale from brief discipline
 style_positive,semi_real,semi-realistic
+style_positive,semi_real,strong semi-realistic
+style_positive,semi_real,semi-realistic discipline
 style_positive,semi_real,stylized realism
+style_positive,semi_real,strong stylized realism
+style_positive,semi_real,more stylized realism
+style_positive,semi_real,stylized realism discipline
 style_positive,semi_real,balanced stylization and realism
+style_positive,semi_real,strong balanced stylization and realism
+style_positive,semi_real,more balanced stylization and realism
+style_positive,semi_real,balance and stabilityd stylization and realism
+style_positive,semi_real,balanced stylization and realism discipline
 style_positive,anime,anime style
+style_positive,anime,strong anime style
+style_positive,anime,more anime style
+style_positive,anime,anime style discipline
 style_positive,anime,clean linework
+style_positive,anime,strong clean linework
+style_positive,anime,more clean linework
+style_positive,anime,clean linework discipline
 style_positive,anime,coherent cel-shading
+style_positive,anime,strong coherent cel-shading
+style_positive,anime,more coherent cel-shading
+style_positive,anime,coherent cel-shading discipline
 style_positive,painterly,painterly style
+style_positive,painterly,strong painterly style
+style_positive,painterly,more painterly style
+style_positive,painterly,painterly style discipline
 style_positive,painterly,brushwork detail
+style_positive,painterly,strong brushwork detail
+style_positive,painterly,more brushwork detail
+style_positive,painterly,brushwork detail discipline
 style_positive,painterly,coherent painted textures
+style_positive,painterly,strong coherent painted textures
+style_positive,painterly,more coherent painted textures
+style_positive,painterly,coherent painted textures discipline
 style_positive,3d_photoreal,photorealistic 3d render
+style_positive,3d_photoreal,strong photorealistic 3d render
+style_positive,3d_photoreal,more photorealistic 3d render
+style_positive,3d_photoreal,photorealistic 3d render discipline
 style_positive,3d_photoreal,realistic cg materials
+style_positive,3d_photoreal,strong realistic cg materials
+style_positive,3d_photoreal,more realistic cg materials
+style_positive,3d_photoreal,realistic cg materials discipline
 style_positive,3d_photoreal,cinematic physically based lighting
+style_positive,3d_photoreal,strong cinematic physically based lighting
+style_positive,3d_photoreal,more cinematic physically based lighting
+style_positive,3d_photoreal,cinematic physically based lighting discipline
 style_negative,3d,flat 2d look
+style_negative,3d,strong flat 2d look
+style_negative,3d,more flat 2d look
+style_negative,3d,flat 2d look discipline
 style_negative,3d,painted texture smear
+style_negative,3d,strong painted texture smear
+style_negative,3d,more painted texture smear
+style_negative,3d,painted texture smear discipline
 style_negative,3d,broken geometry
+style_negative,3d,strong broken geometry
+style_negative,3d,more broken geometry
+style_negative,3d,broken geometry discipline
 style_negative,3d,plastic artifacting
+style_negative,3d,strong plastic artifacting
+style_negative,3d,more plastic artifacting
+style_negative,3d,plastic artifacting discipline
 style_negative,photoreal,cartoon look
+style_negative,photoreal,strong cartoon look
+style_negative,photoreal,more cartoon look
+style_negative,photoreal,cartoon look discipline
 style_negative,photoreal,anime lineart
+style_negative,photoreal,strong anime lineart
+style_negative,photoreal,more anime lineart
+style_negative,photoreal,anime lineart discipline
 style_negative,photoreal,cgi plastic skin
+style_negative,photoreal,strong cgi plastic skin
+style_negative,photoreal,more cgi plastic skin
+style_negative,photoreal,cgi plastic skin discipline
 style_negative,photoreal,painterly brush strokes
+style_negative,photoreal,strong painterly brush strokes
+style_negative,photoreal,more painterly brush strokes
+style_negative,photoreal,painterly brush strokes discipline
 style_negative,semi_real,style collapse
+style_negative,semi_real,strong style collapse
+style_negative,semi_real,more style collapse
+style_negative,semi_real,style collapse discipline
 style_negative,semi_real,over-cartooned
+style_negative,semi_real,strong over-cartooned
+style_negative,semi_real,over-cartooned discipline
 style_negative,semi_real,over-photographic mismatch
+style_negative,semi_real,strong over-photographic mismatch
+style_negative,semi_real,more over-photographic mismatch
 style_negative,anime,photographic pores
 style_negative,anime,uncanny realism
 style_negative,anime,muddy linework
+style_negative,anime,style contradicts photoreal request
 style_negative,painterly,photo artifacts
 style_negative,painterly,over-sharp photographic texture
 style_negative,painterly,style inconsistency
@@ -44,16 +146,20 @@ style_negative,3d_photoreal,non-physical reflections
 style_lock_positive,_,style consistency
 style_lock_positive,_,single coherent art direction
 style_lock_positive,_,uniform rendering style
+style_lock_positive,_,prompt-locked rendering medium
+style_lock_positive,_,no medium swap mid-image
 style_lock_negative,_,style bleed
 style_lock_negative,_,mixed incompatible styles
 style_lock_negative,_,style drift
 style_lock_negative,_,visual style inconsistency
+style_lock_negative,_,medium drift from prompt
 human_media_positive,photographic,authentic photograph
 human_media_positive,photographic,believable exposure
 human_media_positive,photographic,natural dynamic range
 human_media_positive,photographic,real world texture
 human_media_positive,photographic,photographic composition
 human_media_positive,photographic,captured image not rendered
+human_media_positive,photographic,exposure matches stated lighting words
 human_media_positive,dslr,dslr photograph
 human_media_positive,dslr,full frame look
 human_media_positive,dslr,natural lens bokeh
@@ -70,6 +176,7 @@ human_media_negative,photographic,cg render
 human_media_negative,photographic,game engine screenshot
 human_media_negative,photographic,3d model turntable
 human_media_negative,photographic,fake hdr
+human_media_negative,photographic,look contradicts film vs digital cue
 human_media_negative,dslr,phone computational mush
 human_media_negative,dslr,over processed smartphone hdr
 human_media_negative,film,digital noise pattern
@@ -78,6 +185,7 @@ lora_scaffold_positive,blend,coherent lora fusion
 lora_scaffold_positive,blend,unified adaptation
 lora_scaffold_positive,blend,single harmonized style
 lora_scaffold_positive,blend,consistent trigger strength feel
+lora_scaffold_positive,blend,prompt weights reflected in fusion
 lora_scaffold_positive,character_first,locked character design
 lora_scaffold_positive,character_first,consistent facial structure
 lora_scaffold_positive,character_first,same outfit logic
@@ -92,15 +200,7 @@ lora_scaffold_negative,blend,ghosting from stacked loras
 lora_scaffold_negative,character_first,character face drift
 lora_scaffold_negative,character_first,morphing identity
 lora_scaffold_negative,character_first,inconsistent character
+lora_scaffold_negative,character_first,ignored character tag order
 lora_scaffold_negative,style_first,weak style adherence
 lora_scaffold_negative,style_first,washed lora effect
 lora_scaffold_negative,style_first,conflicting style cues
-style_lock_positive,_,prompt-locked rendering medium
-style_lock_positive,_,no medium swap mid-image
-style_lock_negative,_,medium drift from prompt
-style_positive,photoreal,literal texture scale from brief
-style_negative,anime,style contradicts photoreal request
-human_media_positive,photographic,exposure matches stated lighting words
-human_media_negative,photographic,look contradicts film vs digital cue
-lora_scaffold_positive,blend,prompt weights reflected in fusion
-lora_scaffold_negative,character_first,ignored character tag order

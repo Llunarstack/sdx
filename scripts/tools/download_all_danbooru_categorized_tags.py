@@ -10,8 +10,8 @@ Any unknown CLI flags are forwarded to ``fetch_danbooru_tags.py`` (e.g. ``--max-
 
 Examples::
 
-    python scripts/tools/download_all_danbooru_categorized_tags.py
-    python scripts/tools/download_all_danbooru_categorized_tags.py --max-pages 10 --sleep 0.2
+    python -m scripts.tools download_all_danbooru_categorized_tags
+    python -m scripts.tools download_all_danbooru_categorized_tags --max-pages 10 --sleep 0.2
 """
 
 from __future__ import annotations

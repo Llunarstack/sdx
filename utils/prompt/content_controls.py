@@ -8,7 +8,7 @@ shared helpers (dedupe, optional per-mode negatives, Civitai bank loaders).
 buckets; Danbooru-style comma prompts use tag-set matching for count tokens (1girl / solo / 2girls).
 
 Tag text lives under ``data/prompt_tags/*.csv`` (see ``utils/prompt/content_control_tag_data.py``).
-Regenerate from Python snapshots: ``python scripts/tools/dump_prompt_tag_csvs.py``.
+Regenerate from Python snapshots: ``python -m scripts.tools dump_prompt_tag_csvs``.
 """
 # ruff: noqa: F405
 
@@ -68,7 +68,7 @@ def load_civitai_frequency_triggers(
     """
     Load triggers from ``top_triggers_by_frequency.txt`` (one token per line, most common first).
 
-    Regenerate that file with ``python scripts/tools/curate_civitai_triggers.py``.
+    Regenerate that file with ``python -m scripts.tools curate_civitai_triggers``.
     """
     cap = max(0, int(max_tokens))
     if cap == 0:
@@ -445,6 +445,49 @@ def infer_content_controls_from_prompt(prompt: str) -> Dict[str, str]:
     if inferred_adherence != "none":
         out["adherence_pack"] = inferred_adherence
 
+    if _contains_any(
+        p,
+        (
+            "academic composition",
+            "classical composition",
+            "golden ratio",
+            "golden spiral",
+            "dynamic symmetry",
+            "notan",
+            "chiaroscuro composition",
+            "arabesque",
+        ),
+    ):
+        out["artist_composition"] = "classical"
+    elif _contains_any(
+        p,
+        (
+            "one point perspective",
+            "1-point perspective",
+            "two point perspective",
+            "2-point perspective",
+            "three point perspective",
+            "3-point perspective",
+            "vanishing point",
+            "horizon line",
+            "orthogonal perspective",
+        ),
+    ):
+        out["artist_composition"] = "perspective"
+    elif _contains_any(
+        p,
+        (
+            "rule of thirds",
+            "leading lines",
+            "negative space",
+            "visual weight",
+            "focal plane",
+        ),
+    ):
+        out["artist_composition"] = "standard"
+    elif _contains_any(p, ("strong composition", "focal point", "visual hierarchy", "picture plane")):
+        out["artist_composition"] = "lite"
+
     return out
 
 
@@ -485,6 +528,7 @@ def apply_content_controls(
     style_lock: bool = False,
     anti_style_bleed: bool = False,
     composition_mode: str = "none",
+    artist_composition: str = "none",
     anti_duplicate_subjects: bool = False,
     anti_perspective_drift: bool = False,
     cleanup_conflicting_tags: bool = False,
@@ -577,6 +621,7 @@ def apply_content_controls(
         n = _append_unique_csv(n, _STYLE_LOCK_NEGATIVE)
 
     p, n = _merge_kv_pack(p, n, composition_mode, _COMPOSITION_POSITIVE, _COMPOSITION_NEGATIVE)
+    p, n = _merge_kv_pack(p, n, artist_composition, _ARTIST_COMPOSITION_POSITIVE, _ARTIST_COMPOSITION_NEGATIVE)
 
     if anti_duplicate_subjects:
         n = _append_unique_csv(n, _DUPLICATE_SUBJECT_NEGATIVE)

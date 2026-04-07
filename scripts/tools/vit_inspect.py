@@ -3,8 +3,8 @@
 Inspect a ViT quality/adherence checkpoint: config, parameter count, optional module tree.
 
 Usage:
-    python scripts/tools/vit_inspect.py path/to/ViT/best.pt
-    python scripts/tools/vit_inspect.py path/to/best.pt --tree --tree-depth 3
+    python -m scripts.tools vit_inspect path/to/vit_quality/best.pt
+    python -m scripts.tools vit_inspect path/to/best.pt --tree --tree-depth 3
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def main() -> int:
     args = p.parse_args()
 
     from utils.modeling.nn_inspect import format_module_tree
-    from ViT.checkpoint_utils import load_vit_quality_checkpoint, vit_model_parameter_report
+    from vit_quality.checkpoint_utils import load_vit_quality_checkpoint, vit_model_parameter_report
 
     path = Path(args.ckpt)
     if not path.is_file():

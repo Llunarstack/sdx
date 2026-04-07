@@ -3,12 +3,12 @@ Top trigger tokens from ``data/civitai/nsfw_illustrious_noobai_models.csv`` (fre
 
 Regenerate after refreshing the CSV::
 
-    python scripts/tools/curate_civitai_triggers.py
+    python -m scripts.tools curate_civitai_triggers
 """
 
 from __future__ import annotations
 
-# Regenerate: python scripts/tools/curate_civitai_triggers.py
+# Regenerate: python -m scripts.tools curate_civitai_triggers
 CIVITAI_HOT_TAGS = [
     '1girl',
     'long hair',

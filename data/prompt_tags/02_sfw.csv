@@ -1,40 +1,139 @@
 pack,mode,tag
 sfw_positive,_,sfw
+sfw_positive,_,strong sfw
+sfw_positive,_,sfw discipline
 sfw_positive,_,safe for work
+sfw_positive,_,strong safe for work
+sfw_positive,_,more safe for work
+sfw_positive,_,safe for work discipline
 sfw_positive,_,tasteful
+sfw_positive,_,strong tasteful
+sfw_positive,_,tasteful discipline
 sfw_positive,_,non-explicit
+sfw_positive,_,strong non-explicit
+sfw_positive,_,non-explicit discipline
 sfw_positive,_,wholesome presentation
+sfw_positive,_,strong wholesome presentation
+sfw_positive,_,more wholesome presentation
+sfw_positive,_,wholesome presentation discipline
 sfw_positive,_,clean composition
+sfw_positive,_,strong clean composition
+sfw_positive,_,more clean composition
+sfw_positive,_,clean composition discipline
 sfw_positive,_,clear focal subject
+sfw_positive,_,strong focal subject
+sfw_positive,_,more clear focal subject
+sfw_positive,_,clear focal subject discipline
 sfw_positive,_,single coherent scene
+sfw_positive,_,strong single coherent scene
+sfw_positive,_,more single coherent scene
+sfw_positive,_,single coherent scene discipline
 sfw_positive,_,readable pose
+sfw_positive,_,strong readable pose
+sfw_positive,_,more readable pose
+sfw_positive,_,readable pose discipline
 sfw_positive,_,balanced composition
+sfw_positive,_,strong balanced composition
+sfw_positive,_,more balanced composition
+sfw_positive,_,balance and stabilityd composition
+sfw_positive,_,balanced composition discipline
 sfw_positive,_,expressive eyes
+sfw_positive,_,strong expressive eyes
+sfw_positive,_,more expressive eyes
+sfw_positive,_,expressive eyes discipline
 sfw_positive,_,natural skin texture
+sfw_positive,_,strong natural skin texture
+sfw_positive,_,more natural skin texture
+sfw_positive,_,natural skin texture discipline
 sfw_positive,_,storytelling moment
+sfw_positive,_,strong storytelling moment
+sfw_positive,_,more storytelling moment
+sfw_positive,_,storytelling moment discipline
 sfw_positive,_,atmospheric depth
+sfw_positive,_,strong atmospheric depth
+sfw_positive,_,more atmospheric depth
+sfw_positive,_,atmospheric depth discipline
 sfw_positive,_,environment harmony
+sfw_positive,_,strong environment harmony
+sfw_positive,_,more environment harmony
+sfw_positive,_,environment harmony discipline
 sfw_positive,_,__REF__:best_model_tags
+sfw_positive,_,strong __REF__:best_model_tags
 sfw_positive,_,beautiful lighting
+sfw_positive,_,strong beautiful lighting
+sfw_positive,_,more beautiful lighting
+sfw_positive,_,beautiful lighting discipline
 sfw_positive,_,coherent colors
+sfw_positive,_,strong coherent colors
+sfw_positive,_,more coherent colors
+sfw_positive,_,coherent colors discipline
 sfw_positive,_,elegant
+sfw_positive,_,strong elegant
+sfw_positive,_,elegant discipline
 sfw_positive,_,graceful
+sfw_positive,_,strong graceful
+sfw_positive,_,graceful discipline
 sfw_positive,_,serene mood
+sfw_positive,_,strong serene mood
+sfw_positive,_,more serene mood
+sfw_positive,_,serene mood discipline
 sfw_positive,_,peaceful atmosphere
+sfw_positive,_,strong peaceful atmosphere
+sfw_positive,_,more peaceful atmosphere
+sfw_positive,_,peaceful atmosphere discipline
 sfw_positive,_,heartwarming
+sfw_positive,_,strong heartwarming
+sfw_positive,_,heartwarming discipline
 sfw_positive,_,uplifting
+sfw_positive,_,strong uplifting
+sfw_positive,_,uplifting discipline
 sfw_positive,_,artistic
+sfw_positive,_,strong artistic
+sfw_positive,_,artistic discipline
 sfw_positive,_,emotional depth
+sfw_positive,_,strong emotional depth
+sfw_positive,_,more emotional depth
+sfw_positive,_,emotional depth discipline
 sfw_positive,_,kawaii aesthetic
+sfw_positive,_,strong kawaii aesthetic
+sfw_positive,_,more kawaii aesthetic
+sfw_positive,_,kawaii aesthetic discipline
 sfw_positive,_,cute charm
+sfw_positive,_,strong cute charm
+sfw_positive,_,more cute charm
+sfw_positive,_,cute charm discipline
 sfw_positive,_,character focus
+sfw_positive,_,strong character focus
+sfw_positive,_,more character focus
+sfw_positive,_,character focus discipline
 sfw_positive,_,detailed clothing folds
+sfw_positive,_,strong detailed clothing folds
+sfw_positive,_,more detailed clothing folds
+sfw_positive,_,detailed clothing folds discipline
 sfw_positive,_,detailed background
+sfw_positive,_,strong detailed background
+sfw_positive,_,more detailed background
+sfw_positive,_,detailed background discipline
 sfw_positive,_,concept art
+sfw_positive,_,strong concept art
+sfw_positive,_,more concept art
+sfw_positive,_,concept art discipline
 sfw_positive,_,style consistent
+sfw_positive,_,strong style consistent
+sfw_positive,_,more style consistent
+sfw_positive,_,style consistent discipline
 sfw_positive,_,cinematic composition
+sfw_positive,_,strong cinematic composition
+sfw_positive,_,more cinematic composition
+sfw_positive,_,cinematic composition discipline
 sfw_positive,_,professional finish
+sfw_positive,_,strong professional finish
+sfw_positive,_,more professional finish
+sfw_positive,_,professional finish discipline
 sfw_positive,_,soft diffused light
+sfw_positive,_,strong soft diffused light
+sfw_positive,_,more soft diffused light
+sfw_positive,_,soft diffused light discipline
 sfw_positive,_,warm inviting tones
 sfw_positive,_,pastel palette
 sfw_positive,_,dreamy atmosphere

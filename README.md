@@ -86,7 +86,7 @@ SDX is for people who want to understand and modify what's happening — not jus
 
 ## Gallery
 
-> Generate your own gallery: `python scripts/tools/dev/make_gallery.py --ckpt results/.../best.pt`
+> Generate your own gallery: `python -m scripts.tools make_gallery --ckpt results/.../best.pt`
 >
 > Images will be saved to `docs/assets/gallery/` and a grid to `docs/assets/gallery/gallery_grid.png`.
 
@@ -119,7 +119,7 @@ python sample.py \
 Verify the setup runs without errors before committing to a full training run:
 
 ```bash
-python scripts/tools/dev/quick_test.py
+python -m scripts.tools quick_test
 ```
 
 Startup-first readiness report (no training run required):
@@ -342,6 +342,26 @@ python sample.py \
 
 Run `python sample.py --help` for the full list.
 
+### Test-time scaling, beam search, and pick reports (v5)
+
+- **`--pick-best` / `--pick-best auto`**: score multiple candidates (`--num`) and keep the best. With `--pick-vit-ckpt`, auto routes to ViT-aware metrics (`combo_vit_hq`, `combo_count_vit`, `combo_vit_realism`).
+- **`--pick-auto-no-clip`**: auto pick with minimal CLIP use (`aesthetic`, `aesthetic_realism`, `ocr`; count mode still uses CLIP inside `combo_count`).
+- **Beam search** (`--beam-width`, `--beam-steps`): multi-seed early denoise, score previews, continue the winner. **Micro-beam** (`--beam2-*`): branch again mid-sample. Default beam metric is **`combo_vit_hq`** when `--pick-vit-ckpt` is set.
+- **CLIP monitor + rewind** (`--clip-monitor-every`, `--clip-monitor-rewind`): optional CFG boost and soft latent rewind on low CLIP alignment.
+- **`--pick-report-json`**: JSON sidecar (beam + final pick scores) for debugging and preference mining toward Diffusion DPO.
+
+```bash
+python sample.py --ckpt results/.../best.pt --prompt "..." --num 4 --pick-best auto \
+  --pick-vit-ckpt vit_quality/runs/best.pt --pick-report-json out/pick_report.json --out out.png
+
+python sample.py --ckpt results/.../best.pt --prompt "..." --num 1 --steps 40 \
+  --beam-width 6 --beam-steps 10 --pick-vit-ckpt vit_quality/runs/best.pt --out out.png
+```
+
+**Data curation:** `python -m scripts.tools manifest_enrich` (adds `aesthetic_proxy`, optional `clip_sim`); `python -m scripts.tools data_quality` with `--min-clip-sim` / `--min-aesthetic-proxy`.
+
+**Training:** `python -m scripts.tools train_diffusion_dpo` supports `--dpo-logit-clip` and `--sync-ref-every`. **ViT:** `vit_quality/train.py` accepts `--timm-kwargs` JSON for advanced timm backbones.
+
 ### Hybrid TCIS generation loop (recommended for hard prompts)
 
 Use the dispatcher tool to run iterative generation with consensus scoring, optional shape-first scaffold synthesis, and adaptive candidate budgeting:
@@ -349,7 +369,7 @@ Use the dispatcher tool to run iterative generation with consensus scoring, opti
 ```bash
 python -m scripts.tools hybrid_dit_vit_generate \
   --ckpt results/.../best.pt \
-  --vit-ckpt ViT/runs/best.pt \
+  --vit-ckpt vit_quality/runs/best.pt \
   --prompt "poster with title \"NEON STORM\", exactly 2 characters, full body, cinematic rain" \
   --out outputs/tcis.png \
   --num 6 \
@@ -538,7 +558,8 @@ sdx/
 │
 ├── scripts/                  # Download, setup, and tooling scripts
 ├── native/                   # Optional C++/CUDA/Rust acceleration
-├── ViT/                      # Vision Transformer standalone training module
+├── vit_quality/              # Canonical ViT quality/adherence package
+├── ViT/                      # Legacy compatibility namespace for vit_quality
 ├── pipelines/                # High-level generation pipelines (book/comic, etc.)
 ├── toolkit/                  # QoL helpers: env health, seeds, timing, manifest digest
 │
@@ -547,6 +568,16 @@ sdx/
 ├── results/                  # Training run outputs (gitignored)
 ├── docs/                     # All documentation
 └── external/                 # Reference repos (DiT, ControlNet, Flux, etc.)
+```
+
+Canonical command/import surface uses `vit_quality.*`; legacy `ViT.*` launchers/imports are retained as compatibility shims:
+
+```bash
+# Canonical
+python -m vit_quality.train --help
+
+# Legacy-compatible (shim)
+python -m ViT.train --help
 ```
 
 ---
@@ -564,6 +595,7 @@ sdx/
 | [`docs/DIFFUSION_LEVERAGE_ROADMAP.md`](docs/DIFFUSION_LEVERAGE_ROADMAP.md) | High-impact quality priorities |
 | [`docs/MODEL_WEAKNESSES.md`](docs/MODEL_WEAKNESSES.md) | Known failure modes and mitigations |
 | [`docs/COMMON_SHORTCOMINGS_AI_IMAGES.md`](docs/COMMON_SHORTCOMINGS_AI_IMAGES.md) | Common image-gen failure catalog and mitigation mapping |
+| [`DEPRECATIONS.md`](DEPRECATIONS.md) | Canonical import paths and active compatibility shims |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
 | [`docs/releases/v4.md`](docs/releases/v4.md) | v4 release: uncertainty-scaled TCIS, elite-memory diversity bonus, and annealed constraint consensus |
@@ -585,7 +617,7 @@ ruff format .
 pytest tests/ -v
 
 # Quick smoke test (no GPU needed)
-python scripts/tools/dev/quick_test.py
+python -m scripts.tools quick_test
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide.

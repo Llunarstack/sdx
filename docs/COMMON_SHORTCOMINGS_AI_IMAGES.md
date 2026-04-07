@@ -138,4 +138,4 @@ Limitations cluster around: **no grounded physical simulation**; **correlational
 - **Inference framing:** `python sample.py ... --resize-mode center_crop|saliency_crop` (optional `--resize-saliency-face-bias`) to reduce stretched/non-semantic framing when target aspect differs.
 - **Training:** `python train.py ... --train-shortcomings-mitigation auto|all --train-art-guidance-mode auto|all` with optional `--train-shortcomings-2d`, `--train-anatomy-guidance`, `--no-train-art-guidance-photography`.
 - **Training (style domains):** `python train.py ... --train-style-guidance-mode auto|all` (optional `--no-train-style-guidance-artists`).
-- **Offline manifests:** `python -m scripts.tools.normalize_captions ... --shortcomings-mitigation auto --art-guidance-mode auto --style-guidance-mode auto` (plus optional 2D/anatomy toggles).
+- **Offline manifests:** `python -m scripts.tools normalize_captions ... --shortcomings-mitigation auto --art-guidance-mode auto --style-guidance-mode auto` (plus optional 2D/anatomy toggles).

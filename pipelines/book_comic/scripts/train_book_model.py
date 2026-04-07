@@ -90,6 +90,21 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--manifest-min-caption-len", type=int, default=0)
     p.add_argument("--manifest-max-caption-len", type=int, default=0)
+
+    p.add_argument(
+        "--manifest-gate",
+        action="store_true",
+        help="Run manifest_gate (prompt lint + hygiene + optional image QC) before training.",
+    )
+    p.add_argument("--manifest-gate-image-qc", action="store_true", help="Include image sharpness/contrast QC in gate.")
+    p.add_argument("--manifest-gate-image-root", type=str, default="", help="Optional base dir for image paths during QC.")
+    p.add_argument("--manifest-gate-sample", type=int, default=0, help="Image QC sample size (0=all).")
+    p.add_argument("--manifest-gate-min-sharpness", type=float, default=0.0)
+    p.add_argument("--manifest-gate-min-contrast", type=float, default=0.0)
+    p.add_argument("--manifest-gate-max-caption-tokens", type=int, default=0)
+    p.add_argument("--manifest-gate-fail-on-overlap", action="store_true")
+    p.add_argument("--manifest-gate-report-dups", action="store_true")
+    p.add_argument("--manifest-gate-fail-on-dup-groups", type=int, default=0)
     return p
 
 
@@ -130,6 +145,43 @@ def main() -> int:
             print(info["rust_stats_stdout"])
         if args.strict_native and info["rust_validate_ok"] is False:
             print("[book_train] strict-native enabled: aborting due to failed Rust manifest validate.")
+            return 2
+
+    if args.manifest_gate and str(args.manifest_jsonl).strip():
+        manifest = Path(args.manifest_jsonl)
+        gate_cmd = [
+            sys.executable,
+            "-m",
+            "scripts.tools",
+            "manifest_gate",
+            str(manifest),
+            "--min-caption-len-chars",
+            str(int(args.manifest_min_caption_len)),
+            "--max-caption-tokens",
+            str(int(args.manifest_gate_max_caption_tokens)),
+        ]
+        if bool(args.manifest_gate_fail_on_overlap):
+            gate_cmd.append("--fail-on-overlap")
+        if bool(args.manifest_gate_report_dups):
+            gate_cmd.append("--report-dups")
+        if int(args.manifest_gate_fail_on_dup_groups) > 0:
+            gate_cmd.extend(["--fail-on-dup-groups", str(int(args.manifest_gate_fail_on_dup_groups))])
+        if bool(args.manifest_gate_image_qc):
+            gate_cmd.append("--image-qc")
+            if str(args.manifest_gate_image_root).strip():
+                gate_cmd.extend(["--image-root", str(args.manifest_gate_image_root).strip()])
+            if int(args.manifest_gate_sample) > 0:
+                gate_cmd.extend(["--sample", str(int(args.manifest_gate_sample))])
+            if float(args.manifest_gate_min_sharpness) > 0.0:
+                gate_cmd.extend(["--min-sharpness", str(float(args.manifest_gate_min_sharpness))])
+            if float(args.manifest_gate_min_contrast) > 0.0:
+                gate_cmd.extend(["--min-contrast", str(float(args.manifest_gate_min_contrast))])
+
+        print("[book_train] Manifest gate")
+        print(" ", " ".join(gate_cmd))
+        rc = subprocess.run(gate_cmd, cwd=ROOT).returncode
+        if rc != 0:
+            print("[book_train] manifest_gate failed; aborting.")
             return 2
 
     settings = resolve_book_train_settings(args)

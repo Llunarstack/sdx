@@ -11,12 +11,12 @@ Uses ``train.encode_text`` with ``load_text_encoder_bundle`` when the checkpoint
 
 Example::
 
-    python scripts/tools/training/train_diffusion_dpo.py \\
+    python -m scripts.tools train_diffusion_dpo \\
         --ckpt results/best.pt \\
         --preference-jsonl data/prefs.jsonl \\
         --image-root data/images \\
         --out results/dpo_policy.pt \\
-        --steps 500 --batch-size 2 --dpo-beta 300
+        --steps 500 --batch-size 2 --dpo-beta 300 --dpo-logit-clip 40
 """
 
 from __future__ import annotations
@@ -81,6 +81,18 @@ def main() -> int:
     ap.add_argument("--batch-size", type=int, default=2)
     ap.add_argument("--lr", type=float, default=1e-6)
     ap.add_argument("--dpo-beta", type=float, default=500.0)
+    ap.add_argument(
+        "--dpo-logit-clip",
+        type=float,
+        default=40.0,
+        help="Clamp |β·Δimplicit_logp| before logsigmoid (0=off). Reduces exploding grads with large beta.",
+    )
+    ap.add_argument(
+        "--sync-ref-every",
+        type=int,
+        default=0,
+        help="If >0: copy policy weights into the frozen reference every n steps (keeps DPO margin meaningful).",
+    )
     ap.add_argument("--save-every", type=int, default=250)
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--max-caption-length", type=int, default=300)
@@ -241,12 +253,14 @@ def main() -> int:
                     **sk,
                 )
 
+        lc = float(args.dpo_logit_clip)
         dpo = dpo_preference_loss(
             -loss_w_p.float(),
             -loss_l_p.float(),
             -loss_w_r.float(),
             -loss_l_r.float(),
             beta=float(args.dpo_beta),
+            logit_clip=lc if lc > 0.0 else None,
         )
 
         opt.zero_grad(set_to_none=True)
@@ -259,6 +273,11 @@ def main() -> int:
             opt.step()
 
         global_step += 1
+        if int(args.sync_ref_every) > 0 and global_step % int(args.sync_ref_every) == 0:
+            ref.load_state_dict(policy.state_dict())
+            ref.eval()
+            for p in ref.parameters():
+                p.requires_grad = False
         if global_step % 50 == 0:
             print(f"step {global_step} dpo_loss={float(dpo.detach().cpu()):.6f}")
         if args.save_every > 0 and global_step % args.save_every == 0:

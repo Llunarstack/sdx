@@ -7,7 +7,6 @@ Requires training with the same mode; fusion weights are saved in checkpoints as
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -17,19 +16,20 @@ import torch.nn as nn
 
 from utils.modeling.model_paths import default_clip_bigg_path, default_clip_l_path, default_t5_path
 from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
+from utils.runtime.jsonutil import loads as json_loads
 
 
 def _read_clip_text_hidden_size(model_dir: str) -> int:
-    p = Path(model_dir) / "config.json"
-    if not p.is_file():
+    config_path = Path(model_dir) / "config.json"
+    if not config_path.is_file():
         return 768
     try:
-        with p.open("r", encoding="utf-8") as f:
-            cfg = json.load(f)
+        with config_path.open("r", encoding="utf-8") as file_handle:
+            config_data = json_loads(file_handle.read())
         # HF CLIPTextModel
-        if "text_config" in cfg and isinstance(cfg["text_config"], dict):
-            return int(cfg["text_config"].get("hidden_size", 768))
-        return int(cfg.get("hidden_size", 768))
+        if "text_config" in config_data and isinstance(config_data["text_config"], dict):
+            return int(config_data["text_config"].get("hidden_size", 768))
+        return int(config_data.get("hidden_size", 768))
     except Exception:
         return 768
 
@@ -143,10 +143,10 @@ class TextEncoderBundle:
         if self.mode != "triple" or self.fusion is None:
             return _t5_out()
         with torch.no_grad():
-            t5_h = _t5_out()
-            cl = self._clip_pooled(self.clip_text_l, self.clip_tokenizer_l, clip_src, device, dtype)
-            cbg = self._clip_pooled(self.clip_text_bg, self.clip_tokenizer_bg, clip_src, device, dtype)
-        fused = self.fusion(t5_h, cl, cbg)
+            t5_hidden = _t5_out()
+            clip_l_pooled = self._clip_pooled(self.clip_text_l, self.clip_tokenizer_l, clip_src, device, dtype)
+            clip_bg_pooled = self._clip_pooled(self.clip_text_bg, self.clip_tokenizer_bg, clip_src, device, dtype)
+        fused = self.fusion(t5_hidden, clip_l_pooled, clip_bg_pooled)
         if train_fusion:
             return fused
         return fused.detach()
@@ -162,12 +162,12 @@ def attach_fusion_weights(bundle: TextEncoderBundle, fusion_sd: dict) -> None:
 
 def load_fusion_from_state_dict(sd: dict, device: torch.device) -> TripleTextFusion:
     """Rebuild TripleTextFusion from a checkpoint state dict."""
-    w = sd["proj_l.weight"]
-    clip_l_dim, out_dim = int(w.shape[1]), int(w.shape[0])
+    proj_l_weight = sd["proj_l.weight"]
+    clip_l_dim, out_dim = int(proj_l_weight.shape[1]), int(proj_l_weight.shape[0])
     clip_bg_dim = int(sd["proj_bg.weight"].shape[1])
-    m = TripleTextFusion(clip_l_dim, clip_bg_dim, out_dim=out_dim)
-    m.load_state_dict(sd)
-    return m.to(device).eval()
+    fusion_model = TripleTextFusion(clip_l_dim, clip_bg_dim, out_dim=out_dim)
+    fusion_model.load_state_dict(sd)
+    return fusion_model.to(device).eval()
 
 
 def load_text_encoder_bundle(
@@ -184,44 +184,44 @@ def load_text_encoder_bundle(
     if mode != "triple":
         return None
 
-    import transformers as tr
+    import transformers as transformers_lib
 
     t5_path = getattr(cfg, "text_encoder", None) or default_t5_path()
     clip_l_path = (getattr(cfg, "clip_text_encoder_l", None) or "").strip() or default_clip_l_path()
     clip_bg_path = (getattr(cfg, "clip_text_encoder_bigg", None) or "").strip() or default_clip_bigg_path()
 
-    tokenizer = tr.AutoTokenizer.from_pretrained(t5_path)
-    t5 = tr.T5EncoderModel.from_pretrained(t5_path)
+    tokenizer = transformers_lib.AutoTokenizer.from_pretrained(t5_path)
+    t5 = transformers_lib.T5EncoderModel.from_pretrained(t5_path)
     t5.eval()
     for p in t5.parameters():
         p.requires_grad = False
     t5 = t5.to(device)
 
-    clip_tok_l = tr.CLIPTokenizer.from_pretrained(clip_l_path)
-    clip_l = tr.CLIPTextModel.from_pretrained(clip_l_path)
+    clip_tokenizer_l = transformers_lib.CLIPTokenizer.from_pretrained(clip_l_path)
+    clip_l = transformers_lib.CLIPTextModel.from_pretrained(clip_l_path)
     clip_l.eval()
     for p in clip_l.parameters():
         p.requires_grad = False
     clip_l = clip_l.to(device)
 
-    clip_tok_bg = tr.CLIPTokenizer.from_pretrained(clip_bg_path)
-    clip_bg = tr.CLIPTextModel.from_pretrained(clip_bg_path)
+    clip_tokenizer_bg = transformers_lib.CLIPTokenizer.from_pretrained(clip_bg_path)
+    clip_bg = transformers_lib.CLIPTextModel.from_pretrained(clip_bg_path)
     clip_bg.eval()
     for p in clip_bg.parameters():
         p.requires_grad = False
     clip_bg = clip_bg.to(device)
 
-    d_l = _read_clip_text_hidden_size(clip_l_path)
-    d_bg = _read_clip_text_hidden_size(clip_bg_path)
-    fusion = TripleTextFusion(d_l, d_bg, out_dim=out_dim).to(device)
+    clip_l_hidden_dim = _read_clip_text_hidden_size(clip_l_path)
+    clip_bg_hidden_dim = _read_clip_text_hidden_size(clip_bg_path)
+    fusion = TripleTextFusion(clip_l_hidden_dim, clip_bg_hidden_dim, out_dim=out_dim).to(device)
 
     return TextEncoderBundle(
         mode="triple",
         tokenizer=tokenizer,
         text_encoder=t5,
-        clip_tokenizer_l=clip_tok_l,
+        clip_tokenizer_l=clip_tokenizer_l,
         clip_text_l=clip_l,
-        clip_tokenizer_bg=clip_tok_bg,
+        clip_tokenizer_bg=clip_tokenizer_bg,
         clip_text_bg=clip_bg,
         fusion=fusion,
     )

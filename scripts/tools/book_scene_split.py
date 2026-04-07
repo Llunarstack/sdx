@@ -11,7 +11,7 @@ Blank lines inside a section are kept (folded to single spaces per output line u
 
 Usage::
 
-    python scripts/tools/book_scene_split.py story.md --out pages.txt
+    python -m scripts.tools book_scene_split story.md --out pages.txt
     python pipelines/book_comic/scripts/generate_book.py ... --prompts-file pages.txt
 """
 

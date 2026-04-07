@@ -66,7 +66,7 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Hybrid AR planner + diffusion decoder",
         ParityStatus.PARTIAL,
         "Block-causal DiT (num_ar_blocks) + AR/ViT bridge — not a separate billion-parameter AR image tokenizer.",
-        ("models/attention.py", "models/dit_text.py", "utils/architecture/ar_dit_vit.py", "docs/AR.md"),
+        ("models/attention.py", "models/dit_text.py", "utils/architecture/ar_block_conditioning.py", "docs/AR.md"),
         ("--num-ar-blocks",),
     ),
     ThemeMapping(

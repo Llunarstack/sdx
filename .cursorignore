@@ -1,0 +1,111 @@
+# Non-code and heavy blobs - keeps Cursor index / @-file search focused on source.
+# Tune negations below if you need a path back in context.
+
+# --- Prose & docs ---
+*.md
+docs/
+
+# --- Data corpora, tag banks, caption dumps ---
+# data/ (do not ignore all; ignore heavy subsets below)
+
+# --- Bundled payloads (not source) ---
+assets/
+
+# --- Media & model weights ---
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.ico
+*.svg
+*.tif
+*.tiff
+*.heic
+*.avif
+*.mp4
+*.webm
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.pdf
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+*.bin
+*.npz
+*.npy
+*.pkl
+*.pickle
+
+# --- Tabular / serialized (not application source) ---
+*.csv
+*.tsv
+*.json
+
+# --- Plain text dumps (keep Python dependency lists) ---
+*.txt
+!requirements.txt
+!requirements-*.txt
+
+# --- Config / manifest formats (not code; re-include essentials) ---
+*.toml
+!pyproject.toml
+!**/Cargo.toml
+!native/mojo/pixi.toml
+!**/.cargo/config.toml
+*.yaml
+*.yml
+!.github/workflows/**
+
+*.ini
+*.cfg
+*.properties
+.editorconfig
+.gitattributes
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+
+# --- Markup / notebooks when present ---
+*.html
+*.htm
+*.ipynb
+
+# --- License / notices (plain text) ---
+LICENSE*
+LICENCE*
+NOTICE*
+CHANGELOG*
+
+# --- Secrets & local env ---
+.env
+.env.*
+
+# --- Tooling trees (not project source) ---
+.venv/
+venv/
+**/node_modules/
+**/target/
+**/.zig-cache/
+**/zig-out/
+
+# --- Large optional trees (match .gitignore intent) ---
+external/
+enhanced_dit/
+pretrained/
+results/
+# --- Re-include prompt tag CSVs for editing ---
+!data/prompt_tags/
+!data/prompt_tags/*.csv
+# --- Re-include python data modules ---
+!data/**/*.py
+# --- Heavy data subsets ---
+data/danbooru/
+data/civitai/

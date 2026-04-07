@@ -14,9 +14,9 @@ use base models Illustrious and/or NoobAI.
 Pagination uses cursor links from ``metadata.nextPage`` (``page=`` returns 400).
 
 Usage:
-  python scripts/tools/fetch_civitai_nsfw_concepts.py --out data/civitai/nsfw_illustrious_noobai_models.csv
-  python scripts/tools/fetch_civitai_nsfw_concepts.py --max-batches 40 --sleep 0.35
-  python scripts/tools/fetch_civitai_nsfw_concepts.py --preset extended --max-batches-per-query 8 --out data/civitai/nsfw_illustrious_noobai_models.csv
+  python -m scripts.tools fetch_civitai_nsfw_concepts --out data/civitai/nsfw_illustrious_noobai_models.csv
+  python -m scripts.tools fetch_civitai_nsfw_concepts --max-batches 40 --sleep 0.35
+  python -m scripts.tools fetch_civitai_nsfw_concepts --preset extended --max-batches-per-query 8 --out data/civitai/nsfw_illustrious_noobai_models.csv
 """
 
 from __future__ import annotations

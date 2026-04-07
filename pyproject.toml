@@ -1,6 +1,6 @@
 [project]
 name = "sdx"
-version = "0.2.0"
+version = "5.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -21,7 +21,7 @@ src = [
   "scripts",
   "training",
   "utils",
-  "ViT",
+  "vit_quality",
 ]
 # Optional parallel tree / vendored experiments — not part of default CI; keeps `ruff check .` green.
 exclude = ["enhanced_dit", "external", "model", ".git"]
@@ -39,6 +39,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
+"vit_quality/**" = ["E402"]  # repo-root sys.path bootstrap before utils imports
 "utils/latent_geometry.py" = ["E402", "F403"]
 "utils/native_tools.py" = ["E402", "F403"]
 

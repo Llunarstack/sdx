@@ -1,34 +1,136 @@
 pack,mode,tag
 domain_positive,objects,product-style object clarity
+domain_positive,objects,strong product-style object clarity
+domain_positive,objects,more product-style object clarity
+domain_positive,objects,product-style object clarity discipline
 domain_positive,objects,distinct object edges
+domain_positive,objects,strong distinct object edges
+domain_positive,objects,more distinct object edges
+domain_positive,objects,distinct object edges discipline
 domain_positive,objects,material realism
+domain_positive,objects,strong material realism
+domain_positive,objects,more material realism
+domain_positive,objects,material realism discipline
 domain_positive,vehicles,accurate vehicle geometry
+domain_positive,vehicles,strong accurate vehicle geometry
+domain_positive,vehicles,more accurate vehicle geometry
+domain_positive,vehicles,accurate vehicle geometry discipline
 domain_positive,vehicles,coherent wheel/body alignment
+domain_positive,vehicles,strong coherent wheel/body alignment
+domain_positive,vehicles,more coherent wheel/body alignment
+domain_positive,vehicles,coherent wheel/body alignment discipline
 domain_positive,vehicles,automotive detail
+domain_positive,vehicles,strong automotive detail
+domain_positive,vehicles,more automotive detail
+domain_positive,vehicles,automotive detail discipline
 domain_positive,buildings,architectural perspective
+domain_positive,buildings,strong architectural perspective
+domain_positive,buildings,more architectural perspective
+domain_positive,buildings,perspective consistency
+domain_positive,buildings,architectural perspective discipline
 domain_positive,buildings,straight structural lines
+domain_positive,buildings,strong straight structural lines
+domain_positive,buildings,more straight structural lines
+domain_positive,buildings,straight structural lines discipline
 domain_positive,buildings,facade detail
+domain_positive,buildings,strong facade detail
+domain_positive,buildings,more facade detail
+domain_positive,buildings,facade detail discipline
 domain_positive,architecture,architectural composition
+domain_positive,architecture,strong architectural composition
+domain_positive,architecture,more architectural composition
+domain_positive,architecture,architectural composition discipline
 domain_positive,architecture,building scale coherence
+domain_positive,architecture,strong building scale coherence
+domain_positive,architecture,more building scale coherence
+domain_positive,architecture,building scale coherence discipline
 domain_positive,architecture,clean geometry
+domain_positive,architecture,strong clean geometry
+domain_positive,architecture,more clean geometry
+domain_positive,architecture,clean geometry discipline
 domain_positive,mixed,multi-object scene coherence
+domain_positive,mixed,strong multi-object scene coherence
+domain_positive,mixed,more multi-object scene coherence
+domain_positive,mixed,multi-object scene coherence discipline
 domain_positive,mixed,clear object hierarchy
+domain_positive,mixed,strong object hierarchy
+domain_positive,mixed,more clear object hierarchy
+domain_positive,mixed,clear object hierarchy and readability
+domain_positive,mixed,clear object hierarchy discipline
 domain_positive,mixed,consistent perspective
+domain_positive,mixed,strong consistent perspective
+domain_positive,mixed,more consistent perspective
+domain_positive,mixed,perspective consistency
+domain_positive,mixed,consistent perspective discipline
+domain_positive,mixed,object list from prompt intact
+domain_positive,mixed,strong object list from prompt intact
+domain_positive,mixed,more object list from prompt intact
+domain_positive,mixed,object list from prompt intact discipline
 domain_negative,objects,melted object
+domain_negative,objects,strong melted object
+domain_negative,objects,more melted object
+domain_negative,objects,melted object discipline
 domain_negative,objects,fused object
+domain_negative,objects,strong fused object
+domain_negative,objects,more fused object
+domain_negative,objects,fused object discipline
 domain_negative,objects,undefined object shape
+domain_negative,objects,strong undefined object shape
+domain_negative,objects,more undefined object shape
+domain_negative,objects,undefined object shape discipline
 domain_negative,vehicles,deformed wheels
+domain_negative,vehicles,strong deformed wheels
+domain_negative,vehicles,more deformed wheels
+domain_negative,vehicles,deformed wheels discipline
 domain_negative,vehicles,vehicle body distortion
+domain_negative,vehicles,strong vehicle body distortion
+domain_negative,vehicles,more vehicle body distortion
+domain_negative,vehicles,vehicle body distortion discipline
 domain_negative,vehicles,floating car parts
+domain_negative,vehicles,strong floating car parts
+domain_negative,vehicles,more floating car parts
+domain_negative,vehicles,floating car parts discipline
 domain_negative,buildings,bent building lines
+domain_negative,buildings,strong bent building lines
+domain_negative,buildings,more bent building lines
+domain_negative,buildings,bent building lines discipline
 domain_negative,buildings,impossible architecture
+domain_negative,buildings,strong impossible architecture
+domain_negative,buildings,more impossible architecture
+domain_negative,buildings,impossible architecture discipline
 domain_negative,buildings,warped windows
+domain_negative,buildings,strong warped windows
+domain_negative,buildings,more warped windows
+domain_negative,buildings,warped windows discipline
 domain_negative,architecture,distorted perspective
+domain_negative,architecture,strong distorted perspective
+domain_negative,architecture,more distorted perspective
+domain_negative,architecture,perspective consistency
+domain_negative,architecture,distorted perspective discipline
 domain_negative,architecture,collapsed geometry
+domain_negative,architecture,strong collapsed geometry
+domain_negative,architecture,more collapsed geometry
+domain_negative,architecture,collapsed geometry discipline
 domain_negative,architecture,warped straight lines
+domain_negative,architecture,strong warped straight lines
+domain_negative,architecture,more warped straight lines
+domain_negative,architecture,warped straight lines discipline
 domain_negative,mixed,object merging
+domain_negative,mixed,strong object merging
+domain_negative,mixed,more object merging
+domain_negative,mixed,object merging discipline
 domain_negative,mixed,foreground-background confusion
+domain_negative,mixed,strong foreground-background confusion
+domain_negative,mixed,more foreground-background confusion
+domain_negative,mixed,foreground-background confusion discipline
 domain_negative,mixed,scale mismatch
+domain_negative,mixed,strong scale mismatch
+domain_negative,mixed,more scale mismatch
+domain_negative,mixed,scale mismatch discipline
+domain_negative,mixed,substituted product or vehicle
+domain_negative,mixed,strong substituted product or vehicle
+domain_negative,mixed,more substituted product or vehicle
+domain_negative,mixed,substituted product or vehicle discipline
 background_positive,studio,studio backdrop
 background_positive,studio,controlled lighting
 background_positive,studio,clean background separation
@@ -41,9 +143,11 @@ background_positive,outdoor,ground-plane consistency
 background_positive,urban,urban environment detail
 background_positive,urban,architectural perspective
 background_positive,urban,street-scale coherence
+background_positive,urban,architecture matches named city cues
 background_positive,nature,natural landscape depth
 background_positive,nature,organic environment detail
 background_positive,nature,foliage separation
+background_positive,nature,flora as described
 background_positive,minimal,minimal background
 background_positive,minimal,subject emphasis
 background_positive,minimal,clean negative space
@@ -59,14 +163,17 @@ background_negative,outdoor,incoherent horizon
 background_negative,urban,warped buildings
 background_negative,urban,broken vanishing point
 background_negative,urban,street distortion
+background_negative,urban,invented signage text
 background_negative,nature,muddy foliage
 background_negative,nature,texture soup
 background_negative,nature,background collapse
+background_negative,nature,wrong biome vs prompt
 background_negative,minimal,busy background
 background_negative,minimal,visual clutter
 people_layout_positive,solo,single person
 people_layout_positive,solo,one subject only
 people_layout_positive,solo,clear subject focus
+people_layout_positive,solo,solo count locked to prompt
 people_layout_positive,duo,two people
 people_layout_positive,duo,distinct individuals
 people_layout_positive,duo,clear separation between subjects
@@ -82,6 +189,7 @@ people_layout_negative,solo,duplicate body
 people_layout_negative,duo,merged faces
 people_layout_negative,duo,fused limbs
 people_layout_negative,duo,third person artifact
+people_layout_negative,duo,third silhouette not mentioned
 people_layout_negative,group_small,face duplication
 people_layout_negative,group_small,subject fusion
 people_layout_negative,group_small,missing limbs
@@ -99,11 +207,13 @@ relationship_positive,combat,dynamic tension
 relationship_positive,teamwork,cooperative group action
 relationship_positive,teamwork,shared focal objective
 relationship_positive,teamwork,coordinated pose direction
+relationship_positive,teamwork,group action matches brief
 relationship_negative,neutral,awkward overlap
 relationship_negative,neutral,merged bodies
 relationship_negative,romantic,anatomy merge
 relationship_negative,romantic,fused torsos
 relationship_negative,romantic,broken contact anatomy
+relationship_negative,romantic,wrong relationship dynamic
 relationship_negative,combat,weapon clipping
 relationship_negative,combat,limb overlap confusion
 relationship_negative,combat,pose collision
@@ -129,9 +239,11 @@ object_layout_negative,asymmetrical,visual tangles
 composition_positive,single_subject,single subject focus
 composition_positive,single_subject,clean silhouette
 composition_positive,single_subject,clear subject isolation
+composition_positive,single_subject,prompt-specified solo framing
 composition_positive,group,multi-character composition
 composition_positive,group,clear subject separation
 composition_positive,group,non-overlapping silhouettes
+composition_positive,group,headcount matches caption
 composition_positive,multi_character,multi-character composition
 composition_positive,multi_character,clear subject separation
 composition_positive,multi_character,non-overlapping silhouettes
@@ -139,19 +251,24 @@ composition_positive,multi_character,each person has distinct clothing
 composition_positive,multi_character,each figure has own pose
 composition_positive,multi_character,readable silhouettes
 composition_positive,multi_character,spatial separation between subjects
+composition_positive,multi_character,each figure matches their description
 composition_positive,scene,environment-first composition
 composition_positive,scene,coherent depth layering
 composition_positive,scene,foreground midground background
+composition_positive,scene,environment layout from the prompt
 composition_positive,cinematic,cinematic framing
 composition_positive,cinematic,intentional camera blocking
 composition_positive,cinematic,strong depth cues
+composition_positive,cinematic,shot size matches wording
 composition_negative,single_subject,duplicate person
 composition_negative,single_subject,cloned subject
 composition_negative,single_subject,double head
 composition_negative,single_subject,extra face
+composition_negative,single_subject,extra figure not in prompt
 composition_negative,group,subject fusion
 composition_negative,group,merged faces
 composition_negative,group,merged limbs
+composition_negative,group,missing listed person
 composition_negative,multi_character,subject fusion
 composition_negative,multi_character,merged faces
 composition_negative,multi_character,merged limbs
@@ -165,45 +282,28 @@ composition_negative,multi_character,merged bodies
 composition_negative,multi_character,conjoined
 composition_negative,multi_character,shared limbs between people
 composition_negative,multi_character,pose copied onto wrong figure
+composition_negative,multi_character,role swap vs description
 composition_negative,scene,flat composition
 composition_negative,scene,collapsed depth
 composition_negative,scene,scale mismatch
+composition_negative,scene,wrong landmark or room layout
 composition_negative,cinematic,awkward framing
 composition_negative,cinematic,confusing perspective
 composition_negative,cinematic,visual clutter
+composition_negative,cinematic,ignored camera instruction
 perspective_stability_positive,_,consistent perspective
 perspective_stability_positive,_,stable vanishing points
 perspective_stability_positive,_,coherent scene scale
+perspective_stability_positive,_,geometry matches lens description
 perspective_stability_negative,_,perspective drift
 perspective_stability_negative,_,scale drift
 perspective_stability_negative,_,warped geometry
 perspective_stability_negative,_,inconsistent scale
+perspective_stability_negative,_,ignored focal length cue
+perspective_stability_negative,_,warped floor grid vs prompt
 duplicate_subject_negative,_,duplicate subject
 duplicate_subject_negative,_,cloned person
 duplicate_subject_negative,_,double face
 duplicate_subject_negative,_,extra head
 duplicate_subject_negative,_,extra torso
-composition_positive,single_subject,prompt-specified solo framing
-composition_positive,group,headcount matches caption
-composition_positive,multi_character,each figure matches their description
-composition_positive,scene,environment layout from the prompt
-composition_positive,cinematic,shot size matches wording
-composition_negative,single_subject,extra figure not in prompt
-composition_negative,group,missing listed person
-composition_negative,multi_character,role swap vs description
-composition_negative,scene,wrong landmark or room layout
-composition_negative,cinematic,ignored camera instruction
-domain_positive,mixed,object list from prompt intact
-domain_negative,mixed,substituted product or vehicle
-background_positive,urban,architecture matches named city cues
-background_positive,nature,flora as described
-background_negative,urban,invented signage text
-background_negative,nature,wrong biome vs prompt
-people_layout_positive,solo,solo count locked to prompt
-people_layout_negative,duo,third silhouette not mentioned
-relationship_positive,teamwork,group action matches brief
-relationship_negative,romantic,wrong relationship dynamic
-perspective_stability_positive,_,geometry matches lens description
-perspective_stability_negative,_,ignored focal length cue
-perspective_stability_negative,_,warped floor grid vs prompt
 duplicate_subject_negative,_,clone not in caption

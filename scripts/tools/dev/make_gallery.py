@@ -7,9 +7,9 @@ Used to produce the README gallery section.
 
 Usage
 -----
-    python scripts/tools/dev/make_gallery.py --ckpt results/.../best.pt
-    python scripts/tools/dev/make_gallery.py --ckpt results/.../best.pt --preset anime
-    python scripts/tools/dev/make_gallery.py --ckpt results/.../best.pt --prompts-file gallery_prompts.txt
+    python -m scripts.tools make_gallery --ckpt results/.../best.pt
+    python -m scripts.tools make_gallery --ckpt results/.../best.pt --preset anime
+    python -m scripts.tools make_gallery --ckpt results/.../best.pt --prompts-file gallery_prompts.txt
 """
 
 from __future__ import annotations

@@ -204,7 +204,7 @@ These embeddings are passed as `encoder_hidden_states` (and negative as `encoder
 
 - Optional **`token_weights`** (per T5 position): `sample.py` parses `(word)` / `[word]` in the positive prompt, strips brackets for T5, and scales cross-attn conditioning (1.2 / 0.8). Training can mirror this with **`train.py --train-prompt-emphasis`** ([`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py), [TRAINING_TEXT_TO_PIXELS.md](TRAINING_TEXT_TO_PIXELS.md)).
 
-**Preview without a GPU:** `python scripts/tools/preview_generation_prompt.py --prompt "..."` runs `utils.prompt.content_controls` + the same pos/neg token conflict filter as `sample.py` (subset of flags; no checkpoint). Set `SDX_DEBUG=1` to print a traceback if `apply_content_controls` fails.
+**Preview without a GPU:** `python -m scripts.tools preview_generation_prompt --prompt "..."` runs `utils.prompt.content_controls` + the same pos/neg token conflict filter as `sample.py` (subset of flags; no checkpoint). Set `SDX_DEBUG=1` to print a traceback if `apply_content_controls` fails.
 
 ---
 
@@ -285,7 +285,7 @@ If the model was trained with **`num_ar_blocks` > 0**, then during **every** den
 **Code:**
 
 - **Mask:** `models/attention.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks)`. Builds an (N, N) mask with `-inf` where attention is disabled.
-- **DiT:** In `models/dit_text.py` and `models/dit_predecessor.py`, when `num_ar_blocks > 0` we set `num_patches = (latent_size // patch_size) ** 2`, `p = int(sqrt(num_patches))`, and register `self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)`. That buffer is passed as `attn_mask` into every block’s self-attention (see the `for i, block in enumerate(self.blocks): ... block(x, c, text_emb, attn_mask=attn_mask, ...)` loop).
+- **DiT:** In `models/dit_text.py` and `models/dit_text_variants.py`, when `num_ar_blocks > 0` we set `num_patches = (latent_size // patch_size) ** 2`, `p = int(sqrt(num_patches))`, and register `self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)`. That buffer is passed as `attn_mask` into every block’s self-attention (see the `for i, block in enumerate(self.blocks): ... block(x, c, text_emb, attn_mask=attn_mask, ...)` loop).
 - **SelfAttention** in `models/attention.py` takes that mask and uses it in `memory_efficient_attention(..., attn_mask=attn_mask)` or SDPA so that causal positions get `-inf` and are ignored.
 
 So AR does **not** change the diffusion loop or text encoding; it only restricts **which spatial positions can see which** inside the DiT at each step. Full details: [docs/AR.md](AR.md).
@@ -449,7 +449,7 @@ Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` →
 
 1. Add the field to **TrainConfig** in `config/train_config.py`.
 2. Add it to **get_dit_build_kwargs()** in the same file (with a getattr default).
-3. Use it in **DiT constructor** in `models/dit_text.py` (and `models/dit_predecessor.py` if applicable).
+3. Use it in **DiT constructor** in `models/dit_text.py` (and `models/dit_text_variants.py` if applicable).
 4. Add CLI arg in **train.py** and pass into TrainConfig (if training-time only, that’s enough).
 5. For inference: **sample.py** / **inference.py** already get it from checkpoint config via get_dit_build_kwargs; add any new CLI (e.g. `--creativity`) and pass into model_kwargs.
 

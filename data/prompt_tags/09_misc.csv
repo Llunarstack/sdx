@@ -1,27 +1,114 @@
 pack,mode,tag
 unwanted_text_negative,_,watermark
+unwanted_text_negative,_,strong watermark
+unwanted_text_negative,_,watermark discipline
 unwanted_text_negative,_,logo
+unwanted_text_negative,_,strong logo
+unwanted_text_negative,_,logo discipline
 unwanted_text_negative,_,signature
+unwanted_text_negative,_,strong signature
+unwanted_text_negative,_,signature discipline
 unwanted_text_negative,_,brand mark
+unwanted_text_negative,_,strong brand mark
+unwanted_text_negative,_,more brand mark
+unwanted_text_negative,_,brand mark discipline
 unwanted_text_negative,_,caption overlay
+unwanted_text_negative,_,strong caption overlay
+unwanted_text_negative,_,more caption overlay
+unwanted_text_negative,_,caption overlay discipline
 unwanted_text_negative,_,subtitle overlay
+unwanted_text_negative,_,strong subtitle overlay
+unwanted_text_negative,_,more subtitle overlay
+unwanted_text_negative,_,subtitle overlay discipline
 unwanted_text_negative,_,random text
+unwanted_text_negative,_,strong random text
+unwanted_text_negative,_,more random text
+unwanted_text_negative,_,random text discipline
 unwanted_text_negative,_,letters
+unwanted_text_negative,_,strong letters
+unwanted_text_negative,_,letters discipline
 unwanted_text_negative,_,numbers
+unwanted_text_negative,_,strong numbers
+unwanted_text_negative,_,numbers discipline
 unwanted_text_negative,_,typography
-conflicting_tag_pairs,_,front view|||back view
-conflicting_tag_pairs,_,bird's-eye view|||worm's-eye view
-conflicting_tag_pairs,_,top-down perspective|||low-angle shot
-conflicting_tag_pairs,_,daylight|||night scene
-conflicting_tag_pairs,_,indoor|||outdoor
-conflicting_tag_pairs,_,single subject|||crowd
-conflicting_tag_pairs,_,photoreal|||toon shading
-conflicting_tag_pairs,_,flat color|||volumetric lighting
-conflicting_tag_pairs,_,monochrome|||rainbow palette
-conflicting_tag_pairs,_,minimalist|||maximalist clutter
-conflicting_tag_pairs,_,vintage film|||neon cyberpunk
-conflicting_tag_pairs,_,macro close-up|||wide establishing shot
-conflicting_tag_pairs,_,symmetrical layout|||chaotic asymmetry
+unwanted_text_negative,_,strong typography
+unwanted_text_negative,_,typography discipline
 unwanted_text_negative,_,spurious caption text
+unwanted_text_negative,_,strong spurious caption text
+unwanted_text_negative,_,more spurious caption text
+unwanted_text_negative,_,spurious caption text discipline
 unwanted_text_negative,_,unprompted UI chrome
+unwanted_text_negative,_,strong unprompted UI chrome
+unwanted_text_negative,_,more unprompted UI chrome
+unwanted_text_negative,_,unprompted UI chrome discipline
 unwanted_text_negative,_,fake metadata overlay
+unwanted_text_negative,_,strong fake metadata overlay
+unwanted_text_negative,_,more fake metadata overlay
+unwanted_text_negative,_,fake metadata overlay discipline
+unwanted_text_negative,_,thumbnail studies
+unwanted_text_negative,_,gesture drawing clarity
+unwanted_text_negative,_,value study planning
+unwanted_text_negative,_,shape design clarity
+unwanted_text_negative,_,silhouette-first design
+unwanted_text_negative,_,composition thumbnail pass
+unwanted_text_negative,_,design iteration pass
+unwanted_text_negative,_,edge control hierarchy
+unwanted_text_negative,_,simplified value grouping
+unwanted_text_negative,_,focal point emphasis
+unwanted_text_negative,_,clean read at distance
+unwanted_text_negative,_,intentional staging
+unwanted_text_negative,_,camera blocking clarity
+unwanted_text_negative,_,contrast hierarchy
+unwanted_text_negative,_,detail hierarchy
+unwanted_text_negative,_,large shapes first
+conflicting_tag_pairs,_,front view|||back view
+conflicting_tag_pairs,_,strong front view|||back view
+conflicting_tag_pairs,_,more front view|||back view
+conflicting_tag_pairs,_,front view|||back view discipline
+conflicting_tag_pairs,_,bird's-eye view|||worm's-eye view
+conflicting_tag_pairs,_,strong bird's-eye view|||worm's-eye view
+conflicting_tag_pairs,_,more bird's-eye view|||worm's-eye view
+conflicting_tag_pairs,_,bird's-eye view|||worm's-eye view discipline
+conflicting_tag_pairs,_,top-down perspective|||low-angle shot
+conflicting_tag_pairs,_,strong top-down perspective|||low-angle shot
+conflicting_tag_pairs,_,more top-down perspective|||low-angle shot
+conflicting_tag_pairs,_,top-down perspective|||low-angle shot discipline
+conflicting_tag_pairs,_,daylight|||night scene
+conflicting_tag_pairs,_,strong daylight|||night scene
+conflicting_tag_pairs,_,more daylight|||night scene
+conflicting_tag_pairs,_,daylight|||night scene discipline
+conflicting_tag_pairs,_,indoor|||outdoor
+conflicting_tag_pairs,_,strong indoor|||outdoor
+conflicting_tag_pairs,_,indoor|||outdoor discipline
+conflicting_tag_pairs,_,single subject|||crowd
+conflicting_tag_pairs,_,strong single subject|||crowd
+conflicting_tag_pairs,_,more single subject|||crowd
+conflicting_tag_pairs,_,single subject|||crowd discipline
+conflicting_tag_pairs,_,photoreal|||toon shading
+conflicting_tag_pairs,_,strong photoreal|||toon shading
+conflicting_tag_pairs,_,more photoreal|||toon shading
+conflicting_tag_pairs,_,photoreal|||toon shading discipline
+conflicting_tag_pairs,_,flat color|||volumetric lighting
+conflicting_tag_pairs,_,strong flat color|||volumetric lighting
+conflicting_tag_pairs,_,more flat color|||volumetric lighting
+conflicting_tag_pairs,_,flat color|||volumetric lighting discipline
+conflicting_tag_pairs,_,monochrome|||rainbow palette
+conflicting_tag_pairs,_,strong monochrome|||rainbow palette
+conflicting_tag_pairs,_,more monochrome|||rainbow palette
+conflicting_tag_pairs,_,monochrome|||rainbow palette discipline
+conflicting_tag_pairs,_,minimalist|||maximalist clutter
+conflicting_tag_pairs,_,strong minimalist|||maximalist clutter
+conflicting_tag_pairs,_,more minimalist|||maximalist clutter
+conflicting_tag_pairs,_,minimalist|||maximalist clutter discipline
+conflicting_tag_pairs,_,vintage film|||neon cyberpunk
+conflicting_tag_pairs,_,strong vintage film|||neon cyberpunk
+conflicting_tag_pairs,_,more vintage film|||neon cyberpunk
+conflicting_tag_pairs,_,vintage film|||neon cyberpunk discipline
+conflicting_tag_pairs,_,macro close-up|||wide establishing shot
+conflicting_tag_pairs,_,strong macro close-up|||wide establishing shot
+conflicting_tag_pairs,_,more macro close-up|||wide establishing shot
+conflicting_tag_pairs,_,macro close-up|||wide establishing shot discipline
+conflicting_tag_pairs,_,symmetrical layout|||chaotic asymmetry
+conflicting_tag_pairs,_,strong symmetrical layout|||chaotic asymmetry
+conflicting_tag_pairs,_,more symmetrical layout|||chaotic asymmetry
+conflicting_tag_pairs,_,symmetrical layout|||chaotic asymmetry discipline

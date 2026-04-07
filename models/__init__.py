@@ -29,7 +29,8 @@ from .complex_prompt_handler import (
     PromptComplexityAnalyzer,
 )
 from .dit import DiT_models, DiT_XL_2, DiT_XL_4
-from .dit_predecessor import (
+from .dit_text import DiT_XL_2_Text
+from .dit_text_variants import (
     DiT_P_2_Text,
     DiT_P_L_2_Text,
     DiT_Predecessor_Text,
@@ -37,7 +38,6 @@ from .dit_predecessor import (
     DiT_Supreme_L_2_Text,
     DiT_Supreme_Text,
 )
-from .dit_text import DiT_XL_2_Text
 from .dynamic_patch import DynamicPatchEmbed, TimestepPatchScheduler
 from .enhanced_dit import EnhancedDiT_B_2, EnhancedDiT_L_2, EnhancedDiT_models, EnhancedDiT_XL_2
 from .linear_attention import LinearCompressedAttention, LocalWindowAttention
@@ -71,8 +71,7 @@ from .scene_composer import (
     SceneGraphEncoder,
     SceneRelation,
 )
-from .taca import TACA
-from .vit_superior import (
+from .superior_vit import (
     SuperiorViT,
     SuperiorViT_B_2,
     SuperiorViT_L_2,
@@ -80,6 +79,7 @@ from .vit_superior import (
     SuperiorViT_S_2,
     SuperiorViT_XL_2,
 )
+from .taca import TACA
 
 DiT_models_text = {
     **dit_text.DiT_models_text,

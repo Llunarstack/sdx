@@ -6,50 +6,51 @@ import argparse
 
 
 def build_train_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, default="", help="Image folder or manifest JSONL")
-    parser.add_argument("--manifest-jsonl", type=str, default=None)
-    parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--model", type=str, default="DiT-XL/2-Text")
-    parser.add_argument(
+    argument_parser = argparse.ArgumentParser()
+    parser = argument_parser
+    argument_parser.add_argument("--data-path", type=str, default="", help="Image folder or manifest JSONL")
+    argument_parser.add_argument("--manifest-jsonl", type=str, default=None)
+    argument_parser.add_argument("--results-dir", type=str, default="results")
+    argument_parser.add_argument("--model", type=str, default="DiT-XL/2-Text")
+    argument_parser.add_argument(
         "--text-encoder",
         type=str,
         default="",
         help="T5 encoder path or HF id (empty = use pretrained/T5-XXL if present else google/t5-v1_1-xxl)",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--text-encoder-mode",
         type=str,
         default="t5",
         choices=["t5", "triple"],
         help="t5=T5 only; triple=T5+CLIP-L+CLIP-bigG with trainable fusion (match downloaded model/ stack)",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--clip-text-encoder-l",
         type=str,
         default="",
         help="CLIP-ViT-L/14 folder or HF id (triple mode; empty = default)",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--clip-text-encoder-bigg",
         type=str,
         default="",
         help="CLIP-ViT-bigG/14 folder or HF id (triple mode; empty = default)",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--vae-model",
         type=str,
         default="stabilityai/sd-vae-ft-mse",
         help="Autoencoder model id/path (VAE=AutoencoderKL or RAE=AutoencoderRAE)",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--autoencoder-type",
         type=str,
         default="kl",
         choices=["kl", "rae"],
         help="Autoencoder type: kl=AutoencoderKL, rae=AutoencoderRAE",
     )
-    parser.add_argument(
+    argument_parser.add_argument(
         "--no-rae-latent-bridge",
         action="store_true",
         help="When using RAE with C!=4, error out instead of training RAELatentBridge",
@@ -57,8 +58,8 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rae-bridge-cycle-weight", type=float, default=0.01, help="Cycle loss weight for RAELatentBridge (0=off)"
     )
-    parser.add_argument("--image-size", type=int, default=256)
-    parser.add_argument(
+    argument_parser.add_argument("--image-size", type=int, default=256)
+    argument_parser.add_argument(
         "--resolution-buckets",
         type=str,
         default="",

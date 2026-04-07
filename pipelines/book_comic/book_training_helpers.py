@@ -151,17 +151,17 @@ def resolve_book_train_settings(args: Any) -> BookTrainPreset:
     max_steps = int(getattr(args, "max_steps", -1) or -1)
     if max_steps >= 0:
         base = replace(base, max_steps=max_steps)
-    ar_prof = resolve_book_ar_profile(str(getattr(args, "ar_profile", "auto") or "auto"))
-    if "num_ar_blocks" in ar_prof:
-        base = replace(base, num_ar_blocks=int(ar_prof["num_ar_blocks"]))
-    if "ar_block_order" in ar_prof:
-        base = replace(base, ar_block_order=str(ar_prof["ar_block_order"]))
-    nab = int(getattr(args, "num_ar_blocks", -1) or -1)
-    if nab in (0, 2, 4):
-        base = replace(base, num_ar_blocks=nab)
-    abo = str(getattr(args, "ar_block_order", "") or "").strip().lower()
-    if abo in ("raster", "zorder", "snake", "spiral"):
-        base = replace(base, ar_block_order=abo)
+    ar_profile_overrides = resolve_book_ar_profile(str(getattr(args, "ar_profile", "auto") or "auto"))
+    if "num_ar_blocks" in ar_profile_overrides:
+        base = replace(base, num_ar_blocks=int(ar_profile_overrides["num_ar_blocks"]))
+    if "ar_block_order" in ar_profile_overrides:
+        base = replace(base, ar_block_order=str(ar_profile_overrides["ar_block_order"]))
+    num_ar_blocks_override = int(getattr(args, "num_ar_blocks", -1) or -1)
+    if num_ar_blocks_override in (0, 2, 4):
+        base = replace(base, num_ar_blocks=num_ar_blocks_override)
+    ar_block_order_override = str(getattr(args, "ar_block_order", "") or "").strip().lower()
+    if ar_block_order_override in ("raster", "zorder", "snake", "spiral"):
+        base = replace(base, ar_block_order=ar_block_order_override)
     return base
 
 
@@ -232,27 +232,27 @@ def build_train_command(
         cmd.append("--no-xformers")
     if int(getattr(args, "num_workers", -1)) >= 0:
         cmd.extend(["--num-workers", str(int(getattr(args, "num_workers")))])
-    ar_cm = str(getattr(args, "ar_curriculum_mode", "none") or "none").strip().lower()
-    if ar_cm in ("none", "step", "linear"):
-        cmd.extend(["--ar-curriculum-mode", ar_cm])
-    ar_w = int(getattr(args, "ar_curriculum_warmup_steps", 0) or 0)
-    if ar_w > 0:
-        cmd.extend(["--ar-curriculum-warmup-steps", str(ar_w)])
-    ar_rs = int(getattr(args, "ar_curriculum_ramp_start", 0) or 0)
-    if ar_rs > 0:
-        cmd.extend(["--ar-curriculum-ramp-start", str(ar_rs)])
-    ar_re = int(getattr(args, "ar_curriculum_ramp_end", 0) or 0)
-    if ar_re > 0:
-        cmd.extend(["--ar-curriculum-ramp-end", str(ar_re)])
-    ar_sb = int(getattr(args, "ar_curriculum_start_blocks", -1) or -1)
-    if ar_sb in (0, 2, 4):
-        cmd.extend(["--ar-curriculum-start-blocks", str(ar_sb)])
-    ar_tb = int(getattr(args, "ar_curriculum_target_blocks", -1) or -1)
-    if ar_tb in (0, 2, 4):
-        cmd.extend(["--ar-curriculum-target-blocks", str(ar_tb)])
-    ar_mix = str(getattr(args, "ar_order_mix", "") or "").strip()
-    if ar_mix:
-        cmd.extend(["--ar-order-mix", ar_mix])
+    ar_curriculum_mode = str(getattr(args, "ar_curriculum_mode", "none") or "none").strip().lower()
+    if ar_curriculum_mode in ("none", "step", "linear"):
+        cmd.extend(["--ar-curriculum-mode", ar_curriculum_mode])
+    ar_curriculum_warmup_steps = int(getattr(args, "ar_curriculum_warmup_steps", 0) or 0)
+    if ar_curriculum_warmup_steps > 0:
+        cmd.extend(["--ar-curriculum-warmup-steps", str(ar_curriculum_warmup_steps)])
+    ar_curriculum_ramp_start = int(getattr(args, "ar_curriculum_ramp_start", 0) or 0)
+    if ar_curriculum_ramp_start > 0:
+        cmd.extend(["--ar-curriculum-ramp-start", str(ar_curriculum_ramp_start)])
+    ar_curriculum_ramp_end = int(getattr(args, "ar_curriculum_ramp_end", 0) or 0)
+    if ar_curriculum_ramp_end > 0:
+        cmd.extend(["--ar-curriculum-ramp-end", str(ar_curriculum_ramp_end)])
+    ar_curriculum_start_blocks = int(getattr(args, "ar_curriculum_start_blocks", -1) or -1)
+    if ar_curriculum_start_blocks in (0, 2, 4):
+        cmd.extend(["--ar-curriculum-start-blocks", str(ar_curriculum_start_blocks)])
+    ar_curriculum_target_blocks = int(getattr(args, "ar_curriculum_target_blocks", -1) or -1)
+    if ar_curriculum_target_blocks in (0, 2, 4):
+        cmd.extend(["--ar-curriculum-target-blocks", str(ar_curriculum_target_blocks)])
+    ar_order_mix = str(getattr(args, "ar_order_mix", "") or "").strip()
+    if ar_order_mix:
+        cmd.extend(["--ar-order-mix", ar_order_mix])
 
     cmd.extend(passthrough_train_args)
     return cmd
@@ -365,6 +365,8 @@ def build_caption_normalize_command(
     python_exe: str,
     inp_manifest: Path,
     out_manifest: Path,
+    unicode_normalize: bool = False,
+    workers: int = 0,
     shortcomings_mitigation: str = "auto",
     shortcomings_2d: bool = True,
     art_guidance_mode: str = "auto",
@@ -374,10 +376,10 @@ def build_caption_normalize_command(
     style_guidance_artists: bool = True,
 ) -> List[str]:
     """Build command for ``scripts/tools/normalize_captions.py`` with book defaults."""
-    norm_py = root / "scripts" / "tools" / "normalize_captions.py"
+    normalize_py = root / "scripts" / "tools" / "normalize_captions.py"
     cmd: List[str] = [
         python_exe,
-        str(norm_py),
+        str(normalize_py),
         "--in",
         str(inp_manifest),
         "--out",
@@ -391,6 +393,10 @@ def build_caption_normalize_command(
         "--style-guidance-mode",
         style_guidance_mode,
     ]
+    if unicode_normalize:
+        cmd.append("--unicode-normalize")
+    if int(workers) > 0:
+        cmd.extend(["--workers", str(int(workers))])
     if shortcomings_2d:
         cmd.append("--shortcomings-2d")
     if not art_guidance_photography:

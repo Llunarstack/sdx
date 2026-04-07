@@ -3,14 +3,14 @@
 Tag JSONL manifest rows with ``num_ar_blocks`` from an SDX (or compatible) DiT checkpoint.
 
 Use when images were generated with a known AR regime so **ViT** / ranking see the right
-4-D one-hot (see ``utils/architecture/ar_dit_vit.py`` and ``docs/AR.md``).
+4-D one-hot (see ``utils/architecture/ar_block_conditioning.py`` and ``docs/AR.md``).
 
 Examples::
 
-  python scripts/tools/data/ar_tag_manifest.py --dit-ckpt results/run/best.pt \\
+  python -m scripts.tools ar_tag_manifest --dit-ckpt results/run/best.pt \\
     --manifest-jsonl data/manifest.jsonl --out data/manifest_ar_tagged.jsonl
 
-  python scripts/tools/data/ar_tag_manifest.py --num-ar-blocks 2 \\
+  python -m scripts.tools ar_tag_manifest --num-ar-blocks 2 \\
     --manifest-jsonl data/manifest.jsonl --out data/out.jsonl --overwrite
 """
 
@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
-    from utils.architecture.ar_dit_vit import (
+    from utils.architecture.ar_block_conditioning import (
         ar_bridge_summary_lines,
         normalize_num_ar_blocks,
         read_num_ar_blocks_from_checkpoint,

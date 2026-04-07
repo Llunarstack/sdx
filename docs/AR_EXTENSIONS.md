@@ -60,4 +60,4 @@ Note: dynamic AR runtime (`--ar-curriculum-mode != none` or `--ar-order-mix`) di
 
 ## ViT alignment
 
-The ViT bridge ([utils/architecture/ar_dit_vit.py](../utils/architecture/ar_dit_vit.py)) still keys off **`num_ar_blocks`** (0 / 2 / 4 / …). It does **not** encode `ar_block_order` today; if you train DiT with `zorder` and want ViT conditioning to reflect that, extend the JSONL schema and conditioning vector in a follow-up.
+The ViT bridge ([utils/architecture/ar_block_conditioning.py](../utils/architecture/ar_block_conditioning.py)) still keys off **`num_ar_blocks`** (0 / 2 / 4 / …). It does **not** encode `ar_block_order` today; if you train DiT with `zorder` and want ViT conditioning to reflect that, extend the JSONL schema and conditioning vector in a follow-up.
