@@ -895,7 +895,7 @@ sdx/
 │   │   │   ├── clean_repo_artifacts.py
 │   │   │   ├── update_project_structure.py
 │   │   │   └── verify_doc_links.py
-│   │   ├── training/
+│   │   ├── tr/
 │   │   │   ├── mine_preference_pairs.py
 │   │   │   ├── noise_schedule_export.py
 │   │   │   ├── train_diffusion_dpo.py
@@ -928,7 +928,7 @@ sdx/
 │   │   ├── split_danbooru_general_tags.py
 │   │   ├── training_timestep_preview.py
 │   │   └── vit_inspect.py
-│   ├── training/
+│   ├── tr/
 │   │   ├── hf_download_and_train.py
 │   │   ├── hf_export_to_sdx_manifest.py
 │   │   └── precompute_latents.py
@@ -976,13 +976,13 @@ sdx/
 │   ├── quality/
 │   │   ├── __init__.py
 │   │   └── manifest_digest.py
-│   ├── training/
+│   ├── tr/
 │   │   ├── __init__.py
 │   │   ├── env_health.py
 │   │   └── seed_utils.py
 │   ├── __init__.py
 │   └── README.md
-├── training/
+├── tr/
 │   ├── __init__.py
 │   ├── enhanced_trainer.py
 │   ├── train_args.py
@@ -1061,7 +1061,7 @@ sdx/
 │   ├── quantization/
 │   │   ├── __init__.py
 │   │   └── nf4_codec.py
-│   ├── training/
+│   ├── tr/
 │   │   ├── __init__.py
 │   │   ├── ar_curriculum.py
 │   │   ├── config_validator.py
@@ -1096,7 +1096,7 @@ sdx/
 │   ├── train.py
 │   ├── tta.py
 │   └── VIT_G_ARCHITECTURE_VISION.md
-├── vit_quality/
+├── vq/
 │   ├── __init__.py
 │   ├── backbone_presets.py
 │   ├── checkpoint_utils.py

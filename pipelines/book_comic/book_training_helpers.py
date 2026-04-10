@@ -329,7 +329,7 @@ def build_hf_export_command(
     shuffle_seed: Optional[int] = None,
 ) -> List[str]:
     """Build command for ``scripts/training/hf_export_to_sdx_manifest.py``."""
-    export_py = root / "scripts" / "training" / "hf_export_to_sdx_manifest.py"
+    export_py = root / "scripts" / "tr" / "hf_export_to_sdx_manifest.py"
     cmd: List[str] = [
         python_exe,
         str(export_py),

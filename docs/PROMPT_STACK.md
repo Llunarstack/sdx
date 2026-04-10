@@ -27,7 +27,7 @@ This doc ties together the **Python modules** and **CLI flags** that shape the p
 | Content controls | [`utils/prompt/content_controls.py`](../utils/prompt/content_controls.py) | `apply_content_controls`, `infer_content_controls_from_prompt` |
 | Pos/neg conflict filter | [`utils/prompt/neg_filter.py`](../utils/prompt/neg_filter.py) | `filter_negative_by_positive`, `positive_token_set` |
 | Domain / anti-AI strings | [`config/defaults/prompt_domains.py`](../config/defaults/prompt_domains.py) | Defaults, `ANTI_AI_*`, `NATURAL_LOOK_*`, `LORA_STACK_NEGATIVE`, tips |
-| Shims | [`config/prompt_domains.py`](../config/prompt_domains.py) | Re-exports reference module |
+| Shims | [`config/prompt_domains.py`](../config/defaults/prompt_domains.py) | Re-exports reference module |
 | Sampling CLI | [`sample.py`](../sample.py) | Orchestrates the chain above |
 | Emphasis → token weights | [`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py) | `( )` / `[ ]` parsing + T5 `offset_mapping` weights; **`train.py --train-prompt-emphasis`** for training–inference parity |
 | Originality injection | [`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py) | **`sample.py --originality`** / **`train.py --train-originality-prob`** — composition tokens after subject tags |

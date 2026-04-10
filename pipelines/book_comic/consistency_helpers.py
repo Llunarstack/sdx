@@ -6,6 +6,12 @@ These are **soft** text cues—pair with inpaint anchoring (face/edge/bubbles) a
 ``--character-sheet`` / ``--character-prompt-extra`` where your stack supports them.
 
 Used by ``generate_book.py`` (``--consistency-*`` flags, optional JSON spec).
+
+Optional JSON key ``text_continuity`` (object): locked dialogue phrases, object labels, strict script
+flags — see ``book_text_continuity.text_continuity_clause``.
+
+Optional key ``challenging_content`` (object): ``pack`` / ``tags`` / ``extra`` for hard-case prompts;
+see ``book_challenging_content.challenging_content_from_mapping`` (pass ``safety_mode`` when resolving).
 """
 
 from __future__ import annotations
@@ -217,7 +223,7 @@ def _props_from_spec_value(props: Any) -> List[str]:
     return out
 
 
-def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
+def positive_block_from_mapping(spec: Mapping[str, Any], *, safety_mode: str = "") -> str:
     """Build one positive consistency block from a dict (JSON file or merged CLI)."""
     fragments: List[str] = []
 
@@ -294,6 +300,22 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
     ve = spec.get("visual_extra") or spec.get("extras")
     if isinstance(ve, str) and ve.strip():
         fragments.append(ve.strip())
+
+    tc = spec.get("text_continuity")
+    if isinstance(tc, dict):
+        from pipelines.book_comic.book_text_continuity import text_continuity_clause
+
+        tfrag = text_continuity_clause(tc)
+        if tfrag:
+            fragments.append(tfrag)
+
+    ch = spec.get("challenging_content")
+    if isinstance(ch, dict):
+        from pipelines.book_comic.book_challenging_content import challenging_content_from_mapping
+
+        cfrag = challenging_content_from_mapping(ch, safety_mode=safety_mode)
+        if cfrag:
+            fragments.append(cfrag)
 
     return merge_prompt_fragments(*fragments)
 

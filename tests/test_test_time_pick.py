@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from utils.quality import test_time_pick
 
 
@@ -88,7 +89,7 @@ def test_weighted_sum_helper_matches_manual():
         [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
         [0.6, 0.4],
     )
-    assert vals == [0.8, 1.8, 2.8]
+    assert vals == pytest.approx([0.8, 1.8, 2.8], rel=0, abs=1e-5)
 
 
 def test_combo_realism_prefers_candidate_with_better_realism_metrics(monkeypatch):

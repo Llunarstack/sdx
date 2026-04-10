@@ -4,11 +4,14 @@ Enhanced error handling and logging utilities for SDX.
 
 import functools
 import logging
+import pickle
 import traceback
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 import torch
+
+_log = logging.getLogger(__name__)
 
 
 class SDXError(Exception):
@@ -77,8 +80,9 @@ def safe_execute(func: Callable, *args, logger: Optional[logging.Logger] = None,
         return func(*args, **kwargs)
     except Exception as e:
         if logger:
-            logger.error(f"Error in {func.__name__}: {str(e)}")
-            logger.debug(traceback.format_exc())
+            name = getattr(func, "__name__", None) or getattr(type(func), "__name__", None) or repr(func)
+            logger.error("Error in %s: %s", name, e)
+            logger.debug("%s", traceback.format_exc())
         raise
 
 
@@ -102,7 +106,12 @@ def retry_on_cuda_oom(max_retries: int = 3, reduce_batch_size: bool = True):
                         if reduce_batch_size and original_batch_size and attempt < max_retries - 1:
                             new_batch_size = max(1, original_batch_size // (2 ** (attempt + 1)))
                             kwargs["batch_size"] = new_batch_size
-                            print(f"CUDA OOM detected, reducing batch size to {new_batch_size} (attempt {attempt + 1})")
+                            _log.warning(
+                                "CUDA OOM: reducing batch_size to %s (attempt %s/%s)",
+                                new_batch_size,
+                                attempt + 1,
+                                max_retries,
+                            )
                         else:
                             break
                     else:
@@ -116,17 +125,16 @@ def retry_on_cuda_oom(max_retries: int = 3, reduce_batch_size: bool = True):
 
 
 def validate_checkpoint(ckpt_path: str) -> bool:
-    """Validate checkpoint file integrity."""
+    """Return True if ``ckpt_path`` loads as a dict with expected training keys (or EMA-only)."""
     try:
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        required_keys = ["config", "model"]
-
-        for key in required_keys:
-            if key not in ckpt and "ema" not in ckpt:
-                return False
-
-        return True
-    except Exception:
+        if not isinstance(ckpt, dict):
+            return False
+        required_keys = ("config", "model")
+        if "ema" in ckpt:
+            return True
+        return all(k in ckpt for k in required_keys)
+    except (OSError, RuntimeError, pickle.UnpicklingError, TypeError, AttributeError):
         return False
 
 

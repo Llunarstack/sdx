@@ -1,5 +1,5 @@
 """
-Unicode and structure hygiene for training/inference captions (stdlib + optional xxhash).
+Unicode and structure hygiene for tr/inference captions (stdlib + optional xxhash).
 
 Implements the Python side of ``docs/NATIVE_AND_SYSTEM_LIBS.md`` (NFKC normalization,
 zero-width stripping, dedupe fingerprints). Kept under ``sdx_native`` so it does not

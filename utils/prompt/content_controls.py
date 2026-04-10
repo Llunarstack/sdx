@@ -2,7 +2,7 @@
 Prompt controls for harder generation targets.
 
 ``apply_content_controls`` merges optional tag packs into positive/negative CSV prompts using
-shared helpers (dedupe, optional per-mode negatives, Civitai bank loaders).
+shared helpers (dedupe, optional per-mode negatives).
 
 ``infer_content_controls_from_prompt`` maps free text to partial kwargs via ordered keyword
 buckets; Danbooru-style comma prompts use tag-set matching for count tokens (1girl / solo / 2girls).
@@ -14,85 +14,9 @@ Regenerate from Python snapshots: ``python -m scripts.tools dump_prompt_tag_csvs
 
 from __future__ import annotations
 
-import csv
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .content_control_tags import *  # noqa: F401,F403,F405
-
-
-def load_civitai_model_bank_triggers(
-    csv_path: Optional[Path | str] = None,
-    *,
-    max_tokens: int = 120,
-) -> List[str]:
-    """
-    Load unique trigger tokens from a Civitai model bank CSV (id,name,type,bases,triggers).
-
-    Triggers column uses ``|``-separated tokens as written by ``fetch_civitai_nsfw_concepts.py``.
-    Order is stable (first-seen wins). Empty / missing file returns [].
-    """
-    cap = max(0, int(max_tokens))
-    if cap == 0:
-        return []
-    path = Path(csv_path) if csv_path is not None else _DEFAULT_CIVITAI_MODEL_BANK_CSV
-    if not path.is_file():
-        return []
-    out: List[str] = []
-    seen: set[str] = set()
-    try:
-        with path.open(newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                raw = (row.get("triggers") or "").strip()
-                if not raw:
-                    continue
-                for tok in raw.split("|"):
-                    t = tok.strip()
-                    if not t or t in seen:
-                        continue
-                    seen.add(t)
-                    out.append(t)
-                    if len(out) >= cap:
-                        return out
-    except OSError:
-        return []
-    return out
-
-
-def load_civitai_frequency_triggers(
-    txt_path: Optional[Path | str] = None,
-    *,
-    max_tokens: int = 200,
-) -> List[str]:
-    """
-    Load triggers from ``top_triggers_by_frequency.txt`` (one token per line, most common first).
-
-    Regenerate that file with ``python -m scripts.tools curate_civitai_triggers``.
-    """
-    cap = max(0, int(max_tokens))
-    if cap == 0:
-        return []
-    path = Path(txt_path) if txt_path is not None else _DEFAULT_CIVITAI_FREQ_TXT
-    if not path.is_file():
-        return []
-    out: List[str] = []
-    seen: set[str] = set()
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            t = line.strip()
-            if not t or t.startswith("#"):
-                continue
-            k = t.lower()
-            if k in seen:
-                continue
-            seen.add(k)
-            out.append(t)
-            if len(out) >= cap:
-                break
-    except OSError:
-        return []
-    return out
 
 
 def _split_csv_tokens(text: str) -> List[str]:
@@ -533,10 +457,6 @@ def apply_content_controls(
     anti_perspective_drift: bool = False,
     cleanup_conflicting_tags: bool = False,
     allow_text_in_image: bool = False,
-    nsfw_civitai_pack: str = "none",
-    civitai_trigger_bank: str = "none",
-    civitai_model_bank_csv: Optional[str] = None,
-    civitai_frequency_txt: Optional[str] = None,
     one_shot_boost: bool = False,
     anti_ai_pack: str = "none",
     human_media_mode: str = "none",
@@ -586,23 +506,6 @@ def apply_content_controls(
     p, n = _merge_kv_pack(p, n, lighting_mode, _LIGHTING_MODE_POSITIVE, _LIGHTING_MODE_NEGATIVE)
     p, n = _merge_kv_pack(p, n, skin_detail_mode, _SKIN_DETAIL_POSITIVE, _SKIN_DETAIL_NEGATIVE)
     p, n = _merge_kv_pack(p, n, nsfw_pack, _NSFW_PACK_POSITIVE, _NSFW_PACK_NEGATIVE)
-
-    if safety_mode == "nsfw":
-        p, n = _merge_kv_pack(p, n, nsfw_civitai_pack, _NSFW_CIVITAI_POSITIVE, _NSFW_CIVITAI_NEGATIVE)
-
-    if safety_mode == "nsfw" and civitai_trigger_bank in _CIVITAI_TRIGGER_BANK_CAPS:
-        cap = _CIVITAI_TRIGGER_BANK_CAPS[civitai_trigger_bank]
-        if cap > 0:
-            if civitai_trigger_bank.startswith("frequency_"):
-                ft = (civitai_frequency_txt or "").strip()
-                freq_path: Optional[Path] = Path(ft) if ft else None
-                triggers = load_civitai_frequency_triggers(freq_path, max_tokens=cap)
-            else:
-                csv_opt = (civitai_model_bank_csv or "").strip()
-                bank_path: Optional[Path] = Path(csv_opt) if csv_opt else None
-                triggers = load_civitai_model_bank_triggers(bank_path, max_tokens=cap)
-            if triggers:
-                p = _append_unique_csv(p, triggers)
 
     p, n = _merge_kv_pack(p, n, sex_position, _SEX_POSITION_POSITIVE, None, pos_only=True)
     p, n = _merge_kv_pack(p, n, penetration_detail, _PENETRATION_POSITIVE, None, pos_only=True)

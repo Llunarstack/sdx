@@ -390,7 +390,7 @@ def extract_lora_from_checkpoint(checkpoint_path: str, output_path: str, rank: i
     """
     warnings.warn(
         "extract_lora_from_checkpoint does not compute a low-rank LoRA; it wraps full weights with metadata. "
-        "Use dedicated LoRA training/export if you need real adapter matrices.",
+        "Use dedicated LoRA tr/export if you need real adapter matrices.",
         UserWarning,
         stacklevel=2,
     )

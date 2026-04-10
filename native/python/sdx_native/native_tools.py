@@ -402,6 +402,21 @@ def score_ops_shared_library_path() -> Optional[Path]:
     return None
 
 
+def c_buffer_stats_shared_library_path() -> Optional[Path]:
+    """Optional C ``sdx_c_buffer_stats`` (newline count + byte sum over buffers)."""
+    cpp = REPO_ROOT / "native" / "cpp" / "build"
+    candidates = [
+        cpp / "Release" / "sdx_c_buffer_stats.dll",
+        cpp / "Debug" / "sdx_c_buffer_stats.dll",
+        cpp / "libsdx_c_buffer_stats.so",
+        cpp / "libsdx_c_buffer_stats.dylib",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
 def cuda_image_metrics_shared_library_path() -> Optional[Path]:
     """Optional CUDA ``sdx_cuda_image_metrics`` shared library path, if built."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
@@ -761,6 +776,12 @@ def _xxhash_available() -> bool:
 
 def native_stack_status() -> Dict[str, Any]:
     """Summary for diagnostics (e.g. ``quick_test --show-native``)."""
+    try:
+        from sdx_native.native_fast_stack_status import fast_numpy_stack_status
+
+        _fast_np = fast_numpy_stack_status()
+    except Exception:
+        _fast_np = {"error": "fast_numpy_stack_status unavailable"}
     return {
         "repo_root": str(REPO_ROOT),
         "rust_sdx_jsonl_tools": str(rust_jsonl_tools_exe() or ""),
@@ -779,6 +800,7 @@ def native_stack_status() -> Dict[str, Any]:
         "libsdx_rmsnorm_rows_cpu": str(rmsnorm_rows_cpu_shared_library_path() or ""),
         "libsdx_image_metrics": str(image_metrics_shared_library_path() or ""),
         "libsdx_score_ops": str(score_ops_shared_library_path() or ""),
+        "libsdx_c_buffer_stats": str(c_buffer_stats_shared_library_path() or ""),
         "libsdx_cuda_hwc_to_chw": str(cuda_hwc_to_chw_shared_library_path() or ""),
         "libsdx_cuda_ml": str(cuda_ml_shared_library_path() or ""),
         "libsdx_cuda_flow_matching": str(cuda_flow_matching_shared_library_path() or ""),
@@ -796,4 +818,5 @@ def native_stack_status() -> Dict[str, Any]:
         "latent_lib_ctypes": get_latent_lib().available,
         "caption_text_hygiene": True,
         "xxhash_installed": _xxhash_available(),
+        "fast_numpy_helpers": _fast_np,
     }

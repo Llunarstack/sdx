@@ -9,7 +9,7 @@ This file is the curated training shortlist from your exact dataset URLs, focuse
 
 ## Primary datasets (use these first)
 
-1. [`vikhyatk/danbooru2023`](https://huggingface.co/datasets/vikhyatk/danbooru2023)
+1. [`vikhyatoolkit/danbooru2023`](https://huggingface.co/datasets/vikhyatoolkit/danbooru2023)
    - Best overall baseline from your list for anime-style text-to-image coverage.
    - Large scale + broadly useful tag distribution.
 
@@ -75,7 +75,7 @@ This file is the curated training shortlist from your exact dataset URLs, focuse
 
 Start with this weighted mix for first major training runs:
 
-- 40% `vikhyatk/danbooru2023`
+- 40% `vikhyatoolkit/danbooru2023`
 - 20% `ma-xu/fine-t2i`
 - 15% `ShinoharaHare/Danbooru-2024-Filtered-1M`
 - 15% `KBlueLeaf/danbooru2023-webp-4Mpixel`
@@ -86,7 +86,7 @@ Then add optional domain packs (rule34/e621) only if desired product behavior re
 If you want to maximize prompt instruction adherence specifically, add:
 
 - +5% to +15% `ProGamerGov/synthetic-dataset-1m-dalle3-high-quality-captions`
-- reduce `vikhyatk/danbooru2023` by the same amount to keep total at 100%
+- reduce `vikhyatoolkit/danbooru2023` by the same amount to keep total at 100%
 
 ## Operational note
 

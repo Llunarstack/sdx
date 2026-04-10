@@ -4,7 +4,7 @@ Given one prompt/caption, reports which tricky categories are missing (or weak),
 and suggests what to add.
 
 This is meant for dataset authors + inference experiments:
-- complex/weird words
+- complexamples/weird words
 - NSFW descriptors (suggestions are generic unless you extend categories)
 - clothes/wardrobe
 - anatomy micro-details + hands
@@ -199,8 +199,8 @@ def main() -> None:
             ],
             "examples_en": "leather jacket, silk scarf, stitched seams",
             "examples_zh": "皮革夹克，丝绸围巾，缝线/stitched seam",
-            "suggest_en": "Add clothing material terms (leather/silk/latex/denim/wool/cotton) so outfits don’t drift.",
-            "suggest_zh": "加入服装材质词（leather/silk/latex/denim/wool/cotton），让穿搭更稳定不漂移。",
+            "suggest_en": "Add clothing material terms (leather/silk/latexamples/denim/wool/cotton) so outfits don’t drift.",
+            "suggest_zh": "加入服装材质词（leather/silk/latexamples/denim/wool/cotton），让穿搭更稳定不漂移。",
         },
         "art_styles": {
             "terms": [

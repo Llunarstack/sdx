@@ -163,7 +163,7 @@ If you pass `--width` / `--height` much larger or smaller than the model’s nat
 | Text in image      | Describe exact text in prompt (“sign that says X”); use `--text-in-image` or leave neg empty so text-friendly negative is used |
 | Tags / LoRAs        | `--tags "tag1, tag2"` or `--tags-file path`; `--lora path.safetensors --lora-trigger "word"` for style/character LoRAs |
 | Reproducibility     | `--save-prompt` writes prompt, seed, steps to a `.txt` next to the image; `--subject-first` reorders comma-separated prompt (subject first) |
-| Complex/long prompts | Put subject first; use `--boost-quality`; keep key elements in first ~250 tokens |
+| Complexamples/long prompts | Put subject first; use `--boost-quality`; keep key elements in first ~250 tokens |
 | Challenging (NSFW, surreal) | No censorship; add quality tags; use `--boost-quality`; see CHALLENGING_PROMPT_TIPS |
 | Hard styles (3D, realistic, 2.5D) | `--hard-style 3d | realistic | 3d_realistic | style_mix`; set negative from `HARD_STYLE_NEGATIVES`; see STYLE_MIX_TIPS, LORA_MIX_TIPS |
 | Multiple LoRAs / style mix | Lower LoRA scales (0.5–0.6); dominant LoRA first; `--cfg-rescale 0.7` if muddy |

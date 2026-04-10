@@ -1,7 +1,7 @@
 /**
  * CUDA depthwise Gaussian blur on a float32 latent (B, C, H, W).
  * Matches gaussian_blur_latent() in diffusion/sampling_utils.py and
- * _gaussian_blur() in diffusion/holy_grail/latent_refiner.py.
+ * _gaussian_blur() in diffusion/sampling_extras/latent_refiner.py.
  */
 #ifndef SDX_GAUSSIAN_BLUR_LATENT_H
 #define SDX_GAUSSIAN_BLUR_LATENT_H

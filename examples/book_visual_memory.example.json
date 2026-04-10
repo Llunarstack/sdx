@@ -1,0 +1,17 @@
+﻿{
+  "version": 1,
+  "book_style": "manga",
+  "global_camera_language": "dynamic framing",
+  "entities": {
+    "hero": {
+      "kind": "character",
+      "display_name": "Ren",
+      "canonical_look": "short black hair",
+      "structure": { "default_viewing_angle": "three-quarter" },
+      "page_overrides": [
+        { "from_page": 2, "to_page": 5, "patch": { "structure": { "default_viewing_angle": "low angle" } } }
+      ]
+    }
+  },
+  "page_patches": [{ "from_page": 0, "to_page": 1, "extra_prompt": "rain scene" }]
+}

@@ -1,1 +1,1 @@
-"""SDX product pipelines (image_gen, book_comic)."""
+"""SDX product pipelines (e.g. image generation, book_comic)."""

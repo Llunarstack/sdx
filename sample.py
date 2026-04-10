@@ -8,7 +8,7 @@ domain latent prior, sharpen, contrast, saturation, clarity / tone-punch / chrom
 finishing-preset (cross-style post), emphasis (word)/[word].
 
 Presets and OP modes:
-- --preset sdxl|flux|anime|zit: apply a model-style preset from config.model_presets.
+- --preset sdxl|flux|anime|zit: apply a model-style preset from config.defaults.model_presets.
 - --op-mode portrait|fullbody|anime_char: apply a high-level OP bundle on top.
 
 Profiling (optional): pass ``--profile-out PATH`` (plus ``--profile-sort cumulative|tottime|...``,
@@ -31,9 +31,9 @@ from utils.runtime.jsonutil import loads as json_loads
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config.model_presets import apply_op_mode_to_args, apply_preset_to_args
+from config.defaults.model_presets import apply_op_mode_to_args, apply_preset_to_args
 from diffusion import INFERENCE_SOLVERS, create_diffusion, list_timestep_schedules
-from diffusion.holy_grail import (
+from diffusion.sampling_extras import (
     apply_holy_grail_preset_to_args,
     list_holy_grail_presets,
     recommend_holy_grail_preset,
@@ -53,10 +53,12 @@ def _configure_stdio_for_console() -> None:
     if os.name != "nt":
         return
     try:
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(errors="replace")
-        if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(errors="replace")
+        stdout_rc = getattr(sys.stdout, "reconfigure", None)
+        if callable(stdout_rc):
+            stdout_rc(errors="replace")
+        stderr_rc = getattr(sys.stderr, "reconfigure", None)
+        if callable(stderr_rc):
+            stderr_rc(errors="replace")
     except Exception:
         pass
 
@@ -79,12 +81,7 @@ def load_model_from_ckpt(ckpt_path, device="cuda"):
         device=device,
         reject_enhanced=True,
     )
-    try:
-        from config.pixai_reference import get_pixai_style_label
-
-        print(f"Model: {model_name} — {get_pixai_style_label(model_name)}")
-    except ImportError:
-        pass
+    print(f"Model: {model_name}")
     if rae_bridge is not None:
         rae_c = int(rae_bridge.to_dit.weight.shape[1])
         print(f"Loaded RAELatentBridge: rae_channels={rae_c} -> 4 (DiT latent space)")
@@ -590,7 +587,7 @@ def encode_text(
     return out.last_hidden_state.to(dtype)
 
 
-def main():
+def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyzer complexity limits
     parser = argparse.ArgumentParser(
         description="Generate image: prompt, negative prompt, steps, width, height, CFG, and scheduler."
     )
@@ -818,7 +815,7 @@ def main():
         "--tags",
         type=str,
         default="",
-        help="Comma-separated tags; prepended to prompt with subject-first order (PixAI/Danbooru-style)",
+        help="Comma-separated tags; prepended to prompt with subject-first order (Danbooru-style)",
     )
     parser.add_argument(
         "--tags-file",
@@ -1260,12 +1257,21 @@ def main():
         "--pick-vit-ckpt",
         type=str,
         default="",
-        help="Optional vit_quality checkpoint (best.pt) for vit / combo_vit / combo_vit_* / combo_count_vit.",
+        help="Optional vq checkpoint (best.pt) for vit / combo_vit / combo_vit_* / combo_count_vit.",
     )
     parser.add_argument(
         "--pick-vit-use-adherence",
         action="store_true",
         help="When using --pick-best vit/combo_vit: blend in the adherence head (quality*0.65 + adherence*0.35).",
+    )
+    parser.add_argument(
+        "--pick-vit-ar-blocks",
+        type=int,
+        default=-1,
+        help=(
+            "If 0/2/4: ViT quality scorer uses matching DiT block-AR regime (see utils/architecture/ar_block_conditioning.py). "
+            "-1 = ViT unknown one-hot (checkpoint default)."
+        ),
     )
     parser.add_argument(
         "--pick-auto-no-clip",
@@ -1441,7 +1447,7 @@ def main():
     parser.add_argument(
         "--boost-quality",
         action="store_true",
-        help="Prepend 'masterpiece, best quality' to the prompt for stronger adherence (complex/challenging prompts)",
+        help="Prepend 'masterpiece, best quality' to the prompt for stronger adherence (complexamples/challenging prompts)",
     )
     parser.add_argument(
         "--save-prompt",
@@ -1486,7 +1492,7 @@ def main():
         type=str,
         default=None,
         choices=["3d", "realistic", "3d_realistic", "style_mix"],
-        help="Prepend recommended tags for hard styles (3d, realistic, 3d_realistic, style_mix); see config/prompt_domains.py for negatives",
+        help="Prepend recommended tags for hard styles (3d, realistic, 3d_realistic, style_mix); see config/defaults/prompt_domains.py for negatives",
     )
     parser.add_argument(
         "--naturalize",
@@ -1722,7 +1728,7 @@ def main():
         type=str,
         default="none",
         choices=["none", "female", "male", "mixed", "nonbinary"],
-        help="Anatomy consistency hint for subject sex/presentation.",
+        help="Anatomy consistency hint for subject sexamples/presentation.",
     )
     parser.add_argument(
         "--scene-domain",
@@ -1830,52 +1836,6 @@ def main():
         default="none",
         choices=["none", "soft", "explicit_detail", "romantic", "extreme"],
         help="Adult-content pose/anatomy stability pack.",
-    )
-    parser.add_argument(
-        "--nsfw-civitai-pack",
-        type=str,
-        default="none",
-        choices=[
-            "none",
-            "hits",
-            "hits_lite",
-            "snippets",
-            "snippets_lite",
-            "action",
-            "complex",
-            "easy",
-            "clothing",
-            "objects",
-            "style",
-        ],
-        help="Extra NSFW pack: hits*=freq CSV tags; snippets*=short name/trigger fragments (deduped vs hits). Stacks with --nsfw-pack when --safety-mode nsfw.",
-    )
-    parser.add_argument(
-        "--civitai-trigger-bank",
-        type=str,
-        default="none",
-        choices=[
-            "none",
-            "light",
-            "medium",
-            "heavy",
-            "frequency_light",
-            "frequency_medium",
-            "frequency_heavy",
-        ],
-        help="Append triggers: light/medium/heavy = CSV row order; frequency_* = top_triggers_by_frequency.txt (requires --safety-mode nsfw).",
-    )
-    parser.add_argument(
-        "--civitai-model-bank-csv",
-        type=str,
-        default="",
-        help="Override CSV path for row-order trigger bank (default: data/civitai/nsfw_illustrious_noobai_models.csv).",
-    )
-    parser.add_argument(
-        "--civitai-frequency-txt",
-        type=str,
-        default="",
-        help="Override path for frequency_* trigger bank (default: data/civitai/top_triggers_by_frequency.txt).",
     )
     parser.add_argument(
         "--sex-position",
@@ -2097,7 +2057,7 @@ def main():
         type=str,
         default=None,
         choices=["sdxl", "flux", "anime", "zit"],
-        help="Apply a sampler preset (soft defaults) from config.model_presets",
+        help="Apply a sampler preset (soft defaults) from config.defaults.model_presets",
     )
     parser.add_argument(
         "--op-mode",
@@ -2341,7 +2301,7 @@ def main():
 
     if getattr(args, "hard_style", None):
         try:
-            from config.prompt_domains import HARD_STYLE_RECOMMENDED_PROMPTS
+            from config.defaults.prompt_domains import HARD_STYLE_RECOMMENDED_PROMPTS
 
             prefix = HARD_STYLE_RECOMMENDED_PROMPTS.get(args.hard_style, [None])[0]
             if prefix and args.prompt:
@@ -2353,27 +2313,27 @@ def main():
 
     if getattr(args, "naturalize", False) and args.prompt:
         try:
-            from config.prompt_domains import NATURAL_LOOK_POSITIVE, NATURAL_LOOK_POSITIVE_DEEP
+            from config.defaults.prompt_domains import NATURAL_LOOK_POSITIVE, NATURAL_LOOK_POSITIVE_DEEP
 
             _nat_pre = NATURAL_LOOK_POSITIVE_DEEP if getattr(args, "naturalize_deep", False) else NATURAL_LOOK_POSITIVE
             args.prompt = f"{_nat_pre}, {args.prompt}"
         except ImportError:
             try:
-                from config.prompt_domains import NATURAL_LOOK_POSITIVE
+                from config.defaults.prompt_domains import NATURAL_LOOK_POSITIVE
 
                 args.prompt = f"{NATURAL_LOOK_POSITIVE}, {args.prompt}"
             except ImportError:
                 pass
     if getattr(args, "anti_bleed", False) and args.prompt:
         try:
-            from config.prompt_domains import CONCEPT_BLEEDING_POSITIVE
+            from config.defaults.prompt_domains import CONCEPT_BLEEDING_POSITIVE
 
             args.prompt = f"{CONCEPT_BLEEDING_POSITIVE}, {args.prompt}"
         except ImportError:
             pass
     if getattr(args, "diversity", False) and args.prompt:
         try:
-            from config.prompt_domains import DIVERSITY_POSITIVE
+            from config.defaults.prompt_domains import DIVERSITY_POSITIVE
 
             args.prompt = f"{DIVERSITY_POSITIVE}, {args.prompt}"
         except ImportError:
@@ -2624,7 +2584,7 @@ def main():
     _sg_neg = ""
     if _sm_mode in ("auto", "all") and prompt_to_encode.strip():
         try:
-            from config.ai_image_shortcomings import mitigation_fragments
+            from config.defaults.ai_image_shortcomings import mitigation_fragments
 
             _pos_sm, _ = mitigation_fragments(
                 prompt_to_encode,
@@ -2638,7 +2598,7 @@ def main():
             pass
     if (_ag_mode in ("auto", "all") or _ag_anat in ("lite", "strong")) and prompt_to_encode.strip():
         try:
-            from config.art_mediums import guidance_fragments
+            from config.defaults.art_mediums import guidance_fragments
 
             _ag_pos, _ag_neg = guidance_fragments(
                 prompt_to_encode,
@@ -2651,13 +2611,15 @@ def main():
                 args.prompt = prompt_to_encode
         except Exception:
             pass
-    if _sg_mode in ("auto", "all") and prompt_to_encode.strip():
+    # Style domain + artist refs + ``style_artists`` bucket/facet hints (see ``style_guidance_fragments``).
+    if prompt_to_encode.strip():
         try:
-            from config.style_guidance import style_guidance_fragments
+            from config.defaults.style_guidance import style_guidance_fragments
 
+            _sg_eff = _sg_mode if _sg_mode in ("auto", "all") else "none"
             _sg_pos, _sg_neg = style_guidance_fragments(
                 prompt_to_encode,
-                _sg_mode,  # type: ignore[arg-type]
+                _sg_eff,  # type: ignore[arg-type]
                 include_artist_refs=bool(getattr(args, "style_guidance_artists", True)),
             )
             if _sg_pos:
@@ -2736,7 +2698,7 @@ def main():
     except Exception:
         pass
     try:
-        from config.prompt_domains import ANTI_AI_LOOK_NEGATIVE, ANTI_AI_LOOK_NEGATIVE_STRONG
+        from config.defaults.prompt_domains import ANTI_AI_LOOK_NEGATIVE, ANTI_AI_LOOK_NEGATIVE_STRONG
 
         from config import DEFAULT_NEGATIVE_PROMPT, TEXT_IN_IMAGE_NEGATIVE, TEXT_IN_IMAGE_PHRASES
     except ImportError:
@@ -2774,35 +2736,35 @@ def main():
         negative_text_raw = f"{negative_text_raw}, {_anti_nat}".strip()
     if getattr(args, "anti_bleed", False):
         try:
-            from config.prompt_domains import CONCEPT_BLEEDING_NEGATIVE
+            from config.defaults.prompt_domains import CONCEPT_BLEEDING_NEGATIVE
 
             negative_text_raw = f"{negative_text_raw}, {CONCEPT_BLEEDING_NEGATIVE}".strip()
         except ImportError:
             pass
     if getattr(args, "diversity", False):
         try:
-            from config.prompt_domains import FLUX_FACE_DIVERSITY_NEGATIVE
+            from config.defaults.prompt_domains import FLUX_FACE_DIVERSITY_NEGATIVE
 
             negative_text_raw = f"{negative_text_raw}, {FLUX_FACE_DIVERSITY_NEGATIVE}".strip()
         except ImportError:
             pass
     if getattr(args, "anti_artifacts", False):
         try:
-            from config.prompt_domains import ARTIFACT_NEGATIVES
+            from config.defaults.prompt_domains import ARTIFACT_NEGATIVES
 
             negative_text_raw = f"{negative_text_raw}, {ARTIFACT_NEGATIVES}".strip()
         except ImportError:
             pass
     if getattr(args, "strong_watermark", False):
         try:
-            from config.prompt_domains import WATERMARK_NEGATIVE_STRONG
+            from config.defaults.prompt_domains import WATERMARK_NEGATIVE_STRONG
 
             negative_text_raw = f"{negative_text_raw}, {WATERMARK_NEGATIVE_STRONG}".strip()
         except ImportError:
             pass
     if _sm_mode in ("auto", "all"):
         try:
-            from config.ai_image_shortcomings import mitigation_fragments
+            from config.defaults.ai_image_shortcomings import mitigation_fragments
 
             _, _neg_sm = mitigation_fragments(
                 prompt_to_encode,
@@ -2826,7 +2788,7 @@ def main():
             args.human_media_mode = "photographic"
     if len(getattr(args, "lora", []) or []) > 1:
         try:
-            from config.prompt_domains import LORA_STACK_NEGATIVE
+            from config.defaults.prompt_domains import LORA_STACK_NEGATIVE
 
             negative_text_raw = f"{negative_text_raw}, {LORA_STACK_NEGATIVE}".strip()
         except ImportError:
@@ -2931,10 +2893,6 @@ def main():
             anti_perspective_drift=bool(getattr(args, "anti_perspective_drift", False)),
             cleanup_conflicting_tags=bool(getattr(args, "cleanup_conflicting_tags", False)),
             allow_text_in_image=bool(getattr(args, "text_in_image", False)),
-            nsfw_civitai_pack=str(getattr(args, "nsfw_civitai_pack", "none") or "none"),
-            civitai_trigger_bank=str(getattr(args, "civitai_trigger_bank", "none") or "none"),
-            civitai_model_bank_csv=(str(getattr(args, "civitai_model_bank_csv", "") or "").strip() or None),
-            civitai_frequency_txt=(str(getattr(args, "civitai_frequency_txt", "") or "").strip() or None),
             one_shot_boost=bool(getattr(args, "one_shot_boost", True)),
             anti_ai_pack=anti_ai_pack,
             human_media_mode=human_media_mode,
@@ -2967,7 +2925,7 @@ def main():
     effective_style = (args.style or "").strip()
     if getattr(cfg, "style_embed_dim", 0) and not effective_style and getattr(args, "auto_style_from_prompt", False):
         try:
-            from config.style_artists import extract_style_from_text
+            from config.defaults.style_artists import extract_style_from_text
 
             effective_style = extract_style_from_text(prompt_to_encode) or ""
             if effective_style:
@@ -3616,6 +3574,7 @@ def main():
                         str(getattr(args, "expected_count_object", "") or ""),
                         str(getattr(args, "pick_vit_ckpt", "") or ""),
                         bool(getattr(args, "pick_vit_use_adherence", False)),
+                        int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
                     )
                     print(f"beam scores={scores} -> keep {best_i} resume_t={t_resume}", file=sys.stderr)
                     pick_report["beam1"] = {
@@ -3776,6 +3735,7 @@ def main():
                         str(getattr(args, "expected_count_object", "") or ""),
                         str(getattr(args, "pick_vit_ckpt", "") or ""),
                         bool(getattr(args, "pick_vit_use_adherence", False)),
+                        int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
                     )
                     print(
                         f"Micro-beam: split={split}/{steps_main} width={beam2_w} steps={beam2_steps} "
@@ -4088,7 +4048,7 @@ def main():
             image = torch.nn.functional.interpolate(
                 image, size=(out_h, out_w), mode="bilinear", align_corners=False
             )
-    # Civitai-style tip: non-native resolution often causes blur/artifacts
+    # Non-native resolution often causes blur/artifacts
     if out_w != image_size or out_h != image_size:
         if max(out_w, out_h) > image_size * 1.5 or min(out_w, out_h) < image_size * 0.5:
             print(
@@ -4287,6 +4247,7 @@ def main():
             str(getattr(args, "expected_count_object", "") or ""),
             str(getattr(args, "pick_vit_ckpt", "") or ""),
             bool(getattr(args, "pick_vit_use_adherence", False)),
+            int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
         )
         print(f"pick-best ({pick_m}): scores={scores} -> best index {best_idx}")
         pick_report["pick_best"] = {
@@ -4300,6 +4261,7 @@ def main():
             "pick_clip_model": str(getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32") or ""),
             "pick_vit_ckpt": str(getattr(args, "pick_vit_ckpt", "") or ""),
             "pick_vit_use_adherence": bool(getattr(args, "pick_vit_use_adherence", False)),
+            "pick_vit_ar_blocks": int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
             "pick_auto_no_clip": bool(getattr(args, "pick_auto_no_clip", False)),
         }
 
@@ -4571,14 +4533,6 @@ def main():
                         repair_cmd += ["--skin-detail-mode", str(getattr(args, "skin_detail_mode"))]
                     if getattr(args, "nsfw_pack", "none") != "none":
                         repair_cmd += ["--nsfw-pack", str(getattr(args, "nsfw_pack"))]
-                    if getattr(args, "nsfw_civitai_pack", "none") != "none":
-                        repair_cmd += ["--nsfw-civitai-pack", str(getattr(args, "nsfw_civitai_pack"))]
-                    if getattr(args, "civitai_trigger_bank", "none") != "none":
-                        repair_cmd += ["--civitai-trigger-bank", str(getattr(args, "civitai_trigger_bank"))]
-                    if str(getattr(args, "civitai_model_bank_csv", "") or "").strip():
-                        repair_cmd += ["--civitai-model-bank-csv", str(getattr(args, "civitai_model_bank_csv"))]
-                    if str(getattr(args, "civitai_frequency_txt", "") or "").strip():
-                        repair_cmd += ["--civitai-frequency-txt", str(getattr(args, "civitai_frequency_txt"))]
                     if getattr(args, "style_mode", "none") != "none":
                         repair_cmd += ["--style-mode", str(getattr(args, "style_mode"))]
                     if bool(getattr(args, "style_lock", False)):

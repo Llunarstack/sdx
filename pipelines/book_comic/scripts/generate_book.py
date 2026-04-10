@@ -10,12 +10,21 @@ This is intentionally a *workflow* (diffusion as sequential planning):
 Why workflow-first:
 - Adding true multi-page "reasoning" into the core model is architecture/training work.
 - You already have the key primitives (inpainting + MDM freeze + OCR text masks), so we can ship a working generator now.
+
+Stack: each page calls **repo-root** ``sample.py`` (DiT + diffusion), forwarding pick-best metrics that can load **vit_quality** checkpoints and optional **DiT AR regime** alignment via ``utils.architecture.ar_block_conditioning`` (see ``--pick-vit-ar-blocks`` / ``--pick-vit-ar-from-ckpt``).
+Optional **LoRA / DoRA / LyCORIS**, stacked **ControlNet** maps, **holy-grail** scheduling, and **reference / IP-Adapter** weights use the same flags as ``sample.py`` (see ``book_helpers.extend_sample_py_adapter_control_cmd``).
+**Hires-fix, finishing presets, latent spectral/domain knobs, refinement, and face/post-reference** flags match ``sample.py`` via ``book_helpers.extend_sample_py_sdx_enhance_cmd`` (OCR repair subprocesses get the same fragment).
+**``--book-preflight``** checks that **DiT** and **ViT** checkpoints, LoRAs, and control maps exist and warns on AR / resolution mismatches (``book_model_readiness``).
+**``--book-dry-run``** prints the first resolved ``sample.py`` argv and exits (no images written).
+**Adherence / quality packs, CLIP guard & monitor, volatile CFG, SAG, dual-stage layout** forward through
+``book_helpers.extend_sample_py_adherence_quality_cmd`` (also appended to OCR repair argv).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +52,28 @@ def _sample_py() -> Path:
 
 def _safe_run(cmd: Sequence[str]) -> None:
     subprocess.run(list(cmd), check=True)
+
+
+def _resolve_pick_report_json_path(raw: str, out_path: Path) -> str:
+    """
+    Map ``--pick-report-json`` to a concrete file for this page/cover image.
+
+    - ``per-page`` / ``each``: ``<out_stem>_pick_report.json`` next to the PNG.
+    - Path ending in ``.json``: that exact file (last page wins if reused).
+    - Otherwise: treat as a directory and write ``<dir>/<stem>_pick_report.json``.
+    """
+    prj = (raw or "").strip()
+    if not prj:
+        return ""
+    low = prj.lower()
+    if low in ("per-page", "per_page", "each"):
+        return str(out_path.parent / f"{out_path.stem}_pick_report.json")
+    p = Path(prj).expanduser()
+    if p.suffix.lower() == ".json":
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return str(p)
+    p.mkdir(parents=True, exist_ok=True)
+    return str(p / f"{out_path.stem}_pick_report.json")
 
 
 def _apply_book_style(prefix: str, prompt: str) -> str:
@@ -474,7 +505,9 @@ def main() -> None:
     )
     parser.add_argument("--pages", type=int, default=0, help="Number of pages to generate using --page-prompt-template")
     parser.add_argument(
-        "--page-prompt-template", default="", help="Template for each page prompt; supports {page} placeholder."
+        "--page-prompt-template",
+        default="",
+        help="Template per page; placeholders: {page}/{page0} (0-based), {page1}, {total_pages}, {total_pages0}, plus custom {keys} left as-is.",
     )
 
     parser.add_argument("--cover-prompt", default="", help="Optional cover prompt")
@@ -581,12 +614,30 @@ def main() -> None:
         "--text-in-image", action="store_true", help="Set sample.py --text-in-image (also helps negatives)."
     )
 
-    # --- Accuracy / consistency (uses utils/test_time_pick, utils/quality, data/caption_utils) ---
+    # --- Accuracy / consistency (uses utils/quality/test_time_pick, data/caption_utils) ---
     parser.add_argument(
         "--book-accuracy",
         default="none",
-        choices=["none", "fast", "balanced", "maximum", "production"],
-        help="Preset: balanced=2 candidates+combo; maximum=4; production=6+stricter lexicon negatives; none=single sample.",
+        choices=["none", "fast", "balanced", "maximum", "production", "production_vit", "production_fidelity"],
+        help=(
+            "Preset: balanced=2+combo; maximum=4; production=6+combo; production_vit=6+combo_vit_hq; "
+            "production_fidelity=8+combo_vit_hq (max pick budget; pair --pick-vit-ckpt + --adherence-pack / CLIP flags); "
+            "none=single sample."
+        ),
+    )
+    parser.add_argument(
+        "--book-preflight",
+        default="warn",
+        choices=["off", "warn", "strict"],
+        help=(
+            "Verify --ckpt / --pick-vit-ckpt / LoRA paths and DiT vs ViT AR alignment before running. "
+            "strict=exit on missing files or ViT metrics without a scorer checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--book-dry-run",
+        action="store_true",
+        help="Print the first resolved sample.py command (shlex-quoted) and exit; no subprocess, no PNGs.",
     )
     parser.add_argument(
         "--sample-candidates",
@@ -597,8 +648,30 @@ def main() -> None:
     parser.add_argument(
         "--pick-best",
         default="auto",
-        choices=["auto", "none", "clip", "edge", "ocr", "combo", "combo_count"],
-        help="Test-time metric (auto = use preset). combo = CLIP+edge(+OCR if expected text); combo_count also adds people-count verifier.",
+        choices=[
+            "auto",
+            "none",
+            "clip",
+            "edge",
+            "ocr",
+            "vit",
+            "aesthetic",
+            "combo",
+            "combo_vit",
+            "combo_vit_hq",
+            "combo_vit_realism",
+            "combo_count_vit",
+            "combo_exposure",
+            "combo_structural",
+            "combo_hq",
+            "combo_count",
+            "combo_realism",
+            "aesthetic_realism",
+        ],
+        help=(
+            "Forwarded to sample.py --pick-best (ViT metrics need --pick-vit-ckpt). "
+            "See utils/quality/test_time_pick.py."
+        ),
     )
     parser.add_argument(
         "--expected-count",
@@ -694,6 +767,63 @@ def main() -> None:
         help="CLIP model id for --pick-best clip/combo.",
     )
     parser.add_argument("--pick-save-all", action="store_true", help="Keep all candidates when using pick-best.")
+    parser.add_argument(
+        "--pick-vit-ckpt",
+        default="",
+        help="vit_quality checkpoint (best.pt) for sample.py vit / combo_vit* / combo_count_vit pick metrics.",
+    )
+    parser.add_argument(
+        "--pick-vit-use-adherence",
+        action="store_true",
+        help="Blend ViT adherence head in sample.py when using vit/combo_vit metrics.",
+    )
+    parser.add_argument(
+        "--pick-vit-ar-blocks",
+        type=int,
+        default=-1,
+        help="0/2/4: ViT scorer AR regime matching DiT num_ar_blocks (-1 = unknown one-hot). See utils/architecture/ar_block_conditioning.py.",
+    )
+    parser.add_argument(
+        "--pick-vit-ar-from-ckpt",
+        action="store_true",
+        help="Set --pick-vit-ar-blocks from --ckpt metadata (overrides explicit --pick-vit-ar-blocks when successful).",
+    )
+    parser.add_argument(
+        "--pick-report-json",
+        default="",
+        help=(
+            "sample.py --pick-report-json: per-page use ``per-page`` (sidecar next to each PNG), "
+            "a ``.json`` file path, or a directory (writes ``<stem>_pick_report.json`` there)."
+        ),
+    )
+    parser.add_argument(
+        "--pick-auto-no-clip",
+        action="store_true",
+        help="Forward sample.py --pick-auto-no-clip (auto pick-best branches).",
+    )
+    parser.add_argument(
+        "--beam-width",
+        type=int,
+        default=0,
+        help="sample.py DiT beam search width (with --num 1); 0=off.",
+    )
+    parser.add_argument("--beam-steps", type=int, default=0, help="Early steps for beam stage (sample.py).")
+    parser.add_argument("--beam-metric", default="", help="Metric for beam previews (sample.py).")
+    parser.add_argument("--beam2-width", type=int, default=0, help="sample.py second-stage micro-beam width; 0=off.")
+    parser.add_argument("--beam2-steps", type=int, default=0, help="Micro-beam denoise steps (sample.py).")
+    parser.add_argument("--beam2-metric", default="", help="Metric for micro-beam (sample.py).")
+    parser.add_argument(
+        "--beam2-at-frac",
+        type=float,
+        default=0.65,
+        help="When to run micro-beam as fraction of steps (sample.py).",
+    )
+    parser.add_argument(
+        "--beam2-noise",
+        type=float,
+        default=0.03,
+        help="Latent noise std for micro-beam branches (sample.py).",
+    )
     parser.add_argument("--grid", action="store_true", help="Save N-up grid when num>1.")
     parser.add_argument("--cfg-scale", type=float, default=0.0, help="0 = sample.py default.")
     parser.add_argument("--cfg-rescale", type=float, default=0.0, help="0 = off unless sample auto-enables.")
@@ -1068,6 +1198,378 @@ def main() -> None:
         help="Disable photo postprocess in sample.py.",
     )
     parser.add_argument("--photo-post-strength", type=float, default=0.6, help="Photo postprocess strength.")
+
+    # --- LoRA / DoRA / LyCORIS, ControlNet, reference (forwarded to sample.py) ---
+    parser.add_argument(
+        "--style",
+        default="",
+        help="Optional global style prompt fragment for every page (sample.py --style).",
+    )
+    parser.add_argument("--style-strength", type=float, default=0.7, help="sample.py --style-strength.")
+    parser.add_argument(
+        "--auto-style-from-prompt",
+        action="store_true",
+        help="sample.py: infer --style from prompt keywords when --style is empty.",
+    )
+    parser.add_argument(
+        "--tags",
+        default="",
+        help="Comma-separated tags prepended by sample.py (Danbooru-style).",
+    )
+    parser.add_argument("--tags-file", default="", help="Path to tag list for sample.py --tags-file.")
+    parser.add_argument("--control-image", default="", help="Single control map path (depth/edge/pose, etc.).")
+    parser.add_argument(
+        "--control-type",
+        default="auto",
+        choices=["auto", "unknown", "canny", "depth", "pose", "seg", "lineart", "scribble", "normal", "hed"],
+        help="Type when using --control-image (sample.py).",
+    )
+    parser.add_argument("--control-scale", type=float, default=0.85, help="ControlNet strength (sample.py).")
+    parser.add_argument("--control-guidance-start", type=float, default=0.0, help="Control schedule start fraction.")
+    parser.add_argument("--control-guidance-end", type=float, default=1.0, help="Control schedule end fraction.")
+    parser.add_argument("--control-guidance-decay", type=float, default=1.0, help="Control decay power in schedule.")
+    parser.add_argument(
+        "--control",
+        nargs="*",
+        default=None,
+        metavar="SPEC",
+        help="Stacked controls for sample.py: path:type:scale ... (see sample.py --control).",
+    )
+    parser.add_argument("--holy-grail", action="store_true", help="sample.py adaptive CFG/control/adapter scheduling.")
+    parser.add_argument("--holy-grail-cfg-early-ratio", type=float, default=0.72)
+    parser.add_argument("--holy-grail-cfg-late-ratio", type=float, default=1.0)
+    parser.add_argument("--holy-grail-control-mult", type=float, default=1.0)
+    parser.add_argument("--holy-grail-adapter-mult", type=float, default=1.0)
+    parser.add_argument("--holy-grail-no-frontload-control", action="store_true")
+    parser.add_argument("--holy-grail-late-adapter-boost", type=float, default=1.15)
+    parser.add_argument("--holy-grail-cads-strength", type=float, default=0.0)
+    parser.add_argument("--holy-grail-cads-min-strength", type=float, default=0.0)
+    parser.add_argument("--holy-grail-cads-power", type=float, default=1.0)
+    parser.add_argument("--holy-grail-unsharp-sigma", type=float, default=0.0)
+    parser.add_argument("--holy-grail-unsharp-amount", type=float, default=0.0)
+    parser.add_argument("--holy-grail-clamp-quantile", type=float, default=0.0)
+    parser.add_argument("--holy-grail-clamp-floor", type=float, default=1.0)
+    parser.add_argument(
+        "--lora",
+        nargs="*",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "LoRA / DoRA / LyCORIS specs per sample.py: path, path:scale, path:scale:role "
+            "(repeat roles: character, style, detail, composition)."
+        ),
+    )
+    parser.add_argument(
+        "--no-lora-normalize-scales",
+        action="store_true",
+        help="sample.py: disable per-layer multi-adapter scale normalization.",
+    )
+    parser.add_argument("--lora-max-total-scale", type=float, default=1.5, help="Cap total adapter scale per layer.")
+    parser.add_argument(
+        "--lora-default-role",
+        default="style",
+        help="Default :role when a --lora spec omits it.",
+    )
+    parser.add_argument(
+        "--lora-role-budgets",
+        default="",
+        help="Override sample.py role budgets (default uses sample.py built-in string if empty).",
+    )
+    parser.add_argument(
+        "--lora-stage-policy",
+        default="auto",
+        choices=["off", "auto", "character_focus", "style_focus", "balanced"],
+        help="Depth-aware LoRA role routing (sample.py).",
+    )
+    parser.add_argument(
+        "--lora-layers",
+        default="all",
+        choices=["all", "first", "middle", "last"],
+        help="Restrict LoRA to early/mid/late DiT blocks (sample.py).",
+    )
+    parser.add_argument(
+        "--lora-role-stage-weights",
+        default="",
+        help="Per-role early/mid/late multipliers (see sample.py --lora-role-stage-weights).",
+    )
+    parser.add_argument("--lora-trigger", default="", help="Prepend trigger tokens when using --lora.")
+    parser.add_argument(
+        "--lora-scaffold",
+        default="none",
+        choices=["none", "blend", "character_first", "style_first"],
+        help="Prompt scaffolding when using LoRA stacks.",
+    )
+    parser.add_argument(
+        "--lora-scaffold-auto",
+        action="store_true",
+        help="Use blend scaffolding when --lora set and --lora-scaffold none.",
+    )
+    parser.add_argument("--reference-image", default="", help="CLIP vision reference image (sample.py).")
+    parser.add_argument("--reference-strength", type=float, default=1.0)
+    parser.add_argument("--reference-tokens", type=int, default=4)
+    parser.add_argument(
+        "--reference-clip-model",
+        default="openai/clip-vit-large-patch14",
+        help="HF CLIP id for --reference-image.",
+    )
+    parser.add_argument(
+        "--reference-adapter-pt",
+        default="",
+        help="Trained IP-Adapter-style projector checkpoint (sample.py).",
+    )
+
+    # --- sample.py SDX polish (hires / latent / post / refine / faces) — see book_helpers.extend_sample_py_sdx_enhance_cmd
+    parser.add_argument(
+        "--flow-matching-sample",
+        action="store_true",
+        help="Rectified-flow Euler/Heun sampler (sample.py --flow-matching-sample).",
+    )
+    parser.add_argument(
+        "--flow-solver",
+        default="euler",
+        choices=["euler", "heun"],
+        help="ODE solver with --flow-matching-sample (sample.py --flow-solver).",
+    )
+    parser.add_argument(
+        "--domain-prior-latent",
+        type=float,
+        default=0.0,
+        help="sample.py latent domain prior strength (>0 enables).",
+    )
+    parser.add_argument(
+        "--spectral-coherence-latent",
+        type=float,
+        default=0.0,
+        help="sample.py FFT low-frequency latent blend strength (>0 enables).",
+    )
+    parser.add_argument(
+        "--spectral-coherence-cutoff",
+        type=float,
+        default=0.15,
+        help="Radial cutoff for --spectral-coherence-latent (sample.py default 0.15).",
+    )
+    parser.add_argument("--hires-fix", action="store_true", help="sample.py latent upscale + short refine pass.")
+    parser.add_argument("--hires-scale", type=float, default=1.5, help="Target scale when hires-fix infers size.")
+    parser.add_argument("--hires-steps", type=int, default=15, help="Denoising steps for hires pass.")
+    parser.add_argument("--hires-strength", type=float, default=0.35, help="Noise level 0–1 for hires pass.")
+    parser.add_argument(
+        "--hires-cfg-scale",
+        type=float,
+        default=-1.0,
+        help="CFG during hires; <0 = same as main --cfg-scale (sample.py).",
+    )
+    parser.add_argument(
+        "--finishing-preset",
+        default="none",
+        choices=["none", "photo", "anime", "illustration", "characters", "painterly"],
+        help="sample.py cross-style finishing preset (adds baseline clarity/tone/chroma).",
+    )
+    parser.add_argument(
+        "--sharpen",
+        type=float,
+        default=0.0,
+        help="sample.py post: unsharp strength 0–1 (0=off; forwarded to main + OCR repair).",
+    )
+    parser.add_argument("--contrast", type=float, default=1.0, help="sample.py post: contrast factor (1=off).")
+    parser.add_argument("--saturation", type=float, default=1.0, help="sample.py post: saturation factor (1=off).")
+    parser.add_argument("--clarity", type=float, default=0.0, help="sample.py post: local contrast / clarity.")
+    parser.add_argument("--tone-punch", type=float, default=0.0, dest="tone_punch", help="sample.py tone curve punch.")
+    parser.add_argument("--chroma-smooth", type=float, default=0.0, dest="chroma_smooth", help="sample.py chroma smooth.")
+    parser.add_argument(
+        "--polish",
+        type=float,
+        default=0.0,
+        help="sample.py one-knob polish (S-curve + chroma + clarity + grain).",
+    )
+    parser.add_argument(
+        "--face-enhance",
+        action="store_true",
+        dest="face_enhance",
+        help="sample.py OpenCV face patches sharpen/contrast (needs opencv-python).",
+    )
+    parser.add_argument("--face-enhance-sharpen", type=float, default=0.35, dest="face_enhance_sharpen")
+    parser.add_argument("--face-enhance-contrast", type=float, default=1.04, dest="face_enhance_contrast")
+    parser.add_argument("--face-enhance-padding", type=float, default=0.25, dest="face_enhance_padding")
+    parser.add_argument("--face-enhance-max", type=int, default=4, dest="face_enhance_max")
+    parser.add_argument(
+        "--post-reference-image",
+        default="",
+        dest="post_reference_image",
+        help="sample.py whole-frame RGB blend reference (weak color/style pull).",
+    )
+    parser.add_argument(
+        "--post-reference-alpha",
+        type=float,
+        default=0.0,
+        dest="post_reference_alpha",
+        help="Blend weight for --post-reference-image (0=off).",
+    )
+    parser.add_argument(
+        "--face-restore-shell",
+        default="",
+        dest="face_restore_shell",
+        help="sample.py shell hook {src}/{dst} after save (e.g. GFPGAN CLI).",
+    )
+    parser.add_argument("--no-refine", action="store_true", dest="no_refine", help="sample.py: skip latent refinement pass.")
+    parser.add_argument("--refine-t", type=int, default=50, dest="refine_t", help="sample.py refinement noise level t.")
+    parser.add_argument(
+        "--refine-gate",
+        default="off",
+        choices=["off", "auto"],
+        dest="refine_gate",
+        help="sample.py: run refinement only when quick quality score is below threshold.",
+    )
+    parser.add_argument(
+        "--refine-gate-threshold",
+        type=float,
+        default=0.62,
+        dest="refine_gate_threshold",
+        help="Threshold for --refine-gate auto.",
+    )
+
+    # --- Prompt / style fidelity (sample.py packs, CLIP hooks, layout, caching) ---
+    parser.add_argument(
+        "--quality-pack",
+        default="none",
+        choices=["none", "top", "one_shot", "ultra_clean", "cinematic", "illustrative", "editorial", "micro_detail"],
+        help="sample.py high-quality artifact-control / detail scaffolding.",
+    )
+    parser.add_argument(
+        "--adherence-pack",
+        default="none",
+        choices=["none", "standard", "strict"],
+        help="sample.py literal prompt adherence scaffolding (long complex prompts).",
+    )
+    parser.add_argument(
+        "--clip-guard-threshold",
+        type=float,
+        default=0.0,
+        dest="clip_guard_threshold",
+        help="If >0: CLIP cosine gate + short extra denoise (sample.py; slow, needs transformers). Try 0.20–0.28.",
+    )
+    parser.add_argument(
+        "--clip-guard-model",
+        default="openai/clip-vit-base-patch32",
+        dest="clip_guard_model",
+        help="HF CLIP id for --clip-guard-threshold / --clip-monitor-every.",
+    )
+    parser.add_argument(
+        "--clip-guard-t-frac",
+        type=float,
+        default=0.22,
+        dest="clip_guard_t_frac",
+        help="Timestep fraction for CLIP-guard re-noising.",
+    )
+    parser.add_argument(
+        "--clip-guard-steps",
+        type=int,
+        default=12,
+        dest="clip_guard_steps",
+        help="Extra denoise steps when CLIP guard triggers.",
+    )
+    parser.add_argument(
+        "--clip-monitor-every",
+        type=int,
+        default=0,
+        dest="clip_monitor_every",
+        help="If >0: decode every N steps, boost CFG when CLIP cosine is low (sample.py; very slow).",
+    )
+    parser.add_argument(
+        "--clip-monitor-threshold",
+        type=float,
+        default=0.22,
+        dest="clip_monitor_threshold",
+        help="CLIP cosine threshold for --clip-monitor-every.",
+    )
+    parser.add_argument(
+        "--clip-monitor-cfg-boost",
+        type=float,
+        default=0.12,
+        dest="clip_monitor_cfg_boost",
+        help="CFG multiplicative boost when monitor fires.",
+    )
+    parser.add_argument(
+        "--clip-monitor-rewind",
+        type=float,
+        default=0.0,
+        dest="clip_monitor_rewind",
+        help="Soft-rewind latent mix when monitor fires (0=off).",
+    )
+    parser.add_argument(
+        "--volatile-cfg-boost",
+        type=float,
+        default=0.0,
+        dest="volatile_cfg_boost",
+        help="Spike-aware CFG multiplier tail (sample.py); try 0.08–0.18.",
+    )
+    parser.add_argument(
+        "--volatile-cfg-quantile",
+        type=float,
+        default=0.72,
+        dest="volatile_cfg_quantile",
+        help="Rolling latent-delta quantile for volatile CFG.",
+    )
+    parser.add_argument(
+        "--volatile-cfg-window",
+        type=int,
+        default=6,
+        dest="volatile_cfg_window",
+        help="Rolling window length for volatile CFG.",
+    )
+    parser.add_argument(
+        "--sag-scale",
+        type=float,
+        default=0.0,
+        dest="sag_scale",
+        help="Self-attention guidance style heuristic (sample.py); ~0.12–0.35; ~2× forward cost.",
+    )
+    parser.add_argument(
+        "--no-auto-expected-text",
+        action="store_true",
+        dest="no_auto_expected_text",
+        help="sample.py: do not infer --expected-text from quoted prompt lines.",
+    )
+    parser.add_argument(
+        "--no-auto-constraint-boost",
+        action="store_true",
+        dest="no_auto_constraint_boost",
+        help="sample.py: do not auto-raise --num when text/count constraints are detected.",
+    )
+    parser.add_argument(
+        "--hard-style",
+        default="",
+        choices=["", "3d", "realistic", "3d_realistic", "style_mix"],
+        help="sample.py style-domain tag pack (empty = omit).",
+    )
+    parser.add_argument(
+        "--dual-stage-layout",
+        action="store_true",
+        dest="dual_stage_layout",
+        help="sample.py: coarse latent layout then upscale + detail pass (no img2img/inpaint).",
+    )
+    parser.add_argument("--dual-stage-div", type=int, default=2, dest="dual_stage_div", help="Latent divisor for layout stage.")
+    parser.add_argument("--dual-layout-steps", type=int, default=24, dest="dual_layout_steps", help="Steps for coarse stage.")
+    parser.add_argument("--dual-detail-steps", type=int, default=20, dest="dual_detail_steps", help="Steps after latent upscale.")
+    parser.add_argument(
+        "--dual-detail-strength",
+        type=float,
+        default=0.38,
+        dest="dual_detail_strength",
+        help="Re-noise strength before detail stage.",
+    )
+    parser.add_argument(
+        "--sample-deterministic",
+        action="store_true",
+        dest="deterministic",
+        help="Forward sample.py --deterministic (cudnn reproducibility where supported).",
+    )
+    parser.add_argument(
+        "--sample-no-cache",
+        action="store_true",
+        dest="no_cache",
+        help="Forward sample.py --no-cache (disable T5 encoding cache).",
+    )
+
     parser.add_argument(
         "--aspect-preset",
         default="none",
@@ -1109,7 +1611,15 @@ def main() -> None:
     parser.add_argument(
         "--book-style-pack",
         default="none",
-        choices=["none", "manga_nsfw_action", "webtoon_nsfw_romance", "comic_dialogue_safe", "oc_launch_safe"],
+        choices=[
+            "none",
+            "manga_nsfw_action",
+            "webtoon_nsfw_romance",
+            "manga_nsfw_surreal",
+            "webtoon_nsfw_complex",
+            "comic_dialogue_safe",
+            "oc_launch_safe",
+        ],
         help="One-flag style bundle that sets artist/OC/NSFW defaults; explicit flags override.",
     )
     parser.add_argument(
@@ -1122,6 +1632,81 @@ def main() -> None:
         "--auto-humanize",
         action="store_true",
         help="Auto-pick humanization profile from book type/style/safety mode; explicit --humanize-* still override.",
+    )
+    parser.add_argument(
+        "--book-authenticity",
+        default="none",
+        choices=["none", "lite", "standard", "strong"],
+        help=(
+            "Extra sequential-art craft positives + anti-AI negatives (manga/webtoon/comic/illustration); "
+            "pairs with --humanize-pack. Uses --book-authenticity-medium (auto reads --visual-memory book_style)."
+        ),
+    )
+    parser.add_argument(
+        "--book-authenticity-medium",
+        default="auto",
+        choices=[
+            "auto",
+            "manga",
+            "webtoon",
+            "graphic_novel",
+            "comic_us",
+            "illustration",
+            "children",
+            "storyboard",
+        ],
+        help="Which authenticity recipe to use; auto = book_type + lexicon_style + visual-memory book_style.",
+    )
+    parser.add_argument(
+        "--book-challenge-pack",
+        default="none",
+        choices=[
+            "none",
+            "mature_coherence",
+            "surreal_weird",
+            "technical_hard",
+            "horror_mood",
+            "crowd_hands",
+            "max",
+        ],
+        help=(
+            "Extra positive/negative fragments for NSFW narrative fidelity (with --safety-mode nsfw), "
+            "surreal OCs, crowds, reflections, etc. See book_challenging_content.py."
+        ),
+    )
+    parser.add_argument(
+        "--book-challenge-extra",
+        default="",
+        help="Freeform fragment merged with --book-challenge-pack positives.",
+    )
+    parser.add_argument(
+        "--user-style-fragment",
+        default="",
+        help=(
+            "Freeform user aesthetic repeated on every page (e.g. gouache texture, specific palette); "
+            "layers on top of book/lexicon style and visual-memory user_style_anchor."
+        ),
+    )
+    parser.add_argument(
+        "--style-fusion-preset",
+        default="none",
+        choices=[
+            "none",
+            "manga_comic",
+            "webtoon_manga",
+            "graphic_comic",
+            "manhwa_western",
+            "illustration_manga",
+        ],
+        help="Hybrid sequential-art idiom (manga×comic, etc.); see book_style_fusion.py. Visual-memory style_mix can also set this.",
+    )
+    parser.add_argument(
+        "--style-secondary",
+        default="",
+        help=(
+            "Secondary idiom to fuse when preset is none: manga, webtoon, graphic_novel, comic_us, "
+            "illustration, manhwa (underscores ok)."
+        ),
     )
     parser.add_argument(
         "--artist-craft-profile",
@@ -1264,18 +1849,6 @@ def main() -> None:
         default="",
         choices=["", "none", "soft", "explicit_detail", "romantic", "extreme"],
         help="Optional adult-content stability pack forwarded to sample.py.",
-    )
-    parser.add_argument(
-        "--nsfw-civitai-pack",
-        default="",
-        choices=["", "none", "hits", "hits_lite", "snippets", "snippets_lite", "action", "complex", "easy", "clothing", "objects", "style"],
-        help="Optional Civitai-derived NSFW trigger pack forwarded to sample.py.",
-    )
-    parser.add_argument(
-        "--civitai-trigger-bank",
-        default="",
-        choices=["", "none", "light", "medium", "heavy", "frequency_light", "frequency_medium", "frequency_heavy"],
-        help="Optional trigger bank for sample.py when using --safety-mode nsfw.",
     )
     parser.add_argument("--oc-name", default="", help="Original character name/handle for identity locking.")
     parser.add_argument(
@@ -1429,11 +2002,42 @@ def main() -> None:
         choices=["none", "light", "strong"],
         help="Append consistency anti-drift negatives (default: none, or JSON negative_level if set).",
     )
+    parser.add_argument(
+        "--visual-memory",
+        default="",
+        help=(
+            "JSON visual memory for cast/props (proportions, camera, page overrides); "
+            "see pipelines/book_comic/visual_memory.py and examples/book_visual_memory.example.json"
+        ),
+    )
 
     args = parser.parse_args()
+    if getattr(args, "lora", None) is None:
+        args.lora = []
+    if getattr(args, "control", None) is None:
+        args.control = []
 
     _ensure_repo_on_path()
-    from pipelines.book_comic import book_helpers, consistency_helpers, prompt_lexicon
+    from utils.architecture.ar_block_conditioning import read_num_ar_blocks_from_checkpoint
+
+    _dit_ar_nb = -1
+    try:
+        _dit_ar_nb = int(read_num_ar_blocks_from_checkpoint(Path(args.ckpt)))
+    except Exception:
+        _dit_ar_nb = -1
+    if bool(getattr(args, "pick_vit_ar_from_ckpt", False)) and _dit_ar_nb in (0, 2, 4):
+        args.pick_vit_ar_blocks = _dit_ar_nb
+
+    from pipelines.book_comic import (
+        book_challenging_content,
+        book_helpers,
+        book_model_readiness,
+        book_style_authenticity,
+        book_style_fusion,
+        consistency_helpers,
+        prompt_lexicon,
+    )
+    from pipelines.book_comic import visual_memory as book_visual_memory
 
     settings = book_helpers.resolve_book_sample_settings(args)
     _style_cfg = prompt_lexicon.resolve_book_style_controls(
@@ -1442,8 +2046,6 @@ def main() -> None:
         oc_pack=str(getattr(args, "oc_pack", "none") or "none"),
         safety_mode=str(getattr(args, "safety_mode", "") or ""),
         nsfw_pack=str(getattr(args, "nsfw_pack", "") or ""),
-        nsfw_civitai_pack=str(getattr(args, "nsfw_civitai_pack", "") or ""),
-        civitai_trigger_bank=str(getattr(args, "civitai_trigger_bank", "") or ""),
     )
     _auto_h = (
         prompt_lexicon.infer_auto_humanize_controls(
@@ -1467,6 +2069,34 @@ def main() -> None:
         asymmetry_level=_auto_h.get("asymmetry_level", "none") if _human_asym_raw == "none" else _human_asym_raw,
         negative_level=_auto_h.get("negative_level", "none") if _human_neg_raw == "none" else _human_neg_raw,
     )
+
+    _audit_errs, _audit_warns = book_helpers.audit_book_run_flags(
+        pick_best=str(settings.pick_best or ""),
+        sample_candidates=int(settings.sample_candidates),
+        pick_vit_ckpt=str(getattr(args, "pick_vit_ckpt", "") or ""),
+        beam_width=int(getattr(args, "beam_width", 0) or 0),
+        book_challenge_pack=str(getattr(args, "book_challenge_pack", "none") or "none"),
+        safety_mode=str(_style_cfg.get("safety_mode", "") or ""),
+        clip_guard_threshold=float(getattr(args, "clip_guard_threshold", 0.0) or 0.0),
+        clip_monitor_every=int(getattr(args, "clip_monitor_every", 0) or 0),
+        adherence_pack=str(getattr(args, "adherence_pack", "none") or "none"),
+        pick_vit_use_adherence=bool(getattr(args, "pick_vit_use_adherence", False)),
+    )
+    for _aw in _audit_warns:
+        print(f"WARNING [book]: {_aw}", file=sys.stderr)
+    if _audit_errs:
+        raise SystemExit("book run configuration errors:\n" + "\n".join(_audit_errs))
+
+    _pf_errs, _pf_warns = book_model_readiness.run_book_preflight(
+        args,
+        dit_ar_blocks=_dit_ar_nb,
+        mode=str(getattr(args, "book_preflight", "warn") or "warn"),
+        resolved_pick_best=str(settings.pick_best or ""),
+    )
+    for _pw in _pf_warns:
+        print(f"WARNING [book preflight]: {_pw}", file=sys.stderr)
+    if _pf_errs:
+        raise SystemExit("book preflight (strict) failed:\n" + "\n".join(_pf_errs))
 
     def _cfg_cmd_tail() -> List[str]:
         tail: List[str] = []
@@ -1492,12 +2122,6 @@ def main() -> None:
         npack = str(_style_cfg.get("nsfw_pack", "") or "").strip().lower()
         if npack in ("none", "soft", "explicit_detail", "romantic", "extreme"):
             tail.extend(["--nsfw-pack", npack])
-        ncp = str(_style_cfg.get("nsfw_civitai_pack", "") or "").strip().lower()
-        if ncp in ("none", "hits", "hits_lite", "snippets", "snippets_lite", "action", "complex", "easy", "clothing", "objects", "style"):
-            tail.extend(["--nsfw-civitai-pack", ncp])
-        ctb = str(_style_cfg.get("civitai_trigger_bank", "") or "").strip().lower()
-        if ctb in ("none", "light", "medium", "heavy", "frequency_light", "frequency_medium", "frequency_heavy"):
-            tail.extend(["--civitai-trigger-bank", ctb])
         return tail
 
     def _photo_tail() -> List[str]:
@@ -1531,7 +2155,15 @@ def main() -> None:
             tail.append("--no-realism-autopilot")
         return tail
 
-    ocr_extra = book_helpers.build_extra_ocr_sample_flags(settings) + _cfg_cmd_tail() + _nsfw_tail() + _photo_tail()
+    ocr_extra = (
+        book_helpers.build_extra_ocr_sample_flags(settings)
+        + _cfg_cmd_tail()
+        + _nsfw_tail()
+        + _photo_tail()
+        + book_helpers.adapter_control_argv_for_sample(args)
+        + book_helpers.sdx_enhance_argv_for_sample(args)
+        + book_helpers.adherence_quality_argv_for_sample(args)
+    )
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1624,6 +2256,26 @@ def main() -> None:
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, color_render_hint_str)
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, technique_hint_str)
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, human_hint_str)
+    _vm_early = str(getattr(args, "visual_memory", "") or "").strip()
+    _vm_style_peek = book_style_authenticity.peek_visual_memory_book_style(Path(_vm_early)) if _vm_early else ""
+    _book_auth_bundle = book_style_authenticity.resolve_authenticity_bundle(
+        level=str(getattr(args, "book_authenticity", "none") or "none"),
+        medium=str(getattr(args, "book_authenticity_medium", "auto") or "auto"),
+        book_type=str(args.book_type),
+        lexicon_style=str(getattr(args, "lexicon_style", "none") or "none"),
+        visual_memory_book_style=_vm_style_peek,
+    )
+    if _book_auth_bundle.get("positive"):
+        panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, _book_auth_bundle["positive"])
+    _book_auth_neg = str(_book_auth_bundle.get("negative") or "").strip()
+    _book_auth_effective_medium = str(_book_auth_bundle.get("effective_medium") or "").strip()
+    _primary_style_bm = _vm_style_peek or book_style_fusion.primary_style_from_book_type(str(args.book_type))
+    _style_fusion_cli = book_style_fusion.fusion_from_cli(
+        preset=str(getattr(args, "style_fusion_preset", "none") or "none"),
+        secondary=str(getattr(args, "style_secondary", "") or ""),
+        primary_book_style=_primary_style_bm,
+    )
+    _user_style_cli = str(getattr(args, "user_style_fragment", "") or "").strip()
     _oc_name = str(getattr(args, "oc_name", "") or "")
     _oc_archetype = str(getattr(args, "oc_archetype", "none") or "none")
     _oc_traits = str(getattr(args, "oc_traits", "") or "")
@@ -1704,11 +2356,34 @@ def main() -> None:
     if cj:
         consistency_spec = dict(consistency_helpers.load_consistency_json(Path(cj)))
     consistency_helpers.overlay_cli_on_spec(consistency_spec, args)
-    consistency_block = consistency_helpers.positive_block_from_mapping(consistency_spec)
+    _safety_for_challenge = str(_style_cfg.get("safety_mode", "") or "")
+    consistency_block = consistency_helpers.positive_block_from_mapping(
+        consistency_spec,
+        safety_mode=_safety_for_challenge,
+    )
+    _challenge_pack_cli = str(getattr(args, "book_challenge_pack", "none") or "none").strip().lower()
+    _book_challenge_pos = prompt_lexicon.merge_prompt_fragments(
+        book_challenging_content.challenge_pack_positive(
+            _challenge_pack_cli,
+            safety_mode=_safety_for_challenge,
+        ),
+        str(getattr(args, "book_challenge_extra", "") or "").strip(),
+    )
+    consistency_block = prompt_lexicon.merge_prompt_fragments(consistency_block, _book_challenge_pos)
     consistency_neg_level = consistency_helpers.negative_level_from_spec(
         consistency_spec, getattr(args, "consistency_negative", None)
     )
     consistency_neg_fragment = consistency_helpers.consistency_negative_addon(consistency_neg_level)
+    _book_challenge_neg = book_challenging_content.challenge_pack_negative(_challenge_pack_cli)
+
+    vm_path = str(getattr(args, "visual_memory", "") or "").strip()
+    book_vm = None
+    if vm_path:
+        try:
+            book_vm = book_visual_memory.load_visual_memory(Path(vm_path))
+        except Exception as e:
+            raise SystemExit(f"--visual-memory: failed to load {vm_path!r}: {e}") from e
+
     chapter_every = max(0, int(getattr(args, "chapter_break_every", 0) or 0))
     context_n = max(0, int(getattr(args, "page_context_previous", 0) or 0))
     context_mc = max(32, int(getattr(args, "page_context_max_chars", 500) or 500))
@@ -1729,7 +2404,13 @@ def main() -> None:
         page_expected_overrides = [_parse_expected_texts(exp) for (_, exp) in page_specs]
     if args.pages and args.page_prompt_template:
         for i in range(args.pages):
-            prompts.append(args.page_prompt_template.format(page=i))
+            prompts.append(
+                book_helpers.expand_page_prompt_template(
+                    args.page_prompt_template,
+                    page_index=i,
+                    total_pages=int(args.pages),
+                )
+            )
             page_expected_overrides.append([])
     if not prompts and args.cover_prompt:
         prompts = []
@@ -1766,7 +2447,8 @@ def main() -> None:
             prompt_lexicon.suggest_negative_addon(
             use_lexicon_negative=True,
             user_negative=(args.negative_prompt or ""),
-            production_tier=str(getattr(args, "book_accuracy", "") or "").lower() == "production",
+            production_tier=str(getattr(args, "book_accuracy", "") or "").lower()
+            in ("production", "production_vit", "production_fidelity"),
             artist_lettering_strict=str(_artist_cfg.get("lettering_craft", "none") or "none").lower() == "strict",
             ).strip()
             if getattr(args, "lexicon_negative", True)
@@ -1777,6 +2459,10 @@ def main() -> None:
         hneg = prompt_lexicon.humanize_negative_addon(str(_human_cfg.get("negative_level", "none") or "none"))
         if hneg:
             base = f"{base}, {hneg}".strip().strip(",")
+        if _book_auth_neg:
+            base = f"{base}, {_book_auth_neg}".strip().strip(",")
+        if _book_challenge_neg:
+            base = f"{base}, {_book_challenge_neg}".strip().strip(",")
         oc_neg = str(getattr(args, "oc_negative", "") or "").strip()
         if _auto_oc_negative:
             base = f"{base}, {_auto_oc_negative}".strip().strip(",")
@@ -1838,10 +2524,32 @@ def main() -> None:
             pick_expected_count=int(getattr(args, "expected_count", 0) or 0),
             pick_expected_count_target=str(getattr(args, "expected_count_target", "auto") or "auto"),
             pick_expected_count_object=str(getattr(args, "expected_count_object", "") or ""),
+            pick_vit_ckpt=str(getattr(args, "pick_vit_ckpt", "") or ""),
+            pick_vit_use_adherence=bool(getattr(args, "pick_vit_use_adherence", False)),
+            pick_vit_ar_blocks=int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
+            pick_report_json=_resolve_pick_report_json_path(
+                str(getattr(args, "pick_report_json", "") or ""),
+                out_path,
+            ),
+            pick_auto_no_clip=bool(getattr(args, "pick_auto_no_clip", False)),
+        )
+        book_helpers.append_sample_py_beam_flags(
+            cmd,
+            beam_width=int(getattr(args, "beam_width", 0) or 0),
+            beam_steps=int(getattr(args, "beam_steps", 0) or 0),
+            beam_metric=str(getattr(args, "beam_metric", "") or ""),
+            beam2_width=int(getattr(args, "beam2_width", 0) or 0),
+            beam2_steps=int(getattr(args, "beam2_steps", 0) or 0),
+            beam2_metric=str(getattr(args, "beam2_metric", "") or ""),
+            beam2_at_frac=float(getattr(args, "beam2_at_frac", 0.65) or 0.65),
+            beam2_noise=float(getattr(args, "beam2_noise", 0.03) or 0.03),
         )
         cmd.extend(_cfg_cmd_tail())
         cmd.extend(_nsfw_tail())
         cmd.extend(_photo_tail())
+        book_helpers.extend_sample_py_adapter_control_cmd(cmd, args)
+        book_helpers.extend_sample_py_sdx_enhance_cmd(cmd, args)
+        book_helpers.extend_sample_py_adherence_quality_cmd(cmd, args)
         if args.character_sheet.strip():
             cmd += ["--character-sheet", args.character_sheet]
         if args.character_prompt_extra.strip():
@@ -1878,17 +2586,28 @@ def main() -> None:
             cmd += ["--mask", str(mask_path)]
             cmd += ["--inpaint-mode", "mdm"]
 
+        if bool(getattr(args, "book_dry_run", False)):
+            line = " ".join(shlex.quote(str(x)) for x in cmd)
+            print(f"DRY-RUN sample.py:\n  {line}", flush=True)
+            sys.exit(0)
         _safe_run(cmd)
         _postprocess_output(out_path, page_seed if page_seed is not None else int(args.seed))
 
     # Cover generation
     if args.cover_prompt:
         cover_out = cover_dir / "cover.png"
+        vm_cover = (
+            book_vm.prompt_fragment_for_cover(safety_mode=_safety_for_challenge)
+            if book_vm is not None
+            else ""
+        )
         cover_composed = book_helpers.compose_book_page_prompt(
             user_prompt=args.cover_prompt,
             narration_prefix=narration_p,
-            consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block),
-            panel_hint=prompt_lexicon.merge_prompt_fragments(artist_hint_str, human_hint_str),
+            consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block, vm_cover),
+            style_fusion_block=_style_fusion_cli,
+            user_style_fragment=_user_style_cli,
+            panel_hint=panel_hint_str,
             rolling_context="",
         )
         sample_generate(
@@ -1959,10 +2678,17 @@ def main() -> None:
         rolling = book_helpers.build_rolling_page_context(
             prev_prompts, num_previous=context_n, max_chars=context_mc
         )
+        vm_page = (
+            book_vm.prompt_fragment_for_page(i, safety_mode=_safety_for_challenge)
+            if book_vm is not None
+            else ""
+        )
         composed_prompt = book_helpers.compose_book_page_prompt(
             user_prompt=page_prompt,
             narration_prefix=narration_p,
-            consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block),
+            consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block, vm_page),
+            style_fusion_block=_style_fusion_cli,
+            user_style_fragment=_user_style_cli,
             panel_hint=panel_hint_str,
             rolling_context=rolling,
         )
@@ -1996,7 +2722,7 @@ def main() -> None:
             args.anchor_face or args.edge_anchor or args.anchor_speech_bubbles or user_anchor_exists
         )
 
-        page_seed = int(args.seed) + i * 9973
+        page_seed = book_helpers.derive_book_page_seed(int(args.seed), i)
 
         if i == 0 or not should_anchor:
             sample_generate(
@@ -2155,6 +2881,65 @@ def main() -> None:
             "humanize_materiality": str(_human_cfg.get("materiality_mode", "none") or "none"),
             "humanize_asymmetry": str(_human_cfg.get("asymmetry_level", "none") or "none"),
             "humanize_negative_level": str(_human_cfg.get("negative_level", "none") or "none"),
+            "book_authenticity": str(getattr(args, "book_authenticity", "none") or "none"),
+            "book_authenticity_medium": str(getattr(args, "book_authenticity_medium", "auto") or "auto"),
+            "book_authenticity_effective_medium": _book_auth_effective_medium,
+            "book_challenge_pack": str(getattr(args, "book_challenge_pack", "none") or "none"),
+            "book_challenge_extra": str(getattr(args, "book_challenge_extra", "") or "").strip() or None,
+            "sample_candidates": int(settings.sample_candidates),
+            "pick_best": str(settings.pick_best or ""),
+            "pick_vit_ckpt": str(getattr(args, "pick_vit_ckpt", "") or "").strip() or None,
+            "pick_vit_use_adherence": bool(getattr(args, "pick_vit_use_adherence", False)),
+            "pick_vit_ar_blocks": int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
+            "pick_vit_ar_from_ckpt": bool(getattr(args, "pick_vit_ar_from_ckpt", False)),
+            "pick_report_json": str(getattr(args, "pick_report_json", "") or "").strip() or None,
+            "pick_auto_no_clip": bool(getattr(args, "pick_auto_no_clip", False)),
+            "beam_width": int(getattr(args, "beam_width", 0) or 0),
+            "beam_steps": int(getattr(args, "beam_steps", 0) or 0),
+            "beam_metric": str(getattr(args, "beam_metric", "") or "").strip() or None,
+            "beam2_width": int(getattr(args, "beam2_width", 0) or 0),
+            "beam2_steps": int(getattr(args, "beam2_steps", 0) or 0),
+            "beam2_metric": str(getattr(args, "beam2_metric", "") or "").strip() or None,
+            "beam2_at_frac": float(getattr(args, "beam2_at_frac", 0.65) or 0.65),
+            "beam2_noise": float(getattr(args, "beam2_noise", 0.03) or 0.03),
+            "sample_style_prompt": str(getattr(args, "style", "") or "").strip() or None,
+            "sample_style_strength": float(getattr(args, "style_strength", 0.7) or 0.7),
+            "sample_tags_file": str(getattr(args, "tags_file", "") or "").strip() or None,
+            "lora_specs": list(getattr(args, "lora", []) or []),
+            "control_stack": list(getattr(args, "control", []) or []),
+            "control_image": str(getattr(args, "control_image", "") or "").strip() or None,
+            "holy_grail": bool(getattr(args, "holy_grail", False)),
+            "reference_image": str(getattr(args, "reference_image", "") or "").strip() or None,
+            "reference_adapter_pt": str(getattr(args, "reference_adapter_pt", "") or "").strip() or None,
+            "book_preflight": str(getattr(args, "book_preflight", "warn") or "warn"),
+            "book_dry_run": bool(getattr(args, "book_dry_run", False)),
+            "sdx_enhance": {
+                "hires_fix": bool(getattr(args, "hires_fix", False)),
+                "finishing_preset": str(getattr(args, "finishing_preset", "none") or "none"),
+                "flow_matching_sample": bool(getattr(args, "flow_matching_sample", False)),
+                "spectral_coherence_latent": float(getattr(args, "spectral_coherence_latent", 0.0) or 0.0),
+                "domain_prior_latent": float(getattr(args, "domain_prior_latent", 0.0) or 0.0),
+                "face_enhance": bool(getattr(args, "face_enhance", False)),
+                "no_refine": bool(getattr(args, "no_refine", False)),
+            },
+            "adherence_quality": {
+                "quality_pack": str(getattr(args, "quality_pack", "none") or "none"),
+                "adherence_pack": str(getattr(args, "adherence_pack", "none") or "none"),
+                "clip_guard_threshold": float(getattr(args, "clip_guard_threshold", 0.0) or 0.0),
+                "clip_monitor_every": int(getattr(args, "clip_monitor_every", 0) or 0),
+                "volatile_cfg_boost": float(getattr(args, "volatile_cfg_boost", 0.0) or 0.0),
+                "sag_scale": float(getattr(args, "sag_scale", 0.0) or 0.0),
+                "dual_stage_layout": bool(getattr(args, "dual_stage_layout", False)),
+                "hard_style": str(getattr(args, "hard_style", "") or "").strip() or None,
+            },
+            "book_model_stack": book_model_readiness.book_model_stack_snapshot(
+                args,
+                dit_ar_blocks=_dit_ar_nb,
+                vit_cfg=book_model_readiness.peek_vit_config_for_args(args),
+            ),
+            "user_style_fragment": _user_style_cli or None,
+            "style_fusion_preset": str(getattr(args, "style_fusion_preset", "none") or "none"),
+            "style_secondary": str(getattr(args, "style_secondary", "") or "").strip() or None,
             "oc_pack": getattr(args, "oc_pack", ""),
             "auto_original_character": bool(getattr(args, "auto_original_character", True)),
             "auto_oc_seed_offset": int(getattr(args, "auto_oc_seed_offset", 0) or 0),
@@ -2164,10 +2949,10 @@ def main() -> None:
             "original_character_block": oc_block,
             "consistency_negative_level": consistency_neg_level,
             "consistency_json": cj or None,
+            "visual_memory": vm_path or None,
+            "visual_memory_entity_ids": book_vm.entity_ids() if book_vm is not None else [],
             "safety_mode": str(_style_cfg.get("safety_mode", "") or ""),
             "nsfw_pack": str(_style_cfg.get("nsfw_pack", "") or ""),
-            "nsfw_civitai_pack": str(_style_cfg.get("nsfw_civitai_pack", "") or ""),
-            "civitai_trigger_bank": str(_style_cfg.get("civitai_trigger_bank", "") or ""),
             "shortcomings_mitigation": getattr(settings, "shortcomings_mitigation", "none"),
             "shortcomings_2d": bool(getattr(settings, "shortcomings_2d", False)),
             "art_guidance_mode": getattr(settings, "art_guidance_mode", "none"),

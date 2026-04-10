@@ -51,6 +51,47 @@ __all__ = [
     "LORA_STRENGTH_TIPS",
     "PROMPT_STRUCTURE_TIPS",
     "ORIGINALITY_POSITIVE_TOKENS",
+    # Physics / fluids / transparency (see physics_material_prompts.py)
+    "PHYSICS_MATERIAL_DOMAIN_NAMES",
+    "PHYSICS_MATERIAL_RECOMMENDED_PROMPTS_BY_DOMAIN",
+    "PHYSICS_MATERIAL_RECOMMENDED_NEGATIVE_BY_DOMAIN",
+    "PHYSICS_COMMON_NEGATIVE_ADDON",
+    "FLUIDS_PROMPT_TIPS",
+    "TRANSPARENCY_REFRACTION_TIPS",
+    "RIGID_CONTACT_SHADOW_TIPS",
+    "PARTICULATE_VOLUMETRIC_TIPS",
+    "SOFT_BODY_CLOTH_TIPS",
+    "PHYSICS_TRAINING_CAPTION_TIPS",
+    # Creatures / anthro / robots / humanoid monsters (see creature_character_prompts.py)
+    "HUMANOID_MONSTER_PROMPT_KEYWORDS",
+    "CREATURE_CHARACTER_DOMAIN_NAMES",
+    "CREATURE_CHARACTER_RECOMMENDED_PROMPTS_BY_DOMAIN",
+    "CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN",
+    "CREATURE_COMMON_NEGATIVE_ADDON",
+    "CREATURES_PROMPT_TIPS",
+    "CREATURES_SFW_TIPS",
+    "CREATURES_NSFW_TIPS",
+    "ANTHRO_FURRY_PROMPT_TIPS",
+    "ROBOTS_MECH_PROMPT_TIPS",
+    "HUMANOID_MONSTERS_PROMPT_TIPS",
+    "CREATURE_TRAINING_CAPTION_TIPS",
+    "CREATURE_SFW_CONTEXT_POSITIVE",
+    "CREATURE_SFW_NEGATIVE_ADDON",
+    "CREATURE_NSFW_CONTEXT_POSITIVE",
+    "CREATURE_NSFW_NEGATIVE_ADDON",
+    "CREATURE_CHARACTER_SFW_RECOMMENDED_PROMPTS_BY_DOMAIN",
+    "CREATURE_CHARACTER_NSFW_RECOMMENDED_PROMPTS_BY_DOMAIN",
+    "CREATURE_CHARACTER_SFW_RECOMMENDED_NEGATIVE_BY_DOMAIN",
+    "CREATURE_CHARACTER_NSFW_RECOMMENDED_NEGATIVE_BY_DOMAIN",
+    "CREATURE_NSFW_KEYWORDS",
+    "CREATURE_SFW_SCENARIO_TIPS",
+    "CREATURE_NSFW_SCENARIO_TIPS",
+    "ANTHRO_FURRY_SFW_TIPS",
+    "ANTHRO_FURRY_NSFW_TIPS",
+    "ROBOTS_MECH_SFW_TIPS",
+    "ROBOTS_MECH_NSFW_TIPS",
+    "HUMANOID_MONSTERS_SFW_TIPS",
+    "HUMANOID_MONSTERS_NSFW_TIPS",
 ]
 
 DOMAIN_NAMES = ("3d", "realistic", "interior", "exterior")
@@ -96,7 +137,7 @@ RECOMMENDED_NEGATIVE_BY_DOMAIN = {
 }
 
 # Default negative when user leaves negative prompt empty (sample.py uses this).
-# Civitai-style: quality + anatomy/hands (SD 1.5–style; keep minimal for SDXL-like models if they over-obey).
+# Classic SD-style: quality + anatomy/hands (keep minimal for SDXL-like models if they over-obey).
 # Note: "text" here means unwanted watermarks/signatures; for images that should contain legible text, use TEXT_IN_IMAGE_NEGATIVE.
 DEFAULT_NEGATIVE_PROMPT = (
     "low quality, worst quality, blurry, jpeg artifacts, watermark, signature, text, "
@@ -376,10 +417,10 @@ QUALITY_TAG_DEPENDENCY_TIPS = [
     "Training: include quality tags in captions so the model doesn't depend on them at inference; or document that users should use them.",
 ]
 
-# Orange/green tint (e.g. Civitai online generator vs local).
+# Orange/green tint (e.g. some hosted generators vs local).
 COLOR_TINT_NEGATIVE = "orange tint, green tint, yellow tint, color cast, piss filter, wrong white balance"
 
-# --- Inspired by Stable Diffusion Art, ComfyUI docs, FLUX GitHub, Civitai ---
+# --- Inspired by Stable Diffusion Art, ComfyUI docs, FLUX GitHub, community guides ---
 
 # FLUX grid-like artifact (visible grid in dark areas, worse with Depth/Canny and upscale). GitHub #406.
 FLUX_GRID_ARTIFACT_TIPS = [
@@ -411,7 +452,7 @@ GARBLED_FACE_TIPS = [
     "Post-process: face restoration (CodeFormer, GFPGAN) or inpainting/ADetailer for problematic faces.",
 ]
 
-# LoRA strength (Civitai: good LoRAs work at ~1.0; avoid overcooked; FLUX grid at >1.20).
+# LoRA strength (good LoRAs often work at ~1.0; avoid overcooked; FLUX grid at >1.20).
 LORA_STRENGTH_TIPS = [
     "Aim for LoRA strength around 1.0 (or 0.8–1.0) unless the model card suggests otherwise.",
     "Strength above 1.20 on FLUX can trigger grid artifacts; keep at or below 1.20.",
@@ -466,3 +507,55 @@ ORIGINALITY_POSITIVE_TOKENS = [
     "surprising negative space",
     "rhythm in shapes",
 ]
+
+# --- Physics, fluids, transparency, rigid & soft bodies (merged into domain dicts below) ---
+from .physics_material_prompts import (  # noqa: E402
+    FLUIDS_PROMPT_TIPS,
+    PARTICULATE_VOLUMETRIC_TIPS,
+    PHYSICS_COMMON_NEGATIVE_ADDON,
+    PHYSICS_MATERIAL_DOMAIN_NAMES,
+    PHYSICS_MATERIAL_RECOMMENDED_NEGATIVE_BY_DOMAIN,
+    PHYSICS_MATERIAL_RECOMMENDED_PROMPTS_BY_DOMAIN,
+    PHYSICS_TRAINING_CAPTION_TIPS,
+    RIGID_CONTACT_SHADOW_TIPS,
+    SOFT_BODY_CLOTH_TIPS,
+    TRANSPARENCY_REFRACTION_TIPS,
+)
+
+RECOMMENDED_PROMPTS_BY_DOMAIN.update(PHYSICS_MATERIAL_RECOMMENDED_PROMPTS_BY_DOMAIN)
+RECOMMENDED_NEGATIVE_BY_DOMAIN.update(PHYSICS_MATERIAL_RECOMMENDED_NEGATIVE_BY_DOMAIN)
+
+from .creature_character_prompts import (  # noqa: E402
+    ANTHRO_FURRY_NSFW_TIPS,
+    ANTHRO_FURRY_PROMPT_TIPS,
+    ANTHRO_FURRY_SFW_TIPS,
+    CREATURE_CHARACTER_DOMAIN_NAMES,
+    CREATURE_CHARACTER_NSFW_RECOMMENDED_NEGATIVE_BY_DOMAIN,
+    CREATURE_CHARACTER_NSFW_RECOMMENDED_PROMPTS_BY_DOMAIN,
+    CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN,
+    CREATURE_CHARACTER_RECOMMENDED_PROMPTS_BY_DOMAIN,
+    CREATURE_CHARACTER_SFW_RECOMMENDED_NEGATIVE_BY_DOMAIN,
+    CREATURE_CHARACTER_SFW_RECOMMENDED_PROMPTS_BY_DOMAIN,
+    CREATURE_COMMON_NEGATIVE_ADDON,
+    CREATURE_NSFW_CONTEXT_POSITIVE,
+    CREATURE_NSFW_KEYWORDS,
+    CREATURE_NSFW_NEGATIVE_ADDON,
+    CREATURE_NSFW_SCENARIO_TIPS,
+    CREATURE_SFW_CONTEXT_POSITIVE,
+    CREATURE_SFW_NEGATIVE_ADDON,
+    CREATURE_SFW_SCENARIO_TIPS,
+    CREATURE_TRAINING_CAPTION_TIPS,
+    CREATURES_NSFW_TIPS,
+    CREATURES_PROMPT_TIPS,
+    CREATURES_SFW_TIPS,
+    HUMANOID_MONSTER_PROMPT_KEYWORDS,
+    HUMANOID_MONSTERS_NSFW_TIPS,
+    HUMANOID_MONSTERS_PROMPT_TIPS,
+    HUMANOID_MONSTERS_SFW_TIPS,
+    ROBOTS_MECH_NSFW_TIPS,
+    ROBOTS_MECH_PROMPT_TIPS,
+    ROBOTS_MECH_SFW_TIPS,
+)
+
+RECOMMENDED_PROMPTS_BY_DOMAIN.update(CREATURE_CHARACTER_RECOMMENDED_PROMPTS_BY_DOMAIN)
+RECOMMENDED_NEGATIVE_BY_DOMAIN.update(CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN)

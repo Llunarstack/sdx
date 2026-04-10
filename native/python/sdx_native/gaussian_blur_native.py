@@ -3,7 +3,7 @@ Optional ``sdx_cuda_gaussian_blur`` wrapper — depthwise Gaussian blur on float
 latent tensors (B, C, H, W).
 
 Matches ``gaussian_blur_latent()`` in ``diffusion/sampling_utils.py`` and
-``_gaussian_blur()`` in ``diffusion/holy_grail/latent_refiner.py``.
+``_gaussian_blur()`` in ``diffusion/sampling_extras/latent_refiner.py``.
 
 Falls back to pure PyTorch when the native library is not built.
 """

@@ -95,7 +95,7 @@ def main() -> int:
 
     py = sys.executable
     train_py = ROOT / "train.py"
-    export_py = ROOT / "scripts" / "training" / "hf_export_to_sdx_manifest.py"
+    export_py = ROOT / "scripts" / "tr" / "hf_export_to_sdx_manifest.py"
     smoke_py = ROOT / "scripts" / "tools" / "make_smoke_dataset.py"
 
     if args.demo:

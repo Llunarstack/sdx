@@ -150,7 +150,7 @@ def build_readiness_report(
         blockers.append(f"Dataset manifest not found: {dataset_path}")
 
     if not bool(gpu.get("cuda_available", False)):
-        warnings.append("CUDA not detected; future training/inference will be slower on CPU.")
+        warnings.append("CUDA not detected; future tr/inference will be slower on CPU.")
 
     low_disk = [k for k, row in disk.items() if float(row.get("free_gb", 0.0)) < 20.0]
     if low_disk:

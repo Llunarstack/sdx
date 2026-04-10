@@ -4,14 +4,15 @@ Integrated with precision control, anatomy correction, consistency management, a
 """
 
 import json
+import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
-# Import the new advanced systems
+_log = logging.getLogger(__name__)
 
 
 class PromptOptimizer:
@@ -160,13 +161,24 @@ class PromptOptimizer:
 class BatchInference:
     """Handle batch inference with progress tracking and error handling."""
 
-    def __init__(self, model, diffusion, tokenizer, text_encoder, vae, device):
+    def __init__(
+        self,
+        model,
+        diffusion,
+        tokenizer,
+        text_encoder,
+        vae,
+        device,
+        *,
+        generate_fn: Optional[Callable[..., Image.Image]] = None,
+    ):
         self.model = model
         self.diffusion = diffusion
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         self.vae = vae
         self.device = device
+        self._generate_fn = generate_fn
 
     def generate_batch(
         self, prompts: List[str], negative_prompts: Optional[List[str]] = None, **generation_kwargs
@@ -182,25 +194,34 @@ class BatchInference:
 
         for i, (prompt, neg_prompt) in enumerate(zip(prompts, negative_prompts)):
             try:
-                print(f"Generating image {i + 1}/{len(prompts)}: {prompt[:50]}...")
-
-                # Generate single image (this would call your existing generation function)
+                _log.info("Generating image %s/%s: %s...", i + 1, len(prompts), prompt[:50])
                 image = self._generate_single(prompt, neg_prompt, **generation_kwargs)
                 images.append(image)
 
             except Exception as e:
-                print(f"Error generating image {i + 1}: {e}")
-                # Create a placeholder error image
+                _log.error("Error generating image %s: %s", i + 1, e)
                 error_image = Image.new("RGB", (512, 512), color="red")
                 images.append(error_image)
 
         return images
 
     def _generate_single(self, prompt: str, negative_prompt: str = "", **kwargs) -> Image.Image:
-        """Generate a single image (placeholder - implement with your generation logic)."""
-        # This is a placeholder - replace with actual generation code
-        # For now, return a dummy image
-        return Image.new("RGB", (512, 512), color="blue")
+        if self._generate_fn is not None:
+            # Caller supplies a callable that closes over model/diffusion/VAE/etc., or accepts **kwargs.
+            return self._generate_fn(prompt, negative_prompt, **kwargs)
+        from utils.generation.simple_latent_generate import sample_one_image_pil
+
+        return sample_one_image_pil(
+            model=self.model,
+            diffusion=self.diffusion,
+            tokenizer=self.tokenizer,
+            text_encoder=self.text_encoder,
+            vae=self.vae,
+            device=self.device,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            **kwargs,
+        )
 
     def process_prompt_file(self, prompt_file: str, output_dir: str, **generation_kwargs):
         """Process prompts from a file and save generated images."""
@@ -254,7 +275,7 @@ class BatchInference:
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
 
-        print(f"Generated {len(images)} images in {output_dir}")
+        _log.info("Generated %s images in %s", len(images), output_dir)
 
 
 class ImageEnhancer:

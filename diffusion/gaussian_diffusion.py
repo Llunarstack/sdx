@@ -510,7 +510,7 @@ class GaussianDiffusion:
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         hg_enabled = bool(holy_grail_enable)
         if hg_enabled:
-            from diffusion.holy_grail import (
+            from diffusion.sampling_extras import (
                 HolyGrailRecipe,
                 apply_condition_noise,
                 build_holy_grail_step_plan,
@@ -628,7 +628,7 @@ class GaussianDiffusion:
             )
         if hg_enabled:
             if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
-                from diffusion.holy_grail import unsharp_mask_latent
+                from diffusion.sampling_extras import unsharp_mask_latent
 
                 x = unsharp_mask_latent(
                     x,
@@ -636,7 +636,7 @@ class GaussianDiffusion:
                     amount=float(holy_grail_unsharp_amount),
                 )
             if float(holy_grail_clamp_quantile) > 0.0:
-                from diffusion.holy_grail import dynamic_percentile_clamp
+                from diffusion.sampling_extras import dynamic_percentile_clamp
 
                 x = dynamic_percentile_clamp(
                     x,
@@ -857,7 +857,7 @@ class GaussianDiffusion:
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         hg_enabled = bool(holy_grail_enable)
         if hg_enabled:
-            from diffusion.holy_grail import (
+            from diffusion.sampling_extras import (
                 HolyGrailRecipe,
                 apply_condition_noise,
                 build_holy_grail_step_plan,
@@ -1069,7 +1069,7 @@ class GaussianDiffusion:
                     x_0_pred = inpaint_mask * x_0_pred + (1.0 - inpaint_mask) * inpaint_x0
         if hg_enabled and x_0_pred is not None:
             if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
-                from diffusion.holy_grail import unsharp_mask_latent
+                from diffusion.sampling_extras import unsharp_mask_latent
 
                 x_0_pred = unsharp_mask_latent(
                     x_0_pred,
@@ -1077,7 +1077,7 @@ class GaussianDiffusion:
                     amount=float(holy_grail_unsharp_amount),
                 )
             if float(holy_grail_clamp_quantile) > 0.0:
-                from diffusion.holy_grail import dynamic_percentile_clamp
+                from diffusion.sampling_extras import dynamic_percentile_clamp
 
                 x_0_pred = dynamic_percentile_clamp(
                     x_0_pred,

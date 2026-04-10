@@ -340,6 +340,15 @@ class ConsistencyManager:
             if keyword in description_lower:
                 tags.append(keyword)
 
+        try:
+            from config.defaults.style_artists import matching_style_tags_in_prompt
+
+            for t in matching_style_tags_in_prompt(description, max_matches=20):
+                if t not in tags:
+                    tags.append(t)
+        except Exception:
+            pass
+
         return tags
 
     def _extract_colors(self, description: str) -> List[str]:

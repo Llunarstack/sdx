@@ -12,7 +12,7 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | Qwen LLM | `pretrained/Qwen2.5-14B-Instruct` |
 | Stable Cascade | `pretrained/StableCascade-Prior`, `pretrained/StableCascade-Decoder` |
 | LongCLIP-L (long prompts) | `pretrained/LongCLIP-L` or `creative-graphic-design/LongCLIP-L` |
-| moondream2 (caption/VQA helper) | `pretrained/moondream2` or `vikhyatk/moondream2` |
+| moondream2 (caption/VQA helper) | `pretrained/moondream2` or `vikhyatoolkit/moondream2` |
 | Marigold depth/normals | `pretrained/Marigold-Depth-v1-1`, `pretrained/Marigold-Normals-v1-1` |
 | TAESD / TAESDXL (fast preview VAE) | `pretrained/TAESD`, `pretrained/TAESDXL` |
 | Consistency Decoder | `pretrained/Consistency-Decoder` or `openai/consistency-decoder` |

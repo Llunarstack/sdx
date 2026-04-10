@@ -1,6 +1,6 @@
 [project]
 name = "sdx"
-version = "5.0.0"
+version = "6.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -15,6 +15,7 @@ src = [
   "data",
   "diffusion",
   "examples",
+  "research",
   "models",
   "native/python",
   "pipelines",
@@ -40,8 +41,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
 "vit_quality/**" = ["E402"]  # repo-root sys.path bootstrap before utils imports
+"native/python/sdx_native/__init__.py" = ["I001"]  # large explicit re-export surface; isort splits combined imports
 "utils/latent_geometry.py" = ["E402", "F403"]
 "utils/native_tools.py" = ["E402", "F403"]
+"utils/native/__init__.py" = ["I001"]  # sys.path bootstrap then star imports
 
 [tool.ruff.format]
 quote-style = "double"
@@ -51,11 +54,22 @@ docstring-code-format = true
 testpaths = ["tests"]
 pythonpath = [".", "native/python"]
 addopts = "-v --tb=short"
+filterwarnings = [
+  # SciPy vs NumPy pin mismatch in some envs — not actionable in this repo.
+  "ignore:.*NumPy version.*:UserWarning",
+  # Triton autotuner deprecations from transitive deps.
+  "ignore:warmup, rep, and use_cuda_graph parameters are deprecated:DeprecationWarning",
+]
 # Skip GPU tests when CUDA is not available (mark with @pytest.mark.cuda).
 markers = [
     "cuda: requires a CUDA GPU (skip with -m 'not cuda')",
     "slow: slow tests skipped by default (run with -m slow)",
 ]
+
+# Pyright / Pylance / basedpyright: ``sdx_native`` lives under ``native/python`` (also on ``sys.path`` at runtime).
+[tool.pyright]
+extraPaths = ["native/python", "."]
+pythonVersion = "3.10"
 
 [tool.mypy]
 python_version = "3.10"

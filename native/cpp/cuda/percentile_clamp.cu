@@ -2,7 +2,7 @@
  * Per-sample percentile clamp on a float32 tensor (B, *).
  *
  * For each sample b: bound = quantile(|x[b]|, q), then x[b] = clamp(x[b], -bound, bound) / bound.
- * Matches dynamic_percentile_clamp() in diffusion/holy_grail/latent_refiner.py.
+ * Matches dynamic_percentile_clamp() in diffusion/sampling_extras/latent_refiner.py.
  *
  * C ABI: sdx_cuda_percentile_clamp_f32
  */

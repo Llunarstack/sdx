@@ -1,5 +1,5 @@
 """
-Consistency-style utilities for diffusion training/inference experiments.
+Consistency-style utilities for diffusion tr/inference experiments.
 
 These are lightweight tensor helpers (no architecture assumptions) meant to
 support consistency/distillation-style objectives and refinement loops.

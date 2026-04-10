@@ -1,4 +1,4 @@
-# Text-to-image dataset: PixAI-style tag prompts + ReVe-style long/complex captions.
+# Text-to-image dataset: tag-board style prompts + ReVe-style long/complex captions.
 import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -17,9 +17,9 @@ from utils.training.part_aware_training import (
 from .caption_utils import (
     add_anti_blending_and_count,
     apply_art_guidance_to_caption_pair,
-    apply_pixai_emphasis,
     apply_shortcomings_to_caption_pair,
     apply_style_guidance_to_caption_pair,
+    apply_tag_emphasis,
     boost_domain_tags,
     boost_hard_style_tags,
     boost_quality_tags,
@@ -147,7 +147,7 @@ def normalize_to_latent_range(x: torch.Tensor, scale: float = 0.18215) -> torch.
     return x * scale
 
 
-# --- PixAI-style: tag-based prompts (comma-separated, optional emphasis) ---
+# --- Tag-board prompts (comma-separated, optional parenthesis emphasis) ---
 def format_as_tags(tokens: List[str], emphasis: bool = False) -> str:
     """Format list of tokens as comma-separated tags. Optionally wrap in () for emphasis."""
     if emphasis and random.random() < 0.3:
@@ -181,7 +181,7 @@ class Text2ImageDataset(Dataset):
         tag_style_prob: float = 0.5,
         max_caption_length: Optional[int] = None,
         shuffle_caption_parts: bool = False,
-        use_pixai_emphasis: bool = True,
+        use_tag_emphasis: bool = True,
         use_tag_order: bool = True,
         use_quality_boost: bool = True,
         use_adherence_boost: bool = False,
@@ -196,7 +196,7 @@ class Text2ImageDataset(Dataset):
         use_anti_blending: bool = True,
         latent_cache_dir: Optional[str] = None,
         crop_mode: str = "center",  # "center" | "random" | "largest_center" (IMPROVEMENTS 1.2)
-        extract_style_from_caption: bool = True,  # Auto-fill style from artist/style tags (PixAI, Danbooru)
+        extract_style_from_caption: bool = True,  # Auto-fill style from artist/style tags (e.g. Danbooru)
         region_caption_mode: str = "append",  # "append" | "prefix" | "off" — merge JSONL regions/parts into T5 caption
         region_layout_tag: str = "[layout]",
         resolution_buckets: Optional[List[Tuple[int, int]]] = None,
@@ -225,7 +225,7 @@ class Text2ImageDataset(Dataset):
         self.tag_style_prob = tag_style_prob
         self.max_caption_length = max_caption_length
         self.shuffle_caption_parts = shuffle_caption_parts
-        self.use_pixai_emphasis = use_pixai_emphasis
+        self.use_tag_emphasis = use_tag_emphasis
         self.use_tag_order = use_tag_order
         self.use_quality_boost = use_quality_boost
         self.use_adherence_boost = use_adherence_boost
@@ -450,8 +450,8 @@ class Text2ImageDataset(Dataset):
             caption = _normalize_caption_unicode(caption)
             if (negative_caption or "").strip():
                 negative_caption = _normalize_caption_unicode(negative_caption)
-        if self.use_pixai_emphasis:
-            caption = apply_pixai_emphasis(caption)
+        if self.use_tag_emphasis:
+            caption = apply_tag_emphasis(caption)
         if self.use_tag_order:
             caption = normalize_tag_order(caption)
         caption = boost_hard_style_tags(caption, repeat_factor=3)
@@ -520,10 +520,10 @@ class Text2ImageDataset(Dataset):
             "difficulty": s.get("difficulty", 0.5),
         }
         style_text = s.get("style", "")
-        # Auto-fill style from caption when missing (artist/style tags from PixAI, Danbooru, etc.)
+        # Auto-fill style from caption when missing (artist/style tags from tag boards, etc.)
         if not style_text and self.extract_style_from_caption:
             try:
-                from config.style_artists import extract_style_from_text
+                from config.defaults.style_artists import extract_style_from_text
 
                 style_text = extract_style_from_text(s.get("caption", "")) or ""
             except Exception:

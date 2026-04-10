@@ -17,14 +17,14 @@ python -m scripts.tools help
 |---------|------------------|
 | `ckpt_info` | `dev/ckpt_info.py` |
 | `smoke_imports`, `quick_test`, `ar_mask_inspect` | `dev/` |
-| `noise_schedule_export`, `mine_preference_pairs` | `training/` (`mine_preference_pairs` converts benchmark results into DPO-ready JSONL) |
+| `noise_schedule_export`, `mine_preference_pairs` | `tr/` (`mine_preference_pairs` converts benchmark results into DPO-ready JSONL) |
 | `data_quality`, `manifest_paths`, `jsonl_merge` | `data/` |
 | `prompt_lint`, `tag_coverage`, `suggest_style_packs` | `prompt/` (`suggest_style_packs`: free-text style query -> ranked preset suggestions for `--lexicon-style` / `--art-medium-pack` / `--artist-pack` / `--color-render-pack`). |
 | `export_onnx`, `export_safetensors` | `export/` |
 | `op_preflight`, `orchestrate_pipeline`, `auto_improve_loop`, `gen_searcher_bridge`, `pretrained_status`, `startup_readiness`, `hybrid_dit_vit_generate` | `ops/` (`auto_improve_loop`: benchmark -> mine prefs -> DPO -> re-benchmark -> optional promote; supports `--iterations N` and hardcase-aware preference remine. `gen_searcher_bridge`: convert Gen-Searcher outputs into SDX fact JSONL for grounding + optional local shard verification. `pretrained_status`: report local-vs-HF model resolution + local size summary. `startup_readiness`: no-train environment and launch readiness report with JSON/Markdown output. `hybrid_dit_vit_generate`: DiT(+AR) candidate generation with optional ViT reranking and TCIS iterative consensus mode via `--iterations` + disagreement-aware scoring + optional shape-first scaffold synthesis + Pareto elite selection + OCR/count/saturation-aware consensus + adaptive candidate budget.) |
 | `normalize_captions`, `preview_generation_prompt`, `vit_inspect`, `seed_explorer`, `eval_prompts`, `training_timestep_preview`, `image_quality_qc`, `dit_variant_compare`, `make_smoke_dataset`, `spatial_coverage`, `complex_prompt_coverage`, `prompt_gap_scout`, `prompt_i18n`, `book_scene_split` | top-level `scripts/tools/` single-file utilities (now available through dispatcher too). |
 | `dump_prompt_tag_csvs`, `fetch_danbooru_tags`, `download_all_danbooru_categorized_tags`, `split_danbooru_general_tags`, `merge_danbooru_categorized_tags`, `extract_civitai_snippets_for_content_controls`, `curate_civitai_triggers`, `fetch_civitai_nsfw_concepts` | top-level data/style curation utilities (dispatcher-enabled). |
-| `train_diffusion_dpo`, `train_kd_distill` | `training/` (advanced optimization helpers). |
+| `train_diffusion_dpo`, `train_kd_distill` | `tr/` (advanced optimization helpers). |
 | `make_gallery`, `generate_sdx_architecture_diagram`, `architecture_themes`, `validate_config_json` | `dev/` auxiliary tooling (dispatcher-enabled). |
 | `update_project_structure`, `verify_doc_links`, `clean_repo_artifacts` | `repo/` |
 

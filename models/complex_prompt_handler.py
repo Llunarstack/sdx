@@ -5,9 +5,10 @@ Standard diffusion models fail on:
   1. NSFW / explicit anatomy — "melted wax" artifacts, wrong topology
   2. Surreal / contradictory concepts — "melting clocks + cyberpunk + Victorian ghost"
   3. Physics-defying scenes — liquid, fabric, hair dynamics, tentacles
-  4. Extreme body horror / transformation — partial morphs, hybrid creatures
-  5. Fetish precision — specific material properties, unusual poses
-  6. Abstract / conceptual — emotions as landscapes, synesthesia, impossible geometry
+  4. Creatures & characters — anthro/furry species blend, robots vs flesh, humanoid monsters
+  5. Extreme body horror / transformation — partial morphs, hybrid creatures
+  6. Fetish precision — specific material properties, unusual poses
+  7. Abstract / conceptual — emotions as landscapes, synesthesia, impossible geometry
 
 Architecture:
   - PromptComplexityAnalyzer: scores prompt complexity and routes to specialist paths
@@ -41,10 +42,12 @@ class PromptComplexityProfile:
     is_nsfw: bool = False
     is_surreal: bool = False
     is_physics_heavy: bool = False
+    is_creature_character_heavy: bool = False
     is_multi_concept: bool = False
     concept_count: int = 1
-    dominant_mode: str = "standard"     # standard, nsfw, surreal, horror, abstract
+    dominant_mode: str = "standard"     # standard, nsfw, surreal, creature, physics, ...
     physics_tags: List[str] = field(default_factory=list)
+    creature_tags: List[str] = field(default_factory=list)
     concept_groups: List[List[str]] = field(default_factory=list)
 
 
@@ -69,11 +72,23 @@ class PromptComplexityAnalyzer:
         re.IGNORECASE
     )
     _PHYSICS = re.compile(
-        r'\b(liquid|fluid|water|lava|slime|goo|gel|viscous|flowing|'
+        r'\b(liquid|fluid|water|lava|slime|goo|gel|viscous|flowing|meniscus|splash|droplet|pour|pouring|'
+        r'underwater|submerged|vapor|steam|mist|fog|rain|ocean|wave|surf|turbulent|vortex|'
         r'fabric|cloth|silk|velvet|draping|billowing|rippling|'
         r'hair|fur|feathers|scales|tentacles|vines|chains|rope|'
         r'smoke|fire|flame|explosion|shatter|breaking|crumbling|'
-        r'elastic|stretching|morphing|transforming|melting|freezing)\b',
+        r'elastic|stretching|morphing|transforming|melting|freezing|'
+        r'transparent|translucent|glass|refraction|caustic|caustics|fresnel|see-through|crystalline)\b',
+        re.IGNORECASE
+    )
+    _CREATURE_CHAR = re.compile(
+        r'\b(creature|beast|monster|kaiju|dragon|griffin|gryphon|wyvern|alien|xenomorph|'
+        r'anthro|anthropomorphic|furry|fursona|kemono|muzzle|feral|'
+        r'robot|android|mech|mecha|cyborg|gundam|automaton|synthetic humanoid|hard-surface character|'
+        r'orc|ogre|troll|goblin|kobold|demon|devil|imp|daemon|succubus|incubus|cambion|'
+        r'vampire|dhampir|nosferatu|zombie|undead|lich|werewolf|lycan|revenant|wraith|banshee|'
+        r'minotaur|centaur|satyr|faun|naga|harpy|mermaid|merfolk|golem|tiefling|aasimar|drow|'
+        r'angel|archangel|seraph|oni|yokai|kitsune|lamia|arachne|gargoyle|sphinx|medusa|gorgon)\b',
         re.IGNORECASE
     )
     _HORROR = re.compile(
@@ -90,6 +105,7 @@ class PromptComplexityAnalyzer:
         is_surreal = bool(self._SURREAL.search(prompt))
         is_physics = bool(self._PHYSICS.search(prompt))
         is_horror = bool(self._HORROR.search(prompt))
+        is_creature = bool(self._CREATURE_CHAR.search(prompt))
 
         # Count distinct concept groups (separated by + / "meets" / "and")
         concept_parts = self._CONCEPT_SEPARATORS.split(prompt)
@@ -103,6 +119,7 @@ class PromptComplexityAnalyzer:
             (0.2 if is_surreal else 0) +
             (0.15 if is_physics else 0) +
             (0.15 if is_horror else 0) +
+            (0.12 if is_creature else 0) +
             min(concept_count / 5.0, 0.2)
         ))
 
@@ -111,6 +128,8 @@ class PromptComplexityAnalyzer:
             mode = "surreal"
         elif is_nsfw:
             mode = "nsfw"
+        elif is_creature:
+            mode = "creature"
         elif is_physics:
             mode = "physics"
         else:
@@ -118,19 +137,54 @@ class PromptComplexityAnalyzer:
 
         # Physics tags
         physics_tags = []
-        for tag in ["liquid", "fabric", "hair", "fire", "smoke", "tentacle", "elastic"]:
+        for tag in [
+            "liquid",
+            "water",
+            "glass",
+            "transparent",
+            "fabric",
+            "hair",
+            "fire",
+            "smoke",
+            "tentacle",
+            "elastic",
+        ]:
             if re.search(rf'\b{tag}\b', prompt, re.IGNORECASE):
                 physics_tags.append(tag)
+
+        creature_tags: List[str] = []
+        for tag in (
+            "anthro",
+            "furry",
+            "robot",
+            "android",
+            "mecha",
+            "dragon",
+            "monster",
+            "orc",
+            "werewolf",
+            "vampire",
+            "demon",
+            "succubus",
+            "tiefling",
+            "angel",
+            "cyborg",
+            "alien",
+        ):
+            if re.search(rf'\b{re.escape(tag)}\b', prompt, re.IGNORECASE):
+                creature_tags.append(tag)
 
         return PromptComplexityProfile(
             complexity_score=score,
             is_nsfw=is_nsfw,
             is_surreal=is_surreal,
             is_physics_heavy=is_physics,
+            is_creature_character_heavy=is_creature,
             is_multi_concept=is_multi,
             concept_count=concept_count,
             dominant_mode=mode,
             physics_tags=physics_tags,
+            creature_tags=creature_tags,
             concept_groups=[p.strip().split() for p in concept_parts if p.strip()],
         )
 
@@ -429,7 +483,7 @@ class NSFWAnatomyRouter(nn.Module):
 
 class ComplexPromptConditioner(nn.Module):
     """
-    Top-level module for complex/NSFW/surreal/weird prompt handling.
+    Top-level module for complexamples/NSFW/surreal/weird prompt handling.
 
     Combines:
     - PromptComplexityAnalyzer: routes to specialist paths

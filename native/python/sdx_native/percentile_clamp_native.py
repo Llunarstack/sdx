@@ -2,7 +2,7 @@
 Optional ``sdx_cuda_percentile_clamp`` wrapper — per-sample percentile clamp on
 float32 tensors (B, row_len).
 
-Matches ``dynamic_percentile_clamp()`` in ``diffusion/holy_grail/latent_refiner.py``.
+Matches ``dynamic_percentile_clamp()`` in ``diffusion/sampling_extras/latent_refiner.py``.
 
 Falls back to pure NumPy when the native library is not built.
 """

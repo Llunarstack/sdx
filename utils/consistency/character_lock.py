@@ -1,7 +1,7 @@
 """**Character / subject consistency** helpers (LANDSCAPE cross-cutting trends).
 
 Production stacks often advertise “character lock” without a separate LoRA per scene.
-For training/inference in SDX you can:
+For tr/inference in SDX you can:
 
 - Store a stable ``character_id`` (or short **anchor** description) in JSONL metadata.
 - Prepend a **fixed identity block** to captions so T5 sees the same tokens across samples.

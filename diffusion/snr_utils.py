@@ -37,6 +37,12 @@ def snr_from_alpha_cumprod(alpha_cumprod: np.ndarray) -> np.ndarray:
             return result
     except Exception:
         pass
+    try:
+        from sdx_native.diffusion_sigma_fast import snr_from_alpha_cumprod as snr_from_alpha_bar_numpy
+
+        return snr_from_alpha_bar_numpy(np.asarray(alpha_cumprod, dtype=np.float64))
+    except Exception:
+        pass
     ab = np.asarray(alpha_cumprod, dtype=np.float64)
     return ab / (1.0 - ab + 1e-8)
 
