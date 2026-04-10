@@ -30,6 +30,18 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
    python -m scripts.tools verify_doc_links
    ```
 
+
+7. **Typecheck spot-check** (matches CI; errors only):
+
+   ```bash
+   pip install basedpyright
+   python -m basedpyright --level error native/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py
+   ```
+
+   Full mirror: [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md).
+
+8. **Optional pre-commit** — [`.pre-commit-config.yaml`](.pre-commit-config.yaml): `pip install pre-commit && pre-commit install`.
+
 ## Style
 
 - **Ruff** is the source of truth (`pyproject.toml`).
