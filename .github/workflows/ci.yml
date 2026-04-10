@@ -26,15 +26,19 @@ jobs:
       - name: Ruff
         run: python -m ruff check .
 
+      # basedpyright can exit 1 when warnings exist even with --level error; we only fail on errorCount.
       - name: Basedpyright (curated modules, errors only)
         run: |
-          python -m basedpyright --level error \
+          OUT="${RUNNER_TEMP}/basedpyright.json"
+          python -m basedpyright --outputjson \
             native/python/sdx_native/diffusion_sigma_fast.py \
             utils/generation/run_artifacts.py \
             diffusion/snr_utils.py \
             utils/generation/inference_stages.py \
             utils/generation/eval_prompt_pack.py \
-            examples/run_baseline_eval.py
+            examples/run_baseline_eval.py \
+            > "$OUT"
+          python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; ec=int(s.get('errorCount',0)); wc=int(s.get('warningCount',0)); print(f\"basedpyright: {ec} errors, {wc} warnings\"); sys.exit(1 if ec else 0)" "$OUT"
 
       - name: Verify doc links
         run: python -m scripts.tools verify_doc_links
