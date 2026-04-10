@@ -31,11 +31,13 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
    ```
 
 
-7. **Typecheck spot-check** (matches CI; errors only):
+7. **Typecheck spot-check** (matches CI; fail only on `errorCount`, not warnings):
 
    ```bash
    pip install basedpyright
-   python -m basedpyright --level error native/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py utils/generation/eval_prompt_pack.py examples/run_baseline_eval.py
+   OUT=/tmp/basedpyright.json
+   python -m basedpyright --outputjson native/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py utils/generation/eval_prompt_pack.py examples/run_baseline_eval.py > "$OUT"
+   python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; sys.exit(1 if int(s.get('errorCount',0)) else 0)" "$OUT"
    ```
 
    Full mirror: [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md).
