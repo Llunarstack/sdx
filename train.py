@@ -39,6 +39,7 @@ from torch.utils.data.distributed import DistributedSampler
 from training.train_args import build_train_config_from_args
 from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
+from utils.generation.run_artifacts import RUN_MANIFEST_FILENAME, TRAIN_CONFIG_SNAPSHOT_FILENAME
 from utils.runtime.jsonutil import dumps as json_dumps
 from utils.training.ar_curriculum import parse_ar_order_mix, resolve_ar_for_step
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
@@ -146,8 +147,8 @@ def _cfg_to_dict(cfg: TrainConfig) -> dict:
 
 def _write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger) -> None:
     repo_root = Path(__file__).resolve().parent
-    cfg_out = exp_dir / "config.train.json"
-    manifest_out = exp_dir / "run_manifest.json"
+    cfg_out = exp_dir / TRAIN_CONFIG_SNAPSHOT_FILENAME
+    manifest_out = exp_dir / RUN_MANIFEST_FILENAME
     cfg_dict = _cfg_to_dict(cfg)
     cfg_out.write_text(json_dumps(cfg_dict, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
     manifest = {
