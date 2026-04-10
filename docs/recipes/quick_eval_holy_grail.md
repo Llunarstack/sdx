@@ -49,4 +49,7 @@ Disable with `--no-save-run-manifest` if you truly do not want these files.
 
 ## See also
 
+- [eval_baseline_prompts.md](eval_baseline_prompts.md) — structured prompt pack + un_baseline_eval.py.
+## See also
+
 - [local_ci_mirror.md](local_ci_mirror.md) — run the same checks as CI before you push.

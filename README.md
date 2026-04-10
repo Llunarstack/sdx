@@ -92,7 +92,7 @@ SDX is a modular text-to-image training and inference framework built on Diffusi
 
 **Core stack:** DiT · T5 / triple text encoders · LoRA/DoRA/LyCORIS routing · VP diffusion + flow matching + bridge/OT objectives · Holy Grail adaptive sampling · optional native CUDA acceleration.
 
-**Source releases:** [v7.1.0](docs/releases/v7.md) (latest) · [v6.0.0](docs/releases/v6.md) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
+**Source releases:** [v7.2.0](docs/releases/v7.md) (latest) · [v6.0.0](docs/releases/v6.md) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
 
 ---
 
@@ -697,6 +697,7 @@ python -m ViT.train --help
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
 | [docs/releases/v5.md](docs/releases/v5.md) | **v5.0.0** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
 | [docs/recipes/quick_eval_holy_grail.md](docs/recipes/quick_eval_holy_grail.md) | **Evaluation recipe**: demo, sample.py + Holy Grail, training manifests |
+| [docs/recipes/eval_baseline_prompts.md](docs/recipes/eval_baseline_prompts.md) | **Eval pack**: baseline prompts + un_baseline_eval.py driver. |
 | [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md) | **Local CI**: same commands as GitHub Actions (Ruff, basedpyright, doc links, pytest). |
 | [docs/releases/v6.md](docs/releases/v6.md) | **v6.0.0** release: native fast layer, `sampling_extras`, book/visual memory, IDE tooling, CI |
 | [`docs/releases/v4.md`](docs/releases/v4.md) | v4 release: uncertainty-scaled TCIS, elite-memory diversity bonus, and annealed constraint consensus |

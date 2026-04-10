@@ -22,7 +22,9 @@ python -m basedpyright --level error \
   native/python/sdx_native/diffusion_sigma_fast.py \
   utils/generation/run_artifacts.py \
   diffusion/snr_utils.py \
-  utils/generation/inference_stages.py
+  utils/generation/inference_stages.py \
+  utils/generation/eval_prompt_pack.py \
+  examples/run_baseline_eval.py
 
 python -m scripts.tools verify_doc_links
 
