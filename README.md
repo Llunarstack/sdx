@@ -94,7 +94,7 @@ SDX is a modular text-to-image training and inference framework built on Diffusi
 
 **What is new in v7:** CI (Ruff, basedpyright on curated modules, markdown link check) plus Dependabot and optional pre-commit; tracked `.editorconfig`; training run snapshots via `utils.generation.run_artifacts`; baseline **eval prompt pack** (`examples/eval_prompts_baseline.json`) and `examples/run_baseline_eval.py`; **local CI** recipe; research playbooks ([`IMAGE_QUALITY_LEVERS_2026.md`](docs/research/IMAGE_QUALITY_LEVERS_2026.md), [`SAMPLING_EXPERIMENTS_BACKLOG.md`](docs/research/SAMPLING_EXPERIMENTS_BACKLOG.md)); and [`SECURITY.md`](SECURITY.md). Full notes: [`docs/releases/v7.md`](docs/releases/v7.md).
 
-**Source releases:** [**v7**](docs/releases/v7.md) (latest) · [v6.0.0](docs/releases/v6.md) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
+**Source releases:** [**v7**](docs/releases/v7.md) (latest) · [v6](docs/releases/v6.md) · [v5](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
 
 ---
 
@@ -698,12 +698,12 @@ python -m ViT.train --help
 | [docs/research/IMAGE_QUALITY_LEVERS_2026.md](docs/research/IMAGE_QUALITY_LEVERS_2026.md) | **Quality research map** (2025–26 papers → SDX hooks: CFG, flow, data, DPO) |
 | [docs/HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md) | Holy Grail adaptive sampling: preset → per-step CFG/control/adapters (Mermaid flow) |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
-| [docs/releases/v5.md](docs/releases/v5.md) | **v5.0.0** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
+| [docs/releases/v5.md](docs/releases/v5.md) | **v5** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
 | [docs/recipes/quick_eval_holy_grail.md](docs/recipes/quick_eval_holy_grail.md) | **Evaluation recipe**: demo, sample.py + Holy Grail, training manifests |
-| [docs/recipes/eval_baseline_prompts.md](docs/recipes/eval_baseline_prompts.md) | **Eval pack**: baseline prompts + `run_baseline_eval.py` driver. |un_baseline_eval.py driver. |
+| [docs/recipes/eval_baseline_prompts.md](docs/recipes/eval_baseline_prompts.md) | **Eval pack**: baseline prompts + `run_baseline_eval.py` driver. |
 | [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md) | **Local CI**: same commands as GitHub Actions (Ruff, basedpyright, doc links, pytest). |
 | [docs/releases/v7.md](docs/releases/v7.md) | **v7** source release (CI, eval, recipes, research maps). |
-| [docs/releases/v6.md](docs/releases/v6.md) | **v6.0.0** release: native fast layer, `sampling_extras`, book/visual memory, IDE tooling, CI |
+| [docs/releases/v6.md](docs/releases/v6.md) | **v6** release: native fast layer, `sampling_extras`, book/visual memory, IDE tooling, CI |
 | [`docs/releases/v4.md`](docs/releases/v4.md) | v4 release: uncertainty-scaled TCIS, elite-memory diversity bonus, and annealed constraint consensus |
 | [`docs/releases/v3.md`](docs/releases/v3.md) | v3 source release notes (benchmark + hardcase-aware improvement stack) |
 | [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) | Holy Grail adaptive sampling reference |

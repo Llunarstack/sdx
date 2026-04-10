@@ -1,5 +1,6 @@
-[project]
+﻿[project]
 name = "sdx"
+# PEP 440 package version; docs/README brand the line as **v7** (not v7.1 / v7.2).
 version = "7.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
