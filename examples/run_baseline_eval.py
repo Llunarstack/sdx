@@ -4,6 +4,10 @@ Run `sample.py` over `examples/eval_prompts_baseline.json` (or another pack).
 
 Dry-run default (prints commands). Pass ``--execute`` to actually invoke sample.
 
+We load ``eval_prompt_pack`` via ``importlib`` so this script does **not** import
+``utils.generation``'s package ``__init__`` (which re-exports heavy modules and
+pulls hundreds of transitive types into static analysis / CI).
+
 Usage (repo root)::
 
     python examples/run_baseline_eval.py --ckpt results/your_run/best.pt
@@ -13,15 +17,33 @@ Usage (repo root)::
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, Callable
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from utils.generation.eval_prompt_pack import load_eval_prompt_records  # noqa: E402
+
+def _load_eval_prompt_records_fn() -> Callable[..., Any]:
+    path = _REPO_ROOT / "utils" / "generation" / "eval_prompt_pack.py"
+    name = "_sdx_eval_prompt_pack_standalone"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load eval prompt pack from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    fn = getattr(mod, "load_eval_prompt_records", None)
+    if fn is None or not callable(fn):
+        raise ImportError("load_eval_prompt_records missing from eval_prompt_pack")
+    return fn
+
+
+load_eval_prompt_records = _load_eval_prompt_records_fn()
 
 
 def main() -> int:
