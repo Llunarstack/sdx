@@ -4,7 +4,7 @@ Thanks for helping improve SDX.
 
 For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see the README section **[Contributing & community](README.md#contributing--community)**.
 
-**Context:** SDX is a **modular training/sampling codebase** first. Not every PR needs a new benchmark or sample images—docs, small tools, and **tiny reproducible training configs** are valuable too. See the README section **Project status, compute, and expectations** for how we frame scope.
+**Context:** SDX is a **modular tr/sampling codebase** first. Not every PR needs a new benchmark or sample images—docs, small tools, and **tiny reproducible training configs** are valuable too. See the README section **Project status, compute, and expectations** for how we frame scope.
 
 ## Before you open a PR
 
@@ -23,7 +23,7 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
    ```bash
    python -m scripts.tools quick_test
    ```
-4. **Manual sanity** (when you touch training/sampling/core utils): run a minimal `python -m py_compile` on changed modules and/or a short `sample.py` / `train.py` invocation with your new flags if applicable.
+4. **Manual sanity** (when you touch tr/sampling/core utils): run a minimal `python -m py_compile` on changed modules and/or a short `sample.py` / `train.py` invocation with your new flags if applicable.
 5. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
 6. **Doc links** (if you edit cross-links in markdown)
    ```bash

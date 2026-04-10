@@ -16,7 +16,7 @@ Canonical folder classification and migration map: [CANONICAL_STRUCTURE.md](CANO
 | **Diffusion** | `diffusion/` | Noise schedules, `GaussianDiffusion`, sampling utilities |
 | **Models** | `models/` | DiT, ControlNet, MoE, RAE bridge, multimodal fusion; shared blocks in [`model_enhancements.py`](../models/model_enhancements.py) — see [MODEL_STACK.md](MODEL_STACK.md) |
 | **Utils** | `utils/` | Checkpoints, text encoders, REPA, pick-best, **`utils/prompt/`** (content controls, neg filter, blueprint, RAG), lint, LLM client |
-| **ViT tools** | `vit_quality/` (canonical), `ViT/` (compat) | **Separate** from the generator: quality scoring, ranking, prompt tools |
+| **ViT-style QA** | it_quality/ | **Separate** from the generator: quality scoring, ranking, prompt tools |
 | **Pipelines** | `pipelines/` | **image_gen** vs **book_comic** docs; book workflow script (`pipelines/book_comic/scripts/generate_book.py`); not a second copy of DiT |
 | **Scripts** | `scripts/` | Downloads, thin `scripts/book/` launcher, one-off tools (not imported as a package) |
 | **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
@@ -80,9 +80,8 @@ sdx/
 │   └── losses/                         # Timestep loss weights (shim loss_weighting at diffusion/ root)
 ├── models/                             # DiT, ControlNet, MoE, RAE bridge, multimodal scaffolds
 ├── utils/                              # Checkpoints, text encoders, quality, pick-best, …
-├── training/                           # Enhanced trainer module (used by scripts below)
-├── vit_quality/                        # Canonical quality / adherence scoring package
-├── ViT/                                # Legacy compatibility path
+├── training/                       # Training CLI helpers (args/parser, enhanced trainer hooks)
+├── vit_quality/                    # ViT-style quality / adherence scoring (not the DiT generator)
 ├── pipelines/                          # image_gen vs book_comic docs + book workflow
 ├── scripts/                            # cli.py, download/, tools/, enhanced/, … (see scripts/README.md)
 ├── examples/                           # Small usage examples
@@ -141,7 +140,7 @@ Keep new work in predictable places so imports and docs stay stable.
 1. **Core library stays importable from repo root** — `train.py`, `sample.py`, and packages `config`, `data`, `diffusion`, `models`, `utils` are the stable API.
 2. **One optional script layer** — `scripts/` holds downloads, training helpers, tools, enhanced DiT, and **`scripts/cli.py`**. Nothing in `scripts/` is imported by `train.py` at import time for the default path.
 3. **Product lines are documented, not duplicated** — `pipelines/image_gen` vs `pipelines/book_comic` share the same `train.py` / checkpoints; only docs and orchestration differ.
-4. **ViT vs DiT** — `vit_quality/` (and legacy `ViT/`) is **scoring / QA**, not the diffusion generator. See [ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md).
+4. **ViT-style QA vs DiT** — it_quality/ is **scoring / QA**, not the diffusion generator. See [MODEL_STACK.md](MODEL_STACK.md).
 
 ### Layer diagram
 

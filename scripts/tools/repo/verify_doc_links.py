@@ -20,7 +20,6 @@ SCAN_GLOBS = [
     "PROJECT_STRUCTURE.md",
     "docs/**/*.md",
     "pipelines/**/*.md",
-    "ViT/**/*.md",
     "scripts/**/*.md",
 ]
 

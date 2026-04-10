@@ -1,4 +1,4 @@
-# PixAI-style emphasis and ReVe-style caption normalization for strong prompt adherence.
+# Parenthesis/tag emphasis and ReVe-style caption normalization for strong prompt adherence.
 # Quality tags (10x boost), anti-blending, count-aware.
 import re
 from typing import Any, List, Optional, Tuple
@@ -283,7 +283,7 @@ DOMAIN_TAGS = {
         "masterpiece",
         "best quality",
     ],
-    # Style / artist tags (PixAI, Danbooru, etc.): strong style conditioning.
+    # Style / artist tags (Danbooru-style boards, etc.): strong style conditioning.
     "style_artist": [
         "oil painting",
         "watercolor",
@@ -313,7 +313,7 @@ DOMAIN_TAGS_FLAT = [t for tags in DOMAIN_TAGS.values() for t in tags]
 
 # Hard styles: 3D, photorealistic, and style mixes that most AI image models struggle with.
 # Boosted more strongly than general domain tags so the model learns 3D/realistic/mixed looks.
-# See config/prompt_domains.py for recommended prompts and negatives per hard style.
+# See config/defaults/prompt_domains.py for recommended prompts and negatives per hard style.
 HARD_STYLE_TAGS = {
     "3d": [
         "3d render",
@@ -462,9 +462,9 @@ def prompt_from_tags(tags: List[str], subject_first: bool = True) -> str:
     return ", ".join(t[0] for t in ordered)
 
 
-def apply_pixai_emphasis(caption: str, expand_emphasis: bool = True, expand_deemphasis: bool = False) -> str:
+def apply_tag_emphasis(caption: str, expand_emphasis: bool = True, expand_deemphasis: bool = False) -> str:
     """
-    PixAI-style: (tag) or ((tag)) = emphasize; [tag] = de-emphasize.
+    Danbooru-style: (tag) or ((tag)) = emphasize; [tag] = de-emphasize.
     expand_emphasis: (tag) -> repeat tag 1x for stronger focus; ((tag)) -> repeat 2x.
     expand_deemphasis: [tag] -> remove or keep once (we keep once by default).
     """
@@ -507,7 +507,7 @@ def structured_to_tags(parts: dict, order: Optional[List[str]] = None) -> str:
 
 def normalize_tag_order(caption: str, put_subject_first: bool = True) -> str:
     """
-    PixAI-style: order tags for better adherence. When put_subject_first=True, uses full person-descriptor order:
+    Order comma-separated tags for better adherence. When put_subject_first=True, uses full person-descriptor order:
     subject → age → height → build/size → anatomy/framing → body parts → other (same as prompt_from_tags).
     """
     if not put_subject_first or "," not in caption:
@@ -626,24 +626,26 @@ def apply_style_guidance_to_caption_pair(
     include_artist_refs: bool,
 ) -> Tuple[str, str]:
     """
-    Append style-domain fragments (anime/comic/concept/game/photo language) from
-    ``config.defaults.style_guidance``.
+    Append style-domain fragments from ``config.defaults.style_guidance`` plus
+    ``style_artists`` bucket/facet hints (merged inside ``style_guidance_fragments``).
+    When ``mode`` is ``none``, only artist-reference lines (if any) and style-tag hints apply.
     """
     m = (mode or "none").strip().lower()
-    if m not in ("auto", "all") or not (caption or "").strip():
+    out_cap = caption
+    out_neg = negative_caption or ""
+    if not (caption or "").strip():
         return caption, negative_caption
+    eff_mode = m if m in ("auto", "all") else "none"
     try:
         from config.defaults.style_guidance import merge_csv_unique, style_guidance_fragments
 
         pos, neg = style_guidance_fragments(
             caption,
-            m,  # type: ignore[arg-type]
+            eff_mode,  # type: ignore[arg-type]
             include_artist_refs=bool(include_artist_refs),
         )
     except Exception:
         return caption, negative_caption
-    out_cap = caption
-    out_neg = negative_caption or ""
     if pos:
         out_cap = f"{out_cap}, {pos}".strip().strip(",")
     if neg:

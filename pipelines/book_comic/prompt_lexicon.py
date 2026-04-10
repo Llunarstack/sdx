@@ -1416,32 +1416,36 @@ BOOK_STYLE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
         "oc_pack": "none",
         "safety_mode": "nsfw",
         "nsfw_pack": "explicit_detail",
-        "nsfw_civitai_pack": "action",
-        "civitai_trigger_bank": "medium",
     },
     "webtoon_nsfw_romance": {
         "artist_pack": "webtoon_scroll",
         "oc_pack": "none",
         "safety_mode": "nsfw",
         "nsfw_pack": "romantic",
-        "nsfw_civitai_pack": "style",
-        "civitai_trigger_bank": "light",
     },
     "comic_dialogue_safe": {
         "artist_pack": "comic_dialogue",
         "oc_pack": "none",
         "safety_mode": "sfw",
         "nsfw_pack": "none",
-        "nsfw_civitai_pack": "none",
-        "civitai_trigger_bank": "none",
     },
     "oc_launch_safe": {
         "artist_pack": "manga_cinematic",
         "oc_pack": "heroine_scifi",
         "safety_mode": "sfw",
         "nsfw_pack": "none",
-        "nsfw_civitai_pack": "none",
-        "civitai_trigger_bank": "none",
+    },
+    "manga_nsfw_surreal": {
+        "artist_pack": "manga_cinematic",
+        "oc_pack": "none",
+        "safety_mode": "nsfw",
+        "nsfw_pack": "explicit_detail",
+    },
+    "webtoon_nsfw_complex": {
+        "artist_pack": "webtoon_scroll",
+        "oc_pack": "none",
+        "safety_mode": "nsfw",
+        "nsfw_pack": "extreme",
     },
 }
 
@@ -1994,8 +1998,6 @@ def resolve_book_style_controls(
     oc_pack: str = "none",
     safety_mode: str = "",
     nsfw_pack: str = "",
-    nsfw_civitai_pack: str = "",
-    civitai_trigger_bank: str = "",
 ) -> Dict[str, str]:
     """
     Resolve higher-level style controls from one pack + explicit overrides.
@@ -2009,8 +2011,6 @@ def resolve_book_style_controls(
         "oc_pack": pack.get("oc_pack", "none"),
         "safety_mode": pack.get("safety_mode", ""),
         "nsfw_pack": pack.get("nsfw_pack", ""),
-        "nsfw_civitai_pack": pack.get("nsfw_civitai_pack", ""),
-        "civitai_trigger_bank": pack.get("civitai_trigger_bank", ""),
     }
     if (artist_pack or "none").lower().strip() != "none":
         out["artist_pack"] = artist_pack
@@ -2020,10 +2020,6 @@ def resolve_book_style_controls(
         out["safety_mode"] = str(safety_mode).strip()
     if str(nsfw_pack).strip():
         out["nsfw_pack"] = str(nsfw_pack).strip()
-    if str(nsfw_civitai_pack).strip():
-        out["nsfw_civitai_pack"] = str(nsfw_civitai_pack).strip()
-    if str(civitai_trigger_bank).strip():
-        out["civitai_trigger_bank"] = str(civitai_trigger_bank).strip()
     return out
 
 

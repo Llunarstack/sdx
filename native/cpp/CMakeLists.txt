@@ -123,7 +123,7 @@ install(TARGETS sdx_rmsnorm_rows_cpu
   ARCHIVE DESTINATION lib
 )
 
-# CPU mask → patch-weight helper for part-aware training.
+# CPU mask -> patch-weight helper for part-aware training.
 add_library(sdx_mask_ops SHARED
   src/sdx_mask_ops.cpp
 )

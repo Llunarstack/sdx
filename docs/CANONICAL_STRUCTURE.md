@@ -10,12 +10,12 @@ This map defines which folders are canonical implementation roots, which are com
 | `data/` | Canonical implementation | Dataset loaders, caption processing, manifest parsing. |
 | `diffusion/` | Canonical implementation | Diffusion core and canonical loss modules under `diffusion/losses/`. |
 | `models/` | Canonical implementation | Generator model stack and canonical aliases (`dit_text_variants`, `superior_vit`). |
-| `training/` | Canonical implementation | Training args/parser and trainer support modules. |
+| `tr/` | Canonical implementation | Training args/parser and trainer support modules. |
 | `utils/` | Canonical implementation | Shared runtime/tooling helpers and architecture bridges. |
 | `pipelines/` | Canonical implementation | Product-line orchestration and docs-facing workflows. |
 | `scripts/` | Canonical implementation | Operational and maintenance CLIs; `scripts.tools` dispatcher is preferred. |
 | `toolkit/` | Canonical implementation | QoL helpers (`env_health`, digest, timing, seeds). |
-| `vit_quality/` | Canonical implementation | Canonical ViT quality/adherence package and entrypoints. |
+| `vq/` | Canonical implementation | Canonical ViT quality/adherence package and entrypoints. |
 | `ViT/` | Compatibility surface | Legacy namespace kept as thin re-export shims + migration docs. |
 | `native/` | Canonical implementation | Optional native tooling and Python bridge package. |
 | `docs/` | Canonical documentation | Source-of-truth technical docs and release notes. |

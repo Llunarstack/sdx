@@ -472,7 +472,7 @@ def main() -> None:
         "--export-hardcases-jsonl",
         type=str,
         default="",
-        help="If set, export low-scoring failure-tagged rows for targeted retraining/curation.",
+        help="If set, export low-scoring failure-tagged rows for targeted retr/curation.",
     )
     ap.add_argument("--hardcase-threshold", type=float, default=0.60, help="Composite threshold for hard-case tagging.")
     ap.add_argument("--hardcase-max-rows", type=int, default=200, help="Maximum hard-case rows to export.")

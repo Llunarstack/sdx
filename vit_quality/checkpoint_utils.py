@@ -10,6 +10,26 @@ import torch
 from vit_quality.model import ViTQualityAdherenceModel, build_vit_model
 
 
+def peek_vit_quality_config(ckpt_path: str | Path) -> Dict[str, Any]:
+    """
+    Load only the embedded ``config`` dict from a ViT quality checkpoint (no model build).
+
+    Used for book-pipeline preflight and DiT/ViT AR alignment checks. Returns ``{}`` if missing
+    or unreadable.
+    """
+    path = Path(ckpt_path)
+    if not path.is_file():
+        return {}
+    try:
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception:
+        return {}
+    if not isinstance(ckpt, dict):
+        return {}
+    cfg = ckpt.get("config") or {}
+    return dict(cfg) if isinstance(cfg, dict) else {}
+
+
 def load_vit_quality_checkpoint(
     ckpt_path: str | Path,
     *,

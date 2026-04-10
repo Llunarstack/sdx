@@ -120,7 +120,7 @@ def default_longclip_l_path() -> str:
 
 
 def default_moondream2_path() -> str:
-    return resolve_model_path("moondream2", "vikhyatk/moondream2")
+    return resolve_model_path("moondream2", "vikhyatoolkit/moondream2")
 
 
 def default_marigold_depth_path() -> str:
@@ -190,7 +190,7 @@ def pretrained_catalog() -> List[Dict[str, str]]:
         ("SAM2-Hiera-Large", "facebook/sam2-hiera-large-hf", default_sam2_hiera_large_path()),
         ("Real-ESRGAN", "ai-forever/Real-ESRGAN", default_realesrgan_path()),
         ("LongCLIP-L", "creative-graphic-design/LongCLIP-L", default_longclip_l_path()),
-        ("moondream2", "vikhyatk/moondream2", default_moondream2_path()),
+        ("moondream2", "vikhyatoolkit/moondream2", default_moondream2_path()),
         ("Marigold-Depth-v1-1", "prs-eth/marigold-depth-v1-1", default_marigold_depth_path()),
         ("Marigold-Normals-v1-1", "prs-eth/marigold-normals-v1-1", default_marigold_normals_path()),
         ("TAESD", "madebyollin/taesd", default_taesd_path()),

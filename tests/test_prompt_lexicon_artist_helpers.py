@@ -92,7 +92,6 @@ def test_resolve_book_style_controls_pack_and_override():
     assert out["artist_pack"] == "webtoon_scroll"
     assert out["safety_mode"] == "nsfw"
     assert out["nsfw_pack"] == "extreme"  # explicit override wins
-    assert out["nsfw_civitai_pack"] == "style"
 
 
 def test_resolve_humanize_controls_pack_and_override():

@@ -22,7 +22,7 @@ def default_originality_tokens() -> List[str]:
         return list(ORIGINALITY_POSITIVE_TOKENS)
     except ImportError:
         try:
-            from config.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
+            from config.defaults.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
 
             return list(ORIGINALITY_POSITIVE_TOKENS)
         except ImportError:

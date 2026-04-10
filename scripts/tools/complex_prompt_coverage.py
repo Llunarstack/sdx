@@ -477,7 +477,7 @@ def main() -> None:
         "hands_fingers": "If hands fail, add 'correct hands', 'five fingers', and 'hand focus' consistently.",
         "pose_actions": "Add explicit pose/action wording (standing/walking + holding/gripping/carrying verbs) so scenes don’t collapse.",
         "character_scene": "If you want multi-character scenes, include crowd/group words consistently (group/crowd/team/room full of people).",
-        "clothes_materials": "Add clothing material terms (leather/silk/latex/denim/wool/cotton) so outfits are stable.",
+        "clothes_materials": "Add clothing material terms (leather/silk/latexamples/denim/wool/cotton) so outfits are stable.",
         "art_styles": "Add explicit art-style tokens (anime/manga/manhwa/oil painting/cyberpunk/noir/etc.) early in captions.",
     }
 

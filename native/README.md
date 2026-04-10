@@ -136,7 +136,7 @@ print(dll.sdx_latent_numel(4, 32, 32))  # 4 * 32 * 32 latent elements
 | Location | Role |
 |----------|------|
 | **`native/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `text_hygiene.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
-| **`utils/native/__init__.py`** | Unified shim (adds `native/python` to `sys.path`) and re-exports `sdx_native` helpers for stable `from utils.native import …` imports. |
+| **`utils/native/__init__.py`** | Unified shim (adds `native/python` to `sys.path`) and re-exports `sdx_native` helpers for stable `from utils.nt import …` imports. |
 | **`pyproject.toml`** | Pytest **`pythonpath`** includes `native/python` so `import sdx_native` works in tests. |
 
 **Wired scripts**

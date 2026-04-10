@@ -1,4 +1,4 @@
-#include "sdx_c_image_metrics.h"
+#include "../include/sdx_c_image_metrics.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -93,6 +93,8 @@ int sdx_c_count_components_u8(
     const int area_min = min_area > 0 ? min_area : 1;
     const int area_max = max_area > 0 ? max_area : 0;
     int count = 0;
+    static const int nb_dy[4] = {-1, 1, 0, 0};
+    static const int nb_dx[4] = {0, 0, -1, 1};
 
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -110,10 +112,9 @@ int sdx_c_count_components_u8(
                 const int cy = cur / width;
                 const int cx = cur - cy * width;
                 area += 1;
-                const int nb[4][2] = {{cy - 1, cx}, {cy + 1, cx}, {cy, cx - 1}, {cy, cx + 1}};
                 for (int k = 0; k < 4; ++k) {
-                    const int ny = nb[k][0];
-                    const int nx = nb[k][1];
+                    const int ny = cy + nb_dy[k];
+                    const int nx = cx + nb_dx[k];
                     if (ny < 0 || ny >= height || nx < 0 || nx >= width) {
                         continue;
                     }

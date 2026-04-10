@@ -31,15 +31,11 @@ __all__ = (
     "_BACKGROUND_POSITIVE",
     "_BEST_MODEL_TAGS",
     "_BODY_PROPORTION_POSITIVE",
-    "_CIVITAI_SNIPPET_TAGS",
-    "_CIVITAI_TRIGGER_BANK_CAPS",
     "_CLOTHING_NEGATIVE",
     "_CLOTHING_POSITIVE",
     "_COMPOSITION_NEGATIVE",
     "_COMPOSITION_POSITIVE",
     "_CONFLICTING_TAG_PAIRS",
-    "_DEFAULT_CIVITAI_FREQ_TXT",
-    "_DEFAULT_CIVITAI_MODEL_BANK_CSV",
     "_DOMAIN_NEGATIVE",
     "_DOMAIN_POSITIVE",
     "_DUPLICATE_SUBJECT_NEGATIVE",
@@ -53,8 +49,6 @@ __all__ = (
     "_LIGHTING_MODE_POSITIVE",
     "_LORA_SCAFFOLD_NEGATIVE",
     "_LORA_SCAFFOLD_POSITIVE",
-    "_NSFW_CIVITAI_NEGATIVE",
-    "_NSFW_CIVITAI_POSITIVE",
     "_NSFW_NEGATIVE",
     "_NSFW_PACK_NEGATIVE",
     "_NSFW_PACK_POSITIVE",
@@ -97,10 +91,8 @@ __all__ = (
     "_UNWANTED_TEXT_NEGATIVE",
 )
 
-from pathlib import Path
 from typing import Dict, List, Tuple
 
-from .civitai_vocab import CIVITAI_HOT_TAGS
 from .content_control_tag_data import (
     conflicting_pairs_from_table,
     default_tag_data_dir,
@@ -124,20 +116,6 @@ def _dn(pack: str) -> Dict[str, List[str]]:
 
 
 _BEST_MODEL_TAGS: List[str] = flat_pack(_TAG_TABLES, "best_model_tags")
-_CIVITAI_SNIPPET_TAGS: List[str] = flat_pack(_TAG_TABLES, "civitai_snippet_tags")
-
-_DEFAULT_CIVITAI_MODEL_BANK_CSV = Path(__file__).resolve().parents[2] / "data" / "civitai" / "nsfw_illustrious_noobai_models.csv"
-_DEFAULT_CIVITAI_FREQ_TXT = Path(__file__).resolve().parents[2] / "data" / "civitai" / "top_triggers_by_frequency.txt"
-
-_CIVITAI_TRIGGER_BANK_CAPS: Dict[str, int] = {
-    "none": 0,
-    "light": 120,
-    "medium": 300,
-    "heavy": 600,
-    "frequency_light": 150,
-    "frequency_medium": 350,
-    "frequency_heavy": 600,
-}
 
 _SFW_POSITIVE: List[str] = flat_pack(_TAG_TABLES, "sfw_positive")
 _SFW_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "sfw_negative")
@@ -146,15 +124,6 @@ _SFW_POSE_POSITIVE: Dict[str, List[str]] = _dn("sfw_pose_positive")
 _SFW_CLOTHING_POSITIVE: Dict[str, List[str]] = _dn("sfw_clothing_positive")
 _SFW_ENVIRONMENT_POSITIVE: Dict[str, List[str]] = _dn("sfw_environment_positive")
 _SFW_EXPRESSION_POSITIVE: Dict[str, List[str]] = _dn("sfw_expression_positive")
-
-_NSFW_CIVITAI_POSITIVE: Dict[str, List[str]] = dict(dict_pack(_TAG_TABLES, "nsfw_civitai_positive"))
-_NSFW_CIVITAI_POSITIVE.setdefault("none", [])
-_NSFW_CIVITAI_POSITIVE["hits"] = list(CIVITAI_HOT_TAGS)
-_NSFW_CIVITAI_POSITIVE["hits_lite"] = list(CIVITAI_HOT_TAGS[:48])
-_NSFW_CIVITAI_POSITIVE["snippets"] = list(_CIVITAI_SNIPPET_TAGS)
-_NSFW_CIVITAI_POSITIVE["snippets_lite"] = list(_CIVITAI_SNIPPET_TAGS[:36])
-
-_NSFW_CIVITAI_NEGATIVE: Dict[str, List[str]] = _dn("nsfw_civitai_negative")
 
 _NSFW_POSITIVE: List[str] = flat_pack(_TAG_TABLES, "nsfw_positive")
 _NSFW_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "nsfw_negative")

@@ -26,18 +26,6 @@ import torch.distributed as dist
 
 # Project imports (run from repo root: python train.py ...)
 from config.train_config import TrainConfig, get_dit_build_kwargs
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader, random_split
-from torch.utils.data.distributed import DistributedSampler
-
-try:
-    from config.pixai_reference import get_pixai_style_label
-except ImportError:
-
-    def get_pixai_style_label(_model_name):
-        return "PixAI.art-style"
-
-
 from data import ResolutionBucketBatchSampler, Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.losses.timestep_loss_weight import get_timestep_loss_weight
@@ -45,6 +33,9 @@ from diffusion.timestep_sampling import sample_training_timesteps
 from models import DiT_models_text
 from models.attention import create_block_causal_mask_2d
 from models.rae_latent_bridge import RAELatentBridge
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, random_split
+from torch.utils.data.distributed import DistributedSampler
 from training.train_args import build_train_config_from_args
 from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
@@ -1098,7 +1089,7 @@ def main(cfg: TrainConfig):
         model = DDP(model, device_ids=[local_rank])
 
     if rank == 0:
-        logger.info(f"Model: {cfg.model_name} — {get_pixai_style_label(cfg.model_name)}")
+        logger.info(f"Model: {cfg.model_name}")
 
     diffusion = create_diffusion(
         timestep_respacing=cfg.timestep_respacing,
