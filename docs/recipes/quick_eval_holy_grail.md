@@ -46,3 +46,7 @@ Disable with `--no-save-run-manifest` if you truly do not want these files.
 - [HOLY_GRAIL_OVERVIEW.md](../HOLY_GRAIL_OVERVIEW.md)
 - [TCIS_OVERVIEW.md](../TCIS_OVERVIEW.md)
 - [QUALITY_AND_ISSUES.md](../QUALITY_AND_ISSUES.md)
+
+## See also
+
+- [local_ci_mirror.md](local_ci_mirror.md) — run the same checks as CI before you push.

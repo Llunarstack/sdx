@@ -26,8 +26,13 @@ jobs:
       - name: Ruff
         run: python -m ruff check .
 
-      - name: Basedpyright (native SNR helper, errors only)
-        run: python -m basedpyright --level error native/python/sdx_native/diffusion_sigma_fast.py
+      - name: Basedpyright (curated modules, errors only)
+        run: |
+          python -m basedpyright --level error \
+            native/python/sdx_native/diffusion_sigma_fast.py \
+            utils/generation/run_artifacts.py \
+            diffusion/snr_utils.py \
+            utils/generation/inference_stages.py
 
       - name: Verify doc links
         run: python -m scripts.tools verify_doc_links
