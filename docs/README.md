@@ -18,6 +18,7 @@ Quick links to all project docs, grouped by purpose.
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow/efficiency + disclaimers — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BLUEPRINTS.md](BLUEPRINTS.md) | **Merged research notes:** few-step flow/solvers/distillation (Part 1) + prompt-accuracy / GLS / frequency (Part 2). |
+| [recipes/quick_eval_holy_grail.md](recipes/quick_eval_holy_grail.md) | Quick evaluation recipe (demo, `sample.py` + Holy Grail, training manifests). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`python -m scripts.tools update_project_structure`). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | **Merged:** Mermaid/ASCII pipeline diagram, step-by-step generation, config/checkpoint/data wiring (was CONNECTIONS + GENERATION_DIAGRAM + this doc). |
@@ -50,6 +51,7 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|-------------|
+| [releases/v7.md](releases/v7.md) | **v7.0.0** - CI doc links + basedpyright spot-check, tracked `.editorconfig`, evaluation recipe, `run_artifacts` training filenames. |
 | [releases/v6.md](releases/v6.md) | **v6.0.0** - native fast layer + C helpers, `sampling_extras`, book/visual memory, Pyright/clangd tooling, CI, research sketches. |
 | [releases/v5.md](releases/v5.md) | **v5.0.0** - test-time scaling, manifest curation, DPO safeguards, ViT quality, docs. |
 | [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |

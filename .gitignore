@@ -27,7 +27,6 @@ venv/
 .idea/
 .vscode/*
 !.vscode/c_cpp_properties.json
-.editorconfig
 
 # Cursor (local IDE; do not publish to the remote repo)
 .cursor/
