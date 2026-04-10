@@ -55,8 +55,8 @@ Quick links to all project docs, grouped by purpose.
 | Doc | Description |
 |-----|-------------|
 | [releases/v7.md](releases/v7.md) | **v7** - CI, Dependabot, pre-commit, eval prompt pack + driver, research playbooks, `run_artifacts`, `SECURITY.md`. |
-| [releases/v6.md](releases/v6.md) | **v6.0.0** - native fast layer + C helpers, `sampling_extras`, book/visual memory, Pyright/clangd tooling, CI, research sketches. |
-| [releases/v5.md](releases/v5.md) | **v5.0.0** - test-time scaling, manifest curation, DPO safeguards, ViT quality, docs. |
+| [releases/v6.md](releases/v6.md) | **v6** - native fast layer + C helpers, `sampling_extras`, book/visual memory, Pyright/clangd tooling, CI, research sketches. |
+| [releases/v5.md](releases/v5.md) | **v5** - test-time scaling, manifest curation, DPO safeguards, ViT quality, docs. |
 | [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
 | [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — earlier baseline (2026-03-13). |
 | [releases/v3.md](releases/v3.md) | **v3** — benchmark robustness, hard-case mining, hardcase-aware DPO remine, startup readiness checks. |
