@@ -11,13 +11,15 @@
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.x"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3DDC84?style=flat-square" alt="Apache 2.0"/></a>
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Docs-docs%2FREADME-24292f?style=flat-square&logo=github" alt="Docs"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/status-research%20%2F%20experimental-orange?style=flat-square" alt="Research / experimental"/></a>
+  <a href="docs/README.md"><img src="https://img.shields.io/badge/framework-DiT%20%2B%20tooling-6f42c1?style=flat-square" alt="DiT + tooling"/></a>
 </p>
 
 <p align="center">
   <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="#training">Training</a> ·
   <a href="#sampling">Sampling</a> ·
-  <a href="#architecture">Architecture</a> ·
+  <a href="#system-diagram">Diagram</a> ·  <a href="#architecture">Architecture</a> ·
   <a href="#data-formats">Data formats</a> ·
   <a href="#key-docs">Docs</a>
 </p>
@@ -26,18 +28,98 @@
 
 ---
 
+## System diagram
+
+End-to-end path from prompt to pixels. **Mermaid** renders on [github.com](https://github.com); the **ASCII** diagram shows up in any editor, preview, or `git show`.
+
+```mermaid
+flowchart TD
+  PR[Prompt] --> TE[Text encoders]
+  TE --> FC[Fused conditioning]
+  FC --> DIT[DiT backbone]
+  DIT --> DE[Diffusion / flow engine]
+  DE --> HG[Holy Grail + sampling_extras]
+  HG --> VAE[VAE decode]
+  VAE --> IM[Image]
+```
+
+```text
+                    +-------------+
+                    |   Prompt    |
+                    +------+------+
+                           |
+        +------------------+------------------+
+        |                  |                  |
+   +-----v-----+      +-----v-----+      +-----v-----+
+   |  T5-XXL   |      |  CLIP-L   |      | CLIP-bigG |
+   +-----+-----+      +-----+-----+      +-----+-----+
+        |                  |                  |
+        +------------------+------------------+
+                           |
+                    +------v------+
+                    |    Fused    |
+                    | conditioning|
+                    +------+------+
+                           |
+                    +------v------+
+                    |     DiT     |
+                    +------+------+
+                           |
+                    +------v------+
+                    | Diffusion / |
+                    | flow engine |
+                    +------+------+
+                           |
+                    +------v------+
+                    | Holy Grail  |
+                    | + extras    |
+                    +------+------+
+                           |
+                    +------v------+
+                    | VAE decode  |
+                    +------+------+
+                           |
+                    +------v------+
+                    |    Image    |
+                    +-------------+
+```
+
+---
+
 SDX is a modular text-to-image training and inference framework built on Diffusion Transformers (DiT). It is designed to be transparent — training lives in `train.py`, sampling in `sample.py`, and every module boundary is explicit.
 
 **What SDX is not:** a fork of Stable Diffusion 1.5 / SDXL graph runtimes (e.g. ComfyUI checkpoint graphs). SDX is a **DiT-centric** training and sampling codebase with its own checkpoints, CLIs, and module layout.
 
-**Core stack:**
-
 **Core stack:** DiT · T5 / triple text encoders · LoRA/DoRA/LyCORIS routing · VP diffusion + flow matching + bridge/OT objectives · Holy Grail adaptive sampling · optional native CUDA acceleration.
-
 
 **Source releases:** [v6.0.0](docs/releases/v6.md) (latest) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
 
 ---
+
+## Vision
+
+SDX is an **open, modular stack** for **Diffusion Transformers**: training objectives, text conditioning, sampling policies, evaluation hooks, and native accelerators live in explicit modules—not behind a single opaque pipeline. The goal is to **experiment and ship methodology** (schedules, guidance, adapters, hybrid DiT+ViT loops) faster than forking a monolithic UI stack.
+
+This repository is a **framework and reference implementation**, not a promise of a specific pretrained product checkpoint. You can train your own models, plug in your weights, and use the tooling (manifests, benchmarks, readiness checks) to make runs reproducible.
+
+## Roadmap (honest)
+
+| Phase | Focus |
+| :--- | :--- |
+| **Now (v6.x)** | Framework depth: `sampling_extras` / Holy Grail, `sdx_native` fast paths, book/visual-memory pipeline, CI, docs (incl. architecture overviews). |
+| **Next** | Curated **evaluation recipes** and optional **small public checkpoints** when licensing/training capacity allow—not required to use the code. |
+| **Later** | Optional **hosted demos** (HF Space / Pages), APIs, or product packaging—deployment choices on top of this repo. |
+
+## Core innovations (what to highlight)
+
+- **Holy Grail adaptive sampling** — per-step CFG / control / adapter scheduling; see [`docs/HOLY_GRAIL_OVERVIEW.md`](docs/HOLY_GRAIL_OVERVIEW.md).
+- **TCIS hybrid loop** — DiT proposals scored by a ViT committee with disagreement-aware ranking; see [`docs/TCIS_OVERVIEW.md`](docs/TCIS_OVERVIEW.md).
+- **Triple text encoding** — T5-XXL default; optional CLIP-L + CLIP-bigG for stronger prompt structure.
+- **Training objective menu** — VP diffusion, flow matching, bridge auxiliary, OT-style noise–latent coupling—selectable without rewriting the whole trainer.
+- **Adapter algebra** — role-aware LoRA / DoRA / LyCORIS stacking with depth routing.
+- **Operator tooling** — env health, startup readiness, JSONL/manifest tools, preference / hard-case mining hooks—built for serious iteration, not a one-off script.
+
+**GitHub topics** (for discoverability): add tags such as `diffusion`, `diffusion-models`, `pytorch`, `transformer`, `generative-ai`, `text-to-image`, `dit`, `research` on the repository settings page.
 
 ## Try it in one command
 
@@ -409,13 +491,16 @@ TCIS combines:
 
 ## Architecture
 
+**Diagram:** see [System diagram](#system-diagram) at the top of this README (Mermaid + ASCII). This section is the **operator view**: where files and stages live.
+
+Training vs inference: `train.py` optimises the DiT + objectives path; `sample.py` runs the denoising loop through **Holy Grail** and optional **sampling_extras** hooks.
+
 ### Pipeline overview
 
-```
-datasets/train/  ──►  train.py  ──►  checkpoint/  ──►  sample.py  ──►  images
-                       │                                    │
-                  DiT + diffusion                    CFG + scheduler
-                  objectives                         + adapters
+```text
+datasets/train/  -->  train.py  -->  checkpoints/*.pt  -->  sample.py  -->  images
+                         |                                      |
+                    DiT + objectives                    CFG + scheduler + adapters
 ```
 
 ### Model stack
