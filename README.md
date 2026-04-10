@@ -92,7 +92,7 @@ SDX is a modular text-to-image training and inference framework built on Diffusi
 
 **Core stack:** DiT · T5 / triple text encoders · LoRA/DoRA/LyCORIS routing · VP diffusion + flow matching + bridge/OT objectives · Holy Grail adaptive sampling · optional native CUDA acceleration.
 
-**Source releases:** [v6.0.0](docs/releases/v6.md) (latest) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
+**Source releases:** [v7.0.0](docs/releases/v7.md) (latest) · [v6.0.0](docs/releases/v6.md) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
 
 ---
 
@@ -106,7 +106,7 @@ This repository is a **framework and reference implementation**, not a promise o
 
 | Phase | Focus |
 | :--- | :--- |
-| **Now (v6.x)** | Framework depth: `sampling_extras` / Holy Grail, `sdx_native` fast paths, book/visual-memory pipeline, CI, docs (incl. architecture overviews). |
+| **Now (v7.x)** | CI (Ruff, basedpyright spot-check, doc links), `.editorconfig`, evaluation recipes, `run_artifacts`; Holy Grail / `sampling_extras`, `sdx_native`, book/visual-memory, architecture docs. |
 | **Next** | Curated **evaluation recipes** and optional **small public checkpoints** when licensing/training capacity allow—not required to use the code. |
 | **Later** | Optional **hosted demos** (HF Space / Pages), APIs, or product packaging—deployment choices on top of this repo. |
 
@@ -695,6 +695,7 @@ python -m ViT.train --help
 | [docs/HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md) | Holy Grail adaptive sampling: preset → per-step CFG/control/adapters (Mermaid flow) |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
 | [docs/releases/v5.md](docs/releases/v5.md) | **v5.0.0** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
+| [docs/recipes/quick_eval_holy_grail.md](docs/recipes/quick_eval_holy_grail.md) | **Evaluation recipe**: demo, sample.py + Holy Grail, training manifests |
 | [docs/releases/v6.md](docs/releases/v6.md) | **v6.0.0** release: native fast layer, `sampling_extras`, book/visual memory, IDE tooling, CI |
 | [`docs/releases/v4.md`](docs/releases/v4.md) | v4 release: uncertainty-scaled TCIS, elite-memory diversity bonus, and annealed constraint consensus |
 | [`docs/releases/v3.md`](docs/releases/v3.md) | v3 source release notes (benchmark + hardcase-aware improvement stack) |

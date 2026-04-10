@@ -20,11 +20,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install -U pip
-          pip install ruff pytest
+          pip install ruff pytest basedpyright
           pip install -r requirements.txt
 
       - name: Ruff
         run: python -m ruff check .
+
+      - name: Basedpyright (native SNR helper, errors only)
+        run: python -m basedpyright --level error native/python/sdx_native/diffusion_sigma_fast.py
+
+      - name: Verify doc links
+        run: python -m scripts.tools verify_doc_links
 
       - name: Pytest
         run: python -m pytest tests/ -q --tb=short
