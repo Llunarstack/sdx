@@ -53,9 +53,12 @@ def main() -> int:
                     target = (md.parent / rel.replace("/", "\\") if "\\" in rel else md.parent / rel).resolve()
                     # Normalize: relative to repo
                     try:
-                        target.relative_to(REPO_ROOT)
+                        rel_target = target.relative_to(REPO_ROOT)
                     except ValueError:
                         # link goes outside repo — skip
+                        continue
+                    # Optional vendor trees (clone_repos.*); not present in CI — do not require files.
+                    if rel_target.parts and rel_target.parts[0] == "external":
                         continue
                     if not target.exists():
                         bad.append((str(md.relative_to(REPO_ROOT)), rel, str(target.relative_to(REPO_ROOT))))
