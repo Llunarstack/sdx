@@ -5,10 +5,10 @@ from __future__ import annotations
 import numpy as np
 
 
-def snr_from_alpha_cumprod(alpha_bar: np.ndarray, *, eps: float = 1e-20) -> np.ndarray:
-    """SNR = alpha_bar / (1 - alpha_bar) for each timestep."""
-    a = np.clip(alpha_bar.astype(np.float64), eps, 1.0 - eps)
-    return a / (1.0 - a)
+def snr_from_alpha_cumprod(alpha_bar: np.ndarray, *, denom_eps: float = 1e-8) -> np.ndarray:
+    """SNR = alpha_bar / (1 - alpha_bar + denom_eps), matching Rust ``sdx_snr_from_alpha_cumprod_f64``."""
+    a = np.asarray(alpha_bar, dtype=np.float64)
+    return a / (1.0 - a + denom_eps)
 
 
 def sigma_from_alpha_cumprod(alpha_bar: np.ndarray, *, eps: float = 1e-20) -> np.ndarray:
