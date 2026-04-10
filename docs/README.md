@@ -21,6 +21,8 @@ Quick links to all project docs, grouped by purpose.
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`python -m scripts.tools update_project_structure`). |
 | [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) | **Merged:** Mermaid/ASCII pipeline diagram, step-by-step generation, config/checkpoint/data wiring (was CONNECTIONS + GENERATION_DIAGRAM + this doc). |
+| [TCIS_OVERVIEW.md](TCIS_OVERVIEW.md) | TCIS hybrid loop: propose, critique, consensus, optional iterate (Mermaid). |
+| [HOLY_GRAIL_OVERVIEW.md](HOLY_GRAIL_OVERVIEW.md) | Holy Grail adaptive sampling: how presets become per-step CFG/control/adapter plans (Mermaid). |
 | [PROMPT_STACK.md](PROMPT_STACK.md) | **Inference text path:** `content_controls` → `neg_filter` → encoder; flag cheat sheet; links to preview CLI. |
 | [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | **Lower-level / native libs:** in-repo Rust/Zig/C++/Go tools + ecosystem picks (image I/O, tokenization, QA) mapped to **quality**, **training**, **prompt adherence**. |
 | [MODEL_STACK.md](MODEL_STACK.md) | Local `model/` paths, triple encoders — plus **model enhancements** (RMSNorm, FiLM, cross-attn, cascade blend, RAE scales). |
