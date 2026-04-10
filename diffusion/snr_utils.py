@@ -10,12 +10,15 @@ are for analysis, monitoring, and schedule comparison without a GPU.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
+from numpy.typing import NDArray
 
 __all__ = ["alpha_cumprod_from_betas", "snr_from_alpha_cumprod", "snr_from_betas"]
 
 
-def alpha_cumprod_from_betas(betas: np.ndarray) -> np.ndarray:
+def alpha_cumprod_from_betas(betas: NDArray[Any]) -> NDArray[Any]:
     """``alpha_cumprod[t] = prod_{s<=t} (1 - beta[s])``."""
     try:
         from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust
@@ -28,7 +31,7 @@ def alpha_cumprod_from_betas(betas: np.ndarray) -> np.ndarray:
     return np.cumprod(1.0 - beta)
 
 
-def snr_from_alpha_cumprod(alpha_cumprod: np.ndarray) -> np.ndarray:
+def snr_from_alpha_cumprod(alpha_cumprod: NDArray[Any]) -> NDArray[Any]:
     """``SNR(t) = alpha_bar[t] / (1 - alpha_bar[t])`` for VP diffusion."""
     try:
         from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust
@@ -47,6 +50,6 @@ def snr_from_alpha_cumprod(alpha_cumprod: np.ndarray) -> np.ndarray:
     return ab / (1.0 - ab + 1e-8)
 
 
-def snr_from_betas(betas: np.ndarray) -> np.ndarray:
+def snr_from_betas(betas: NDArray[Any]) -> NDArray[Any]:
     """SNR curve from a raw beta schedule vector."""
     return snr_from_alpha_cumprod(alpha_cumprod_from_betas(betas))
