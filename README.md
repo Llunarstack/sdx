@@ -692,6 +692,7 @@ python -m ViT.train --help
 | [`DEPRECATIONS.md`](DEPRECATIONS.md) | Canonical import paths and active compatibility shims |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
 | [docs/TCIS_OVERVIEW.md](docs/TCIS_OVERVIEW.md) | TCIS hybrid loop: DiT propose → ViT critique → consensus rank → optional iterate (Mermaid flow) |
+| [docs/research/IMAGE_QUALITY_LEVERS_2026.md](docs/research/IMAGE_QUALITY_LEVERS_2026.md) | **Quality research map** (2025–26 papers → SDX hooks: CFG, flow, data, DPO) |
 | [docs/HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md) | Holy Grail adaptive sampling: preset → per-step CFG/control/adapters (Mermaid flow) |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
 | [docs/releases/v5.md](docs/releases/v5.md) | **v5.0.0** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
