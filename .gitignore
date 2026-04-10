@@ -26,6 +26,7 @@ venv/
 .env
 .idea/
 .vscode/
+.editorconfig
 
 # Danbooru full tag dumps (regenerate: scripts/tools/fetch_danbooru_tags.py)
 data/danbooru/tags/raw/*.txt
@@ -37,7 +38,12 @@ data/danbooru/tags/all_tags_categorized.txt
 *.png
 *.jpg
 results/
+runs/
+checkpoints/
 output*.png
+demo_out.png
+pretrained_status.json
+*.log
 
 # Downloaded LLMs (heavy)
 pretrained/
