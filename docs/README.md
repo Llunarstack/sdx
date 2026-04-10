@@ -16,9 +16,11 @@ Quick links to all project docs, grouped by purpose.
 | [CANONICAL_STRUCTURE.md](CANONICAL_STRUCTURE.md) | Canonical-vs-compat folder map and migration table for professional naming/layout. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
+| [research/SAMPLING_EXPERIMENTS_BACKLOG.md](research/SAMPLING_EXPERIMENTS_BACKLOG.md) | CFG/steps/solver experiment grids. |
 | [research/IMAGE_QUALITY_LEVERS_2026.md](research/IMAGE_QUALITY_LEVERS_2026.md) | **2026 research map**: CFG/flow sampling, data curation, DPO, perceptual losses — mapped to SDX. |`r`n| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow/efficiency + disclaimers — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BLUEPRINTS.md](BLUEPRINTS.md) | **Merged research notes:** few-step flow/solvers/distillation (Part 1) + prompt-accuracy / GLS / frequency (Part 2). |
 | [recipes/quick_eval_holy_grail.md](recipes/quick_eval_holy_grail.md) | Quick evaluation recipe (demo, `sample.py` + Holy Grail, training manifests). |
+| [recipes/eval_baseline_prompts.md](recipes/eval_baseline_prompts.md) | Baseline prompt pack + eval driver. |
 | [recipes/local_ci_mirror.md](recipes/local_ci_mirror.md) | Mirror CI locally (Ruff, basedpyright, verify_doc_links, pytest). |
 | [FILES.md](FILES.md) | File map: every SDX file and key external references. |
 | [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | **Auto-generated** full tree (`python -m scripts.tools update_project_structure`). |
@@ -52,7 +54,7 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|-------------|
-| [releases/v7.md](releases/v7.md) | **v7.1.0** — Dependabot, optional pre-commit, expanded CI typecheck, `inference_stages`, local CI recipe; **v7.0** — doc-link CI, `.editorconfig`, eval recipe, `run_artifacts`. |
+| [releases/v7.md](releases/v7.md) | **v7.2.0** — Dependabot, optional pre-commit, expanded CI typecheck, `inference_stages`, local CI recipe; **v7.0** — doc-link CI, `.editorconfig`, eval recipe, `run_artifacts`. |
 | [releases/v6.md](releases/v6.md) | **v6.0.0** - native fast layer + C helpers, `sampling_extras`, book/visual memory, Pyright/clangd tooling, CI, research sketches. |
 | [releases/v5.md](releases/v5.md) | **v5.0.0** - test-time scaling, manifest curation, DPO safeguards, ViT quality, docs. |
 | [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
@@ -66,6 +68,7 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|--------------|
+| [research/SAMPLING_EXPERIMENTS_BACKLOG.md](research/SAMPLING_EXPERIMENTS_BACKLOG.md) | CFG/steps/solver experiment grids. |
 | [research/IMAGE_QUALITY_LEVERS_2026.md](research/IMAGE_QUALITY_LEVERS_2026.md) | **2026 research map**: CFG/flow sampling, data curation, DPO, perceptual losses — mapped to SDX. |`r`n| [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 hub (merged):** industry context, post-diffusion architecture themes, workflow integration + disclaimers — mapped to SDX ([utils/generation/orchestration.py](../utils/generation/orchestration.py), [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: techniques vs SDX, **prompt_lexicon** + `generate_book` flags, and **best-output checklist** (data, training, production tier, pick-best, OCR). |
 | [MODEL_STACK.md](MODEL_STACK.md) | **Model stack** and how ViT-style quality tooling (it_quality/) relates to DiT generation. |

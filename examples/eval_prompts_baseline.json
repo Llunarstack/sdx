@@ -1,0 +1,12 @@
+[
+  {"id": "object_single", "prompt": "a red bicycle leaning against a brick wall, outdoor photo, soft daylight"},
+  {"id": "hands", "prompt": "close-up of a person's hands holding a ceramic coffee cup, five fingers, correct anatomy"},
+  {"id": "text_sign", "prompt": "a storefront sign that reads OPEN in bold sans-serif letters, neon trim, night city"},
+  {"id": "counting", "prompt": "three apples and two oranges arranged on a wooden table, still life"},
+  {"id": "style_photo", "prompt": "portrait of an elderly sailor, weathered face, natural skin texture, 85mm photograph"},
+  {"id": "abstract", "prompt": "abstract geometric composition, muted teal and coral, clean vectors, museum poster"},
+  {"id": "landscape", "prompt": "misty fjord at dawn, calm water, layered mountains, cinematic wide shot"},
+  {"id": "interaction", "prompt": "a golden retriever catching a frisbee mid-air, grassy park, motion blur on background"},
+  {"id": "material", "prompt": "macro photo of water droplets on a spider web, bokeh, crystal highlights"},
+  {"id": "negative_space", "prompt": "minimalist product shot of matte black headphones on white seamless, soft shadow"}
+]

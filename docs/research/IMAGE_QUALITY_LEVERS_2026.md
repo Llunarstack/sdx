@@ -65,9 +65,9 @@ Ordered roughly by **impact if executed well** vs **engineering cost**:
 - **Extreme CFG** without rescale / schedule will **always** fight you.  
 - **No compute** means fewer ablations; prioritize **inference sweeps** and **small controlled train runs** over rewriting the world.
 
----
-
 ## See also
+
+- [Sampling experiment grids](SAMPLING_EXPERIMENTS_BACKLOG.md)
 
 - [`docs/QUALITY_AND_ISSUES.md`](../QUALITY_AND_ISSUES.md) — operational fixes (blur, saturation, hands, text).  
 - [`docs/HOLY_GRAIL_OVERVIEW.md`](../HOLY_GRAIL_OVERVIEW.md) — adaptive sampling.  

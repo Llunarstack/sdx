@@ -35,7 +35,7 @@ For **why contribute**, **ideas for first PRs**, and a **dev quick start**, see 
 
    ```bash
    pip install basedpyright
-   python -m basedpyright --level error native/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py
+   python -m basedpyright --level error native/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py utils/generation/eval_prompt_pack.py examples/run_baseline_eval.py
    ```
 
    Full mirror: [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md).
