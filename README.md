@@ -28,6 +28,10 @@
 
 SDX is a modular text-to-image training and inference framework built on Diffusion Transformers (DiT). It is designed to be transparent — training lives in `train.py`, sampling in `sample.py`, and every module boundary is explicit.
 
+**What SDX is not:** a fork of Stable Diffusion 1.5 / SDXL graph runtimes (e.g. ComfyUI checkpoint graphs). SDX is a **DiT-centric** training and sampling codebase with its own checkpoints, CLIs, and module layout.
+
+**Core stack:**
+
 **Core stack:** DiT · T5 / triple text encoders · LoRA/DoRA/LyCORIS routing · VP diffusion + flow matching + bridge/OT objectives · Holy Grail adaptive sampling · optional native CUDA acceleration.
 
 
@@ -92,6 +96,8 @@ SDX is for people who want to understand and modify what's happening — not jus
 > Generate your own gallery: `python -m scripts.tools make_gallery --ckpt results/.../best.pt`
 >
 > Images will be saved to `docs/assets/gallery/` and a grid to `docs/assets/gallery/gallery_grid.png`.
+
+**Public demo (optional):** publish docs/assets/gallery/ via **GitHub Pages** or wrap sample.py in a **Hugging Face Space** when you have a license-clear checkpoint to pin—both are deployment choices, not required to use the repo.
 
 ---
 
@@ -600,6 +606,8 @@ python -m ViT.train --help
 | [`docs/COMMON_SHORTCOMINGS_AI_IMAGES.md`](docs/COMMON_SHORTCOMINGS_AI_IMAGES.md) | Common image-gen failure catalog and mitigation mapping |
 | [`DEPRECATIONS.md`](DEPRECATIONS.md) | Canonical import paths and active compatibility shims |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
+| [docs/TCIS_OVERVIEW.md](docs/TCIS_OVERVIEW.md) | TCIS hybrid loop: DiT propose → ViT critique → consensus rank → optional iterate (Mermaid flow) |
+| [docs/HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md) | Holy Grail adaptive sampling: preset → per-step CFG/control/adapters (Mermaid flow) |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
 | [docs/releases/v5.md](docs/releases/v5.md) | **v5.0.0** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
 | [docs/releases/v6.md](docs/releases/v6.md) | **v6.0.0** release: native fast layer, `sampling_extras`, book/visual memory, IDE tooling, CI |
