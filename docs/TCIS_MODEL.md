@@ -56,7 +56,7 @@ The penalty term prefers candidates where both heads agree, reducing fragile "lo
 ```bash
 python -m scripts.tools hybrid_dit_vit_generate \
   --ckpt results/run/best.pt \
-  --vit-ckpt vit_quality/runs/best.pt \
+  --vit-ckpt vq/runs/best.pt \
   --prompt "hero character, full body, cinematic rain, readable title text" \
   --out outputs/tcis.png \
   --num 8 \

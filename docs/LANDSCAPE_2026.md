@@ -232,7 +232,7 @@ Commercial stacks and names change quickly. Treat the following as **examples** 
 | :--- | :--- | :--- |
 | **RAE** | **Semantic** latents from **frozen** encoders + learned decoder; **DiT** denoises in that space. | **Richer** than “compress pixels only” VAEs. |
 
-**SDX today:** **`--autoencoder-type rae`**, `RAELatentBridge`, training/inference paths — see [MODEL_STACK.md](MODEL_STACK.md), README. **Status:** implemented (RAE path). **REPA** ([`--repa-weight`](../train.py)) aligns with **external** vision reps — **related** to “semantic-first latents.”
+**SDX today:** **`--autoencoder-type rae`**, `RAELatentBridge`, tr/inference paths — see [MODEL_STACK.md](MODEL_STACK.md), README. **Status:** implemented (RAE path). **REPA** ([`--repa-weight`](../train.py)) aligns with **external** vision reps — **related** to “semantic-first latents.”
 
 ---
 

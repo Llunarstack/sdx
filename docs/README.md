@@ -48,6 +48,8 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|-------------|
+| [releases/v6.md](releases/v6.md) | **v6.0.0** - native fast layer + C helpers, `sampling_extras`, book/visual memory, Pyright/clangd tooling, CI, research sketches. |
+| [releases/v5.md](releases/v5.md) | **v5.0.0** - test-time scaling, manifest curation, DPO safeguards, ViT quality, docs. |
 | [releases/v0.2.0.md](releases/v0.2.0.md) | **v0.2.0** — flow/bridge/OT sampling, DPO/KD, native + toolkit, docs; GitHub: [Releases](https://github.com/Llunarstack/sdx/releases). |
 | [releases/v0.1.0.md](releases/v0.1.0.md) | **v0.1.0** — earlier baseline (2026-03-13). |
 | [releases/v3.md](releases/v3.md) | **v3** — benchmark robustness, hard-case mining, hardcase-aware DPO remine, startup readiness checks. |
@@ -61,7 +63,7 @@ Quick links to all project docs, grouped by purpose.
 |-----|--------------|
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **2026 hub (merged):** industry context, post-diffusion architecture themes, workflow integration + disclaimers — mapped to SDX ([utils/generation/orchestration.py](../utils/generation/orchestration.py), [`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential art: techniques vs SDX, **prompt_lexicon** + `generate_book` flags, and **best-output checklist** (data, training, production tier, pick-best, OCR). |
-| [../ViT/EXCELLENCE_VS_DIT.md](../ViT/EXCELLENCE_VS_DIT.md) | **ViT quality scoring vs DiT generation deep-dive:** conceptual comparison doc under legacy `ViT/`; canonical package/runtime path is `vit_quality/`. |
+| [MODEL_STACK.md](MODEL_STACK.md) | **Model stack** and how ViT-style quality tooling (it_quality/) relates to DiT generation. |
 | [IMPROVEMENTS.md](IMPROVEMENTS.md) | Roadmap: quality, fixes, novel ideas — includes **§11 Next-tier / insane quality** and **§12 Industry alignment (2026)**. |
 | [INSPIRATION.md](INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos. |
 | [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md) | Copy‑paste prompt recipes using presets, op‑modes, hard styles, and all the quality flags. |

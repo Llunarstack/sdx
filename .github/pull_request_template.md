@@ -6,7 +6,7 @@
 ## Scope
 
 - [ ] Training path (`train.py`, `training/`, `data/`)
-- [ ] Sampling path (`sample.py`, `diffusion/`, `utils/generation/`)
+- [ ] Sampling path (`sample.py`, `diffusion/`, `utils/gen/`)
 - [ ] Tooling/docs only
 
 ## Validation

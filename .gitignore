@@ -25,7 +25,8 @@ build/
 venv/
 .env
 .idea/
-.vscode/
+.vscode/*
+!.vscode/c_cpp_properties.json
 .editorconfig
 
 # Danbooru full tag dumps (regenerate: scripts/tools/fetch_danbooru_tags.py)
@@ -53,6 +54,7 @@ native/rust/**/target/
 native/zig/**/.zig-cache/
 native/zig/**/zig-out/
 native/cpp/build/
+native/cpp/build-compile-db/
 native/cpp/cmake-build-*/
 # Go build output next to source (keep native/go/sdx-manifest/*.go tracked)
 native/go/sdx-manifest/sdx-manifest

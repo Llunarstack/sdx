@@ -115,11 +115,6 @@ def main() -> None:
     r3 += _rows_from_list("nsfw_negative", cct._NSFW_NEGATIVE)
     r3 += _rows_from_dict("nsfw_pack_positive", cct._NSFW_PACK_POSITIVE)
     r3 += _rows_from_dict("nsfw_pack_negative", cct._NSFW_PACK_NEGATIVE)
-    r3 += _rows_from_dict("nsfw_civitai_positive", cct._NSFW_CIVITAI_POSITIVE)
-    r3 += _rows_from_dict("nsfw_civitai_negative", cct._NSFW_CIVITAI_NEGATIVE)
-    # Remove hits/hits_lite positive rows (dynamic from CIVITAI_HOT_TAGS)
-    r3 = [row for row in r3 if not (row[0] == "nsfw_civitai_positive" and row[1] in ("hits", "hits_lite"))]
-    r3 += _rows_from_list("civitai_snippet_tags", cct._CIVITAI_SNIPPET_TAGS)
     write_csv(out_dir / "03_nsfw_core.csv", r3)
 
     # --- 04_scene_people_objects.csv ---

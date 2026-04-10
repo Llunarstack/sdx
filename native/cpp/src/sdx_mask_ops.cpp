@@ -1,5 +1,5 @@
 /**
- * CPU helpers for mask → patch-weight operations used in part-aware training.
+ * CPU helpers for mask -> patch-weight operations used in part-aware training.
  *
  * sdx_mask_to_patch_weights_f32:
  *   Downsample a (B, 1, H, W) float32 binary/soft mask to (B, ph*pw) by

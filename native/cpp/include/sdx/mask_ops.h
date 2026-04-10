@@ -1,5 +1,5 @@
 /**
- * CPU mask → patch-weight helpers for part-aware training.
+ * CPU mask -> patch-weight helpers for part-aware training.
  * Matches image_mask_to_patch_weights() in utils/training/part_aware_training.py.
  */
 #ifndef SDX_MASK_OPS_H

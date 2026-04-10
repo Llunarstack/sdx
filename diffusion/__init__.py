@@ -15,6 +15,20 @@ from .consistency_utils import (
 from .gaussian_diffusion import INFERENCE_SOLVERS, GaussianDiffusion, create_diffusion
 from .inference_timesteps import build_inference_timesteps, list_timestep_schedules
 from .losses import get_loss_weight, get_timestep_loss_weight
+from .pixel_perfect import (
+    LATENT_TO_PIXEL,
+    PixelPerfectCanvas,
+    ar_block_grid_side,
+    dit_rgb_stride_px,
+    latent_hw_from_pixels,
+    pixel_stride_for_pipeline,
+    pixels_from_latent_hw,
+    resolve_pixel_perfect_hw,
+    snap_to_multiple,
+    tag_manifest_pixel_perfect,
+    validate_latent_matches_ar_grid,
+    validate_pixels_against_dit,
+)
 from .respace import space_timesteps
 from .sampling_utils import norm_thresholding, spatial_norm_thresholding
 from .schedules import get_beta_schedule
@@ -23,6 +37,18 @@ from .snr_utils import alpha_cumprod_from_betas, snr_from_alpha_cumprod, snr_fro
 from .timestep_sampling import sample_training_timesteps
 
 __all__ = [
+    "LATENT_TO_PIXEL",
+    "PixelPerfectCanvas",
+    "ar_block_grid_side",
+    "dit_rgb_stride_px",
+    "latent_hw_from_pixels",
+    "pixels_from_latent_hw",
+    "pixel_stride_for_pipeline",
+    "resolve_pixel_perfect_hw",
+    "snap_to_multiple",
+    "tag_manifest_pixel_perfect",
+    "validate_latent_matches_ar_grid",
+    "validate_pixels_against_dit",
     "INFERENCE_SOLVERS",
     "build_inference_timesteps",
     "list_timestep_schedules",

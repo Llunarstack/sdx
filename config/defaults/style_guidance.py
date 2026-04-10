@@ -1,4 +1,8 @@
-"""Style-domain + artist/game reference guidance packs (auto-detect or full)."""
+"""Style-domain + artist/game reference guidance packs (auto-detect or full).
+
+Also merges ``config.defaults.style_artists`` bucket/facet quality fragments on every call
+(``_style_tag_quality_safe``) so inference and caption utils stay in sync.
+"""
 
 from __future__ import annotations
 
@@ -433,6 +437,15 @@ def _artist_reference_fragments(prompt: str, enabled: bool) -> Tuple[str, str]:
     return "", ""
 
 
+def _style_tag_quality_safe(prompt: str) -> Tuple[str, str]:
+    try:
+        from config.defaults.style_artists import style_tag_quality_fragments
+
+        return style_tag_quality_fragments(prompt)
+    except Exception:
+        return "", ""
+
+
 def style_guidance_fragments(
     prompt: str,
     mode: StyleGuidanceMode,
@@ -440,9 +453,10 @@ def style_guidance_fragments(
     include_artist_refs: bool,
 ) -> Tuple[str, str]:
     m = (mode or "none").lower()
+    tp, tn = _style_tag_quality_safe(prompt)
     if m == "none":
         ap, an = _artist_reference_fragments(prompt, include_artist_refs)
-        return ap, an
+        return merge_csv_unique(ap, tp), merge_csv_unique(an, tn)
     if m == "all":
         specs = list(STYLE_SPECS)
     else:
@@ -450,5 +464,5 @@ def style_guidance_fragments(
     pos = merge_csv_unique(*(s.positive_hints for s in specs))
     neg = merge_csv_unique(*(s.negative_hints for s in specs))
     ap, an = _artist_reference_fragments(prompt, include_artist_refs)
-    return merge_csv_unique(pos, ap), merge_csv_unique(neg, an)
+    return merge_csv_unique(pos, ap, tp), merge_csv_unique(neg, an, tn)
 

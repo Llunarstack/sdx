@@ -64,3 +64,13 @@ def test_detect_anime_game_3d_and_booru_styles():
     assert "anime_game_3d_styles" in ids
     assert "booru_2d_3d_prompt_style" in ids
 
+
+def test_style_guidance_none_includes_tag_bucket_hints():
+    pos, neg = style_guidance_fragments(
+        "portrait, vector_art, flat design",
+        "none",
+        include_artist_refs=False,
+    )
+    assert "2d digital" in pos.lower() or "focal hierarchy" in pos.lower()
+    assert neg.strip()
+

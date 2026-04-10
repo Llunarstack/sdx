@@ -47,7 +47,7 @@ LLM_BEST = "Qwen/Qwen2.5-7B-Instruct"
 
 ADVANCED_REPOS = [
     ("creative-graphic-design/LongCLIP-L", "LongCLIP-L"),
-    ("vikhyatk/moondream2", "moondream2"),
+    ("vikhyatoolkit/moondream2", "moondream2"),
     ("prs-eth/marigold-depth-v1-1", "Marigold-Depth-v1-1"),
     ("prs-eth/marigold-normals-v1-1", "Marigold-Normals-v1-1"),
     ("madebyollin/taesd", "TAESD"),

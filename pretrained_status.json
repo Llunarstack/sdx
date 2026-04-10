@@ -165,7 +165,7 @@
     {
       "name": "moondream2",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
-      "hf_fallback": "vikhyatk/moondream2",
+      "hf_fallback": "vikhyatoolkit/moondream2",
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
       "is_local": true,
       "size_gb": 3.592

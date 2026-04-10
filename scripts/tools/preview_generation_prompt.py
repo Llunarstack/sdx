@@ -4,7 +4,7 @@ Preview final positive/negative prompts after content_controls + optional neg fi
 
 Does not replicate every sample.py step (character sheets, scene blueprints, hard-style prefix,
 naturalize prefix, boost-quality, emphasis weights). Use for tuning --safety-mode, --quality-pack,
---anti-ai-pack, --human-media, Civitai packs, etc.
+--anti-ai-pack, --human-media, etc.
 
 Usage:
   python -m scripts.tools preview_generation_prompt --prompt "1girl, red dress" --safety-mode nsfw
@@ -64,10 +64,6 @@ def main() -> int:
     p.add_argument("--nsfw-pack", type=str, default="none")
     p.add_argument("--sex-position", type=str, default="none")
     p.add_argument("--clothing-mode", type=str, default="none")
-    p.add_argument("--nsfw-civitai-pack", type=str, default="none")
-    p.add_argument("--civitai-trigger-bank", type=str, default="none")
-    p.add_argument("--civitai-model-bank-csv", type=str, default="")
-    p.add_argument("--civitai-frequency-txt", type=str, default="")
     p.add_argument("--style-lock", action="store_true")
     p.add_argument("--anti-style-bleed", action="store_true")
     p.add_argument("--anti-duplicate-subjects", action="store_true")
@@ -91,7 +87,7 @@ def main() -> int:
 
     if int(args.lora_count) >= 2:
         try:
-            from config.prompt_domains import LORA_STACK_NEGATIVE
+            from config.defaults.prompt_domains import LORA_STACK_NEGATIVE
 
             neg = f"{neg}, {LORA_STACK_NEGATIVE}".strip()
         except ImportError:
@@ -187,10 +183,6 @@ def main() -> int:
             anti_perspective_drift=bool(args.anti_perspective_drift),
             cleanup_conflicting_tags=bool(args.cleanup_conflicting_tags),
             allow_text_in_image=bool(args.text_in_image),
-            nsfw_civitai_pack=str(args.nsfw_civitai_pack or "none"),
-            civitai_trigger_bank=str(args.civitai_trigger_bank or "none"),
-            civitai_model_bank_csv=(str(args.civitai_model_bank_csv or "").strip() or None),
-            civitai_frequency_txt=(str(args.civitai_frequency_txt or "").strip() or None),
             one_shot_boost=bool(args.one_shot_boost),
             anti_ai_pack=anti_ai_pack,
             human_media_mode=human_media_mode,

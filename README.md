@@ -30,6 +30,9 @@ SDX is a modular text-to-image training and inference framework built on Diffusi
 
 **Core stack:** DiT · T5 / triple text encoders · LoRA/DoRA/LyCORIS routing · VP diffusion + flow matching + bridge/OT objectives · Holy Grail adaptive sampling · optional native CUDA acceleration.
 
+
+**Source releases:** [v6.0.0](docs/releases/v6.md) (latest) · [v5.0.0](docs/releases/v5.md) · [earlier tags](docs/README.md#releases-versioned-source)
+
 ---
 
 ## Try it in one command
@@ -352,10 +355,10 @@ Run `python sample.py --help` for the full list.
 
 ```bash
 python sample.py --ckpt results/.../best.pt --prompt "..." --num 4 --pick-best auto \
-  --pick-vit-ckpt vit_quality/runs/best.pt --pick-report-json out/pick_report.json --out out.png
+  --pick-vit-ckpt vq/runs/best.pt --pick-report-json out/pick_report.json --out out.png
 
 python sample.py --ckpt results/.../best.pt --prompt "..." --num 1 --steps 40 \
-  --beam-width 6 --beam-steps 10 --pick-vit-ckpt vit_quality/runs/best.pt --out out.png
+  --beam-width 6 --beam-steps 10 --pick-vit-ckpt vq/runs/best.pt --out out.png
 ```
 
 **Data curation:** `python -m scripts.tools manifest_enrich` (adds `aesthetic_proxy`, optional `clip_sim`); `python -m scripts.tools data_quality` with `--min-clip-sim` / `--min-aesthetic-proxy`.
@@ -369,7 +372,7 @@ Use the dispatcher tool to run iterative generation with consensus scoring, opti
 ```bash
 python -m scripts.tools hybrid_dit_vit_generate \
   --ckpt results/.../best.pt \
-  --vit-ckpt vit_quality/runs/best.pt \
+  --vit-ckpt vq/runs/best.pt \
   --prompt "poster with title \"NEON STORM\", exactly 2 characters, full body, cinematic rain" \
   --out outputs/tcis.png \
   --num 6 \
@@ -520,7 +523,7 @@ Weights are resolved automatically at runtime via `utils/modeling/model_paths.py
 | SAM2 Hiera Large | `pretrained/SAM2-Hiera-Large` | `facebook/sam2-hiera-large-hf` |
 | Real-ESRGAN | `pretrained/Real-ESRGAN` | `ai-forever/Real-ESRGAN` |
 | LongCLIP-L | `pretrained/LongCLIP-L` | `creative-graphic-design/LongCLIP-L` |
-| moondream2 | `pretrained/moondream2` | `vikhyatk/moondream2` |
+| moondream2 | `pretrained/moondream2` | `vikhyatoolkit/moondream2` |
 | Marigold Depth v1.1 | `pretrained/Marigold-Depth-v1-1` | `prs-eth/marigold-depth-v1-1` |
 | Marigold Normals v1.1 | `pretrained/Marigold-Normals-v1-1` | `prs-eth/marigold-normals-v1-1` |
 | TAESD | `pretrained/TAESD` | `madebyollin/taesd` |
@@ -553,12 +556,12 @@ sdx/
 ├── diffusion/                # Diffusion engine, schedules, losses, Holy Grail
 │   └── holy_grail/           # Adaptive per-step CFG/control/adapter scheduling
 ├── models/                   # DiT core, attention, adapters, ControlNet, MoE
-├── training/                 # CLI parser + config mapping (split from train loop)
+├── tr/                 # CLI parser + config mapping (split from train loop)
 ├── utils/                    # Training, generation, prompt, checkpoint, modeling utils
 │
 ├── scripts/                  # Download, setup, and tooling scripts
 ├── native/                   # Optional C++/CUDA/Rust acceleration
-├── vit_quality/              # Canonical ViT quality/adherence package
+├── vq/              # Canonical ViT quality/adherence package
 ├── ViT/                      # Legacy compatibility namespace for vit_quality
 ├── pipelines/                # High-level generation pipelines (book/comic, etc.)
 ├── toolkit/                  # QoL helpers: env health, seeds, timing, manifest digest
@@ -598,6 +601,8 @@ python -m ViT.train --help
 | [`DEPRECATIONS.md`](DEPRECATIONS.md) | Canonical import paths and active compatibility shims |
 | [`docs/QUALITY_AND_ISSUES.md`](docs/QUALITY_AND_ISSUES.md) | Practical quality playbook |
 | [`docs/TCIS_MODEL.md`](docs/TCIS_MODEL.md) | TCIS hybrid architecture: iterative consensus, shape-first scaffold, and constraint-aware ranking |
+| [docs/releases/v5.md](docs/releases/v5.md) | **v5.0.0** release: test-time scaling, beam/pick reports, data curation, DPO/ViT |
+| [docs/releases/v6.md](docs/releases/v6.md) | **v6.0.0** release: native fast layer, `sampling_extras`, book/visual memory, IDE tooling, CI |
 | [`docs/releases/v4.md`](docs/releases/v4.md) | v4 release: uncertainty-scaled TCIS, elite-memory diversity bonus, and annealed constraint consensus |
 | [`docs/releases/v3.md`](docs/releases/v3.md) | v3 source release notes (benchmark + hardcase-aware improvement stack) |
 | [`diffusion/holy_grail/README.md`](diffusion/holy_grail/README.md) | Holy Grail adaptive sampling reference |

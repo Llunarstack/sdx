@@ -6,7 +6,7 @@ Used by sample.py --pick-best (§11.3 IMPROVEMENTS.md).
 from __future__ import annotations
 
 import re
-from typing import List, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple, cast
 
 import numpy as np
 
@@ -27,12 +27,12 @@ except Exception:  # pragma: no cover - optional native path
     maybe_norm01_native = None
     maybe_weighted_sum_native = None
 
-_clip_model = None
-_clip_processor = None
-_clip_model_id = None
-_vit_model = None
-_vit_cfg = None
-_vit_ckpt = None
+_clip_model: Any = None
+_clip_processor: Any = None
+_clip_model_id: Optional[str] = None
+_vit_model: Any = None
+_vit_cfg: Any = None
+_vit_ckpt: Any = None
 _PEOPLE_WORDS = {
     "people",
     "persons",
@@ -199,8 +199,8 @@ def score_clip_similarity(
         return [0.5] * len(rgb_uint8_list)
 
     if _clip_model is None or _clip_model_id != model_id:
-        _clip_processor = CLIPProcessor.from_pretrained(model_id)
-        _clip_model = CLIPModel.from_pretrained(model_id).to(device)
+        _clip_processor = cast(Any, CLIPProcessor).from_pretrained(model_id)
+        _clip_model = cast(Any, cast(Any, CLIPModel).from_pretrained(model_id)).to(device)
         _clip_model.eval()
         _clip_model_id = model_id
 
@@ -441,8 +441,9 @@ def _cv2_face_cascade():
     try:
         import cv2
 
-        path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        cascade = cv2.CascadeClassifier(path)
+        cv2_any = cast(Any, cv2)
+        path = cv2_any.data.haarcascades + "haarcascade_frontalface_default.xml"
+        cascade = cv2_any.CascadeClassifier(path)
         _CV2_FACE_CASCADE = cascade if not cascade.empty() else False
     except Exception:
         _CV2_FACE_CASCADE = False
@@ -456,8 +457,9 @@ def _cv2_hog_people():
     try:
         import cv2
 
-        hog = cv2.HOGDescriptor()
-        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        cv2_any = cast(Any, cv2)
+        hog = cv2_any.HOGDescriptor()
+        hog.setSVMDetector(cv2_any.HOGDescriptor_getDefaultPeopleDetector())
         _CV2_HOG = hog
     except Exception:
         _CV2_HOG = False
@@ -613,6 +615,7 @@ def pick_best_indices(
     expected_count_object: str = "",
     vit_ckpt_path: str = "",
     vit_use_adherence: bool = False,
+    vit_num_ar_blocks: int = -1,
 ) -> Tuple[int, List[float]]:
     """
     Return (best_index, raw_scores_one_per_image).
@@ -674,8 +677,21 @@ def pick_best_indices(
                 imgs.append(torch.zeros((3, img_sz, img_sz), dtype=torch.float32))
         x = torch.stack(imgs, dim=0).to(dev)
         txt = txt.expand(x.shape[0], -1)
+        ar_cond = None
+        if bool((_vit_cfg or {}).get("use_ar_conditioning", False)):
+            try:
+                from utils.architecture.ar_block_conditioning import (
+                    ar_conditioning_vector,
+                    normalize_num_ar_blocks,
+                )
+
+                nb = normalize_num_ar_blocks(vit_num_ar_blocks)
+                if nb in (0, 2, 4):
+                    ar_cond = ar_conditioning_vector(nb, device=dev, dtype=txt.dtype).expand(x.shape[0], -1)
+            except Exception:
+                ar_cond = None
         with torch.inference_mode():
-            out = _vit_model(x, txt, ar_conditioning=None)
+            out = _vit_model(x, txt, ar_conditioning=ar_cond)
             q = out.get("quality_logit", None)
             if q is None:
                 return [0.5] * image_count
