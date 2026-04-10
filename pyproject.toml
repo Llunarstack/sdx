@@ -1,6 +1,6 @@
 [project]
 name = "sdx"
-version = "7.2.0"
+version = "7.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
 requires-python = ">=3.8"
