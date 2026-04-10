@@ -29,6 +29,10 @@ venv/
 !.vscode/c_cpp_properties.json
 .editorconfig
 
+# Cursor (local IDE; do not publish to the remote repo)
+.cursor/
+.cursorignore
+
 # Danbooru full tag dumps (regenerate: scripts/tools/fetch_danbooru_tags.py)
 data/danbooru/tags/raw/*.txt
 data/danbooru/tags/buckets/*.txt
