@@ -9,7 +9,7 @@ diffusers>=0.25.0
 xformers>=0.0.23
 # Triton: xformers (and some torch.compile paths) call `import triton`. Official wheels are Linux x86_64;
 # on Windows use the community package that provides the same module name.
-triton>=2.0; sys_platform == "linux" and platform_machine == "x86_64"
+triton>=3.6.0; sys_platform == "linux" and platform_machine == "x86_64"
 triton-windows>=3.6.0; sys_platform == "win32"
 accelerate>=0.25.0
 
