@@ -6,7 +6,7 @@ transformers>=4.30.0
 huggingface_hub>=0.20.0
 datasets>=2.14.0
 diffusers>=0.25.0
-xformers>=0.0.23
+xformers>=0.0.35
 # Triton: xformers (and some torch.compile paths) call `import triton`. Official wheels are Linux x86_64;
 # on Windows use the community package that provides the same module name.
 triton>=2.0; sys_platform == "linux" and platform_machine == "x86_64"
