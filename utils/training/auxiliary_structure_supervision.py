@@ -64,6 +64,7 @@ _PRETRAINED = Path(__file__).resolve().parents[2] / "pretrained"
 # Prediction heads
 # ---------------------------------------------------------------------------
 
+
 class DepthHead(nn.Module):
     """
     Lightweight depth prediction head.
@@ -202,6 +203,7 @@ class SegmentationHead(nn.Module):
 # Pseudo-label generators (no training needed)
 # ---------------------------------------------------------------------------
 
+
 def compute_sobel_edges(images_rgb: torch.Tensor) -> torch.Tensor:
     """
     Compute Sobel edge magnitude from RGB images.
@@ -216,14 +218,12 @@ def compute_sobel_edges(images_rgb: torch.Tensor) -> torch.Tensor:
     gray = 0.299 * images_rgb[:, 0:1] + 0.587 * images_rgb[:, 1:2] + 0.114 * images_rgb[:, 2:3]
 
     # Sobel kernels
-    sobel_x = torch.tensor(
-        [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
-        dtype=images_rgb.dtype, device=images_rgb.device
-    ).view(1, 1, 3, 3)
-    sobel_y = torch.tensor(
-        [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
-        dtype=images_rgb.dtype, device=images_rgb.device
-    ).view(1, 1, 3, 3)
+    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=images_rgb.dtype, device=images_rgb.device).view(
+        1, 1, 3, 3
+    )
+    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=images_rgb.dtype, device=images_rgb.device).view(
+        1, 1, 3, 3
+    )
 
     gx = F.conv2d(gray, sobel_x, padding=1)
     gy = F.conv2d(gray, sobel_y, padding=1)
@@ -336,6 +336,7 @@ def compute_normal_pseudo_labels(
 # Timestep-aware loss weighting
 # ---------------------------------------------------------------------------
 
+
 def structure_loss_weight(t: torch.Tensor, num_timesteps: int) -> torch.Tensor:
     """
     Weight structure losses by timestep.
@@ -356,23 +357,25 @@ def structure_loss_weight(t: torch.Tensor, num_timesteps: int) -> torch.Tensor:
 # Main supervisor class
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class AuxStructureConfig:
     """Configuration for auxiliary structure supervision."""
+
     use_depth: bool = True
     use_edges: bool = True
-    use_normals: bool = False       # Requires Marigold normals
+    use_normals: bool = False  # Requires Marigold normals
     use_segmentation: bool = False  # Requires SAM2 or similar
     depth_weight: float = 0.5
     edge_weight: float = 0.3
     normal_weight: float = 0.2
     seg_weight: float = 0.1
     patch_size: int = 2
-    latent_size: int = 32           # latent spatial size (image_size // 8)
+    latent_size: int = 32  # latent spatial size (image_size // 8)
     n_seg_classes: int = 4
     use_pseudo_labels: bool = True  # Generate labels from pretrained models
-    pseudo_label_every: int = 10    # Regenerate pseudo-labels every N steps
-    timestep_weighting: bool = True # Weight loss by timestep
+    pseudo_label_every: int = 10  # Regenerate pseudo-labels every N steps
+    timestep_weighting: bool = True  # Weight loss by timestep
 
 
 class AuxiliaryStructureSupervisor:
@@ -506,7 +509,9 @@ class AuxiliaryStructureSupervisor:
             pred_depth = self.heads["depth"](features)
             target_depth = labels["depth"].to(features.device)
             if pred_depth.shape != target_depth.shape:
-                target_depth = F.interpolate(target_depth, size=pred_depth.shape[-2:], mode="bilinear", align_corners=False)
+                target_depth = F.interpolate(
+                    target_depth, size=pred_depth.shape[-2:], mode="bilinear", align_corners=False
+                )
             depth_loss = (F.l1_loss(pred_depth, target_depth, reduction="none") * t_weight).mean()
             total_loss = total_loss + self.cfg.depth_weight * depth_loss
             metrics["depth_loss"] = float(depth_loss.item())
@@ -516,7 +521,9 @@ class AuxiliaryStructureSupervisor:
             pred_edges = self.heads["edges"](features)
             target_edges = labels["edges"].to(features.device)
             if pred_edges.shape != target_edges.shape:
-                target_edges = F.interpolate(target_edges, size=pred_edges.shape[-2:], mode="bilinear", align_corners=False)
+                target_edges = F.interpolate(
+                    target_edges, size=pred_edges.shape[-2:], mode="bilinear", align_corners=False
+                )
             edge_loss = (F.binary_cross_entropy(pred_edges, target_edges, reduction="none") * t_weight).mean()
             total_loss = total_loss + self.cfg.edge_weight * edge_loss
             metrics["edge_loss"] = float(edge_loss.item())
@@ -526,7 +533,9 @@ class AuxiliaryStructureSupervisor:
             pred_normals = self.heads["normals"](features)
             target_normals = labels["normals"].to(features.device)
             if pred_normals.shape != target_normals.shape:
-                target_normals = F.interpolate(target_normals, size=pred_normals.shape[-2:], mode="bilinear", align_corners=False)
+                target_normals = F.interpolate(
+                    target_normals, size=pred_normals.shape[-2:], mode="bilinear", align_corners=False
+                )
             # Angular loss: 1 - cosine similarity
             cos_sim = (pred_normals * target_normals).sum(dim=1, keepdim=True)
             normal_loss = ((1.0 - cos_sim) * t_weight).mean()

@@ -116,4 +116,3 @@ def build_vit_model(
         backbone_grad_checkpointing=backbone_grad_checkpointing,
         timm_kwargs=timm_kwargs,
     )
-

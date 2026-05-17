@@ -19,9 +19,7 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
     if _rm in ("stretch", "center_crop", "saliency_crop"):
         cmd.extend(["--resize-mode", _rm])
     if float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0) > 0:
-        cmd.extend(
-            ["--resize-saliency-face-bias", str(float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0))]
-        )
+        cmd.extend(["--resize-saliency-face-bias", str(float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0))])
 
     if (
         getattr(args, "dynamic_threshold_type", "percentile") != "percentile"

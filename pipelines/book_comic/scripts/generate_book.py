@@ -531,7 +531,9 @@ def main() -> None:
         default="",
         help="Expected text (comma-separated or JSON list). Used for OCR validation + fixes.",
     )
-    parser.add_argument("--cover-expected-text", default="", help="Expected front cover text (defaults to --expected-text).")
+    parser.add_argument(
+        "--cover-expected-text", default="", help="Expected front cover text (defaults to --expected-text)."
+    )
     parser.add_argument(
         "--back-cover-expected-text",
         default="",
@@ -1109,13 +1111,28 @@ def main() -> None:
     parser.add_argument(
         "--artist-technique-pack",
         default="none",
-        choices=["none", "digital_2d_master", "anime_2d_master", "drawing_ink_master", "painting_master", "toon_3d_master", "pbr_3d_master"],
+        choices=[
+            "none",
+            "digital_2d_master",
+            "anime_2d_master",
+            "drawing_ink_master",
+            "painting_master",
+            "toon_3d_master",
+            "pbr_3d_master",
+        ],
         help="One-flag artist-technique preset for linework/render/shading/material/composition.",
     )
     parser.add_argument(
         "--linework-technique",
         default="none",
-        choices=["none", "clean_contour", "expressive_weight", "crosshatch_precision", "sketch_loose", "calligraphic_ink"],
+        choices=[
+            "none",
+            "clean_contour",
+            "expressive_weight",
+            "crosshatch_precision",
+            "sketch_loose",
+            "calligraphic_ink",
+        ],
         help="Linework technique emphasis.",
     )
     parser.add_argument(
@@ -1150,7 +1167,16 @@ def main() -> None:
     parser.add_argument(
         "--photo-realism-pack",
         default="none",
-        choices=["none", "documentary", "cinematic", "studio_portrait", "film_analog", "night_noir", "product_catalog", "fashion_editorial"],
+        choices=[
+            "none",
+            "documentary",
+            "cinematic",
+            "studio_portrait",
+            "film_analog",
+            "night_noir",
+            "product_catalog",
+            "fashion_editorial",
+        ],
         help="Photography realism pack forwarded to sample.py.",
     )
     parser.add_argument(
@@ -1162,7 +1188,16 @@ def main() -> None:
     parser.add_argument(
         "--photo-lighting-technique",
         default="none",
-        choices=["none", "three_point", "golden_hour", "overcast_soft", "motivated_practical", "rim_backlight", "butterfly", "rembrandt"],
+        choices=[
+            "none",
+            "three_point",
+            "golden_hour",
+            "overcast_soft",
+            "motivated_practical",
+            "rim_backlight",
+            "butterfly",
+            "rembrandt",
+        ],
         help="Photography lighting technique forwarded to sample.py.",
     )
     parser.add_argument(
@@ -1394,7 +1429,9 @@ def main() -> None:
     parser.add_argument("--saturation", type=float, default=1.0, help="sample.py post: saturation factor (1=off).")
     parser.add_argument("--clarity", type=float, default=0.0, help="sample.py post: local contrast / clarity.")
     parser.add_argument("--tone-punch", type=float, default=0.0, dest="tone_punch", help="sample.py tone curve punch.")
-    parser.add_argument("--chroma-smooth", type=float, default=0.0, dest="chroma_smooth", help="sample.py chroma smooth.")
+    parser.add_argument(
+        "--chroma-smooth", type=float, default=0.0, dest="chroma_smooth", help="sample.py chroma smooth."
+    )
     parser.add_argument(
         "--polish",
         type=float,
@@ -1430,7 +1467,9 @@ def main() -> None:
         dest="face_restore_shell",
         help="sample.py shell hook {src}/{dst} after save (e.g. GFPGAN CLI).",
     )
-    parser.add_argument("--no-refine", action="store_true", dest="no_refine", help="sample.py: skip latent refinement pass.")
+    parser.add_argument(
+        "--no-refine", action="store_true", dest="no_refine", help="sample.py: skip latent refinement pass."
+    )
     parser.add_argument("--refine-t", type=int, default=50, dest="refine_t", help="sample.py refinement noise level t.")
     parser.add_argument(
         "--refine-gate",
@@ -1624,9 +1663,15 @@ def main() -> None:
         dest="dual_stage_layout",
         help="sample.py: coarse latent layout then upscale + detail pass (no img2img/inpaint).",
     )
-    parser.add_argument("--dual-stage-div", type=int, default=2, dest="dual_stage_div", help="Latent divisor for layout stage.")
-    parser.add_argument("--dual-layout-steps", type=int, default=24, dest="dual_layout_steps", help="Steps for coarse stage.")
-    parser.add_argument("--dual-detail-steps", type=int, default=20, dest="dual_detail_steps", help="Steps after latent upscale.")
+    parser.add_argument(
+        "--dual-stage-div", type=int, default=2, dest="dual_stage_div", help="Latent divisor for layout stage."
+    )
+    parser.add_argument(
+        "--dual-layout-steps", type=int, default=24, dest="dual_layout_steps", help="Steps for coarse stage."
+    )
+    parser.add_argument(
+        "--dual-detail-steps", type=int, default=20, dest="dual_detail_steps", help="Steps after latent upscale."
+    )
     parser.add_argument(
         "--dual-detail-strength",
         type=float,
@@ -1925,7 +1970,16 @@ def main() -> None:
     parser.add_argument(
         "--oc-archetype",
         default="none",
-        choices=["none", "shonen_lead", "cool_rival", "mentor", "antihero", "magical_girl", "noir_detective", "space_pilot"],
+        choices=[
+            "none",
+            "shonen_lead",
+            "cool_rival",
+            "mentor",
+            "antihero",
+            "magical_girl",
+            "noir_detective",
+            "space_pilot",
+        ],
         help="Original character archetype helper preset.",
     )
     parser.add_argument("--oc-traits", default="", help="Signature OC traits (hair, eyes, scars, accessories).")
@@ -2125,8 +2179,12 @@ def main() -> None:
     _human_neg_raw = str(getattr(args, "humanize_negative_level", "none") or "none")
     _human_cfg = prompt_lexicon.resolve_humanize_controls(
         humanize_pack=str(getattr(args, "humanize_pack", "none") or "none"),
-        humanize_profile=_auto_h.get("humanize_profile", "none") if _human_profile_raw == "none" else _human_profile_raw,
-        imperfection_level=_auto_h.get("imperfection_level", "none") if _human_imperf_raw == "none" else _human_imperf_raw,
+        humanize_profile=_auto_h.get("humanize_profile", "none")
+        if _human_profile_raw == "none"
+        else _human_profile_raw,
+        imperfection_level=_auto_h.get("imperfection_level", "none")
+        if _human_imperf_raw == "none"
+        else _human_imperf_raw,
         materiality_mode=_auto_h.get("materiality_mode", "none") if _human_mat_raw == "none" else _human_mat_raw,
         asymmetry_level=_auto_h.get("asymmetry_level", "none") if _human_asym_raw == "none" else _human_asym_raw,
         negative_level=_auto_h.get("negative_level", "none") if _human_neg_raw == "none" else _human_neg_raw,
@@ -2497,11 +2555,11 @@ def main() -> None:
     def _merged_negative() -> str:
         base = (
             prompt_lexicon.suggest_negative_addon(
-            use_lexicon_negative=True,
-            user_negative=(args.negative_prompt or ""),
-            production_tier=str(getattr(args, "book_accuracy", "") or "").lower()
-            in ("production", "production_vit", "production_fidelity"),
-            artist_lettering_strict=str(_artist_cfg.get("lettering_craft", "none") or "none").lower() == "strict",
+                use_lexicon_negative=True,
+                user_negative=(args.negative_prompt or ""),
+                production_tier=str(getattr(args, "book_accuracy", "") or "").lower()
+                in ("production", "production_vit", "production_fidelity"),
+                artist_lettering_strict=str(_artist_cfg.get("lettering_craft", "none") or "none").lower() == "strict",
             ).strip()
             if getattr(args, "lexicon_negative", True)
             else (args.negative_prompt or "").strip()
@@ -2653,11 +2711,7 @@ def main() -> None:
         manifest_kind: str,
         seed: int,
     ) -> None:
-        vm_cover = (
-            book_vm.prompt_fragment_for_cover()
-            if book_vm is not None
-            else ""
-        )
+        vm_cover = book_vm.prompt_fragment_for_cover() if book_vm is not None else ""
         composed = book_helpers.compose_book_page_prompt(
             user_prompt=user_prompt,
             narration_prefix=narration_p,
@@ -2756,14 +2810,8 @@ def main() -> None:
                 prev_path = page_out
             continue
 
-        rolling = book_helpers.build_rolling_page_context(
-            prev_prompts, num_previous=context_n, max_chars=context_mc
-        )
-        vm_page = (
-            book_vm.prompt_fragment_for_page(i)
-            if book_vm is not None
-            else ""
-        )
+        rolling = book_helpers.build_rolling_page_context(prev_prompts, num_previous=context_n, max_chars=context_mc)
+        vm_page = book_vm.prompt_fragment_for_page(i) if book_vm is not None else ""
         composed_prompt = book_helpers.compose_book_page_prompt(
             user_prompt=page_prompt,
             narration_prefix=narration_p,

@@ -38,31 +38,34 @@ import torch.nn.functional as F
 # Camera spec data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class CameraSpec:
     """Parsed camera/lens/angle specification."""
+
     # Viewing angle
-    angle: str = "eye_level"           # eye_level, birds_eye, worms_eye, dutch, overhead, low_angle, high_angle
-    pov: str = "third_person"          # first_person, third_person, over_shoulder, through_object, drone
+    angle: str = "eye_level"  # eye_level, birds_eye, worms_eye, dutch, overhead, low_angle, high_angle
+    pov: str = "third_person"  # first_person, third_person, over_shoulder, through_object, drone
     # Lens
-    focal_length_mm: float = 50.0      # 14, 24, 35, 50, 85, 135, 200+
-    aperture: float = 2.8              # f/1.2 to f/22
-    lens_type: str = "standard"        # standard, wide, telephoto, fisheye, tilt_shift, anamorphic, macro
+    focal_length_mm: float = 50.0  # 14, 24, 35, 50, 85, 135, 200+
+    aperture: float = 2.8  # f/1.2 to f/22
+    lens_type: str = "standard"  # standard, wide, telephoto, fisheye, tilt_shift, anamorphic, macro
     # Depth of field
-    dof: str = "medium"                # shallow, medium, deep
-    focus_distance: float = 0.5        # 0=very close, 1=infinity
+    dof: str = "medium"  # shallow, medium, deep
+    focus_distance: float = 0.5  # 0=very close, 1=infinity
     # Composition
-    composition: str = "centered"      # centered, rule_of_thirds, golden_ratio, leading_lines, negative_space
+    composition: str = "centered"  # centered, rule_of_thirds, golden_ratio, leading_lines, negative_space
     # Distortion
-    distortion: float = 0.0            # -1=barrel (fisheye), 0=none, +1=pincushion
+    distortion: float = 0.0  # -1=barrel (fisheye), 0=none, +1=pincushion
     # Cinematic
-    aspect_ratio: str = "16:9"         # 1:1, 4:3, 16:9, 2.39:1 (anamorphic)
-    film_format: str = "digital"       # digital, 35mm, medium_format, large_format, super8
+    aspect_ratio: str = "16:9"  # 1:1, 4:3, 16:9, 2.39:1 (anamorphic)
+    film_format: str = "digital"  # digital, 35mm, medium_format, large_format, super8
 
 
 # ---------------------------------------------------------------------------
 # Camera Spec Parser
 # ---------------------------------------------------------------------------
+
 
 class CameraSpecParser:
     """
@@ -125,13 +128,13 @@ class CameraSpecParser:
         return default
 
     def _extract_focal_length(self, text: str) -> float:
-        m = re.search(r'(\d+)\s*mm', text, re.IGNORECASE)
+        m = re.search(r"(\d+)\s*mm", text, re.IGNORECASE)
         if m:
             return float(m.group(1))
         return 50.0
 
     def _extract_aperture(self, text: str) -> float:
-        m = re.search(r'f\s*/\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+        m = re.search(r"f\s*/\s*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
         if m:
             return float(m.group(1))
         return 2.8
@@ -152,6 +155,7 @@ class CameraSpecParser:
 # Camera Embedder
 # ---------------------------------------------------------------------------
 
+
 class CameraEmbedder(nn.Module):
     """
     Encodes a CameraSpec into a conditioning vector injected at every block.
@@ -161,18 +165,18 @@ class CameraEmbedder(nn.Module):
     """
 
     ANGLES = ["eye_level", "birds_eye", "worms_eye", "dutch", "low_angle", "high_angle", "overhead"]
-    POVS   = ["first_person", "third_person", "over_shoulder", "through_object", "drone"]
+    POVS = ["first_person", "third_person", "over_shoulder", "through_object", "drone"]
     LENSES = ["standard", "wide", "telephoto", "fisheye", "tilt_shift", "anamorphic", "macro", "portrait"]
-    DOFS   = ["shallow", "medium", "deep"]
-    COMPS  = ["centered", "rule_of_thirds", "golden_ratio", "leading_lines", "negative_space", "frame_in_frame"]
+    DOFS = ["shallow", "medium", "deep"]
+    COMPS = ["centered", "rule_of_thirds", "golden_ratio", "leading_lines", "negative_space", "frame_in_frame"]
 
     def __init__(self, hidden_size: int):
         super().__init__()
         self.angle_embed = nn.Embedding(len(self.ANGLES), hidden_size // 4)
-        self.pov_embed   = nn.Embedding(len(self.POVS),   hidden_size // 4)
-        self.lens_embed  = nn.Embedding(len(self.LENSES), hidden_size // 4)
-        self.dof_embed   = nn.Embedding(len(self.DOFS),   hidden_size // 4)
-        self.comp_embed  = nn.Embedding(len(self.COMPS),  hidden_size // 4)
+        self.pov_embed = nn.Embedding(len(self.POVS), hidden_size // 4)
+        self.lens_embed = nn.Embedding(len(self.LENSES), hidden_size // 4)
+        self.dof_embed = nn.Embedding(len(self.DOFS), hidden_size // 4)
+        self.comp_embed = nn.Embedding(len(self.COMPS), hidden_size // 4)
 
         # Continuous params: focal_length, aperture, distortion, focus_distance
         self.continuous_proj = nn.Linear(4, hidden_size // 4)
@@ -187,13 +191,14 @@ class CameraEmbedder(nn.Module):
         nn.init.zeros_(self.fusion[-1].bias)
 
         self._angle_to_id = {a: i for i, a in enumerate(self.ANGLES)}
-        self._pov_to_id   = {p: i for i, p in enumerate(self.POVS)}
-        self._lens_to_id  = {lens_name: i for i, lens_name in enumerate(self.LENSES)}
-        self._dof_to_id   = {d: i for i, d in enumerate(self.DOFS)}
-        self._comp_to_id  = {c: i for i, c in enumerate(self.COMPS)}
+        self._pov_to_id = {p: i for i, p in enumerate(self.POVS)}
+        self._lens_to_id = {lens_name: i for i, lens_name in enumerate(self.LENSES)}
+        self._dof_to_id = {d: i for i, d in enumerate(self.DOFS)}
+        self._comp_to_id = {c: i for i, c in enumerate(self.COMPS)}
 
     def forward(self, spec: CameraSpec, device: torch.device) -> torch.Tensor:
         """Returns (1, hidden_size) camera conditioning vector."""
+
         def _id(mapping, key, default=0):
             return torch.tensor(mapping.get(key, default), device=device)
 
@@ -207,8 +212,7 @@ class CameraEmbedder(nn.Module):
         fl_norm = (math.log(max(spec.focal_length_mm, 1)) - math.log(14)) / (math.log(800) - math.log(14))
         ap_norm = (math.log(max(spec.aperture, 0.7)) - math.log(0.7)) / (math.log(22) - math.log(0.7))
         cont = torch.tensor(
-            [fl_norm, ap_norm, (spec.distortion + 1) / 2, spec.focus_distance],
-            device=device, dtype=torch.float32
+            [fl_norm, ap_norm, (spec.distortion + 1) / 2, spec.focus_distance], device=device, dtype=torch.float32
         )
         cont_emb = self.continuous_proj(cont)
 
@@ -219,6 +223,7 @@ class CameraEmbedder(nn.Module):
 # ---------------------------------------------------------------------------
 # Perspective Distortion Module
 # ---------------------------------------------------------------------------
+
 
 class PerspectiveDistortionModule(nn.Module):
     """
@@ -257,7 +262,7 @@ class PerspectiveDistortionModule(nn.Module):
         """Returns (N, 2) normalised (row, col) positions."""
         rows = torch.linspace(0, 1, h, device=device)
         cols = torch.linspace(0, 1, w, device=device)
-        grid_r, grid_c = torch.meshgrid(rows, cols, indexing='ij')
+        grid_r, grid_c = torch.meshgrid(rows, cols, indexing="ij")
         return torch.stack([grid_r.flatten(), grid_c.flatten()], dim=-1)  # (N, 2)
 
     def forward(
@@ -304,6 +309,7 @@ class PerspectiveDistortionModule(nn.Module):
 # ---------------------------------------------------------------------------
 # Lens Distortion Encoder
 # ---------------------------------------------------------------------------
+
 
 class LensDistortionEncoder(nn.Module):
     """
@@ -354,7 +360,7 @@ class LensDistortionEncoder(nn.Module):
         B, N, D = x.shape
         rows = torch.linspace(0, 1, h_patches, device=x.device)
         cols = torch.linspace(0, 1, w_patches, device=x.device)
-        gr, gc = torch.meshgrid(rows, cols, indexing='ij')
+        gr, gc = torch.meshgrid(rows, cols, indexing="ij")
         positions = torch.stack([gr.flatten(), gc.flatten()], dim=-1)  # (N, 2)
 
         cam_exp = camera_emb.unsqueeze(1).expand(B, N, D)
@@ -362,7 +368,7 @@ class LensDistortionEncoder(nn.Module):
         inp = torch.cat([cam_exp, pos_exp], dim=-1)
 
         distortion = self.distortion_field(inp)  # (B, N, D)
-        sharpness = self.sharpness_map(inp)       # (B, N, 1)
+        sharpness = self.sharpness_map(inp)  # (B, N, 1)
 
         # Apply: distortion modulates token content, sharpness gates it
         return x + 0.1 * distortion * sharpness
@@ -371,6 +377,7 @@ class LensDistortionEncoder(nn.Module):
 # ---------------------------------------------------------------------------
 # Depth of Field Module
 # ---------------------------------------------------------------------------
+
 
 class DepthOfFieldModule(nn.Module):
     """
@@ -433,12 +440,12 @@ class DepthOfFieldModule(nn.Module):
             # Linear depth: top of image = far, bottom = near
             rows = torch.linspace(0, 1, h_patches, device=x.device)
             cols = torch.linspace(0, 1, w_patches, device=x.device)
-            gr, _ = torch.meshgrid(rows, cols, indexing='ij')
+            gr, _ = torch.meshgrid(rows, cols, indexing="ij")
             d = gr.flatten().unsqueeze(0).unsqueeze(-1).expand(B, -1, 1)  # (B, N, 1)
 
         # Sharpness: Gaussian around focus plane
         focus_depth_exp = focus_depth.unsqueeze(1)  # (B, 1, 1)
-        dof_w_exp = dof_w.unsqueeze(1)              # (B, 1, 1)
+        dof_w_exp = dof_w.unsqueeze(1)  # (B, 1, 1)
         sharpness = torch.exp(-0.5 * ((d - focus_depth_exp) / (dof_w_exp + 1e-6)) ** 2)  # (B, N, 1)
 
         # Inject sharpness signal into tokens
@@ -449,6 +456,7 @@ class DepthOfFieldModule(nn.Module):
 # ---------------------------------------------------------------------------
 # Camera Conditioner (top-level)
 # ---------------------------------------------------------------------------
+
 
 class CameraConditioner(nn.Module):
     """

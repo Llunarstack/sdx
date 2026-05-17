@@ -34,10 +34,7 @@ from utils.terminal import configure_stdio_for_console  # noqa: E402
 
 configure_stdio_for_console()
 
-_DEMO_PROMPT = (
-    "cinematic portrait of a young woman, soft window light, "
-    "shallow depth of field, film grain, muted tones"
-)
+_DEMO_PROMPT = "cinematic portrait of a young woman, soft window light, shallow depth of field, film grain, muted tones"
 _DEMO_NEGATIVE = "blurry, low quality, watermark, text, oversaturated"
 _HF_DIT_REPO = "facebookresearch/DiT"
 _HF_DIT_FILE = "DiT-XL-2-256x256.pt"  # ~675 MB — smallest publicly available DiT-XL checkpoint
@@ -50,6 +47,7 @@ _DEMO_CKPT = _DEMO_CKPT_DIR / "dit_xl_2_imagenet_sdx.pt"
 # Download helpers
 # ---------------------------------------------------------------------------
 
+
 def _download_dit_imagenet(dest: Path) -> Path:
     """Download DiT-XL/2-256 from HF and return the local .pt path."""
     dest.mkdir(parents=True, exist_ok=True)
@@ -60,6 +58,7 @@ def _download_dit_imagenet(dest: Path) -> Path:
     print(f"  Downloading {_HF_DIT_REPO}/{_HF_DIT_FILE} …")
     try:
         from huggingface_hub import hf_hub_download
+
         path = hf_hub_download(
             repo_id=_HF_DIT_REPO,
             filename=_HF_DIT_FILE,
@@ -134,10 +133,7 @@ def _ensure_checkpoint(args) -> tuple[Path, bool]:
         return _DEMO_CKPT, False
 
     if args.no_download:
-        sys.exit(
-            "No checkpoint found and --no-download set.\n"
-            f"Place a checkpoint at {_DEMO_CKPT} or pass --ckpt PATH."
-        )
+        sys.exit(f"No checkpoint found and --no-download set.\nPlace a checkpoint at {_DEMO_CKPT} or pass --ckpt PATH.")
 
     print("No checkpoint found — downloading DiT-XL/2 ImageNet weights from HF …")
     raw = _download_dit_imagenet(_DEMO_CKPT_DIR)
@@ -148,6 +144,7 @@ def _ensure_checkpoint(args) -> tuple[Path, bool]:
 # ---------------------------------------------------------------------------
 # Sampling helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_class_conditioned(ckpt: Path, args) -> Path:
     """
@@ -180,13 +177,16 @@ def _run_class_conditioned(ckpt: Path, args) -> Path:
     # Load VAE for decoding.
     print("Loading VAE …")
     from diffusers import AutoencoderKL
+
     vae_id = "stabilityai/sd-vae-ft-mse"
     try:
-        vae = AutoencoderKL.from_pretrained(
-            str(_PRETRAINED_DIR / "sd-vae-ft-mse")
-            if (_PRETRAINED_DIR / "sd-vae-ft-mse").exists()
-            else vae_id
-        ).to(device).eval()
+        vae = (
+            AutoencoderKL.from_pretrained(
+                str(_PRETRAINED_DIR / "sd-vae-ft-mse") if (_PRETRAINED_DIR / "sd-vae-ft-mse").exists() else vae_id
+            )
+            .to(device)
+            .eval()
+        )
     except Exception:
         vae = AutoencoderKL.from_pretrained(vae_id).to(device).eval()
 
@@ -197,6 +197,7 @@ def _run_class_conditioned(ckpt: Path, args) -> Path:
     with torch.no_grad():
         # CFG: duplicate batch for cond/uncond.
         y = torch.tensor([class_label, 1000], device=device)  # 1000 = null class
+
         def model_fn(x, t, y):
             return model.forward_with_cfg(x, t, y, cfg_scale=args.cfg)
 
@@ -237,14 +238,22 @@ def _run_text_conditioned(ckpt: Path, args) -> Path:
     import subprocess
 
     cmd = [
-        sys.executable, "sample.py",
-        "--ckpt", str(ckpt),
-        "--prompt", args.prompt,
-        "--negative-prompt", _DEMO_NEGATIVE,
-        "--steps", str(args.steps),
-        "--cfg-scale", str(args.cfg),
-        "--out", args.out,
-        "--holy-grail-preset", args.preset,
+        sys.executable,
+        "sample.py",
+        "--ckpt",
+        str(ckpt),
+        "--prompt",
+        args.prompt,
+        "--negative-prompt",
+        _DEMO_NEGATIVE,
+        "--steps",
+        str(args.steps),
+        "--cfg-scale",
+        str(args.cfg),
+        "--out",
+        args.out,
+        "--holy-grail-preset",
+        args.preset,
     ]
     print(f"\nRunning: {' '.join(cmd)}\n")
     result = subprocess.run(cmd)
@@ -256,6 +265,7 @@ def _run_text_conditioned(ckpt: Path, args) -> Path:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(

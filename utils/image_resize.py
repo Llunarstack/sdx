@@ -70,7 +70,9 @@ def _saliency_map(img: np.ndarray, face_bias: float = 0.0) -> np.ndarray:
     return sal.astype(np.float32)
 
 
-def _best_saliency_crop_box(img: np.ndarray, out_h: int, out_w: int, face_bias: float = 0.0) -> Tuple[int, int, int, int]:
+def _best_saliency_crop_box(
+    img: np.ndarray, out_h: int, out_w: int, face_bias: float = 0.0
+) -> Tuple[int, int, int, int]:
     h, w = img.shape[:2]
     y0, x0, ch, cw = _center_crop_box(h, w, out_h, out_w)
     sal = _saliency_map(img, face_bias=face_bias)
@@ -124,4 +126,3 @@ def fit_image_to_size(
         raise ValueError(f"Unknown resize mode: {mode}")
     crop = img[y0 : y0 + ch, x0 : x0 + cw]
     return _resize_np(crop, out_h, out_w)
-

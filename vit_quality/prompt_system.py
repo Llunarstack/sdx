@@ -121,4 +121,3 @@ def build_prompt_plan(prompt: str, *, inject_default_avoid: bool = True) -> Dict
         "neutral": b.neutral,
         "composed_prompt": composed,
     }
-

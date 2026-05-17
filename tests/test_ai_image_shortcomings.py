@@ -30,7 +30,9 @@ def test_detect_pixel_art():
 
 
 def test_mitigation_auto_digital_art():
-    pos, neg = mitigation_fragments("concept art environment, matte painting, artstation", "auto", include_2d_pack=False)
+    pos, neg = mitigation_fragments(
+        "concept art environment, matte painting, artstation", "auto", include_2d_pack=False
+    )
     assert "design" in pos.lower() or "perspective" in pos.lower()
     assert "cutout" in neg.lower() or "mismatch" in neg.lower()
 

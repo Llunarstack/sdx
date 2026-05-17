@@ -88,20 +88,12 @@ class DynamicPatchEmbed(nn.Module):
 
         # One projection per patch size
         self.projs = nn.ModuleDict(
-            {
-                str(p): nn.Conv2d(in_channels, hidden_size, kernel_size=p, stride=p, bias=False)
-                for p in patch_sizes
-            }
+            {str(p): nn.Conv2d(in_channels, hidden_size, kernel_size=p, stride=p, bias=False) for p in patch_sizes}
         )
 
         # Learnable position embeddings for each resolution
         self.pos_embeds = nn.ParameterDict(
-            {
-                str(p): nn.Parameter(
-                    torch.zeros(1, (img_size // p) ** 2, hidden_size)
-                )
-                for p in patch_sizes
-            }
+            {str(p): nn.Parameter(torch.zeros(1, (img_size // p) ** 2, hidden_size)) for p in patch_sizes}
         )
         self._init_weights()
 

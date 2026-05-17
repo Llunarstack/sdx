@@ -21,7 +21,6 @@ import os
 import re
 import subprocess
 import sys
-import traceback
 from pathlib import Path
 from typing import Tuple
 
@@ -40,7 +39,6 @@ from diffusion.sampling_extras import (
     sanitize_holy_grail_kwargs,
 )
 from models.controlnet import control_type_to_id, infer_control_type_from_path
-from utils.prompt.neg_filter import filter_negative_by_positive
 from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
 from utils.terminal import configure_stdio_for_console
 
@@ -67,7 +65,6 @@ def load_model_from_ckpt(ckpt_path, device="cuda"):
 # T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
 _t5_cache = {}
 _T5_CACHE_MAX = 32  # limit entries to avoid unbounded memory
-
 
 
 def _parse_scale_csv(value: str) -> list:
@@ -461,7 +458,9 @@ def _normalize_list_or_str(v) -> list:
     return []
 
 
-def _sanitize_character_prompt_tokens(tokens: list, negative_tokens: list, *, uncensored_mode: bool = False) -> Tuple[list, list]:
+def _sanitize_character_prompt_tokens(
+    tokens: list, negative_tokens: list, *, uncensored_mode: bool = False
+) -> Tuple[list, list]:
     """
     Prevent explicitly sexual tokens from being injected.
     If user includes "futa" or similar, we replace with androgynous presentation.
@@ -776,10 +775,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--lora-role-stage-weights",
         type=str,
         default="",
-        help=(
-            "Override per-role early/mid/late multipliers, e.g. "
-            "'character=1.15/1.0/0.85,style=0.9/1.0/1.1'."
-        ),
+        help=("Override per-role early/mid/late multipliers, e.g. 'character=1.15/1.0/0.85,style=0.9/1.0/1.1'."),
     )
     parser.add_argument(
         "--lora-trigger",
@@ -1748,9 +1744,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--multi-instance-count",
         type=int,
         default=0,
-        help=(
-            "With --multi-instance-preset: set --expected-count for test-time scoring (e.g. 5 posters, 4 people)."
-        ),
+        help=("With --multi-instance-preset: set --expected-count for test-time scoring (e.g. 5 posters, 4 people)."),
     )
     parser.add_argument(
         "--multi-instance-auto",
@@ -1865,7 +1859,16 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--photo-realism-pack",
         type=str,
         default="none",
-        choices=["none", "documentary", "cinematic", "studio_portrait", "film_analog", "night_noir", "product_catalog", "fashion_editorial"],
+        choices=[
+            "none",
+            "documentary",
+            "cinematic",
+            "studio_portrait",
+            "film_analog",
+            "night_noir",
+            "product_catalog",
+            "fashion_editorial",
+        ],
         help="Photography realism pack for prompt+negative guidance.",
     )
     parser.add_argument(
@@ -1879,7 +1882,16 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--photo-lighting-technique",
         type=str,
         default="none",
-        choices=["none", "three_point", "golden_hour", "overcast_soft", "motivated_practical", "rim_backlight", "butterfly", "rembrandt"],
+        choices=[
+            "none",
+            "three_point",
+            "golden_hour",
+            "overcast_soft",
+            "motivated_practical",
+            "rim_backlight",
+            "butterfly",
+            "rembrandt",
+        ],
         help="Photography lighting-technique cues.",
     )
     parser.add_argument(
@@ -2500,9 +2512,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     has_prompt_file = bool(getattr(args, "prompt_file", "").strip())
     has_prompt_layout = bool(getattr(args, "prompt_layout", "").strip())
     if not (args.prompt or has_tags or has_prompt_file or has_prompt_layout):
-        parser.error(
-            "Provide at least one of --prompt, --prompt-file, --tags, --tags-file, or --prompt-layout"
-        )
+        parser.error("Provide at least one of --prompt, --prompt-file, --tags, --tags-file, or --prompt-layout")
 
     # Build effective prompt from --prompt-file, --tags / --tags-file, and optional --lora-trigger
     if has_prompt_file:
@@ -2549,9 +2559,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             args._prompt_layout_negative = compiled.negative or ""
             args._used_prompt_layout = True
             args._layout_compiled = compiled
-            prompt_for_encoding = merge_prompt_with_layout(
-                compiled.positive, prompt_for_encoding, layout_first=True
-            )
+            prompt_for_encoding = merge_prompt_with_layout(compiled.positive, prompt_for_encoding, layout_first=True)
         except Exception as e:
             print(f"Warning: --prompt-layout failed: {e}", file=sys.stderr)
 
@@ -2962,7 +2970,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         try:
             from utils.visual_design.presets import apply_visual_design_preset_to_prompt
 
-            prompt_to_encode, _vd_pre_dom, _vd_pre_int = apply_visual_design_preset_to_prompt(prompt_to_encode, _vd_preset)
+            prompt_to_encode, _vd_pre_dom, _vd_pre_int = apply_visual_design_preset_to_prompt(
+                prompt_to_encode, _vd_preset
+            )
             args.prompt = prompt_to_encode
             setattr(args, "visual_design_domain", _vd_pre_dom)
             setattr(args, "visual_design_intensity", _vd_pre_int)
@@ -3050,8 +3060,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 _fallback = getattr(_rag_result.get("rag_result"), "fallback_used", True)
                 _mode = "semantic fallback" if _fallback else "Qwen2.5 synthesis"
                 print(
-                    f"Creative RAG ({_mode}): added {max(0, _added_count)} enrichment(s) "
-                    f"[intent={_intent}]",
+                    f"Creative RAG ({_mode}): added {max(0, _added_count)} enrichment(s) [intent={_intent}]",
                     file=sys.stderr,
                 )
                 prompt_to_encode = _enriched
@@ -3107,7 +3116,11 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         except Exception as _mi_e:
             print(f"Multi-instance preset skipped: {_mi_e}", file=sys.stderr)
 
-    if bool(getattr(args, "multi_instance_auto", False)) and _mi_preset not in ("none", "") and prompt_to_encode.strip():
+    if (
+        bool(getattr(args, "multi_instance_auto", False))
+        and _mi_preset not in ("none", "")
+        and prompt_to_encode.strip()
+    ):
         try:
             from utils.prompt.composition_brief import apply_composition_brief
             from utils.prompt.multi_instance_scene import (
@@ -3295,7 +3308,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             if style_mix and len(style_mix) > 1:
                 style_texts = [t for t, _ in style_mix]
                 style_weights = torch.tensor([w for _, w in style_mix], device=device, dtype=torch.float32)
-                style_enc = encode_text(style_texts, tokenizer, text_encoder, device, text_bundle=text_bundle).mean(dim=1)
+                style_enc = encode_text(style_texts, tokenizer, text_encoder, device, text_bundle=text_bundle).mean(
+                    dim=1
+                )
                 style_emb_cached = (style_enc * style_weights[:, None].to(style_enc.dtype)).sum(dim=0, keepdim=True)
             else:
                 style_emb_cached = encode_text(
@@ -3328,9 +3343,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         model_kwargs_cond["style_strength"] = args.style_strength
     # IMPROVEMENTS 2.2: prompt emphasis (word) -> 1.2, [word] -> 0.8
     if _emphasis_segments:
-        tw = token_weights_from_cleaned_segments(
-            prompt_to_encode, _emphasis_segments, tokenizer, 300, device=device
-        )
+        tw = token_weights_from_cleaned_segments(prompt_to_encode, _emphasis_segments, tokenizer, 300, device=device)
         if tw is not None:
             model_kwargs_cond["token_weights"] = tw
 
@@ -3401,9 +3414,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
 
             pil_r = Image.open(ref_path).convert("RGB")
             clip_id = str(getattr(args, "reference_clip_model", "") or "openai/clip-vit-large-patch14")
-            emb, clip_dim = encode_reference_image_pil(
-                pil_r, device=device, model_id=clip_id, dtype=torch.float32
-            )
+            emb, clip_dim = encode_reference_image_pil(pil_r, device=device, model_id=clip_id, dtype=torch.float32)
             if num_gen > 1:
                 emb = emb.expand(num_gen, -1)
             hs = int(getattr(cfg, "hidden_size", 1152))
@@ -3693,7 +3704,10 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
 
     dual_stage = bool(getattr(args, "dual_stage_layout", False))
     if use_flow_sample and dual_stage:
-        print("Dual-stage layout disabled: second stage uses VP re-noising (incompatible with flow sampler).", file=sys.stderr)
+        print(
+            "Dual-stage layout disabled: second stage uses VP re-noising (incompatible with flow sampler).",
+            file=sys.stderr,
+        )
         dual_stage = False
     if dual_stage:
         if ae_type != "kl" or args.mask or args.init_image or args.init_latent or x_init is not None:
@@ -3776,9 +3790,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_periodic_kw,
                 **_guidance_kw,
             )
-            x0_up = torch.nn.functional.interpolate(
-                x0.float(), size=(fh, fw), mode="bicubic", align_corners=False
-            ).to(dtype=x0.dtype)
+            x0_up = torch.nn.functional.interpolate(x0.float(), size=(fh, fw), mode="bicubic", align_corners=False).to(
+                dtype=x0.dtype
+            )
             t_d = int(float(getattr(args, "dual_detail_strength", 0.38)) * (num_timesteps - 1))
             t_d = min(max(1, t_d), num_timesteps - 1)
             noise_d = torch.randn_like(x0_up, device=device, dtype=x0.dtype)
@@ -3795,7 +3809,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             )
             if "control_image" in model_kwargs_cond:
                 mk_c2 = dict(mk_c2)
-                mk_c2["control_image"] = _resize_control_tensor(model_kwargs_cond["control_image"], image_size, image_size)
+                mk_c2["control_image"] = _resize_control_tensor(
+                    model_kwargs_cond["control_image"], image_size, image_size
+                )
                 mk_c2["control_scale"] = model_kwargs_cond.get("control_scale", args.control_scale)
                 if "control_type" in model_kwargs_cond:
                     mk_c2["control_type"] = model_kwargs_cond["control_type"]
@@ -3863,9 +3879,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 if not pick_m0 or pick_m0 in ("auto", "none"):
                     pick_m0 = (str(getattr(args, "pick_best", "") or "")).strip().lower()
                 if not pick_m0 or pick_m0 in ("auto", "none"):
-                    pick_m0 = (
-                        "combo_vit_hq" if str(getattr(args, "pick_vit_ckpt", "") or "").strip() else "combo_vit"
-                    )
+                    pick_m0 = "combo_vit_hq" if str(getattr(args, "pick_vit_ckpt", "") or "").strip() else "combo_vit"
                 print(f"Beam search: width={beam_w} steps={beam_steps} metric={pick_m0}", file=sys.stderr)
 
                 shape_b = (beam_w, shape[1], shape[2], shape[3])
@@ -3983,9 +3997,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 if not pick_m2 or pick_m2 in ("auto", "none"):
                     pick_m2 = (str(getattr(args, "pick_best", "") or "")).strip().lower()
                 if not pick_m2 or pick_m2 in ("auto", "none"):
-                    pick_m2 = (
-                        "combo_vit_hq" if str(getattr(args, "pick_vit_ckpt", "") or "").strip() else "combo_vit"
-                    )
+                    pick_m2 = "combo_vit_hq" if str(getattr(args, "pick_vit_ckpt", "") or "").strip() else "combo_vit"
 
                 split = int(round(float(steps_main) * float(min(0.95, max(0.05, beam2_at)))))
                 split = max(1, min(split, steps_main - (beam2_steps + 1)))
@@ -4411,10 +4423,10 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     if args.width > 0 or args.height > 0:
         out_w = int(args.width or dec_w)
         out_h = int(args.height or dec_h)
-        if (out_w != dec_w or out_h != dec_h) and str(getattr(args, "resize_mode", "stretch") or "stretch") == "stretch":
-            image = torch.nn.functional.interpolate(
-                image, size=(out_h, out_w), mode="bilinear", align_corners=False
-            )
+        if (out_w != dec_w or out_h != dec_h) and str(
+            getattr(args, "resize_mode", "stretch") or "stretch"
+        ) == "stretch":
+            image = torch.nn.functional.interpolate(image, size=(out_h, out_w), mode="bilinear", align_corners=False)
     # Non-native resolution often causes blur/artifacts
     if out_w != image_size or out_h != image_size:
         if max(out_w, out_h) > image_size * 1.5 or min(out_w, out_h) < image_size * 0.5:
@@ -4432,7 +4444,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     for i in range(num_gen):
         img_np = image[i].permute(1, 2, 0).cpu().numpy()
         img_np = (img_np * 255).round().astype("uint8")
-        if (out_w != dec_w or out_h != dec_h) and str(getattr(args, "resize_mode", "stretch") or "stretch") != "stretch":
+        if (out_w != dec_w or out_h != dec_h) and str(
+            getattr(args, "resize_mode", "stretch") or "stretch"
+        ) != "stretch":
             try:
                 from utils.image_resize import fit_image_to_size
 
@@ -4533,19 +4547,21 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             except Exception:
                 pass
         # Artistic post-processing: compositional director, value structure, asymmetry, SSS, etc.
-        _artistic_needed = any([
-            str(getattr(args, "composition_guide", "none") or "none") != "none",
-            float(getattr(args, "value_shadow_lift", 0.0) or 0.0) > 0,
-            float(getattr(args, "value_highlight_roll", 0.0) or 0.0) > 0,
-            float(getattr(args, "value_midtone_contrast", 0.0) or 0.0) > 0,
-            bool(getattr(args, "value_structure", False)),
-            float(getattr(args, "asymmetry", 0.0) or 0.0) > 0,
-            float(getattr(args, "lost_found_edges", 0.0) or 0.0) > 0,
-            float(getattr(args, "sss", 0.0) or 0.0) > 0,
-            float(getattr(args, "chromatic_aberration", 0.0) or 0.0) > 0,
-            float(getattr(args, "vignette", 0.0) or 0.0) > 0,
-            float(getattr(args, "micro_detail", 0.0) or 0.0) > 0,
-        ])
+        _artistic_needed = any(
+            [
+                str(getattr(args, "composition_guide", "none") or "none") != "none",
+                float(getattr(args, "value_shadow_lift", 0.0) or 0.0) > 0,
+                float(getattr(args, "value_highlight_roll", 0.0) or 0.0) > 0,
+                float(getattr(args, "value_midtone_contrast", 0.0) or 0.0) > 0,
+                bool(getattr(args, "value_structure", False)),
+                float(getattr(args, "asymmetry", 0.0) or 0.0) > 0,
+                float(getattr(args, "lost_found_edges", 0.0) or 0.0) > 0,
+                float(getattr(args, "sss", 0.0) or 0.0) > 0,
+                float(getattr(args, "chromatic_aberration", 0.0) or 0.0) > 0,
+                float(getattr(args, "vignette", 0.0) or 0.0) > 0,
+                float(getattr(args, "micro_detail", 0.0) or 0.0) > 0,
+            ]
+        )
         if _artistic_needed:
             try:
                 from utils.quality.artistic_post_process import ArtisticPostConfig, apply_artistic_pipeline
@@ -4626,7 +4642,10 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 pick_m = "aesthetic"
         elif isinstance(expected_texts, list) and expected_texts:
             pick_m = "combo"
-        elif re.search(r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b", str(prompt_to_encode).lower()):
+        elif re.search(
+            r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b",
+            str(prompt_to_encode).lower(),
+        ):
             pick_m = "combo_count"
         elif _is_photo_prompt or str(_pr_pack_ef).lower() != "none":
             pick_m = "combo_realism"
@@ -4835,6 +4854,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     if frs:
         try:
             import shlex
+
             # Security: split into a list so the OS never interprets shell metacharacters.
             # {src} and {dst} are replaced with the literal path strings before splitting,
             # so the final argv list contains the path as a single token — no injection risk.

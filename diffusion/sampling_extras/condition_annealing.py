@@ -36,4 +36,3 @@ def apply_condition_noise(
         return cond
     n = torch.randn_like(cond) * sig
     return cond + n
-

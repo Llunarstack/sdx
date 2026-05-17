@@ -62,4 +62,3 @@ def one_step_consistency_refine(
     if x0_pred.shape != x0_teacher.shape:
         raise ValueError("x0_pred/x0_teacher shapes must match")
     return x0_pred + a * (x0_teacher - x0_pred)
-

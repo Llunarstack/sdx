@@ -88,9 +88,7 @@ def main() -> int:
                 from utils.architecture.ar_block_conditioning import normalize_num_ar_blocks
 
                 ar_b = normalize_num_ar_blocks(args.default_num_ar_blocks)
-            ar_vec = (
-                ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0) if use_ar else None
-            )
+            ar_vec = ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0) if use_ar else None
             with torch.no_grad():
                 out = model(x, txt, ar_vec)
                 emb = out["embedding"].squeeze(0).detach().cpu().numpy()
@@ -111,4 +109,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

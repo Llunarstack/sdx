@@ -55,7 +55,7 @@ class LinearCompressedAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
         self.context_size = int(context_size)
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
         self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
@@ -133,7 +133,7 @@ class LocalWindowAttention(nn.Module):
         self.head_dim = hidden_size // num_heads
         self.window_size = int(window_size)
         self.num_global = int(num_global_tokens)
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
         self.out_proj = nn.Linear(hidden_size, hidden_size, bias=False)
@@ -150,9 +150,7 @@ class LocalWindowAttention(nn.Module):
 
     # Bug 3 fix: return type was annotated as torch.Tensor but the method
     # actually returns a 3-tuple (tensor, padded_h, padded_w).
-    def _window_partition(
-        self, x: torch.Tensor, h: int, w: int
-    ) -> Tuple[torch.Tensor, int, int]:
+    def _window_partition(self, x: torch.Tensor, h: int, w: int) -> Tuple[torch.Tensor, int, int]:
         """(B, N, D) -> (B*nW, W^2, D), padded_h, padded_w."""
         B, N, D = x.shape
         ws = self.window_size
@@ -167,9 +165,7 @@ class LocalWindowAttention(nn.Module):
         x = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, ws * ws, D)
         return x, hp, wp
 
-    def _window_unpartition(
-        self, x: torch.Tensor, B: int, h: int, w: int, hp: int, wp: int
-    ) -> torch.Tensor:
+    def _window_unpartition(self, x: torch.Tensor, B: int, h: int, w: int, hp: int, wp: int) -> torch.Tensor:
         """(B*nW, W*W, D) -> (B, h*w, D)."""
         ws = self.window_size
         D = x.shape[-1]
@@ -188,10 +184,7 @@ class LocalWindowAttention(nn.Module):
         # invalid inputs raise a proper exception rather than an AssertionError
         # (which can be silenced with Python's -O flag).
         if h * w != N:
-            raise ValueError(
-                f"LocalWindowAttention requires a square token grid; got N={N} "
-                f"(sqrt ≈ {N**0.5:.2f})"
-            )
+            raise ValueError(f"LocalWindowAttention requires a square token grid; got N={N} (sqrt ≈ {N**0.5:.2f})")
 
         if self.num_global > 0:
             g = self.global_tokens.expand(B, -1, -1)
@@ -205,21 +198,21 @@ class LocalWindowAttention(nn.Module):
         # computing KV for the local tokens redundantly.  It also extracted
         # k_g / v_g from the first chunk but then discarded them in favour of
         # k_all / v_all from a second chunk on the same tensor.
-        qkv_full = self.qkv(x_full)          # (B, G+N, 3D)
+        qkv_full = self.qkv(x_full)  # (B, G+N, 3D)
         q_full, k_full, v_full = qkv_full.chunk(3, dim=-1)
 
         # ------------------------------------------------------------------ #
         # Local window attention (patch tokens only)
         # ------------------------------------------------------------------ #
-        x_local_q = q_full[:, self.num_global:, :]  # (B, N, D)
-        x_local_k = k_full[:, self.num_global:, :]
-        x_local_v = v_full[:, self.num_global:, :]
+        x_local_q = q_full[:, self.num_global :, :]  # (B, N, D)
+        x_local_k = k_full[:, self.num_global :, :]
+        x_local_v = v_full[:, self.num_global :, :]
 
         x_local_q, hp_q, wp_q = self._window_partition(x_local_q, h, w)
         x_local_k, hp_k, wp_k = self._window_partition(x_local_k, h, w)
         x_local_v, hp_v, wp_v = self._window_partition(x_local_v, h, w)
 
-        W2 = self.window_size ** 2
+        W2 = self.window_size**2
         nW = x_local_q.shape[0]  # B * num_windows
 
         def _to_heads(t: torch.Tensor) -> torch.Tensor:

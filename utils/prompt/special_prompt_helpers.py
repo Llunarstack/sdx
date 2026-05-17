@@ -1,4 +1,3 @@
-
 """
 Special Prompt Helpers for AI Image Generation.
 
@@ -111,6 +110,7 @@ _ALL_CATEGORIES: Tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
+
 
 def merge_csv_unique(*chunks: str) -> str:
     """
@@ -599,12 +599,10 @@ def narrative_helpers(prompt: str) -> Tuple[str, str]:
         )
     )
     is_memory = any(
-        phrase in p
-        for phrase in ("memory", "flashback", "remembering", "nostalgia", "long ago", "faded memory")
+        phrase in p for phrase in ("memory", "flashback", "remembering", "nostalgia", "long ago", "faded memory")
     )
     is_discovery = any(
-        phrase in p
-        for phrase in ("discovers", "finding", "stumbles upon", "comes across", "first sight of")
+        phrase in p for phrase in ("discovers", "finding", "stumbles upon", "comes across", "first sight of")
     )
 
     pos_extras: List[str] = []
@@ -959,8 +957,7 @@ def technical_helpers(prompt: str) -> Tuple[str, str]:
     is_high_angle = any(w in p for w in ("from above", "bird", "high angle", "looking down", "overhead", "top down"))
     is_dutch = any(w in p for w in ("dutch angle", "tilted camera", "canted angle", "diagonal horizon"))
     is_multi_subject = any(
-        w in p
-        for w in ("two people", "three people", "group", "crowd", "multiple characters", "couple", "duo", "trio")
+        w in p for w in ("two people", "three people", "group", "crowd", "multiple characters", "couple", "duo", "trio")
     )
     is_fisheye = any(w in p for w in ("fisheye", "fish eye", "ultra wide", "wide angle distortion"))
     is_isometric = any(w in p for w in ("isometric", "axonometric", "isometric view", "iso perspective"))
@@ -1362,9 +1359,7 @@ def minimalist_helpers(prompt: str) -> Tuple[str, str]:
     is_white_bg = any(w in p for w in ("white background", "white bg", "isolated on white", "studio white"))
     is_zen = any(w in p for w in ("zen", "japanese", "wabi", "sabi", "ma ", "negative space"))
     is_graphic = any(w in p for w in ("graphic design", "poster", "logo", "icon", "flat design"))
-    is_single_subject = any(
-        w in p for w in ("single", "one subject", "solo", "isolated", "alone", "just the")
-    )
+    is_single_subject = any(w in p for w in ("single", "one subject", "solo", "isolated", "alone", "just the"))
 
     pos_extras: List[str] = []
     neg_extras: List[str] = []
@@ -1818,66 +1813,235 @@ def _compile_detect(terms: List[str]) -> List[re.Pattern]:
     return [re.compile(rf"\b{re.escape(t)}\b", re.IGNORECASE) for t in terms]
 
 
-_DETECT_PATTERNS[CATEGORY_WEIRD] = _compile_detect([
-    "surreal", "surrealism", "dreamlike", "uncanny", "liminal", "non-euclidean",
-    "impossible", "abstract", "weird", "strange", "bizarre", "kafkaesque",
-    "magritte", "dali", "de chirico", "dreamscape", "backrooms", "void",
-    "melting", "morphing", "impossible geometry", "wrong", "unsettling",
-])
+_DETECT_PATTERNS[CATEGORY_WEIRD] = _compile_detect(
+    [
+        "surreal",
+        "surrealism",
+        "dreamlike",
+        "uncanny",
+        "liminal",
+        "non-euclidean",
+        "impossible",
+        "abstract",
+        "weird",
+        "strange",
+        "bizarre",
+        "kafkaesque",
+        "magritte",
+        "dali",
+        "de chirico",
+        "dreamscape",
+        "backrooms",
+        "void",
+        "melting",
+        "morphing",
+        "impossible geometry",
+        "wrong",
+        "unsettling",
+    ]
+)
 
-_DETECT_PATTERNS[CATEGORY_HORROR] = _compile_detect([
-    "horror", "scary", "terrifying", "dread", "disturbing", "dark atmosphere",
-    "eldritch", "lovecraft", "cthulhu", "body horror", "psychological horror",
-    "folk horror", "haunted", "ghost", "demon", "monster", "creature",
-    "gore", "blood", "visceral", "grotesque", "macabre", "sinister",
-    "ominous", "foreboding", "creepy", "eerie", "unsettling darkness",
-])
+_DETECT_PATTERNS[CATEGORY_HORROR] = _compile_detect(
+    [
+        "horror",
+        "scary",
+        "terrifying",
+        "dread",
+        "disturbing",
+        "dark atmosphere",
+        "eldritch",
+        "lovecraft",
+        "cthulhu",
+        "body horror",
+        "psychological horror",
+        "folk horror",
+        "haunted",
+        "ghost",
+        "demon",
+        "monster",
+        "creature",
+        "gore",
+        "blood",
+        "visceral",
+        "grotesque",
+        "macabre",
+        "sinister",
+        "ominous",
+        "foreboding",
+        "creepy",
+        "eerie",
+        "unsettling darkness",
+    ]
+)
 
-_DETECT_PATTERNS[CATEGORY_NARRATIVE] = _compile_detect([
-    "moment before", "just before", "about to", "aftermath", "after the",
-    "in the wake", "story", "narrative", "implied", "environmental storytelling",
-    "memory", "flashback", "nostalgia", "discovery", "finds", "stumbles upon",
-    "the last", "the first", "the only", "witness", "survivor",
-    "ruins of", "remains of", "wreckage", "evidence of",
-])
+_DETECT_PATTERNS[CATEGORY_NARRATIVE] = _compile_detect(
+    [
+        "moment before",
+        "just before",
+        "about to",
+        "aftermath",
+        "after the",
+        "in the wake",
+        "story",
+        "narrative",
+        "implied",
+        "environmental storytelling",
+        "memory",
+        "flashback",
+        "nostalgia",
+        "discovery",
+        "finds",
+        "stumbles upon",
+        "the last",
+        "the first",
+        "the only",
+        "witness",
+        "survivor",
+        "ruins of",
+        "remains of",
+        "wreckage",
+        "evidence of",
+    ]
+)
 
-_DETECT_PATTERNS[CATEGORY_EMOTION] = _compile_detect([
-    "melancholy", "joy", "joyful", "dread", "wonder", "loneliness", "lonely",
-    "tenderness", "tender", "anxiety", "anxious", "nostalgia", "nostalgic",
-    "awe", "resignation", "resigned", "bittersweet", "wistful", "poignant",
-    "serene", "peaceful", "tranquil", "aching", "yearning", "hopeful",
-    "despair", "grief", "elation", "euphoria", "melancholic", "somber",
-    "mood", "atmosphere", "feeling", "emotion", "emotional",
-])
+_DETECT_PATTERNS[CATEGORY_EMOTION] = _compile_detect(
+    [
+        "melancholy",
+        "joy",
+        "joyful",
+        "dread",
+        "wonder",
+        "loneliness",
+        "lonely",
+        "tenderness",
+        "tender",
+        "anxiety",
+        "anxious",
+        "nostalgia",
+        "nostalgic",
+        "awe",
+        "resignation",
+        "resigned",
+        "bittersweet",
+        "wistful",
+        "poignant",
+        "serene",
+        "peaceful",
+        "tranquil",
+        "aching",
+        "yearning",
+        "hopeful",
+        "despair",
+        "grief",
+        "elation",
+        "euphoria",
+        "melancholic",
+        "somber",
+        "mood",
+        "atmosphere",
+        "feeling",
+        "emotion",
+        "emotional",
+    ]
+)
 
-_DETECT_PATTERNS[CATEGORY_TECHNICAL] = _compile_detect([
-    "foreshortening", "foreshortened", "from below", "from above", "worm's eye",
-    "bird's eye", "dutch angle", "fisheye", "fish eye", "ultra wide",
-    "isometric", "axonometric", "pov", "point of view", "first person",
-    "extreme angle", "dramatic perspective", "overhead", "top down",
-    "multiple subjects", "group composition", "crowd", "complex composition",
-    "overlapping figures", "depth layers",
-])
+_DETECT_PATTERNS[CATEGORY_TECHNICAL] = _compile_detect(
+    [
+        "foreshortening",
+        "foreshortened",
+        "from below",
+        "from above",
+        "worm's eye",
+        "bird's eye",
+        "dutch angle",
+        "fisheye",
+        "fish eye",
+        "ultra wide",
+        "isometric",
+        "axonometric",
+        "pov",
+        "point of view",
+        "first person",
+        "extreme angle",
+        "dramatic perspective",
+        "overhead",
+        "top down",
+        "multiple subjects",
+        "group composition",
+        "crowd",
+        "complex composition",
+        "overlapping figures",
+        "depth layers",
+    ]
+)
 
-_DETECT_PATTERNS[CATEGORY_MINIMALIST] = _compile_detect([
-    "minimalist", "minimalism", "minimal", "negative space", "empty",
-    "white background", "clean background", "isolated", "zen", "wabi-sabi",
-    "sparse", "simple composition", "breathing room", "less is more",
-    "single subject", "void background", "pure white",
-])
+_DETECT_PATTERNS[CATEGORY_MINIMALIST] = _compile_detect(
+    [
+        "minimalist",
+        "minimalism",
+        "minimal",
+        "negative space",
+        "empty",
+        "white background",
+        "clean background",
+        "isolated",
+        "zen",
+        "wabi-sabi",
+        "sparse",
+        "simple composition",
+        "breathing room",
+        "less is more",
+        "single subject",
+        "void background",
+        "pure white",
+    ]
+)
 
-_DETECT_PATTERNS[CATEGORY_NSFW_PRECISION] = _compile_detect([
-    "nsfw", "nude", "naked", "explicit", "adult content", "18+",
-    "breast", "nipple", "vagina", "vulva", "penis", "genitals",
-    "topless", "bottomless", "nude female", "nude male",
-    "erotic", "sexual", "sex", "intercourse", "penetration",
-])
+_DETECT_PATTERNS[CATEGORY_NSFW_PRECISION] = _compile_detect(
+    [
+        "nsfw",
+        "nude",
+        "naked",
+        "explicit",
+        "adult content",
+        "18+",
+        "breast",
+        "nipple",
+        "vagina",
+        "vulva",
+        "penis",
+        "genitals",
+        "topless",
+        "bottomless",
+        "nude female",
+        "nude male",
+        "erotic",
+        "sexual",
+        "sex",
+        "intercourse",
+        "penetration",
+    ]
+)
 
 # Style fusion requires two style keywords — handled separately in classify
 _STYLE_KEYWORDS: List[str] = [
-    "photorealistic", "realistic", "anime", "manga", "cartoon", "illustration",
-    "oil painting", "watercolor", "digital art", "3d render", "pixel art",
-    "sketch", "ink", "cel shaded", "painterly", "noir", "black and white",
+    "photorealistic",
+    "realistic",
+    "anime",
+    "manga",
+    "cartoon",
+    "illustration",
+    "oil painting",
+    "watercolor",
+    "digital art",
+    "3d render",
+    "pixel art",
+    "sketch",
+    "ink",
+    "cel shaded",
+    "painterly",
+    "noir",
+    "black and white",
 ]
 
 
@@ -2041,6 +2205,7 @@ def apply_special_helpers(
 # Convenience: apply multiple categories at once
 # ---------------------------------------------------------------------------
 
+
 def apply_multiple_helpers(
     prompt: str,
     negative: str,
@@ -2082,6 +2247,7 @@ def apply_multiple_helpers(
 # Convenience: suggest categories for a prompt (for UI / tooling)
 # ---------------------------------------------------------------------------
 
+
 def suggest_categories(prompt: str, *, top_n: int = 3) -> List[str]:
     """
     Return the top-N most likely categories for a prompt, ranked by score.
@@ -2122,6 +2288,7 @@ def suggest_categories(prompt: str, *, top_n: int = 3) -> List[str]:
 # Convenience: get token lists for a category (for inspection / debugging)
 # ---------------------------------------------------------------------------
 
+
 def get_category_tokens(category: str) -> Tuple[List[str], List[str]]:
     """
     Return the base positive and negative token lists for a category.
@@ -2147,4 +2314,3 @@ def get_category_tokens(category: str) -> Tuple[List[str], List[str]]:
         CATEGORY_NSFW_PRECISION: (NSFW_PRECISION_POSITIVE_TOKENS, NSFW_PRECISION_NEGATIVE_TOKENS),
     }
     return _token_map.get(category, ([], []))
-

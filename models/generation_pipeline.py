@@ -36,6 +36,7 @@ class GenerationContext:
     All optional conditioning inputs for one generation call.
     Pass only what you have — everything else is skipped gracefully.
     """
+
     # Text
     prompt: str = ""
     negative_prompt: str = ""
@@ -43,15 +44,15 @@ class GenerationContext:
     pos_text_emb: Optional[torch.Tensor] = None
     neg_text_emb: Optional[torch.Tensor] = None
     # Camera
-    camera_spec: Optional[CameraSpec] = None          # if None, parsed from prompt
-    depth_map: Optional[torch.Tensor] = None          # (B, 1, H, W)
+    camera_spec: Optional[CameraSpec] = None  # if None, parsed from prompt
+    depth_map: Optional[torch.Tensor] = None  # (B, 1, H, W)
     # Characters
     character_specs: List[CharacterSpec] = field(default_factory=list)
     interactions: List[InteractionSpec] = field(default_factory=list)
     # Scene
     scene_graph: Optional[SceneGraph] = None
     # Style
-    medium_profile: Optional[MediumProfile] = None    # if None, detected from prompt
+    medium_profile: Optional[MediumProfile] = None  # if None, detected from prompt
     naturalness_strength: float = 0.5
     # Complexity
     complexity_profile: Optional[PromptComplexityProfile] = None
@@ -206,25 +207,26 @@ class GenerationPipeline(nn.Module):
         # 4. Multi-character conditioning
         if self.multi_char is not None and ctx.character_specs:
             x, char_cond = self.multi_char(
-                x, t_emb, ctx.character_specs, ctx.interactions,
-                h_patches, w_patches, text_emb,
+                x,
+                t_emb,
+                ctx.character_specs,
+                ctx.interactions,
+                h_patches,
+                w_patches,
+                text_emb,
             )
             t_emb = t_emb + char_cond
 
         # 5. Scene graph conditioning
         if self.scene is not None and text_emb is not None:
-            x, text_emb = self.scene(
-                x, text_emb, ctx.scene_graph, h_patches, w_patches, device
-            )
+            x, text_emb = self.scene(x, text_emb, ctx.scene_graph, h_patches, w_patches, device)
 
         # 6. Anti-AI naturalness
         if self.naturalness is not None:
             medium = ctx.medium_profile
             if medium is None and ctx.prompt:
                 medium = detect_medium(ctx.prompt)
-            x = self.naturalness(
-                x, medium, h_patches, w_patches, ctx.naturalness_strength
-            )
+            x = self.naturalness(x, medium, h_patches, w_patches, ctx.naturalness_strength)
 
         return x, text_emb
 
@@ -250,9 +252,7 @@ class GenerationPipeline(nn.Module):
         """
         if self.adherence is None:
             return attn_logits, value
-        return self.adherence.apply_to_cross_attention(
-            attn_logits, value, text_emb, spatial_mask
-        )
+        return self.adherence.apply_to_cross_attention(attn_logits, value, text_emb, spatial_mask)
 
 
 __all__ = ["GenerationPipeline", "GenerationContext"]

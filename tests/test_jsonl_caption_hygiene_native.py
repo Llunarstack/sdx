@@ -18,4 +18,3 @@ def test_jsonl_caption_hygiene_normalizes_unicode(tmp_path: Path):
     row = json.loads(out.read_text(encoding="utf-8").strip())
     assert row["caption"] == "agirl, cafe"
     assert row["negative_caption"] == "bad, text"
-

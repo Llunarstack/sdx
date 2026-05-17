@@ -41,6 +41,7 @@ PRODUCTION_TIER_NEGATIVE_ADDON = (
     "spine misaligned title on cover, barcode on interior page, low dpi moire, muddy screentone"
 )
 
+
 def combined_comic_negative(*, include_lettering: bool = True, include_anatomy: bool = True) -> str:
     parts = [INK_STYLE_NEGATIVE_ADDON]
     if include_lettering:
@@ -48,6 +49,7 @@ def combined_comic_negative(*, include_lettering: bool = True, include_anatomy: 
     if include_anatomy:
         parts.append(ANATOMY_PANEL_NEGATIVE_ADDON)
     return ", ".join(parts)
+
 
 # ---------------------------------------------------------------------------
 # Style snippets (append to user prompt or book prefix)
@@ -1525,22 +1527,15 @@ READING_ORDER_HINT = {
 
 # Vertical Japanese lettering (tategaki) — use when your dataset includes JP
 TATEGAKI_HINT = (
-    "vertical japanese text in speech bubble, tategaki, correct stroke order impression, "
-    "legible jp characters"
+    "vertical japanese text in speech bubble, tategaki, correct stroke order impression, legible jp characters"
 )
 
-SFX_ONOMATOPOEIA_HINT = (
-    "impact sfx typography, hand-drawn sound effects, integrated with art not overlay subtitle"
-)
+SFX_ONOMATOPOEIA_HINT = "impact sfx typography, hand-drawn sound effects, integrated with art not overlay subtitle"
 
 # Optional polish for print / cover work (use with models trained on book art)
-PRINT_FINISH_HINT = (
-    "print-ready line weight, crisp halftone, no banding, clean margins, professional reproduction"
-)
+PRINT_FINISH_HINT = "print-ready line weight, crisp halftone, no banding, clean margins, professional reproduction"
 
-COVER_SPOTLIGHT_HINT = (
-    "strong focal point on hero figure, title area reserved, balanced negative space for typography"
-)
+COVER_SPOTLIGHT_HINT = "strong focal point on hero figure, title area reserved, balanced negative space for typography"
 
 # Panel / grid hints (sequential art — model follows training; these are soft cues)
 PANEL_LAYOUT_HINTS: Dict[str, str] = {

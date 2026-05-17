@@ -421,7 +421,9 @@ def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: f
     return out.astype(np.uint8) if is_uint else out
 
 
-def apply_photo_filter(image: np.ndarray, filter_name: str = "none", strength: float = 0.5, seed: Optional[int] = None) -> np.ndarray:
+def apply_photo_filter(
+    image: np.ndarray, filter_name: str = "none", strength: float = 0.5, seed: Optional[int] = None
+) -> np.ndarray:
     """
     Lightweight photography filter simulation.
     Filters: none|pro_mist|polarizer|nd_long_exposure|vintage_diffusion|clean_digital

@@ -159,4 +159,3 @@ def apply_holy_grail_preset_to_args(args: Any, preset_name: str) -> None:
         no_frontload = bool(getattr(args, "holy_grail_no_frontload_control", False))
         if not no_frontload and not p.frontload_control:
             setattr(args, "holy_grail_no_frontload_control", True)
-

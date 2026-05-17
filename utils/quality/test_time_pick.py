@@ -548,7 +548,11 @@ def estimate_object_count(rgb_uint8: np.ndarray, object_hint: str = "") -> int:
                 min_area=area_min,
                 max_area=area_max,
             )
-            if native_count is not None and native_count >= 0 and hint not in {"coin", "button", "ball", "circle", "bubble"}:
+            if (
+                native_count is not None
+                and native_count >= 0
+                and hint not in {"coin", "button", "ball", "circle", "bubble"}
+            ):
                 return int(native_count)
         except Exception:
             pass

@@ -40,9 +40,7 @@ class RegisterTokens(nn.Module):
     def __init__(self, hidden_size: int, num_registers: int = 8, init_std: float = 0.02):
         super().__init__()
         self.num_registers = int(num_registers)
-        self.registers = nn.Parameter(
-            torch.randn(1, self.num_registers, int(hidden_size)) * float(init_std)
-        )
+        self.registers = nn.Parameter(torch.randn(1, self.num_registers, int(hidden_size)) * float(init_std))
 
     def prepend(self, x: torch.Tensor) -> torch.Tensor:
         """Prepend register tokens to patch sequence.
@@ -56,7 +54,7 @@ class RegisterTokens(nn.Module):
         """Remove register tokens from the front of the sequence.
         x: (B, R+N, D) -> (B, N, D)
         """
-        return x[:, self.num_registers:, :]
+        return x[:, self.num_registers :, :]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Convenience: prepend registers (call strip() after transformer blocks)."""
@@ -115,9 +113,9 @@ class JumboToken(nn.Module):
         Run the jumbo-specific FFN on the jumbo token after attention.
         jumbo: (B, 1, D) in patch space -> (B, 1, D)
         """
-        z = self.up_proj(jumbo)          # (B, 1, J)
-        z = self.norm(z + self.ffn(z))   # residual in jumbo space
-        return self.down_proj(z)         # (B, 1, D)
+        z = self.up_proj(jumbo)  # (B, 1, J)
+        z = self.norm(z + self.ffn(z))  # residual in jumbo space
+        return self.down_proj(z)  # (B, 1, D)
 
 
 __all__ = ["RegisterTokens", "JumboToken"]

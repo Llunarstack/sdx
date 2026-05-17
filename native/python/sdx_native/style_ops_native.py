@@ -5,7 +5,7 @@ Rust ``sdx_prompt_ops`` style helpers: Jaccard overlap, FNV fingerprint, multi-a
 from __future__ import annotations
 
 import ctypes
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from sdx_native.native_tools import rust_prompt_ops_shared_library_path
 
@@ -50,9 +50,7 @@ class StyleOpsLib:
 
     @property
     def available(self) -> bool:
-        return self._lib is not None and (
-            self._has_jaccard or self._has_fnv or self._has_merge_axes
-        )
+        return self._lib is not None and (self._has_jaccard or self._has_fnv or self._has_merge_axes)
 
 
 _LIB: Optional[StyleOpsLib] = None
@@ -72,9 +70,7 @@ def maybe_token_jaccard(a: str, b: str) -> Optional[float]:
         return None
     a_b = (a or "").encode("utf-8")
     b_b = (b or "").encode("utf-8")
-    bp = lib._lib.sdx_token_jaccard_utf8(
-        a_b, len(a_b), b_b, len(b_b)
-    )
+    bp = lib._lib.sdx_token_jaccard_utf8(a_b, len(a_b), b_b, len(b_b))
     if bp < 0:
         return None
     return float(bp) / 10000.0

@@ -535,10 +535,10 @@ class PromptAnalyzer:
             "length": min(len(prompt) / 500, 1.0) * 0.3,  # Length factor
             "element_count": min(sum(len(elements) for elements in categorized.values()) / 20, 1.0) * 0.2,
             "category_diversity": (
-                len([cat for cat, elements in categorized.items() if elements])
-                / len(self.categories)
-                * 0.2
-            ) if self.categories else 0.0,
+                len([cat for cat, elements in categorized.items() if elements]) / len(self.categories) * 0.2
+            )
+            if self.categories
+            else 0.0,
             "emphasis_usage": self._count_emphasis_markers(prompt) / 10 * 0.1,
             "technical_terms": self._count_technical_terms(prompt) / 5 * 0.2,
         }
@@ -597,8 +597,7 @@ class PromptAnalyzer:
         semantic = [c for c in conflicts if "term_a" in c]
         if semantic:
             recommendations.append(
-                f"Found {len(semantic)} semantic contradiction(s) - "
-                "these will fight each other during generation"
+                f"Found {len(semantic)} semantic contradiction(s) - these will fight each other during generation"
             )
             for c in semantic:
                 recommendations.append(
@@ -635,9 +634,7 @@ class PromptAnalyzer:
         # Intent-specific recommendations
         intent_boosts = _INTENT_QUALITY_BOOSTS.get(intent, [])
         if intent_boosts and element_counts.get("quality", 0) < 2:
-            recommendations.append(
-                f"For {intent} intent, consider adding: {', '.join(intent_boosts[:2])}"
-            )
+            recommendations.append(f"For {intent} intent, consider adding: {', '.join(intent_boosts[:2])}")
 
         # Over-specification warnings
         if element_counts.get("technical", 0) > 3:
@@ -980,6 +977,7 @@ def create_advanced_prompting_system():
 # CreativeRAGOptimizer: full pipeline combining all systems
 # ---------------------------------------------------------------------------
 
+
 class CreativeRAGOptimizer:
     """
     Full creative pipeline:
@@ -1002,6 +1000,7 @@ class CreativeRAGOptimizer:
         if self._rag_engine is None:
             try:
                 from utils.prompt.creative_rag import CreativeRAGEngine
+
                 self._rag_engine = CreativeRAGEngine(device=self._device)
             except Exception:
                 self._rag_engine = None

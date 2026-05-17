@@ -36,9 +36,7 @@ CONSISTENCY_NEGATIVE_STRONG = (
     + ", melted props, floating disconnected objects, illegible blob text, mirrored lettering errors"
 )
 
-CHARACTER_SILHOUETTE_HINT = (
-    "consistent character silhouette and proportions across panels, recognizable same person"
-)
+CHARACTER_SILHOUETTE_HINT = "consistent character silhouette and proportions across panels, recognizable same person"
 
 TEXT_LEGIBILITY_POSITIVE = (
     "hand-lettered comic dialogue, crisp balloon tails, readable printed letters, "
@@ -187,9 +185,7 @@ def consistency_negative_addon(level: str) -> str:
 # JSON + CLI merge (spec consumed by generate_book)
 # ---------------------------------------------------------------------------
 
-_CHAR_KEYS = frozenset(
-    {"label", "hair", "eyes", "skin", "build", "face", "signature_items", "age_vibe", "extra"}
-)
+_CHAR_KEYS = frozenset({"label", "hair", "eyes", "skin", "build", "face", "signature_items", "age_vibe", "extra"})
 
 
 def load_consistency_json(path: Path) -> Dict[str, Any]:
@@ -267,9 +263,7 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
     if isinstance(mascot, dict):
         desc = str(mascot.get("description", "")).strip()
         if desc:
-            fragments.append(
-                creature_or_mascot_clause(desc, species_lock=str(mascot.get("species", "") or ""))
-            )
+            fragments.append(creature_or_mascot_clause(desc, species_lock=str(mascot.get("species", "") or "")))
     elif isinstance(mascot, str) and mascot.strip():
         fragments.append(creature_or_mascot_clause(mascot))
 

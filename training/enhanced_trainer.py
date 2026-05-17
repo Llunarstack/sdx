@@ -93,7 +93,6 @@ class SpatialControlLoss(nn.Module):
         spatial_layout: Optional[torch.Tensor] = None,
         object_counts: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-
         if spatial_layout is None:
             return torch.tensor(0.0, device=predicted_noise.device)
 
@@ -157,7 +156,6 @@ class AnatomyAwareLoss(nn.Module):
         anatomy_mask: Optional[torch.Tensor] = None,
         anatomy_keypoints: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-
         if anatomy_mask is None:
             return torch.tensor(0.0, device=predicted_noise.device)
 
@@ -166,8 +164,7 @@ class AnatomyAwareLoss(nn.Module):
         H = W = math.isqrt(N)
         if H * W != N:
             raise ValueError(
-                f"AnatomyAwareLoss: anatomy_mask sequence length {N} is not a perfect square. "
-                f"Got sqrt ≈ {N**0.5:.2f}."
+                f"AnatomyAwareLoss: anatomy_mask sequence length {N} is not a perfect square. Got sqrt ≈ {N**0.5:.2f}."
             )
         anatomy_mask_2d = anatomy_mask.view(B, H, W).unsqueeze(1)
         anatomy_mask_2d = F.interpolate(anatomy_mask_2d, size=predicted_noise.shape[-2:], mode="nearest")
@@ -207,7 +204,6 @@ class TextRenderingLoss(nn.Module):
         text_tokens: Optional[torch.Tensor] = None,
         text_positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-
         if text_tokens is None:
             return torch.tensor(0.0, device=predicted_noise.device)
 
@@ -260,7 +256,6 @@ class ConsistencyLoss(nn.Module):
         character_features: Optional[torch.Tensor] = None,
         style_features: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-
         consistency_loss = 0.0
 
         # Character consistency loss
@@ -574,7 +569,9 @@ class EnhancedTrainer:
 
         return batch
 
-    def validate_style_harmony(self, prompt: str, lora_configs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def validate_style_harmony(
+        self, prompt: str, lora_configs: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """Validate style harmony for a given prompt and LoRA configuration."""
         return self.style_harmonizer.harmonize_styles(
             prompt=prompt,
@@ -593,8 +590,7 @@ class EnhancedTrainer:
 
             for conflict in result["conflicts"]:
                 recommendations.append(
-                    f"Conflict between {conflict['style1']} and {conflict['style2']}"
-                    f" (severity: {conflict['severity']})"
+                    f"Conflict between {conflict['style1']} and {conflict['style2']} (severity: {conflict['severity']})"
                 )
         else:
             recommendations.append("No style conflicts detected - harmonious combination")

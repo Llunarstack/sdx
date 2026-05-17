@@ -60,7 +60,9 @@ def main() -> int:
     p.add_argument("--ranking-margin", type=float, default=0.15)
     p.add_argument("--ranking-min-gap", type=float, default=0.05)
     p.add_argument("--fuse-dropout", type=float, default=0.1, help="Dropout after fuse MLP (before heads)")
-    p.add_argument("--text-proj-dropout", type=float, default=0.0, help="Dropout on text branch after text_proj (training only)")
+    p.add_argument(
+        "--text-proj-dropout", type=float, default=0.0, help="Dropout on text branch after text_proj (training only)"
+    )
     p.add_argument(
         "--backbone-grad-checkpointing",
         action="store_true",
@@ -291,4 +293,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

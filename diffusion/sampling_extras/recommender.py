@@ -21,4 +21,3 @@ def recommend_holy_grail_preset(
     if any(k in text for k in ("photo", "photoreal", "cinematic", "dslr", "realistic", "portrait")):
         return "photoreal"
     return "balanced"
-

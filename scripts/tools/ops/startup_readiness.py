@@ -176,12 +176,10 @@ def build_readiness_report(
         "python -m scripts.tools pretrained_status",
         "python -m scripts.tools benchmark_suite --help",
         "python -m scripts.tools auto_improve_loop --help",
-        "python -m pytest -m \"not cuda and not slow\"",
+        'python -m pytest -m "not cuda and not slow"',
     ]
     if dataset_manifest.strip():
-        suggestions.append(
-            f"python -m scripts.tools op_preflight --manifest \"{dataset_path}\""
-        )
+        suggestions.append(f'python -m scripts.tools op_preflight --manifest "{dataset_path}"')
 
     return {
         "status": status,

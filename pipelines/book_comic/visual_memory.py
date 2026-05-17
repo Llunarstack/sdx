@@ -47,8 +47,7 @@ BOOK_STYLE_HINTS: Dict[str, str] = {
         "soft gradients and clean separation between vertical tiers"
     ),
     "graphic_novel": (
-        "graphic novel sequential art: painterly cohesion, cinematic framing, stable inking "
-        "across panels"
+        "graphic novel sequential art: painterly cohesion, cinematic framing, stable inking across panels"
     ),
     "comic_us": (
         "American comic style: confident figure drawing, bold holds, dynamic foreshortening, "

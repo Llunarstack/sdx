@@ -82,7 +82,9 @@ def _caption_from_row(row: Dict[str, Any], caption_field: str, tag_join: str) ->
 def main() -> int:
     p = argparse.ArgumentParser(description="HF Dataset -> SDX JSONL + image files.")
     p.add_argument("--dataset", type=str, required=True, help="HF dataset id, e.g. org/danbooru-export")
-    p.add_argument("--config", type=str, default=None, help="Optional dataset config name (second arg to load_dataset).")
+    p.add_argument(
+        "--config", type=str, default=None, help="Optional dataset config name (second arg to load_dataset)."
+    )
     p.add_argument("--split", type=str, default="train")
     p.add_argument("--revision", type=str, default=None, help="Git revision / branch / commit.")
     p.add_argument("--image-field", type=str, default="image", help="Column with image (PIL/bytes).")

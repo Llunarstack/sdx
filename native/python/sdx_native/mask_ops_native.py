@@ -34,11 +34,11 @@ class MaskOpsLib:
         lib.sdx_mask_to_patch_weights_f32.argtypes = [
             ctypes.c_void_p,  # mask  (B, 1, H, W)
             ctypes.c_void_p,  # out   (B, ph*pw)
-            ctypes.c_int,     # B
-            ctypes.c_int,     # H
-            ctypes.c_int,     # W
-            ctypes.c_int,     # ph
-            ctypes.c_int,     # pw
+            ctypes.c_int,  # B
+            ctypes.c_int,  # H
+            ctypes.c_int,  # W
+            ctypes.c_int,  # ph
+            ctypes.c_int,  # pw
         ]
         lib.sdx_mask_to_patch_weights_f32.restype = ctypes.c_int
         self._lib = lib
@@ -75,9 +75,7 @@ class MaskOpsLib:
             ctypes.c_int(pw),
         )
         if rc == -3:
-            raise ValueError(
-                f"mask dimensions ({H}, {W}) not divisible by patch grid ({ph}, {pw})"
-            )
+            raise ValueError(f"mask dimensions ({H}, {W}) not divisible by patch grid ({ph}, {pw})")
         if rc != 0:
             raise RuntimeError(f"sdx_mask_to_patch_weights_f32 failed (rc={rc})")
         return out

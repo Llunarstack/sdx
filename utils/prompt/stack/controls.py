@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping
 
 from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
 
@@ -51,7 +51,7 @@ class ContentControlState:
     human_media_mode: str = "none"
     lora_scaffold: str = "none"
     adherence_pack: str = "none"
-  # flags
+    # flags
     style_lock: bool = False
     anti_style_bleed: bool = False
     anti_duplicate_subjects: bool = False
@@ -93,9 +93,7 @@ _INFER_KEYS = frozenset(
 )
 
 
-def merge_content_control_overrides(
-    state: ContentControlState, overrides: Mapping[str, Any]
-) -> ContentControlState:
+def merge_content_control_overrides(state: ContentControlState, overrides: Mapping[str, Any]) -> ContentControlState:
     """Apply intelligence (or other) overrides without passing unknown keys to the dataclass."""
     if not overrides:
         return state
@@ -115,7 +113,12 @@ def merge_content_control_overrides(
 def resolve_content_controls(args: Any, prompt: str, *, auto_infer: bool = True) -> ContentControlState:
     """Merge argparse flags with optional ``infer_content_controls_from_prompt``."""
     lora_scaffold = _get(args, "lora_scaffold")
-    if args is not None and _get_bool(args, "lora_scaffold_auto") and getattr(args, "lora", None) and lora_scaffold == "none":
+    if (
+        args is not None
+        and _get_bool(args, "lora_scaffold_auto")
+        and getattr(args, "lora", None)
+        and lora_scaffold == "none"
+    ):
         lora_scaffold = "blend"
 
     state = ContentControlState(

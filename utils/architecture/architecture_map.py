@@ -58,7 +58,13 @@ THEMES: Tuple[ThemeMapping, ...] = (
         ParityStatus.PARTIAL,
         "Linear latent interpolation (diffusion/latent_bridge.py) + optional VP shuffle-pair auxiliary loss in train "
         "(diffusion/bridge_training.py, --bridge-aux-weight); not a full Schrödinger-bridge trainer.",
-        ("diffusion/latent_bridge.py", "diffusion/bridge_training.py", "train.py", "sample.py", "docs/MODERN_DIFFUSION.md"),
+        (
+            "diffusion/latent_bridge.py",
+            "diffusion/bridge_training.py",
+            "train.py",
+            "sample.py",
+            "docs/MODERN_DIFFUSION.md",
+        ),
         ("--bridge-aux-weight", "--bridge-aux-lambda"),
     ),
     ThemeMapping(
@@ -188,7 +194,12 @@ THEMES: Tuple[ThemeMapping, ...] = (
         "Reference-image / IP-Adapter-style conditioning for identity lock",
         ParityStatus.PARTIAL,
         "CLIP vision -> ReferenceTokenProjector -> extra cross-attn tokens in DiT_Text; optional trained --reference-adapter-pt. Also --init-image, --post-reference-image, character sheet.",
-        ("models/dit_text.py", "models/reference_token_projection.py", "sample.py", "utils/generation/clip_reference_embed.py"),
+        (
+            "models/dit_text.py",
+            "models/reference_token_projection.py",
+            "sample.py",
+            "utils/generation/clip_reference_embed.py",
+        ),
         (
             "--reference-image",
             "--reference-strength",

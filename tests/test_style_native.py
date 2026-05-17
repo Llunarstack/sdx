@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-
 from utils.prompt.style_genome import StyleGenome
 from utils.prompt.style_native import (
     genome_style_fingerprint,

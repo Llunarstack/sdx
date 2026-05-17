@@ -36,4 +36,3 @@ def sanitize_holy_grail_kwargs(kwargs: Dict[str, float | bool]) -> Dict[str, flo
     if out["holy_grail_clamp_quantile"] < 0.5:
         out["holy_grail_clamp_quantile"] = 0.0
     return out
-

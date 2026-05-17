@@ -107,8 +107,6 @@ def consistency_blend_latent(
     if teacher is None:
         return x
     if teacher.shape != x.shape:
-        raise ValueError(
-            f"teacher shape {teacher.shape} must match x shape {x.shape}"
-        )
+        raise ValueError(f"teacher shape {teacher.shape} must match x shape {x.shape}")
     s = max(0.0, min(1.0, float(strength)))
     return (1.0 - s) * x + s * teacher.to(dtype=x.dtype)

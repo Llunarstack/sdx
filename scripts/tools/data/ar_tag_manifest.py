@@ -56,8 +56,7 @@ def main() -> int:
         n = read_num_ar_blocks_from_checkpoint(args.dit_ckpt)
         if n == -1:
             print(
-                "Could not read num_ar_blocks from checkpoint (missing config?). "
-                "Use --num-ar-blocks explicitly.",
+                "Could not read num_ar_blocks from checkpoint (missing config?). Use --num-ar-blocks explicitly.",
                 file=sys.stderr,
             )
             return 2

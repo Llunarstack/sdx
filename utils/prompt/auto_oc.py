@@ -219,4 +219,3 @@ def infer_auto_original_character(
         expression_sheet=expression_sheet,
         negative_block=_DEFAULT_NEGATIVE,
     )
-

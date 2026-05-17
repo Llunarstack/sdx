@@ -30,6 +30,7 @@ def _clip_betas(beta: np.ndarray) -> np.ndarray:
 def linear_beta_schedule(num_timesteps: int) -> np.ndarray:
     try:
         from sdx_native.diffusion_math_native import maybe_linear_beta_schedule_rust
+
         result = maybe_linear_beta_schedule_rust(int(num_timesteps))
         if result is not None:
             return result.astype(np.float64)
@@ -46,6 +47,7 @@ def cosine_beta_schedule(num_timesteps: int) -> np.ndarray:
     """
     try:
         from sdx_native.diffusion_math_native import maybe_cosine_beta_schedule_rust
+
         result = maybe_cosine_beta_schedule_rust(int(num_timesteps))
         if result is not None:
             return _clip_betas(result)
@@ -101,6 +103,7 @@ def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999)
     # 1. Rust cdylib
     try:
         from sdx_native.diffusion_math_native import maybe_squaredcos_beta_schedule_v2_rust
+
         result = maybe_squaredcos_beta_schedule_v2_rust(n, float(max_beta))
         if result is not None and result.shape == (n,):
             return result
@@ -110,6 +113,7 @@ def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999)
     # 2. Existing C++ DLL
     try:
         from sdx_native.beta_schedules_native import squared_cosine_betas_v2_native
+
         got = squared_cosine_betas_v2_native(n, max_beta)
         if got is not None and got.shape == (n,):
             return got
@@ -135,7 +139,4 @@ def get_beta_schedule(schedule_name: str, num_timesteps: int) -> np.ndarray:
         return sigmoid_beta_schedule(num_timesteps)
     if name in ("squaredcos_cap_v2", "squared_cosine_v2"):
         return squared_cosine_beta_schedule_v2(num_timesteps)
-    raise ValueError(
-        f"Unknown beta schedule {schedule_name!r}; "
-        "expected linear, cosine, sigmoid, or squaredcos_cap_v2"
-    )
+    raise ValueError(f"Unknown beta schedule {schedule_name!r}; expected linear, cosine, sigmoid, or squaredcos_cap_v2")

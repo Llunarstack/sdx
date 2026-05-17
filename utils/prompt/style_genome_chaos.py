@@ -333,16 +333,10 @@ def hypermutate(
         signature=maybe_replace(genome.signature, WILD_POSITIVE),
         anti_clone=genome.anti_clone,
         positive_fragments=tuple(
-            dict.fromkeys(
-                list(genome.positive_fragments)
-                + list(r.sample(WILD_POSITIVE, k=min(3, len(WILD_POSITIVE))))
-            )
+            dict.fromkeys(list(genome.positive_fragments) + list(r.sample(WILD_POSITIVE, k=min(3, len(WILD_POSITIVE)))))
         ),
         negative_fragments=tuple(
-            dict.fromkeys(
-                list(genome.negative_fragments)
-                + list(r.sample(WILD_NEGATIVE, k=min(4, len(WILD_NEGATIVE))))
-            )
+            dict.fromkeys(list(genome.negative_fragments) + list(r.sample(WILD_NEGATIVE, k=min(4, len(WILD_NEGATIVE)))))
         ),
         reasoning=f"Hypermutation of {genome.id} @ {level:.0%}",
     )
@@ -431,9 +425,7 @@ def invent_insane_batch(
         seen_names.add(key)
         unique.append(g)
     while len(unique) < n and len(unique) < len(presets) + 3:
-        extra = invent_insane_batch(
-            prompt, 1, seed=seed + len(unique) * 31, mode="insane", chaos_level=chaos_level
-        )
+        extra = invent_insane_batch(prompt, 1, seed=seed + len(unique) * 31, mode="insane", chaos_level=chaos_level)
         for g in extra:
             key = g.name.split("[")[0].strip().lower()
             if key not in seen_names:

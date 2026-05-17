@@ -20,4 +20,3 @@ def style_detail_mix_for_progress(
 
 def bounded_scale(value: float, *, lo: float = 0.0, hi: float = 3.0) -> float:
     return max(float(lo), min(float(hi), float(value)))
-

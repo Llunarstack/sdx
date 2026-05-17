@@ -5,16 +5,16 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from utils.prompt.stack import (
-    StackMode,
     PromptContext,
+    StackMode,
     analyze_prompt,
+    append_unique,
     apply_clauses,
     list_clauses,
     merge_guidance_for_training_caption,
     resolve_content_controls,
     run_prompt_stack,
     split_tags,
-    append_unique,
 )
 from utils.prompt.stack.clauses import CLAUSE_REGISTRY
 
@@ -166,9 +166,7 @@ def test_training_guidance_unified_entry():
         style_guidance_mode="auto",
     )
     step_pos, step_neg = caption, neg
-    step_pos, step_neg = apply_shortcomings_to_caption_pair(
-        step_pos, step_neg, mode="auto", include_2d=False
-    )
+    step_pos, step_neg = apply_shortcomings_to_caption_pair(step_pos, step_neg, mode="auto", include_2d=False)
     step_pos, step_neg = apply_art_guidance_to_caption_pair(
         step_pos,
         step_neg,
@@ -176,8 +174,6 @@ def test_training_guidance_unified_entry():
         include_photography=True,
         anatomy_mode="lite",
     )
-    step_pos, step_neg = apply_style_guidance_to_caption_pair(
-        step_pos, step_neg, mode="auto", include_artist_refs=True
-    )
+    step_pos, step_neg = apply_style_guidance_to_caption_pair(step_pos, step_neg, mode="auto", include_artist_refs=True)
     assert unified_pos.strip() == step_pos.strip()
     assert unified_neg.strip() == step_neg.strip()

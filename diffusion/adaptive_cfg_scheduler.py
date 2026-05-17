@@ -44,6 +44,7 @@ import torch.nn as nn
 # Simple schedule-based CFG
 # ---------------------------------------------------------------------------
 
+
 class CosineAnnealingCFG:
     """
     Cosine annealing CFG schedule.
@@ -134,6 +135,7 @@ class StepwiseCFG:
 # Prompt-complexity-aware CFG
 # ---------------------------------------------------------------------------
 
+
 class PromptComplexityCFG:
     """
     Adapts CFG based on prompt complexity.
@@ -197,6 +199,7 @@ class PromptComplexityCFG:
 # Latent-delta-based adaptive CFG
 # ---------------------------------------------------------------------------
 
+
 class LatentDeltaCFG:
     """
     Adapts CFG based on how much the latent is changing.
@@ -252,6 +255,7 @@ class LatentDeltaCFG:
 # ---------------------------------------------------------------------------
 # Learned CFG schedule (trainable MLP)
 # ---------------------------------------------------------------------------
+
 
 class LearnedCFGSchedule(nn.Module):
     """
@@ -327,14 +331,17 @@ class LearnedCFGSchedule(nn.Module):
             lat_mean, lat_std, lat_skew = 0.0, 1.0, 0.0
 
         # Normalize inputs
-        features = torch.tensor([
-            float(t_norm),
-            float(lat_mean) / 4.0,  # typical range [-4, 4]
-            float(lat_std) / 2.0,   # typical range [0, 2]
-            float(lat_skew) / 2.0,  # typical range [-2, 2]
-            float(prompt_emb_norm) / 100.0,  # normalize
-            float(step_frac),
-        ], dtype=torch.float32)
+        features = torch.tensor(
+            [
+                float(t_norm),
+                float(lat_mean) / 4.0,  # typical range [-4, 4]
+                float(lat_std) / 2.0,  # typical range [0, 2]
+                float(lat_skew) / 2.0,  # typical range [-2, 2]
+                float(prompt_emb_norm) / 100.0,  # normalize
+                float(step_frac),
+            ],
+            dtype=torch.float32,
+        )
 
         with torch.no_grad():
             output = self.net(features).item()  # [0, 1]
@@ -348,14 +355,16 @@ class LearnedCFGSchedule(nn.Module):
 # Hybrid adaptive CFG (combines all strategies)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class AdaptiveCFGConfig:
     """Configuration for HybridAdaptiveCFG."""
+
     base_cfg: float = 7.5
     use_cosine_schedule: bool = True
     use_complexity_boost: bool = True
     use_latent_delta: bool = True
-    use_learned: bool = False           # Requires trained MLP
+    use_learned: bool = False  # Requires trained MLP
     cosine_cfg_max: float = 9.0
     cosine_cfg_min: float = 5.5
     complexity_boost: float = 1.5
@@ -384,27 +393,39 @@ class HybridAdaptiveCFG:
             cfg = AdaptiveCFGConfig(**{k: v for k, v in kwargs.items() if hasattr(AdaptiveCFGConfig, k)})
         self.cfg = cfg
 
-        self.cosine = CosineAnnealingCFG(
-            cfg_max=cfg.cosine_cfg_max,
-            cfg_min=cfg.cosine_cfg_min,
-            total_steps=cfg.total_steps,
-        ) if cfg.use_cosine_schedule else None
+        self.cosine = (
+            CosineAnnealingCFG(
+                cfg_max=cfg.cosine_cfg_max,
+                cfg_min=cfg.cosine_cfg_min,
+                total_steps=cfg.total_steps,
+            )
+            if cfg.use_cosine_schedule
+            else None
+        )
 
-        self.complexity = PromptComplexityCFG(
-            base_cfg=cfg.base_cfg,
-            complexity_boost=cfg.complexity_boost,
-            total_steps=cfg.total_steps,
-        ) if cfg.use_complexity_boost else None
+        self.complexity = (
+            PromptComplexityCFG(
+                base_cfg=cfg.base_cfg,
+                complexity_boost=cfg.complexity_boost,
+                total_steps=cfg.total_steps,
+            )
+            if cfg.use_complexity_boost
+            else None
+        )
 
         if self.complexity and cfg.prompt:
             self.complexity.set_prompt(cfg.prompt)
 
-        self.delta = LatentDeltaCFG(
-            base_cfg=cfg.base_cfg,
-            boost_when_stuck=cfg.stuck_boost,
-            stuck_threshold=cfg.stuck_threshold,
-            total_steps=cfg.total_steps,
-        ) if cfg.use_latent_delta else None
+        self.delta = (
+            LatentDeltaCFG(
+                base_cfg=cfg.base_cfg,
+                boost_when_stuck=cfg.stuck_boost,
+                stuck_threshold=cfg.stuck_threshold,
+                total_steps=cfg.total_steps,
+            )
+            if cfg.use_latent_delta
+            else None
+        )
 
         self.learned: Optional[LearnedCFGSchedule] = None
         if cfg.use_learned and cfg.learned_ckpt:

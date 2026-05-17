@@ -31,30 +31,34 @@ import torch.nn as nn
 # Scene Graph
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class SceneElement:
     """One element in the scene (character, object, background, etc.)."""
+
     element_id: str
     label: str
-    element_type: str           # "character", "object", "background", "fx"
+    element_type: str  # "character", "object", "background", "fx"
     bbox: Optional[Tuple[float, float, float, float]] = None  # (x1,y1,x2,y2) normalised
-    depth: float = 0.5          # 0=foreground, 1=background
-    scale: float = 1.0          # relative scale
+    depth: float = 0.5  # 0=foreground, 1=background
+    scale: float = 1.0  # relative scale
     description: str = ""
 
 
 @dataclass(slots=True)
 class SceneRelation:
     """A spatial/semantic relation between two scene elements."""
+
     subject_id: str
     object_id: str
-    relation: str               # "in_front_of", "behind", "on_top_of", "holding",
-                                # "touching", "near", "far_from", "occludes"
+    relation: str  # "in_front_of", "behind", "on_top_of", "holding",
+    # "touching", "near", "far_from", "occludes"
 
 
 @dataclass(slots=True)
 class SceneGraph:
     """Complete structured scene description."""
+
     elements: List[SceneElement] = field(default_factory=list)
     relations: List[SceneRelation] = field(default_factory=list)
     global_description: str = ""
@@ -65,6 +69,7 @@ class SceneGraph:
 # ---------------------------------------------------------------------------
 # Scene Graph Encoder
 # ---------------------------------------------------------------------------
+
 
 class SceneGraphEncoder(nn.Module):
     """
@@ -80,9 +85,21 @@ class SceneGraphEncoder(nn.Module):
 
     ELEMENT_TYPES = ["character", "object", "background", "fx", "text", "unknown"]
     RELATION_TYPES = [
-        "in_front_of", "behind", "on_top_of", "below", "holding",
-        "touching", "near", "far_from", "occludes", "overlaps",
-        "left_of", "right_of", "above", "contains", "attached_to",
+        "in_front_of",
+        "behind",
+        "on_top_of",
+        "below",
+        "holding",
+        "touching",
+        "near",
+        "far_from",
+        "occludes",
+        "overlaps",
+        "left_of",
+        "right_of",
+        "above",
+        "contains",
+        "attached_to",
     ]
 
     def __init__(self, hidden_size: int, max_elements: int = 12):
@@ -128,10 +145,7 @@ class SceneGraphEncoder(nn.Module):
             x1, y1, x2, y2 = 0.0, 0.0, 1.0, 1.0
         cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
         w, h = x2 - x1, y2 - y1
-        spatial = torch.tensor(
-            [x1, y1, x2, y2, cx, cy, w, h, el.depth, el.scale],
-            device=device, dtype=torch.float32
-        )
+        spatial = torch.tensor([x1, y1, x2, y2, cx, cy, w, h, el.depth, el.scale], device=device, dtype=torch.float32)
         spatial_emb = self.spatial_proj(spatial)  # (D/2,)
 
         combined = torch.cat([type_emb, spatial_emb], dim=-1)  # (D/4 + D/2,)
@@ -146,14 +160,12 @@ class SceneGraphEncoder(nn.Module):
         Encode scene graph into conditioning tokens.
         Returns: (1, num_elements + 1, hidden_size) — elements + global lighting token.
         """
-        elements = scene.elements[:self.max_elements]
+        elements = scene.elements[: self.max_elements]
         if not elements:
             return torch.zeros(1, 1, self.hidden_size, device=device)
 
         # Encode each element
-        el_tokens = torch.stack([
-            self._encode_element(el, device) for el in elements
-        ], dim=0).unsqueeze(0)  # (1, E, D)
+        el_tokens = torch.stack([self._encode_element(el, device) for el in elements], dim=0).unsqueeze(0)  # (1, E, D)
 
         # Build relation bias for graph attention
         E = len(elements)
@@ -171,7 +183,9 @@ class SceneGraphEncoder(nn.Module):
         # Graph attention with relation bias
         normed = self.graph_norm(el_tokens)
         attended, _ = self.graph_attn(
-            normed, normed, normed,
+            normed,
+            normed,
+            normed,
             attn_mask=rel_bias.unsqueeze(0) if E > 1 else None,
         )
         el_tokens = el_tokens + attended  # (1, E, D)
@@ -187,6 +201,7 @@ class SceneGraphEncoder(nn.Module):
 # ---------------------------------------------------------------------------
 # Occlusion Order Module
 # ---------------------------------------------------------------------------
+
 
 class OcclusionOrderModule(nn.Module):
     """
@@ -261,6 +276,7 @@ class OcclusionOrderModule(nn.Module):
 # Scale-Perspective Consistency
 # ---------------------------------------------------------------------------
 
+
 class ScalePerspectiveConsistency(nn.Module):
     """
     Ensures object scale is consistent with perspective depth.
@@ -309,7 +325,7 @@ class ScalePerspectiveConsistency(nn.Module):
             # Estimate depth from vertical position (simple prior: top=far, bottom=near)
             rows = torch.linspace(0, 1, h_patches, device=x.device)
             cols = torch.linspace(0, 1, w_patches, device=x.device)
-            gr, _ = torch.meshgrid(rows, cols, indexing='ij')
+            gr, _ = torch.meshgrid(rows, cols, indexing="ij")
             depth_map = gr.flatten().unsqueeze(0).unsqueeze(-1).expand(B, -1, 1)
 
         # Perspective scale: objects at depth d appear at scale 1/(1 + focal*d)
@@ -331,6 +347,7 @@ class ScalePerspectiveConsistency(nn.Module):
 # ---------------------------------------------------------------------------
 # Global Scene Conditioner (top-level)
 # ---------------------------------------------------------------------------
+
 
 class GlobalSceneConditioner(nn.Module):
     """

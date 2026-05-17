@@ -260,7 +260,9 @@ def _composite_score(case: PromptCase, metrics: Dict[str, float]) -> float:
     return float(sum(vals) / len(vals))
 
 
-def _score_image(case: PromptCase, image_path: Path, *, include_clip: bool, clip_model: str, device: str) -> Dict[str, float]:
+def _score_image(
+    case: PromptCase, image_path: Path, *, include_clip: bool, clip_model: str, device: str
+) -> Dict[str, float]:
     arr = np.array(Image.open(image_path).convert("RGB"), dtype=np.uint8)
     out: Dict[str, float] = {
         "edge_sharpness": float(ttp.score_edge_sharpness(arr)),
@@ -445,7 +447,9 @@ def main() -> None:
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--seed-list", type=str, default="", help="Comma-separated seeds for robustness runs (e.g. 42,123,999).")
+    ap.add_argument(
+        "--seed-list", type=str, default="", help="Comma-separated seeds for robustness runs (e.g. 42,123,999)."
+    )
     ap.add_argument(
         "--robustness-penalty",
         type=float,
@@ -459,7 +463,9 @@ def main() -> None:
     ap.add_argument("--clip-model", type=str, default="openai/clip-vit-base-patch32")
     ap.add_argument("--auto-expected-text", action="store_true", default=True)
     ap.add_argument("--no-auto-expected-text", action="store_false", dest="auto_expected_text")
-    ap.add_argument("--sample-arg", action="append", default=[], help="Extra token passed to sample.py; repeat as needed.")
+    ap.add_argument(
+        "--sample-arg", action="append", default=[], help="Extra token passed to sample.py; repeat as needed."
+    )
     ap.add_argument(
         "--export-preference-jsonl",
         type=str,

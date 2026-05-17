@@ -82,6 +82,7 @@ def _process_caption_pair(
     )
     return cap.strip(), neg.strip()
 
+
 def _process_jsonl_lines_worker(payload: Dict[str, Any]) -> List[str]:
     """
     Worker for multiprocessing: takes a dict with keys:

@@ -365,7 +365,9 @@ def apply_loras(
 
         stage_i = _stage_bucket(_extract_layer_index(base_key), min_idx, max_idx)
         for ad, scale, role in adapters:
-            scale_eff = float(scale) * float(stage_weights.get(role, stage_weights.get("other", (1.0, 1.0, 1.0)))[stage_i])
+            scale_eff = float(scale) * float(
+                stage_weights.get(role, stage_weights.get("other", (1.0, 1.0, 1.0)))[stage_i]
+            )
             wrapper.add_adapter(
                 ad.down,
                 ad.up,

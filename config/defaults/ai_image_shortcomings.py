@@ -306,8 +306,7 @@ SHORTCOMING_SPECS: Tuple[ShortcomingSpec, ...] = (
             "cohesive hand-painted surface direction"
         ),
         negative_hints=(
-            "muddy albedo, random noise mud, swimming hand-painted detail, "
-            "inconsistent brush scale across UV shells"
+            "muddy albedo, random noise mud, swimming hand-painted detail, inconsistent brush scale across UV shells"
         ),
     ),
     # --- Stylized 2D packs (only when include_2d_pack or style keywords match in auto+2d) ---

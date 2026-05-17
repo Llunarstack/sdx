@@ -57,11 +57,7 @@ def test_analyze_checkpoint_single_el_tensor_no_std_warning(tmp_path: Path) -> N
     assert out["statistics"]["tensors_compared"] == 1
     assert out["statistics"]["tensors_skipped_non_tensor"] == 0
     assert out["parameter_differences"]["w"]["std_diff"] == 0.0
-    dof_msgs = [
-        str(w.message).lower()
-        for w in caught
-        if "degrees of freedom" in str(w.message).lower()
-    ]
+    dof_msgs = [str(w.message).lower() for w in caught if "degrees of freedom" in str(w.message).lower()]
     assert not dof_msgs, dof_msgs
 
 

@@ -21,6 +21,7 @@ def _ensure_native_python_path() -> None:
     if np.is_dir() and str(np) not in sys.path:
         sys.path.insert(0, str(np))
 
+
 # Block-normalized NF4 levels (symmetric, percentile-based; then scaled to [-1, 1] envelope).
 NF4_LEVELS: Tuple[float, ...] = (
     -1.0,
@@ -40,6 +41,7 @@ NF4_LEVELS: Tuple[float, ...] = (
     0.7229568362236023,
     1.0,
 )
+
 
 def quantize_nf4_block(w: torch.Tensor, block_size: int = 64) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
@@ -98,14 +100,10 @@ def dequantize_nf4_block_auto(
             am = absmax.detach().cpu().numpy().astype(np.float32, copy=False)
             arr = maybe_nf4_dequant_cuda(packed, am, block_size=block_size, n_weights=n_weights)
             if arr is not None:
-                return torch.from_numpy(arr[: int(original_numel)]).to(
-                    device=absmax.device, dtype=torch.float32
-                )
+                return torch.from_numpy(arr[: int(original_numel)]).to(device=absmax.device, dtype=torch.float32)
         except Exception:
             pass
-    return dequantize_nf4_block(
-        codes_uint8, absmax, block_size=block_size, original_numel=original_numel
-    )
+    return dequantize_nf4_block(codes_uint8, absmax, block_size=block_size, original_numel=original_numel)
 
 
 def dequantize_nf4_block(

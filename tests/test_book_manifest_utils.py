@@ -58,8 +58,6 @@ def test_validate_book_manifest_missing_file(tmp_path) -> None:
 
 
 def test_manifest_summary_includes_pick() -> None:
-    lines = manifest_summary_lines(
-        {"pick_best": "combo", "sample_candidates": 2, "entries": [], "ckpt": "a.pt"}
-    )
+    lines = manifest_summary_lines({"pick_best": "combo", "sample_candidates": 2, "entries": [], "ckpt": "a.pt"})
     assert any("pick_best=combo" in x for x in lines)
     assert any("sample_candidates=2" in x for x in lines)

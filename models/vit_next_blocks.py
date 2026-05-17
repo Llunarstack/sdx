@@ -50,9 +50,7 @@ class LayerScale(nn.Module):
         super().__init__()
         if float(init_value) < 0.0:
             raise ValueError(f"LayerScale init_value must be >= 0, got {init_value!r}")
-        self.gamma = nn.Parameter(
-            torch.full((int(dim),), float(init_value))
-        )
+        self.gamma = nn.Parameter(torch.full((int(dim),), float(init_value)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         g = self.gamma

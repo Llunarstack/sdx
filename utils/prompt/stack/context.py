@@ -35,7 +35,7 @@ class PromptContext:
 
     *positive* / *negative* are updated in place through stages.
     *args* is the argparse Namespace from ``sample.py`` when present.
-  """
+    """
 
     positive: str
     negative: str = ""

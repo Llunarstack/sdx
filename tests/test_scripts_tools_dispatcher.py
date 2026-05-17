@@ -6,11 +6,7 @@ from scripts.tools import __main__ as tools_main
 
 
 def test_tools_dispatcher_targets_exist():
-    missing = [
-        name
-        for name, path in tools_main._CANONICAL.items()
-        if not path.is_file()
-    ]
+    missing = [name for name, path in tools_main._CANONICAL.items() if not path.is_file()]
     assert not missing, f"Broken dispatcher paths: {missing}"
 
 

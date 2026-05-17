@@ -20,9 +20,11 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
-    from config import DEFAULT_NEGATIVE_PROMPT
-    from utils.prompt.stack import PromptContext, StackMode, run_prompt_stack
     from types import SimpleNamespace
+
+    from utils.prompt.stack import PromptContext, StackMode, run_prompt_stack
+
+    from config import DEFAULT_NEGATIVE_PROMPT
 
     p = argparse.ArgumentParser(description="Preview prompts after PromptStack (no model load).")
     p.add_argument("--prompt", type=str, required=True)
@@ -104,7 +106,9 @@ def main() -> int:
         hand_mode=args.hand_mode,
         lighting_mode=args.lighting_mode,
         anti_ai_pack=args.anti_ai_pack if args.anti_ai_pack != "none" else ("lite" if args.less_ai else "none"),
-        human_media_mode=args.human_media_mode if args.human_media_mode != "none" else ("photographic" if args.less_ai else "none"),
+        human_media_mode=args.human_media_mode
+        if args.human_media_mode != "none"
+        else ("photographic" if args.less_ai else "none"),
         lora_scaffold=args.lora_scaffold,
         lora_scaffold_auto=False,
         style_lock=args.style_lock,

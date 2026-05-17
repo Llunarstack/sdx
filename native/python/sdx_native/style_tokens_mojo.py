@@ -5,7 +5,6 @@ Optional Mojo fast path for comma merge/dedupe and style fingerprints.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from typing import List, Optional
 
 from sdx_native.native_tools import REPO_ROOT, mojo_cli_path

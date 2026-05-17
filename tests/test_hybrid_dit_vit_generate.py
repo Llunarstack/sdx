@@ -42,12 +42,8 @@ def test_fuse_vit_scores_zero_weights_falls_back_even() -> None:
 
 
 def test_consensus_score_penalizes_disagreement() -> None:
-    hi_disagree = consensus_score(
-        0.95, 0.40, quality_weight=0.55, adherence_weight=0.45, disagreement_penalty=0.2
-    )
-    lo_disagree = consensus_score(
-        0.75, 0.70, quality_weight=0.55, adherence_weight=0.45, disagreement_penalty=0.2
-    )
+    hi_disagree = consensus_score(0.95, 0.40, quality_weight=0.55, adherence_weight=0.45, disagreement_penalty=0.2)
+    lo_disagree = consensus_score(0.75, 0.70, quality_weight=0.55, adherence_weight=0.45, disagreement_penalty=0.2)
     assert lo_disagree > hi_disagree
 
 
@@ -69,7 +65,7 @@ def test_infer_shape_blueprint_includes_constraints() -> None:
     bp = infer_shape_blueprint("full body warrior left of dragon, cinematic moonlight")
     assert isinstance(bp.get("constraints"), list)
     assert "shape-first composition" in (bp.get("composition") or [])
-    assert (bp.get("actors") or [])
+    assert bp.get("actors") or []
 
 
 def test_compile_shape_scaffold_outputs_positive_negative() -> None:

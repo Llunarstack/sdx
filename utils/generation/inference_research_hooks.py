@@ -93,9 +93,7 @@ def apply_size_embed_to_model_kwargs(
     return mc, mu
 
 
-def spectral_latent_lowfreq_blend(
-    x: torch.Tensor, strength: float = 0.0, cutoff_frac: float = 0.15
-) -> torch.Tensor:
+def spectral_latent_lowfreq_blend(x: torch.Tensor, strength: float = 0.0, cutoff_frac: float = 0.15) -> torch.Tensor:
     """
     Blend latent with its **low-frequency** FFT reconstruction (global coherence heuristic).
 

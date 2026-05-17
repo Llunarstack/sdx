@@ -31,8 +31,12 @@ from pipelines.book_comic.book_training_helpers import (  # noqa: E402
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Prepare book dataset and train in one command.")
 
-    p.add_argument("--data-path", type=str, default="", help="Existing data root. If --dataset is used, defaults to --out-dir.")
-    p.add_argument("--manifest-jsonl", type=str, default="", help="Existing manifest path. Optional when using --dataset.")
+    p.add_argument(
+        "--data-path", type=str, default="", help="Existing data root. If --dataset is used, defaults to --out-dir."
+    )
+    p.add_argument(
+        "--manifest-jsonl", type=str, default="", help="Existing manifest path. Optional when using --dataset."
+    )
     p.add_argument("--out-dir", type=str, default="data/book_train_run", help="Export directory when using --dataset.")
     p.add_argument("--results-dir", type=str, default="results/book_train_run")
 
@@ -116,7 +120,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ar-profile",
         type=str,
         default="auto",
-        choices=["auto", "none", "layout", "strong", "zorder", "vit_layout", "vit_strong", "comic_snake", "cinema_spiral"],
+        choices=[
+            "auto",
+            "none",
+            "layout",
+            "strong",
+            "zorder",
+            "vit_layout",
+            "vit_strong",
+            "comic_snake",
+            "cinema_spiral",
+        ],
         help="Book trainer AR preset (classic + upgraded ViT-aligned traversal presets).",
     )
     p.add_argument("--num-ar-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
@@ -219,17 +233,17 @@ def main() -> int:
         if bool(getattr(args, "manifest_gate_report_dups", False)):
             gate_cmd.append("--report-dups")
         if int(getattr(args, "manifest_gate_fail_on_dup_groups", 0) or 0) > 0:
-            gate_cmd.extend(["--fail-on-dup-groups", str(int(getattr(args, "manifest_gate_fail_on_dup_groups"))) ])
+            gate_cmd.extend(["--fail-on-dup-groups", str(int(getattr(args, "manifest_gate_fail_on_dup_groups")))])
         if bool(getattr(args, "manifest_gate_image_qc", False)):
             gate_cmd.append("--image-qc")
             if str(getattr(args, "manifest_gate_image_root", "") or "").strip():
                 gate_cmd.extend(["--image-root", str(getattr(args, "manifest_gate_image_root")).strip()])
             if int(getattr(args, "manifest_gate_sample", 0) or 0) > 0:
-                gate_cmd.extend(["--sample", str(int(getattr(args, "manifest_gate_sample"))) ])
+                gate_cmd.extend(["--sample", str(int(getattr(args, "manifest_gate_sample")))])
             if float(getattr(args, "manifest_gate_min_sharpness", 0.0) or 0.0) > 0.0:
-                gate_cmd.extend(["--min-sharpness", str(float(getattr(args, "manifest_gate_min_sharpness"))) ])
+                gate_cmd.extend(["--min-sharpness", str(float(getattr(args, "manifest_gate_min_sharpness")))])
             if float(getattr(args, "manifest_gate_min_contrast", 0.0) or 0.0) > 0.0:
-                gate_cmd.extend(["--min-contrast", str(float(getattr(args, "manifest_gate_min_contrast"))) ])
+                gate_cmd.extend(["--min-contrast", str(float(getattr(args, "manifest_gate_min_contrast")))])
         rc = _run(gate_cmd, cwd=ROOT, label="Manifest gate")
         if rc != 0:
             return rc
@@ -248,13 +262,13 @@ def main() -> int:
         if str(getattr(args, "filter_dedup", "") or "").strip():
             dq_cmd.extend(["--dedup", str(getattr(args, "filter_dedup")).strip()])
         if int(getattr(args, "filter_min_caption_len", 0) or 0) > 0:
-            dq_cmd.extend(["--min-caption-len", str(int(getattr(args, "filter_min_caption_len"))) ])
+            dq_cmd.extend(["--min-caption-len", str(int(getattr(args, "filter_min_caption_len")))])
         if int(getattr(args, "filter_max_caption_len", 0) or 0) > 0:
-            dq_cmd.extend(["--max-caption-len", str(int(getattr(args, "filter_max_caption_len"))) ])
+            dq_cmd.extend(["--max-caption-len", str(int(getattr(args, "filter_max_caption_len")))])
         if str(getattr(args, "filter_bad_words", "") or "").strip():
             dq_cmd.extend(["--bad-words", str(getattr(args, "filter_bad_words")).strip()])
         if float(getattr(args, "filter_min_weight", 0.0) or 0.0) > 0.0:
-            dq_cmd.extend(["--min-weight", str(float(getattr(args, "filter_min_weight"))) ])
+            dq_cmd.extend(["--min-weight", str(float(getattr(args, "filter_min_weight")))])
         if bool(getattr(args, "filter_native_validate", False)):
             dq_cmd.append("--native-validate")
         rc = _run(dq_cmd, cwd=ROOT, label="Manifest filter/dedupe")

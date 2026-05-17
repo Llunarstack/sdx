@@ -67,8 +67,7 @@ def jsonl_stat_text(path: Path) -> str:
     ]
     if cap_lens:
         lines.append(
-            "caption_len_chars: "
-            f"min={cap_lens[0]} p50={pct(0.5)} p90={pct(0.9)} p99={pct(0.99)} max={cap_lens[-1]}"
+            f"caption_len_chars: min={cap_lens[0]} p50={pct(0.5)} p90={pct(0.9)} p99={pct(0.99)} max={cap_lens[-1]}"
         )
     return "\n".join(lines) + "\n"
 
@@ -173,7 +172,7 @@ def promptlint_text(
                 max_overlap_distinct_tokens = max(max_overlap_distinct_tokens, overlap)
 
     items = sorted(overlap_token_counts.items(), key=lambda x: -x[1])
-    top = items[: top_overlap_tokens] if top_overlap_tokens > 0 else items
+    top = items[:top_overlap_tokens] if top_overlap_tokens > 0 else items
 
     out_lines = [
         f"promptlint: file {path}",

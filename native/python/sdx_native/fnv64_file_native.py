@@ -39,7 +39,9 @@ class Fnv64Lib:
         h = ctypes.c_ulonglong(0)
         b = ctypes.c_ulonglong(0)
         n = ctypes.c_ulonglong(0)
-        rc = self._lib.sdx_fnv1a64_file_stream(str(path).encode("utf-8"), ctypes.byref(h), ctypes.byref(b), ctypes.byref(n))
+        rc = self._lib.sdx_fnv1a64_file_stream(
+            str(path).encode("utf-8"), ctypes.byref(h), ctypes.byref(b), ctypes.byref(n)
+        )
         if rc != 0:
             raise OSError(f"sdx_fnv1a64_file_stream failed for {path}")
         return int(h.value), int(b.value), int(n.value)

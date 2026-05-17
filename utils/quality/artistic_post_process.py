@@ -28,47 +28,49 @@ import numpy as np
 # Config
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class ArtisticPostConfig:
     """All artistic post-processing knobs in one place."""
 
     # Compositional director
-    composition_mode: str = "none"          # "none"|"rule_of_thirds"|"golden_ratio"|"dynamic_symmetry"
-    composition_strength: float = 0.0       # 0-1: how strongly to nudge toward the composition guide
+    composition_mode: str = "none"  # "none"|"rule_of_thirds"|"golden_ratio"|"dynamic_symmetry"
+    composition_strength: float = 0.0  # 0-1: how strongly to nudge toward the composition guide
 
     # Value structure (light/dark discipline)
-    value_structure: bool = False           # enforce value hierarchy
-    value_shadow_lift: float = 0.0          # 0-0.15: lift shadows slightly (reduces crush)
-    value_highlight_roll: float = 0.0       # 0-0.15: roll off highlights (reduces blow-out)
-    value_midtone_contrast: float = 0.0     # 0-0.3: boost midtone separation
+    value_structure: bool = False  # enforce value hierarchy
+    value_shadow_lift: float = 0.0  # 0-0.15: lift shadows slightly (reduces crush)
+    value_highlight_roll: float = 0.0  # 0-0.15: roll off highlights (reduces blow-out)
+    value_midtone_contrast: float = 0.0  # 0-0.3: boost midtone separation
 
     # Intentional asymmetry (anti-uncanny-valley)
-    asymmetry_strength: float = 0.0         # 0-1: how much to break perfect symmetry
+    asymmetry_strength: float = 0.0  # 0-1: how much to break perfect symmetry
     asymmetry_seed: Optional[int] = None
 
     # Lost-and-found edges (vary edge sharpness)
-    lost_found_strength: float = 0.0        # 0-1: how much to soften some edges
+    lost_found_strength: float = 0.0  # 0-1: how much to soften some edges
     lost_found_seed: Optional[int] = None
 
     # Subsurface scattering simulation (skin/wax/translucent materials)
-    sss_strength: float = 0.0               # 0-1: SSS simulation strength
-    sss_radius: float = 3.0                 # blur radius for SSS approximation
+    sss_strength: float = 0.0  # 0-1: SSS simulation strength
+    sss_radius: float = 3.0  # blur radius for SSS approximation
     sss_color: Tuple[float, float, float] = (1.0, 0.6, 0.4)  # warm skin scatter color
 
     # Vignette (compositional framing)
-    vignette_strength: float = 0.0          # 0-1
-    vignette_softness: float = 0.5          # 0-1: how soft the falloff is
+    vignette_strength: float = 0.0  # 0-1
+    vignette_softness: float = 0.5  # 0-1: how soft the falloff is
 
     # Chromatic aberration (lens character)
-    chromatic_aberration: float = 0.0       # 0-1: pixel shift amount
+    chromatic_aberration: float = 0.0  # 0-1: pixel shift amount
 
     # Micro-detail recovery (sharpens fine texture without halos)
-    micro_detail: float = 0.0              # 0-1
+    micro_detail: float = 0.0  # 0-1
 
 
 # ---------------------------------------------------------------------------
 # Value structure
 # ---------------------------------------------------------------------------
+
 
 def _rgb_to_lum(img: np.ndarray) -> np.ndarray:
     """(H,W,3) float -> (H,W) luminance."""
@@ -133,6 +135,7 @@ def apply_value_structure(
 # Compositional director
 # ---------------------------------------------------------------------------
 
+
 def _rule_of_thirds_map(h: int, w: int) -> np.ndarray:
     """
     Returns (H, W) weight map that is highest at rule-of-thirds intersections.
@@ -143,12 +146,12 @@ def _rule_of_thirds_map(h: int, w: int) -> np.ndarray:
     grid_x, grid_y = np.meshgrid(xx, yy)
 
     # Four intersection points
-    thirds = [1/3, 2/3]
+    thirds = [1 / 3, 2 / 3]
     weight = np.zeros((h, w), dtype=np.float32)
     sigma = 0.12  # spread of each hotspot
     for ty in thirds:
         for tx in thirds:
-            d2 = (grid_y - ty)**2 + (grid_x - tx)**2
+            d2 = (grid_y - ty) ** 2 + (grid_x - tx) ** 2
             weight += np.exp(-d2 / (2 * sigma**2))
 
     return weight / (weight.max() + 1e-8)
@@ -171,7 +174,7 @@ def _golden_ratio_map(h: int, w: int) -> np.ndarray:
     sigma = 0.10
     for ty in gy:
         for tx in gx:
-            d2 = (grid_y - ty)**2 + (grid_x - tx)**2
+            d2 = (grid_y - ty) ** 2 + (grid_x - tx) ** 2
             weight += np.exp(-d2 / (2 * sigma**2))
 
     return weight / (weight.max() + 1e-8)
@@ -206,8 +209,8 @@ def apply_compositional_director(
         yy = np.linspace(0, 1, h)
         xx = np.linspace(0, 1, w)
         grid_x, grid_y = np.meshgrid(xx, yy)
-        d1 = np.exp(-((grid_y - grid_x)**2) / (2 * 0.08**2))
-        d2 = np.exp(-((grid_y - (1 - grid_x))**2) / (2 * 0.08**2))
+        d1 = np.exp(-((grid_y - grid_x) ** 2) / (2 * 0.08**2))
+        d2 = np.exp(-((grid_y - (1 - grid_x)) ** 2) / (2 * 0.08**2))
         guide_map = np.clip(d1 + d2, 0, 1).astype(np.float32)
         guide_map /= guide_map.max() + 1e-8
     else:  # rule_of_thirds (default)
@@ -231,6 +234,7 @@ def apply_compositional_director(
 # ---------------------------------------------------------------------------
 # Intentional asymmetry (anti-uncanny-valley)
 # ---------------------------------------------------------------------------
+
 
 def apply_intentional_asymmetry(
     image: np.ndarray,
@@ -270,14 +274,28 @@ def apply_intentional_asymmetry(
     noise_x = rng.normal(0, 1, (grid_h, grid_w)).astype(np.float32)
 
     # Upsample to full resolution
-    noise_y_full = np.array(
-        _PIL.fromarray(((noise_y - noise_y.min()) / (np.ptp(noise_y) + 1e-8) * 255).astype(np.uint8))
-        .resize((w, h), _PIL.BILINEAR), dtype=np.float32
-    ) / 255.0 * 2.0 - 1.0  # [-1, 1]
-    noise_x_full = np.array(
-        _PIL.fromarray(((noise_x - noise_x.min()) / (np.ptp(noise_x) + 1e-8) * 255).astype(np.uint8))
-        .resize((w, h), _PIL.BILINEAR), dtype=np.float32
-    ) / 255.0 * 2.0 - 1.0
+    noise_y_full = (
+        np.array(
+            _PIL.fromarray(((noise_y - noise_y.min()) / (np.ptp(noise_y) + 1e-8) * 255).astype(np.uint8)).resize(
+                (w, h), _PIL.BILINEAR
+            ),
+            dtype=np.float32,
+        )
+        / 255.0
+        * 2.0
+        - 1.0
+    )  # [-1, 1]
+    noise_x_full = (
+        np.array(
+            _PIL.fromarray(((noise_x - noise_x.min()) / (np.ptp(noise_x) + 1e-8) * 255).astype(np.uint8)).resize(
+                (w, h), _PIL.BILINEAR
+            ),
+            dtype=np.float32,
+        )
+        / 255.0
+        * 2.0
+        - 1.0
+    )
 
     # Scale displacement: max ~2-4 pixels at strength=1
     max_disp = s * 3.0
@@ -288,8 +306,8 @@ def apply_intentional_asymmetry(
     # This is the key — symmetric warp would cancel out and look natural but not break symmetry
     half_w = w // 2
     asymmetry_mask = np.ones((h, w), dtype=np.float32)
-    asymmetry_mask[:, :half_w] *= 0.4   # left half: weaker warp
-    asymmetry_mask[:, half_w:] *= 1.0   # right half: stronger warp
+    asymmetry_mask[:, :half_w] *= 0.4  # left half: weaker warp
+    asymmetry_mask[:, half_w:] *= 1.0  # right half: stronger warp
     dy *= asymmetry_mask
     dx *= asymmetry_mask
 
@@ -301,9 +319,7 @@ def apply_intentional_asymmetry(
     # Apply warp to each channel
     out = np.zeros_like(img)
     for c in range(3):
-        out[..., c] = map_coordinates(
-            img[..., c], [map_rows, map_cols], order=1, mode='reflect'
-        )
+        out[..., c] = map_coordinates(img[..., c], [map_rows, map_cols], order=1, mode="reflect")
 
     out = np.clip(out, 0.0, 255.0)
     return out.astype(np.uint8) if is_uint else out
@@ -312,6 +328,7 @@ def apply_intentional_asymmetry(
 # ---------------------------------------------------------------------------
 # Lost-and-found edges
 # ---------------------------------------------------------------------------
+
 
 def apply_lost_and_found_edges(
     image: np.ndarray,
@@ -360,10 +377,9 @@ def apply_lost_and_found_edges(
     # Use low-frequency noise so the pattern is organic, not random speckle
     grid_h, grid_w = max(4, h // 8), max(4, w // 8)
     noise = rng.uniform(0, 1, (grid_h, grid_w)).astype(np.float32)
-    lost_mask = np.array(
-        _PIL.fromarray((noise * 255).astype(np.uint8))
-        .resize((w, h), _PIL.BILINEAR), dtype=np.float32
-    ) / 255.0
+    lost_mask = (
+        np.array(_PIL.fromarray((noise * 255).astype(np.uint8)).resize((w, h), _PIL.BILINEAR), dtype=np.float32) / 255.0
+    )
 
     # Only apply to actual edge regions (not flat areas)
     lost_mask = lost_mask * edge_mag
@@ -390,6 +406,7 @@ def apply_lost_and_found_edges(
 # ---------------------------------------------------------------------------
 # Subsurface scattering simulation
 # ---------------------------------------------------------------------------
+
 
 def apply_sss_simulation(
     image: np.ndarray,
@@ -450,6 +467,7 @@ def apply_sss_simulation(
 # Vignette
 # ---------------------------------------------------------------------------
 
+
 def apply_vignette(
     image: np.ndarray,
     strength: float = 0.3,
@@ -476,7 +494,7 @@ def apply_vignette(
 
     # Smooth falloff controlled by softness
     sigma = 0.3 + soft * 0.7
-    vig = 1.0 - s * np.clip(r / (sigma * 1.5), 0.0, 1.0)**2
+    vig = 1.0 - s * np.clip(r / (sigma * 1.5), 0.0, 1.0) ** 2
 
     out = np.clip(img * vig[..., np.newaxis], 0.0, 255.0)
     return out.astype(np.uint8) if is_uint else out
@@ -485,6 +503,7 @@ def apply_vignette(
 # ---------------------------------------------------------------------------
 # Chromatic aberration (lens character)
 # ---------------------------------------------------------------------------
+
 
 def apply_chromatic_aberration(
     image: np.ndarray,
@@ -511,9 +530,9 @@ def apply_chromatic_aberration(
     out = img.copy()
 
     # Shift red channel outward (toward top-left)
-    out[shift:, shift:, 0] = img[:h-shift, :w-shift, 0]
+    out[shift:, shift:, 0] = img[: h - shift, : w - shift, 0]
     # Shift blue channel outward (toward bottom-right)
-    out[:h-shift, :w-shift, 2] = img[shift:, shift:, 2]
+    out[: h - shift, : w - shift, 2] = img[shift:, shift:, 2]
     # Green stays centered
 
     return out.astype(np.uint8) if is_uint else out
@@ -522,6 +541,7 @@ def apply_chromatic_aberration(
 # ---------------------------------------------------------------------------
 # Micro-detail recovery
 # ---------------------------------------------------------------------------
+
 
 def apply_micro_detail(
     image: np.ndarray,
@@ -547,7 +567,7 @@ def apply_micro_detail(
     s = float(min(1.0, max(0.0, strength)))
 
     lum = _rgb_to_lum(img)
-    blur = gaussian_filter(lum, sigma=0.5, mode='reflect')
+    blur = gaussian_filter(lum, sigma=0.5, mode="reflect")
     hf = lum - blur  # high-frequency component
     new_lum = np.clip(lum + s * hf * 0.8, 1e-3, 255.0)
 
@@ -560,6 +580,7 @@ def apply_micro_detail(
 # ---------------------------------------------------------------------------
 # Full pipeline
 # ---------------------------------------------------------------------------
+
 
 def apply_artistic_pipeline(
     image: np.ndarray,
@@ -581,7 +602,12 @@ def apply_artistic_pipeline(
     out = image
 
     # 1. Value structure
-    if cfg.value_structure or cfg.value_shadow_lift > 0 or cfg.value_highlight_roll > 0 or cfg.value_midtone_contrast > 0:
+    if (
+        cfg.value_structure
+        or cfg.value_shadow_lift > 0
+        or cfg.value_highlight_roll > 0
+        or cfg.value_midtone_contrast > 0
+    ):
         out = apply_value_structure(
             out,
             shadow_lift=cfg.value_shadow_lift,

@@ -64,7 +64,9 @@ def get_cuda_nf4_lib() -> CudaNf4Lib:
     return _LIB
 
 
-def maybe_nf4_dequant_cuda(packed: np.ndarray, absmax: np.ndarray, *, block_size: int, n_weights: int) -> Optional[np.ndarray]:
+def maybe_nf4_dequant_cuda(
+    packed: np.ndarray, absmax: np.ndarray, *, block_size: int, n_weights: int
+) -> Optional[np.ndarray]:
     lib = get_cuda_nf4_lib()
     if not lib.available:
         return None

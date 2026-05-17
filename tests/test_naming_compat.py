@@ -58,4 +58,3 @@ def test_config_defaults_prompt_style_mediums_surface():
     assert callable(getattr(art_mediums, "guidance_fragments", None))
     assert callable(getattr(style_guidance, "style_guidance_fragments", None))
     assert callable(getattr(model_presets, "apply_preset_to_args", None))
-

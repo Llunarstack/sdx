@@ -67,7 +67,9 @@ def softplus_loss_gen(fake_logit: torch.Tensor) -> torch.Tensor:
     return F.softplus(-fake_logit).mean()
 
 
-def teacher_student_mse(teacher: nn.Module, student: nn.Module, x_t: torch.Tensor, t: torch.Tensor, **kwargs) -> torch.Tensor:
+def teacher_student_mse(
+    teacher: nn.Module, student: nn.Module, x_t: torch.Tensor, t: torch.Tensor, **kwargs
+) -> torch.Tensor:
     """
     Per-element MSE between teacher and student predictions (same kwargs for both).
     Typical kwargs: ``y`` (class), ``text_embeds``, etc., matching your model API.

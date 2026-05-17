@@ -149,9 +149,7 @@ def visual_facts_from_requests(
     if not requests:
         return facts
 
-    facts.append(
-        "Reference-image dissection requested. Treat these as constraints when generating the final image."
-    )
+    facts.append("Reference-image dissection requested. Treat these as constraints when generating the final image.")
     facts.append(f"Number of reference images provided: {int(num_reference_images)}")
 
     for r in requests:
@@ -285,7 +283,7 @@ def dissect_images_to_parts(
             continue
         pil = _load_pil(reference_images[r.source_index])
         w, h = pil.size
-        stem = f"ref{r.source_index+1}_{re.sub(r'[^a-z0-9]+','_', r.part.lower()).strip('_')}_{i:02d}"
+        stem = f"ref{r.source_index + 1}_{re.sub(r'[^a-z0-9]+', '_', r.part.lower()).strip('_')}_{i:02d}"
 
         # Background: treat as full-image mask/crop.
         if r.role == "background" or r.part.lower().strip() == "background":
@@ -361,7 +359,11 @@ def dissect_images_to_parts(
         dp.mask_path = mp
         dp.crop_path = cp
         dp.confidence = float(max(0.0, min(1.0, score)))
-        dp.metadata["mode"] = "gdino+sam" if sam is not None and gdino is not None else ("gdino+bbox" if gdino is not None else "bbox_only")
+        dp.metadata["mode"] = (
+            "gdino+sam"
+            if sam is not None and gdino is not None
+            else ("gdino+bbox" if gdino is not None else "bbox_only")
+        )
 
     return reqs, parts, facts
 
@@ -373,4 +375,3 @@ __all__ = [
     "visual_facts_from_requests",
     "dissect_images_to_parts",
 ]
-

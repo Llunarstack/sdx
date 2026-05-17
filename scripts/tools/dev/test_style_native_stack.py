@@ -53,13 +53,11 @@ def main() -> int:
         assert merged == "a, b, c, d"
 
     # 3) Inventor + chaos
+    from utils.prompt.style_genome_chaos import fuse_genomes, invent_insane_batch
     from utils.prompt.style_inventor import StyleInventor
-    from utils.prompt.style_genome_chaos import invent_insane_batch, fuse_genomes
 
     inv = StyleInventor(use_qwen=False)
-    genomes = inv.invent(
-        "samurai at sunset", n=2, invention_mode="insane", chaos_level=0.8, seed=42
-    )
+    genomes = inv.invent("samurai at sunset", n=2, invention_mode="insane", chaos_level=0.8, seed=42)
     assert len(genomes) == 2
     print(f"Invented: {[g.name for g in genomes]}")
     ch = fuse_genomes(genomes[0], genomes[1])

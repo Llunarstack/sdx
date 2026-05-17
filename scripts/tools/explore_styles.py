@@ -192,7 +192,7 @@ def main() -> int:
     if args.preview_stack and plan.candidates:
         from types import SimpleNamespace
 
-        from utils.prompt.stack import StackMode, PromptContext, run_prompt_stack
+        from utils.prompt.stack import PromptContext, StackMode, run_prompt_stack
 
         c0 = plan.candidates[0]
         ns = SimpleNamespace(

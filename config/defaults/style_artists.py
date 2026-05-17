@@ -1140,12 +1140,8 @@ _STYLE_TAG_BUCKET_ORDER: Tuple[Tuple[str, Sequence[str]], ...] = (
 )
 
 # Extra nudge whenever any bucket matched: cross-cutting coherence (one fragment each).
-STYLE_TAG_GLOBAL_BUCKET_POSITIVE = (
-    "single dominant focal hierarchy, consistent style grammar from foreground to background, no contradictory medium cues on the same subject"
-)
-STYLE_TAG_GLOBAL_BUCKET_NEGATIVE = (
-    "dueling focal points of equal weight, mid-image style pivot, accidental watermark or UI chrome, compression blocks read as texture"
-)
+STYLE_TAG_GLOBAL_BUCKET_POSITIVE = "single dominant focal hierarchy, consistent style grammar from foreground to background, no contradictory medium cues on the same subject"
+STYLE_TAG_GLOBAL_BUCKET_NEGATIVE = "dueling focal points of equal weight, mid-image style pivot, accidental watermark or UI chrome, compression blocks read as texture"
 
 # (facet_id, trigger_tags, positive_hint, negative_hint) — tags are chosen from bucket lists where possible.
 STYLE_TAG_FACET_RULES: Tuple[Tuple[str, Tuple[str, ...], str, str], ...] = (

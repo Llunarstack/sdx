@@ -75,7 +75,12 @@ def main() -> int:
     ap.add_argument("--suite-pack", type=str, default="top_contender_proxy_v1")
     ap.add_argument("--steps", type=int, default=30, help="Benchmark sampling steps.")
     ap.add_argument("--seed-list", type=str, default="", help="Comma-separated seeds used by benchmark_suite.")
-    ap.add_argument("--robustness-penalty", type=float, default=0.15, help="Penalty weight for seed variance in leaderboard ranking.")
+    ap.add_argument(
+        "--robustness-penalty",
+        type=float,
+        default=0.15,
+        help="Penalty weight for seed variance in leaderboard ranking.",
+    )
     ap.add_argument("--num", type=int, default=3, help="Benchmark candidates per case.")
     ap.add_argument("--pick-best", type=str, default="auto")
     ap.add_argument("--preference-min-margin", type=float, default=0.08)

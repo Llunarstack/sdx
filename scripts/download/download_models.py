@@ -126,7 +126,9 @@ def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=
 
 def main():
     parser = argparse.ArgumentParser(description="Download best HF models for image output: T5, VAE, LLMs into model/.")
-    parser.add_argument("--model-dir", type=str, default=MODEL_DIR_DEFAULT, help="Base dir (default: project pretrained/)")
+    parser.add_argument(
+        "--model-dir", type=str, default=MODEL_DIR_DEFAULT, help="Base dir (default: project pretrained/)"
+    )
     parser.add_argument(
         "--t5", action="store_true", help="Download T5 text encoders: XXL (best), XL, Large (prompt understanding)"
     )

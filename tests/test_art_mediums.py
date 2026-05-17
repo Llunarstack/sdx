@@ -46,7 +46,9 @@ def test_detect_medium_ids_with_aliases():
 
 
 def test_detect_new_storyboard_and_diorama_aliases():
-    ids = detect_medium_ids("animatic storyboard for action beats with miniature photo lighting", include_photography=True)
+    ids = detect_medium_ids(
+        "animatic storyboard for action beats with miniature photo lighting", include_photography=True
+    )
     assert "storyboard_sketch" in ids
     assert "miniature_diorama_photo" in ids
 
@@ -73,4 +75,3 @@ def test_guidance_adds_pbr_terms_for_3d():
     assert "physically based shading logic" in pos.lower()
     assert "roughness/metalness" in pos.lower()
     assert "inconsistent brdf" in neg.lower()
-

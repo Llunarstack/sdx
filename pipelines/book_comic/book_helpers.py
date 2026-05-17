@@ -266,9 +266,7 @@ def audit_book_run_flags(
     bw = int(beam_width or 0)
 
     if pick_metric_requires_vit_ckpt(pb) and not pv:
-        warnings.append(
-            f"--pick-best {pb!r} expects --pick-vit-ckpt (ViT scores fall back to neutral 0.5 without it)."
-        )
+        warnings.append(f"--pick-best {pb!r} expects --pick-vit-ckpt (ViT scores fall back to neutral 0.5 without it).")
     if bw > 1 and sc != 1:
         warnings.append(
             f"--beam-width {bw} is intended with a single latent branch (--sample-candidates 1); "
@@ -287,9 +285,7 @@ def audit_book_run_flags(
     except (TypeError, ValueError):
         cme = 0
     if cme > 0:
-        warnings.append(
-            f"--clip-monitor-every {cme} decodes x0 during sampling for CLIP alignment (very slow)."
-        )
+        warnings.append(f"--clip-monitor-every {cme} decodes x0 during sampling for CLIP alignment (very slow).")
     adh = str(adherence_pack or "none").strip().lower()
     pbv = str(pick_best or "").strip().lower()
     if adh in ("standard", "strict") and pbv in VIT_DEPENDENT_PICK_METRICS and not pick_vit_use_adherence:
@@ -577,14 +573,19 @@ def extend_sample_py_adapter_control_cmd(cmd: List[str], args: Any) -> None:
 
     if bool(getattr(args, "holy_grail", False)):
         cmd.append("--holy-grail")
-        cmd.extend(["--holy-grail-cfg-early-ratio", str(float(getattr(args, "holy_grail_cfg_early_ratio", 0.72) or 0.72))])
+        cmd.extend(
+            ["--holy-grail-cfg-early-ratio", str(float(getattr(args, "holy_grail_cfg_early_ratio", 0.72) or 0.72))]
+        )
         cmd.extend(["--holy-grail-cfg-late-ratio", str(float(getattr(args, "holy_grail_cfg_late_ratio", 1.0) or 1.0))])
         cmd.extend(["--holy-grail-control-mult", str(float(getattr(args, "holy_grail_control_mult", 1.0) or 1.0))])
         cmd.extend(["--holy-grail-adapter-mult", str(float(getattr(args, "holy_grail_adapter_mult", 1.0) or 1.0))])
         if bool(getattr(args, "holy_grail_no_frontload_control", False)):
             cmd.append("--holy-grail-no-frontload-control")
         cmd.extend(
-            ["--holy-grail-late-adapter-boost", str(float(getattr(args, "holy_grail_late_adapter_boost", 1.15) or 1.15))]
+            [
+                "--holy-grail-late-adapter-boost",
+                str(float(getattr(args, "holy_grail_late_adapter_boost", 1.15) or 1.15)),
+            ]
         )
         cmd.extend(["--holy-grail-cads-strength", str(float(getattr(args, "holy_grail_cads_strength", 0.0) or 0.0))])
         cmd.extend(
@@ -634,7 +635,10 @@ def extend_sample_py_adapter_control_cmd(cmd: List[str], args: Any) -> None:
         cmd.extend(
             [
                 "--reference-clip-model",
-                str(getattr(args, "reference_clip_model", "openai/clip-vit-large-patch14") or "openai/clip-vit-large-patch14"),
+                str(
+                    getattr(args, "reference_clip_model", "openai/clip-vit-large-patch14")
+                    or "openai/clip-vit-large-patch14"
+                ),
             ]
         )
     rap = str(getattr(args, "reference_adapter_pt", "") or "").strip()
@@ -755,9 +759,7 @@ def extend_sample_py_sdx_enhance_cmd(cmd: List[str], args: Any) -> None:
     rg = str(getattr(args, "refine_gate", "off") or "off").strip().lower()
     if rg != "off":
         cmd.extend(["--refine-gate", rg])
-        cmd.extend(
-            ["--refine-gate-threshold", str(float(getattr(args, "refine_gate_threshold", 0.62) or 0.62))]
-        )
+        cmd.extend(["--refine-gate-threshold", str(float(getattr(args, "refine_gate_threshold", 0.62) or 0.62))])
 
 
 def sdx_enhance_argv_for_sample(args: Any) -> List[str]:
@@ -785,7 +787,12 @@ def extend_sample_py_adherence_quality_cmd(cmd: List[str], args: Any) -> None:
     if cgt > 0.0:
         cmd.extend(["--clip-guard-threshold", str(cgt)])
         cmd.extend(
-            ["--clip-guard-model", str(getattr(args, "clip_guard_model", "openai/clip-vit-base-patch32") or "openai/clip-vit-base-patch32")]
+            [
+                "--clip-guard-model",
+                str(
+                    getattr(args, "clip_guard_model", "openai/clip-vit-base-patch32") or "openai/clip-vit-base-patch32"
+                ),
+            ]
         )
         cmd.extend(["--clip-guard-t-frac", str(float(getattr(args, "clip_guard_t_frac", 0.22) or 0.22))])
         cmd.extend(["--clip-guard-steps", str(int(getattr(args, "clip_guard_steps", 12) or 12))])

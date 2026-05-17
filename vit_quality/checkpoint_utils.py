@@ -83,4 +83,3 @@ def vit_model_parameter_report(model: ViTQualityAdherenceModel) -> Dict[str, int
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return {"total_parameters": int(total), "trainable_parameters": int(trainable)}
-

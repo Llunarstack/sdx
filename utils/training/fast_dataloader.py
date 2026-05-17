@@ -51,6 +51,7 @@ from torch.utils.data import DataLoader, Dataset
 # Optimal worker count heuristic
 # ---------------------------------------------------------------------------
 
+
 def optimal_num_workers(
     dataset_size: int,
     batch_size: int,
@@ -83,6 +84,7 @@ def optimal_num_workers(
 # ---------------------------------------------------------------------------
 # PrefetchDataLoader: overlaps H2D transfer with GPU compute
 # ---------------------------------------------------------------------------
+
 
 class PrefetchDataLoader:
     """
@@ -170,6 +172,7 @@ class PrefetchDataLoader:
 # build_fast_dataloader: factory with optimal defaults
 # ---------------------------------------------------------------------------
 
+
 def build_fast_dataloader(
     dataset: Dataset,
     batch_size: int,
@@ -228,6 +231,7 @@ def build_fast_dataloader(
         import random
 
         import numpy as np
+
         worker_seed = seed + worker_id
         random.seed(worker_seed)
         np.random.seed(worker_seed)
@@ -253,6 +257,7 @@ def build_fast_dataloader(
 # ---------------------------------------------------------------------------
 # LatentCacheBuilder: precompute VAE latents to disk
 # ---------------------------------------------------------------------------
+
 
 class LatentCacheBuilder:
     """
@@ -380,8 +385,7 @@ class LatentCacheBuilder:
 
         if show_progress:
             print(
-                f"Latent cache complete: cached={stats['cached']} "
-                f"skipped={stats['skipped']} failed={stats['failed']}"
+                f"Latent cache complete: cached={stats['cached']} skipped={stats['skipped']} failed={stats['failed']}"
             )
 
         return stats
@@ -390,6 +394,7 @@ class LatentCacheBuilder:
 # ---------------------------------------------------------------------------
 # AsyncCaptionPrefetcher: background T5 encoding
 # ---------------------------------------------------------------------------
+
 
 class AsyncCaptionPrefetcher:
     """
@@ -473,15 +478,19 @@ class AsyncCaptionPrefetcher:
                     self._output_cache[batch_id] = result
             except Exception as exc:
                 import logging
+
                 logging.getLogger(__name__).warning(
                     "AsyncCaptionPrefetcher: encoding failed for batch_id=%s: %s",
-                    batch_id, exc, exc_info=True,
+                    batch_id,
+                    exc,
+                    exc_info=True,
                 )
 
 
 # ---------------------------------------------------------------------------
 # DataLoaderProfiler: measure actual throughput
 # ---------------------------------------------------------------------------
+
 
 class DataLoaderProfiler:
     """

@@ -44,9 +44,7 @@ def _get_dll() -> Optional[ctypes.CDLL]:
         return None
 
 
-def finalize_inference_timesteps_native(
-    raw: np.ndarray, target_len: int, num_train: int
-) -> Optional[np.ndarray]:
+def finalize_inference_timesteps_native(raw: np.ndarray, target_len: int, num_train: int) -> Optional[np.ndarray]:
     """
     Match :func:`diffusion.inference_timesteps._resample_length_numpy` when the native
     library is built and accepts the inputs. Returns ``None`` if unavailable or on error.

@@ -39,4 +39,3 @@ def test_dissect_background_full_mask(tmp_path: Path) -> None:
     assert reqs
     assert parts and parts[0].mask_path and parts[0].crop_path
     assert any("background" in f.lower() for f in facts)
-

@@ -465,4 +465,3 @@ def style_guidance_fragments(
     neg = merge_csv_unique(*(s.negative_hints for s in specs))
     ap, an = _artist_reference_fragments(prompt, include_artist_refs)
     return merge_csv_unique(pos, ap, tp), merge_csv_unique(neg, an, tn)
-

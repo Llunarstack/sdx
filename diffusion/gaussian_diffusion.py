@@ -177,6 +177,7 @@ class GaussianDiffusion:
         # Use Rust SNR computation when available.
         try:
             from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust
+
             _snr = maybe_snr_from_alpha_cumprod_rust(alpha_cumprod)
             snr = _snr if _snr is not None else alpha_cumprod / (1.0 - alpha_cumprod + 1e-8)
         except Exception:
@@ -429,6 +430,7 @@ class GaussianDiffusion:
             # Use native CUDA percentile clamp when available.
             try:
                 from sdx_native.percentile_clamp_native import maybe_percentile_clamp_cuda
+
                 row_len = x.numel() // b
                 x_np = x.detach().float().cpu().numpy().reshape(b, row_len)
                 result = maybe_percentile_clamp_cuda(x_np, q_val, 0.0)
@@ -729,9 +731,7 @@ class GaussianDiffusion:
             else:
                 x = x + v1 * ds
 
-        if dynamic_threshold_percentile > 0 or (
-            dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
-        ):
+        if dynamic_threshold_percentile > 0 or (dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0):
             x = self._dynamic_threshold(
                 x,
                 percentile=dynamic_threshold_percentile,
@@ -891,7 +891,9 @@ class GaussianDiffusion:
         hg_enabled = bool(holy_grail_enable)
         cg_sched = str(cfg_guidance_schedule).strip() if cfg_guidance_schedule else ""
         if hg_enabled and cg_sched:
-            raise ValueError("cfg_guidance_schedule cannot be combined with holy_grail_enable; disable one or the other.")
+            raise ValueError(
+                "cfg_guidance_schedule cannot be combined with holy_grail_enable; disable one or the other."
+            )
         if flow_matching_sample:
             if return_intermediate_state:
                 raise ValueError("return_intermediate_state is not supported for flow_matching_sample")
@@ -1189,13 +1191,7 @@ class GaussianDiffusion:
                             cfg_box[0] = float(cfg_scale) * (1.0 + v_boost)
                         else:
                             cfg_box[0] = float(cfg_scale)
-                if (
-                    p_int > 0
-                    and p_fn is not None
-                    and p_boost > 0.0
-                    and x_0_pred is not None
-                    and (i + 1) % p_int == 0
-                ):
+                if p_int > 0 and p_fn is not None and p_boost > 0.0 and x_0_pred is not None and (i + 1) % p_int == 0:
                     try:
                         sim = float(p_fn(int(i), x_0_pred))
                         if sim < p_thr:

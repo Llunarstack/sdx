@@ -150,9 +150,7 @@ def _apply_photo_realism(prompt: str, args: Any) -> Tuple[str, str, dict]:
         meta["_is_photo_prompt"] = bool(is_photographic_prompt(prompt))
     except Exception:
         pass
-    if bool(getattr(args, "realism_autopilot", True)) and (
-        meta["_is_photo_prompt"] or meta["_pr_pack_ef"] != "none"
-    ):
+    if bool(getattr(args, "realism_autopilot", True)) and (meta["_is_photo_prompt"] or meta["_pr_pack_ef"] != "none"):
         try:
             rp = recommend_photo_post_profile(
                 photo_realism_pack=meta["_pr_pack_ef"],
@@ -160,7 +158,10 @@ def _apply_photo_realism(prompt: str, args: Any) -> Tuple[str, str, dict]:
                 photo_filter=meta["_pr_filter_ef"],
                 photo_grain_style=meta["_pr_grain_ef"],
             )
-            if str(meta["_pr_grain_ef"]).lower() == "none" and str(rp.get("photo_grain_style", "none")).lower() != "none":
+            if (
+                str(meta["_pr_grain_ef"]).lower() == "none"
+                and str(rp.get("photo_grain_style", "none")).lower() != "none"
+            ):
                 meta["_pr_grain_ef"] = str(rp["photo_grain_style"])
                 args.photo_grain_style = meta["_pr_grain_ef"]
             if abs(float(getattr(args, "photo_post_strength", 0.6) or 0.6) - 0.6) < 1e-6:
@@ -210,10 +211,10 @@ def apply_training_guidance_pair(
     include_art_guidance_photography: bool = True,
 ) -> Tuple[str, str]:
     """
-  Training-side helper: same guidance fragments as ``sample.py`` / ``t2i_dataset`` (pos + neg).
+    Training-side helper: same guidance fragments as ``sample.py`` / ``t2i_dataset`` (pos + neg).
 
-  Mirrors ``apply_shortcomings_to_caption_pair`` + art + style without duplicating config logic.
-  """
+    Mirrors ``apply_shortcomings_to_caption_pair`` + art + style without duplicating config logic.
+    """
     ctx = PromptContext(
         positive=caption,
         negative=negative_caption or "",

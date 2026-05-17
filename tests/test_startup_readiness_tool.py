@@ -36,7 +36,9 @@ def test_build_readiness_report_blocked_on_missing_required_packages(monkeypatch
 def test_build_readiness_report_checks_dataset_manifest(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(sr, "_check_packages", lambda req, opt: {"required": {"torch": True}, "optional": {}})
     monkeypatch.setattr(sr, "_gather_native_status", lambda: {})
-    monkeypatch.setattr(sr, "_gpu_status", lambda: {"torch_imported": True, "cuda_available": True, "device_count": 1, "devices": []})
+    monkeypatch.setattr(
+        sr, "_gpu_status", lambda: {"torch_imported": True, "cuda_available": True, "device_count": 1, "devices": []}
+    )
     repo_root = tmp_path
     (repo_root / "sample.py").write_text("", encoding="utf-8")
     (repo_root / "train.py").write_text("", encoding="utf-8")

@@ -304,7 +304,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--qk-norm",
         action="store_true",
         help="Enable QK-norm (SD3.5-style per-head normalisation before attention). "
-             "Improves stability at high resolution. Incompatible with checkpoints trained without it.",
+        "Improves stability at high resolution. Incompatible with checkpoints trained without it.",
     )
     parser.add_argument(
         "--lora-layers",
@@ -470,7 +470,9 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         default=0,
         help="torch.set_num_interop_threads(N); 0=default.",
     )
-    parser.add_argument("--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training")
+    parser.add_argument(
+        "--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--caption-dropout-schedule",
@@ -571,7 +573,9 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Aux loss: align DiT block-0 cross-attention with JSONL grounding_mask (VP-DDPM only; mixed masked/unmasked batches supported)",
     )
-    parser.add_argument("--attn-grounding-token-start", type=int, default=0, help="Token slice start for grounding loss")
+    parser.add_argument(
+        "--attn-grounding-token-start", type=int, default=0, help="Token slice start for grounding loss"
+    )
     parser.add_argument(
         "--attn-grounding-token-end",
         type=int,
@@ -718,8 +722,17 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--book-ar-profile",
         type=str,
         default="auto",
-        choices=["auto", "none", "layout", "strong", "zorder", "vit_layout", "vit_strong", "comic_snake", "cinema_spiral"],
+        choices=[
+            "auto",
+            "none",
+            "layout",
+            "strong",
+            "zorder",
+            "vit_layout",
+            "vit_strong",
+            "comic_snake",
+            "cinema_spiral",
+        ],
         help="When --book-train-preset is set: one-flag AR block layout (see pipelines/book_comic/README.md).",
     )
     return parser
-

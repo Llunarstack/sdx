@@ -43,9 +43,7 @@ class _VisionTextCrossAttention(nn.Module):
             raise ValueError("model_dim must be divisible by num_heads for cross-attention")
         self.q_norm = nn.LayerNorm(int(model_dim))
         self.kv_norm = nn.LayerNorm(int(model_dim))
-        self.mha = nn.MultiheadAttention(
-            int(model_dim), int(num_heads), dropout=float(dropout), batch_first=True
-        )
+        self.mha = nn.MultiheadAttention(int(model_dim), int(num_heads), dropout=float(dropout), batch_first=True)
         self.drop = nn.Dropout(float(dropout))
 
     def forward(
@@ -142,9 +140,7 @@ class NativeMultimodalTransformer(nn.Module):
             norm_first=True,
         )
         try:
-            self.encoder = nn.TransformerEncoder(
-                encoder_layer, num_layers=int(num_layers), enable_nested_tensor=False
-            )
+            self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=int(num_layers), enable_nested_tensor=False)
         except TypeError:
             self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=int(num_layers))
 

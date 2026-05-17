@@ -46,4 +46,3 @@ def pytest_ignore_collect(collection_path, config) -> bool:  # type: ignore[no-u
         return True
 
     return False
-

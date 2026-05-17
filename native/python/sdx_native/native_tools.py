@@ -62,7 +62,9 @@ def run_rust_noise_schedule(args: List[str], *, timeout: float = 120) -> subproc
     """Run ``sdx-noise-schedule`` (e.g. ``[\"linear\", \"--steps\", \"1000\"]``)."""
     exe = rust_noise_schedule_exe()
     if not exe:
-        raise FileNotFoundError("Rust sdx-noise-schedule not built (cargo build --release in native/rust/sdx-noise-schedule)")
+        raise FileNotFoundError(
+            "Rust sdx-noise-schedule not built (cargo build --release in native/rust/sdx-noise-schedule)"
+        )
     return subprocess.run(
         [str(exe), *args],
         capture_output=True,

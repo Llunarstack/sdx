@@ -21,6 +21,7 @@ def run_command(cmd, check=True):
     with shlex so that shell=True is never used.
     """
     import shlex
+
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
     print(f"Running: {' '.join(cmd)}")

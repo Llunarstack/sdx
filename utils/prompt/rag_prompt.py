@@ -180,7 +180,9 @@ def load_facts_from_gen_searcher_json(
                     row = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                for fact in facts_from_gen_searcher_payload(row, max_entries=max_entries, max_item_chars=max_item_chars):
+                for fact in facts_from_gen_searcher_payload(
+                    row, max_entries=max_entries, max_item_chars=max_item_chars
+                ):
                     k = fact.lower()
                     if k in seen:
                         continue

@@ -53,7 +53,9 @@ def resize_square(pil: Image.Image, size_px: int, *, resample: int = Image.Resam
     return pil.resize((int(size_px), int(size_px)), resample=resample)
 
 
-def pil_rgb_to_tensor_m11(pil: Image.Image, *, device: Optional[torch.device] = None, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+def pil_rgb_to_tensor_m11(
+    pil: Image.Image, *, device: Optional[torch.device] = None, dtype: torch.dtype = torch.float32
+) -> torch.Tensor:
     """``(1, 3, H, W)`` in roughly ``[-1, 1]`` (SD VAE convention)."""
     arr = np.array(pil).astype(np.float32) / 255.0
     arr = (arr - 0.5) / 0.5
@@ -195,9 +197,7 @@ class LatentEditInit:
     @property
     def inpaint_freeze_known(self) -> bool:
         """True when MDM-style freeze tensors are all set (see ``sample.py`` ``--inpaint-mode mdm``)."""
-        return (
-            self.inpaint_mask is not None and self.inpaint_x0 is not None and self.inpaint_noise is not None
-        )
+        return self.inpaint_mask is not None and self.inpaint_x0 is not None and self.inpaint_noise is not None
 
     def sample_loop_kwargs(self) -> Dict[str, Any]:
         """Keyword subset to merge into ``diffusion.sample_loop``."""

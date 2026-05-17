@@ -48,4 +48,3 @@ def blend_self_cond(
     if self_cond.shape != x.shape:
         raise ValueError(f"self_cond shape {tuple(self_cond.shape)} must match x shape {tuple(x.shape)}")
     return (1.0 - s) * x + s * self_cond.to(dtype=x.dtype)
-
