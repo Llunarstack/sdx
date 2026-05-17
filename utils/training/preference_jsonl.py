@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PreferencePair:
     win_path: str
     lose_path: str

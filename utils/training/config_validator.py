@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import torch
+
 from config.train_config import TrainConfig
 
 
@@ -37,6 +38,9 @@ def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> Lis
 
     if cfg.manifest_jsonl and not Path(cfg.manifest_jsonl).exists():
         errors.append(f"Manifest JSONL does not exist: {cfg.manifest_jsonl}")
+
+    if getattr(cfg, "resume", None) and getattr(cfg, "init_from", None):
+        errors.append("Specify only one of resume or init_from (--resume vs --init-from)")
 
     # Model validation
     from models import DiT_models_text

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 project(sdx_latent VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -210,6 +210,7 @@ if(SDX_BUILD_CUDA)
 
   add_library(sdx_cuda_ml SHARED
     cuda/l2_normalize_rows.cu
+    cuda/style_pick_best.cu
   )
   set_property(TARGET sdx_cuda_ml PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
   target_compile_definitions(sdx_cuda_ml PRIVATE SDX_CUDA_L2_BUILD)

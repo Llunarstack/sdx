@@ -24,7 +24,7 @@ __all__ = [
 StyleGuidanceMode = Literal["none", "auto", "all"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StyleSpec:
     id: str
     keywords: Tuple[str, ...]

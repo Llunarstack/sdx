@@ -78,7 +78,9 @@ These are **optional**; Python paths work without them. They help **data quality
 | Module / tool | Role |
 |----------------|------|
 | [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py) | **NFKC** normalization, zero-width strip, comma-segment trim, **SHA256** or **xxhash** caption fingerprints, pos/neg token overlap helper |
-| [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py) | Canonical Python bridge for `sdx_native.text_hygiene` |
+| [`native/python/sdx_native/caption_csv_fast.py`](../native/python/sdx_native/caption_csv_fast.py) | Fast comma-caption split/merge/dedupe (Python; used by `utils.prompt.fast_paths`) |
+| [`native/rust/sdx-prompt-ops`](../native/rust/sdx-prompt-ops/) | Rust cdylib: caption merge + pos/neg filter (`sdx_native.prompt_ops_native`) |
+| [`utils/prompt/fast_paths.py`](../utils/prompt/fast_paths.py) | Single import for prompt hot paths (Rust when built, else optimized Python) |
 | [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py) | JSONL CLI: `--report-dups`, `--report-overlap`, `--normalize-samples` |
 | Training | `train.py --caption-unicode-normalize` → `TrainConfig.caption_unicode_normalize` → `Text2ImageDataset(caption_unicode_normalize=True)` |
 

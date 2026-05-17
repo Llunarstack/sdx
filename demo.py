@@ -27,7 +27,12 @@ import sys
 from pathlib import Path
 
 # Run from repo root
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(_ROOT))
+
+from utils.terminal import configure_stdio_for_console  # noqa: E402
+
+configure_stdio_for_console()
 
 _DEMO_PROMPT = (
     "cinematic portrait of a young woman, soft window light, "
@@ -80,6 +85,7 @@ def _convert_dit_imagenet_to_sdx(raw_pt: Path, out_pt: Path) -> Path:
     so sample.py can run it with --class-label for a quick smoke test.
     """
     import torch
+
     from config.train_config import TrainConfig
 
     if out_pt.exists() and out_pt.stat().st_size > 1_000_000:
@@ -271,8 +277,8 @@ def main():
     parser.add_argument("--no-download", action="store_true", help="Skip automatic weight download.")
     parser.add_argument(
         "--device",
-        default="cuda" if __import__("torch").cuda.is_available() else "cpu",
-        help="Device (default: cuda if available).",
+        default="",
+        help="Device: cuda or cpu (default: cuda when available).",
     )
     parser.add_argument(
         "--class-label",
@@ -280,7 +286,38 @@ def main():
         default=207,
         help="ImageNet class label for the demo checkpoint (default: 207 = golden retriever).",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print planned download/sampling steps without running generation.",
+    )
     args = parser.parse_args()
+
+    if not str(args.device).strip():
+        try:
+            import torch
+
+            args.device = "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception:
+            args.device = "cpu"
+
+    if args.dry_run:
+        ckpt_hint = args.ckpt or str(_DEMO_CKPT)
+        mode = "text-conditioned (sample.py)" if args.ckpt else "class-conditioned ImageNet DiT-XL/2"
+        print("SDX demo — dry run")
+        print(f"  Mode     : {mode}")
+        print(f"  Checkpoint: {ckpt_hint}")
+        print(f"  Device   : {args.device}")
+        print(f"  Output   : {args.out}")
+        if args.ckpt:
+            print(f"  Prompt   : {args.prompt}")
+            print(f"  Preset   : {args.preset} (Holy Grail)")
+        else:
+            print(f"  Class    : {args.class_label} (ImageNet; prompt ignored)")
+            print("  Note     : default demo does not use your --prompt until you pass --ckpt")
+        if not args.ckpt and not _DEMO_CKPT.exists() and not args.no_download:
+            print(f"  Download : {_HF_DIT_REPO}/{_HF_DIT_FILE} -> {_DEMO_CKPT_DIR}")
+        return
 
     print("=" * 60)
     print("  SDX demo")

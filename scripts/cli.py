@@ -15,7 +15,6 @@ import torch
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT))
 
-from config.train_config import TrainConfig
 from utils.analysis.data_analysis import DatasetAnalyzer
 from utils.checkpoint.checkpoint_manager import CheckpointManager, analyze_checkpoint_differences, merge_checkpoints
 from utils.generation.advanced_inference import PromptOptimizer
@@ -23,6 +22,8 @@ from utils.generation.master_integration import create_sdx_master, quick_generat
 from utils.modeling.model_viz import analyze_model_architecture, print_model_summary
 from utils.training.config_validator import estimate_memory_usage, suggest_optimizations, validate_train_config
 from utils.training.error_handling import validate_checkpoint
+
+from config.train_config import TrainConfig
 
 
 def cmd_analyze_dataset(args):
@@ -337,6 +338,10 @@ def cmd_generate_image(args):
             "enhance_output": not args.no_enhance,
             "quality_level": args.quality,
             "lora_configs": final_lora_configs,
+            "visual_design_domain": str(getattr(args, "visual_design_domain", "none") or "none"),
+            "visual_design_intensity": str(getattr(args, "visual_design_intensity", "standard") or "standard"),
+            "visual_design_negative_pack": bool(getattr(args, "visual_design_negative_pack", False)),
+            "visual_design_preset": str(getattr(args, "visual_design_preset", "") or "").strip(),
         }
 
         # Character consistency support
@@ -1150,8 +1155,14 @@ def cmd_get_statistics(args):
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="SDX - Comprehensive CLI for diffusion model training and inference",
+        description="SDX utilities CLI (dataset analysis, checkpoints, character DB).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Canonical generation and training:\n"
+            "  python train.py --data-path datasets/train --results-dir results\n"
+            "  python sample.py --ckpt results/.../best.pt --prompt '...' --out out.png\n"
+            "  python demo.py\n"
+        ),
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -1236,6 +1247,45 @@ def main():
     generate_parser.add_argument("--has-text", action="store_true", help="Image contains text")
     generate_parser.add_argument("--no-enhance", action="store_true", help="Skip image enhancement")
     generate_parser.add_argument("--quality", choices=["low", "medium", "high"], default="high", help="Quality level")
+    try:
+        from utils.visual_design.compose import visual_design_cli_domain_choices as _vdd_gen_choices
+
+        _vdd_opts = _vdd_gen_choices()
+    except ImportError:
+
+        def _vdd_gen_choices():  # type: ignore[misc]
+            return (
+                "none",
+                "auto",
+                "ui_ux",
+                "architecture",
+                "stem",
+                "textbook",
+                "brand",
+                "infographic",
+                "packaging",
+                "wayfinding",
+                "general_product",
+                "editorial_layout",
+                "presentation_slide",
+                "technical_blueprint",
+                "fashion_flat",
+            )
+
+        _vdd_opts = _vdd_gen_choices()
+    generate_parser.add_argument("--visual-design-domain", type=str, default="none", choices=_vdd_opts)
+    generate_parser.add_argument(
+        "--visual-design-intensity", type=str, default="standard", choices=["lite", "standard", "strong"]
+    )
+    generate_parser.add_argument("--visual-design-negative-pack", action="store_true")
+    try:
+        from utils.visual_design.presets import preset_ids as _vdp_cli_ids
+
+        _vdp_cli = ("",) + _vdp_cli_ids()
+    except ImportError:
+        _vdp_cli = ("",)
+
+    generate_parser.add_argument("--visual-design-preset", type=str, default="", choices=_vdp_cli)
     generate_parser.add_argument("--save-metadata", action="store_true", help="Save generation metadata")
     generate_parser.set_defaults(func=cmd_generate_image)
 

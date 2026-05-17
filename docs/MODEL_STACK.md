@@ -20,6 +20,12 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | LAION Aesthetic v2 | `pretrained/LAION-Aesthetic-v2` |
 | CodeFormer (face restore helper) | `pretrained/CodeFormer` |
 | AnyDoor reference weights | `pretrained/AnyDoor-Ref` |
+| HPSv2 (preference scorer) | `pretrained/HPSv2-hf` or `adams-story/HPSv2-hf` |
+| BLIP captioning (base) | `pretrained/BLIP-image-captioning-base` or `Salesforce/blip-image-captioning-base` |
+| Kosmos-2 VLM | `pretrained/Kosmos-2-patch14-224` or `microsoft/kosmos-2-patch14-224` |
+| CRAFT text detector | `pretrained/CRAFT-text-detector` or `boomb0om/CRAFT-text-detector` |
+| OwlViT (open-vocab detector) | `pretrained/OwlViT-base-patch32` or `google/owlvit-base-patch32` |
+| Donut (doc/layout understanding) | `pretrained/Donut-base` or `naver-clova-ix/donut-base` |
 
 ## How this maps to the SDX pipeline
 

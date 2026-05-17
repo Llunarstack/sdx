@@ -40,6 +40,9 @@ jobs:
             > "$OUT" || true
           python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; ec=int(s.get('errorCount',0)); wc=int(s.get('warningCount',0)); print(f\"basedpyright: {ec} errors, {wc} warnings\"); sys.exit(1 if ec else 0)" "$OUT"
 
+      - name: Smoke imports
+        run: python -m scripts.tools smoke_imports
+
       - name: Verify doc links
         run: python -m scripts.tools verify_doc_links
 

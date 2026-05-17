@@ -1,5 +1,5 @@
 # Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, ε/v/x0-pred, DDIM, CFG).
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 import numpy as np
 import torch
@@ -12,8 +12,64 @@ from .sampling_utils import norm_thresholding, spatial_norm_thresholding
 from .schedules import get_beta_schedule
 from .spectral_sfp import spectral_sfp_per_sample_loss
 
-INFERENCE_SOLVERS = ("ddim", "heun")
+# Canonical VP update backends inside ``sample_loop`` (extended via aliases below).
+_SOLVER_DDIM = "ddim"
+_SOLVER_HEUN = "heun"
+
+INFERENCE_SOLVERS = (_SOLVER_DDIM, _SOLVER_HEUN)
 FLOW_INFERENCE_SOLVERS = ("euler", "heun")
+
+INFERENCE_SOLVER_ALIASES: Dict[str, str] = {
+    "ddim": _SOLVER_DDIM,
+    "euler": _SOLVER_DDIM,
+    "euler_explicit": _SOLVER_DDIM,
+    "euler_explicit_1": _SOLVER_DDIM,
+    "edm_euler": _SOLVER_DDIM,
+    "edm-euler": _SOLVER_DDIM,
+    "edm_euler_a": _SOLVER_DDIM,
+    "dpmsolver_pp_1": _SOLVER_DDIM,
+    "heun": _SOLVER_HEUN,
+    "heun_2": _SOLVER_HEUN,
+    "edm_heun": _SOLVER_HEUN,
+    "edm-heun": _SOLVER_HEUN,
+    "predictor_corrector": _SOLVER_HEUN,
+    "predictor-corrector": _SOLVER_HEUN,
+    "pc": _SOLVER_HEUN,
+    "pc2": _SOLVER_HEUN,
+    "rk2": _SOLVER_HEUN,
+}
+
+FLOW_SOLVER_ALIASES = {
+    "euler": "euler",
+    "euler_forward": "euler",
+    "heun": "heun",
+    "edm_heun": "heun",
+    "edm-heun": "heun",
+    "rk2": "heun",
+    "predictor_corrector": "heun",
+    "predictor-corrector": "heun",
+    "midpoint_pc": "heun",
+}
+
+
+def canonicalize_vp_solver(name: str) -> str:
+    raw = str(name).lower().strip()
+    if raw in INFERENCE_SOLVER_ALIASES:
+        return INFERENCE_SOLVER_ALIASES[raw]
+    keys = ", ".join(sorted(INFERENCE_SOLVER_ALIASES.keys()))
+    raise ValueError(f"Unknown VP inference solver {name!r}. Known aliases: {keys}")
+
+
+def list_inference_solver_aliases() -> tuple:
+    return tuple(sorted(INFERENCE_SOLVER_ALIASES.keys()))
+
+
+def canonicalize_flow_solver(name: str) -> str:
+    raw = str(name).lower().strip()
+    if raw in FLOW_SOLVER_ALIASES:
+        return FLOW_SOLVER_ALIASES[raw]
+    keys = ", ".join(sorted(FLOW_SOLVER_ALIASES.keys()))
+    raise ValueError(f"Unknown flow solver {name!r}. Known aliases: {keys}")
 
 
 def _control_guidance_scale_for_step(
@@ -109,10 +165,13 @@ class GaussianDiffusion:
         beta = get_beta_schedule(beta_schedule, num_timesteps)
         alpha = 1.0 - beta
         # Use Rust cdylib when built — avoids NumPy cumprod overhead at startup.
+        # ``maybe_alpha_cumprod_rust`` expects betas (it computes Π(1 − βₜ)); do not pass (1 − β).
         try:
             from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust
-            _ac = maybe_alpha_cumprod_rust(alpha)
-            alpha_cumprod = _ac if _ac is not None else np.cumprod(alpha)
+
+            beta_f64 = np.asarray(beta, dtype=np.float64)
+            _ac = maybe_alpha_cumprod_rust(beta_f64)
+            alpha_cumprod = _ac if _ac is not None else np.cumprod(1.0 - beta_f64)
         except Exception:
             alpha_cumprod = np.cumprod(alpha)
         # Use Rust SNR computation when available.
@@ -326,15 +385,16 @@ class GaussianDiffusion:
         legacy behavior). Other schedule names ignore respacing (e.g. ``euler`` with respacing
         still uses the euler index path).
         """
-        name = str(scheduler if scheduler is not None else timestep_schedule).lower().strip()
+        raw = str(scheduler if scheduler is not None else timestep_schedule).strip()
+        name_lc = raw.lower()
         ts_resp = getattr(self, "timestep_respacing_str", None)
-        if ts_resp and name == "ddim":
+        if ts_resp and name_lc == "ddim" and not name_lc.startswith("indices:"):
             steps = space_timesteps(self.num_timesteps, ts_resp)
             self.timesteps = torch.from_numpy(steps[::-1].copy().astype(np.int64))
             return self.timesteps
         ac = self.alpha_cumprod.detach().cpu().numpy()
         steps = build_inference_timesteps(
-            name,
+            raw,
             self.num_timesteps,
             num_inference_steps,
             ac,
@@ -464,6 +524,11 @@ class GaussianDiffusion:
         holy_grail_unsharp_amount: float = 0.0,
         holy_grail_clamp_quantile: float = 0.0,
         holy_grail_clamp_floor: float = 1.0,
+        cfg_guidance_schedule: Optional[str] = None,
+        cfg_guidance_linear_start_multiplier: float = 0.7,
+        cfg_guidance_linear_end_multiplier: float = 1.0,
+        cfg_guidance_cosine_min_multiplier: float = 0.65,
+        cfg_guidance_cosine_max_multiplier: float = 1.0,
     ) -> torch.Tensor:
         """
         Sample to match ``diffusion.flow_matching.flow_matching_per_sample_losses`` training:
@@ -480,7 +545,8 @@ class GaussianDiffusion:
         denom = max(T - 1, 1)
         n = max(1, int(num_inference_steps))
         B = int(shape[0])
-        fs = str(flow_solver).lower().strip()
+        cg_gs_fm = str(cfg_guidance_schedule).strip() if cfg_guidance_schedule else ""
+        fs = canonicalize_flow_solver(flow_solver)
 
         if x_init is not None and start_timestep is not None:
             t0 = int(start_timestep)
@@ -527,15 +593,61 @@ class GaussianDiffusion:
                 late_adapter_boost=float(holy_grail_late_adapter_boost),
             )
 
+        def _flow_guided_cs(step_idx: int, t_batch_bt: torch.Tensor) -> float:
+            from diffusion.cfg_schedulers import (
+                cfg_multiplier_snr_aware_multiplier,
+                cfg_scale_cosine_ramp,
+                cfg_scale_linear,
+                cfg_scale_piecewise,
+            )
+
+            vr = float(cfg_box[0]) / float(max(abs(float(cfg_scale)), 1e-8))
+            if cg_gs_fm:
+                gn0 = cg_gs_fm.lower()
+                bs_f = float(cfg_scale)
+                tot_steps = n
+                if gn0 == "linear":
+                    sa = cfg_scale_linear(
+                        bs_f,
+                        step_idx,
+                        tot_steps,
+                        start_multiplier=float(cfg_guidance_linear_start_multiplier),
+                        end_multiplier=float(cfg_guidance_linear_end_multiplier),
+                    )
+                elif gn0 in ("cosine", "cosine_ramp"):
+                    sa = cfg_scale_cosine_ramp(
+                        bs_f,
+                        step_idx,
+                        tot_steps,
+                        min_multiplier=float(cfg_guidance_cosine_min_multiplier),
+                        max_multiplier=float(cfg_guidance_cosine_max_multiplier),
+                    )
+                elif gn0 == "piecewise":
+                    sa = cfg_scale_piecewise(bs_f, step_idx, tot_steps)
+                elif gn0 in ("snr", "snr_aware"):
+                    t_ix = int(t_batch_bt.reshape(-1)[0].detach().cpu().item())
+                    ac_a = float(self.alpha_cumprod[t_ix])
+                    mu = cfg_multiplier_snr_aware_multiplier(ac_a)
+                    sa = bs_f * mu
+                else:
+                    raise ValueError(
+                        "Unknown cfg_guidance_schedule "
+                        f"{cfg_guidance_schedule!r}; use linear, cosine, piecewise, snr (or unset)."
+                    )
+                return float(sa) * vr
+            return float(cfg_scale) * vr
+
         def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor, step_idx: int) -> torch.Tensor:
-            cs = cfg_box[0]
             mk_c = model_kwargs_cond
             mk_u = model_kwargs_uncond
+            plan = None
             p = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
             if hg_enabled:
                 plan = build_holy_grail_step_plan(recipe=hg_recipe, step_index=step_idx, total_steps=n)
                 dyn = 1.0 if float(cfg_scale) == 0.0 else float(cfg_box[0]) / float(cfg_scale)
                 cs = float(plan.cfg_scale) * dyn
+            else:
+                cs = _flow_guided_cs(step_idx, t_batch)
             if has_control:
                 sf = _control_guidance_scale_for_step(
                     1.0,
@@ -567,7 +679,7 @@ class GaussianDiffusion:
                         power=float(holy_grail_cads_power),
                     )
                     mk_c["encoder_hidden_states"] = apply_condition_noise(emb, std=sig)
-            if use_spec_cfg and cs != 1.0 and cs > 0 and mk_u:
+            if use_spec_cfg and cs != 1.0 and mk_u:
                 from utils.generation.speculative_denoise import speculative_cfg_prediction
 
                 return speculative_cfg_prediction(
@@ -582,7 +694,7 @@ class GaussianDiffusion:
                     close_thresh=spec_thr,
                     blend_on_close=spec_blend,
                 )
-            if cs != 1.0 and cs > 0 and mk_u:
+            if cs != 1.0 and mk_u:
                 out_cond = model(x_in, t_batch, **mk_c)
                 out_uncond = model(x_in, t_batch, **mk_u)
                 if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
@@ -666,6 +778,11 @@ class GaussianDiffusion:
         timestep_schedule=None,
         solver="ddim",
         karras_rho: float = 7.0,
+        cfg_guidance_schedule: Optional[str] = None,
+        cfg_guidance_linear_start_multiplier: float = 0.7,
+        cfg_guidance_linear_end_multiplier: float = 1.0,
+        cfg_guidance_cosine_min_multiplier: float = 0.65,
+        cfg_guidance_cosine_max_multiplier: float = 1.0,
         # Optional: masked/inpainting-style freezing of known regions.
         # This approximates MDM-style "fill the blanks" behavior at inference:
         # after each denoise step, unmasked latents are reset to q_sample(x0_known, t).
@@ -731,9 +848,14 @@ class GaussianDiffusion:
         (see ``diffusion.inference_timesteps``). ``timestep_schedule`` overrides ``scheduler``
         when set.
 
-        **Solver** (``solver``): ``ddim`` = one DDIM-style update per step (default);
-        ``heun`` = predictor–corrector with two model evaluations per step (often sharper,
-        ~2× forward cost when SAG is off).
+        **Solver** (``solver``): canonical backends ``ddim`` (single DDIM update) and ``heun``
+        (two evals per step); many aliases are accepted (see ``canonicalize_vp_solver``, ``list_inference_solver_aliases``).
+
+        **CFG over time**: ``cfg_guidance_schedule`` in {``linear``, ``cosine``, ``piecewise``, ``snr``}
+        ramps effective CFG vs denoise progress (ignored when ``holy_grail_enable``; incompatible with HG).
+
+        **Timesteps**: besides registered names (``ddim``, ``euler``, ``karras_rho``, …), use
+        ``indices:999,950,...,0`` for an explicit descending index path (see ``diffusion.inference_timesteps``).
 
         cfg_rescale: ComfyUI-style; if > 0, rescale CFG delta to reduce over-saturation (e.g. 0.7).
         dynamic_threshold_percentile: if > 0, clamp x_0_pred to this percentile (e.g. 99.5).
@@ -766,6 +888,10 @@ class GaussianDiffusion:
         do_inpaint = bool(
             inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
         )
+        hg_enabled = bool(holy_grail_enable)
+        cg_sched = str(cfg_guidance_schedule).strip() if cfg_guidance_schedule else ""
+        if hg_enabled and cg_sched:
+            raise ValueError("cfg_guidance_schedule cannot be combined with holy_grail_enable; disable one or the other.")
         if flow_matching_sample:
             if return_intermediate_state:
                 raise ValueError("return_intermediate_state is not supported for flow_matching_sample")
@@ -774,7 +900,7 @@ class GaussianDiffusion:
                     "flow_matching_sample is not compatible with inpaint_freeze_known (VP q_sample trajectory). "
                     "Use VP sampling or disable structured inpaint."
                 )
-            fs_flow = str(flow_solver).lower().strip()
+            fs_flow = canonicalize_flow_solver(flow_solver)
             if fs_flow not in FLOW_INFERENCE_SOLVERS:
                 raise ValueError(f"flow_solver must be one of {FLOW_INFERENCE_SOLVERS}, got {flow_solver!r}")
             return self._sample_loop_flow_matching(
@@ -814,11 +940,14 @@ class GaussianDiffusion:
                 holy_grail_unsharp_amount=float(holy_grail_unsharp_amount),
                 holy_grail_clamp_quantile=float(holy_grail_clamp_quantile),
                 holy_grail_clamp_floor=float(holy_grail_clamp_floor),
+                cfg_guidance_schedule=cg_sched or None,
+                cfg_guidance_linear_start_multiplier=float(cfg_guidance_linear_start_multiplier),
+                cfg_guidance_linear_end_multiplier=float(cfg_guidance_linear_end_multiplier),
+                cfg_guidance_cosine_min_multiplier=float(cfg_guidance_cosine_min_multiplier),
+                cfg_guidance_cosine_max_multiplier=float(cfg_guidance_cosine_max_multiplier),
             )
-        ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).lower().strip()
-        sol = str(solver).lower().strip()
-        if sol not in INFERENCE_SOLVERS:
-            raise ValueError(f"Unknown solver {solver!r}. Choose one of: {INFERENCE_SOLVERS}")
+        ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).strip()
+        sol_backend = canonicalize_vp_solver(solver)
         if do_inpaint:
             inpaint_mask = inpaint_mask.to(device=device, dtype=dtype)
             inpaint_x0 = inpaint_x0.to(device=device, dtype=dtype)
@@ -855,7 +984,6 @@ class GaussianDiffusion:
         use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
         has_control = "control_image" in model_kwargs_cond
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
-        hg_enabled = bool(holy_grail_enable)
         if hg_enabled:
             from diffusion.sampling_extras import (
                 HolyGrailRecipe,
@@ -886,15 +1014,61 @@ class GaussianDiffusion:
                 last_t_next_val = int(t_next[0])
             x_prev = x
 
+            def _vp_guided_cs(step_idx: int, t_batch_bt: torch.Tensor) -> float:
+                from diffusion.cfg_schedulers import (
+                    cfg_multiplier_snr_aware_multiplier,
+                    cfg_scale_cosine_ramp,
+                    cfg_scale_linear,
+                    cfg_scale_piecewise,
+                )
+
+                vr = float(cfg_box[0]) / float(max(abs(float(cfg_scale)), 1e-8))
+                if cg_sched:
+                    gn0 = cg_sched.lower()
+                    bs_f = float(cfg_scale)
+                    tot_steps = len(timesteps)
+                    if gn0 == "linear":
+                        sa = cfg_scale_linear(
+                            bs_f,
+                            step_idx,
+                            tot_steps,
+                            start_multiplier=float(cfg_guidance_linear_start_multiplier),
+                            end_multiplier=float(cfg_guidance_linear_end_multiplier),
+                        )
+                    elif gn0 in ("cosine", "cosine_ramp"):
+                        sa = cfg_scale_cosine_ramp(
+                            bs_f,
+                            step_idx,
+                            tot_steps,
+                            min_multiplier=float(cfg_guidance_cosine_min_multiplier),
+                            max_multiplier=float(cfg_guidance_cosine_max_multiplier),
+                        )
+                    elif gn0 == "piecewise":
+                        sa = cfg_scale_piecewise(bs_f, step_idx, tot_steps)
+                    elif gn0 in ("snr", "snr_aware"):
+                        t_ix = int(t_batch_bt.reshape(-1)[0].detach().cpu().item())
+                        ac_a = float(self.alpha_cumprod[t_ix])
+                        mu = cfg_multiplier_snr_aware_multiplier(ac_a)
+                        sa = bs_f * mu
+                    else:
+                        raise ValueError(
+                            "Unknown cfg_guidance_schedule "
+                            f"{cfg_guidance_schedule!r}; use linear, cosine, piecewise, snr (or unset)."
+                        )
+                    return float(sa) * vr
+                return float(cfg_scale) * vr
+
             def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
-                cs = cfg_box[0]
                 mk_c = model_kwargs_cond
                 mk_u = model_kwargs_uncond
+                plan = None
                 p = 1.0 if len(timesteps) <= 1 else float(i) / float(max(len(timesteps) - 1, 1))
                 if hg_enabled:
                     plan = build_holy_grail_step_plan(recipe=hg_recipe, step_index=i, total_steps=len(timesteps))
                     dyn = 1.0 if float(cfg_scale) == 0.0 else float(cfg_box[0]) / float(cfg_scale)
                     cs = float(plan.cfg_scale) * dyn
+                else:
+                    cs = _vp_guided_cs(i, t_batch)
                 if has_control:
                     sf = _control_guidance_scale_for_step(
                         1.0,
@@ -928,7 +1102,7 @@ class GaussianDiffusion:
                             power=float(holy_grail_cads_power),
                         )
                         mk_c["encoder_hidden_states"] = apply_condition_noise(emb, std=sig)
-                if use_spec_cfg and cs != 1.0 and cs > 0 and mk_u:
+                if use_spec_cfg and cs != 1.0 and mk_u:
                     from utils.generation.speculative_denoise import speculative_cfg_prediction
 
                     return speculative_cfg_prediction(
@@ -943,7 +1117,7 @@ class GaussianDiffusion:
                         close_thresh=spec_thr,
                         blend_on_close=spec_blend,
                     )
-                if cs != 1.0 and cs > 0 and mk_u:
+                if cs != 1.0 and mk_u:
                     out_cond = model(x_in, t_batch, **mk_c)
                     out_uncond = model(x_in, t_batch, **mk_u)
                     if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
@@ -970,7 +1144,7 @@ class GaussianDiffusion:
 
             out1 = _apply_sag(x, t, _model_prediction(x, t))
             if i + 1 < len(timesteps):
-                if sol == "heun":
+                if sol_backend == _SOLVER_HEUN:
                     x_euler, _ = self.step_with_pred(
                         x,
                         t,

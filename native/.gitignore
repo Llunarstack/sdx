@@ -1,0 +1,10 @@
+# CMake outputs (always under native/cpp, never commit)
+cpp/build/
+cpp/build-compile-db/
+cpp/cmake-build-*/
+
+# Zig artifact dirs (per-crate zig-out is already under zig/*/zig-out)
+zig/**/.zig-cache/
+
+# Stray / mistyped Cargo target dirs
+**/targetB1KiDT/

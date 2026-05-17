@@ -2,9 +2,7 @@
 Prompt fragments for **hard** sequential-art cases: mature-rated narrative fidelity (when NSFW
 stack is enabled), surreal or non-human designs, crowds, reflections, and extreme perspective.
 
-These strings are **craft / rendering** guidance. They do not substitute for ``--safety-mode``,
-``--nsfw-pack`` in ``sample.py``—pair this module with those flags when
-you need uncensored adult pipelines.
+These strings are **craft / rendering** guidance for uncensored sequential-art runs.
 """
 
 from __future__ import annotations
@@ -103,15 +101,6 @@ CHALLENGE_NEGATIVE_ADDON = (
 )
 
 
-def _safety_is_nsfw(safety_mode: str) -> bool:
-    return str(safety_mode or "").strip().lower() == "nsfw"
-
-
-def _content_rating_allows_mature(root: Mapping[str, Any]) -> bool:
-    r = str(root.get("content_rating", "") or "").strip().lower()
-    return r in ("mature", "unrestricted", "adult", "nsfw")
-
-
 def merge_challenge_tags(tags: Sequence[str]) -> str:
     """Map challenge tag names to lexicon fragments; unknown tags are skipped."""
     out: List[str] = []
@@ -123,23 +112,15 @@ def merge_challenge_tags(tags: Sequence[str]) -> str:
     return merge_prompt_fragments(*out)
 
 
-def challenge_pack_positive(pack: str, *, safety_mode: str = "") -> str:
-    """
-    Resolve a named challenge pack to a positive prompt block.
-
-    ``mature_coherence`` and the ``mature_narrative_fidelity`` portion of ``max`` only apply when
-    *safety_mode* is ``nsfw`` (avoids pushing mature-fidelity language into SFW runs).
-    """
+def challenge_pack_positive(pack: str) -> str:
+    """Resolve a named challenge pack to a positive prompt block."""
     name = str(pack or "none").strip().lower()
     if name == "none" or name not in CHALLENGE_PACK_CHOICES:
         return ""
-    allow_mature = _safety_is_nsfw(safety_mode)
     if name == "mature_coherence":
-        return _PACK_POSITIVE_CORE["mature_coherence"] if allow_mature else ""
+        return _PACK_POSITIVE_CORE["mature_coherence"]
     if name == "max":
-        parts: List[str] = []
-        if allow_mature:
-            parts.append(_PACK_POSITIVE_CORE["mature_coherence"])
+        parts: List[str] = [_PACK_POSITIVE_CORE["mature_coherence"]]
         parts.append(
             merge_prompt_fragments(
                 CHALLENGE_TAG_FRAGMENTS["surreal_weird"],
@@ -164,7 +145,7 @@ def challenge_pack_negative(pack: str) -> str:
     return CHALLENGE_NEGATIVE_ADDON
 
 
-def challenging_content_from_mapping(block: Mapping[str, Any], *, safety_mode: str = "") -> str:
+def challenging_content_from_mapping(block: Mapping[str, Any]) -> str:
     """
     JSON block shape::
 
@@ -183,11 +164,11 @@ def challenging_content_from_mapping(block: Mapping[str, Any], *, safety_mode: s
     elif isinstance(tags_raw, list):
         tags = [str(t).strip() for t in tags_raw if str(t).strip()]
     tag_frag = merge_challenge_tags(tags)
-    pack_frag = challenge_pack_positive(pack, safety_mode=safety_mode)
+    pack_frag = challenge_pack_positive(pack)
     return merge_prompt_fragments(pack_frag, tag_frag, extra)
 
 
-def visual_memory_challenge_clause(root: Mapping[str, Any], *, safety_mode: str = "") -> str:
+def visual_memory_challenge_clause(root: Mapping[str, Any]) -> str:
     """
     Read optional visual-memory keys:
 
@@ -199,10 +180,10 @@ def visual_memory_challenge_clause(root: Mapping[str, Any], *, safety_mode: str 
     bits: List[str] = []
     ch = root.get("challenging_content")
     if isinstance(ch, dict):
-        bits.append(challenging_content_from_mapping(ch, safety_mode=safety_mode))
+        bits.append(challenging_content_from_mapping(ch))
     bp = str(root.get("book_challenge_pack", "") or "").strip().lower()
     if bp and bp != "none":
-        bits.append(challenge_pack_positive(bp, safety_mode=safety_mode))
+        bits.append(challenge_pack_positive(bp))
     raw_tags = root.get("challenge_tags") or root.get("challenge_tag")
     if isinstance(raw_tags, str) and raw_tags.strip():
         tag_list = [t.strip() for t in raw_tags.split(",") if t.strip()]
@@ -210,11 +191,10 @@ def visual_memory_challenge_clause(root: Mapping[str, Any], *, safety_mode: str 
     elif isinstance(raw_tags, list):
         bits.append(merge_challenge_tags([str(t) for t in raw_tags]))
 
-    if _safety_is_nsfw(safety_mode) or _content_rating_allows_mature(root):
-        mature_only = merge_challenge_tags(["mature_narrative_fidelity"])
-        existing = merge_prompt_fragments(*bits)
-        if mature_only and mature_only.lower() not in existing.lower():
-            bits.append(mature_only)
+    mature_only = merge_challenge_tags(["mature_narrative_fidelity"])
+    existing = merge_prompt_fragments(*bits)
+    if mature_only and mature_only.lower() not in existing.lower():
+        bits.append(mature_only)
 
     for key in ("weird_character_notes", "unusual_character_notes"):
         w = str(root.get(key, "") or "").strip()

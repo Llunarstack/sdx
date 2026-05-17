@@ -20,7 +20,7 @@ DEFAULT_AVOID = [
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PromptBreakdown:
     add: List[str]
     avoid: List[str]

@@ -105,7 +105,7 @@ PRESET_SECTION_ORDER: Dict[str, Tuple[str, ...]] = {
 DEFAULT_PRESET_ORDER = "subject_first"
 
 
-@dataclass
+@dataclass(slots=True)
 class CompiledPromptLayout:
     """Result of :func:`compile_prompt_layout`."""
 

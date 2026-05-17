@@ -23,7 +23,7 @@ except ImportError:
     KMeans = None
 
 
-@dataclass
+@dataclass(slots=True)
 class PhysicalFeatures:
     """Physical feature specifications for a character."""
 
@@ -57,7 +57,7 @@ class PhysicalFeatures:
             self.body_marks = []
 
 
-@dataclass
+@dataclass(slots=True)
 class StylePreferences:
     """Style and appearance preferences for a character."""
 
@@ -75,7 +75,7 @@ class StylePreferences:
             self.preferred_expressions = ["neutral", "smile"]
 
 
-@dataclass
+@dataclass(slots=True)
 class CharacterProfile:
     """Complete character profile with all defining features."""
 

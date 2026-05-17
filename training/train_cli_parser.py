@@ -402,8 +402,8 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--timestep-sample-mode",
         type=str,
         default="uniform",
-        choices=["uniform", "logit_normal", "high_noise"],
-        help="Training t distribution: uniform (classic) | logit_normal (SD3-style discrete) | high_noise (Beta bias to large t)",
+        choices=["uniform", "logit_normal", "high_noise", "low_noise"],
+        help="Training t distribution: uniform | logit_normal (SD3-style) | high_noise (Beta→large t) | low_noise (Beta→small t)",
     )
     parser.add_argument(
         "--timestep-logit-mean",
@@ -417,7 +417,21 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Gaussian std on logit axis for --timestep-sample-mode logit_normal",
     )
+    parser.add_argument(
+        "--timestep-curriculum-schedule",
+        type=str,
+        default="",
+        help="Override t-distribution by global step: segments 'start:mode|start:mode:mu:sig' "
+        "(see utils/training/timestep_curriculum.py). Example: 0:high_noise|40000:logit_normal:0:1|80000:low_noise",
+    )
     parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint path")
+    parser.add_argument(
+        "--init-from",
+        type=str,
+        default=None,
+        help="Load weights from checkpoint (same as resume) but ignore optimizer/steps — use for fine-tuning "
+        "(e.g. book/comic) from a general SDX checkpoint. Mutually exclusive with --resume.",
+    )
     parser.add_argument(
         "--val-split",
         type=float,
@@ -434,6 +448,28 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--val-max-batches", type=int, default=None, help="Max val batches per eval (default: full val set)"
     )
     parser.add_argument("--deterministic", action="store_true", help="Reproducible training (worker seeds)")
+    parser.add_argument(
+        "--no-cudnn-benchmark",
+        action="store_true",
+        help="Disable cuDNN autotune (slower convs; shapes already stable)",
+    )
+    parser.add_argument(
+        "--no-tf32",
+        action="store_true",
+        help="Disable TF32 for matmul/cuDNN on Ampere+ (stricter FP32, slower)",
+    )
+    parser.add_argument(
+        "--cpu-threads",
+        type=int,
+        default=0,
+        help="torch.set_num_threads(N); 0=default. Lower if DataLoader workers starve.",
+    )
+    parser.add_argument(
+        "--cpu-interop-threads",
+        type=int,
+        default=0,
+        help="torch.set_num_interop_threads(N); 0=default.",
+    )
     parser.add_argument("--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
@@ -667,6 +703,23 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--log-images-prompt", type=str, default="a photo of a cat", help="Prompt for --log-images-every sample"
+    )
+    parser.add_argument(
+        "--book-train-preset",
+        type=str,
+        default="",
+        choices=["", "fast", "balanced", "production"],
+        help=(
+            "Book/comic/manga training bundle on the same DiT-Text stack (AR, hierarchical captions, "
+            "guidance packs). Empty=off. Same checkpoint family as sample.py — not a separate model type."
+        ),
+    )
+    parser.add_argument(
+        "--book-ar-profile",
+        type=str,
+        default="auto",
+        choices=["auto", "none", "layout", "strong", "zorder", "vit_layout", "vit_strong", "comic_snake", "cinema_spiral"],
+        help="When --book-train-preset is set: one-flag AR block layout (see pipelines/book_comic/README.md).",
     )
     return parser
 

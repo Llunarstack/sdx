@@ -12,9 +12,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from timm.models.vision_transformer import PatchEmbed
 
-from .dit import DiTBlock, LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed
+from .dit import DiTBlock, FinalLayer, LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed
 
 
 class SpatialControlModule(nn.Module):
@@ -411,11 +412,9 @@ class EnhancedDiT(nn.Module):
             [EnhancedDiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)]
         )
 
-        # Final layer
-        self.final_layer = nn.Sequential(
-            nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6),
-            nn.Linear(hidden_size, patch_size * patch_size * self.out_channels, bias=True),
-        )
+        # Final layer — adaLN-conditioned on timestep/class embedding, matching the base DiT design.
+        # Using a plain nn.Sequential here would lose all conditioning information at the output.
+        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
 
         # Initialize weights
         self.initialize_weights()
@@ -431,43 +430,33 @@ class EnhancedDiT(nn.Module):
             block.gradient_checkpointing = False
 
     def initialize_weights(self):
-        """Initialize model weights."""
-        # Initialize transformer blocks
-        for block in self.blocks:
-            nn.init.normal_(block.adaLN_modulation[-1].weight, std=0.02)
-            nn.init.zeros_(block.adaLN_modulation[-1].bias)
-
-        # Initialize final layer
-        nn.init.normal_(self.final_layer[-1].weight, std=0.02)
-        nn.init.zeros_(self.final_layer[-1].bias)
-
-        # Initialize position embeddings
-        nn.init.normal_(self.pos_embed, std=0.02)
-        """Initialize model weights."""
-        # Initialize positional embeddings
+        """Initialize model weights following the base DiT recipe."""
+        # Sinusoidal 2D positional embeddings (non-learned, copied from base DiT)
         pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
-        # Initialize patch embedding like nn.Linear
+        # Patch embedding — initialize like a linear layer (xavier uniform)
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)
 
-        # Initialize label embedding table
+        # Label embedding table
         nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
-        # Initialize timestep embedding MLP
+        # Timestep embedding MLP
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
-        # Zero-out adaLN modulation layers
+        # Zero-out adaLN modulation final projections (identity modulation at init)
         for block in self.blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
-        # Zero-out output projection
-        nn.init.constant_(self.final_layer[-1].weight, 0)
-        nn.init.constant_(self.final_layer[-1].bias, 0)
+        # Zero-out FinalLayer: adaLN modulation + output linear projection
+        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
+        nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
+        nn.init.constant_(self.final_layer.linear.weight, 0)
+        nn.init.constant_(self.final_layer.linear.bias, 0)
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
         """Convert patches back to image format."""
@@ -518,11 +507,9 @@ class EnhancedDiT(nn.Module):
         y = self.y_embedder(y, self.training)  # [B, D]
         c = t + y  # [B, D]
 
-        # Process through enhanced blocks
+        # Process through enhanced blocks (gradient checkpointing honoured when enabled)
         for block in self.blocks:
-            x = block(
-                x,
-                c,
+            block_kwargs = dict(
                 spatial_layout=spatial_layout if self.enable_spatial_control else None,
                 anatomy_mask=anatomy_mask if self.enable_anatomy_awareness else None,
                 text_tokens=text_tokens if self.enable_text_rendering else None,
@@ -531,10 +518,18 @@ class EnhancedDiT(nn.Module):
                 character_id=character_id if self.enable_consistency else None,
                 style_id=style_id if self.enable_consistency else None,
             )
+            if getattr(block, "gradient_checkpointing", False):
+                x = torch.utils.checkpoint.checkpoint(
+                    lambda _x, _c: block(_x, _c, **block_kwargs),
+                    x, c,
+                    use_reentrant=False,
+                )
+            else:
+                x = block(x, c, **block_kwargs)
 
-        # Final processing
-        x = self.final_layer(x)  # [B, N, patch_size^2 * out_channels]
-        x = self.unpatchify(x)  # [B, out_channels, H, W]
+        # Final processing — pass c so FinalLayer can apply adaLN conditioning
+        x = self.final_layer(x, c)  # [B, N, patch_size^2 * out_channels]
+        x = self.unpatchify(x)      # [B, out_channels, H, W]
 
         return x
 
@@ -552,9 +547,17 @@ def EnhancedDiT_B_2(**kwargs):
     return EnhancedDiT(depth=12, hidden_size=768, patch_size=2, num_heads=12, **kwargs)
 
 
-# Model registry
-EnhancedDiT_models = {
+EnhancedDiT_models: dict = {
     "EnhancedDiT-XL/2": EnhancedDiT_XL_2,
-    "EnhancedDiT-L/2": EnhancedDiT_L_2,
-    "EnhancedDiT-B/2": EnhancedDiT_B_2,
+    "EnhancedDiT-L/2":  EnhancedDiT_L_2,
+    "EnhancedDiT-B/2":  EnhancedDiT_B_2,
 }
+
+__all__ = [
+    "EnhancedDiT",
+    "EnhancedDiTBlock",
+    "EnhancedDiT_XL_2",
+    "EnhancedDiT_L_2",
+    "EnhancedDiT_B_2",
+    "EnhancedDiT_models",
+]

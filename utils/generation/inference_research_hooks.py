@@ -31,7 +31,7 @@ import torch.nn.functional as F
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(slots=True)
 class DualStageLatentPlan:
     """Coarse layout latent grid vs target fine grid (both in VAE latent units, i.e. px/8)."""
 
@@ -178,7 +178,7 @@ class GlyphToCondProjector(torch.nn.Module):
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(slots=True)
 class RewindState:
     latent: torch.Tensor
     step_index: int

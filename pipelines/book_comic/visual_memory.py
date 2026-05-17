@@ -210,7 +210,7 @@ def _merge_entity_for_cover(base_entity: Mapping[str, Any]) -> Dict[str, Any]:
     return ent
 
 
-@dataclass
+@dataclass(slots=True)
 class BookVisualMemory:
     """Loaded visual-memory document with helpers for prompts and updates."""
 
@@ -359,7 +359,7 @@ class BookVisualMemory:
             parts.append(_entity_prompt(eid, merged))
         return merge_prompt_fragments(*parts)
 
-    def prompt_fragment_for_cover(self, *, safety_mode: str = "") -> str:
+    def prompt_fragment_for_cover(self) -> str:
         bits: List[str] = []
         cov = self.root.get("cover")
         if isinstance(cov, dict):
@@ -371,7 +371,7 @@ class BookVisualMemory:
                 bits.append(tr)
         g = self._global_fragment()
         ent = self._entities_fragment_for_page(0, for_cover=True)
-        ch = visual_memory_challenge_clause(self.root, safety_mode=safety_mode)
+        ch = visual_memory_challenge_clause(self.root)
         return merge_prompt_fragments(
             g,
             ent,
@@ -382,13 +382,13 @@ class BookVisualMemory:
             *bits,
         )
 
-    def prompt_fragment_for_page(self, page_index: int, *, safety_mode: str = "") -> str:
+    def prompt_fragment_for_page(self, page_index: int) -> str:
         """0-based page index; merges globals, entities (with overrides), and run page patches."""
         g = self._global_fragment()
         ent = self._entities_fragment_for_page(page_index, for_cover=False)
         pp = self._page_patch_fragments(page_index)
         tail = str(self.root.get("extra_prompt_all_pages", "")).strip()
-        ch = visual_memory_challenge_clause(self.root, safety_mode=safety_mode)
+        ch = visual_memory_challenge_clause(self.root)
         return merge_prompt_fragments(
             g,
             ent,

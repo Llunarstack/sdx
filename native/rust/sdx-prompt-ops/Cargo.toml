@@ -1,0 +1,10 @@
+[package]
+name = "sdx-prompt-ops"
+version = "0.1.0"
+edition = "2021"
+description = "Fast caption merge/dedupe and pos/neg conflict filter (C ABI for Python ctypes)"
+license = "MIT"
+
+[lib]
+name = "sdx_prompt_ops"
+crate-type = ["cdylib", "rlib"]

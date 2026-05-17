@@ -1,7 +1,26 @@
 """
-Next-gen ViT/DiT utility blocks.
+Next-generation ViT/DiT utility blocks.
 
-These modules are lightweight and opt-in so old checkpoints remain compatible.
+Lightweight, opt-in modules that improve training stability and token routing
+for deep vision transformers.  All residual-path modules are designed so that
+a freshly initialised model behaves as (or close to) an identity mapping.
+
+Modules
+-------
+LayerScale
+    Per-channel residual scaling (CaiT-style).  Initialise ``init_value``
+    near zero (e.g. ``1e-5``) for deep-network stability, or to ``1.0`` to
+    start as a no-op.  The ``gamma`` parameter is always created so it remains
+    learnable even when initialised to zero.
+
+apply_topk_token_keep
+    Soft top-k token gating that preserves tensor shape (no token dropping),
+    making it safe to drop into existing DiT blocks without architecture
+    changes.
+
+References
+----------
+- CaiT (Touvron et al., 2021): https://arxiv.org/abs/2103.17239
 """
 
 from __future__ import annotations
@@ -11,20 +30,35 @@ import torch.nn as nn
 
 
 class LayerScale(nn.Module):
-    """Per-channel residual scaling (CaiT-style), useful for deep transformer stability."""
+    """
+    Per-channel residual scaling (CaiT-style).
 
-    def __init__(self, dim: int, init_value: float = 0.0):
+    Multiplies the residual branch output by a learnable per-channel scalar
+    ``gamma``, initialised to ``init_value``.  Starting near zero (e.g.
+    ``init_value=1e-5``) improves training stability for very deep networks
+    (Touvron et al., 2021).
+
+    Args:
+        dim:        Feature dimension (number of channels).
+        init_value: Initial value for ``gamma``.  Must be >= 0.
+                    Set to ``1.0`` to start as a no-op.
+                    Set to a small positive value (e.g. ``1e-5``) for deep
+                    network stability.
+    """
+
+    def __init__(self, dim: int, init_value: float = 1e-5):
         super().__init__()
-        self.enabled = float(init_value) > 0.0
-        if self.enabled:
-            self.gamma = nn.Parameter(torch.full((int(dim),), float(init_value)))
-        else:
-            self.register_parameter("gamma", None)
+        if float(init_value) < 0.0:
+            raise ValueError(f"LayerScale init_value must be >= 0, got {init_value!r}")
+        self.gamma = nn.Parameter(
+            torch.full((int(dim),), float(init_value))
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.gamma is None:
-            return x
-        return x * self.gamma.view(1, 1, -1).to(dtype=x.dtype, device=x.device)
+        g = self.gamma
+        if g.dtype != x.dtype or g.device != x.device:
+            g = g.to(dtype=x.dtype, device=x.device)
+        return x * g
 
 
 def apply_topk_token_keep(
@@ -54,7 +88,7 @@ def apply_topk_token_keep(
     idx = torch.topk(patch_score, k=k, dim=1, largest=True).indices  # (B, k)
     hard = torch.zeros((b, p), device=score.device, dtype=token_gate.dtype)
     hard.scatter_(1, idx, 1.0)
-    hard = hard.unsqueeze(-1)  # (B,p,1)
+    hard = hard.unsqueeze(-1)  # (B, p, 1)
     out_patch = token_gate[:, :p, :] * hard + float(min_keep_value) * (1.0 - hard)
     if n == p:
         return out_patch

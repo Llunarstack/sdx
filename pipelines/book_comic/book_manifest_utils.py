@@ -12,11 +12,28 @@ from pipelines.book_comic.book_helpers import pick_metric_requires_vit_ckpt
 
 
 def load_book_manifest(path: Union[str, Path]) -> Dict[str, Any]:
+    """Load ``book_manifest.json`` or ``book.json`` from a project directory or file path."""
     p = Path(path)
+    if p.is_dir():
+        for name in ("book_manifest.json", "book.json"):
+            candidate = p / name
+            if candidate.is_file():
+                p = candidate
+                break
+        else:
+            raise FileNotFoundError(f"No book_manifest.json or book.json under {p}")
     data = json.loads(p.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("book manifest root must be an object")
     return data
+
+
+def manifest_project_root(manifest_path: Union[str, Path]) -> Path:
+    """Directory containing manifest assets (parent of the JSON file)."""
+    p = Path(manifest_path)
+    if p.is_dir():
+        return p.resolve()
+    return p.parent.resolve()
 
 
 def manifest_entries(manifest: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -47,8 +64,12 @@ def manifest_prompt_digest(
 ) -> List[Tuple[int, str]]:
     """Return (page_index, truncated prompt) for manifest rows."""
     rows: List[Tuple[int, str]] = []
+    cover_kinds = frozenset({"cover", "front_cover", "back_cover"})
     for e in entries:
-        if e.get("kind") != kind:
+        ek = e.get("kind")
+        if kind == "cover" and ek not in cover_kinds:
+            continue
+        if kind != "cover" and ek != kind:
             continue
         try:
             idx = int(e.get("index", -1))
@@ -66,10 +87,12 @@ def manifest_summary_lines(manifest: Dict[str, Any]) -> List[str]:
     """Human-readable one-liners for logs or CI artifacts."""
     ent = manifest_entries(manifest)
     pages = [e for e in ent if e.get("kind") == "page"]
-    covers = [e for e in ent if e.get("kind") == "cover"]
+    covers = [e for e in ent if e.get("kind") in ("cover", "front_cover")]
+    back_covers = [e for e in ent if e.get("kind") == "back_cover"]
     lines = [
         f"pages_recorded={len(pages)}",
-        f"covers_recorded={len(covers)}",
+        f"front_covers_recorded={len(covers)}",
+        f"back_covers_recorded={len(back_covers)}",
     ]
     pb = str(manifest.get("pick_best") or "").strip()
     if pb:
@@ -95,7 +118,12 @@ def manifest_summary_lines(manifest: Dict[str, Any]) -> List[str]:
     return lines
 
 
-def validate_book_manifest(manifest: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+def validate_book_manifest(
+    manifest: Dict[str, Any],
+    *,
+    project_root: Union[str, Path, None] = None,
+    check_files: bool = False,
+) -> Tuple[List[str], List[str]]:
     """
     Sanity-check a ``book_manifest.json`` dict (post-run QC).
 
@@ -144,5 +172,22 @@ def validate_book_manifest(manifest: Dict[str, Any]) -> Tuple[List[str], List[st
         sc_i = 0
     if bw_i > 1 and sc_i > 1:
         warnings.append(f"beam_width={bw_i} with sample_candidates={sc_i} (beam is meant for num=1 branch)")
+
+    kinds = {str(e.get("kind") or "") for e in entries}
+    if "front_cover" not in kinds and "cover" not in kinds:
+        warnings.append("no front cover entry (kind front_cover or legacy cover)")
+    if "back_cover" not in kinds and any(k in kinds for k in ("front_cover", "cover", "page")):
+        warnings.append("no back_cover entry (optional but recommended for print wrap)")
+
+    if check_files and project_root is not None:
+        root = Path(project_root).resolve()
+        for e in entries:
+            rel = str(e.get("path") or "").strip()
+            if not rel:
+                warnings.append(f"entry kind={e.get('kind')!r} missing path")
+                continue
+            fp = (root / Path(rel.replace("\\", "/"))).resolve()
+            if not fp.is_file():
+                errors.append(f"missing file: {rel}")
 
     return errors, warnings

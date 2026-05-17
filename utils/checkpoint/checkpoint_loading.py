@@ -52,3 +52,28 @@ def load_dit_text_checkpoint(
     if not isinstance(fusion_state_dict, dict):
         fusion_state_dict = None
     return model, config, rae_bridge, str(model_name), fusion_state_dict
+
+
+def load_sampler_checkpoint(
+    ckpt_path: str,
+    device: str = "cuda",
+    *,
+    reject_enhanced: bool = True,
+    verbose: bool = True,
+) -> Tuple[torch.nn.Module, object, Optional[RAELatentBridge], Optional[dict]]:
+    """
+    Load a checkpoint for ``sample.py`` / inference utilities.
+
+    Returns ``(model, config, rae_bridge, text_encoder_fusion_sd)``.
+    """
+    model, cfg, rae_bridge, model_name, fusion_sd = load_dit_text_checkpoint(
+        ckpt_path,
+        device=device,
+        reject_enhanced=reject_enhanced,
+    )
+    if verbose:
+        print(f"Model: {model_name}")
+        if rae_bridge is not None:
+            rae_c = int(rae_bridge.to_dit.weight.shape[1])
+            print(f"Loaded RAELatentBridge: rae_channels={rae_c} -> 4 (DiT latent space)")
+    return model, cfg, rae_bridge, fusion_sd

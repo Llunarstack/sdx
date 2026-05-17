@@ -7,8 +7,8 @@ shared helpers (dedupe, optional per-mode negatives).
 ``infer_content_controls_from_prompt`` maps free text to partial kwargs via ordered keyword
 buckets; Danbooru-style comma prompts use tag-set matching for count tokens (1girl / solo / 2girls).
 
-Tag text lives under ``data/prompt_tags/*.csv`` (see ``utils/prompt/content_control_tag_data.py``).
-Regenerate from Python snapshots: ``python -m scripts.tools dump_prompt_tag_csvs``.
+Tag text is built into ``utils/prompt/content_control_tags_builtin.py`` (no CSV tag packs).
+SFW/NSFW scaffolding was removed; the model is treated as uncensored by default.
 """
 # ruff: noqa: F405
 
@@ -20,7 +20,9 @@ from .content_control_tags import *  # noqa: F401,F403,F405
 
 
 def _split_csv_tokens(text: str) -> List[str]:
-    return [t.strip() for t in (text or "").split(",") if t.strip()]
+    from utils.prompt.fast_paths import split_tags
+
+    return split_tags(text)
 
 
 def _contains_any(haystack: str, needles: Iterable[str]) -> bool:
@@ -63,18 +65,9 @@ def _merge_kv_pack(
 
 
 def _append_unique_csv(base_text: str, additions: Sequence[str]) -> str:
-    base = _split_csv_tokens(base_text)
-    seen = {t.lower() for t in base}
-    out = list(base)
-    for token in additions:
-        t = token.strip()
-        if not t:
-            continue
-        key = t.lower()
-        if key not in seen:
-            seen.add(key)
-            out.append(t)
-    return ", ".join(out)
+    from utils.prompt.fast_paths import append_unique
+
+    return append_unique(base_text, additions)
 
 
 def _remove_conflicting_tags(text: str) -> str:
@@ -153,73 +146,6 @@ _INFER_HUMAN_MEDIA_PHOTO: Tuple[str, ...] = (
     "smartphone photo realistic",
 )
 
-_INFER_NSFW_TRIGGERS: Tuple[str, ...] = (
-    "nsfw",
-    "nude",
-    "naked",
-    "explicit",
-    "adult content",
-    "erotic",
-    "uncensored",
-    "porn",
-    "hentai",
-    "fucking",
-    "fuck ",
-    " sex ",
-    "sex,",
-    "sexual",
-    "penetration",
-    "ahegao",
-    "creampie",
-    "blowjob",
-    "oral sex",
-    " anal ",
-    "vaginal",
-    "dildo",
-    "vibrator",
-    "bukkake",
-    "cum ",
-    "cumming",
-    "orgasm",
-    "masturbat",
-    "thighjob",
-    "paizuri",
-    "footjob",
-    "spread legs",
-    "doggy style",
-    "missionary",
-    "cowgirl",
-    "reverse cowgirl",
-    "nipples",
-    "areola",
-    "pussy",
-    "penis",
-    "cock ",
-    "dick ",
-    "cumshot",
-    "facial cum",
-)
-
-_INFER_NSFW_PACK_EXTREME: Tuple[str, ...] = ("extreme", "macro", "throat bulge", "ahegao", "mind break", "brutal")
-_INFER_NSFW_PACK_ROMANTIC: Tuple[str, ...] = ("romantic", "gentle", "tender", "couple", "cuddling")
-_INFER_NSFW_PACK_DETAIL: Tuple[str, ...] = ("detailed", "closeup", "macro", "hi res", "highres")
-
-_INFER_SFW_TRIGGERS: Tuple[str, ...] = (
-    "sfw,",
-    "sfw ",
-    "safe for work",
-    "family friendly",
-    "pg-13",
-    "pg rated",
-    "wholesome only",
-    "linkedin headshot",
-    "corporate headshot",
-    "christmas card",
-    "school photo",
-    "wedding photo",
-    "toddler portrait",
-)
-
 _INFER_ADHERENCE_STANDARD_KW: Tuple[str, ...] = (
     "as described",
     "faithful to prompt",
@@ -235,32 +161,6 @@ _INFER_ADHERENCE_STRICT_KW: Tuple[str, ...] = (
     "no extra elements",
     "no additions beyond",
 )
-
-_WS_BOUNDARY = frozenset(" ,\n\t;|")
-
-
-def _bounded_token(haystack_lower: str, needle: str) -> bool:
-    """True if `needle` appears as a comma/whitespace-bounded token (reduces 'solo' in 'soloist', '69' in '1969')."""
-    if not needle or not haystack_lower:
-        return False
-    n = len(needle)
-    start = 0
-    while True:
-        i = haystack_lower.find(needle, start)
-        if i < 0:
-            return False
-        left = haystack_lower[i - 1] if i > 0 else " "
-        right = haystack_lower[i + n] if i + n < len(haystack_lower) else " "
-        if left in _WS_BOUNDARY and right in _WS_BOUNDARY:
-            return True
-        start = i + max(1, n)
-
-
-def _infer_nsfw_hit(p_lower: str) -> bool:
-    if _bounded_token(p_lower, "69"):
-        return True
-    return _contains_any(p_lower, _INFER_NSFW_TRIGGERS)
-
 
 def infer_content_controls_from_prompt(prompt: str) -> Dict[str, str]:
     """
@@ -282,35 +182,12 @@ def infer_content_controls_from_prompt(prompt: str) -> Dict[str, str]:
     if _contains_any(p, ("action pose", "acrobat", "parkour", "jumping", "spinning kick")):
         out["pose_mode"] = "action"
 
-    nsfw_hit = _infer_nsfw_hit(p)
-    if nsfw_hit:
-        out["safety_mode"] = "nsfw"
-        if _contains_any(p, _INFER_NSFW_PACK_EXTREME):
-            out["nsfw_pack"] = "extreme"
-        elif _contains_any(p, _INFER_NSFW_PACK_ROMANTIC):
-            out["nsfw_pack"] = "romantic"
-        elif _contains_any(p, _INFER_NSFW_PACK_DETAIL):
-            out["nsfw_pack"] = "explicit_detail"
-        if "doggy" in p or "from behind" in p or "prone bone" in p:
-            out["sex_position"] = "doggy"
-        elif "reverse cowgirl" in p:
-            out["sex_position"] = "cowgirl"
-        elif "cowgirl" in p:
-            out["sex_position"] = "cowgirl"
-        elif "missionary" in p:
-            out["sex_position"] = "missionary"
-        elif "spoon" in p:
-            out["sex_position"] = "spooning"
-        elif "standing" in p and _contains_any(p, ("sex", "fuck", "penetration")):
-            out["sex_position"] = "standing"
-        if "lingerie" in p:
-            out["clothing_mode"] = "lingerie"
-        elif "bikini" in p:
-            out["clothing_mode"] = "bikini"
-        elif "torn" in p or "ripped clothes" in p:
-            out["clothing_mode"] = "torn"
-    elif _contains_any(p, _INFER_SFW_TRIGGERS):
-        out["safety_mode"] = "sfw"
+    if "lingerie" in p:
+        out["clothing_mode"] = "lingerie"
+    elif "bikini" in p:
+        out["clothing_mode"] = "bikini"
+    elif "torn" in p or "ripped clothes" in p:
+        out["clothing_mode"] = "torn"
 
     tags = [x.strip().lower() for x in raw_prompt.split(",") if x.strip()]
     tagset = set(tags)
@@ -419,7 +296,6 @@ def apply_content_controls(
     prompt: str,
     negative_prompt: str,
     *,
-    safety_mode: str = "none",
     pose_mode: str = "none",
     view_angle: str = "none",
     subject_sex: str = "none",
@@ -435,19 +311,11 @@ def apply_content_controls(
     quality_pack: str = "none",
     lighting_mode: str = "none",
     skin_detail_mode: str = "none",
-    nsfw_pack: str = "none",
-    sex_position: str = "none",
-    penetration_detail: str = "none",
     body_proportion: str = "none",
     interaction_intensity: str = "none",
     advanced_pose: str = "none",
     object_interaction: str = "none",
     environment_type: str = "none",
-    sfw_mood: str = "none",
-    sfw_pose: str = "none",
-    sfw_clothing: str = "none",
-    sfw_environment: str = "none",
-    sfw_expression: str = "none",
     style_mode: str = "none",
     style_lock: bool = False,
     anti_style_bleed: bool = False,
@@ -471,22 +339,9 @@ def apply_content_controls(
     p = (prompt or "").strip()
     n = (negative_prompt or "").strip()
 
-    if safety_mode == "sfw":
-        p = _append_unique_csv(p, _SFW_POSITIVE)
-        n = _append_unique_csv(n, _SFW_NEGATIVE)
-    elif safety_mode == "nsfw":
-        p = _append_unique_csv(p, _NSFW_POSITIVE)
-        n = _append_unique_csv(n, _NSFW_NEGATIVE)
-
     if one_shot_boost:
         p = _append_unique_csv(p, _ONE_SHOT_POSITIVE)
         n = _append_unique_csv(n, _ONE_SHOT_NEGATIVE)
-
-    p, n = _merge_kv_pack(p, n, sfw_mood, _SFW_MOOD_POSITIVE, None)
-    p, n = _merge_kv_pack(p, n, sfw_pose, _SFW_POSE_POSITIVE, None)
-    p, n = _merge_kv_pack(p, n, sfw_clothing, _SFW_CLOTHING_POSITIVE, None)
-    p, n = _merge_kv_pack(p, n, sfw_environment, _SFW_ENVIRONMENT_POSITIVE, None)
-    p, n = _merge_kv_pack(p, n, sfw_expression, _SFW_EXPRESSION_POSITIVE, None)
 
     p, n = _merge_kv_pack(p, n, pose_mode, _POSE_POSITIVE, None, shared_neg=_POSE_NEGATIVE)
     p, n = _merge_kv_pack(p, n, view_angle, _ANGLE_POSITIVE, None, shared_neg=_ANGLE_NEGATIVE)
@@ -505,10 +360,6 @@ def apply_content_controls(
     p, n = _merge_kv_pack(p, n, adherence_pack, _ADHERENCE_PACK_POSITIVE, _ADHERENCE_PACK_NEGATIVE)
     p, n = _merge_kv_pack(p, n, lighting_mode, _LIGHTING_MODE_POSITIVE, _LIGHTING_MODE_NEGATIVE)
     p, n = _merge_kv_pack(p, n, skin_detail_mode, _SKIN_DETAIL_POSITIVE, _SKIN_DETAIL_NEGATIVE)
-    p, n = _merge_kv_pack(p, n, nsfw_pack, _NSFW_PACK_POSITIVE, _NSFW_PACK_NEGATIVE)
-
-    p, n = _merge_kv_pack(p, n, sex_position, _SEX_POSITION_POSITIVE, None, pos_only=True)
-    p, n = _merge_kv_pack(p, n, penetration_detail, _PENETRATION_POSITIVE, None, pos_only=True)
     p, n = _merge_kv_pack(p, n, body_proportion, _BODY_PROPORTION_POSITIVE, None, pos_only=True)
     p, n = _merge_kv_pack(p, n, interaction_intensity, _INTERACTION_INTENSITY, None, pos_only=True)
     p, n = _merge_kv_pack(p, n, advanced_pose, _ADVANCED_POSE_POSITIVE, None, pos_only=True)

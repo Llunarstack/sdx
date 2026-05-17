@@ -6,7 +6,6 @@ Optional profiling: ``--profile-out PATH`` (and ``--profile-sort``, ``--profile-
 output plus a sorted text summary (same convention as sample.py).
 """
 
-import glob
 import itertools
 import logging
 import math
@@ -23,9 +22,6 @@ from typing import Optional
 
 import torch
 import torch.distributed as dist
-
-# Project imports (run from repo root: python train.py ...)
-from config.train_config import TrainConfig, get_dit_build_kwargs
 from data import ResolutionBucketBatchSampler, Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.losses.timestep_loss_weight import get_timestep_loss_weight
@@ -36,15 +32,21 @@ from models.rae_latent_bridge import RAELatentBridge
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
-from training.train_args import build_train_config_from_args
-from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
 from utils.generation.run_artifacts import RUN_MANIFEST_FILENAME, TRAIN_CONFIG_SNAPSHOT_FILENAME
 from utils.runtime.jsonutil import dumps as json_dumps
+from utils.runtime.plain_dict import to_plain_dict as _cfg_to_plain_dict
 from utils.training.ar_curriculum import parse_ar_order_mix, resolve_ar_for_step
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
+from utils.training.device_perf import configure_training_cuda_and_cpu, log_cuda_quick_stats, log_training_perf_hints
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
 from utils.training.metrics import MetricsTracker, log_system_info
+from utils.training.timestep_curriculum import resolve_timestep_kwargs_for_step
+
+# Project imports (run from repo root: python train.py ...)
+from config.train_config import TrainConfig, get_dit_build_kwargs
+from training.train_args import build_train_config_from_args
+from training.train_cli_parser import build_train_arg_parser
 
 
 def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
@@ -68,15 +70,21 @@ from utils.modeling.model_viz import print_model_summary  # noqa: E402
 from utils.modeling.text_encoder_bundle import load_text_encoder_bundle  # noqa: E402
 
 
-def _sample_training_timesteps(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
+def _sample_training_timesteps(
+    cfg,
+    num_timesteps: int,
+    batch_size: int,
+    device: torch.device,
+    *,
+    global_step: int = 0,
+) -> torch.Tensor:
     """Integer diffusion timestep indices for a training batch."""
+    kw = resolve_timestep_kwargs_for_step(cfg, int(global_step))
     return sample_training_timesteps(
         batch_size,
         int(num_timesteps),
         device=device,
-        mode=str(getattr(cfg, "timestep_sample_mode", "uniform")),
-        logit_mean=float(getattr(cfg, "timestep_logit_mean", 0.0)),
-        logit_std=float(getattr(cfg, "timestep_logit_std", 1.0)),
+        **kw,
     )
 
 
@@ -90,9 +98,16 @@ def _spectral_flow_prediction_training_kwargs(cfg: TrainConfig) -> dict:
     }
 
 
-def _sample_training_t(cfg, num_timesteps: int, batch_size: int, device: torch.device) -> torch.Tensor:
+def _sample_training_t(
+    cfg,
+    num_timesteps: int,
+    batch_size: int,
+    device: torch.device,
+    *,
+    global_step: int = 0,
+) -> torch.Tensor:
     """Backward-compatible alias for `_sample_training_timesteps`."""
-    return _sample_training_timesteps(cfg, num_timesteps, batch_size, device)
+    return _sample_training_timesteps(cfg, num_timesteps, batch_size, device, global_step=global_step)
 
 
 def _spectral_sfp_training_kwargs(cfg: TrainConfig) -> dict:
@@ -140,9 +155,7 @@ def _safe_git_info(repo_root: Path) -> dict:
 
 
 def _cfg_to_dict(cfg: TrainConfig) -> dict:
-    if hasattr(cfg, "__dict__"):
-        return dict(cfg.__dict__)
-    return {}
+    return _cfg_to_plain_dict(cfg)
 
 
 def _write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger) -> None:
@@ -585,9 +598,32 @@ def compute_mdm_training_loss(
     return {"loss": loss}
 
 
-def update_ema(ema_model, model, decay=0.9999):
-    for ema_p, p in zip(ema_model.parameters(), model.parameters()):
-        ema_p.data.mul_(decay).add_(p.data, alpha=1 - decay)
+@torch.no_grad()
+def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999) -> None:
+    """
+    Exponential moving average update for all parameters **and** persistent buffers.
+
+    Using ``model.parameters()`` alone misses registered buffers such as
+    BatchNorm running statistics and fixed positional embedding tables.  We
+    iterate over ``state_dict`` values instead, which includes both.
+
+    Args:
+        ema_model: The EMA shadow model (weights are mutated in-place).
+        model:     The live training model.
+        decay:     EMA decay factor (typically 0.9999).
+    """
+    ema_sd = ema_model.state_dict()
+    model_sd = model.state_dict()
+    for key in ema_sd:
+        if key not in model_sd:
+            continue
+        ema_val = ema_sd[key]
+        live_val = model_sd[key]
+        if ema_val.dtype.is_floating_point:
+            ema_val.mul_(decay).add_(live_val.to(dtype=ema_val.dtype), alpha=1.0 - decay)
+        else:
+            # Non-floating-point buffers (e.g. step counters) are copied directly.
+            ema_val.copy_(live_val)
 
 
 @torch.no_grad()
@@ -607,6 +643,7 @@ def eval_val_loss(
     rae_bridge=None,
     latent_scale=1.0,
     text_bundle=None,
+    global_step: int = 0,
 ):
     """Average loss over validation set (EMA model, no backward). Used for early stopping and best-by-val checkpoint."""
     ema_model.eval()
@@ -680,7 +717,9 @@ def eval_val_loss(
                     train_fusion=False,
                 )
                 style_embedding = style_embedding.mean(dim=1)
-            t = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
+            t = _sample_training_timesteps(
+                cfg, diffusion.num_timesteps, latents.shape[0], device, global_step=global_step
+            )
             model_kwargs = {
                 "encoder_hidden_states": encoder_hidden,
                 "encoder_hidden_states_negative": encoder_hidden_neg,
@@ -714,7 +753,9 @@ def eval_val_loss(
             def _bridge_aux_loss_val() -> torch.Tensor:
                 from diffusion.bridge_training import bridge_aux_vp_loss
 
-                t_br = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                t_br = _sample_training_timesteps(
+                    cfg, diffusion.num_timesteps, latents.shape[0], device, global_step=global_step
+                )
                 return bridge_aux_vp_loss(
                     diffusion,
                     ema_model,
@@ -927,7 +968,11 @@ def create_logger(log_dir):
 
 
 def main(cfg: TrainConfig):
-    assert torch.cuda.is_available(), "CUDA required"
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA is not available. Training requires a CUDA-capable GPU. "
+            "Run `nvidia-smi` to check driver status."
+        )
 
     # Enhanced error handling and validation
     logger = setup_logging()
@@ -977,21 +1022,30 @@ def main(cfg: TrainConfig):
     torch.manual_seed(cfg.global_seed + rank)
     # IMPROVEMENTS 5.3: full reproducibility when --deterministic
     if getattr(cfg, "deterministic", False):
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
         try:
             torch.use_deterministic_algorithms(True, warn_only=True)
         except Exception:
             pass
-    else:
-        torch.backends.cudnn.benchmark = True
+
+    configure_training_cuda_and_cpu(
+        deterministic=bool(getattr(cfg, "deterministic", False)),
+        cudnn_benchmark=bool(getattr(cfg, "cudnn_benchmark", True)),
+        enable_tf32=bool(getattr(cfg, "enable_tf32", True)),
+        cpu_num_threads=int(getattr(cfg, "torch_cpu_num_threads", 0) or 0),
+        cpu_num_interop_threads=int(getattr(cfg, "torch_cpu_num_interop_threads", 0) or 0),
+        logger=logger,
+    )
+    if rank == 0:
+        log_cuda_quick_stats(logger)
+        log_training_perf_hints(logger, int(cfg.num_workers), int(cfg.world_size))
 
     # Experiment dir with enhanced checkpoint management
     if rank == 0:
         Path(cfg.results_dir).mkdir(parents=True, exist_ok=True)
-        exp_index = len(glob.glob(f"{cfg.results_dir}/*"))
-        exp_dir = Path(cfg.results_dir) / f"{exp_index:03d}-{cfg.model_name.replace('/', '-')}"
+        import time as _time
+        _ts = _time.strftime("%Y%m%d_%H%M%S")
+        exp_dir = Path(cfg.results_dir) / f"{_ts}-{cfg.model_name.replace('/', '-')}"
         exp_dir.mkdir(parents=True, exist_ok=True)
         ckpt_dir = exp_dir / "checkpoints"
         ckpt_dir.mkdir(exist_ok=True)
@@ -1110,39 +1164,60 @@ def main(cfg: TrainConfig):
         weight_decay=cfg.weight_decay,
         betas=(0.9, 0.999),
     )
-    scaler = torch.amp.GradScaler("cuda", enabled=cfg.use_bf16)
+    # GradScaler is only meaningful for FP16, where gradient underflow is a
+    # real problem.  BF16 has the same exponent range as FP32 and does NOT
+    # need loss scaling.  Enabling it for BF16 adds overhead with no benefit.
+    _use_fp16 = getattr(cfg, "use_fp16", False)
+    scaler = torch.amp.GradScaler("cuda", enabled=_use_fp16)
 
-    # Resume from checkpoint
+    # Resume from checkpoint, or init weights only (--init-from) for fine-tuning
     start_step = 0
     best_loss = float("inf")
+
+    def _load_ckpt_file(path: Path):
+        try:
+            return torch.load(path, map_location="cpu", weights_only=True)
+        except Exception:
+            return torch.load(path, map_location="cpu", weights_only=False)
+
+    def _apply_train_checkpoint(ckpt: dict, *, load_optimizer: bool) -> None:
+        raw = model.module if use_ddp else model
+        raw.load_state_dict(ckpt.get("model", ckpt.get("ema")), strict=True)
+        if "ema" in ckpt and ckpt["ema"]:
+            ema.load_state_dict(ckpt["ema"], strict=True)
+        if load_optimizer and "opt" in ckpt and ckpt["opt"]:
+            try:
+                opt.load_state_dict(ckpt["opt"])
+            except Exception:
+                pass
+        if rae_bridge is not None and ckpt.get("rae_latent_bridge"):
+            try:
+                rae_bridge.load_state_dict(ckpt["rae_latent_bridge"], strict=True)
+                logger.info("Loaded rae_latent_bridge from checkpoint.")
+            except Exception as e:
+                logger.warning(f"Could not load rae_latent_bridge: {e}")
+        if text_bundle is not None and text_bundle.fusion is not None and ckpt.get("text_encoder_fusion"):
+            try:
+                text_bundle.fusion.load_state_dict(ckpt["text_encoder_fusion"], strict=True)
+                logger.info("Loaded text_encoder_fusion from checkpoint.")
+            except Exception as e:
+                logger.warning(f"Could not load text_encoder_fusion: {e}")
+
     if getattr(cfg, "resume", None):
         resume_path = Path(cfg.resume)
         if resume_path.exists():
-            ckpt = torch.load(resume_path, map_location="cpu", weights_only=False)
-            raw = model.module if use_ddp else model
-            raw.load_state_dict(ckpt.get("model", ckpt.get("ema")), strict=True)
-            if "ema" in ckpt and ckpt["ema"]:
-                ema.load_state_dict(ckpt["ema"], strict=True)
-            if "opt" in ckpt and ckpt["opt"]:
-                try:
-                    opt.load_state_dict(ckpt["opt"])
-                except Exception:
-                    pass
+            ckpt = _load_ckpt_file(resume_path)
+            _apply_train_checkpoint(ckpt, load_optimizer=True)
             start_step = ckpt.get("steps", 0)
             best_loss = ckpt.get("best_loss", float("inf"))
-            if rae_bridge is not None and ckpt.get("rae_latent_bridge"):
-                try:
-                    rae_bridge.load_state_dict(ckpt["rae_latent_bridge"], strict=True)
-                    logger.info("Loaded rae_latent_bridge from checkpoint.")
-                except Exception as e:
-                    logger.warning(f"Could not load rae_latent_bridge: {e}")
-            if text_bundle is not None and text_bundle.fusion is not None and ckpt.get("text_encoder_fusion"):
-                try:
-                    text_bundle.fusion.load_state_dict(ckpt["text_encoder_fusion"], strict=True)
-                    logger.info("Loaded text_encoder_fusion from checkpoint.")
-                except Exception as e:
-                    logger.warning(f"Could not load text_encoder_fusion: {e}")
             logger.info(f"Resumed from {resume_path} at step {start_step}")
+    elif getattr(cfg, "init_from", None):
+        init_path = Path(cfg.init_from)
+        if not init_path.is_file():
+            raise FileNotFoundError(f"--init-from is not a file: {init_path}")
+        ckpt = _load_ckpt_file(init_path)
+        _apply_train_checkpoint(ckpt, load_optimizer=False)
+        logger.info(f"Initialized weights from {init_path} (step=0, fresh optimizer)")
 
     # Data
     data_path = cfg.manifest_jsonl or cfg.data_path
@@ -1375,7 +1450,7 @@ def main(cfg: TrainConfig):
         try:
             import wandb
 
-            wandb.init(project=cfg.wandb_project, config=cfg.__dict__ if hasattr(cfg, "__dict__") else {})
+            wandb.init(project=cfg.wandb_project, config=_cfg_to_dict(cfg))
             logger.info(f"WandB project: {cfg.wandb_project}")
         except Exception as e:
             logger.warning(f"WandB not available: {e}")
@@ -1548,7 +1623,9 @@ def main(cfg: TrainConfig):
                     z_cycle = latents_raw.detach()
                 else:
                     z_cycle = None
-                t = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                t = _sample_training_timesteps(
+                    cfg, diffusion.num_timesteps, latents.shape[0], device, global_step=steps
+                )
                 model_kwargs = {
                     "encoder_hidden_states": encoder_hidden,
                     "encoder_hidden_states_negative": encoder_hidden_neg,
@@ -1620,7 +1697,9 @@ def main(cfg: TrainConfig):
                 def _bridge_aux_loss() -> torch.Tensor:
                     from diffusion.bridge_training import bridge_aux_vp_loss
 
-                    t_br = _sample_training_timesteps(cfg, diffusion.num_timesteps, latents.shape[0], device)
+                    t_br = _sample_training_timesteps(
+                        cfg, diffusion.num_timesteps, latents.shape[0], device, global_step=steps
+                    )
                     return bridge_aux_vp_loss(
                         diffusion,
                         train_model,
@@ -1940,6 +2019,7 @@ def main(cfg: TrainConfig):
                     rae_bridge=rae_bridge,
                     latent_scale=effective_latent_scale,
                     text_bundle=text_bundle,
+                    global_step=steps,
                 )
                 logger.info(f"Val loss @ step {steps}: {val_loss:.4f}")
                 if val_loss < best_val_loss:
@@ -1991,8 +2071,14 @@ if __name__ == "__main__":
     sys.argv = _argv
 
     def _train_entry() -> None:
+        from utils.terminal import configure_stdio_for_console
+
+        configure_stdio_for_console()
         parser = build_train_arg_parser()
         args = parser.parse_args()
+        from training.book_train_preset import apply_book_train_preset_to_args
+
+        apply_book_train_preset_to_args(args)
         cfg = build_train_config_from_args(args)
         main(cfg)
 

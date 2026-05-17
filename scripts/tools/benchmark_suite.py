@@ -21,7 +21,7 @@ from PIL import Image
 from utils.quality import test_time_pick as ttp
 
 
-@dataclass
+@dataclass(slots=True)
 class PromptCase:
     name: str
     prompt: str

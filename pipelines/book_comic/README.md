@@ -3,21 +3,50 @@
 **Scope:** Multi-page workflows, **text in panels**, speech bubbles, optional **face/edge anchoring** across pages, **OCR**-guided fixes.  
 Uses the **same** `sample.py` / `train.py` as general image gen; this folder owns **book-specific orchestration**.
 
+## One generative model
+
+Book/comic/manga uses the **same DiT-Text checkpoint** as `train.py` / `sample.py`. There is no separate “book architecture”—only training presets and multi-page orchestration.
+
+Train on panels and covers in one run:
+
+```bash
+python train.py --manifest-jsonl data/book.jsonl --results-dir results/my_book \
+  --book-train-preset balanced --book-ar-profile comic_snake
+```
+
+Generate a project with **stored front/back covers and pages**:
+
+```bash
+python pipelines/book_comic/scripts/generate_book.py --ckpt results/my_book/checkpoints/best.pt \
+  --output-dir out/my_volume --cover-prompt "title: NEON STORM" \
+  --back-cover-prompt "back cover blurb, barcode area" --write-book-manifest
+```
+
+On disk:
+
+```text
+out/my_volume/
+  book.json           # metadata + manifest entries
+  covers/front.png
+  covers/back.png
+  pages/page_000.png
+  cover/cover.png     # legacy mirror of front (unless --no-legacy-cover-path)
+```
+
 ## Script (canonical path)
 
 | Script | Description |
 |--------|-------------|
-| [scripts/generate_book.py](scripts/generate_book.py) | Multi-page generator: inpaint chains, MDM masks, OCR repair |
-| [scripts/train_book_model.py](scripts/train_book_model.py) | Book-specific trainer wrapper around `train.py` with presets + native manifest preflight |
+| [scripts/generate_book.py](scripts/generate_book.py) | Multi-page generator: front/back covers, inpaint chains, MDM masks, OCR repair |
+| [scripts/train_book_model.py](scripts/train_book_model.py) | Optional wrapper (same as `train.py --book-train-preset …`) |
 | [scripts/prepare_and_train_book.py](scripts/prepare_and_train_book.py) | One command: optional HF export -> optional caption normalization -> book trainer |
+| [book_project.py](book_project.py) | `book.json` + `covers/` + `pages/` layout helpers |
 | [book_helpers.py](book_helpers.py) | Presets (`--book-accuracy`), pick-best wiring, post-process (sharpen / naturalize) |
 | [book_training_helpers.py](book_training_helpers.py) | Training presets, train command builder, Rust/Zig manifest diagnostics |
 | [consistency_helpers.py](consistency_helpers.py) | Character / prop / vehicle / setting / lettering prompt cues + optional JSON spec |
 | [prompt_lexicon.py](prompt_lexicon.py) | Style snippets (shonen/webtoon/…), merged negatives, aspect presets, tategaki/SFX hints |
 | [../../docs/BOOK_COMIC_TECH.md](../../docs/BOOK_COMIC_TECH.md) | Tech survey + SDX mapping + **best output checklist** (data, training, production tier) |
 | [../../scripts/tools/book_scene_split.py](../../scripts/tools/book_scene_split.py) | Split `## Page N` script → one line per page for `--prompts-file` |
-
-**Legacy entry (wrapper):** `scripts/book/generate_book.py` forwards to the path above so old commands keep working.
 
 ### Accuracy & consistency (uses shared repo tools)
 
@@ -55,10 +84,10 @@ Use `--book-accuracy maximum` for 4 candidates, or **`production`** for 6 candid
 | `--artist-pack` | One-flag preset for artist craft controls (`manga_cinematic`, `comic_dialogue`, `webtoon_scroll`, `storyboard_fast`). |
 | `--oc-name` / `--oc-archetype` / `--oc-traits` / `--oc-wardrobe` | Build an original-character consistency block from artist-facing anchors. |
 | `--oc-pack` | One-flag OC design preset (`heroine_scifi`, `rival_dark`, `mentor_classic`), overridable by explicit `--oc-*` fields. |
-| `--book-style-pack` | Higher-level bundle that sets artist pack + OC pack + safety/nsfw defaults (`manga_nsfw_action`, `webtoon_nsfw_romance`, `comic_dialogue_safe`, `oc_launch_safe`). |
+| `--book-style-pack` | Higher-level bundle that sets artist pack + OC pack (`manga_nsfw_action`, `webtoon_nsfw_romance`, `comic_dialogue_safe`, `oc_launch_safe`). |
 | `--humanize-pack` / `--humanize-profile` / `--humanize-imperfection` | Humanization helpers to push handcrafted variance and reduce synthetic/sterile artifacts. |
-| `--auto-humanize` | Autopilot for humanization defaults inferred from `--book-type`, `--lexicon-style`, and effective safety mode; explicit `--humanize-*` flags still win. |
-| `--safety-mode` / `--nsfw-pack` / `--nsfw-civitai-pack` / `--civitai-trigger-bank` | Forward sample.py content-control scaffolding (including NSFW modes) into page and OCR-repair passes. |
+| `--auto-humanize` | Autopilot for humanization defaults inferred from `--book-type` and `--lexicon-style`; explicit `--humanize-*` flags still win. |
+| `--nsfw-civitai-pack` / `--civitai-trigger-bank` | Optional Civitai trigger banks forwarded to `sample.py` (uncensored model; no SFW/NSFW tag CSV scaffolding). |
 | `--sample-originality` / `--sample-creativity` | Passed through to `sample.py` when set. |
 | `--shortcomings-mitigation` / `--shortcomings-2d` | Forward mitigation packs to `sample.py` for digital/realism consistency (OCR repair passes included). |
 | `--art-guidance-mode` / `--anatomy-guidance` | Forward artist-medium and anatomy/proportion packs to `sample.py` (OCR repair passes included). |

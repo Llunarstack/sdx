@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from config.train_config import TrainConfig
 from utils.modeling.model_paths import default_t5_path
+
+from config.train_config import TrainConfig
 
 
 def parse_caption_dropout_schedule(s: Optional[str]):
@@ -160,12 +161,18 @@ def build_train_config_from_args(args) -> TrainConfig:
         timestep_sample_mode=getattr(args, "timestep_sample_mode", "uniform"),
         timestep_logit_mean=getattr(args, "timestep_logit_mean", 0.0),
         timestep_logit_std=getattr(args, "timestep_logit_std", 1.0),
+        timestep_curriculum_schedule=str(getattr(args, "timestep_curriculum_schedule", "") or ""),
         resume=args.resume,
+        init_from=getattr(args, "init_from", None),
         val_split=args.val_split,
         val_every=args.val_every,
         early_stopping_patience=args.early_stopping_patience,
         val_max_batches=args.val_max_batches,
         deterministic=args.deterministic,
+        cudnn_benchmark=not bool(getattr(args, "no_cudnn_benchmark", False)),
+        enable_tf32=not bool(getattr(args, "no_tf32", False)),
+        torch_cpu_num_threads=int(getattr(args, "cpu_threads", 0) or 0),
+        torch_cpu_num_interop_threads=int(getattr(args, "cpu_interop_threads", 0) or 0),
         latent_cache_dir=args.latent_cache_dir,
         caption_dropout_schedule=parse_caption_dropout_schedule(getattr(args, "caption_dropout_schedule", None)),
         crop_mode=getattr(args, "crop_mode", "center"),

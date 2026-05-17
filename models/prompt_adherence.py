@@ -31,7 +31,7 @@ import torch.nn.functional as F
 # Data structures
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(slots=True)
 class SemanticTriple:
     """A (subject, attribute, relation) triple parsed from a prompt."""
     subject: str
@@ -42,7 +42,7 @@ class SemanticTriple:
     token_indices: List[int] = field(default_factory=list)  # positions in token sequence
 
 
-@dataclass
+@dataclass(slots=True)
 class ParsedPrompt:
     triples: List[SemanticTriple]
     raw: str

@@ -1,12 +1,12 @@
 """
-Preview **training timestep index** distributions (uniform vs logit-normal vs high-noise).
+Preview **training timestep index** distributions (uniform, logit-normal, high/low-noise).
 
 Useful when tuning `--timestep-sample-mode` / FasterDiT-style SNR–timestep thinking: you can
 see how often the model will see small vs large `t` before starting a long run.
 
 Usage (from repo root):
     python -m scripts.tools training_timestep_preview
-    python -m scripts.tools training_timestep_preview --modes uniform,logit_normal,high_noise --samples 200000
+    python -m scripts.tools training_timestep_preview --modes uniform,logit_normal,high_noise,low_noise --samples 200000
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ def main() -> None:
     parser.add_argument(
         "--modes",
         type=str,
-        default="uniform,logit_normal,high_noise",
-        help="Comma-separated: uniform | logit_normal | high_noise",
+        default="uniform,logit_normal,high_noise,low_noise",
+        help="Comma-separated: uniform | logit_normal | high_noise | low_noise",
     )
     parser.add_argument("--logit-mean", type=float, default=0.0)
     parser.add_argument("--logit-std", type=float, default=1.0)

@@ -1,7 +1,9 @@
 """
-Reusable model building blocks (norms, stochastic depth, conditioning).
+Reusable model building blocks: normalization, stochastic depth, and conditioning gates.
 
-Use across DiT-adjacent modules, multimodal fusion, and small MLP heads.
+All modules are designed to be zero-initialized at the residual path so that a model
+using them starts as an identity mapping, which is critical for stable training of deep
+networks.
 """
 
 from __future__ import annotations
@@ -12,15 +14,25 @@ import torch.nn.functional as F
 
 
 class RMSNorm(nn.Module):
-    """Root mean square layer normalization (no mean centering)."""
+    """
+    Root mean square layer normalization (no mean centering).
+
+    Uses the built-in ``torch.nn.RMSNorm`` kernel when available (PyTorch >= 2.4),
+    falling back to a manual float32 implementation for older versions.
+    """
 
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = float(eps)
         self.weight = nn.Parameter(torch.ones(int(dim)))
+        # Detect native RMSNorm (PyTorch >= 2.4)
+        self._use_native = hasattr(torch.nn, "RMSNorm")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (..., dim)
+        if self._use_native:
+            return torch.nn.functional.rms_norm(
+                x, self.weight.shape, self.weight, self.eps
+            )
         dtype = x.dtype
         v = x.float().pow(2).mean(dim=-1, keepdim=True)
         x = x * torch.rsqrt(v + self.eps)
@@ -32,6 +44,10 @@ class DropPath(nn.Module):
 
     def __init__(self, drop_prob: float = 0.0):
         super().__init__()
+        if not 0.0 <= float(drop_prob) < 1.0:
+            raise ValueError(
+                f"DropPath drop_prob must be in [0, 1), got {drop_prob!r}"
+            )
         self.drop_prob = float(drop_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -69,13 +85,15 @@ class TokenFiLM(nn.Module):
 
 
 class SE1x1(nn.Module):
-    """Squeeze–excitation style gating on channel vector (B, D) -> (B, D)."""
+    """Squeeze-excitation style gating on channel vector (B, D) -> (B, D)."""
 
     def __init__(self, dim: int, reduction: int = 4):
         super().__init__()
         h = max(8, int(dim) // int(reduction))
         self.fc1 = nn.Linear(int(dim), h)
         self.fc2 = nn.Linear(h, int(dim))
+        nn.init.zeros_(self.fc2.weight)
+        nn.init.zeros_(self.fc2.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, D) or (B, N, D) — pool spatial/token if 3D

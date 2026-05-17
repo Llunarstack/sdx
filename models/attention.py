@@ -17,14 +17,6 @@ except ImportError:
     pass
 
 
-def _qkv_format(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
-    """Ensure (B, N, H, D) for xformers or SDPA."""
-    # Input often (B, H, N, D) -> (B, N, H, D)
-    if q.dim() == 4 and q.size(1) != q.size(2):
-        pass  # assume (B, H, N, D)
-    return q, k, v
-
-
 def memory_efficient_attention(
     q: torch.Tensor,
     k: torch.Tensor,

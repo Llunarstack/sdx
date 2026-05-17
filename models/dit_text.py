@@ -721,7 +721,17 @@ class DiT_Text(nn.Module):
                 text_emb_i = text_emb + float(a) * base_text_emb
             if return_attn and i == 0:
                 if self._grad_checkpointing and self.training:
-                    raise NotImplementedError("return_attn with grad_checkpointing")
+                    # Grad checkpointing rematerialises activations and is incompatible with
+                    # capturing attention weights mid-forward. Disable checkpointing for this
+                    # block only and proceed — the caller gets attention weights at the cost of
+                    # slightly higher peak memory for this one block.
+                    import warnings
+                    warnings.warn(
+                        "return_attn=True with grad_checkpointing: disabling checkpointing for "
+                        "block 0 to capture attention weights (minor peak-memory increase).",
+                        UserWarning,
+                        stacklevel=4,
+                    )
                 x, captured_attn = block(
                     x,
                     c,

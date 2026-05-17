@@ -15,7 +15,7 @@ _OC_TRIGGER_RE = re.compile(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AutoOriginalCharacterProfile:
     name: str
     archetype: str

@@ -31,7 +31,7 @@ import torch.nn as nn
 # Scene Graph
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(slots=True)
 class SceneElement:
     """One element in the scene (character, object, background, etc.)."""
     element_id: str
@@ -43,7 +43,7 @@ class SceneElement:
     description: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class SceneRelation:
     """A spatial/semantic relation between two scene elements."""
     subject_id: str
@@ -52,7 +52,7 @@ class SceneRelation:
                                 # "touching", "near", "far_from", "occludes"
 
 
-@dataclass
+@dataclass(slots=True)
 class SceneGraph:
     """Complete structured scene description."""
     elements: List[SceneElement] = field(default_factory=list)

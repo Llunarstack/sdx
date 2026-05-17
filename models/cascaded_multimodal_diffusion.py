@@ -9,7 +9,7 @@ import torch.nn as nn
 from .rae_latent_bridge import RAELatentBridge
 
 
-@dataclass
+@dataclass(slots=True)
 class CascadedSchedule:
     base_steps: int = 30
     refine_steps: int = 20

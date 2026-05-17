@@ -2,10 +2,12 @@
 """
 Book/comic/manga training launcher around root ``train.py``.
 
-Adds:
-- Preset bundles tuned for sequential art.
-- Optional native preflight over JSONL manifests (Rust/Zig when available).
-- Pass-through support for any additional train.py flags after ``--``.
+Prefer calling ``train.py`` directly with the same presets (one unified model path)::
+
+    python train.py --manifest-jsonl data/book.jsonl --results-dir results/book \\
+      --book-train-preset balanced --book-ar-profile comic_snake
+
+This wrapper adds native manifest preflight and manifest_gate before spawning train.py.
 """
 
 from __future__ import annotations
@@ -105,6 +107,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--manifest-gate-fail-on-overlap", action="store_true")
     p.add_argument("--manifest-gate-report-dups", action="store_true")
     p.add_argument("--manifest-gate-fail-on-dup-groups", type=int, default=0)
+    p.add_argument(
+        "--resume",
+        type=str,
+        default="",
+        help="Forward to train.py --resume (optimizer + step counter).",
+    )
+    p.add_argument(
+        "--init-from",
+        type=str,
+        dest="init_from",
+        default="",
+        help="Forward to train.py --init-from: load general SDX weights, start a fresh book fine-tune (step 0).",
+    )
     return p
 
 

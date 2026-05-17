@@ -30,7 +30,7 @@ from .prompt_adherence import PromptAdherenceController
 from .scene_composer import GlobalSceneConditioner, SceneGraph
 
 
-@dataclass
+@dataclass(slots=True)
 class GenerationContext:
     """
     All optional conditioning inputs for one generation call.

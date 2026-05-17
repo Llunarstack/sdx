@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HolyGrailPreset:
     name: str
     description: str

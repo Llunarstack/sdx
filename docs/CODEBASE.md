@@ -18,7 +18,7 @@ Canonical folder classification and migration map: [CANONICAL_STRUCTURE.md](CANO
 | **Utils** | `utils/` | Checkpoints, text encoders, REPA, pick-best, **`utils/prompt/`** (content controls, neg filter, blueprint, RAG), lint, LLM client |
 | **ViT-style QA** | it_quality/ | **Separate** from the generator: quality scoring, ranking, prompt tools |
 | **Pipelines** | `pipelines/` | **image_gen** vs **book_comic** docs; book workflow script (`pipelines/book_comic/scripts/generate_book.py`); not a second copy of DiT |
-| **Scripts** | `scripts/` | Downloads, thin `scripts/book/` launcher, one-off tools (not imported as a package) |
+| **Scripts** | `scripts/` | Downloads, training helpers, and `python -m scripts.tools` utilities (not imported by `train.py` at import time) |
 | **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
 | **Toolkit** | `toolkit/` | QoL: env report, seeds, manifest digest, timing, optional-lib hints — [toolkit/README.md](../toolkit/README.md) |
 End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](FILES.md).
@@ -112,7 +112,7 @@ Run from **repo root** so `config`, `data`, `models`, `utils` resolve without ex
 | **`scripts/setup/`** | Clone upstream repos into `external/` (reference only) |
 | **`scripts/training/`** | HF → JSONL, precompute latents, `hf_download_and_train`, … |
 | **`scripts/tools/`** | Utilities — grouped entrypoints (`dev/`, `data/`, `prompt/`, `ops/`, `export/`, `repo/`) + **`python -m scripts.tools <cmd>`** dispatcher — **[scripts/tools/README.md](../scripts/tools/README.md)** |
-| **`scripts/book/`** | Thin launcher → `pipelines/book_comic/scripts/generate_book.py` |
+| **`pipelines/book_comic/scripts/`** | Book/comic train and generate entrypoints |
 | **`scripts/enhanced/`** | **EnhancedDiT** training, sampling, setup, checkpoint seed — optional path parallel to main `train.py` |
 | **`scripts/cascade_generate.py`** | Stable Cascade stub (optional) |
 
@@ -178,7 +178,7 @@ Keep new work in predictable places so imports and docs stay stable.
 ### What we avoid
 
 - **Moving `config/`, `models/`, … under `src/`** without a dedicated migration — it breaks every import and doc link.
-- **Duplicating `generate_book.py`** — use `scripts/book/generate_book.py` as a thin launcher only.
+- **Duplicating `generate_book.py`** — extend `pipelines/book_comic/scripts/generate_book.py` instead of adding parallel launchers.
 - **Importing `external/`** at runtime — clones are reference-only.
 
 ---

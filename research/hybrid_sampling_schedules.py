@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import List
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HybridStepBudget:
     ar_refine_steps: int
     diffusion_steps: int

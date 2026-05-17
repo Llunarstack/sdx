@@ -143,7 +143,7 @@ def main() -> None:
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-    from scripts.tools.prompt_i18n import generic_suggestion
+    from utils.prompt.prompt_i18n import generic_suggestion
 
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():

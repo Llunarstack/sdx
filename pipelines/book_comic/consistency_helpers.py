@@ -11,7 +11,7 @@ Optional JSON key ``text_continuity`` (object): locked dialogue phrases, object 
 flags — see ``book_text_continuity.text_continuity_clause``.
 
 Optional key ``challenging_content`` (object): ``pack`` / ``tags`` / ``extra`` for hard-case prompts;
-see ``book_challenging_content.challenging_content_from_mapping`` (pass ``safety_mode`` when resolving).
+see ``book_challenging_content.challenging_content_from_mapping``.
 """
 
 from __future__ import annotations
@@ -223,7 +223,7 @@ def _props_from_spec_value(props: Any) -> List[str]:
     return out
 
 
-def positive_block_from_mapping(spec: Mapping[str, Any], *, safety_mode: str = "") -> str:
+def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
     """Build one positive consistency block from a dict (JSON file or merged CLI)."""
     fragments: List[str] = []
 
@@ -313,7 +313,7 @@ def positive_block_from_mapping(spec: Mapping[str, Any], *, safety_mode: str = "
     if isinstance(ch, dict):
         from pipelines.book_comic.book_challenging_content import challenging_content_from_mapping
 
-        cfrag = challenging_content_from_mapping(ch, safety_mode=safety_mode)
+        cfrag = challenging_content_from_mapping(ch)
         if cfrag:
             fragments.append(cfrag)
 

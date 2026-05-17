@@ -11,7 +11,7 @@ the noise schedule or the model.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -21,6 +21,32 @@ __all__ = [
     "list_timestep_schedules",
     "register_timestep_schedule",
 ]
+
+_INDICES_PREFIX = "indices:"
+
+
+def parse_indices_timestep_schedule(name: str) -> Optional[np.ndarray]:
+    """
+    Explicit VP timestep **indices** (high-noise → low-noise).
+
+    Syntax: ``indices:999,800,600,...,0`` (commas optional spaces). Overrides registered
+    names and avoids clashes with comma-based **training** timestep_respacing strings.
+    """
+    raw = str(name).strip()
+    low = raw.lower()
+    if not low.startswith(_INDICES_PREFIX):
+        return None
+    body = raw[len(_INDICES_PREFIX) :].strip()
+    if not body:
+        return None
+    parts = [p.strip() for p in body.split(",") if p.strip()]
+    if not parts:
+        return None
+    try:
+        vals = [int(float(p)) for p in parts]
+    except ValueError:
+        raise ValueError(f"indices: schedule contains non-integers: {body!r}") from None
+    return np.asarray(vals, dtype=np.int64)
 
 
 def _enforce_strict_descending(idx: np.ndarray, num_train: int) -> np.ndarray:
@@ -155,11 +181,18 @@ def build_inference_timesteps(
     karras_rho: float = 7.0,
 ) -> np.ndarray:
     """
-    :param name: registered schedule key (e.g. ``ddim``, ``karras_rho``).
+    :param name: registered schedule key (e.g. ``ddim``, ``karras_rho``); or ``indices:...``.
     :param alpha_cumprod: (T,) training ᾱ (numpy).
     :return: (num_inference_steps,) int64 indices, high → low.
     """
-    key = str(name).lower().strip()
+    key_full = str(name).strip()
+    explicit = parse_indices_timestep_schedule(key_full)
+    if explicit is not None:
+        clipped = np.clip(explicit.astype(np.int64), 0, int(num_train_timesteps) - 1)
+        raw = clipped
+        return _resample_length(raw, num_inference_steps, num_train_timesteps)
+
+    key = key_full.lower().strip()
     known = sorted(set(INFERENCE_TIMESTEP_SCHEDULES.keys()) | {"karras_rho"})
     if key == "karras_rho":
         raw = _schedule_karras_rho_with_rho(

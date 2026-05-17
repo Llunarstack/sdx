@@ -43,6 +43,8 @@ def sample_training_timesteps(
             - ``high_noise``: ``u ~ Beta(2, 1)`` on ``[0,1]`` then map to ``t`` — more
               weight on **high** noise (large ``t``), useful if you want extra
               steps learning heavily corrupted latents.
+            - ``low_noise``: ``u ~ Beta(1, 2)`` — more weight on **low** ``t``
+              (fine detail / denoising tail).
         logit_mean / logit_std: Gaussian parameters for ``logit_normal`` mode.
             Defaults ``0, 1`` match common SD3-style presets on the normalized axis.
 
@@ -73,4 +75,15 @@ def sample_training_timesteps(
         t = (u * float(T - 1)).round().to(dtype=torch.long)
         return t.to(dtype=dtype)
 
-    raise ValueError(f"Unknown timestep_sample_mode {mode!r}; use uniform | logit_normal | high_noise")
+    if m in ("low_noise", "low-noise", "beta_low", "detail"):
+        dist = torch.distributions.Beta(
+            torch.tensor(1.0, device=device),
+            torch.tensor(2.0, device=device),
+        )
+        u = dist.sample((B,))
+        t = (u * float(T - 1)).round().to(dtype=torch.long)
+        return t.to(dtype=dtype)
+
+    raise ValueError(
+        f"Unknown timestep_sample_mode {mode!r}; use uniform | logit_normal | high_noise | low_noise"
+    )

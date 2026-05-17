@@ -28,7 +28,7 @@ This file tracks active compatibility shims and canonical paths.
 | `config.style_guidance` | `config.defaults.style_guidance` | Shim retained for backward compatibility. |
 | `config.art_mediums` | `config.defaults.art_mediums` | Shim retained for backward compatibility. |
 | `config.ai_image_shortcomings` | `config.defaults.ai_image_shortcomings` | Shim retained for backward compatibility. |
-| `scripts/book/*.py` launchers | `pipelines/book_comic/scripts/*.py` | Legacy launcher entrypoints retained for compatibility. |
+| `scripts/book/*.py` launchers | `pipelines/book_comic/scripts/*.py` | **Removed** — use `pipelines/book_comic/scripts/` directly. |
 
 ## Removed legacy path
 

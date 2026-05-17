@@ -54,6 +54,7 @@ Quick links to all project docs, grouped by purpose.
 
 | Doc | Description |
 |-----|-------------|
+| [releases/v8.md](releases/v8.md) | **v8** — Style Genome, PromptStack v2, chaos/fusion modes, native style ops, training/inference prompt parity. |
 | [releases/v7.md](releases/v7.md) | **v7** - CI, Dependabot, pre-commit, eval prompt pack + driver, research playbooks, `run_artifacts`, `SECURITY.md`. |
 | [releases/v6.md](releases/v6.md) | **v6** - native fast layer + C helpers, `sampling_extras`, book/visual memory, Pyright/clangd tooling, CI, research sketches. |
 | [releases/v5.md](releases/v5.md) | **v5** - test-time scaling, manifest curation, DPO safeguards, ViT quality, docs. |

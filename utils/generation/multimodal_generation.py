@@ -5,7 +5,10 @@ Combines precision control, anatomy correction, consistency management, text ren
 
 import asyncio
 import logging
+import shutil
+import tempfile
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PIL import Image
@@ -23,9 +26,13 @@ from utils.architecture.enhanced_utils import (
 from .advanced_inference import ImageEnhancer, PromptOptimizer, QualityAnalyzer
 
 
-@dataclass
+@dataclass(slots=True)
 class GenerationRequest:
-    """Comprehensive generation request with all parameters."""
+    """
+    Single image generation request: text, optional negatives, sizing, conditioning, and optional edit I/O.
+
+    For real diffusion output via the official CLI pipeline, set :attr:`checkpoint_path` to your ``.pt`` checkpoint.
+    """
 
     prompt: str
     negative_prompt: str = ""
@@ -60,10 +67,30 @@ class GenerationRequest:
     edit_mask: Optional[Image.Image] = None
     edit_instruction: str = ""
     edit_type: str = "replace"
+    heuristic_edit_region: Optional[str] = None  # coarse mask when edit_mask is None (see edit_masks)
+    segment_prompt: Optional[str] = None  # natural-language region → segmentation_to_mask (see priority below)
+    segment_mask_feather: float = 4.0
+    use_segmentation_models: bool = True  # Grounding DINO + SAM2 in pretrained/, else phrase heuristics
 
     # Quality settings
     enhance_output: bool = True
     quality_level: str = "high"
+
+    # Real inference via sample.py subprocess (recommended for edits + txt2img)
+    checkpoint_path: str = ""
+    img2img_strength: float = 0.65
+    inpaint_mode: str = "mdm"
+    sample_device: str = "cuda"
+    sample_scheduler: str = "ddim"
+    sample_solver: str = "ddim"
+    timestep_schedule: Optional[str] = None
+    extra_sample_args: Optional[List[str]] = None
+
+    # Professional / educational visual packs (same semantics as ``sample.py``)
+    visual_design_domain: str = "none"
+    visual_design_intensity: str = "standard"
+    visual_design_negative_pack: bool = False
+    visual_design_preset: str = ""
 
     def __post_init__(self):
         if self.spatial_constraints is None:
@@ -72,9 +99,11 @@ class GenerationRequest:
             self.focus_areas = ["hands", "face", "posture"]
         if self.text_content is None:
             self.text_content = []
+        if self.extra_sample_args is None:
+            self.extra_sample_args = []
 
 
-@dataclass
+@dataclass(slots=True)
 class GenerationResult:
     """Comprehensive generation result with metadata."""
 
@@ -185,20 +214,46 @@ class MultimodalGenerator:
                 result.prompt_used = text_data["enhanced_prompt"]
                 result.text_validation = text_data["validation"]
 
+            # Step 5b: Visual-design packs (UI, STEM, brand, presets, …)
+            _prior = result.prompt_used
+            _vd_prompt, _vd_neg = self._apply_visual_design_to_prompt(request, result.prompt_used)
+            if _vd_prompt != _prior or (_vd_neg and _vd_neg.strip()):
+                result.processing_steps.append("Visual design pack")
+            result.prompt_used = _vd_prompt
+            if _vd_neg.strip():
+                from utils.visual_design.negatives import merge_negative_addon
+
+                request.negative_prompt = merge_negative_addon(request.negative_prompt, _vd_neg.strip())
+
             # Step 6: Optimize negative prompt
             result.processing_steps.append("Optimizing negative prompt")
             result.negative_prompt_used = self._optimize_negative_prompt(request.negative_prompt)
 
             # Step 7: Generate image
             result.processing_steps.append("Generating image")
-            if request.base_image and request.edit_mask:
-                # Image editing mode
-                generated_image = await self._generate_with_editing(
+            ckpt = (request.checkpoint_path or "").strip()
+            use_real = bool(ckpt)
+            if request.base_image is not None and use_real:
+                # Img2img (mask optional → full-image edit vs inpainting)
+                generated_image = await asyncio.to_thread(
+                    self._generate_via_sample_with_init,
+                    request,
+                    result.prompt_used,
+                    result.negative_prompt_used,
+                )
+            elif use_real:
+                generated_image = await asyncio.to_thread(
+                    self._generate_txt2img_via_sample,
+                    request,
+                    result.prompt_used,
+                    result.negative_prompt_used,
+                )
+            elif request.base_image is not None:
+                generated_image = await self._generate_with_editing_fallback(
                     request, result.prompt_used, result.negative_prompt_used
                 )
             else:
-                # Standard generation mode
-                generated_image = await self._generate_standard(
+                generated_image = await self._generate_standard_placeholder(
                     request, result.prompt_used, result.negative_prompt_used
                 )
 
@@ -356,34 +411,157 @@ class MultimodalGenerator:
             },
         }
 
+    def _apply_visual_design_to_prompt(self, request: GenerationRequest, prompt: str) -> tuple[str, str]:
+        """Return (positive, negative_fragment) mirroring ``sample.py`` preset + domain stages."""
+        p = (prompt or "").strip()
+        try:
+            from utils.visual_design.presets import apply_visual_design_preset_to_prompt
+            from utils.visual_design.sampling import apply_visual_design_stage
+
+            preset = str(getattr(request, "visual_design_preset", "") or "").strip()
+            if preset:
+                p, dom, intens = apply_visual_design_preset_to_prompt(p, preset)
+                request.visual_design_domain = dom
+                request.visual_design_intensity = intens
+
+            vd_out = apply_visual_design_stage(
+                p,
+                cli_domain=str(getattr(request, "visual_design_domain", "none") or "none"),
+                intensity=str(getattr(request, "visual_design_intensity", "standard") or "standard"),
+                use_negative_pack=bool(getattr(request, "visual_design_negative_pack", False)),
+                emit=None,
+            )
+            return vd_out.prompt, vd_out.negative_addon
+        except Exception as exc:
+            self.logger.warning("Visual design pack skipped: %s", exc)
+            return prompt, ""
+
     def _optimize_negative_prompt(self, negative_prompt: str) -> str:
         """Optimize negative prompt with common negative terms."""
         return self.prompt_optimizer.optimize_negative_prompt(negative_prompt)
 
-    async def _generate_standard(self, request: GenerationRequest, prompt: str, negative_prompt: str) -> Image.Image:
-        """Standard image generation."""
-        # This would integrate with your actual generation pipeline
-        # For now, return a placeholder
-        self.logger.info(f"Generating with prompt: {prompt[:100]}...")
-
-        # Placeholder generation - replace with actual model inference
-        image = Image.new("RGB", (request.width, request.height), (100, 150, 200))
-
-        return image
-
-    async def _generate_with_editing(
+    def _generate_txt2img_via_sample(
         self, request: GenerationRequest, prompt: str, negative_prompt: str
     ) -> Image.Image:
-        """Image generation with editing (inpainting/outpainting)."""
+        """Text-to-image via ``sample.py`` subprocess."""
+        from utils.generation.sample_edit_runner import run_sample_inference
+
+        ckpt = (request.checkpoint_path or "").strip()
+
+        tmpd = tempfile.mkdtemp(prefix="sdx_txt2img_")
+        out_path = Path(tmpd) / "out.png"
+        try:
+            run_sample_inference(
+                ckpt=ckpt,
+                prompt=prompt,
+                out_path=out_path,
+                negative_prompt=negative_prompt,
+                width=request.width,
+                height=request.height,
+                steps=request.steps,
+                cfg_scale=request.cfg_scale,
+                seed=request.seed,
+                device=(request.sample_device or "cuda"),
+                scheduler=request.sample_scheduler or "ddim",
+                solver=request.sample_solver or "ddim",
+                timestep_schedule=request.timestep_schedule,
+                extra_args=request.extra_sample_args or None,
+            )
+            return Image.open(out_path).convert("RGB")
+        finally:
+            shutil.rmtree(tmpd, ignore_errors=True)
+
+    def _generate_via_sample_with_init(
+        self, request: GenerationRequest, prompt: str, negative_prompt: str
+    ) -> Image.Image:
+        """Img2img or inpainting via ``sample_edit_runner.run_edit_with_pillow``."""
+        from utils.generation.sample_edit_runner import run_edit_with_pillow
+
+        inpainting_engine = self.editing_system["inpainting"]
+        ckpt = (request.checkpoint_path or "").strip()
+
+        merged_prompt = inpainting_engine.generate_edit_prompt(prompt, request.edit_instruction, request.edit_type)
+
+        # Mask priority: explicit edit_mask → text segmentation → heuristic region token.
+        mask_image = request.edit_mask
+        seg_prompt = (request.segment_prompt or "").strip()
+        if mask_image is None and seg_prompt:
+            from utils.generation.segmentation_to_mask import build_segmentation_mask_for_edit
+
+            guide = request.base_image.convert("RGB").resize(
+                (int(request.width), int(request.height)),
+                Image.Resampling.LANCZOS,
+            )
+            seg_res = build_segmentation_mask_for_edit(
+                guide,
+                seg_prompt,
+                feather_radius=float(request.segment_mask_feather),
+                use_vision_models=bool(request.use_segmentation_models),
+            )
+            mask_image = seg_res.mask
+            self.logger.debug("segment_prompt mask mode=%s notes=%s", seg_res.mode, seg_res.notes)
+        hr_raw = (request.heuristic_edit_region or "").strip()
+        if mask_image is None and hr_raw:
+            from utils.generation.edit_masks import heuristic_inpaint_mask, normalize_heuristic_region
+
+            nr = normalize_heuristic_region(hr_raw)
+            if nr != hr_raw.lower().strip():
+                self.logger.debug("Normalized heuristic_edit_region %r -> %r", hr_raw, nr)
+            mask_image = heuristic_inpaint_mask(request.width, request.height, nr)
+
+        mode = "inpaint" if mask_image is not None else "img2img"
+        preview = merged_prompt[:120].replace("\n", " ")
+        self.logger.info(
+            "Editing via sample.py mode=%s dims=%sx%s preview=%r",
+            mode,
+            request.width,
+            request.height,
+            preview,
+        )
+
+        return run_edit_with_pillow(
+            ckpt=ckpt,
+            prompt=merged_prompt,
+            negative_prompt=negative_prompt,
+            base_image=request.base_image,
+            mask_image=mask_image,
+            width=request.width,
+            height=request.height,
+            steps=request.steps,
+            cfg_scale=request.cfg_scale,
+            seed=request.seed,
+            img2img_strength=float(request.img2img_strength),
+            inpaint_mode=(request.inpaint_mode or "mdm"),
+            device=(request.sample_device or "cuda"),
+            scheduler=request.sample_scheduler or "ddim",
+            solver=request.sample_solver or "ddim",
+            timestep_schedule=request.timestep_schedule,
+            extra_args=request.extra_sample_args or None,
+        )
+
+    async def _generate_standard_placeholder(
+        self, request: GenerationRequest, prompt: str, _negative_prompt: str
+    ) -> Image.Image:
+        """Placeholder when no ``checkpoint_path`` (legacy / tests)."""
+        self.logger.warning(
+            "GenerationRequest.checkpoint_path is empty: returning solid-color placeholder. "
+            "Set checkpoint_path to a .pt ckpt to run real txt2img via sample.py."
+        )
+        self.logger.info("Placeholder generate prompt_preview=%r", prompt[:120].replace("\n", " "))
+        return Image.new("RGB", (request.width, request.height), (100, 150, 200))
+
+    async def _generate_with_editing_fallback(
+        self, request: GenerationRequest, prompt: str, negative_prompt: str
+    ) -> Image.Image:
+        """Legacy path: no ckpt → prompt merge only, no model call."""
         inpainting_engine = self.editing_system["inpainting"]
 
-        # Generate edit prompt
-        edit_prompt = inpainting_engine.generate_edit_prompt(prompt, request.edit_instruction, request.edit_type)
-
-        # Placeholder for actual inpainting - replace with model inference
-        self.logger.info(f"Editing with prompt: {edit_prompt[:100]}...")
-
-        # For now, return the base image
+        merged_prompt = inpainting_engine.generate_edit_prompt(prompt, request.edit_instruction, request.edit_type)
+        self.logger.warning(
+            "No checkpoint_path; edit prompt prepared but returning base_image unchanged. "
+            "Set GenerationRequest.checkpoint_path for real inpainting/img2img."
+        )
+        self.logger.info(f"Edit (no ckpt): {merged_prompt[:100]}... negatives[:50]={negative_prompt[:50]!r}")
         return request.base_image
 
     def _enhance_image(self, image: Image.Image, quality_level: str) -> Image.Image:

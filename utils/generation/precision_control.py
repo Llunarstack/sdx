@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
-@dataclass
+@dataclass(slots=True)
 class SceneObject:
     """Represents an object in a scene with precise positioning."""
 

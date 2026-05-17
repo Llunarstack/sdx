@@ -174,6 +174,24 @@ class TestGaussianDiffusion:
         d = create_diffusion(num_timesteps=100, beta_schedule=schedule)
         assert d.num_timesteps == 100
 
+    def test_alpha_cumprod_matches_cumprod_one_minus_beta(self):
+        """``GaussianDiffusion`` must agree with Π(1−βₜ) regardless of Rust/NumPy path."""
+        from diffusion import create_diffusion
+        from diffusion.schedules import get_beta_schedule
+
+        for schedule in ("linear", "cosine", "squaredcos_cap_v2"):
+            for n in (100, 1000):
+                beta = get_beta_schedule(schedule, n)
+                expected = np.cumprod(1.0 - np.asarray(beta, dtype=np.float64)).astype(np.float32)
+                d = create_diffusion(num_timesteps=n, beta_schedule=schedule)
+                np.testing.assert_allclose(
+                    d.alpha_cumprod.numpy(),
+                    expected,
+                    rtol=1e-5,
+                    atol=1e-6,
+                    err_msg=f"alpha_cumprod mismatch for schedule={schedule!r} T={n}",
+                )
+
 
 # ---------------------------------------------------------------------------
 # Loss weights
@@ -247,6 +265,12 @@ class TestTimestepSampling:
         from diffusion.timestep_sampling import sample_training_timesteps
         t = sample_training_timesteps(2048, 1000, device=torch.device("cpu"), mode="high_noise")
         assert t.float().mean() > 500, "high_noise should bias toward large t"
+
+    def test_low_noise_bias(self):
+        """low_noise mode should have mean < 500 (biased toward small t)."""
+        from diffusion.timestep_sampling import sample_training_timesteps
+        t = sample_training_timesteps(2048, 1000, device=torch.device("cpu"), mode="low_noise")
+        assert t.float().mean() < 500, "low_noise should bias toward small t"
 
     def test_unknown_mode_raises(self):
         from diffusion.timestep_sampling import sample_training_timesteps

@@ -32,7 +32,7 @@ class StyleConflictLevel(Enum):
     INCOMPATIBLE = "incompatible"
 
 
-@dataclass
+@dataclass(slots=True)
 class StyleComponent:
     """Individual style component (LoRA, prompt element, etc.)."""
 
@@ -48,7 +48,7 @@ class StyleComponent:
             self.compatibility_tags = []
 
 
-@dataclass
+@dataclass(slots=True)
 class StyleAnalysis:
     """Analysis of style components and conflicts."""
 

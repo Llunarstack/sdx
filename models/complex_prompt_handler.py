@@ -25,17 +25,40 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
-from .model_enhancements import RMSNorm
+    from .model_enhancements import RMSNorm
+    _TORCH_AVAILABLE = True
+except ModuleNotFoundError as e:
+    if e.name != "torch":
+        raise
+    # Allow regex-only prompt analysis utilities to work without torch.
+    torch = None  # type: ignore[assignment]
+    F = None  # type: ignore[assignment]
+
+    class _TorchMissingModuleBase:
+        pass
+
+    class _StubNN:
+        Module = _TorchMissingModuleBase
+
+        def __getattr__(self, name: str):
+            raise ModuleNotFoundError(
+                "torch is required for this model component, but torch is not installed."
+            )
+
+    nn = _StubNN()  # type: ignore[assignment]
+    RMSNorm = None  # type: ignore[assignment]
+    _TORCH_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Prompt complexity analysis
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(slots=True)
 class PromptComplexityProfile:
     """Analysis of a prompt's complexity and content type."""
     complexity_score: float = 0.0       # 0=simple, 1=extremely complex

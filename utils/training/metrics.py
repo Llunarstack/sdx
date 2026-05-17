@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 
-@dataclass
+@dataclass(slots=True)
 class TrainingMetrics:
     """Training metrics container."""
 

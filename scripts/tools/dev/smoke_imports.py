@@ -31,17 +31,25 @@ def main() -> None:
         ("data", repo_root / "data"),
         ("diffusion", repo_root / "diffusion"),
         ("models", repo_root / "models"),
+        ("training", repo_root / "training"),
         ("utils", repo_root / "utils"),
+        ("pipelines", repo_root / "pipelines"),
+        ("vit_quality", repo_root / "vit_quality"),
         ("scripts.tools", repo_root / "scripts" / "tools"),
     ]
+
+    skip_prefixes = (
+        "research.agi_image.",  # experimental scaffold; optional heavy deps
+    )
 
     failures = []
     for pkg, path in packages:
         if not path.exists():
             continue
         for mod_name in iter_internal_modules(pkg, path):
-            # Skip private/dunder modules; keep it simple.
             if mod_name.endswith(".__pycache__"):
+                continue
+            if any(mod_name.startswith(p) for p in skip_prefixes):
                 continue
             try:
                 importlib.import_module(mod_name)

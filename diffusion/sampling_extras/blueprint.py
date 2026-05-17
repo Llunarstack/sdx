@@ -7,7 +7,7 @@ import torch
 from .guidance_fusion import fuse_condition_scales
 
 
-@dataclass
+@dataclass(slots=True)
 class HolyGrailRecipe:
     """
     Master recipe to coordinate strong prompt adherence and style/control stability.
@@ -22,7 +22,7 @@ class HolyGrailRecipe:
     late_adapter_boost: float = 1.15
 
 
-@dataclass
+@dataclass(slots=True)
 class HolyGrailStepPlan:
     """
     Per-step runtime plan values.

@@ -20,3 +20,4 @@ mojo = ">=0.25.0"
 
 [tasks]
 mojo-run = "mojo src/sdx_stub.mojo"
+style-tokens = "mojo src/sdx_style_tokens.mojo merge \"a, b, B, c\""

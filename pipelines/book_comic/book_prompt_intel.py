@@ -47,7 +47,7 @@ def composed_prompt_length_report(
     return parts
 
 
-@dataclass
+@dataclass(slots=True)
 class CastMentionResult:
     """Which cast labels were found in a page prompt (case-insensitive substring)."""
 

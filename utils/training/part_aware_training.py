@@ -288,7 +288,7 @@ def foveated_random_crop_box(
     return y0, x0, y0 + ch, x0 + cw
 
 
-@dataclass
+@dataclass(slots=True)
 class PartAwareCaptionConfig:
     """Optional toggles for dataset / training (mirrors TrainConfig subset)."""
 

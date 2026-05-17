@@ -38,7 +38,7 @@ import torch.nn.functional as F
 # Camera spec data structures
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(slots=True)
 class CameraSpec:
     """Parsed camera/lens/angle specification."""
     # Viewing angle

@@ -2,6 +2,32 @@
 
 This doc ties together the **Python modules** and **CLI flags** that shape the positive and negative strings before T5 (or triple-encoder) runs. For **copy-paste recipes**, see [PROMPT_COOKBOOK.md](PROMPT_COOKBOOK.md).
 
+## PromptStack v2 (unified pipeline)
+
+`sample.py` post-checkpoint prompt assembly runs through **`utils.prompt.stack`**:
+
+| Stage | Role |
+|-------|------|
+| Intelligence | Analyze complexity/domains; optional light quality hints |
+| Guidance | Shortcomings, art medium, style guidance, photo realism |
+| Negative bootstrap | Default neg, staged layout/MI/VD negs, flag negs |
+| Content controls | Resolved infer + `apply_content_controls` |
+| Clauses | Named bundles (`--prompt-clauses uncensored.fidelity,hands.stable`) |
+| Post-enrich | Character/scene/scale negatives |
+| Prompt breakdown | Optional T5 section ordering |
+| Neg filter | Remove pos/neg token conflicts |
+
+**Preview without GPU:**
+
+```bash
+python -m scripts.tools preview_prompt_stack --prompt "1girl, portrait" --quality-pack top
+SDX_PROMPT_STACK_TRACE=1 python -m scripts.tools preview_prompt_stack --prompt "..." --json
+```
+
+**Training:** `merge_guidance_for_training_caption()` reuses the guidance stage on JSONL captions.
+
+**API:** `from utils.prompt.stack import run_prompt_stack, PromptContext, apply_sample_prompt_stack`
+
 ---
 
 ## End-to-end path (inference)
@@ -9,7 +35,7 @@ This doc ties together the **Python modules** and **CLI flags** that shape the p
 1. **User input** — `--prompt`, optional `--negative-prompt`, `--tags` / `--tags-file`, `--lora-trigger`, character sheet / scene blueprint JSON, emphasis `(word)` / `[word]` in `sample.py`.
 2. **Defaults** — If negative is empty, `config.reference.prompt_domains` supplies `DEFAULT_NEGATIVE_PROMPT` (or text-in-image variants when `--text-in-image` or detected phrases).
 3. **Optional prefixes** — `--hard-style`, `--naturalize` / `--naturalize-deep`, `--anti-bleed`, `--diversity`, originality tokens, etc. (see `sample.py` after the prompt is assembled).
-4. **`utils.prompt.content_controls.apply_content_controls`** — SFW/NSFW scaffolding, quality packs (including **`micro_detail`** texture/material), **`adherence_pack`** (standard/strict literalism), pose/view/domain, Civitai trigger banks, **one-shot** scaffolding, **anti-AI** / **human-media** / **LoRA scaffold** packs, composition guards, etc. (`--safety-mode`, `--less-ai`, `--auto-content-fix`, …). With **`--auto-content-fix`** (default on), long prompts can auto-pick **`standard`** / **`strict`** adherence from length + keywords.
+4. **`utils.prompt.content_controls.apply_content_controls`** — Quality packs (including **`micro_detail`** texture/material), **`adherence_pack`** (standard/strict literalism), pose/view/domain, Civitai trigger banks, **one-shot** scaffolding, **anti-AI** / **human-media** / **LoRA scaffold** packs, composition guards, etc. (`--less-ai`, `--auto-content-fix`, …). Tag packs are built-in (no CSV). With **`--auto-content-fix`** (default on), long prompts can auto-pick **`standard`** / **`strict`** adherence from length + keywords. **`--uncensored-mode`** (default on) disables character-sheet safety sanitization.
 5. **Extra negatives** — Scale distortion, character/scene negatives, **multi-LoRA** `LORA_STACK_NEGATIVE` when two+ `--lora` paths.
 6. **Conflict filter** — `utils.prompt.neg_filter.filter_negative_by_positive` removes negative tokens that duplicate positive tokens (unless `--no-neg-filter`).
 7. **Encode** — T5 (or triple bundle) → `encoder_hidden_states` / CFG uncond.
@@ -38,7 +64,7 @@ This doc ties together the **Python modules** and **CLI flags** that shape the p
 ## Preview without a GPU
 
 ```bash
-python -m scripts.tools preview_generation_prompt --prompt "1girl, red dress" --safety-mode nsfw --less-ai
+python -m scripts.tools preview_generation_prompt --prompt "1girl, red dress" --quality-pack top --less-ai
 ```
 
 Prints **effective positive / negative** after content controls + the same conflict filter as `sample.py` (subset of flags; no checkpoint). See [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md).
@@ -49,7 +75,7 @@ Prints **effective positive / negative** after content controls + the same confl
 
 | Intent | Flags (examples) |
 |--------|------------------|
-| SFW vs NSFW intent | `--safety-mode sfw\|nsfw\|none` |
+| Uncensored / no sheet sanitization | `--uncensored-mode` (default on) / `--no-uncensored-mode` |
 | Stronger first-try composition | `--one-shot-boost` (default on) / `--no-one-shot-boost` |
 | Keyword inference | `--auto-content-fix` (default on) / `--no-auto-content-fix` |
 | Less “AI render” look | `--less-ai`, `--anti-ai-pack lite\|strong`, `--human-media photographic\|dslr\|film`, `--naturalize` |

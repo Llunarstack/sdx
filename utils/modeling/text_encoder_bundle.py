@@ -61,7 +61,7 @@ class TripleTextFusion(nn.Module):
         return torch.cat([t5_hidden, extra], dim=1)
 
 
-@dataclass
+@dataclass(slots=True)
 class TextEncoderBundle:
     mode: str  # "t5" | "triple"
     tokenizer: object

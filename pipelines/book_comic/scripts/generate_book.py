@@ -510,13 +510,33 @@ def main() -> None:
         help="Template per page; placeholders: {page}/{page0} (0-based), {page1}, {total_pages}, {total_pages0}, plus custom {keys} left as-is.",
     )
 
-    parser.add_argument("--cover-prompt", default="", help="Optional cover prompt")
+    parser.add_argument(
+        "--cover-prompt",
+        default="",
+        help="Front cover prompt (written to covers/front.png; legacy cover/cover.png unless --no-legacy-cover-path).",
+    )
+    parser.add_argument("--back-cover-prompt", default="", help="Optional back cover prompt (covers/back.png).")
+    parser.add_argument(
+        "--book-title",
+        default="",
+        help="Optional title stored in book.json / book_manifest.json metadata.",
+    )
+    parser.add_argument(
+        "--no-legacy-cover-path",
+        action="store_true",
+        help="Do not mirror front cover to cover/cover.png (use covers/front.png only).",
+    )
     parser.add_argument(
         "--expected-text",
         default="",
         help="Expected text (comma-separated or JSON list). Used for OCR validation + fixes.",
     )
-    parser.add_argument("--cover-expected-text", default="", help="Expected cover text (defaults to --expected-text).")
+    parser.add_argument("--cover-expected-text", default="", help="Expected front cover text (defaults to --expected-text).")
+    parser.add_argument(
+        "--back-cover-expected-text",
+        default="",
+        help="Expected back cover text (defaults to --cover-expected-text, then --expected-text).",
+    )
     parser.add_argument("--pages-expected-text", default="", help="Expected page text (defaults to --expected-text).")
     parser.add_argument(
         "--ocr-fix", action="store_true", help="Enable OCR validation + iterative inpainting of text regions."
@@ -1440,6 +1460,63 @@ def main() -> None:
         choices=["none", "standard", "strict"],
         help="sample.py literal prompt adherence scaffolding (long complex prompts).",
     )
+    try:
+        from utils.visual_design.compose import visual_design_cli_domain_choices as _vdd_choices_book
+    except ImportError:
+
+        def _vdd_choices_book():
+            return (
+                "none",
+                "auto",
+                "ui_ux",
+                "architecture",
+                "stem",
+                "textbook",
+                "brand",
+                "infographic",
+                "packaging",
+                "wayfinding",
+                "general_product",
+                "editorial_layout",
+                "presentation_slide",
+                "technical_blueprint",
+                "fashion_flat",
+            )
+
+    parser.add_argument(
+        "--visual-design-domain",
+        default="none",
+        choices=list(_vdd_choices_book()),
+        dest="visual_design_domain",
+        help="Forwarded to sample.py: append visual-design craft pack (UI, STEM, brand, textbook, …).",
+    )
+    parser.add_argument(
+        "--visual-design-intensity",
+        default="standard",
+        choices=["lite", "standard", "strong"],
+        dest="visual_design_intensity",
+        help="Tier for --visual-design-domain (sample.py).",
+    )
+    parser.add_argument(
+        "--visual-design-negative-pack",
+        action="store_true",
+        dest="visual_design_negative_pack",
+        help="Forwarded to sample.py: merge domain-specific negatives.",
+    )
+    try:
+        from utils.visual_design.presets import preset_ids as _book_vdp_ids
+
+        _book_preset_choices = ("",) + tuple(_book_vdp_ids())
+    except ImportError:
+        _book_preset_choices = ("",)
+    parser.add_argument(
+        "--visual-design-preset",
+        type=str,
+        default="",
+        choices=list(_book_preset_choices),
+        dest="visual_design_preset",
+        help="Forwarded to sample.py: named pack (see utils.visual_design.presets).",
+    )
     parser.add_argument(
         "--clip-guard-threshold",
         type=float,
@@ -1631,7 +1708,7 @@ def main() -> None:
     parser.add_argument(
         "--auto-humanize",
         action="store_true",
-        help="Auto-pick humanization profile from book type/style/safety mode; explicit --humanize-* still override.",
+        help="Auto-pick humanization profile from book type/style; explicit --humanize-* still override.",
     )
     parser.add_argument(
         "--book-authenticity",
@@ -1670,8 +1747,8 @@ def main() -> None:
             "max",
         ],
         help=(
-            "Extra positive/negative fragments for NSFW narrative fidelity (with --safety-mode nsfw), "
-            "surreal OCs, crowds, reflections, etc. See book_challenging_content.py."
+            "Extra positive/negative fragments for mature narrative fidelity, surreal OCs, "
+            "crowds, reflections, etc. See book_challenging_content.py."
         ),
     )
     parser.add_argument(
@@ -1837,18 +1914,6 @@ def main() -> None:
         default="none",
         choices=["none", "lite", "balanced", "strong"],
         help="Anti-synthetic negative prompt boost level.",
-    )
-    parser.add_argument(
-        "--safety-mode",
-        default="",
-        choices=["", "none", "sfw", "nsfw"],
-        help="Optional override forwarded to sample.py safety scaffolding.",
-    )
-    parser.add_argument(
-        "--nsfw-pack",
-        default="",
-        choices=["", "none", "soft", "explicit_detail", "romantic", "extreme"],
-        help="Optional adult-content stability pack forwarded to sample.py.",
     )
     parser.add_argument("--oc-name", default="", help="Original character name/handle for identity locking.")
     parser.add_argument(
@@ -2044,14 +2109,11 @@ def main() -> None:
         book_style_pack=str(getattr(args, "book_style_pack", "none") or "none"),
         artist_pack=str(getattr(args, "artist_pack", "none") or "none"),
         oc_pack=str(getattr(args, "oc_pack", "none") or "none"),
-        safety_mode=str(getattr(args, "safety_mode", "") or ""),
-        nsfw_pack=str(getattr(args, "nsfw_pack", "") or ""),
     )
     _auto_h = (
         prompt_lexicon.infer_auto_humanize_controls(
             book_type=str(getattr(args, "book_type", "manga") or "manga"),
             lexicon_style=str(getattr(args, "lexicon_style", "none") or "none"),
-            safety_mode=str(_style_cfg.get("safety_mode", "") or ""),
         )
         if bool(getattr(args, "auto_humanize", False))
         else {}
@@ -2076,7 +2138,6 @@ def main() -> None:
         pick_vit_ckpt=str(getattr(args, "pick_vit_ckpt", "") or ""),
         beam_width=int(getattr(args, "beam_width", 0) or 0),
         book_challenge_pack=str(getattr(args, "book_challenge_pack", "none") or "none"),
-        safety_mode=str(_style_cfg.get("safety_mode", "") or ""),
         clip_guard_threshold=float(getattr(args, "clip_guard_threshold", 0.0) or 0.0),
         clip_monitor_every=int(getattr(args, "clip_monitor_every", 0) or 0),
         adherence_pack=str(getattr(args, "adherence_pack", "none") or "none"),
@@ -2114,16 +2175,6 @@ def main() -> None:
         )
         return tail
 
-    def _nsfw_tail() -> List[str]:
-        tail: List[str] = []
-        sm = str(_style_cfg.get("safety_mode", "") or "").strip().lower()
-        if sm in ("none", "sfw", "nsfw"):
-            tail.extend(["--safety-mode", sm])
-        npack = str(_style_cfg.get("nsfw_pack", "") or "").strip().lower()
-        if npack in ("none", "soft", "explicit_detail", "romantic", "extreme"):
-            tail.extend(["--nsfw-pack", npack])
-        return tail
-
     def _photo_tail() -> List[str]:
         tail: List[str] = []
         prp = str(getattr(args, "photo_realism_pack", "none") or "none").strip().lower()
@@ -2158,7 +2209,6 @@ def main() -> None:
     ocr_extra = (
         book_helpers.build_extra_ocr_sample_flags(settings)
         + _cfg_cmd_tail()
-        + _nsfw_tail()
         + _photo_tail()
         + book_helpers.adapter_control_argv_for_sample(args)
         + book_helpers.sdx_enhance_argv_for_sample(args)
@@ -2166,15 +2216,24 @@ def main() -> None:
     )
 
     out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pages_dir = out_dir / "pages"
-    pages_dir.mkdir(exist_ok=True)
-    cover_dir = out_dir / "cover"
-    cover_dir.mkdir(exist_ok=True)
+    _ensure_repo_on_path()
+    from pipelines.book_comic.book_project import BookProject
+
+    book_proj = BookProject.open(out_dir, create=True)
+    book_proj.ckpt = str(args.ckpt)
+    book_proj.book_type = str(args.book_type)
+    book_proj.title = str(getattr(args, "book_title", "") or "").strip()
+    pages_dir = book_proj.pages_dir()
+    covers_dir = book_proj.covers_dir()
 
     expected_texts = _parse_expected_texts(args.expected_text)
     cover_expected_texts = (
         _parse_expected_texts(args.cover_expected_text) if args.cover_expected_text.strip() else expected_texts
+    )
+    back_cover_expected_texts = (
+        _parse_expected_texts(args.back_cover_expected_text)
+        if str(getattr(args, "back_cover_expected_text", "") or "").strip()
+        else cover_expected_texts
     )
     pages_expected_texts = (
         _parse_expected_texts(args.pages_expected_text) if args.pages_expected_text.strip() else expected_texts
@@ -2356,17 +2415,10 @@ def main() -> None:
     if cj:
         consistency_spec = dict(consistency_helpers.load_consistency_json(Path(cj)))
     consistency_helpers.overlay_cli_on_spec(consistency_spec, args)
-    _safety_for_challenge = str(_style_cfg.get("safety_mode", "") or "")
-    consistency_block = consistency_helpers.positive_block_from_mapping(
-        consistency_spec,
-        safety_mode=_safety_for_challenge,
-    )
+    consistency_block = consistency_helpers.positive_block_from_mapping(consistency_spec)
     _challenge_pack_cli = str(getattr(args, "book_challenge_pack", "none") or "none").strip().lower()
     _book_challenge_pos = prompt_lexicon.merge_prompt_fragments(
-        book_challenging_content.challenge_pack_positive(
-            _challenge_pack_cli,
-            safety_mode=_safety_for_challenge,
-        ),
+        book_challenging_content.challenge_pack_positive(_challenge_pack_cli),
         str(getattr(args, "book_challenge_extra", "") or "").strip(),
     )
     consistency_block = prompt_lexicon.merge_prompt_fragments(consistency_block, _book_challenge_pos)
@@ -2414,9 +2466,9 @@ def main() -> None:
             page_expected_overrides.append([])
     if not prompts and args.cover_prompt:
         prompts = []
-    if not prompts and not args.cover_prompt:
+    if not prompts and not args.cover_prompt and not str(getattr(args, "back_cover_prompt", "") or "").strip():
         raise SystemExit(
-            "Provide either --prompts-file or (--pages and --page-prompt-template), or provide --cover-prompt."
+            "Provide --prompts-file or (--pages and --page-prompt-template), or --cover-prompt / --back-cover-prompt."
         )
 
     # Initialize OCR lazily (only when needed).
@@ -2545,7 +2597,6 @@ def main() -> None:
             beam2_noise=float(getattr(args, "beam2_noise", 0.03) or 0.03),
         )
         cmd.extend(_cfg_cmd_tail())
-        cmd.extend(_nsfw_tail())
         cmd.extend(_photo_tail())
         book_helpers.extend_sample_py_adapter_control_cmd(cmd, args)
         book_helpers.extend_sample_py_sdx_enhance_cmd(cmd, args)
@@ -2593,16 +2644,22 @@ def main() -> None:
         _safe_run(cmd)
         _postprocess_output(out_path, page_seed if page_seed is not None else int(args.seed))
 
-    # Cover generation
-    if args.cover_prompt:
-        cover_out = cover_dir / "cover.png"
+    def _run_cover_side(
+        *,
+        side: str,
+        user_prompt: str,
+        out_path: Path,
+        expected_for_ocr: List[str],
+        manifest_kind: str,
+        seed: int,
+    ) -> None:
         vm_cover = (
-            book_vm.prompt_fragment_for_cover(safety_mode=_safety_for_challenge)
+            book_vm.prompt_fragment_for_cover()
             if book_vm is not None
             else ""
         )
-        cover_composed = book_helpers.compose_book_page_prompt(
-            user_prompt=args.cover_prompt,
+        composed = book_helpers.compose_book_page_prompt(
+            user_prompt=user_prompt,
             narration_prefix=narration_p,
             consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block, vm_cover),
             style_fusion_block=_style_fusion_cli,
@@ -2611,29 +2668,26 @@ def main() -> None:
             rolling_context="",
         )
         sample_generate(
-            cover_composed,
-            cover_out,
-            expected_texts_for_prompt=cover_expected_texts,
-            page_seed=int(args.seed),
+            composed,
+            out_path,
+            expected_texts_for_prompt=expected_for_ocr,
+            page_seed=seed,
         )
-        if args.write_book_manifest:
-            manifest_rows.append(
-                {
-                    "kind": "cover",
-                    "path": f"cover/{cover_out.name}",
-                    "prompt": cover_composed,
-                    "seed": int(args.seed),
-                }
-            )
-        # OCR-fix cover too (optional)
-        if args.ocr_fix and cover_expected_texts:
-            ocr_out = cover_out
+        row = {
+            "kind": manifest_kind,
+            "side": side,
+            "path": book_proj.rel(out_path),
+            "prompt": composed,
+            "seed": int(seed),
+        }
+        manifest_rows.append(row)
+        if args.ocr_fix and expected_for_ocr:
             _try_ocr_fix(
-                image_path=cover_out,
-                expected_texts=cover_expected_texts,
-                prompt=cover_composed,
+                image_path=out_path,
+                expected_texts=expected_for_ocr,
+                prompt=composed,
                 ckpt=args.ckpt,
-                out_path=ocr_out,
+                out_path=out_path,
                 sample_steps=args.steps,
                 strength=args.page_inpaint_strength,
                 inpaint_strength=args.text_inpaint_strength,
@@ -2647,13 +2701,40 @@ def main() -> None:
                 max_iters=args.ocr_iters,
                 threshold=args.ocr_threshold,
                 inpaint_mode="mdm",
-                seed=args.seed,
+                seed=seed,
                 sampler=args.scheduler,
                 text_in_image_flag=args.text_in_image,
                 ocr_mask_dilate=args.ocr_mask_dilate,
                 ocr_extra_flags=ocr_extra,
             )
-            _postprocess_output(cover_out, int(args.seed))
+        _postprocess_output(out_path, int(seed))
+
+    # Front / back covers (same DiT checkpoint as interior pages)
+    if args.cover_prompt:
+        front_out = book_proj.cover_path("front")
+        _run_cover_side(
+            side="front",
+            user_prompt=args.cover_prompt,
+            out_path=front_out,
+            expected_for_ocr=cover_expected_texts,
+            manifest_kind="front_cover",
+            seed=int(args.seed),
+        )
+        if not bool(getattr(args, "no_legacy_cover_path", False)):
+            book_proj.sync_legacy_front_cover(front_out)
+
+    back_prompt = str(getattr(args, "back_cover_prompt", "") or "").strip()
+    if back_prompt:
+        back_out = book_proj.cover_path("back")
+        back_seed = book_helpers.derive_book_page_seed(int(args.seed), 9999)
+        _run_cover_side(
+            side="back",
+            user_prompt=back_prompt,
+            out_path=back_out,
+            expected_for_ocr=back_cover_expected_texts,
+            manifest_kind="back_cover",
+            seed=back_seed,
+        )
 
     # Pages
     prev_path: Optional[Path] = None
@@ -2679,7 +2760,7 @@ def main() -> None:
             prev_prompts, num_previous=context_n, max_chars=context_mc
         )
         vm_page = (
-            book_vm.prompt_fragment_for_page(i, safety_mode=_safety_for_challenge)
+            book_vm.prompt_fragment_for_page(i)
             if book_vm is not None
             else ""
         )
@@ -2699,17 +2780,16 @@ def main() -> None:
         if args.skip_existing and page_out.is_file():
             prev_prompts.append(page_prompt)
             prev_path = page_out
-            if args.write_book_manifest:
-                manifest_rows.append(
-                    {
-                        "kind": "page",
-                        "index": i,
-                        "path": f"pages/{page_out.name}",
-                        "prompt": composed_prompt,
-                        "seed": int(args.seed) + i * 9973,
-                        "skipped": True,
-                    }
-                )
+            manifest_rows.append(
+                {
+                    "kind": "page",
+                    "index": i,
+                    "path": book_proj.rel(page_out),
+                    "prompt": composed_prompt,
+                    "seed": book_helpers.derive_book_page_seed(int(args.seed), i),
+                    "skipped": True,
+                }
+            )
             continue
 
         # If this page has an override expected text, use it; otherwise use the global pages_expected_texts.
@@ -2820,17 +2900,16 @@ def main() -> None:
 
         prev_prompts.append(page_prompt)
         prev_path = page_out
-        if args.write_book_manifest:
-            manifest_rows.append(
-                {
-                    "kind": "page",
-                    "index": i,
-                    "path": f"pages/{page_out.name}",
-                    "prompt": composed_prompt,
-                    "seed": page_seed,
-                    "skipped": False,
-                }
-            )
+        manifest_rows.append(
+            {
+                "kind": "page",
+                "index": i,
+                "path": book_proj.rel(page_out),
+                "prompt": composed_prompt,
+                "seed": page_seed,
+                "skipped": False,
+            }
+        )
 
     if args.write_book_manifest:
         mf = {
@@ -2925,6 +3004,10 @@ def main() -> None:
             "adherence_quality": {
                 "quality_pack": str(getattr(args, "quality_pack", "none") or "none"),
                 "adherence_pack": str(getattr(args, "adherence_pack", "none") or "none"),
+                "visual_design_domain": str(getattr(args, "visual_design_domain", "none") or "none"),
+                "visual_design_intensity": str(getattr(args, "visual_design_intensity", "standard") or "standard"),
+                "visual_design_negative_pack": bool(getattr(args, "visual_design_negative_pack", False)),
+                "visual_design_preset": str(getattr(args, "visual_design_preset", "") or ""),
                 "clip_guard_threshold": float(getattr(args, "clip_guard_threshold", 0.0) or 0.0),
                 "clip_monitor_every": int(getattr(args, "clip_monitor_every", 0) or 0),
                 "volatile_cfg_boost": float(getattr(args, "volatile_cfg_boost", 0.0) or 0.0),
@@ -2951,8 +3034,6 @@ def main() -> None:
             "consistency_json": cj or None,
             "visual_memory": vm_path or None,
             "visual_memory_entity_ids": book_vm.entity_ids() if book_vm is not None else [],
-            "safety_mode": str(_style_cfg.get("safety_mode", "") or ""),
-            "nsfw_pack": str(_style_cfg.get("nsfw_pack", "") or ""),
             "shortcomings_mitigation": getattr(settings, "shortcomings_mitigation", "none"),
             "shortcomings_2d": bool(getattr(settings, "shortcomings_2d", False)),
             "art_guidance_mode": getattr(settings, "art_guidance_mode", "none"),
@@ -2968,7 +3049,14 @@ def main() -> None:
         }
         (out_dir / "book_manifest.json").write_text(json.dumps(mf, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    book_proj.entries = list(manifest_rows)
+    if args.write_book_manifest:
+        book_proj.extra.update({k: v for k, v in mf.items() if k != "entries"})
+    book_proj.flush()
+
     print(f"Book generation finished: {out_dir}")
+    print(f"  Project file: {book_proj.root / 'book.json'}")
+    print(f"  Covers: {covers_dir}/front.png" + (" + back.png" if back_prompt else ""))
 
 
 if __name__ == "__main__":

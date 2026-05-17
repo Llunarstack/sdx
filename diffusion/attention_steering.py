@@ -35,7 +35,7 @@ from typing import Optional
 import torch
 
 
-@dataclass
+@dataclass(slots=True)
 class ASTConfig:
     """Configuration for Attention Steering."""
 

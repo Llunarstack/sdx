@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EvalPromptRecord:
     """One row from a JSON eval pack after normalization."""
 
