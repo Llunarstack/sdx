@@ -162,7 +162,7 @@ Optional compiled CLIs (Rust, Go, Zig, C++, Node) for fast JSONL — **not** imp
 | [pipelines/book_comic/prompt_lexicon.py](../pipelines/book_comic/prompt_lexicon.py) | Comic/manga **style** snippets, merged negatives, aspect presets, tategaki/SFX hints. |
 | [docs/BOOK_COMIC_TECH.md](BOOK_COMIC_TECH.md) | Sequential-art techniques vs SDX + **best output checklist** (data, training, `generate_book`, pick-best, post). |
 | [scripts/tools/book_scene_split.py](../scripts/tools/book_scene_split.py) | `## Page` / `---PAGE---` → `pages.txt` for `generate_book.py`. |
-| [scripts/book/generate_book.py](../scripts/book/generate_book.py) | Thin launcher → `pipelines/book_comic/scripts/generate_book.py`. |
+| [pipelines/book_comic/scripts/generate_book.py](../pipelines/book_comic/scripts/generate_book.py) | Multi-page book/comic generator (canonical entry). |
 
 ### Scripts
 

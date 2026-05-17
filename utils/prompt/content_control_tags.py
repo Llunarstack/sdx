@@ -1,10 +1,4 @@
-"""
-Tag lists/dicts for ``content_controls``, loaded from ``data/prompt_tags/*.csv``.
-
-Regenerate CSVs from the repo root::
-
-    python -m scripts.tools dump_prompt_tag_csvs
-"""
+"""Tag lists/dicts for ``content_controls`` (built-in packs; no CSV tag files)."""
 
 from __future__ import annotations
 
@@ -93,20 +87,12 @@ __all__ = (
 
 from typing import Dict, List, Tuple
 
-from .content_control_tag_data import (
-    conflicting_pairs_from_table,
-    default_tag_data_dir,
-    dict_pack,
-    flat_pack,
-    load_tag_tables,
-)
+from .content_control_tag_data import conflicting_pairs_from_table, dict_pack, flat_pack
+from .content_control_tags_builtin import BUILTIN_TAG_TABLES
 
-_TAG_TABLES = load_tag_tables(default_tag_data_dir())
-if not _TAG_TABLES:
-    raise FileNotFoundError(
-        f"Missing content-control tag CSVs under {default_tag_data_dir()}. "
-        "Run: python -m scripts.tools dump_prompt_tag_csvs"
-    )
+_TAG_TABLES = BUILTIN_TAG_TABLES
+_EMPTY_LIST: List[str] = []
+_EMPTY_DICT: Dict[str, List[str]] = {"none": []}
 
 
 def _dn(pack: str) -> Dict[str, List[str]]:
@@ -117,16 +103,16 @@ def _dn(pack: str) -> Dict[str, List[str]]:
 
 _BEST_MODEL_TAGS: List[str] = flat_pack(_TAG_TABLES, "best_model_tags")
 
-_SFW_POSITIVE: List[str] = flat_pack(_TAG_TABLES, "sfw_positive")
-_SFW_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "sfw_negative")
-_SFW_MOOD_POSITIVE: Dict[str, List[str]] = _dn("sfw_mood_positive")
-_SFW_POSE_POSITIVE: Dict[str, List[str]] = _dn("sfw_pose_positive")
-_SFW_CLOTHING_POSITIVE: Dict[str, List[str]] = _dn("sfw_clothing_positive")
-_SFW_ENVIRONMENT_POSITIVE: Dict[str, List[str]] = _dn("sfw_environment_positive")
-_SFW_EXPRESSION_POSITIVE: Dict[str, List[str]] = _dn("sfw_expression_positive")
+_SFW_POSITIVE: List[str] = _EMPTY_LIST
+_SFW_NEGATIVE: List[str] = _EMPTY_LIST
+_SFW_MOOD_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
+_SFW_POSE_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
+_SFW_CLOTHING_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
+_SFW_ENVIRONMENT_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
+_SFW_EXPRESSION_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
 
-_NSFW_POSITIVE: List[str] = flat_pack(_TAG_TABLES, "nsfw_positive")
-_NSFW_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "nsfw_negative")
+_NSFW_POSITIVE: List[str] = _EMPTY_LIST
+_NSFW_NEGATIVE: List[str] = _EMPTY_LIST
 
 _POSE_POSITIVE: Dict[str, List[str]] = dict_pack(_TAG_TABLES, "pose_positive")
 _POSE_NEGATIVE: List[str] = flat_pack(_TAG_TABLES, "pose_negative_shared")
@@ -187,10 +173,10 @@ _LIGHTING_MODE_POSITIVE: Dict[str, List[str]] = _dn("lighting_mode_positive")
 _LIGHTING_MODE_NEGATIVE: Dict[str, List[str]] = _dn("lighting_mode_negative")
 _SKIN_DETAIL_POSITIVE: Dict[str, List[str]] = _dn("skin_detail_positive")
 _SKIN_DETAIL_NEGATIVE: Dict[str, List[str]] = _dn("skin_detail_negative")
-_NSFW_PACK_POSITIVE: Dict[str, List[str]] = _dn("nsfw_pack_positive")
-_NSFW_PACK_NEGATIVE: Dict[str, List[str]] = _dn("nsfw_pack_negative")
-_SEX_POSITION_POSITIVE: Dict[str, List[str]] = _dn("sex_position_positive")
-_PENETRATION_POSITIVE: Dict[str, List[str]] = _dn("penetration_positive")
+_NSFW_PACK_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
+_NSFW_PACK_NEGATIVE: Dict[str, List[str]] = _EMPTY_DICT
+_SEX_POSITION_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
+_PENETRATION_POSITIVE: Dict[str, List[str]] = _EMPTY_DICT
 _BODY_PROPORTION_POSITIVE: Dict[str, List[str]] = _dn("body_proportion_positive")
 _INTERACTION_INTENSITY: Dict[str, List[str]] = _dn("interaction_intensity_positive")
 _CLOTHING_POSITIVE: Dict[str, List[str]] = _dn("clothing_positive")

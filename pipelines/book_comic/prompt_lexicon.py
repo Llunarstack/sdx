@@ -1414,38 +1414,26 @@ BOOK_STYLE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     "manga_nsfw_action": {
         "artist_pack": "manga_cinematic",
         "oc_pack": "none",
-        "safety_mode": "nsfw",
-        "nsfw_pack": "explicit_detail",
     },
     "webtoon_nsfw_romance": {
         "artist_pack": "webtoon_scroll",
         "oc_pack": "none",
-        "safety_mode": "nsfw",
-        "nsfw_pack": "romantic",
     },
     "comic_dialogue_safe": {
         "artist_pack": "comic_dialogue",
         "oc_pack": "none",
-        "safety_mode": "sfw",
-        "nsfw_pack": "none",
     },
     "oc_launch_safe": {
         "artist_pack": "manga_cinematic",
         "oc_pack": "heroine_scifi",
-        "safety_mode": "sfw",
-        "nsfw_pack": "none",
     },
     "manga_nsfw_surreal": {
         "artist_pack": "manga_cinematic",
         "oc_pack": "none",
-        "safety_mode": "nsfw",
-        "nsfw_pack": "explicit_detail",
     },
     "webtoon_nsfw_complex": {
         "artist_pack": "webtoon_scroll",
         "oc_pack": "none",
-        "safety_mode": "nsfw",
-        "nsfw_pack": "extreme",
     },
 }
 
@@ -1996,8 +1984,6 @@ def resolve_book_style_controls(
     book_style_pack: str = "none",
     artist_pack: str = "none",
     oc_pack: str = "none",
-    safety_mode: str = "",
-    nsfw_pack: str = "",
 ) -> Dict[str, str]:
     """
     Resolve higher-level style controls from one pack + explicit overrides.
@@ -2009,17 +1995,11 @@ def resolve_book_style_controls(
     out = {
         "artist_pack": pack.get("artist_pack", "none"),
         "oc_pack": pack.get("oc_pack", "none"),
-        "safety_mode": pack.get("safety_mode", ""),
-        "nsfw_pack": pack.get("nsfw_pack", ""),
     }
     if (artist_pack or "none").lower().strip() != "none":
         out["artist_pack"] = artist_pack
     if (oc_pack or "none").lower().strip() != "none":
         out["oc_pack"] = oc_pack
-    if str(safety_mode).strip():
-        out["safety_mode"] = str(safety_mode).strip()
-    if str(nsfw_pack).strip():
-        out["nsfw_pack"] = str(nsfw_pack).strip()
     return out
 
 
@@ -2060,17 +2040,13 @@ def infer_auto_humanize_controls(
     *,
     book_type: str = "manga",
     lexicon_style: str = "none",
-    safety_mode: str = "",
 ) -> Dict[str, str]:
     """
     Infer practical default humanization settings from high-level intent.
     """
     bt = (book_type or "manga").lower().strip()
     ls = (lexicon_style or "none").lower().strip()
-    sm = (safety_mode or "").lower().strip()
 
-    if sm == "nsfw":
-        return resolve_humanize_controls(humanize_pack="balanced")
     if bt == "storyboard":
         return resolve_humanize_controls(humanize_pack="lite")
     if bt == "novel_cover":

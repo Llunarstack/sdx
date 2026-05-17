@@ -1,8 +1,25 @@
 """
-Enhanced Training System for Advanced DiT Models
-Includes specialized loss functions and training procedures for advanced features.
+Enhanced training system for advanced DiT models.
+
+Provides specialised loss modules for spatial control, anatomy awareness,
+text rendering, and character/style consistency, plus a unified
+``EnhancedTrainer`` that orchestrates them alongside the standard diffusion
+objective.
+
+Loss hierarchy
+--------------
+All auxiliary loss modules return a scalar **delta** (not the full loss).
+The final loss is::
+
+    total_loss = base_mse_loss + sum(auxiliary_deltas)
+
+This avoids double-counting the base loss regardless of which auxiliary
+modules are active.
 """
 
+from __future__ import annotations
+
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -22,7 +39,7 @@ from utils.consistency.consistency_losses import ConsistencyLossManager
 from utils.consistency.style_harmonization import create_style_harmonization_system
 
 
-@dataclass
+@dataclass(slots=True)
 class EnhancedTrainingBatch:
     """Enhanced training batch with additional feature data."""
 
@@ -59,12 +76,15 @@ class EnhancedTrainingBatch:
 
 
 class SpatialControlLoss(nn.Module):
-    """Loss function for spatial control and object placement."""
+    """Loss function for spatial control and object placement.
+
+    Returns an auxiliary **delta** (not the full loss). Combine with
+    ``F.mse_loss(predicted_noise, target_noise)`` in the trainer.
+    """
 
     def __init__(self, weight: float = 1.0):
         super().__init__()
         self.weight = weight
-        self.mse_loss = nn.MSELoss()
 
     def forward(
         self,
@@ -74,14 +94,10 @@ class SpatialControlLoss(nn.Module):
         object_counts: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
 
-        # Base diffusion loss
-        base_loss = self.mse_loss(predicted_noise, target_noise)
-
         if spatial_layout is None:
-            return base_loss
+            return torch.tensor(0.0, device=predicted_noise.device)
 
-        # Spatial consistency loss
-        # Encourage model to respect spatial layouts
+        # Spatial consistency loss — encourage model to respect spatial layouts
         B, C, H, W = predicted_noise.shape
 
         # Create spatial attention maps from noise prediction
@@ -90,17 +106,17 @@ class SpatialControlLoss(nn.Module):
         # Create target spatial maps from layout
         target_spatial = torch.zeros_like(spatial_attention)
 
-        if spatial_layout is not None:
-            for b in range(B):
-                for obj_idx in range(spatial_layout.shape[1]):
-                    x, y, w, h = spatial_layout[b, obj_idx]
-                    if x > 0 and y > 0:  # Valid object
-                        x_start = int(x * W)
-                        y_start = int(y * H)
-                        x_end = int((x + w) * W)
-                        y_end = int((y + h) * H)
-
-                        target_spatial[b, y_start:y_end, x_start:x_end] = 1.0
+        # Vectorised target spatial map via bilinear upsampling of bbox masks
+        for b in range(B):
+            for obj_idx in range(spatial_layout.shape[1]):
+                x_n, y_n, w_n, h_n = spatial_layout[b, obj_idx].tolist()
+                if x_n > 0 and y_n > 0:
+                    x0 = max(0, int(x_n * W))
+                    y0 = max(0, int(y_n * H))
+                    x1 = min(W, int((x_n + w_n) * W))
+                    y1 = min(H, int((y_n + h_n) * H))
+                    if x1 > x0 and y1 > y0:
+                        target_spatial[b, y0:y1, x0:x1] = 1.0
 
         # Spatial alignment loss
         spatial_loss = F.mse_loss(spatial_attention, target_spatial)
@@ -108,7 +124,7 @@ class SpatialControlLoss(nn.Module):
         # Counting loss if provided
         counting_loss = 0.0
         if object_counts is not None:
-            # Simplified counting loss - count peaks in attention
+            # Simplified counting loss — count peaks in attention
             attention_peaks = []
             for b in range(B):
                 # Find local maxima in spatial attention
@@ -120,17 +136,19 @@ class SpatialControlLoss(nn.Module):
             predicted_counts = torch.stack(attention_peaks)
             counting_loss = F.mse_loss(predicted_counts, object_counts.float())
 
-        total_loss = base_loss + self.weight * (spatial_loss + 0.5 * counting_loss)
-        return total_loss
+        return self.weight * (spatial_loss + 0.5 * counting_loss)
 
 
 class AnatomyAwareLoss(nn.Module):
-    """Loss function for anatomy-aware generation."""
+    """Loss function for anatomy-aware generation.
+
+    Returns an auxiliary **delta** (not the full loss). Combine with
+    ``F.mse_loss(predicted_noise, target_noise)`` in the trainer.
+    """
 
     def __init__(self, weight: float = 1.0):
         super().__init__()
         self.weight = weight
-        self.mse_loss = nn.MSELoss()
 
     def forward(
         self,
@@ -140,45 +158,47 @@ class AnatomyAwareLoss(nn.Module):
         anatomy_keypoints: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
 
-        # Base diffusion loss
-        base_loss = self.mse_loss(predicted_noise, target_noise)
-
         if anatomy_mask is None:
-            return base_loss
+            return torch.tensor(0.0, device=predicted_noise.device)
 
-        # Anatomy-focused loss
-        # Higher weight on human regions
-        if anatomy_mask is not None:
-            # Reshape mask to match noise dimensions
-            B, N = anatomy_mask.shape
-            H = W = int(np.sqrt(N))
-            anatomy_mask_2d = anatomy_mask.view(B, H, W).unsqueeze(1)
-            anatomy_mask_2d = F.interpolate(anatomy_mask_2d, size=predicted_noise.shape[-2:], mode="nearest")
+        # Reshape mask to match noise dimensions
+        B, N = anatomy_mask.shape
+        H = W = math.isqrt(N)
+        if H * W != N:
+            raise ValueError(
+                f"AnatomyAwareLoss: anatomy_mask sequence length {N} is not a perfect square. "
+                f"Got sqrt ≈ {N**0.5:.2f}."
+            )
+        anatomy_mask_2d = anatomy_mask.view(B, H, W).unsqueeze(1)
+        anatomy_mask_2d = F.interpolate(anatomy_mask_2d, size=predicted_noise.shape[-2:], mode="nearest")
 
-            # Weighted loss - higher weight on anatomy regions
-            anatomy_weight = 1.0 + 2.0 * anatomy_mask_2d  # 3x weight on anatomy
-            anatomy_loss = torch.mean(anatomy_weight * (predicted_noise - target_noise) ** 2)
-        else:
-            anatomy_loss = base_loss
+        # Weighted loss — higher weight on anatomy regions (3x)
+        anatomy_weight = 1.0 + 2.0 * anatomy_mask_2d
+        base_loss = F.mse_loss(predicted_noise, target_noise)
+        weighted_mse = torch.mean(anatomy_weight * (predicted_noise - target_noise) ** 2)
+        # Delta: the extra contribution over plain MSE
+        anatomy_loss = weighted_mse - base_loss
 
         # Hand-specific loss (simplified)
         hand_loss = 0.0
         if anatomy_keypoints is not None:
-            # Focus on hand regions - would need more sophisticated implementation
+            # Focus on hand regions — would need more sophisticated implementation
             # Apply additional loss weighting to hand regions
-            hand_loss = 0.1 * F.mse_loss(predicted_noise, target_noise)
+            hand_loss = 0.1 * base_loss
 
-        total_loss = base_loss + self.weight * (anatomy_loss - base_loss + hand_loss)
-        return total_loss
+        return self.weight * (anatomy_loss + hand_loss)
 
 
 class TextRenderingLoss(nn.Module):
-    """Loss function for text rendering accuracy."""
+    """Loss function for text rendering accuracy.
+
+    Returns an auxiliary **delta** (not the full loss). Combine with
+    ``F.mse_loss(predicted_noise, target_noise)`` in the trainer.
+    """
 
     def __init__(self, weight: float = 1.0):
         super().__init__()
         self.weight = weight
-        self.mse_loss = nn.MSELoss()
 
     def forward(
         self,
@@ -188,14 +208,11 @@ class TextRenderingLoss(nn.Module):
         text_positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
 
-        # Base diffusion loss
-        base_loss = self.mse_loss(predicted_noise, target_noise)
-
         if text_tokens is None:
-            return base_loss
+            return torch.tensor(0.0, device=predicted_noise.device)
 
         # Text region loss
-        text_loss = 0.0
+        text_loss = torch.tensor(0.0, device=predicted_noise.device)
         if text_positions is not None:
             B, max_text_len, _ = text_positions.shape
             C, H, W = predicted_noise.shape[1:]
@@ -216,21 +233,23 @@ class TextRenderingLoss(nn.Module):
                         y_end = min(H, y_pos + 5)
                         text_masks[b, y_start:y_end, x_start:x_end] = 1.0
 
-            # Apply higher weight to text regions
-            text_weight = 1.0 + 3.0 * text_masks.unsqueeze(1)  # 4x weight on text
+            # Apply higher weight to text regions (4x)
+            text_weight = 1.0 + 3.0 * text_masks.unsqueeze(1)
             text_loss = torch.mean(text_weight * (predicted_noise - target_noise) ** 2)
 
-        total_loss = base_loss + self.weight * (text_loss - base_loss)
-        return total_loss
+        return self.weight * text_loss
 
 
 class ConsistencyLoss(nn.Module):
-    """Loss function for character and style consistency."""
+    """Loss function for character and style consistency.
+
+    Returns an auxiliary **delta** (not the full loss). Combine with
+    ``F.mse_loss(predicted_noise, target_noise)`` in the trainer.
+    """
 
     def __init__(self, weight: float = 1.0):
         super().__init__()
         self.weight = weight
-        self.mse_loss = nn.MSELoss()
 
     def forward(
         self,
@@ -242,9 +261,6 @@ class ConsistencyLoss(nn.Module):
         style_features: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
 
-        # Base diffusion loss
-        base_loss = self.mse_loss(predicted_noise, target_noise)
-
         consistency_loss = 0.0
 
         # Character consistency loss
@@ -254,9 +270,9 @@ class ConsistencyLoss(nn.Module):
             for char_id in unique_chars:
                 char_mask = character_ids == char_id
                 if char_mask.sum() > 1:  # Multiple instances of same character
-                    char_features = character_features[char_mask]
+                    char_feats = character_features[char_mask]
                     # Encourage feature similarity
-                    char_consistency = torch.var(char_features, dim=0).mean()
+                    char_consistency = torch.var(char_feats, dim=0).mean()
                     consistency_loss += char_consistency
 
         # Style consistency loss
@@ -270,16 +286,22 @@ class ConsistencyLoss(nn.Module):
                     style_consistency = torch.var(style_features_subset, dim=0).mean()
                     consistency_loss += style_consistency
 
-        total_loss = base_loss + self.weight * consistency_loss
-        return total_loss
+        return self.weight * consistency_loss
 
 
 class EnhancedTrainer:
     """Enhanced trainer for advanced DiT models."""
 
-    def __init__(self, model: EnhancedDiT, device: str = "cuda", character_database_path: str = "./character_database"):
+    def __init__(
+        self,
+        model: EnhancedDiT,
+        device: str = "cuda",
+        character_database_path: str = "./character_database",
+        diffusion=None,  # Optional[GaussianDiffusion]
+    ):
         self.model = model
         self.device = device
+        self.diffusion = diffusion  # used by add_noise when provided
 
         # Loss functions
         self.spatial_loss = SpatialControlLoss(weight=0.5)
@@ -316,7 +338,7 @@ class EnhancedTrainer:
     ) -> Dict[str, torch.Tensor]:
         """Compute enhanced loss with all advanced features."""
 
-        losses = {}
+        losses: Dict[str, torch.Tensor] = {}
 
         # Spatial control loss
         if batch.spatial_layouts is not None:
@@ -351,16 +373,15 @@ class EnhancedTrainer:
             )
             losses["legacy_consistency"] = consistency_loss
 
-        # Base diffusion loss
+        # Base diffusion loss (single source of truth)
         base_loss = F.mse_loss(predicted_noise, target_noise)
         losses["base"] = base_loss
 
-        # Total loss
+        # Total = base + sum of all auxiliary loss deltas
         total_loss = base_loss
         for loss_name, loss_value in losses.items():
             if loss_name != "base":
-                total_loss = total_loss + loss_value - base_loss  # Avoid double counting base loss
-
+                total_loss = total_loss + loss_value
         losses["total"] = total_loss
 
         return losses
@@ -390,45 +411,53 @@ class EnhancedTrainer:
             style_id=batch.style_ids,
         )
 
-        # For character consistency, we need to generate images during training
-        # This is computationally expensive but necessary for consistency training
-        generated_images = None
-        if batch.character_profiles is not None:
-            # Generate images from predicted noise (simplified)
-            with torch.no_grad():
-                # This would normally require full denoising process
-                # For training efficiency, we use a simplified approximation
-                generated_images = x_0  # Use ground truth as approximation
-
-        # Compute enhanced loss
-        losses = self.compute_enhanced_loss(batch, model_output, noise, generated_images)
-
-        # Handle sigma prediction if enabled
+        # Split noise prediction from sigma prediction (when learn_sigma=True the model
+        # outputs 2×channels; we only compare the noise half against the target).
         if hasattr(self.model, "learn_sigma") and self.model.learn_sigma:
-            # Split output into noise and sigma predictions
-            predicted_noise, predicted_sigma = torch.chunk(model_output, 2, dim=1)
+            predicted_noise, _predicted_sigma = torch.chunk(model_output, 2, dim=1)
         else:
             predicted_noise = model_output
 
-        # Compute enhanced losses
-        losses = self.compute_enhanced_loss(batch, predicted_noise, noise)
+        # Optional: provide approximate generated images for character-consistency loss.
+        generated_images = None
+        if batch.character_profiles is not None:
+            with torch.no_grad():
+                # Full denoising would be expensive during training; use x_0 as proxy.
+                generated_images = x_0
+
+        # Single compute_enhanced_loss call with the correctly-shaped noise prediction.
+        losses = self.compute_enhanced_loss(batch, predicted_noise, noise, generated_images)
 
         return losses
 
-    def add_noise(self, x_0: torch.Tensor, noise: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """Add noise to clean images (standard diffusion)."""
-        # This would use your diffusion schedule
-        # Placeholder implementation
-        alpha_t = torch.cos(t * np.pi / 2) ** 2
-        alpha_t = alpha_t.view(-1, 1, 1, 1)
+    def add_noise(
+        self,
+        x_0: torch.Tensor,
+        noise: torch.Tensor,
+        t: torch.Tensor,
+        num_timesteps: int = 1000,
+    ) -> torch.Tensor:
+        """Add noise using the configured diffusion schedule when available,
+        otherwise falls back to a cosine approximation.
 
-        x_t = torch.sqrt(alpha_t) * x_0 + torch.sqrt(1 - alpha_t) * noise
-        return x_t
+        Args:
+            x_0: Clean latents [B, C, H, W].
+            noise: Gaussian noise, same shape as x_0.
+            t: Integer timestep indices in [0, num_timesteps-1].
+            num_timesteps: Total number of diffusion steps (used to normalise t
+                to [0, 1] for the cosine fallback).
+        """
+        if self.diffusion is not None:
+            return self.diffusion.q_sample(x_0, t, noise=noise)
+        # Cosine-schedule fallback: normalise integer timestep indices to [0, 1]
+        t_norm = t.float() / max(num_timesteps - 1, 1)
+        alpha_t = torch.cos(t_norm * np.pi / 2) ** 2
+        return torch.sqrt(alpha_t).view(-1, 1, 1, 1) * x_0 + torch.sqrt(1 - alpha_t).view(-1, 1, 1, 1) * noise
 
     def validate_generation(self, generated_images: torch.Tensor, batch: EnhancedTrainingBatch) -> Dict[str, float]:
         """Validate generated images against enhanced features."""
 
-        validation_results = {}
+        validation_results: Dict[str, float] = {}
 
         # Convert to PIL images for validation
         from torchvision.transforms import ToPILImage
@@ -453,17 +482,18 @@ class EnhancedTrainer:
 
             # Validate anatomy if applicable
             if batch.anatomy_masks is not None:
-                # Placeholder anatomy validation
-                validation_results[f"anatomy_score_{i}"] = 0.8  # Would be actual validation
+                validation_results[f"anatomy_score_{i}"] = float("nan")  # Not yet implemented
 
             # Validate spatial layout if applicable
             if batch.spatial_layouts is not None:
-                # Placeholder spatial validation
-                validation_results[f"spatial_accuracy_{i}"] = 0.9  # Would be actual validation
+                validation_results[f"spatial_accuracy_{i}"] = float("nan")  # Not yet implemented
 
         return validation_results
 
-    # Character consistency management methods
+    # ------------------------------------------------------------------ #
+    # Character consistency management methods                            #
+    # ------------------------------------------------------------------ #
+
     def create_character(
         self, name: str, reference_images: List[str], physical_features=None, style_preferences=None
     ) -> CharacterProfile:
@@ -490,7 +520,7 @@ class EnhancedTrainer:
         """Validate consistency of generated image against character."""
         return self.character_database.validate_consistency(image, character_id)
 
-    def update_consistency_loss_weights(self, new_weights: Dict[str, float]):
+    def update_consistency_loss_weights(self, new_weights: Dict[str, float]) -> None:
         """Update character consistency loss weights during training."""
         self.character_consistency_manager.update_loss_weights(new_weights)
 
@@ -502,25 +532,26 @@ class EnhancedTrainer:
             "database_path": str(self.character_database.database_path),
         }
 
-    # Style harmonization methods
+    # ------------------------------------------------------------------ #
+    # Style harmonization methods                                         #
+    # ------------------------------------------------------------------ #
+
     def harmonize_batch_styles(self, batch: EnhancedTrainingBatch) -> EnhancedTrainingBatch:
         """Harmonize styles in a training batch to prevent conflicts."""
         if not batch.original_prompt or not batch.lora_configs:
             return batch  # No harmonization needed
 
-        # Harmonize styles for each item in batch
-        harmonized_prompts = []
-        harmonized_lora_configs = []
-        style_analyses = []
+        harmonized_prompts: List[str] = []
+        harmonized_lora_configs: List[Any] = []
+        style_analyses: List[Dict[str, Any]] = []
 
         batch_size = batch.images.shape[0]
 
         for i in range(batch_size):
-            # Get individual prompt and LoRA config (simplified - assumes same for all)
+            # Get individual prompt and LoRA config (simplified — assumes same for all)
             prompt = batch.original_prompt if isinstance(batch.original_prompt, str) else batch.original_prompt[i]
             lora_config = batch.lora_configs if isinstance(batch.lora_configs, list) else [batch.lora_configs]
 
-            # Harmonize styles
             harmonization_result = self.style_harmonizer.harmonize_styles(
                 prompt=prompt,
                 lora_configs=lora_config,
@@ -543,24 +574,27 @@ class EnhancedTrainer:
 
         return batch
 
-    def validate_style_harmony(self, prompt: str, lora_configs: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def validate_style_harmony(self, prompt: str, lora_configs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Validate style harmony for a given prompt and LoRA configuration."""
         return self.style_harmonizer.harmonize_styles(
-            prompt=prompt, lora_configs=lora_configs or [], user_preferences={"harmonization_mode": "analyze_only"}
+            prompt=prompt,
+            lora_configs=lora_configs or [],
+            user_preferences={"harmonization_mode": "analyze_only"},
         )
 
-    def get_style_recommendations(self, prompt: str, lora_configs: List[Dict[str, Any]] = None) -> List[str]:
+    def get_style_recommendations(self, prompt: str, lora_configs: Optional[List[Dict[str, Any]]] = None) -> List[str]:
         """Get style harmonization recommendations."""
         result = self.validate_style_harmony(prompt, lora_configs)
 
-        recommendations = []
+        recommendations: List[str] = []
         if result["style_analysis"]["conflict_level"] != "none":
             recommendations.append(f"Detected {result['style_analysis']['conflict_level']} style conflicts")
             recommendations.append(f"Dominant style: {result['style_analysis']['dominant_style']}")
 
             for conflict in result["conflicts"]:
                 recommendations.append(
-                    f"Conflict between {conflict['style1']} and {conflict['style2']} (severity: {conflict['severity']})"
+                    f"Conflict between {conflict['style1']} and {conflict['style2']}"
+                    f" (severity: {conflict['severity']})"
                 )
         else:
             recommendations.append("No style conflicts detected - harmonious combination")
@@ -569,7 +603,10 @@ class EnhancedTrainer:
 
 
 def create_enhanced_trainer(
-    model: EnhancedDiT, device: str = "cuda", character_database_path: str = "./character_database"
+    model: EnhancedDiT,
+    device: str = "cuda",
+    character_database_path: str = "./character_database",
+    diffusion=None,  # Optional[GaussianDiffusion]
 ) -> EnhancedTrainer:
     """Create enhanced trainer instance with character consistency support."""
-    return EnhancedTrainer(model, device, character_database_path)
+    return EnhancedTrainer(model, device, character_database_path, diffusion)

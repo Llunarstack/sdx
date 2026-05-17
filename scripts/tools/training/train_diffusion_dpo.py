@@ -31,7 +31,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
-from config.train_config import get_dit_build_kwargs
 from diffusion import create_diffusion
 from models import DiT_models_text
 from torch.utils.data import DataLoader
@@ -41,6 +40,7 @@ from utils.training.diffusion_dpo_loss import dpo_preference_loss
 from utils.training.preference_image_dataset import PreferenceImageDataset, collate_preference_batch
 
 import train as train_mod
+from config.train_config import get_dit_build_kwargs
 
 
 def _build_reference(policy: torch.nn.Module, cfg, device: str) -> torch.nn.Module:

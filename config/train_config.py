@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
-@dataclass
+@dataclass(slots=True)
 class TrainConfig:
     # -------------------------------------------------------------------------
     # Data
@@ -195,9 +195,12 @@ class TrainConfig:
     bridge_aux_weight: float = 0.0   # 0 = off; try 0.02–0.15
     bridge_aux_lambda: float = 0.2   # mix x0 = (1-λ)x + λ·shuffle(x); in (0, 1]
     # Timestep sampling distribution (see diffusion/timestep_sampling.py).
-    timestep_sample_mode: str = "uniform"  # "uniform" | "logit_normal" | "high_noise"
+    timestep_sample_mode: str = "uniform"  # "uniform" | "logit_normal" | "high_noise" | "low_noise"
     timestep_logit_mean: float = 0.0
     timestep_logit_std: float = 1.0
+    # When non-empty, overrides timestep_sample_mode / logit params by training step; see
+    # utils/training/timestep_curriculum.py (e.g. "0:high_noise|40000:logit_normal:0:1|90000:low_noise").
+    timestep_curriculum_schedule: str = ""
 
     # -------------------------------------------------------------------------
     # Training length
@@ -285,6 +288,8 @@ class TrainConfig:
     ckpt_every: int = 5000
     global_seed: int = 42
     resume: Optional[str] = None  # path to checkpoint to resume from
+    # Load model/EMA (and aux modules) from checkpoint but start step 0 with a fresh optimizer.
+    init_from: Optional[str] = None
     wandb_project: Optional[str] = None    # e.g. "sdx" to enable WandB logging
     tensorboard_dir: Optional[str] = None  # e.g. "runs" to enable TensorBoard
     log_images_every: int = 0              # 0 = off; log a sample image every N steps
@@ -299,6 +304,14 @@ class TrainConfig:
     # -------------------------------------------------------------------------
     deterministic: bool = False
     latent_cache_dir: Optional[str] = None  # precomputed latents for faster training
+
+    # -------------------------------------------------------------------------
+    # Host throughput (CUDA / CPU)
+    # -------------------------------------------------------------------------
+    cudnn_benchmark: bool = True  # ignored when deterministic=True
+    enable_tf32: bool = True  # Ampere+: faster matmul/conv; disable for stricter FP32
+    torch_cpu_num_threads: int = 0  # 0 = do not call set_num_threads
+    torch_cpu_num_interop_threads: int = 0  # 0 = do not call set_num_interop_threads
 
     # -------------------------------------------------------------------------
     # Distributed (set by launcher, not CLI)

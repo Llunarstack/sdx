@@ -13,7 +13,7 @@ from typing import Callable, Sequence
 __all__ = ["ProfileConfig", "consume_profile_args", "run_with_cprofile"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProfileConfig:
     out_path: str
     sort_key: str

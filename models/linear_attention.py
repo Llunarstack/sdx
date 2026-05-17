@@ -1,28 +1,25 @@
 """
-Linear Compressed Attention for Diffusion Transformers (arxiv 2503.16726).
+Linear Compressed Attention and Local Window Attention for Diffusion Transformers.
 
-Standard self-attention is O(N^2) in sequence length. At 1024x1024 with
-patch size 2, N ≈ 262k — quadratic attention is infeasible.
+Provides two sub-quadratic attention alternatives:
 
-This module provides two O(N) alternatives that can replace or augment
-standard attention in DiT blocks:
+``LinearCompressedAttention``
+    Compresses keys/values to a fixed context of ``context_size`` tokens via
+    a learned linear pooling, then attends over the compressed context.
+    Complexity: O(N · C) where C ≪ N.
 
-1. LinearCompressedAttention:
-   Compresses keys/values to a fixed-size context via learned pooling,
-   then attends over the compressed context. Complexity: O(N * C) where
-   C << N is the compressed context size.
+``LocalWindowAttention``
+    Swin-style local window attention with optional global register tokens.
+    Global tokens attend to the full sequence for long-range context.
+    Complexity: O(N · W²) where W is the window size.
 
-2. LocalWindowAttention:
-   Swin-style local window attention with optional global register tokens.
-   Complexity: O(N * W^2) where W is the window size.
-
-Both modules are drop-in replacements for nn.MultiheadAttention in DiT blocks.
+Both are drop-in replacements for ``nn.MultiheadAttention`` in DiT blocks.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -74,7 +71,10 @@ class LinearCompressedAttention(nn.Module):
         nn.init.xavier_uniform_(self.q_proj.weight)
         nn.init.xavier_uniform_(self.k_proj.weight)
         nn.init.xavier_uniform_(self.v_proj.weight)
-        nn.init.zeros_(self.out_proj.weight)
+        # Bug 1 fix: use xavier_uniform_ instead of zeros_ — out_proj is a
+        # standalone projection (not inside a residual block), so zero-init
+        # would produce all-zero outputs and zero gradients on the first pass.
+        nn.init.xavier_uniform_(self.out_proj.weight)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -144,10 +144,16 @@ class LocalWindowAttention(nn.Module):
         if self.num_global > 0:
             self.global_tokens = nn.Parameter(torch.randn(1, self.num_global, hidden_size) * 0.02)
 
+        # out_proj is correctly zero-initialized here because LocalWindowAttention
+        # sits inside a residual block — the caller does x = x + attention(x).
         nn.init.zeros_(self.out_proj.weight)
 
-    def _window_partition(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
-        """(B, N, D) -> (B*nW, W*W, D) where nW = (h/ws)*(w/ws)."""
+    # Bug 3 fix: return type was annotated as torch.Tensor but the method
+    # actually returns a 3-tuple (tensor, padded_h, padded_w).
+    def _window_partition(
+        self, x: torch.Tensor, h: int, w: int
+    ) -> Tuple[torch.Tensor, int, int]:
+        """(B, N, D) -> (B*nW, W^2, D), padded_h, padded_w."""
         B, N, D = x.shape
         ws = self.window_size
         x = x.reshape(B, h, w, D)
@@ -178,45 +184,76 @@ class LocalWindowAttention(nn.Module):
         """
         B, N, D = x.shape
         h = w = int(math.isqrt(N))
-        assert h * w == N, "LocalWindowAttention requires square token grid"
+        # Bug 4 fix: replace bare assert with a descriptive ValueError so that
+        # invalid inputs raise a proper exception rather than an AssertionError
+        # (which can be silenced with Python's -O flag).
+        if h * w != N:
+            raise ValueError(
+                f"LocalWindowAttention requires a square token grid; got N={N} "
+                f"(sqrt ≈ {N**0.5:.2f})"
+            )
 
-        # Prepend global tokens
         if self.num_global > 0:
             g = self.global_tokens.expand(B, -1, -1)
             x_full = torch.cat([g, x], dim=1)  # (B, G+N, D)
         else:
             x_full = x
 
-        # Partition into windows (local tokens only)
-        x_local, hp, wp = self._window_partition(x, h, w)  # (B*nW, W^2, D)
+        # Bug 2 fix: call self.qkv exactly once on x_full, then slice out the
+        # global and local parts.  The old code called self.qkv twice when
+        # num_global > 0 (once on the windowed local tokens, once on x_full),
+        # computing KV for the local tokens redundantly.  It also extracted
+        # k_g / v_g from the first chunk but then discarded them in favour of
+        # k_all / v_all from a second chunk on the same tensor.
+        qkv_full = self.qkv(x_full)          # (B, G+N, 3D)
+        q_full, k_full, v_full = qkv_full.chunk(3, dim=-1)
 
-        # QKV for local windows
-        qkv_local = self.qkv(x_local)
-        q_l, k_l, v_l = qkv_local.chunk(3, dim=-1)
-        q_l = q_l.reshape(-1, self.window_size ** 2, self.num_heads, self.head_dim).transpose(1, 2)
-        k_l = k_l.reshape(-1, self.window_size ** 2, self.num_heads, self.head_dim).transpose(1, 2)
-        v_l = v_l.reshape(-1, self.window_size ** 2, self.num_heads, self.head_dim).transpose(1, 2)
+        # ------------------------------------------------------------------ #
+        # Local window attention (patch tokens only)
+        # ------------------------------------------------------------------ #
+        x_local_q = q_full[:, self.num_global:, :]  # (B, N, D)
+        x_local_k = k_full[:, self.num_global:, :]
+        x_local_v = v_full[:, self.num_global:, :]
+
+        x_local_q, hp_q, wp_q = self._window_partition(x_local_q, h, w)
+        x_local_k, hp_k, wp_k = self._window_partition(x_local_k, h, w)
+        x_local_v, hp_v, wp_v = self._window_partition(x_local_v, h, w)
+
+        W2 = self.window_size ** 2
+        nW = x_local_q.shape[0]  # B * num_windows
+
+        def _to_heads(t: torch.Tensor) -> torch.Tensor:
+            return t.reshape(nW, W2, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q_l = _to_heads(x_local_q)
+        k_l = _to_heads(x_local_k)
+        v_l = _to_heads(x_local_v)
 
         if self.q_norm is not None:
             q_l = self.q_norm(q_l)
             k_l = self.k_norm(k_l)
 
         out_local = F.scaled_dot_product_attention(q_l, k_l, v_l, scale=self.scale)
-        out_local = out_local.transpose(1, 2).reshape(-1, self.window_size ** 2, D)
-        out_local = self._window_unpartition(out_local, B, h, w, hp, wp)  # (B, N, D)
+        out_local = out_local.transpose(1, 2).reshape(nW, W2, D)
+        out_local = self._window_unpartition(out_local, B, h, w, hp_q, wp_q)  # (B, N, D)
 
-        # Global tokens attend to all tokens
+        # ------------------------------------------------------------------ #
+        # Global token attention over ALL tokens
+        # ------------------------------------------------------------------ #
         if self.num_global > 0:
-            qkv_g = self.qkv(x_full)
-            q_g, k_g, v_g = qkv_g[:, :self.num_global].chunk(3, dim=-1)
-            # Global queries attend to all keys/values
-            _, k_all, v_all = qkv_g.chunk(3, dim=-1)
-            q_g = q_g.reshape(B, self.num_global, self.num_heads, self.head_dim).transpose(1, 2)
-            k_all = k_all.reshape(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            v_all = v_all.reshape(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            G = self.num_global
+            q_g = q_full[:, :G, :].reshape(B, G, self.num_heads, self.head_dim).transpose(1, 2)
+            k_all = k_full.reshape(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            v_all = v_full.reshape(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+            if self.q_norm is not None:
+                q_g = self.q_norm(q_g)
+                k_all = self.k_norm(k_all)
+
             out_g = F.scaled_dot_product_attention(q_g, k_all, v_all, scale=self.scale)
-            out_g = out_g.transpose(1, 2).reshape(B, self.num_global, D)
-            # Distribute global context back to local tokens via addition
+            out_g = out_g.transpose(1, 2).reshape(B, G, D)
+
+            # Broadcast global context back to every patch token via mean pooling
             out_local = out_local + out_g.mean(dim=1, keepdim=True)
 
         return self.out_proj(out_local)

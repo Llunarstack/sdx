@@ -76,7 +76,7 @@ def naturalize(
         small_w = max(8, w // 8)
         tex_small = rng.normal(0.0, 1.0, size=(small_h, small_w)).astype(np.float32)
         tex_img = Image.fromarray(
-            (np.clip((tex_small - tex_small.min()) / (tex_small.ptp() + 1e-8), 0.0, 1.0) * 255.0).astype(np.uint8)
+            (np.clip((tex_small - tex_small.min()) / (np.ptp(tex_small) + 1e-8), 0.0, 1.0) * 255.0).astype(np.uint8)
         )
         tex = np.array(tex_img.resize((w, h), resample=Image.BILINEAR), dtype=np.float32)
         tex = tex / 255.0 - 0.5  # centered [-0.5, 0.5]

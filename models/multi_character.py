@@ -35,7 +35,7 @@ from .model_enhancements import RMSNorm
 # Data structures
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(slots=True)
 class CharacterSpec:
     """Specification for one character in a multi-character scene."""
     character_id: str
@@ -50,7 +50,7 @@ class CharacterSpec:
     reference_embedding: Optional[torch.Tensor] = None
 
 
-@dataclass
+@dataclass(slots=True)
 class InteractionSpec:
     """Specification for an interaction between two characters."""
     char_a: str  # character_id

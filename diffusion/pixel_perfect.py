@@ -92,7 +92,7 @@ def pixels_from_latent_hw(latent_h: int, latent_w: int) -> Tuple[int, int]:
     return int(latent_h) * LATENT_TO_PIXEL, int(latent_w) * LATENT_TO_PIXEL
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PixelPerfectCanvas:
     """Canonical sizes after snapping (pixels and latent)."""
 

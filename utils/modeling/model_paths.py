@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Sequence
 
 
 def repo_root() -> Path:
@@ -27,6 +27,33 @@ def resolve_model_path(folder_name: str, hf_fallback: str) -> str:
                 return str(local_model_path)
         except OSError:
             pass
+    return hf_fallback
+
+
+def resolve_model_path_require_weights(
+    folder_name: str,
+    hf_fallback: str,
+    *,
+    weight_globs: Optional[Sequence[str]] = None,
+) -> str:
+    """
+    Like `resolve_model_path`, but only uses the local folder if it appears to
+    contain model weights (so "config-only" minimal downloads won't break
+    runtime by masking the HF fallback).
+
+    `weight_globs` defaults to common HF weight file extensions.
+    """
+    local_model_path = model_dir() / folder_name
+    if not local_model_path.is_dir():
+        return hf_fallback
+
+    patterns = list(weight_globs or ("*.safetensors", "*.bin", "*.pt", "*.pth"))
+    try:
+        for pat in patterns:
+            if any(local_model_path.glob(pat)):
+                return str(local_model_path)
+    except OSError:
+        pass
     return hf_fallback
 
 
@@ -159,6 +186,53 @@ def default_anydoor_ref_path() -> str:
     return resolve_model_path("AnyDoor-Ref", "camenduru/AnyDoor")
 
 
+# ---------------------------------------------------------------------------
+# Additional optional "boost" models (critics / VLM / detectors).
+# These are often downloaded "config-only" to save disk. For those, use
+# weight-aware resolution so HF fallback is used unless weights exist locally.
+# ---------------------------------------------------------------------------
+
+
+def default_hpsv2_path() -> str:
+    return resolve_model_path_require_weights("HPSv2-hf", "adams-story/HPSv2-hf")
+
+
+def default_blip_caption_base_path() -> str:
+    return resolve_model_path_require_weights(
+        "BLIP-image-captioning-base",
+        "Salesforce/blip-image-captioning-base",
+    )
+
+
+def default_kosmos2_path() -> str:
+    return resolve_model_path_require_weights(
+        "Kosmos-2-patch14-224",
+        "microsoft/kosmos-2-patch14-224",
+    )
+
+
+def default_craft_text_detector_path() -> str:
+    # This one is small enough that we typically have weights locally.
+    return resolve_model_path_require_weights(
+        "CRAFT-text-detector",
+        "boomb0om/CRAFT-text-detector",
+    )
+
+
+def default_owlvit_base_path() -> str:
+    return resolve_model_path_require_weights(
+        "OwlViT-base-patch32",
+        "google/owlvit-base-patch32",
+    )
+
+
+def default_donut_base_path() -> str:
+    return resolve_model_path_require_weights(
+        "Donut-base",
+        "naver-clova-ix/donut-base",
+    )
+
+
 def pretrained_catalog() -> List[Dict[str, str]]:
     """
     Canonical pretrained model map used by SDX.
@@ -200,6 +274,13 @@ def pretrained_catalog() -> List[Dict[str, str]]:
         ("ConvNeXtV2-Large", "facebook/convnextv2-large-22k-384", default_convnextv2_large_path()),
         ("LAION-Aesthetic-v2", "christophschuhmann/improved-aesthetic-predictor", default_laion_aesthetic_v2_path()),
         ("AnyDoor-Ref", "camenduru/AnyDoor", default_anydoor_ref_path()),
+        # Boost models (critics / VLM / detectors)
+        ("HPSv2-hf", "adams-story/HPSv2-hf", default_hpsv2_path()),
+        ("BLIP-image-captioning-base", "Salesforce/blip-image-captioning-base", default_blip_caption_base_path()),
+        ("Kosmos-2-patch14-224", "microsoft/kosmos-2-patch14-224", default_kosmos2_path()),
+        ("CRAFT-text-detector", "boomb0om/CRAFT-text-detector", default_craft_text_detector_path()),
+        ("OwlViT-base-patch32", "google/owlvit-base-patch32", default_owlvit_base_path()),
+        ("Donut-base", "naver-clova-ix/donut-base", default_donut_base_path()),
     ]
     catalog: List[Dict[str, str]] = []
     for name, hf_fallback, resolved_path in catalog_rows:

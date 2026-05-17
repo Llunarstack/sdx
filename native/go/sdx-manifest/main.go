@@ -82,14 +82,66 @@ func merge(outPath, dedupeKey string, inputs []string) error {
 }
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "merge" {
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(2)
+	}
+	switch os.Args[1] {
+	case "merge":
+		runMerge(os.Args[2:])
+		return
+	case "explore-stats":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: sdx-manifest explore-stats manifest.jsonl")
+			os.Exit(2)
+		}
+		if err := exploreStats(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	case "explore-dedupe":
+		runExploreDedupe(os.Args[2:])
+		return
+	default:
+		printUsage()
+		os.Exit(2)
+	}
+}
+
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "usage:")
+	fmt.Fprintln(os.Stderr, "  sdx-manifest merge -o out.jsonl [--dedupe-key image_path] a.jsonl ...")
+	fmt.Fprintln(os.Stderr, "  sdx-manifest explore-stats explore_manifest.jsonl")
+	fmt.Fprintln(os.Stderr, "  sdx-manifest explore-dedupe -o out.jsonl [--key style_genome_id] in.jsonl")
+}
+
+func runExploreDedupe(args []string) {
+	fs := flag.NewFlagSet("explore-dedupe", flag.ExitOnError)
+	out := fs.String("o", "", "output JSONL")
+	key := fs.String("key", "style_genome_id", "dedupe field")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if *out == "" || len(fs.Args()) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: sdx-manifest explore-dedupe -o out.jsonl [--key style_genome_id] in.jsonl")
+		os.Exit(2)
+	}
+	if err := exploreDedupe(fs.Args()[0], *out, *key); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func runMerge(args []string) {
+	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: sdx-manifest merge -o out.jsonl [--dedupe-key image_path] a.jsonl b.jsonl ...")
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("merge", flag.ExitOnError)
 	out := fs.String("o", "", "output JSONL path")
 	dedupe := fs.String("dedupe-key", "image_path", "field for dedupe (empty = image_path/path/image only)")
-	if err := fs.Parse(os.Args[2:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
 	if *out == "" {

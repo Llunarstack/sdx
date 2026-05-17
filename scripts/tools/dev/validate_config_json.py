@@ -36,8 +36,9 @@ def main() -> int:
         return 1
 
     raw = json.loads(args.config_json.read_text(encoding="utf-8"))
-    from config.train_config import TrainConfig
     from utils.training.config_validator import estimate_memory_usage, validate_train_config
+
+    from config.train_config import TrainConfig
 
     cfg = TrainConfig(**raw)
     issues = validate_train_config(cfg, require_cuda=not args.no_cuda_check)

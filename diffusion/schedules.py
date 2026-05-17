@@ -39,6 +39,11 @@ def linear_beta_schedule(num_timesteps: int) -> np.ndarray:
 
 
 def cosine_beta_schedule(num_timesteps: int) -> np.ndarray:
+    """
+    Nichol & Dhariwal (IDDPM) cosine alpha_bar schedule.
+    ``alpha_bar(t) = cos^2((t/T + 0.008) / 1.008 * π/2)``.
+    This matches ``squaredcos_cap_v2`` for compatibility.
+    """
     try:
         from sdx_native.diffusion_math_native import maybe_cosine_beta_schedule_rust
         result = maybe_cosine_beta_schedule_rust(int(num_timesteps))
@@ -47,7 +52,7 @@ def cosine_beta_schedule(num_timesteps: int) -> np.ndarray:
     except Exception:
         pass
     steps = np.arange(num_timesteps + 1, dtype=np.float64)
-    alpha_bar = np.cos(((steps / num_timesteps) + 0.01) / 1.01 * np.pi * 0.5) ** 2
+    alpha_bar = np.cos(((steps / num_timesteps) + 0.008) / 1.008 * np.pi * 0.5) ** 2
     alpha_bar = alpha_bar / alpha_bar[0]
     beta = 1.0 - (alpha_bar[1:] / alpha_bar[:-1])
     return _clip_betas(beta)

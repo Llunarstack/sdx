@@ -21,7 +21,7 @@ GuidanceMode = Literal["none", "auto", "all"]
 AnatomyGuidanceMode = Literal["none", "lite", "strong"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MediumSpec:
     id: str
     keywords: Tuple[str, ...]

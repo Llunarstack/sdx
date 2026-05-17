@@ -27,7 +27,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict
 
-from scripts.tools.prompt_i18n import generic_suggestion
+from utils.prompt.prompt_i18n import generic_suggestion
 
 
 def _term_present(caption_lower: str, term: str) -> bool:

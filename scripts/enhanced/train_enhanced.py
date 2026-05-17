@@ -23,13 +23,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
 # Project imports
-from config.train_config import TrainConfig
 from data.enhanced_dataset import EnhancedT2IDataset, collate_enhanced_batch
 from diffusion.gaussian_diffusion import create_diffusion
 from models.enhanced_dit import EnhancedDiT_models
-from training.enhanced_trainer import create_enhanced_trainer
 from utils.training.error_handling import setup_logging
 from utils.training.metrics import MetricsTracker, TrainingMetrics
+
+from config.train_config import TrainConfig
+from training.enhanced_trainer import create_enhanced_trainer
 
 # Enable TF32 on Ampere+ for speed
 torch.backends.cuda.matmul.allow_tf32 = True

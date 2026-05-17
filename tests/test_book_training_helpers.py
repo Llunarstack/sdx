@@ -32,6 +32,8 @@ def _args(**overrides):
         no_compile=False,
         no_xformers=False,
         num_workers=-1,
+        resume="",
+        init_from="",
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -43,6 +45,36 @@ def test_preset_for_book_train_production():
     assert p.train_art_guidance_mode == "all"
     assert p.train_anatomy_guidance == "strong"
     assert p.use_hierarchical_captions is True
+
+
+def test_build_train_command_init_from_forwarded():
+    args = _args(manifest_jsonl="data/m.jsonl", init_from="results/sdx/best.pt")
+    settings = bth.resolve_book_train_settings(args)
+    cmd = bth.build_train_command(
+        root=Path("c:/repo"),
+        python_exe="python",
+        args=args,
+        settings=settings,
+        passthrough_train_args=[],
+    )
+    i = cmd.index("--init-from")
+    assert cmd[i + 1] == "results/sdx/best.pt"
+
+
+def test_build_train_command_rejects_resume_and_init_from():
+    args = _args(manifest_jsonl="data/m.jsonl", resume="a.pt", init_from="b.pt")
+    settings = bth.resolve_book_train_settings(args)
+    try:
+        bth.build_train_command(
+            root=Path("c:/repo"),
+            python_exe="python",
+            args=args,
+            settings=settings,
+            passthrough_train_args=[],
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as e:
+        assert "not both" in str(e)
 
 
 def test_build_train_command_includes_book_guidance():

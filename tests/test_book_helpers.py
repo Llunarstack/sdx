@@ -261,6 +261,81 @@ def test_extend_sample_py_adherence_quality_cmd_packs_and_clip():
     assert "--dual-layout-steps 20" in s
 
 
+def test_extend_sample_argv_visual_design_preset_via_book_helpers():
+    """extend_sample_py_adherence_quality_cmd delegates visual argv to utils.visual_design.argv."""
+    ns = SimpleNamespace(
+        quality_pack="none",
+        adherence_pack="none",
+        clip_guard_threshold=0.0,
+        clip_guard_model="openai/clip-vit-base-patch32",
+        clip_guard_t_frac=0.22,
+        clip_guard_steps=12,
+        clip_monitor_every=0,
+        clip_monitor_threshold=0.22,
+        clip_monitor_cfg_boost=0.12,
+        clip_monitor_rewind=0.0,
+        volatile_cfg_boost=0.0,
+        volatile_cfg_quantile=0.72,
+        volatile_cfg_window=6,
+        sag_scale=0.0,
+        no_auto_expected_text=False,
+        no_auto_constraint_boost=False,
+        hard_style="",
+        dual_stage_layout=False,
+        dual_stage_div=2,
+        dual_layout_steps=24,
+        dual_detail_steps=20,
+        dual_detail_strength=0.38,
+        deterministic=False,
+        no_cache=False,
+        visual_design_domain="none",
+        visual_design_intensity="standard",
+        visual_design_negative_pack=False,
+        visual_design_preset="keynote_slide",
+    )
+    cmd: list[str] = []
+    book_helpers.extend_sample_py_adherence_quality_cmd(cmd, ns)
+    assert cmd == ["--visual-design-preset", "keynote_slide"]
+
+
+def test_extend_sample_py_adherence_includes_visual_design():
+    ns = SimpleNamespace(
+        quality_pack="none",
+        adherence_pack="none",
+        clip_guard_threshold=0.0,
+        clip_guard_model="openai/clip-vit-base-patch32",
+        clip_guard_t_frac=0.22,
+        clip_guard_steps=12,
+        clip_monitor_every=0,
+        clip_monitor_threshold=0.22,
+        clip_monitor_cfg_boost=0.12,
+        clip_monitor_rewind=0.0,
+        volatile_cfg_boost=0.0,
+        volatile_cfg_quantile=0.72,
+        volatile_cfg_window=6,
+        sag_scale=0.0,
+        no_auto_expected_text=False,
+        no_auto_constraint_boost=False,
+        hard_style="",
+        dual_stage_layout=False,
+        dual_stage_div=2,
+        dual_layout_steps=24,
+        dual_detail_steps=20,
+        dual_detail_strength=0.38,
+        deterministic=False,
+        no_cache=False,
+        visual_design_domain="stem",
+        visual_design_intensity="strong",
+        visual_design_negative_pack=True,
+    )
+    cmd: list[str] = []
+    book_helpers.extend_sample_py_adherence_quality_cmd(cmd, ns)
+    s = " ".join(cmd)
+    assert "--visual-design-domain stem" in s
+    assert "--visual-design-intensity strong" in s
+    assert "--visual-design-negative-pack" in s
+
+
 def test_adherence_quality_argv_for_sample_matches_extend():
     ns = SimpleNamespace(
         quality_pack="none",

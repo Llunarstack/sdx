@@ -39,7 +39,6 @@ def minimal_consistency_dict_from_visual_memory(
     mem: Any,
     *,
     page_index: int = 0,
-    safety_mode: str = "",
 ) -> Dict[str, Any]:
     """
     Build a dict compatible with ``consistency_helpers.positive_block_from_mapping`` **additions**.
@@ -48,7 +47,7 @@ def minimal_consistency_dict_from_visual_memory(
     ``visual_extra`` and a simple ``character`` string synthesized from the first
     ``kind=character`` entity at *page_index* (including page overrides).
     """
-    frag = mem.prompt_fragment_for_page(page_index, safety_mode=safety_mode)
+    frag = mem.prompt_fragment_for_page(page_index)
     out: Dict[str, Any] = {"visual_extra": frag}
 
     for eid in mem.entity_ids():

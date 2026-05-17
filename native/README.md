@@ -1,21 +1,44 @@
-# SDX native helpers (Rust, Zig, C++, CUDA, Go, Mojo)
+# SDX native helpers (Rust, Zig, C, C++, CUDA, Go, Mojo)
 
-**Broader map (ecosystem libs + how they help quality / training / adherence):** [docs/NATIVE_AND_SYSTEM_LIBS.md](../docs/NATIVE_AND_SYSTEM_LIBS.md).
+**Broader map:** [docs/NATIVE_AND_SYSTEM_LIBS.md](../docs/NATIVE_AND_SYSTEM_LIBS.md).
 
-Small **high-throughput utilities** around the Python training stack. They are **optional**: `train.py` / `sample.py` do not depend on them, but they speed up dataset QA and give reusable math/code for extensions (e.g. custom preprocessors, bindings).
+Optional high-throughput utilities around the Python stack. `train.py` / `sample.py` do not require them.
+
+## Layout (one place per language)
+
+```
+native/
+  rust/          # CLI tools + cdylibs (prompt-ops, jsonl-tools, …)
+  zig/           # linecrc, pathstat
+  c/             # small C-only helpers (buffer stats, image metrics)
+  cpp/           # main C ABI libraries (latent, timesteps, …)
+    cuda/        # ALL .cu kernels live here (not a second top-level cuda/)
+    include/sdx/ # C/C++ headers
+    src/         # C++ sources
+    build/       # gitignored — local CMake output only
+  go/sdx-manifest/
+  mojo/src/      # optional Mojo experiments
+  python/sdx_native/  # ctypes + Python fallbacks
+```
+
+**CUDA:** only under `cpp/cuda/`. See [cpp/cuda/README.md](cpp/cuda/README.md).  
+**Clean local builds:** `.\scripts\tools\native\clean_native_builds.ps1`
 
 | Component | Role |
 |-----------|------|
 | **Rust** `rust/sdx-jsonl-tools` | JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`**, **`dup-image-paths`**, **`file-fnv`**, **`caption-len-buckets`**. |
 | **Rust** `rust/sdx-noise-schedule` | CLI: **linear** / **cosine** VP-DDPM schedule tables (CSV) for analysis vs `diffusion/`. |
 | **Rust** `rust/sdx-image-metrics` | CLI: **stats** (mean luma, clip ratio, Laplacian variance) and **count-blobs** connected components for quick count heuristics. |
+| **Rust** `rust/sdx-prompt-ops` | cdylib: **caption merge/dedupe**, **pos/neg filter**, **style Jaccard**, **FNV fingerprint**, **multi-axis merge** (`prompt_ops_native`, `style_ops_native`). |
+| **Rust** `rust/sdx-diffusion-math` | cdylib: **alpha_cumprod**, **SNR**, beta schedules (`sdx_native.diffusion_math_native`). |
 | **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over file bytes (manifest change detection). |
 | **Zig** `zig/sdx-pathstat` | Given a **newline-separated path list**, print `path<TAB>size_bytes<TAB>ok|missing` (fast file-exists + size audit; pair with Rust `image-paths`). |
-| **C++** `cpp/` | `libsdx_latent`, **`sdx_line_stats`**, **`sdx_fnv64_file`**, **`sdx_image_metrics`**, inference/beta helpers — **C ABI** for ctypes. **`include/sdx/experimental/`**: **tensor_lite**, **vram_pool_stub**, **augmentor_plugin** (header stubs). |
-| **CUDA** `cpp/cuda/` + [cuda/README.md](cuda/README.md) | Optional **`sdx_cuda_hwc_to_chw`**, **`sdx_cuda_ml`**, **`sdx_cuda_flow_matching`**, **`sdx_cuda_nf4`**, **`sdx_cuda_sdpa_online`**, **`sdx_cuda_image_metrics`**; `-DSDX_BUILD_CUDA=ON`. |
-| **Mojo** `mojo/` + [mojo/README.md](mojo/README.md) | Optional **Modular Mojo** stubs + **Python** `mojopy` launcher for CPU/SIMD experiments. |
-| **Go** `go/sdx-manifest` | Merge multiple JSONL files; optional dedupe by image path (first wins). |
-| **Python** `sdx_native.jsonl_manifest_pure` | Zero-build manifest **stats** + **prompt-lint** (same role as the old `js/*.mjs`; no Node). |
+| **C** `c/` | Lightweight **C ABI** buffer stats + image metrics (no C++). |
+| **C++** `cpp/` | `libsdx_latent`, line stats, FNV, image metrics, inference/beta — **C ABI** for ctypes. |
+| **CUDA** `cpp/cuda/` | Optional GPU libs; [cpp/cuda/README.md](cpp/cuda/README.md); `-DSDX_BUILD_CUDA=ON`. |
+| **Go** `go/sdx-manifest` | JSONL **merge**, **explore-stats**, **explore-dedupe** (style manifests). |
+| **Mojo** `mojo/` | [mojo/README.md](mojo/README.md) — `sdx_style_tokens.mojo`, Pixi env. |
+| **Python** `python/sdx_native/` | ctypes wrappers + pure-Python fallbacks. |
 
 ## Build (quick)
 
@@ -32,6 +55,13 @@ cargo build --release
 cd native/rust/sdx-image-metrics
 cargo build --release
 # target/release/sdx-image-metrics stats --image sample.png
+
+cd native/rust/sdx-prompt-ops
+cargo build --release
+# Python: sdx_native.prompt_ops_native.get_prompt_ops_lib().available
+
+cd native/rust/sdx-diffusion-math
+cargo build --release
 ```
 
 ### Zig (0.13+)
@@ -129,6 +159,20 @@ print(dll.sdx_latent_numel(4, 32, 32))  # 4 * 32 * 32 latent elements
 ### Example: merge JSONL (Go)
 ```bash
 ./sdx-manifest merge a.jsonl b.jsonl -o merged.jsonl --dedupe-key image_path
+```
+
+### Example: style explore manifest (Go + Python)
+```bash
+python -m scripts.tools explore_styles --prompt "samurai at dusk" --insane --native-stats
+go build -o sdx-manifest ./native/go/sdx-manifest
+./sdx-manifest explore-stats data/style_genomes/explore_manifest.jsonl
+./sdx-manifest explore-dedupe -o data/style_genomes/train_styles.jsonl --key style_genome_id data/style_genomes/explore_manifest.jsonl
+python -m scripts.tools explore_styles --show-native
+```
+
+### Style native Python API
+```python
+from utils.prompt.style_native import native_stack_status, pick_best_embedding_index
 ```
 
 ## Python integration (repo root on `PYTHONPATH`)

@@ -14,11 +14,19 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def run_command(cmd, check=True):
-    """Run a command and return the result."""
-    print(f"Running: {cmd}")
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    """Run a command and return the result.
+
+    ``cmd`` must be a list of strings (e.g. ["pip", "install", "torch"]).
+    Passing a plain string is accepted for backward-compat but will be split
+    with shlex so that shell=True is never used.
+    """
+    import shlex
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
+    print(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, shell=False, capture_output=True, text=True)
     if check and result.returncode != 0:
-        print(f"Error running command: {cmd}")
+        print(f"Error running command: {' '.join(cmd)}")
         print(f"Error output: {result.stderr}")
         return False
     return result.returncode == 0
@@ -185,8 +193,9 @@ def run_quick_test():
 
     try:
         # Test configuration validation
-        from config.train_config import TrainConfig
         from utils.training.config_validator import validate_train_config
+
+        from config.train_config import TrainConfig
 
         cfg = TrainConfig(data_path="./datasets/test", model_name="DiT-XL/2-Text", global_batch_size=16, passes=1)
 

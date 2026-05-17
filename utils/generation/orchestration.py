@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PipelineRole:
     """One stage in a multi-expert image generation pipeline."""
 

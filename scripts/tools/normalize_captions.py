@@ -23,9 +23,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from data.caption_utils import (
     add_anti_blending_and_count,
-    apply_art_guidance_to_caption_pair,
-    apply_shortcomings_to_caption_pair,
-    apply_style_guidance_to_caption_pair,
+    apply_training_guidance_to_caption_pair,
     boost_domain_tags,
     boost_hard_style_tags,
     boost_quality_tags,
@@ -71,24 +69,16 @@ def _process_caption_pair(
     cap = boost_quality_tags(cap, repeat_factor=3)
     cap = boost_domain_tags(cap, repeat_factor=2)
     cap, neg = add_anti_blending_and_count(cap, neg)
-    cap, neg = apply_shortcomings_to_caption_pair(
+    cap, neg = apply_training_guidance_to_caption_pair(
         cap,
         neg,
-        mode=shortcomings_mode,
-        include_2d=shortcomings_2d,
-    )
-    cap, neg = apply_art_guidance_to_caption_pair(
-        cap,
-        neg,
-        mode=art_guidance_mode,
-        include_photography=art_guidance_photography,
-        anatomy_mode=anatomy_guidance,
-    )
-    cap, neg = apply_style_guidance_to_caption_pair(
-        cap,
-        neg,
-        mode=style_guidance_mode,
-        include_artist_refs=style_guidance_artists,
+        shortcomings_mode=shortcomings_mode,
+        shortcomings_2d=shortcomings_2d,
+        art_guidance_mode=art_guidance_mode,
+        anatomy_guidance=anatomy_guidance,
+        style_guidance_mode=style_guidance_mode,
+        style_guidance_artists=style_guidance_artists,
+        include_art_guidance_photography=art_guidance_photography,
     )
     return cap.strip(), neg.strip()
 
@@ -104,9 +94,7 @@ def _process_jsonl_lines_worker(payload: Dict[str, Any]) -> List[str]:
     # Import inside worker to avoid pickling issues.
     from data.caption_utils import (  # noqa: WPS433
         add_anti_blending_and_count,
-        apply_art_guidance_to_caption_pair,
-        apply_shortcomings_to_caption_pair,
-        apply_style_guidance_to_caption_pair,
+        apply_training_guidance_to_caption_pair,
         boost_domain_tags,
         boost_hard_style_tags,
         boost_quality_tags,
@@ -131,24 +119,16 @@ def _process_jsonl_lines_worker(payload: Dict[str, Any]) -> List[str]:
         cap = boost_quality_tags(cap, repeat_factor=3)
         cap = boost_domain_tags(cap, repeat_factor=2)
         cap, neg = add_anti_blending_and_count(cap, neg)
-        cap, neg = apply_shortcomings_to_caption_pair(
+        cap, neg = apply_training_guidance_to_caption_pair(
             cap,
             neg,
-            mode=str(cfg.get("shortcomings_mitigation", "none") or "none"),
-            include_2d=bool(cfg.get("shortcomings_2d", False)),
-        )
-        cap, neg = apply_art_guidance_to_caption_pair(
-            cap,
-            neg,
-            mode=str(cfg.get("art_guidance_mode", "none") or "none"),
-            include_photography=bool(cfg.get("art_guidance_photography", True)),
-            anatomy_mode=str(cfg.get("anatomy_guidance", "none") or "none"),
-        )
-        cap, neg = apply_style_guidance_to_caption_pair(
-            cap,
-            neg,
-            mode=str(cfg.get("style_guidance_mode", "none") or "none"),
-            include_artist_refs=bool(cfg.get("style_guidance_artists", True)),
+            shortcomings_mode=str(cfg.get("shortcomings_mitigation", "none") or "none"),
+            shortcomings_2d=bool(cfg.get("shortcomings_2d", False)),
+            art_guidance_mode=str(cfg.get("art_guidance_mode", "none") or "none"),
+            anatomy_guidance=str(cfg.get("anatomy_guidance", "none") or "none"),
+            style_guidance_mode=str(cfg.get("style_guidance_mode", "none") or "none"),
+            style_guidance_artists=bool(cfg.get("style_guidance_artists", True)),
+            include_art_guidance_photography=bool(cfg.get("art_guidance_photography", True)),
         )
         return cap.strip(), neg.strip()
 

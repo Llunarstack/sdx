@@ -87,11 +87,10 @@ def test_resolve_oc_controls_pack_and_override():
 def test_resolve_book_style_controls_pack_and_override():
     out = prompt_lexicon.resolve_book_style_controls(
         book_style_pack="webtoon_nsfw_romance",
-        nsfw_pack="extreme",
+        artist_pack="manga_cinematic",
     )
-    assert out["artist_pack"] == "webtoon_scroll"
-    assert out["safety_mode"] == "nsfw"
-    assert out["nsfw_pack"] == "extreme"  # explicit override wins
+    assert out["artist_pack"] == "manga_cinematic"  # explicit override wins
+    assert out["oc_pack"] == "none"
 
 
 def test_resolve_humanize_controls_pack_and_override():
@@ -117,19 +116,17 @@ def test_humanize_prompt_and_negative_helpers():
     assert "ai soup texture" in n
 
 
-def test_infer_auto_humanize_controls_storyboard_and_nsfw():
+def test_infer_auto_humanize_controls_storyboard_and_seinen():
     sb = prompt_lexicon.infer_auto_humanize_controls(
         book_type="storyboard",
         lexicon_style="none",
-        safety_mode="",
     )
     assert sb["humanize_profile"] == "lite"
     ns = prompt_lexicon.infer_auto_humanize_controls(
         book_type="manga",
-        lexicon_style="shonen",
-        safety_mode="nsfw",
+        lexicon_style="seinen",
     )
-    assert ns["humanize_profile"] == "balanced"
+    assert ns["humanize_profile"] == "painterly"
 
 
 def test_resolve_art_medium_controls_pack_and_override():

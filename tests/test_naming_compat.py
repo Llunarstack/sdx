@@ -12,6 +12,13 @@ def test_diffusion_holy_grail_shim_reexports_sampling_extras():
     assert list_holy_grail_presets() == list_se()
 
 
+def test_diffusion_holy_grail_all_matches_sampling_extras():
+    import diffusion.holy_grail as hg  # noqa: PLC0415
+    import diffusion.sampling_extras as se  # noqa: PLC0415
+
+    assert sorted(hg.__all__) == sorted(se.__all__)
+
+
 def test_ar_block_conditioning_canonical_available():
     assert normalize_num_ar_blocks_canonical(2) == 2
     assert normalize_num_ar_blocks_canonical(7) == -1
@@ -28,6 +35,14 @@ def test_model_canonical_aliases_expose_symbols():
 
 def test_vit_quality_canonical_package_exports_checkpoint_loader():
     assert callable(load_vit_quality_checkpoint)
+
+
+def test_vit_quality_lazy_attr_origin_covers_all():
+    """Each ``vit_quality.__all__`` name must have ``_ATTR_ORIGIN``."""
+    import vit_quality as vq
+
+    for n in vq.__all__:
+        assert n in vq._ATTR_ORIGIN, f"add _ATTR_ORIGIN[{n!r}] in vit_quality/__init__.py"
 
 
 def test_config_defaults_prompt_style_mediums_surface():

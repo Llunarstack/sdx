@@ -72,7 +72,7 @@ INLINE_NEGATIVE_PATTERNS = [
 ]
 
 
-@dataclass
+@dataclass(slots=True)
 class ParsedLongPrompt:
     """Result of hierarchical prompt parsing."""
     raw: str

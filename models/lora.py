@@ -127,7 +127,7 @@ def _policy_stage_weights(policy: str) -> Dict[str, Tuple[float, float, float]]:
     return {}
 
 
-@dataclass
+@dataclass(slots=True)
 class _AdapterTensors:
     down: Optional[torch.Tensor] = None
     up: Optional[torch.Tensor] = None
@@ -141,7 +141,7 @@ class MultiLoRALinear(nn.Module):
     def __init__(self, linear: nn.Linear):
         super().__init__()
         self.linear = linear
-        self._adapters: List[Dict[str, nn.Parameter]] = []
+        self._adapter_params: nn.ModuleList = nn.ModuleList()  # list of nn.ParameterDict
         self._scales: List[float] = []
         self._roles: List[str] = []
 
@@ -158,13 +158,13 @@ class MultiLoRALinear(nn.Module):
         rank = int(down.shape[0]) if down.ndim == 2 else 0
         alpha_ratio = float(alpha) / max(1, rank) if alpha is not None else 1.0
         eff_scale = float(scale) * alpha_ratio
-        ad = {
-            "down": nn.Parameter(down, requires_grad=False),
-            "up": nn.Parameter(up, requires_grad=False),
+        ad: Dict[str, nn.Parameter] = {
+            "down": nn.Parameter(down.clone(), requires_grad=False),
+            "up": nn.Parameter(up.clone(), requires_grad=False),
         }
         if dora_mag is not None:
-            ad["dora_mag"] = nn.Parameter(dora_mag, requires_grad=False)
-        self._adapters.append(ad)
+            ad["dora_mag"] = nn.Parameter(dora_mag.clone(), requires_grad=False)
+        self._adapter_params.append(nn.ParameterDict(ad))
         self._scales.append(eff_scale)
         self._roles.append(str(role or "style").strip().lower())
 
@@ -196,12 +196,17 @@ class MultiLoRALinear(nn.Module):
         fac = float(max_total_scale) / total
         self._scales = [s * fac for s in self._scales]
 
+    @property
+    def _adapters(self):
+        """Backward-compatible alias for ``_adapter_params``."""
+        return self._adapter_params
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.linear(x)
-        if not self._adapters:
+        if not self._adapter_params:
             return out
         delta = 0.0
-        for ad, sc in zip(self._adapters, self._scales):
+        for ad, sc in zip(self._adapter_params, self._scales):
             d = x @ ad["down"].T @ ad["up"].T
             if "dora_mag" in ad:
                 mag = ad["dora_mag"]

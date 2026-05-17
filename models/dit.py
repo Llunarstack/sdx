@@ -46,7 +46,14 @@ class LabelEmbedder(nn.Module):
         self.dropout_prob = dropout_prob
 
     def forward(self, labels, train, force_drop_ids=None):
-        if train and self.dropout_prob > 0 and force_drop_ids is None:
+        if force_drop_ids is not None:
+            # Explicitly force-drop the specified samples (e.g. all-ones mask for unconditional CFG).
+            labels = torch.where(
+                force_drop_ids.bool(),
+                torch.full_like(labels, self.num_classes),
+                labels,
+            )
+        elif train and self.dropout_prob > 0:
             drop = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
             labels = torch.where(drop, torch.full_like(labels, self.num_classes), labels)
         embeddings = self.embedding_table(labels)

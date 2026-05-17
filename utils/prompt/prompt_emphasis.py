@@ -13,7 +13,12 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-import torch
+try:
+    import torch
+except ModuleNotFoundError as e:
+    if e.name != "torch":
+        raise
+    torch = None  # type: ignore[assignment]
 
 __all__ = [
     "parse_prompt_emphasis",
@@ -64,6 +69,8 @@ def token_weights_from_cleaned_segments(
     Return ``(max_length,)`` per-token weights using tokenizer ``offset_mapping``, or ``None``
     if the tokenizer does not support it.
     """
+    if torch is None:  # pragma: no cover (torch required for tensor ops)
+        raise ModuleNotFoundError("torch is required for token-weight tensor operations.")
     try:
         enc = tokenizer(
             [cleaned],
@@ -115,6 +122,8 @@ def batch_encoder_token_weights(
     If offset mapping is unavailable for any row, returns ``(cleaned_captions, None)`` — caller
     should still encode *cleaned_captions* but omit ``token_weights`` in ``model_kwargs``.
     """
+    if torch is None:  # pragma: no cover (torch required for tensor ops)
+        raise ModuleNotFoundError("torch is required for token-weight tensor operations.")
     cleaned_caps: List[str] = []
     segment_lists: List[Tuple[str, list]] = []
     for c in captions:

@@ -21,7 +21,7 @@ from utils.native import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BookTrainPreset:
     """Book training defaults for a quality/speed tier."""
 
@@ -232,6 +232,15 @@ def build_train_command(
         cmd.append("--no-xformers")
     if int(getattr(args, "num_workers", -1)) >= 0:
         cmd.extend(["--num-workers", str(int(getattr(args, "num_workers")))])
+
+    resume = str(getattr(args, "resume", "") or "").strip()
+    init_from = str(getattr(args, "init_from", "") or "").strip()
+    if resume and init_from:
+        raise ValueError("Use either --resume or --init-from for book training, not both.")
+    if resume:
+        cmd.extend(["--resume", resume])
+    if init_from:
+        cmd.extend(["--init-from", init_from])
     ar_curriculum_mode = str(getattr(args, "ar_curriculum_mode", "none") or "none").strip().lower()
     if ar_curriculum_mode in ("none", "step", "linear"):
         cmd.extend(["--ar-curriculum-mode", ar_curriculum_mode])

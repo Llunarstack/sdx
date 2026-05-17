@@ -326,6 +326,22 @@ def mask_ops_shared_library_path() -> Optional[Path]:
     return None
 
 
+def rust_prompt_ops_shared_library_path() -> Optional[Path]:
+    """Rust ``sdx_prompt_ops`` cdylib (caption merge, pos/neg filter)."""
+    base = REPO_ROOT / "native" / "rust" / "sdx-prompt-ops" / "target"
+    candidates = [
+        base / "release" / "sdx_prompt_ops.dll",
+        base / "release" / "libsdx_prompt_ops.so",
+        base / "release" / "libsdx_prompt_ops.dylib",
+        base / "debug" / "sdx_prompt_ops.dll",
+        base / "debug" / "libsdx_prompt_ops.so",
+    ]
+    for p in candidates:
+        if p.is_file() and p.stat().st_size > 0:
+            return p
+    return None
+
+
 def rust_diffusion_math_shared_library_path() -> Optional[Path]:
     """Rust ``sdx_diffusion_math`` cdylib (alpha_cumprod, SNR, beta schedules)."""
     base = REPO_ROOT / "native" / "rust" / "sdx-diffusion-math" / "target"

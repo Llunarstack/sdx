@@ -182,7 +182,7 @@ def build_img2img_initial_latent(
     return x_init, t_start
 
 
-@dataclass
+@dataclass(slots=True)
 class LatentEditInit:
     """Bundle for ``GaussianDiffusion.sample_loop`` (``x_init``, ``start_timestep``, optional inpaint args)."""
 

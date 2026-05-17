@@ -12,6 +12,17 @@ from typing import Any, Dict, List, Optional
 import torch
 import torch.nn as nn
 
+from utils.runtime.plain_dict import to_plain_dict
+
+
+def _diff_std_population(diff: torch.Tensor) -> float:
+    """Std of absolute diffs per parameter; stable for tiny tensors (avoids unbiased-std warnings)."""
+    flat = torch.flatten(diff)
+    n = int(flat.numel())
+    if n <= 1:
+        return 0.0
+    return float(torch.std(flat, unbiased=False))
+
 
 class CheckpointManager:
     """Manage model checkpoints with metadata and versioning."""
@@ -312,36 +323,97 @@ def analyze_checkpoint_differences(checkpoint1_path: str, checkpoint2_path: str)
     cp1 = torch.load(checkpoint1_path, map_location="cpu", weights_only=False)
     cp2 = torch.load(checkpoint2_path, map_location="cpu", weights_only=False)
 
-    analysis = {"parameter_differences": {}, "statistics": {}, "config_differences": {}}
+    analysis: Dict[str, Any] = {"parameter_differences": {}, "statistics": {}, "config_differences": {}}
 
-    # Compare model parameters
-    model1 = cp1["model"]
-    model2 = cp2["model"]
+    raw1, raw2 = cp1.get("model"), cp2.get("model")
+    model1: Dict[str, Any] = raw1 if isinstance(raw1, dict) else {}
+    model2: Dict[str, Any] = raw2 if isinstance(raw2, dict) else {}
 
     total_diff = 0.0
     total_params = 0
     max_diff = 0.0
     max_diff_param = ""
 
-    for key in model1.keys():
-        if key in model2:
-            diff = torch.abs(model1[key] - model2[key])
-            param_diff = torch.mean(diff).item()
-            param_max_diff = torch.max(diff).item()
+    n_tensors_compared = 0
+    n_only_checkpoint1 = 0
+    n_only_checkpoint2 = 0
+    n_shape_mismatch = 0
+    n_skipped_non_tensor = 0
 
+    if not isinstance(raw1, dict) and raw1 is not None:
+        analysis["parameter_differences"]["__note__"] = {
+            "checkpoint1_model": "not_a_dict_skipped",
+        }
+    if not isinstance(raw2, dict) and raw2 is not None:
+        note = analysis["parameter_differences"].setdefault("__note__", {})
+        note["checkpoint2_model"] = "not_a_dict_skipped"
+
+    all_keys = sorted(set(model1.keys()) | set(model2.keys()))
+    for key in all_keys:
+        t1 = model1.get(key)
+        t2 = model2.get(key)
+        if t1 is None:
             analysis["parameter_differences"][key] = {
-                "mean_diff": param_diff,
-                "max_diff": param_max_diff,
-                "std_diff": torch.std(diff).item(),
-                "shape": list(model1[key].shape),
+                "status": "only_in_checkpoint2",
+                "shape": list(t2.shape) if hasattr(t2, "shape") else [],
             }
+            n_only_checkpoint2 += 1
+            continue
+        if t2 is None:
+            analysis["parameter_differences"][key] = {
+                "status": "only_in_checkpoint1",
+                "shape": list(t1.shape) if hasattr(t1, "shape") else [],
+            }
+            n_only_checkpoint1 += 1
+            continue
+        if not isinstance(t1, torch.Tensor) or not isinstance(t2, torch.Tensor):
+            analysis["parameter_differences"][key] = {
+                "status": "skipped_non_tensor",
+                "type_checkpoint1": type(t1).__name__,
+                "type_checkpoint2": type(t2).__name__,
+            }
+            n_skipped_non_tensor += 1
+            continue
+        if t1.shape != t2.shape:
+            analysis["parameter_differences"][key] = {
+                "status": "shape_mismatch",
+                "shape_checkpoint1": list(t1.shape),
+                "shape_checkpoint2": list(t2.shape),
+            }
+            n_shape_mismatch += 1
+            continue
 
-            total_diff += param_diff * model1[key].numel()
-            total_params += model1[key].numel()
+        diff = torch.abs(t1 - t2)
+        param_diff = torch.mean(diff).item()
+        param_max_diff = torch.max(diff).item()
 
-            if param_max_diff > max_diff:
-                max_diff = param_max_diff
-                max_diff_param = key
+        analysis["parameter_differences"][key] = {
+            "mean_diff": param_diff,
+            "max_diff": param_max_diff,
+            "std_diff": _diff_std_population(diff),
+            "shape": list(t1.shape),
+        }
+
+        total_diff += param_diff * t1.numel()
+        total_params += t1.numel()
+        n_tensors_compared += 1
+
+        if param_max_diff > max_diff:
+            max_diff = param_max_diff
+            max_diff_param = key
+
+    if not raw1:
+        mc1 = "missing_or_empty"
+    elif not isinstance(raw1, dict):
+        mc1 = "wrong_type"
+    else:
+        mc1 = "ok"
+    if not raw2:
+        mc2 = "missing_or_empty"
+    elif not isinstance(raw2, dict):
+        mc2 = "wrong_type"
+    else:
+        mc2 = "ok"
 
     # Overall statistics
     analysis["statistics"] = {
@@ -351,6 +423,14 @@ def analyze_checkpoint_differences(checkpoint1_path: str, checkpoint2_path: str)
         "max_difference_parameter": max_diff_param,
         "step_difference": cp2.get("step", 0) - cp1.get("step", 0),
         "loss_difference": cp2.get("loss", 0) - cp1.get("loss", 0),
+        "model_dict_checkpoint1": mc1,
+        "model_dict_checkpoint2": mc2,
+        "tensors_compared": n_tensors_compared,
+        "tensors_only_checkpoint1": n_only_checkpoint1,
+        "tensors_only_checkpoint2": n_only_checkpoint2,
+        "tensors_shape_mismatch": n_shape_mismatch,
+        "tensors_skipped_non_tensor": n_skipped_non_tensor,
+        "tensor_keys_checked": len(all_keys),
     }
 
     # Compare configs if available
@@ -358,17 +438,9 @@ def analyze_checkpoint_differences(checkpoint1_path: str, checkpoint2_path: str)
         config1 = cp1["config"]
         config2 = cp2["config"]
 
-        # Simple config comparison (assumes configs are dicts or have __dict__)
         try:
-            if hasattr(config1, "__dict__"):
-                config1_dict = config1.__dict__
-            else:
-                config1_dict = config1
-
-            if hasattr(config2, "__dict__"):
-                config2_dict = config2.__dict__
-            else:
-                config2_dict = config2
+            config1_dict = to_plain_dict(config1)
+            config2_dict = to_plain_dict(config2)
 
             for key in set(config1_dict.keys()) | set(config2_dict.keys()):
                 val1 = config1_dict.get(key, "MISSING")
@@ -378,6 +450,10 @@ def analyze_checkpoint_differences(checkpoint1_path: str, checkpoint2_path: str)
                     analysis["config_differences"][key] = {"checkpoint1": val1, "checkpoint2": val2}
         except Exception:
             analysis["config_differences"] = {"error": "Could not compare configs"}
+
+    cfg_diff = analysis["config_differences"]
+    if cfg_diff and "error" not in cfg_diff:
+        analysis["statistics"]["config_keys_differing"] = len(cfg_diff)
 
     return analysis
 

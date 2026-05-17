@@ -1,6 +1,8 @@
 """
-Inference with optional refinement: fix imperfections during/after generation.
-Set allow_imperfect_output=True (or refine_output=False) when you want the raw/fucked look.
+Checkpoint load + optional latent refinement smoke utility.
+
+This is **not** a full prompt-to-image path — use ``sample.py`` or ``demo.py`` for generation.
+Use ``--verify`` to run a single ``refine_latent_once`` step on random latents after loading weights.
 """
 
 import argparse
@@ -13,11 +15,16 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from diffusion import create_diffusion
-from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
+from utils.terminal import configure_stdio_for_console
+
+configure_stdio_for_console()
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    model, cfg, rae_bridge, _, _fusion_sd = load_dit_text_checkpoint(ckpt_path, device=device, reject_enhanced=False)
+    model, cfg, rae_bridge, _fusion_sd = load_sampler_checkpoint(
+        ckpt_path, device=device, reject_enhanced=False, verbose=True
+    )
     return model, cfg, rae_bridge
 
 
@@ -38,7 +45,11 @@ def refine_latent_once(diffusion, model, x_0_latent, encoder_hidden_states, t_re
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Load checkpoint and run one sample (refinement optional)")
+    parser = argparse.ArgumentParser(
+        description="Load a DiT checkpoint and optionally run a latent-refinement smoke test.",
+        epilog="For prompt-to-image generation, use: python sample.py --ckpt PATH --prompt '...' --out out.png",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--ckpt", type=str, required=True, help="Path to checkpoint (e.g. results/.../best.pt)")
     parser.add_argument(
         "--refine-output",
@@ -47,7 +58,9 @@ def main():
         help="Enable/disable one refinement pass to fix imperfections (default: enabled)",
     )
     parser.add_argument(
-        "--allow-imperfect", action="store_true", help="Skip refinement; output raw result (user wants fucked look)"
+        "--allow-imperfect",
+        action="store_true",
+        help="Skip refinement; keep the raw latent (no extra denoise pass)",
     )
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument(

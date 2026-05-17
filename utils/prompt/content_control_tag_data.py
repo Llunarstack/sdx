@@ -1,7 +1,7 @@
 """
-Load content-control tag packs from ``data/prompt_tags/*.csv``.
+Helpers for built-in content-control tag packs (see ``content_control_tags_builtin.py``).
 
-Each CSV uses the same columns::
+Legacy CSV layout (removed from the repo) used columns::
 
     pack,mode,tag
 

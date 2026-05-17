@@ -136,6 +136,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strict-native", action="store_true")
     p.add_argument("--manifest-min-caption-len", type=int, default=0)
     p.add_argument("--manifest-max-caption-len", type=int, default=0)
+    p.add_argument("--resume", type=str, default="", help="Forwarded to book trainer → train.py --resume.")
+    p.add_argument(
+        "--init-from",
+        type=str,
+        dest="init_from",
+        default="",
+        help="Forwarded to book trainer → train.py --init-from (SDX base weights, fresh optimizer).",
+    )
     return p
 
 
@@ -352,6 +360,10 @@ def main() -> int:
         train_cmd.extend(["--manifest-min-caption-len", str(int(args.manifest_min_caption_len))])
     if int(args.manifest_max_caption_len) > 0:
         train_cmd.extend(["--manifest-max-caption-len", str(int(args.manifest_max_caption_len))])
+    if str(getattr(args, "resume", "") or "").strip():
+        train_cmd.extend(["--resume", str(getattr(args, "resume")).strip()])
+    if str(getattr(args, "init_from", "") or "").strip():
+        train_cmd.extend(["--init-from", str(getattr(args, "init_from")).strip()])
 
     if passthrough_train_args:
         train_cmd.extend(["--", *passthrough_train_args])

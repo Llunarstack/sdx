@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are applied on the **`main`** branch. Release tags (e.g. `v7.x`) point at snapshots; use **`main`** for the latest fixes.
+Security fixes are applied on the **`main`** branch. Release tags (e.g. `v8.0.0`, `v7.0.0`) point at snapshots; use **`main`** for the latest fixes.
 
 ## Reporting a vulnerability
 

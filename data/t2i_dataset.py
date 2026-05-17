@@ -14,11 +14,9 @@ from utils.training.part_aware_training import (
     foveated_random_crop_box,
 )
 
+from .caption_truncate import truncate_caption_at_comma_boundary
 from .caption_utils import (
     add_anti_blending_and_count,
-    apply_art_guidance_to_caption_pair,
-    apply_shortcomings_to_caption_pair,
-    apply_style_guidance_to_caption_pair,
     apply_tag_emphasis,
     boost_domain_tags,
     boost_hard_style_tags,
@@ -462,33 +460,31 @@ class Text2ImageDataset(Dataset):
             caption = prepend_adherence_boost(caption, repeat_factor=2)
         if self.use_anti_blending:
             caption, negative_caption = add_anti_blending_and_count(caption, negative_caption)
-        if self.train_shortcomings_mitigation in ("auto", "all"):
-            caption, negative_caption = apply_shortcomings_to_caption_pair(
+        if (
+            self.train_shortcomings_mitigation in ("auto", "all")
+            or self.train_art_guidance_mode in ("auto", "all")
+            or self.train_anatomy_guidance in ("lite", "strong")
+            or self.train_style_guidance_mode in ("auto", "all")
+        ):
+            from .caption_utils import apply_training_guidance_to_caption_pair
+
+            caption, negative_caption = apply_training_guidance_to_caption_pair(
                 caption,
                 negative_caption,
-                mode=self.train_shortcomings_mitigation,
-                include_2d=self.train_shortcomings_2d,
-            )
-        if self.train_art_guidance_mode in ("auto", "all") or self.train_anatomy_guidance in ("lite", "strong"):
-            caption, negative_caption = apply_art_guidance_to_caption_pair(
-                caption,
-                negative_caption,
-                mode=self.train_art_guidance_mode,
-                include_photography=self.train_art_guidance_photography,
-                anatomy_mode=self.train_anatomy_guidance,
-            )
-        if self.train_style_guidance_mode in ("auto", "all"):
-            caption, negative_caption = apply_style_guidance_to_caption_pair(
-                caption,
-                negative_caption,
-                mode=self.train_style_guidance_mode,
-                include_artist_refs=self.train_style_guidance_artists,
+                shortcomings_mode=self.train_shortcomings_mitigation,
+                shortcomings_2d=self.train_shortcomings_2d,
+                art_guidance_mode=self.train_art_guidance_mode,
+                anatomy_guidance=self.train_anatomy_guidance,
+                style_guidance_mode=self.train_style_guidance_mode,
+                style_guidance_artists=self.train_style_guidance_artists,
+                include_art_guidance_photography=self.train_art_guidance_photography,
             )
         if self.max_caption_length:
-            parts = caption.split(",")
+            parts = [p.strip() for p in caption.split(",") if p.strip()]
             if self.shuffle_caption_parts and len(parts) > 1:
                 random.shuffle(parts)
-            caption = ",".join(parts)[: self.max_caption_length]
+                caption = ", ".join(parts)
+            caption = truncate_caption_at_comma_boundary(caption, self.max_caption_length)
         return caption.strip(), (negative_caption or "").strip()
 
     def _latent_path(self, path: str) -> Optional[Path]:

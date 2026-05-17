@@ -16,6 +16,7 @@ Profiling (optional): pass ``--profile-out PATH`` (plus ``--profile-sort cumulat
 """
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -31,8 +32,7 @@ from utils.runtime.jsonutil import loads as json_loads
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config.defaults.model_presets import apply_op_mode_to_args, apply_preset_to_args
-from diffusion import INFERENCE_SOLVERS, create_diffusion, list_timestep_schedules
+from diffusion import create_diffusion, list_timestep_schedules
 from diffusion.sampling_extras import (
     apply_holy_grail_preset_to_args,
     list_holy_grail_presets,
@@ -40,30 +40,13 @@ from diffusion.sampling_extras import (
     sanitize_holy_grail_kwargs,
 )
 from models.controlnet import control_type_to_id, infer_control_type_from_path
-from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
 from utils.prompt.neg_filter import filter_negative_by_positive
 from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
+from utils.terminal import configure_stdio_for_console
 
+from config.defaults.model_presets import apply_op_mode_to_args, apply_preset_to_args
 
-def _configure_stdio_for_console() -> None:
-    """
-    Avoid UnicodeEncodeError on Windows terminals using legacy encodings (e.g. cp1252).
-    This keeps --help and logging robust even when text includes Unicode symbols.
-    """
-    if os.name != "nt":
-        return
-    try:
-        stdout_rc = getattr(sys.stdout, "reconfigure", None)
-        if callable(stdout_rc):
-            stdout_rc(errors="replace")
-        stderr_rc = getattr(sys.stderr, "reconfigure", None)
-        if callable(stderr_rc):
-            stderr_rc(errors="replace")
-    except Exception:
-        pass
-
-
-_configure_stdio_for_console()
+configure_stdio_for_console()
 
 
 def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
@@ -76,16 +59,9 @@ def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    model, cfg, rae_bridge, model_name, fusion_sd = load_dit_text_checkpoint(
-        ckpt_path,
-        device=device,
-        reject_enhanced=True,
-    )
-    print(f"Model: {model_name}")
-    if rae_bridge is not None:
-        rae_c = int(rae_bridge.to_dit.weight.shape[1])
-        print(f"Loaded RAELatentBridge: rae_channels={rae_c} -> 4 (DiT latent space)")
-    return model, cfg, rae_bridge, fusion_sd
+    from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
+
+    return load_sampler_checkpoint(ckpt_path, device=device, reject_enhanced=True, verbose=True)
 
 
 # T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
@@ -828,6 +804,25 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     parser.add_argument("--init-latent", type=str, default="", help="Start from saved latent .pt (from-z)")
     parser.add_argument("--mask", type=str, default="", help="Inpainting: path to mask (white=inpaint)")
     parser.add_argument(
+        "--dissect-refs",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated reference image paths for prompt-driven part extraction/compositing. "
+            "Example: --dissect-refs \"ref1.png,ref2.png\" and prompt 'use the hat from image 1 and background from image 2'."
+        ),
+    )
+    parser.add_argument(
+        "--auto-init-from-dissection",
+        action="store_true",
+        help="If set (and no --init-image/--mask provided), auto-build init+mask from --dissect-refs + prompt dissection.",
+    )
+    parser.add_argument(
+        "--dissection-lock-background",
+        action="store_true",
+        help="When background is requested from a reference image, preserve it (mask black everywhere).",
+    )
+    parser.add_argument(
         "--inpaint-mode",
         type=str,
         default="legacy",
@@ -874,6 +869,97 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         default="none",
         choices=["none", "photo", "anime", "illustration", "characters", "painterly"],
         help="Adds baseline clarity/tone/chroma-smooth amounts on top of explicit flags (style-aware defaults).",
+    )
+    # Artistic post-processing (compositional director, value structure, asymmetry, SSS, etc.)
+    parser.add_argument(
+        "--composition-guide",
+        type=str,
+        default="none",
+        choices=["none", "rule_of_thirds", "golden_ratio", "dynamic_symmetry"],
+        help=(
+            "Nudge visual weight toward compositional guide points. "
+            "Counteracts AI center-bias. 'rule_of_thirds' is the most natural starting point."
+        ),
+    )
+    parser.add_argument(
+        "--composition-guide-strength",
+        type=float,
+        default=0.15,
+        help="Strength of compositional guide nudge (0.1-0.25 is subtle; default 0.15).",
+    )
+    parser.add_argument(
+        "--value-structure",
+        action="store_true",
+        help="Enforce value discipline: lift shadows, roll off highlights, boost midtone separation.",
+    )
+    parser.add_argument(
+        "--value-shadow-lift",
+        type=float,
+        default=0.0,
+        help="Raise the black point slightly (0.0-0.12) to prevent crushed shadows.",
+    )
+    parser.add_argument(
+        "--value-highlight-roll",
+        type=float,
+        default=0.0,
+        help="Compress highlights (0.0-0.12) to prevent blown-out whites.",
+    )
+    parser.add_argument(
+        "--value-midtone-contrast",
+        type=float,
+        default=0.0,
+        help="Boost midtone separation (0.0-0.25) for more visual depth.",
+    )
+    parser.add_argument(
+        "--asymmetry",
+        type=float,
+        default=0.0,
+        help=(
+            "Introduce subtle organic asymmetry to break AI's perfect bilateral symmetry "
+            "(uncanny valley fix). 0.1-0.35 is subliminal; above 0.5 becomes visible."
+        ),
+    )
+    parser.add_argument(
+        "--lost-found-edges",
+        type=float,
+        default=0.0,
+        help=(
+            "Vary edge sharpness to mimic human mark-making ('lost and found' edges). "
+            "0.2-0.45 is natural; above 0.6 is painterly."
+        ),
+    )
+    parser.add_argument(
+        "--sss",
+        type=float,
+        default=0.0,
+        help=(
+            "Simulate subsurface scattering for skin/wax/translucent materials. "
+            "0.15-0.35 for subtle skin; 0.5-0.7 for wax/candle. Needs scipy."
+        ),
+    )
+    parser.add_argument(
+        "--sss-radius",
+        type=float,
+        default=3.0,
+        help="SSS blur radius in pixels (2-6 typical; default 3.0).",
+    )
+    parser.add_argument(
+        "--chromatic-aberration",
+        type=float,
+        default=0.0,
+        help="Subtle lens chromatic aberration (0.1-0.3 is natural; adds lens character).",
+    )
+    parser.add_argument(
+        "--vignette",
+        type=float,
+        default=0.0,
+        help="Radial vignette strength (0.15-0.4 is natural; frames the composition).",
+    )
+    parser.add_argument(
+        "--micro-detail",
+        type=float,
+        default=0.0,
+        help="Luminance-only micro-detail recovery (0.2-0.5; no RGB halos unlike sharpen).",
     )
     parser.add_argument(
         "--face-enhance",
@@ -1196,8 +1282,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--flow-solver",
         type=str,
         default="euler",
-        choices=["euler", "heun"],
-        help="ODE solver when using flow-matching sampling.",
+        metavar="NAME",
+        help="Flow ODE solver: euler/heun canonical; aliases rk2/edm_heun/etc. "
+        "(see diffusion.gaussian_diffusion.canonicalize_flow_solver).",
     )
     parser.add_argument(
         "--domain-prior-latent",
@@ -1391,29 +1478,66 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     parser.add_argument(
         "--no-cache", action="store_true", help="Disable T5 encoding cache (use when prompt/negative change every run)"
     )
-    _ts_choices = tuple(sorted(list_timestep_schedules()))
+    _ts_list = tuple(sorted(list_timestep_schedules()))
     parser.add_argument(
         "--scheduler",
         type=str,
         default="ddim",
-        choices=_ts_choices,
         metavar="NAME",
-        help=f"Timestep index schedule (noise→clean path): {', '.join(_ts_choices)}. Composes with --steps and --solver.",
+        help="Timestep index schedule; registered: "
+        + ", ".join(_ts_list)
+        + ". Or indices:HIGH,...,LOW (see diffusion.inference_timesteps). Composes with --steps and --solver.",
     )
     parser.add_argument(
         "--timestep-schedule",
         type=str,
         default=None,
-        choices=_ts_choices,
         metavar="NAME",
-        help="If set, overrides --scheduler (same names).",
+        help="If set, overrides --scheduler (registered names plus indices:...).",
     )
     parser.add_argument(
         "--solver",
         type=str,
         default="ddim",
-        choices=tuple(INFERENCE_SOLVERS),
-        help="Update rule: ddim (1 model eval per step) or heun (2 evals/step, often sharper).",
+        metavar="NAME",
+        help="VP update solver (canonical ddim/heun; aliases euler/rk2/edm_heun/… — see list_inference_solver_aliases).",
+    )
+    parser.add_argument(
+        "--guidance-schedule",
+        "--cfg-schedule",
+        dest="guidance_schedule",
+        type=str,
+        default=None,
+        metavar="MODE",
+        help="CFG vs denoise progress: linear | cosine | piecewise | snr (incompatible with --holy-grail).",
+    )
+    parser.add_argument(
+        "--guidance-schedule-linear-start",
+        dest="guidance_schedule_linear_start",
+        type=float,
+        default=0.7,
+        help="Multiplier at first VP/flow step for --guidance-schedule linear (default 0.7).",
+    )
+    parser.add_argument(
+        "--guidance-schedule-linear-end",
+        dest="guidance_schedule_linear_end",
+        type=float,
+        default=1.0,
+        help="Multiplier at last VP/flow step for --guidance-schedule linear (default 1.0).",
+    )
+    parser.add_argument(
+        "--guidance-schedule-cosine-min",
+        dest="guidance_schedule_cosine_min",
+        type=float,
+        default=0.65,
+        help="Min cosine multiplier when --guidance-schedule cosine.",
+    )
+    parser.add_argument(
+        "--guidance-schedule-cosine-max",
+        dest="guidance_schedule_cosine_max",
+        type=float,
+        default=1.0,
+        help="Max cosine multiplier when --guidance-schedule cosine.",
     )
     parser.add_argument(
         "--karras-rho",
@@ -1486,6 +1610,213 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         type=int,
         default=2400,
         help="Max total character budget for merged retrieved-facts context block.",
+    )
+    # Creative RAG: multimodal prompt enrichment using moondream2 + Qwen2.5 + semantic analysis
+    parser.add_argument(
+        "--creative-rag",
+        action="store_true",
+        help=(
+            "Enable Creative RAG prompt enrichment: semantically decomposes the prompt, "
+            "resolves cross-category contradictions, classifies intent, and enriches with "
+            "novel context-aware additions. Uses moondream2 (pretrained/moondream2) for "
+            "reference image understanding and Qwen2.5 (pretrained/Qwen2.5-14B-Instruct) "
+            "for creative synthesis when available; falls back to lightweight semantic "
+            "enrichment otherwise."
+        ),
+    )
+    parser.add_argument(
+        "--creative-rag-level",
+        type=float,
+        default=0.7,
+        help=(
+            "Creative RAG novelty level 0-1 (default 0.7). "
+            "0.3=subtle quality improvements, 0.6=balanced, 0.9=push for genuinely novel directions."
+        ),
+    )
+    parser.add_argument(
+        "--creative-rag-image",
+        type=str,
+        default="",
+        help=(
+            "Reference image path for Creative RAG. moondream2 will describe this image "
+            "in correlation with your prompt intent, grounding the creative synthesis."
+        ),
+    )
+    parser.add_argument(
+        "--creative-rag-images",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated reference image paths for Creative RAG (max 16), similar to multi-image "
+            "API workflows: dissection-derived facts use all paths; Moondream captions the first "
+            "8 existent files to control latency."
+        ),
+    )
+    parser.add_argument(
+        "--composition-brief",
+        type=str,
+        choices=("off", "auto", "on"),
+        default="off",
+        help=(
+            "Append concise composition and text-legibility cues. "
+            "'auto' enables only for UI/posters/quoted-string style prompts."
+        ),
+    )
+    _vdd_choices = None  # filled lazily to avoid importing visual_design during --help snapshots
+    try:
+        from utils.visual_design.compose import visual_design_cli_domain_choices
+
+        _vdd_choices = visual_design_cli_domain_choices()
+    except ImportError:
+        _vdd_choices = (
+            "none",
+            "auto",
+            "ui_ux",
+            "architecture",
+            "stem",
+            "textbook",
+            "brand",
+            "infographic",
+            "packaging",
+            "wayfinding",
+            "general_product",
+            "editorial_layout",
+            "presentation_slide",
+            "technical_blueprint",
+            "fashion_flat",
+        )
+    parser.add_argument(
+        "--visual-design-domain",
+        type=str,
+        default="none",
+        choices=_vdd_choices,
+        help=(
+            "Append utils.visual_design domain craft cues (UI, STEM, textbook, brand, packaging, …). "
+            "'auto' picks from the prompt heuristic; pairs well with --composition-brief for UI/typography."
+        ),
+    )
+    parser.add_argument(
+        "--visual-design-intensity",
+        type=str,
+        default="standard",
+        choices=("lite", "standard", "strong"),
+        help="Tier for --visual-design-domain positives and optional negatives.",
+    )
+    parser.add_argument(
+        "--visual-design-negative-pack",
+        action="store_true",
+        help="Merge domain negatives into the effective negative prompt (requires --visual-design-domain / auto-hit).",
+    )
+    try:
+        from utils.visual_design.presets import preset_ids as _visual_design_preset_ids
+
+        _vdp_help_extra = f"Known ids: {', '.join(_visual_design_preset_ids())}."
+    except ImportError:
+
+        def _visual_design_preset_ids():  # type: ignore[misc]
+            return ()
+
+        _vdp_help_extra = ""
+    parser.add_argument(
+        "--visual-design-preset",
+        type=str,
+        default="",
+        help=(
+            "Shortcut: set domain + intensity (and optional prompt prefix) via utils.visual_design.presets. "
+            "Overrides --visual-design-domain / --visual-design-intensity when non-empty. "
+            f"{_vdp_help_extra}"
+        ),
+    )
+    parser.add_argument(
+        "--multi-instance-preset",
+        type=str,
+        choices=(
+            "none",
+            "distinct_objects",
+            "stacked_media",
+            "turnaround_sheet",
+            "panel_strip",
+            "group_portrait",
+        ),
+        default="none",
+        help=(
+            "Bias toward several *different* instances in one frame (posters, books, panels, group shots, "
+            "turnarounds): structure + anti-clone negatives + higher --num floor. See utils.prompt.multi_instance_scene."
+        ),
+    )
+    parser.add_argument(
+        "--multi-instance-count",
+        type=int,
+        default=0,
+        help=(
+            "With --multi-instance-preset: set --expected-count for test-time scoring (e.g. 5 posters, 4 people)."
+        ),
+    )
+    parser.add_argument(
+        "--multi-instance-auto",
+        action="store_true",
+        help=(
+            "With --multi-instance-preset: if --composition-brief was off, switch to auto; "
+            "if --pick-best is none, use combo_count; if --multi-instance-count>0 and "
+            "--expected-count-target is auto, set people vs objects heuristic. Prints a workflow checklist."
+        ),
+    )
+    parser.add_argument(
+        "--detailed-scene-boost",
+        type=str,
+        choices=("off", "auto", "on"),
+        default="off",
+        help=(
+            "Add separation, per-entity noun consistency, pose/weight/contact, optional anatomy + "
+            "physics/creature heuristics (see utils.prompt.detailed_scene_entities). "
+            "Use auto for group/count/long multi-clause prompts; on always appends."
+        ),
+    )
+    parser.add_argument(
+        "--detailed-scene-strength",
+        type=str,
+        choices=("lite", "strong"),
+        default="lite",
+        help="With --detailed-scene-boost: lite vs stronger anatomy/pose/shadow cues.",
+    )
+    parser.add_argument(
+        "--prompt-breakdown",
+        type=str,
+        choices=("off", "auto", "on"),
+        default="off",
+        help=(
+            "Heuristically split comma/semicolon clauses into layout-aligned buckets and reorder for encoders. "
+            "Auto triggers on long or clause-heavy prompts. Skipped when --prompt-layout is used."
+        ),
+    )
+    parser.add_argument(
+        "--prompt-breakdown-format",
+        type=str,
+        choices=("ordered", "labeled"),
+        default="ordered",
+        help=(
+            "With --prompt-breakdown: ordered = single reordered comma line (CLIP+T5); "
+            "labeled = QUALITY:/SUBJECTS:/… blocks for T5 only (flat line still used for cache/CLIP consistency)."
+        ),
+    )
+    parser.add_argument(
+        "--prompt-breakdown-order",
+        type=str,
+        choices=("subject_first", "quality_first", "scene_first"),
+        default="subject_first",
+        help="Section priority when merging buckets (same presets as prompt_layout JSON).",
+    )
+    parser.add_argument(
+        "--creative-rag-resolve-conflicts",
+        action="store_true",
+        default=True,
+        help="Resolve semantic contradictions in the prompt before generation (e.g. 'photorealistic, anime'). Default: on.",
+    )
+    parser.add_argument(
+        "--no-creative-rag-resolve-conflicts",
+        action="store_false",
+        dest="creative_rag_resolve_conflicts",
+        help="Disable automatic semantic conflict resolution.",
     )
     parser.add_argument(
         "--hard-style",
@@ -1629,7 +1960,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         help="If any --lora is set and --lora-scaffold is none, use blend scaffolding.",
     )
     parser.add_argument(
-         "--anti-bleed",
+        "--anti-bleed",
         action="store_true",
         help="Reduce concept/color bleeding: add distinct-colors positive and color-bleed negative",
     )
@@ -1690,13 +2021,6 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     )
     parser.add_argument(
         "--strong-watermark", action="store_true", help="Stronger watermark/logo negative (for stubborn baked-in logos)"
-    )
-    parser.add_argument(
-        "--safety-mode",
-        type=str,
-        default="nsfw",
-        choices=["none", "sfw", "nsfw"],
-        help="Content intent mode: sfw/nsfw scaffolding for better adherence. (default: nsfw for uncensored model)",
     )
     parser.add_argument(
         "--pose-mode",
@@ -1831,27 +2155,6 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         help="Skin texture/detail behavior pack.",
     )
     parser.add_argument(
-        "--nsfw-pack",
-        type=str,
-        default="none",
-        choices=["none", "soft", "explicit_detail", "romantic", "extreme"],
-        help="Adult-content pose/anatomy stability pack.",
-    )
-    parser.add_argument(
-        "--sex-position",
-        type=str,
-        default="none",
-        choices=["none", "standing_missionary", "doggy", "cowgirl", "missionary", "spooning", "standing"],
-        help="Specific sex position for extreme scene control.",
-    )
-    parser.add_argument(
-        "--penetration-detail",
-        type=str,
-        default="none",
-        choices=["none", "normal", "deep", "extreme"],
-        help="Level of penetration detail and anatomical exaggeration.",
-    )
-    parser.add_argument(
         "--body-proportion",
         type=str,
         default="none",
@@ -1864,41 +2167,6 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         default="none",
         choices=["none", "gentle", "passionate", "intense", "extreme"],
         help="Intensity of sexual interaction.",
-    )
-    parser.add_argument(
-        "--sfw-mood",
-        type=str,
-        default="none",
-        choices=["none", "wholesome", "heroic", "serene", "adventurous", "joyful", "cozy"],
-        help="SFW mood control for wholesome and artistic scenes.",
-    )
-    parser.add_argument(
-        "--sfw-pose",
-        type=str,
-        default="none",
-        choices=["none", "elegant", "heroic", "contemplative", "playful", "dynamic", "relaxed"],
-        help="SFW pose control for elegant and wholesome scenes.",
-    )
-    parser.add_argument(
-        "--sfw-clothing",
-        type=str,
-        default="none",
-        choices=["none", "casual", "elegant", "cozy", "adventurer", "fantasy", "historical", "sporty"],
-        help="SFW clothing control for wholesome outfits.",
-    )
-    parser.add_argument(
-        "--sfw-environment",
-        type=str,
-        default="none",
-        choices=["none", "forest", "cabin", "meadow", "library", "garden", "night"],
-        help="SFW environment control for peaceful scenes.",
-    )
-    parser.add_argument(
-        "--sfw-expression",
-        type=str,
-        default="none",
-        choices=["none", "gentle", "joyful", "curious", "serene", "determined"],
-        help="SFW facial expression control.",
     )
     parser.add_argument(
         "--style-mode",
@@ -1972,6 +2240,119 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         help="Disable extra one-shot scaffolding tokens.",
     )
     parser.set_defaults(one_shot_boost=True)
+    parser.add_argument(
+        "--prompt-clauses",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated intent clauses from utils.prompt.stack (e.g. "
+            "uncensored.fidelity,hands.stable,quality.micro). Applied after content controls."
+        ),
+    )
+    parser.add_argument(
+        "--no-prompt-stack-intelligence",
+        dest="prompt_stack_intelligence",
+        action="store_false",
+        help="Disable PromptStack prompt analysis (complexity, auto quality hints).",
+    )
+    parser.set_defaults(prompt_stack_intelligence=True)
+    parser.add_argument(
+        "--no-prompt-stack-auto-quality",
+        dest="prompt_stack_auto_quality",
+        action="store_false",
+        help="Disable light quality-tag injection for short prompts.",
+    )
+    parser.set_defaults(prompt_stack_auto_quality=True)
+    parser.add_argument(
+        "--prompt-special-helpers",
+        type=str,
+        default="auto",
+        help=(
+            "Route surreal/horror/narrative/technical/NSFW-precision helpers "
+            "(utils.prompt.special_prompt_helpers). Use 'off' to disable."
+        ),
+    )
+    parser.add_argument(
+        "--invent-styles",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Invent N novel style genomes (utils.prompt.style_inventor) and apply "
+            "genome #--style-genome-index via PromptStack before generation."
+        ),
+    )
+    parser.add_argument(
+        "--style-genome-file",
+        type=str,
+        default="",
+        help="JSON file with one StyleGenome object or an array (use with --style-genome-index).",
+    )
+    parser.add_argument(
+        "--style-genome-index",
+        type=int,
+        default=0,
+        help="When --style-genome-file or --invent-styles returns multiple genomes, pick this index.",
+    )
+    parser.add_argument(
+        "--style-inventor-creativity",
+        type=float,
+        default=0.75,
+        help="0–1 novelty for --invent-styles (higher = more original axes).",
+    )
+    parser.add_argument(
+        "--no-style-inventor-qwen",
+        action="store_true",
+        help="Use deterministic style genome fallback only (no Qwen2.5).",
+    )
+    parser.add_argument(
+        "--explore-styles",
+        action="store_true",
+        help=(
+            "Shorthand: --invent-styles 3, --num 3, --pick-best combo if unset. "
+            "For full genome×mutation manifests use scripts.tools.explore_styles."
+        ),
+    )
+    parser.add_argument(
+        "--explore-styles-insane",
+        action="store_true",
+        help=(
+            "Nuclear explore: --style-inventor-mode apocalypse --style-chaos-level 0.95 "
+            "--invent-styles 4 --prompt-clauses style.chaos,style.surreal"
+        ),
+    )
+    parser.add_argument(
+        "--style-inventor-mode",
+        type=str,
+        default="normal",
+        choices=("normal", "insane", "apocalypse", "chimera", "glitch", "eldritch", "cyberpunk"),
+        help="Style genome invention mode (see utils.prompt.style_genome_chaos).",
+    )
+    parser.add_argument(
+        "--style-chaos-level",
+        type=float,
+        default=0.0,
+        help="0–1 extra chaos spice on top of invented genome (hyper-fragments, wild axes).",
+    )
+    parser.add_argument(
+        "--style-genome-preset",
+        type=str,
+        default="",
+        help=(
+            "Force a named insane preset (glitch_cathedral, biolume_abyss, eldritch_taxonomy, …). "
+            "Run: python -m scripts.tools explore_styles --list-presets"
+        ),
+    )
+    parser.add_argument(
+        "--style-genome-hypermutate",
+        action="store_true",
+        help="Hypermutate each invented genome before apply (sibling strain).",
+    )
+    parser.add_argument(
+        "--style-genome-fusion",
+        action="store_true",
+        help="When inventing 2+ genomes, also build chimera fusion in explore manifest (explore_styles tool).",
+    )
     parser.add_argument(
         "--gender-swap",
         action="store_true",
@@ -2487,7 +2868,34 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     )
 
     # Encode prompts (cond = positive, uncond = negative; default negative when empty)
+    if getattr(args, "explore_styles_insane", False):
+        args.explore_styles = True
+        args.style_inventor_mode = "apocalypse"
+        args.style_chaos_level = max(float(getattr(args, "style_chaos_level", 0) or 0), 0.95)
+        args.invent_styles = max(int(getattr(args, "invent_styles", 0) or 0), 4)
+        _cl = str(getattr(args, "prompt_clauses", "") or "").strip()
+        _insane_clauses = "style.chaos,style.surreal,style.apocalypse"
+        args.prompt_clauses = f"{_cl},{_insane_clauses}".strip(",") if _cl else _insane_clauses
+        print("Explore-styles-insane: apocalypse mode engaged.", file=sys.stderr)
+
+    if getattr(args, "explore_styles", False):
+        if int(getattr(args, "invent_styles", 0) or 0) < 1:
+            args.invent_styles = 3
+        _pb_explore = str(getattr(args, "pick_best", "none") or "none").strip().lower()
+        if _pb_explore in ("none", ""):
+            args.pick_best = "combo"
+        print(
+            f"Explore-styles: inventing {args.invent_styles} genomes "
+            f"(mode={getattr(args, 'style_inventor_mode', 'normal')}, "
+            f"chaos={float(getattr(args, 'style_chaos_level', 0) or 0):.2f}); "
+            f"use --style-genome-index 0..{args.invent_styles - 1} per run or scripts.tools.explore_styles",
+            file=sys.stderr,
+        )
+
     num_gen = max(1, getattr(args, "num", 1))
+    if getattr(args, "explore_styles", False) and num_gen < int(getattr(args, "invent_styles", 3) or 3):
+        num_gen = int(args.invent_styles)
+        args.num = num_gen
     if num_gen < 2 and str(getattr(args, "pick_best", "none")).lower() not in ("none", ""):
         print("Note: --pick-best only applies with --num >= 2; ignoring.", file=sys.stderr)
     # Resolve emphasis (word)/[word] first so we have prompt_to_encode for conflict filter
@@ -2534,6 +2942,130 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 print(f"Agentic grounding: no facts found in {facts_path}", file=sys.stderr)
         except Exception as e:
             print(f"Warning: agentic fact grounding failed: {e}", file=sys.stderr)
+
+    _comp_brief = str(getattr(args, "composition_brief", "off") or "off")
+    if _comp_brief != "off" and prompt_to_encode.strip():
+        try:
+            from utils.prompt.composition_brief import apply_composition_brief
+
+            prompt_to_encode = apply_composition_brief(
+                prompt_to_encode,
+                _comp_brief,  # type: ignore[arg-type]
+            )
+            args.prompt = prompt_to_encode
+        except Exception as _cb_e:
+            print(f"Composition brief skipped: {_cb_e}", file=sys.stderr)
+
+    setattr(args, "_visual_design_negative", "")
+    _vd_preset = str(getattr(args, "visual_design_preset", "") or "").strip().lower()
+    if _vd_preset and prompt_to_encode.strip():
+        try:
+            from utils.visual_design.presets import apply_visual_design_preset_to_prompt
+
+            prompt_to_encode, _vd_pre_dom, _vd_pre_int = apply_visual_design_preset_to_prompt(prompt_to_encode, _vd_preset)
+            args.prompt = prompt_to_encode
+            setattr(args, "visual_design_domain", _vd_pre_dom)
+            setattr(args, "visual_design_intensity", _vd_pre_int)
+        except Exception as _vp_e:
+            print(f"Visual design preset skipped: {_vp_e}", file=sys.stderr)
+
+    _vd_dom = str(getattr(args, "visual_design_domain", "none") or "none").lower().strip()
+    if _vd_dom != "none" and prompt_to_encode.strip():
+        try:
+            from utils.visual_design.sampling import apply_visual_design_stage
+
+            vd_out = apply_visual_design_stage(
+                prompt_to_encode,
+                cli_domain=_vd_dom,
+                intensity=str(getattr(args, "visual_design_intensity", "standard") or "standard"),
+                use_negative_pack=bool(getattr(args, "visual_design_negative_pack", False)),
+                emit=lambda m: print(m, file=sys.stderr),
+            )
+            prompt_to_encode = vd_out.prompt
+            args.prompt = prompt_to_encode
+            if vd_out.negative_addon:
+                setattr(args, "_visual_design_negative", vd_out.negative_addon)
+        except Exception as _vd_e:
+            print(f"Visual design pack skipped: {_vd_e}", file=sys.stderr)
+
+    # Creative RAG: semantic conflict resolution + intent-aware enrichment + optional moondream2/Qwen2.5
+    if getattr(args, "creative_rag", False) and prompt_to_encode.strip():
+        try:
+            from utils.prompt.advanced_prompting import (
+                CreativeRAGOptimizer,
+                classify_prompt_intent,
+                resolve_semantic_conflicts,
+            )
+
+            _rag_level = float(getattr(args, "creative_rag_level", 0.7) or 0.7)
+            _rag_image = str(getattr(args, "creative_rag_image", "") or "").strip()
+            _rag_multi = str(getattr(args, "creative_rag_images", "") or "").strip()
+            _rag_resolve = bool(getattr(args, "creative_rag_resolve_conflicts", True))
+
+            _rag_ref_list: list[str] = []
+            if _rag_image:
+                _rag_ref_list.append(_rag_image)
+            if _rag_multi:
+                for _p in _rag_multi.split(","):
+                    _s = _p.strip()
+                    if _s and _s not in _rag_ref_list:
+                        _rag_ref_list.append(_s)
+            _rag_ref_list = _rag_ref_list[:16]
+
+            # Always run semantic conflict resolution (fast, no heavy models)
+            if _rag_resolve:
+                _resolved, _removed = resolve_semantic_conflicts(prompt_to_encode)
+                if _removed:
+                    print(
+                        f"Creative RAG: resolved {len(_removed)} semantic contradiction(s): "
+                        + ", ".join(f"'{r}'" for r in _removed[:4]),
+                        file=sys.stderr,
+                    )
+                    prompt_to_encode = _resolved
+                    args.prompt = prompt_to_encode
+
+            # Classify intent and report
+            _intent = classify_prompt_intent(prompt_to_encode)
+            print(f"Creative RAG: detected intent={_intent}, creativity_level={_rag_level:.2f}", file=sys.stderr)
+            if _rag_ref_list:
+                print(
+                    f"Creative RAG: reference images={len(_rag_ref_list)} (facts/dissection up to 16; moondream up to 8)",
+                    file=sys.stderr,
+                )
+
+            # Full enrichment (uses moondream2 + Qwen2.5 if available, else fast fallback)
+            _rag_opt = CreativeRAGOptimizer(device=str(device))
+            _rag_result = _rag_opt.optimize(
+                prompt_to_encode,
+                reference_image_paths=_rag_ref_list if _rag_ref_list else None,
+                creativity_level=_rag_level,
+                optimization_level="balanced",
+                seed=int(getattr(args, "seed", 42)),
+                use_rag=True,
+            )
+
+            if _rag_result.get("optimized_prompt", "").strip():
+                _enriched = _rag_result["optimized_prompt"]
+                _added_count = len(_enriched.split(",")) - len(prompt_to_encode.split(","))
+                _fallback = getattr(_rag_result.get("rag_result"), "fallback_used", True)
+                _mode = "semantic fallback" if _fallback else "Qwen2.5 synthesis"
+                print(
+                    f"Creative RAG ({_mode}): added {max(0, _added_count)} enrichment(s) "
+                    f"[intent={_intent}]",
+                    file=sys.stderr,
+                )
+                prompt_to_encode = _enriched
+                args.prompt = prompt_to_encode
+
+                # Merge RAG negative additions into the negative prompt
+                _rag_neg = str(_rag_result.get("negative_additions", "") or "").strip()
+                if _rag_neg and not getattr(args, "negative_prompt", "").strip():
+                    # Only auto-inject if user didn't provide a custom negative
+                    # (we don't want to override user intent)
+                    pass  # negative additions are available via _rag_result for downstream use
+
+        except Exception as e:
+            print(f"Creative RAG failed (non-fatal): {e}", file=sys.stderr)
     if getattr(args, "boost_quality", False) and prompt_to_encode.strip():
         try:
             from data.caption_utils import QUALITY_PREFIX
@@ -2542,6 +3074,104 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 prompt_to_encode = f"{QUALITY_PREFIX}{prompt_to_encode}".strip()
         except ImportError:
             prompt_to_encode = f"masterpiece, best quality, {prompt_to_encode}".strip()
+
+    setattr(args, "_multi_instance_negative", "")
+    _mi_preset = str(getattr(args, "multi_instance_preset", "none") or "none").lower().strip()
+    if _mi_preset not in ("none", "") and prompt_to_encode.strip():
+        try:
+            from utils.prompt.multi_instance_scene import apply_multi_instance_preset, describe_limitation_short
+
+            _mi_user_n = max(0, int(getattr(args, "multi_instance_count", 0) or 0))
+            prompt_to_encode, _mi_neg, _mi_min_n, _mi_ec, _mi_note = apply_multi_instance_preset(
+                prompt_to_encode,
+                _mi_preset,
+                user_expected_count=_mi_user_n,
+            )
+            args.prompt = prompt_to_encode
+            if _mi_neg:
+                setattr(args, "_multi_instance_negative", _mi_neg)
+            if _mi_min_n > num_gen:
+                num_gen = max(num_gen, _mi_min_n)
+                args.num = int(num_gen)
+                print(
+                    f"Multi-instance preset '{_mi_preset}': raised --num to {num_gen} for broader search "
+                    f"({describe_limitation_short()})",
+                    file=sys.stderr,
+                )
+            if _mi_user_n > 0:
+                setattr(args, "expected_count", int(_mi_user_n))
+            elif _mi_ec is not None and _mi_ec > 0 and int(getattr(args, "expected_count", 0) or 0) <= 0:
+                setattr(args, "expected_count", int(_mi_ec))
+            if _mi_note:
+                print(f"Multi-instance: {_mi_note}", file=sys.stderr)
+        except Exception as _mi_e:
+            print(f"Multi-instance preset skipped: {_mi_e}", file=sys.stderr)
+
+    if bool(getattr(args, "multi_instance_auto", False)) and _mi_preset not in ("none", "") and prompt_to_encode.strip():
+        try:
+            from utils.prompt.composition_brief import apply_composition_brief
+            from utils.prompt.multi_instance_scene import (
+                multi_instance_auto_settings,
+                print_multi_instance_hints,
+            )
+
+            _st = multi_instance_auto_settings(_mi_preset)
+            if _st.get("composition_brief_boost") and str(getattr(args, "composition_brief", "off")).lower() == "off":
+                setattr(args, "composition_brief", "auto")
+                prompt_to_encode = apply_composition_brief(prompt_to_encode, "auto")
+                args.prompt = prompt_to_encode
+                print("Multi-instance auto: composition-brief -> auto", file=sys.stderr)
+            _pb0 = str(getattr(args, "pick_best", "none") or "none").strip().lower()
+            if _pb0 in ("none", "") and _st.get("pick_best"):
+                setattr(args, "pick_best", str(_st["pick_best"]))
+                print(f"Multi-instance auto: pick-best -> {_st['pick_best']}", file=sys.stderr)
+            _mic_auto = int(getattr(args, "multi_instance_count", 0) or 0)
+            _ect0 = str(getattr(args, "expected_count_target", "auto") or "auto").lower().strip()
+            if _mic_auto > 0 and _ect0 == "auto" and _st.get("expected_count_target"):
+                setattr(args, "expected_count_target", str(_st["expected_count_target"]))
+                print(
+                    f"Multi-instance auto: expected-count-target -> {_st['expected_count_target']}",
+                    file=sys.stderr,
+                )
+            if str(getattr(args, "pick_best", "none") or "").strip().lower() not in ("none", ""):
+                if num_gen < 2:
+                    num_gen = max(2, num_gen)
+                    setattr(args, "num", int(num_gen))
+                    print("Multi-instance auto: --num raised to >= 2 because pick-best is active", file=sys.stderr)
+            print_multi_instance_hints(_mi_preset)
+        except Exception as _mia:
+            print(f"Multi-instance auto skipped: {_mia}", file=sys.stderr)
+
+    setattr(args, "_detailed_scene_negative", "")
+    _dsb = str(getattr(args, "detailed_scene_boost", "auto") or "auto")
+    _dss = str(getattr(args, "detailed_scene_strength", "lite") or "lite")
+    if _dsb != "off" and prompt_to_encode.strip():
+        try:
+            from utils.prompt.detailed_scene_entities import (
+                apply_detailed_scene_boost,
+                detailed_scene_warrants_boost,
+                extract_key_segments,
+            )
+
+            if _dsb == "on" or (_dsb == "auto" and detailed_scene_warrants_boost(prompt_to_encode)):
+                _ds_pt, _ds_neg = apply_detailed_scene_boost(
+                    prompt_to_encode,
+                    "on",
+                    strength=_dss,  # type: ignore[arg-type]
+                )
+                if _ds_neg:
+                    setattr(args, "_detailed_scene_negative", _ds_neg)
+                if _ds_pt != prompt_to_encode:
+                    prompt_to_encode = _ds_pt
+                    args.prompt = prompt_to_encode
+                _segs = extract_key_segments(prompt_to_encode)
+                if _segs:
+                    print(
+                        f"Detailed-scene boost ({_dss}): {len(_segs)} key clauses (e.g. {_segs[:3]!r})",
+                        file=sys.stderr,
+                    )
+        except Exception as _dse:
+            print(f"Detailed-scene boost skipped: {_dse}", file=sys.stderr)
 
     expected_texts = _parse_expected_texts(getattr(args, "expected_text", ""))
     if not expected_texts and bool(getattr(args, "auto_expected_text", True)):
@@ -2574,353 +3204,23 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         args.text_in_image = True
         prompt_to_encode = _maybe_append_text_says(prompt_to_encode, expected_texts)
         args.prompt = prompt_to_encode
-    _sm_mode = str(getattr(args, "shortcomings_mitigation", "none") or "none").lower()
-    _ag_mode = str(getattr(args, "art_guidance_mode", "none") or "none").lower()
-    _ag_anat = str(getattr(args, "anatomy_guidance", "none") or "none").lower()
-    _sg_mode = str(getattr(args, "style_guidance_mode", "none") or "none").lower()
-    _ag_pos = ""
-    _ag_neg = ""
-    _sg_pos = ""
-    _sg_neg = ""
-    if _sm_mode in ("auto", "all") and prompt_to_encode.strip():
-        try:
-            from config.defaults.ai_image_shortcomings import mitigation_fragments
+    _pr_grade_ef = str(getattr(args, "_pr_grade_ef", "none") or "none")
+    _pr_filter_ef = str(getattr(args, "_pr_filter_ef", "none") or "none")
+    _pr_grain_ef = str(getattr(args, "_pr_grain_ef", "none") or "none")
+    _pr_pack_ef = str(getattr(args, "_pr_pack_ef", "none") or "none")
+    _is_photo_prompt = bool(getattr(args, "_is_photo_prompt", False))
+    _auto_pick_metric = str(getattr(args, "_auto_pick_metric", "") or "")
 
-            _pos_sm, _ = mitigation_fragments(
-                prompt_to_encode,
-                _sm_mode,  # type: ignore[arg-type]
-                include_2d_pack=bool(getattr(args, "shortcomings_2d", False)),
-            )
-            if _pos_sm:
-                prompt_to_encode = f"{prompt_to_encode}, {_pos_sm}".strip().strip(",")
-                args.prompt = prompt_to_encode
-        except Exception:
-            pass
-    if (_ag_mode in ("auto", "all") or _ag_anat in ("lite", "strong")) and prompt_to_encode.strip():
-        try:
-            from config.defaults.art_mediums import guidance_fragments
+    from utils.prompt.stack import apply_sample_prompt_stack
 
-            _ag_pos, _ag_neg = guidance_fragments(
-                prompt_to_encode,
-                _ag_mode,  # type: ignore[arg-type]
-                include_photography=not bool(getattr(args, "no_art_guidance_photography", False)),
-                anatomy_mode=_ag_anat,  # type: ignore[arg-type]
-            )
-            if _ag_pos:
-                prompt_to_encode = f"{prompt_to_encode}, {_ag_pos}".strip().strip(",")
-                args.prompt = prompt_to_encode
-        except Exception:
-            pass
-    # Style domain + artist refs + ``style_artists`` bucket/facet hints (see ``style_guidance_fragments``).
-    if prompt_to_encode.strip():
-        try:
-            from config.defaults.style_guidance import style_guidance_fragments
-
-            _sg_eff = _sg_mode if _sg_mode in ("auto", "all") else "none"
-            _sg_pos, _sg_neg = style_guidance_fragments(
-                prompt_to_encode,
-                _sg_eff,  # type: ignore[arg-type]
-                include_artist_refs=bool(getattr(args, "style_guidance_artists", True)),
-            )
-            if _sg_pos:
-                prompt_to_encode = f"{prompt_to_encode}, {_sg_pos}".strip().strip(",")
-                args.prompt = prompt_to_encode
-        except Exception:
-            pass
-    _photo_neg = ""
-    _pr_grade_ef = "none"
-    _pr_filter_ef = "none"
-    _pr_grain_ef = "none"
-    _pr_pack_ef = "none"
-    _is_photo_prompt = False
-    _auto_pick_metric = ""
-    try:
-        from utils.prompt.photo_realism import (
-            infer_photo_realism_controls,
-            is_photographic_prompt,
-            photo_realism_fragments,
-            recommend_photo_post_profile,
-        )
-
-        _pr_pack = str(getattr(args, "photo_realism_pack", "none") or "none")
-        _pr_grade = str(getattr(args, "photo_color_grade", "none") or "none")
-        _pr_light = str(getattr(args, "photo_lighting_technique", "none") or "none")
-        _pr_filter = str(getattr(args, "photo_filter", "none") or "none")
-        _pr_grain = str(getattr(args, "photo_grain_style", "none") or "none")
-        _pr_strength = float(getattr(args, "photo_realism_strength", 1.0) or 1.0)
-        if getattr(args, "auto_photo_realism", True):
-            _pr_inf = infer_photo_realism_controls(prompt_to_encode)
-            if _pr_pack == "none" and _pr_inf.get("photo_realism_pack"):
-                _pr_pack = str(_pr_inf["photo_realism_pack"])
-            if _pr_grade == "none" and _pr_inf.get("photo_color_grade"):
-                _pr_grade = str(_pr_inf["photo_color_grade"])
-            if _pr_light == "none" and _pr_inf.get("photo_lighting_technique"):
-                _pr_light = str(_pr_inf["photo_lighting_technique"])
-            if _pr_filter == "none" and _pr_inf.get("photo_filter"):
-                _pr_filter = str(_pr_inf["photo_filter"])
-        _is_photo_prompt = bool(is_photographic_prompt(prompt_to_encode))
-        _pr_pos, _pr_neg = photo_realism_fragments(
-            photo_realism_pack=_pr_pack,
-            photo_color_grade=_pr_grade,
-            photo_lighting_technique=_pr_light,
-            photo_filter=_pr_filter,
-            photo_grain_style=_pr_grain,
-            strength=_pr_strength,
-        )
-        if _pr_pos:
-            prompt_to_encode = f"{prompt_to_encode}, {_pr_pos}".strip().strip(",")
-            args.prompt = prompt_to_encode
-            # Photo realism cues pair well with camera-media grounding.
-            if str(getattr(args, "human_media_mode", "none") or "none") == "none":
-                args.human_media_mode = "photographic"
-        _pr_grade_ef = str(_pr_grade or "none")
-        _pr_filter_ef = str(_pr_filter or "none")
-        _pr_grain_ef = str(_pr_grain or "none")
-        _pr_pack_ef = str(_pr_pack or "none")
-        if bool(getattr(args, "realism_autopilot", True)) and (_is_photo_prompt or _pr_pack_ef != "none"):
-            _rp = recommend_photo_post_profile(
-                photo_realism_pack=_pr_pack_ef,
-                photo_color_grade=_pr_grade_ef,
-                photo_filter=_pr_filter_ef,
-                photo_grain_style=_pr_grain_ef,
-            )
-            if str(_pr_grain_ef).lower() == "none" and str(_rp.get("photo_grain_style", "none")).lower() != "none":
-                _pr_grain_ef = str(_rp["photo_grain_style"])
-                args.photo_grain_style = _pr_grain_ef
-            if abs(float(getattr(args, "photo_post_strength", 0.6) or 0.6) - 0.6) < 1e-6:
-                try:
-                    args.photo_post_strength = float(_rp.get("photo_post_strength", "0.62"))
-                except Exception:
-                    pass
-            _auto_pick_metric = str(_rp.get("pick_best_metric", "") or "")
-        if _pr_neg:
-            _photo_neg = _pr_neg
-    except Exception:
-        pass
-    try:
-        from config.defaults.prompt_domains import ANTI_AI_LOOK_NEGATIVE, ANTI_AI_LOOK_NEGATIVE_STRONG
-
-        from config import DEFAULT_NEGATIVE_PROMPT, TEXT_IN_IMAGE_NEGATIVE, TEXT_IN_IMAGE_PHRASES
-    except ImportError:
-        DEFAULT_NEGATIVE_PROMPT = " "
-        TEXT_IN_IMAGE_NEGATIVE = (
-            "garbled text, misspelled, wrong spelling, illegible, watermark, signature, low quality, blurry"
-        )
-        TEXT_IN_IMAGE_PHRASES = ("sign that says", "text that says", "lettering", "written", 'reads "', 'says "')
-        ANTI_AI_LOOK_NEGATIVE = (
-            "oversaturated, plastic skin, smooth skin, airbrushed, waxy, doll-like, synthetic, artificial, CGI, uncanny"
-        )
-        ANTI_AI_LOOK_NEGATIVE_STRONG = ANTI_AI_LOOK_NEGATIVE
-    # When user wants text in the image (sign, lettering, etc.), use a negative that avoids bad text but doesn't suppress desired text
-    user_neg = (args.negative_prompt or "").strip()
-    layout_neg = (getattr(args, "_prompt_layout_negative", None) or "").strip()
-    if user_neg:
-        negative_text_raw = user_neg
-    elif getattr(args, "text_in_image", False):
-        negative_text_raw = TEXT_IN_IMAGE_NEGATIVE
-    else:
-        prompt_lower = prompt_to_encode.lower()
-        if any(phrase in prompt_lower for phrase in TEXT_IN_IMAGE_PHRASES):
-            negative_text_raw = TEXT_IN_IMAGE_NEGATIVE
-            print(
-                "Text-in-image detected: using text-friendly negative (legible text not suppressed).", file=sys.stderr
-            )
-        else:
-            negative_text_raw = DEFAULT_NEGATIVE_PROMPT
-    if layout_neg:
-        negative_text_raw = (
-            f"{negative_text_raw}, {layout_neg}".strip().strip(",") if negative_text_raw else layout_neg
-        )
-    if getattr(args, "naturalize", False):
-        _anti_nat = ANTI_AI_LOOK_NEGATIVE_STRONG if getattr(args, "naturalize_deep", False) else ANTI_AI_LOOK_NEGATIVE
-        negative_text_raw = f"{negative_text_raw}, {_anti_nat}".strip()
-    if getattr(args, "anti_bleed", False):
-        try:
-            from config.defaults.prompt_domains import CONCEPT_BLEEDING_NEGATIVE
-
-            negative_text_raw = f"{negative_text_raw}, {CONCEPT_BLEEDING_NEGATIVE}".strip()
-        except ImportError:
-            pass
-    if getattr(args, "diversity", False):
-        try:
-            from config.defaults.prompt_domains import FLUX_FACE_DIVERSITY_NEGATIVE
-
-            negative_text_raw = f"{negative_text_raw}, {FLUX_FACE_DIVERSITY_NEGATIVE}".strip()
-        except ImportError:
-            pass
-    if getattr(args, "anti_artifacts", False):
-        try:
-            from config.defaults.prompt_domains import ARTIFACT_NEGATIVES
-
-            negative_text_raw = f"{negative_text_raw}, {ARTIFACT_NEGATIVES}".strip()
-        except ImportError:
-            pass
-    if getattr(args, "strong_watermark", False):
-        try:
-            from config.defaults.prompt_domains import WATERMARK_NEGATIVE_STRONG
-
-            negative_text_raw = f"{negative_text_raw}, {WATERMARK_NEGATIVE_STRONG}".strip()
-        except ImportError:
-            pass
-    if _sm_mode in ("auto", "all"):
-        try:
-            from config.defaults.ai_image_shortcomings import mitigation_fragments
-
-            _, _neg_sm = mitigation_fragments(
-                prompt_to_encode,
-                _sm_mode,  # type: ignore[arg-type]
-                include_2d_pack=bool(getattr(args, "shortcomings_2d", False)),
-            )
-            if _neg_sm:
-                negative_text_raw = f"{negative_text_raw}, {_neg_sm}".strip()
-        except Exception:
-            pass
-    if _ag_neg:
-        negative_text_raw = f"{negative_text_raw}, {_ag_neg}".strip()
-    if _sg_neg:
-        negative_text_raw = f"{negative_text_raw}, {_sg_neg}".strip()
-    if _photo_neg:
-        negative_text_raw = f"{negative_text_raw}, {_photo_neg}".strip()
-    if getattr(args, "less_ai", False):
-        if str(getattr(args, "anti_ai_pack", "none") or "none") == "none":
-            args.anti_ai_pack = "lite"
-        if str(getattr(args, "human_media_mode", "none") or "none") == "none":
-            args.human_media_mode = "photographic"
-    if len(getattr(args, "lora", []) or []) > 1:
-        try:
-            from config.defaults.prompt_domains import LORA_STACK_NEGATIVE
-
-            negative_text_raw = f"{negative_text_raw}, {LORA_STACK_NEGATIVE}".strip()
-        except ImportError:
-            pass
-    # Optional prompt controls for hard cases: sfw/nsfw, pose, viewpoint, domain grounding.
-    # Also applies stronger anti-text/logo suppression when text is not desired.
-    try:
-        from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
-
-        scene_domain = str(getattr(args, "scene_domain", "none") or "none")
-        view_angle = str(getattr(args, "view_angle", "none") or "none")
-        pose_mode = str(getattr(args, "pose_mode", "none") or "none")
-        style_mode = str(getattr(args, "style_mode", "none") or "none")
-        safety_mode = str(getattr(args, "safety_mode", "none") or "none")
-        clothing_mode = str(getattr(args, "clothing_mode", "none") or "none")
-        composition_mode = str(getattr(args, "composition_mode", "none") or "none")
-        artist_composition = str(getattr(args, "artist_composition", "none") or "none")
-        people_layout = str(getattr(args, "people_layout", "none") or "none")
-        hand_mode = str(getattr(args, "hand_mode", "none") or "none")
-        lighting_mode = str(getattr(args, "lighting_mode", "none") or "none")
-        nsfw_pack = str(getattr(args, "nsfw_pack", "none") or "none")
-        sex_position = str(getattr(args, "sex_position", "none") or "none")
-        human_media_mode = str(getattr(args, "human_media_mode", "none") or "none")
-        anti_ai_pack = str(getattr(args, "anti_ai_pack", "none") or "none")
-        lora_scaffold_ef = str(getattr(args, "lora_scaffold", "none") or "none")
-        adherence_pack = str(getattr(args, "adherence_pack", "none") or "none")
-        if getattr(args, "lora_scaffold_auto", False) and getattr(args, "lora", None) and lora_scaffold_ef == "none":
-            lora_scaffold_ef = "blend"
-        sfw_mood = str(getattr(args, "sfw_mood", "none") or "none")
-        sfw_pose = str(getattr(args, "sfw_pose", "none") or "none")
-        sfw_clothing = str(getattr(args, "sfw_clothing", "none") or "none")
-        sfw_environment = str(getattr(args, "sfw_environment", "none") or "none")
-        sfw_expression = str(getattr(args, "sfw_expression", "none") or "none")
-        if getattr(args, "auto_content_fix", False):
-            inferred = infer_content_controls_from_prompt(prompt_to_encode)
-            if scene_domain == "none":
-                scene_domain = inferred.get("scene_domain", scene_domain)
-            if view_angle == "none":
-                view_angle = inferred.get("view_angle", view_angle)
-            if pose_mode == "none":
-                pose_mode = inferred.get("pose_mode", pose_mode)
-            if style_mode == "none":
-                style_mode = inferred.get("style_mode", style_mode)
-            if safety_mode == "none" and inferred.get("safety_mode"):
-                safety_mode = inferred["safety_mode"]
-            if composition_mode == "none" and inferred.get("composition_mode"):
-                composition_mode = inferred["composition_mode"]
-            if artist_composition == "none" and inferred.get("artist_composition"):
-                artist_composition = inferred["artist_composition"]
-            if people_layout == "none" and inferred.get("people_layout"):
-                people_layout = inferred["people_layout"]
-            if hand_mode == "none" and inferred.get("hand_mode"):
-                hand_mode = inferred["hand_mode"]
-            if lighting_mode == "none" and inferred.get("lighting_mode"):
-                lighting_mode = inferred["lighting_mode"]
-            if clothing_mode == "none" and inferred.get("clothing_mode"):
-                clothing_mode = inferred["clothing_mode"]
-            if nsfw_pack == "none" and inferred.get("nsfw_pack"):
-                nsfw_pack = inferred["nsfw_pack"]
-            if sex_position == "none" and inferred.get("sex_position"):
-                sex_position = inferred["sex_position"]
-            if human_media_mode == "none" and inferred.get("human_media_mode"):
-                human_media_mode = inferred["human_media_mode"]
-            if adherence_pack == "none" and inferred.get("adherence_pack"):
-                adherence_pack = str(inferred["adherence_pack"])
-
-        prompt_to_encode, negative_text_raw = apply_content_controls(
-            prompt_to_encode,
-            negative_text_raw,
-            safety_mode=safety_mode,
-            pose_mode=pose_mode,
-            view_angle=view_angle,
-            subject_sex=str(getattr(args, "subject_sex", "none") or "none"),
-            scene_domain=scene_domain,
-            clothing_mode=clothing_mode,
-            background_mode=str(getattr(args, "background_mode", "none") or "none"),
-            people_layout=people_layout,
-            relationship_mode=str(getattr(args, "relationship_mode", "none") or "none"),
-            object_layout=str(getattr(args, "object_layout", "none") or "none"),
-            hand_mode=hand_mode,
-            pose_naturalness=str(getattr(args, "pose_naturalness", "none") or "none"),
-            typography_mode=str(getattr(args, "typography_mode", "none") or "none"),
-            quality_pack=str(getattr(args, "quality_pack", "none") or "none"),
-            lighting_mode=lighting_mode,
-            skin_detail_mode=str(getattr(args, "skin_detail_mode", "none") or "none"),
-            nsfw_pack=nsfw_pack,
-            sex_position=sex_position,
-            penetration_detail=str(getattr(args, "penetration_detail", "none") or "none"),
-            body_proportion=str(getattr(args, "body_proportion", "none") or "none"),
-            interaction_intensity=str(getattr(args, "interaction_intensity", "none") or "none"),
-            sfw_mood=sfw_mood,
-            sfw_pose=sfw_pose,
-            sfw_clothing=sfw_clothing,
-            sfw_environment=sfw_environment,
-            sfw_expression=sfw_expression,
-            style_mode=style_mode,
-            style_lock=bool(getattr(args, "style_lock", False)),
-            anti_style_bleed=bool(getattr(args, "anti_style_bleed", False)),
-            composition_mode=composition_mode,
-            artist_composition=artist_composition,
-            anti_duplicate_subjects=bool(getattr(args, "anti_duplicate_subjects", False)),
-            anti_perspective_drift=bool(getattr(args, "anti_perspective_drift", False)),
-            cleanup_conflicting_tags=bool(getattr(args, "cleanup_conflicting_tags", False)),
-            allow_text_in_image=bool(getattr(args, "text_in_image", False)),
-            one_shot_boost=bool(getattr(args, "one_shot_boost", True)),
-            anti_ai_pack=anti_ai_pack,
-            human_media_mode=human_media_mode,
-            lora_scaffold=lora_scaffold_ef,
-            adherence_pack=adherence_pack,
-        )
-    except Exception as e:
-        print(f"Warning: apply_content_controls failed: {e}", file=sys.stderr)
-        if os.environ.get("SDX_DEBUG", "").strip():
-            traceback.print_exc()
-    if anatomy_scales or object_scales or scene_scales:
-        negative_text_raw = f"{negative_text_raw}, {SCALE_DISTORTION_NEGATIVE}".strip()
-    if character_negative_additions:
-        negative_text_raw = f"{negative_text_raw}, {character_negative_additions}".strip()
-    if scene_negative_additions:
-        negative_text_raw = f"{negative_text_raw}, {scene_negative_additions}".strip()
-    # Pos/neg conflict: remove from negative any token that appears in positive so CFG doesn't fight the user's intent
-    if getattr(args, "no_neg_filter", False):
-        negative_text = negative_text_raw
-    else:
-        negative_text = filter_negative_by_positive(prompt_to_encode, negative_text_raw)
-        if not negative_text.strip():
-            negative_text = " "
-        if negative_text != negative_text_raw:
-            print(
-                f'Negative prompt filtered (conflict resolution): "{negative_text_raw[:60]}{"..." if len(negative_text_raw) > 60 else ""}" -> "{negative_text[:60]}{"..." if len(negative_text) > 60 else ""}"',
-                file=sys.stderr,
-            )
+    prompt_to_encode, negative_text = apply_sample_prompt_stack(
+        args,
+        prompt_to_encode,
+        character_negative_additions=character_negative_additions,
+        scene_negative_additions=scene_negative_additions,
+        apply_scale_distortion=bool(anatomy_scales or object_scales or scene_scales),
+    )
+    args.prompt = prompt_to_encode
     # Style: explicit --style (supports weighted mix with '|') or auto-extract from prompt.
     effective_style = (args.style or "").strip()
     if getattr(cfg, "style_embed_dim", 0) and not effective_style and getattr(args, "auto_style_from_prompt", False):
@@ -2946,7 +3246,8 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         t5_layout_enc = "blocks" if compiled_layout is not None else "flat"
     else:
         t5_layout_enc = raw_t5_layout
-    t5_positive_prompt = prompt_to_encode
+    _t5_hint = str(getattr(args, "_encode_t5_positive_hint", "") or "").strip()
+    t5_positive_prompt = _t5_hint if _t5_hint else prompt_to_encode
     segment_texts = None
     clip_caps = None
     if compiled_layout is not None and t5_layout_enc == "blocks":
@@ -2965,8 +3266,11 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     layout_cache_tag = (
         (t5_layout_enc, str(getattr(args, "prompt_layout", "") or "")) if compiled_layout is not None else ("flat", "")
     )
+    _t5_cache_extra = hashlib.sha256(t5_positive_prompt.encode("utf-8")).hexdigest()[:20]
     cache_key = (
-        (prompt_to_encode, negative_text, style_key, layout_cache_tag) if not getattr(args, "no_cache", False) else None
+        (prompt_to_encode, negative_text, style_key, layout_cache_tag, _t5_cache_extra)
+        if not getattr(args, "no_cache", False)
+        else None
     )
     if cache_key is not None and cache_key in _t5_cache:
         cond_emb, uncond_emb, style_emb_cached = _t5_cache[cache_key]
@@ -3122,6 +3426,49 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         except Exception as e:
             print(f"Reference image conditioning skipped: {e}", file=sys.stderr)
 
+    # Optional: prompt-driven dissection -> composite init image + inpaint mask.
+    # Only runs when explicitly enabled and when user hasn't already provided init/mask.
+    if (
+        bool(getattr(args, "auto_init_from_dissection", False))
+        and not str(getattr(args, "init_image", "") or "").strip()
+        and not str(getattr(args, "mask", "") or "").strip()
+    ):
+        raw_refs = str(getattr(args, "dissect_refs", "") or "").strip()
+        if raw_refs:
+            try:
+                ref_paths = [p.strip() for p in raw_refs.split(",") if p.strip()]
+                if ref_paths:
+                    from utils.generation.image_dissection import dissect_images_to_parts
+                    from utils.generation.part_compositing import build_init_and_inpaint_mask
+
+                    out_dir = Path("runs") / "dissection_composites"
+                    reqs, parts, _facts = dissect_images_to_parts(
+                        str(getattr(args, "prompt", "") or ""),
+                        ref_paths,
+                        output_dir=out_dir,
+                        enable_heavy_models=True,
+                    )
+                    spec = build_init_and_inpaint_mask(
+                        reference_images=ref_paths,
+                        parts=parts,
+                        output_dir=out_dir,
+                        target_size=(image_size, image_size),
+                        lock_background_if_requested=bool(getattr(args, "dissection_lock_background", False)),
+                    )
+                    if spec.preserved_parts > 0:
+                        args.init_image = spec.init_image_path
+                        args.mask = spec.mask_path
+                        # MDM inpaint behaves better for preserving known regions.
+                        if str(getattr(args, "inpaint_mode", "legacy")) == "legacy":
+                            args.inpaint_mode = "mdm"
+                        print(
+                            f"Auto dissection init enabled: parts={spec.preserved_parts}, "
+                            f"background_locked={spec.background_locked} -> init={args.init_image}, mask={args.mask}",
+                            file=sys.stderr,
+                        )
+            except Exception as _e:
+                pass
+
     # Img2img / from-z / inpainting
     num_timesteps = getattr(cfg, "num_timesteps", 1000)
     use_flow_sample = bool(getattr(args, "flow_matching_sample", False)) or (
@@ -3275,6 +3622,18 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     _holy_kw = sanitize_holy_grail_kwargs(_holy_kw)
     if _holy_kw["holy_grail_enable"]:
         print("Holy-grail diffusion policy enabled.", file=sys.stderr)
+    _gs_raw = getattr(args, "guidance_schedule", None)
+    _gs = _gs_raw.strip() if isinstance(_gs_raw, str) and _gs_raw.strip() else None
+    if _holy_kw["holy_grail_enable"] and _gs:
+        print("--guidance-schedule ignored when holy-grail is enabled.", file=sys.stderr)
+        _gs = None
+    _guidance_kw = dict(
+        cfg_guidance_schedule=_gs,
+        cfg_guidance_linear_start_multiplier=float(getattr(args, "guidance_schedule_linear_start", 0.7)),
+        cfg_guidance_linear_end_multiplier=float(getattr(args, "guidance_schedule_linear_end", 1.0)),
+        cfg_guidance_cosine_min_multiplier=float(getattr(args, "guidance_schedule_cosine_min", 0.65)),
+        cfg_guidance_cosine_max_multiplier=float(getattr(args, "guidance_schedule_cosine_max", 1.0)),
+    )
     if use_flow_sample:
         print(
             f"Using flow-matching sampler (solver={_flow_kw['flow_solver']}); "
@@ -3415,6 +3774,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_control_kw,
                 **_holy_kw,
                 **_periodic_kw,
+                **_guidance_kw,
             )
             x0_up = torch.nn.functional.interpolate(
                 x0.float(), size=(fh, fw), mode="bicubic", align_corners=False
@@ -3477,6 +3837,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_control_kw,
                 **_holy_kw,
                 **_periodic_kw,
+                **_guidance_kw,
             )
     else:
         print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
@@ -3543,6 +3904,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_holy_kw,
                         **_ada_kw,
                         **_periodic_kw,
+                        **_guidance_kw,
                         return_intermediate_state=True,
                     )
 
@@ -3663,6 +4025,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_holy_kw,
                         **_ada_kw,
                         **_periodic_kw,
+                        **_guidance_kw,
                         return_intermediate_state=True,
                     )
 
@@ -3705,6 +4068,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_holy_kw,
                         **_ada_kw,
                         **_periodic_kw,
+                        **_guidance_kw,
                         return_intermediate_state=True,
                     )
 
@@ -3793,6 +4157,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             **_holy_kw,
             **_ada_kw,
             **_periodic_kw,
+            **_guidance_kw,
         )
 
     if float(getattr(args, "clip_guard_threshold", 0.0) or 0.0) > 0.0:
@@ -3845,6 +4210,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                     **_flow_kw,
                     **_control_kw,
                     **_holy_kw,
+                    **_guidance_kw,
                 )
 
             x0 = maybe_clip_refine_latent(
@@ -3976,6 +4342,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_control_kw,
                         **_holy_kw,
                         **_periodic_kw,
+                        **_guidance_kw,
                     )
                 print(
                     f"Hires-fix: refined latent {tlh}x{tlw} ({hires_steps} steps, t_start={t_hires}, cfg={cfg_h}).",
@@ -4165,6 +4532,44 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 img_np = naturalize(img_np, grain_amount=grain, micro_contrast=1.02, seed=args.seed + i)
             except Exception:
                 pass
+        # Artistic post-processing: compositional director, value structure, asymmetry, SSS, etc.
+        _artistic_needed = any([
+            str(getattr(args, "composition_guide", "none") or "none") != "none",
+            float(getattr(args, "value_shadow_lift", 0.0) or 0.0) > 0,
+            float(getattr(args, "value_highlight_roll", 0.0) or 0.0) > 0,
+            float(getattr(args, "value_midtone_contrast", 0.0) or 0.0) > 0,
+            bool(getattr(args, "value_structure", False)),
+            float(getattr(args, "asymmetry", 0.0) or 0.0) > 0,
+            float(getattr(args, "lost_found_edges", 0.0) or 0.0) > 0,
+            float(getattr(args, "sss", 0.0) or 0.0) > 0,
+            float(getattr(args, "chromatic_aberration", 0.0) or 0.0) > 0,
+            float(getattr(args, "vignette", 0.0) or 0.0) > 0,
+            float(getattr(args, "micro_detail", 0.0) or 0.0) > 0,
+        ])
+        if _artistic_needed:
+            try:
+                from utils.quality.artistic_post_process import ArtisticPostConfig, apply_artistic_pipeline
+
+                _art_cfg = ArtisticPostConfig(
+                    composition_mode=str(getattr(args, "composition_guide", "none") or "none"),
+                    composition_strength=float(getattr(args, "composition_guide_strength", 0.15) or 0.15),
+                    value_structure=bool(getattr(args, "value_structure", False)),
+                    value_shadow_lift=float(getattr(args, "value_shadow_lift", 0.0) or 0.0),
+                    value_highlight_roll=float(getattr(args, "value_highlight_roll", 0.0) or 0.0),
+                    value_midtone_contrast=float(getattr(args, "value_midtone_contrast", 0.0) or 0.0),
+                    asymmetry_strength=float(getattr(args, "asymmetry", 0.0) or 0.0),
+                    asymmetry_seed=int(args.seed) + i,
+                    lost_found_strength=float(getattr(args, "lost_found_edges", 0.0) or 0.0),
+                    lost_found_seed=int(args.seed) + i + 1000,
+                    sss_strength=float(getattr(args, "sss", 0.0) or 0.0),
+                    sss_radius=float(getattr(args, "sss_radius", 3.0) or 3.0),
+                    chromatic_aberration=float(getattr(args, "chromatic_aberration", 0.0) or 0.0),
+                    vignette_strength=float(getattr(args, "vignette", 0.0) or 0.0),
+                    micro_detail=float(getattr(args, "micro_detail", 0.0) or 0.0),
+                )
+                img_np = apply_artistic_pipeline(img_np, _art_cfg)
+            except Exception as e:
+                print(f"Artistic post-process failed (non-fatal): {e}", file=sys.stderr)
         if getattr(args, "face_enhance", False):
             try:
                 from utils.quality.face_region_enhance import enhance_faces_in_rgb
@@ -4410,275 +4815,9 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         "--ocr-repair-iter",
                         str(int(getattr(args, "ocr_repair_iter", 0)) + 1),
                     ]
-                    if int(getattr(args, "width", 0) or 0) > 0:
-                        repair_cmd += ["--width", str(int(getattr(args, "width", 0) or 0))]
-                    if int(getattr(args, "height", 0) or 0) > 0:
-                        repair_cmd += ["--height", str(int(getattr(args, "height", 0) or 0))]
-                    _rm = str(getattr(args, "resize_mode", "stretch") or "stretch").lower()
-                    if _rm in ("stretch", "center_crop", "saliency_crop"):
-                        repair_cmd += ["--resize-mode", _rm]
-                    if float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0) > 0:
-                        repair_cmd += [
-                            "--resize-saliency-face-bias",
-                            str(float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0)),
-                        ]
+                    from utils.generation.sample_cli_passthrough import append_sample_repair_passthrough
 
-                    # Forward common generation knobs that impact text quality.
-                    if (
-                        getattr(args, "dynamic_threshold_type", "percentile") != "percentile"
-                        or getattr(args, "dynamic_threshold_value", 0.0) > 0.0
-                        or getattr(args, "dynamic_threshold_percentile", 0.0) > 0.0
-                    ):
-                        repair_cmd += [
-                            "--dynamic-threshold-percentile",
-                            str(getattr(args, "dynamic_threshold_percentile", 0.0)),
-                            "--dynamic-threshold-type",
-                            getattr(args, "dynamic_threshold_type", "percentile"),
-                            "--dynamic-threshold-value",
-                            str(getattr(args, "dynamic_threshold_value", 0.0)),
-                        ]
-                    if getattr(args, "vae_tiling", False):
-                        repair_cmd.append("--vae-tiling")
-                    if getattr(args, "deterministic", False):
-                        repair_cmd.append("--deterministic")
-                    if getattr(args, "no_cache", False):
-                        repair_cmd.append("--no-cache")
-                    if getattr(args, "no_refine", False):
-                        repair_cmd.append("--no-refine")
-                    if getattr(args, "refine_t", None) is not None:
-                        repair_cmd += ["--refine-t", str(getattr(args, "refine_t", 50))]
-                    if str(getattr(args, "refine_gate", "off") or "off").lower() in ("off", "auto"):
-                        repair_cmd += ["--refine-gate", str(getattr(args, "refine_gate", "off"))]
-                    if getattr(args, "refine_gate_threshold", None) is not None:
-                        repair_cmd += ["--refine-gate-threshold", str(getattr(args, "refine_gate_threshold", 0.62))]
-                    if getattr(args, "no_neg_filter", False):
-                        repair_cmd.append("--no-neg-filter")
-                    # Ensure text isn't suppressed.
-                    repair_cmd.append("--text-in-image")
-
-                    # Optional prompt controls.
-                    if getattr(args, "gender_swap", False):
-                        repair_cmd.append("--gender-swap")
-                    if getattr(args, "anatomy_scale", ""):
-                        repair_cmd += ["--anatomy-scale", str(getattr(args, "anatomy_scale"))]
-                    if getattr(args, "object_scale", ""):
-                        repair_cmd += ["--object-scale", str(getattr(args, "object_scale"))]
-                    if getattr(args, "scene_scale", ""):
-                        repair_cmd += ["--scene-scale", str(getattr(args, "scene_scale"))]
-                    if str(getattr(args, "photo_realism_pack", "none") or "none") != "none":
-                        repair_cmd += ["--photo-realism-pack", str(getattr(args, "photo_realism_pack"))]
-                    if str(getattr(args, "photo_color_grade", "none") or "none") != "none":
-                        repair_cmd += ["--photo-color-grade", str(getattr(args, "photo_color_grade"))]
-                    if str(getattr(args, "photo_lighting_technique", "none") or "none") != "none":
-                        repair_cmd += ["--photo-lighting-technique", str(getattr(args, "photo_lighting_technique"))]
-                    if str(getattr(args, "photo_filter", "none") or "none") != "none":
-                        repair_cmd += ["--photo-filter", str(getattr(args, "photo_filter"))]
-                    if str(getattr(args, "photo_grain_style", "none") or "none") != "none":
-                        repair_cmd += ["--photo-grain-style", str(getattr(args, "photo_grain_style"))]
-                    if float(getattr(args, "photo_realism_strength", 1.0) or 1.0) != 1.0:
-                        repair_cmd += ["--photo-realism-strength", str(getattr(args, "photo_realism_strength"))]
-                    if not bool(getattr(args, "auto_photo_realism", True)):
-                        repair_cmd += ["--no-auto-photo-realism"]
-                    if not bool(getattr(args, "photo_postprocess", True)):
-                        repair_cmd += ["--no-photo-postprocess"]
-                    if float(getattr(args, "photo_post_strength", 0.6) or 0.6) != 0.6:
-                        repair_cmd += ["--photo-post-strength", str(getattr(args, "photo_post_strength"))]
-                    if not bool(getattr(args, "realism_autopilot", True)):
-                        repair_cmd += ["--no-realism-autopilot"]
-                    if getattr(args, "character_sheet", ""):
-                        repair_cmd += ["--character-sheet", str(getattr(args, "character_sheet"))]
-                    if getattr(args, "label_multi_character_sheets", False):
-                        repair_cmd.append("--label-multi-character-sheets")
-                    if getattr(args, "character_prompt_extra", ""):
-                        repair_cmd += ["--character-prompt-extra", str(getattr(args, "character_prompt_extra"))]
-                    if getattr(args, "character_negative_extra", ""):
-                        repair_cmd += ["--character-negative-extra", str(getattr(args, "character_negative_extra"))]
-                    if getattr(args, "prompt_layout", ""):
-                        repair_cmd += ["--prompt-layout", str(getattr(args, "prompt_layout"))]
-                    if str(getattr(args, "t5_layout_encode", "auto") or "auto").lower() != "auto":
-                        repair_cmd += ["--t5-layout-encode", str(getattr(args, "t5_layout_encode"))]
-                    if getattr(args, "scene_blueprint", ""):
-                        repair_cmd += ["--scene-blueprint", str(getattr(args, "scene_blueprint"))]
-                    if float(getattr(args, "scene_blueprint_strength", 1.0)) != 1.0:
-                        repair_cmd += ["--scene-blueprint-strength", str(getattr(args, "scene_blueprint_strength"))]
-                    if float(getattr(args, "character_strength", 1.0)) != 1.0:
-                        repair_cmd += ["--character-strength", str(getattr(args, "character_strength"))]
-                    if bool(getattr(args, "uncensored_mode", False)):
-                        repair_cmd += ["--uncensored-mode"]
-                    if getattr(args, "clothing_mode", "none") != "none":
-                        repair_cmd += ["--clothing-mode", str(getattr(args, "clothing_mode"))]
-                    if getattr(args, "background_mode", "none") != "none":
-                        repair_cmd += ["--background-mode", str(getattr(args, "background_mode"))]
-                    if getattr(args, "people_layout", "none") != "none":
-                        repair_cmd += ["--people-layout", str(getattr(args, "people_layout"))]
-                    if getattr(args, "relationship_mode", "none") != "none":
-                        repair_cmd += ["--relationship-mode", str(getattr(args, "relationship_mode"))]
-                    if getattr(args, "object_layout", "none") != "none":
-                        repair_cmd += ["--object-layout", str(getattr(args, "object_layout"))]
-                    if getattr(args, "artist_composition", "none") != "none":
-                        repair_cmd += ["--artist-composition", str(getattr(args, "artist_composition"))]
-                    if getattr(args, "hand_mode", "none") != "none":
-                        repair_cmd += ["--hand-mode", str(getattr(args, "hand_mode"))]
-                    if getattr(args, "pose_naturalness", "none") != "none":
-                        repair_cmd += ["--pose-naturalness", str(getattr(args, "pose_naturalness"))]
-                    if getattr(args, "typography_mode", "none") != "none":
-                        repair_cmd += ["--typography-mode", str(getattr(args, "typography_mode"))]
-                    if getattr(args, "quality_pack", "none") != "none":
-                        repair_cmd += ["--quality-pack", str(getattr(args, "quality_pack"))]
-                    if getattr(args, "adherence_pack", "none") != "none":
-                        repair_cmd += ["--adherence-pack", str(getattr(args, "adherence_pack"))]
-                    if getattr(args, "lighting_mode", "none") != "none":
-                        repair_cmd += ["--lighting-mode", str(getattr(args, "lighting_mode"))]
-                    if getattr(args, "skin_detail_mode", "none") != "none":
-                        repair_cmd += ["--skin-detail-mode", str(getattr(args, "skin_detail_mode"))]
-                    if getattr(args, "nsfw_pack", "none") != "none":
-                        repair_cmd += ["--nsfw-pack", str(getattr(args, "nsfw_pack"))]
-                    if getattr(args, "style_mode", "none") != "none":
-                        repair_cmd += ["--style-mode", str(getattr(args, "style_mode"))]
-                    if bool(getattr(args, "style_lock", False)):
-                        repair_cmd += ["--style-lock"]
-                    if bool(getattr(args, "anti_style_bleed", False)):
-                        repair_cmd += ["--anti-style-bleed"]
-                    if getattr(args, "preset", None):
-                        repair_cmd += ["--preset", str(getattr(args, "preset"))]
-                    if getattr(args, "op_mode", None):
-                        repair_cmd += ["--op-mode", str(getattr(args, "op_mode"))]
-                    if getattr(args, "holy_grail_preset", None):
-                        repair_cmd += ["--holy-grail-preset", str(getattr(args, "holy_grail_preset"))]
-                    if getattr(args, "hard_style", None):
-                        repair_cmd += ["--hard-style", str(getattr(args, "hard_style"))]
-                    if getattr(args, "boost_quality", False):
-                        repair_cmd.append("--boost-quality")
-                    if getattr(args, "style", ""):
-                        repair_cmd += ["--style", str(getattr(args, "style"))]
-                        repair_cmd += ["--style-strength", str(getattr(args, "style_strength", 0.7))]
-                    if getattr(args, "control_image", ""):
-                        repair_cmd += ["--control-image", str(getattr(args, "control_image"))]
-                        repair_cmd += ["--control-type", str(getattr(args, "control_type", "auto"))]
-                        repair_cmd += ["--control-scale", str(getattr(args, "control_scale", 0.85))]
-                        repair_cmd += ["--control-guidance-start", str(getattr(args, "control_guidance_start", 0.0))]
-                        repair_cmd += ["--control-guidance-end", str(getattr(args, "control_guidance_end", 1.0))]
-                        repair_cmd += ["--control-guidance-decay", str(getattr(args, "control_guidance_decay", 1.0))]
-                    if bool(getattr(args, "holy_grail", False)):
-                        repair_cmd.append("--holy-grail")
-                        repair_cmd += ["--holy-grail-cfg-early-ratio", str(getattr(args, "holy_grail_cfg_early_ratio", 0.72))]
-                        repair_cmd += ["--holy-grail-cfg-late-ratio", str(getattr(args, "holy_grail_cfg_late_ratio", 1.0))]
-                        repair_cmd += ["--holy-grail-control-mult", str(getattr(args, "holy_grail_control_mult", 1.0))]
-                        repair_cmd += ["--holy-grail-adapter-mult", str(getattr(args, "holy_grail_adapter_mult", 1.0))]
-                        if bool(getattr(args, "holy_grail_no_frontload_control", False)):
-                            repair_cmd.append("--holy-grail-no-frontload-control")
-                        repair_cmd += [
-                            "--holy-grail-late-adapter-boost",
-                            str(getattr(args, "holy_grail_late_adapter_boost", 1.15)),
-                        ]
-                        repair_cmd += ["--holy-grail-cads-strength", str(getattr(args, "holy_grail_cads_strength", 0.0))]
-                        repair_cmd += [
-                            "--holy-grail-cads-min-strength",
-                            str(getattr(args, "holy_grail_cads_min_strength", 0.0)),
-                        ]
-                        repair_cmd += ["--holy-grail-cads-power", str(getattr(args, "holy_grail_cads_power", 1.0))]
-                        repair_cmd += ["--holy-grail-unsharp-sigma", str(getattr(args, "holy_grail_unsharp_sigma", 0.0))]
-                        repair_cmd += ["--holy-grail-unsharp-amount", str(getattr(args, "holy_grail_unsharp_amount", 0.0))]
-                        repair_cmd += [
-                            "--holy-grail-clamp-quantile",
-                            str(getattr(args, "holy_grail_clamp_quantile", 0.0)),
-                        ]
-                        repair_cmd += ["--holy-grail-clamp-floor", str(getattr(args, "holy_grail_clamp_floor", 1.0))]
-                    if getattr(args, "control", None):
-                        repair_cmd += ["--control"] + [str(x) for x in getattr(args, "control", [])]
-                    if getattr(args, "lora", None):
-                        repair_cmd += ["--lora"] + [str(x) for x in getattr(args, "lora", [])]
-                        if getattr(args, "no_lora_normalize_scales", False):
-                            repair_cmd.append("--no-lora-normalize-scales")
-                        repair_cmd += ["--lora-max-total-scale", str(getattr(args, "lora_max_total_scale", 1.5))]
-                        if str(getattr(args, "lora_default_role", "style") or "style").strip().lower() != "style":
-                            repair_cmd += ["--lora-default-role", str(getattr(args, "lora_default_role"))]
-                        lrb = str(getattr(args, "lora_role_budgets", "") or "").strip()
-                        if lrb:
-                            repair_cmd += ["--lora-role-budgets", lrb]
-                        lsp = str(getattr(args, "lora_stage_policy", "auto") or "auto").strip().lower()
-                        if lsp and lsp != "auto":
-                            repair_cmd += ["--lora-stage-policy", lsp]
-                        lrsw = str(getattr(args, "lora_role_stage_weights", "") or "").strip()
-                        if lrsw:
-                            repair_cmd += ["--lora-role-stage-weights", lrsw]
-                        if getattr(args, "lora_trigger", ""):
-                            repair_cmd += ["--lora-trigger", str(getattr(args, "lora_trigger"))]
-                    if getattr(args, "naturalize", False):
-                        repair_cmd.append("--naturalize")
-                        repair_cmd += ["--naturalize-grain", str(getattr(args, "naturalize_grain", 0.015))]
-                    if getattr(args, "naturalize_deep", False):
-                        repair_cmd.append("--naturalize-deep")
-                    if getattr(args, "face_enhance", False):
-                        repair_cmd.append("--face-enhance")
-                        repair_cmd += ["--face-enhance-sharpen", str(getattr(args, "face_enhance_sharpen", 0.35))]
-                        repair_cmd += ["--face-enhance-contrast", str(getattr(args, "face_enhance_contrast", 1.04))]
-                        repair_cmd += ["--face-enhance-padding", str(getattr(args, "face_enhance_padding", 0.25))]
-                        repair_cmd += ["--face-enhance-max", str(getattr(args, "face_enhance_max", 4))]
-                    pri = str(getattr(args, "post_reference_image", "") or "").strip()
-                    if pri:
-                        repair_cmd += ["--post-reference-image", pri]
-                        repair_cmd += ["--post-reference-alpha", str(float(getattr(args, "post_reference_alpha", 0.0) or 0.0))]
-                    frsh = str(getattr(args, "face_restore_shell", "") or "").strip()
-                    if frsh:
-                        repair_cmd += ["--face-restore-shell", frsh]
-                    rif = str(getattr(args, "reference_image", "") or "").strip()
-                    if rif:
-                        repair_cmd += ["--reference-image", rif]
-                        repair_cmd += ["--reference-strength", str(float(getattr(args, "reference_strength", 1.0) or 0.0))]
-                        repair_cmd += ["--reference-tokens", str(int(getattr(args, "reference_tokens", 4) or 4))]
-                        repair_cmd += [
-                            "--reference-clip-model",
-                            str(getattr(args, "reference_clip_model", "openai/clip-vit-large-patch14")),
-                        ]
-                    rap = str(getattr(args, "reference_adapter_pt", "") or "").strip()
-                    if rap:
-                        repair_cmd += ["--reference-adapter-pt", rap]
-                    if float(getattr(args, "sag_blur_sigma", 0.0) or 0.0) > 0 and float(
-                        getattr(args, "sag_scale", 0.0) or 0.0
-                    ) > 0:
-                        repair_cmd += ["--sag-blur-sigma", str(getattr(args, "sag_blur_sigma", 0.0))]
-                        repair_cmd += ["--sag-scale", str(getattr(args, "sag_scale", 0.0))]
-                    if getattr(args, "less_ai", False):
-                        repair_cmd.append("--less-ai")
-                    if str(getattr(args, "anti_ai_pack", "none") or "none") != "none":
-                        repair_cmd += ["--anti-ai-pack", str(getattr(args, "anti_ai_pack"))]
-                    if str(getattr(args, "human_media_mode", "none") or "none") != "none":
-                        repair_cmd += ["--human-media", str(getattr(args, "human_media_mode"))]
-                    if str(getattr(args, "lora_scaffold", "none") or "none") != "none":
-                        repair_cmd += ["--lora-scaffold", str(getattr(args, "lora_scaffold"))]
-                    if getattr(args, "lora_scaffold_auto", False):
-                        repair_cmd.append("--lora-scaffold-auto")
-                    if getattr(args, "anti_bleed", False):
-                        repair_cmd.append("--anti-bleed")
-                    if getattr(args, "diversity", False):
-                        repair_cmd.append("--diversity")
-                    if getattr(args, "anti_artifacts", False):
-                        repair_cmd.append("--anti-artifacts")
-                    if getattr(args, "strong_watermark", False):
-                        repair_cmd.append("--strong-watermark")
-                    _rsm = str(getattr(args, "shortcomings_mitigation", "none") or "none").lower()
-                    if _rsm in ("auto", "all"):
-                        repair_cmd += ["--shortcomings-mitigation", _rsm]
-                    if getattr(args, "shortcomings_2d", False):
-                        repair_cmd.append("--shortcomings-2d")
-                    _rag = str(getattr(args, "art_guidance_mode", "none") or "none").lower()
-                    if _rag in ("auto", "all"):
-                        repair_cmd += ["--art-guidance-mode", _rag]
-                    if getattr(args, "no_art_guidance_photography", False):
-                        repair_cmd.append("--no-art-guidance-photography")
-                    _anat = str(getattr(args, "anatomy_guidance", "none") or "none").lower()
-                    if _anat in ("lite", "strong"):
-                        repair_cmd += ["--anatomy-guidance", _anat]
-                    _sg = str(getattr(args, "style_guidance_mode", "none") or "none").lower()
-                    if _sg in ("auto", "all"):
-                        repair_cmd += ["--style-guidance-mode", _sg]
-                    if not bool(getattr(args, "style_guidance_artists", True)):
-                        repair_cmd.append("--no-style-guidance-artists")
-                    if not getattr(args, "auto_content_fix", True):
-                        repair_cmd.append("--no-auto-content-fix")
-                    if not getattr(args, "one_shot_boost", True):
-                        repair_cmd.append("--no-one-shot-boost")
+                    append_sample_repair_passthrough(repair_cmd, args)
 
                     print(
                         f"OCR fix: acc={acc:.3f} < {args.ocr_threshold}; repairing with mdm inpainting...",
@@ -4695,8 +4834,13 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     frs = str(getattr(args, "face_restore_shell", "") or "").strip()
     if frs:
         try:
-            cmd = frs.replace("{src}", str(out_path)).replace("{dst}", str(out_path))
-            subprocess.run(cmd, shell=True, check=False)
+            import shlex
+            # Security: split into a list so the OS never interprets shell metacharacters.
+            # {src} and {dst} are replaced with the literal path strings before splitting,
+            # so the final argv list contains the path as a single token — no injection risk.
+            cmd_str = frs.replace("{src}", str(out_path)).replace("{dst}", str(out_path))
+            cmd_list = shlex.split(cmd_str)
+            subprocess.run(cmd_list, shell=False, check=False)
         except Exception as e:
             print(f"face-restore-shell failed: {e}", file=sys.stderr)
 

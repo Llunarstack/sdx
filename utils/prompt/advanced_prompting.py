@@ -1,14 +1,193 @@
 """
-Advanced Prompt Engineering System - Address over-specification and prompt optimization.
-Implements intelligent prompt structuring, priority weighting, and adaptive prompting.
+Advanced Prompt Engineering System.
+
+Implements intelligent prompt structuring, priority weighting, adaptive prompting,
+semantic conflict detection, and optional creative RAG enrichment.
+
+Key upgrades over v1:
+- Semantic conflict detection (not just keyword matching): detects contradictions
+  across categories, not just within them (e.g. "photorealistic" + "anime" in
+  different categories still conflicts).
+- Weighted priority model: subject > action > style > composition > environment >
+  lighting > quality > technical, with per-element emphasis multipliers.
+- Creative RAG integration: optionally calls CreativeRAGEngine to enrich prompts
+  with novel, context-aware additions grounded in retrieved facts and image understanding.
+- Prompt intent classification: detects the dominant intent (portrait, landscape,
+  character, scene, abstract) and adjusts optimization strategy accordingly.
+- Over-specification guard: detects when a prompt is fighting itself and resolves
+  contradictions rather than just flagging them.
 """
 
+import copy
 import re
-from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+# ---------------------------------------------------------------------------
+# Prompt intent classification
+# ---------------------------------------------------------------------------
+
+_INTENT_PATTERNS: Dict[str, List[str]] = {
+    "portrait": [
+        r"\b(portrait|headshot|bust|face|close.?up|selfie|profile)\b",
+        r"\b(1girl|1boy|1woman|1man|solo)\b",
+    ],
+    "character": [
+        r"\b(character|oc|original character|design|full body|standing|pose)\b",
+        r"\b(warrior|mage|knight|wizard|hero|villain|anime character)\b",
+    ],
+    "landscape": [
+        r"\b(landscape|scenery|environment|nature|forest|mountain|ocean|sky|city)\b",
+        r"\b(wide shot|establishing shot|panorama|vista)\b",
+    ],
+    "scene": [
+        r"\b(scene|setting|interior|exterior|room|street|battle|crowd)\b",
+        r"\b(multiple|group|together|interaction)\b",
+    ],
+    "abstract": [
+        r"\b(abstract|surreal|dreamlike|conceptual|symbolic|metaphor)\b",
+        r"\b(pattern|texture|fractal|geometric|non.?representational)\b",
+    ],
+    "product": [
+        r"\b(product|object|item|still life|isolated|white background|studio)\b",
+    ],
+}
+
+# Semantic conflict pairs: (term_a, term_b, conflict_description)
+# These are mutually contradictory regardless of which category they appear in.
+_SEMANTIC_CONFLICTS: List[Tuple[str, str, str]] = [
+    ("photorealistic", "anime", "realism vs stylization"),
+    ("photorealistic", "cartoon", "realism vs stylization"),
+    ("photorealistic", "illustration", "realism vs stylization"),
+    ("photorealistic", "pixel art", "realism vs stylization"),
+    ("photorealistic", "oil painting", "realism vs stylization"),
+    ("photorealistic", "watercolor", "realism vs stylization"),
+    ("realistic", "anime", "realism vs stylization"),
+    ("realistic", "cartoon", "realism vs stylization"),
+    ("3d render", "watercolor", "3d vs traditional media"),
+    ("3d render", "oil painting", "3d vs traditional media"),
+    ("3d render", "sketch", "3d vs traditional media"),
+    ("day", "night", "time of day"),
+    ("daytime", "nighttime", "time of day"),
+    ("sunny", "dark", "lighting contradiction"),
+    ("bright", "dark", "lighting contradiction"),
+    ("indoor", "outdoor", "location contradiction"),
+    ("interior", "exterior", "location contradiction"),
+    ("smiling", "crying", "expression contradiction"),
+    ("happy", "sad", "emotion contradiction"),
+    ("young", "old", "age contradiction"),
+    ("simple", "detailed", "detail level contradiction"),
+    ("minimalist", "detailed", "detail level contradiction"),
+    ("minimalist", "complex", "detail level contradiction"),
+    ("black and white", "colorful", "color contradiction"),
+    ("monochrome", "vibrant colors", "color contradiction"),
+    ("standing", "sitting", "pose contradiction"),
+    ("standing", "lying", "pose contradiction"),
+    ("sitting", "running", "pose contradiction"),
+    ("close up", "wide shot", "framing contradiction"),
+    ("close up", "full body", "framing contradiction"),
+    ("portrait", "wide shot", "framing contradiction"),
+    ("from above", "from below", "camera angle contradiction"),
+    ("bird eye", "worm eye", "camera angle contradiction"),
+    ("soft light", "harsh light", "lighting quality contradiction"),
+    ("natural light", "studio lighting", "lighting source contradiction"),
+    ("warm", "cold", "color temperature contradiction"),
+    ("warm colors", "cool colors", "color temperature contradiction"),
+]
+
+# Intent → recommended quality additions
+_INTENT_QUALITY_BOOSTS: Dict[str, List[str]] = {
+    "portrait": [
+        "detailed facial features",
+        "natural skin texture",
+        "expressive eyes",
+        "believable subsurface scattering",
+    ],
+    "character": [
+        "consistent character design",
+        "clear silhouette",
+        "story-worn details",
+        "weight and physicality",
+    ],
+    "landscape": [
+        "atmospheric perspective",
+        "environmental depth",
+        "coherent light source",
+        "foreground interest",
+    ],
+    "scene": [
+        "spatial coherence",
+        "consistent scale",
+        "environmental storytelling",
+        "motivated lighting",
+    ],
+    "abstract": [
+        "intentional composition",
+        "visual rhythm",
+        "color harmony",
+        "conceptual clarity",
+    ],
+    "product": [
+        "clean edges",
+        "accurate material rendering",
+        "neutral background",
+        "studio-quality lighting",
+    ],
+}
 
 
-@dataclass
+def classify_prompt_intent(prompt: str) -> str:
+    """Classify the dominant intent of a prompt."""
+    p = prompt.lower()
+    scores: Dict[str, int] = {}
+    for intent, patterns in _INTENT_PATTERNS.items():
+        score = sum(1 for pat in patterns if re.search(pat, p, re.IGNORECASE))
+        if score:
+            scores[intent] = score
+    return max(scores, key=lambda k: scores[k]) if scores else "scene"
+
+
+def detect_semantic_conflicts(prompt: str) -> List[Dict[str, Any]]:
+    """
+    Detect semantic contradictions in a prompt regardless of category.
+    Returns list of conflict dicts: term_a, term_b, description, severity.
+    """
+    p = prompt.lower()
+    return [
+        {"term_a": ta, "term_b": tb, "description": desc, "severity": "high"}
+        for ta, tb, desc in _SEMANTIC_CONFLICTS
+        if ta in p and tb in p
+    ]
+
+
+def resolve_semantic_conflicts(prompt: str) -> Tuple[str, List[str]]:
+    """
+    Remove the lower-priority (later-occurring) term from each conflicting pair.
+    Returns (resolved_prompt, list_of_removed_parts).
+    """
+    conflicts = detect_semantic_conflicts(prompt)
+    if not conflicts:
+        return prompt, []
+
+    parts = [p.strip() for p in prompt.split(",") if p.strip()]
+    removed: List[str] = []
+
+    for conflict in conflicts:
+        term_a, term_b = conflict["term_a"], conflict["term_b"]
+        pos_a = next((i for i, p in enumerate(parts) if term_a in p.lower()), -1)
+        pos_b = next((i for i, p in enumerate(parts) if term_b in p.lower()), -1)
+        if pos_a == -1 or pos_b == -1:
+            continue
+        # Remove the later-occurring term (user intent = earlier = higher priority)
+        remove_idx = pos_b if pos_a <= pos_b else pos_a
+        if 0 <= remove_idx < len(parts):
+            removed.append(parts[remove_idx])
+            parts.pop(remove_idx)
+
+    return ", ".join(parts), removed
+
+
+@dataclass(slots=True)
 class PromptElement:
     """Represents a single element in a prompt."""
 
@@ -16,7 +195,7 @@ class PromptElement:
     category: str
     priority: float
     weight: float = 1.0
-    conflicts: tuple = None
+    conflicts: Optional[tuple] = field(default=None)
 
     def __post_init__(self):
         if self.conflicts is None:
@@ -37,7 +216,7 @@ class PromptElement:
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class PromptStructure:
     """Represents the structure of an optimized prompt."""
 
@@ -208,21 +387,28 @@ class PromptAnalyzer:
         """Analyze a prompt and return detailed breakdown."""
         elements = self._parse_prompt_elements(prompt)
         categorized = self._categorize_elements(elements)
-        conflicts = self._detect_conflicts(categorized)
+        # Use semantic conflict detection (cross-category, not just within-category)
+        conflicts = detect_semantic_conflicts(prompt)
+        # Also run the category-level conflict check for intra-category issues
+        category_conflicts = self._detect_conflicts(categorized)
+        all_conflicts = conflicts + [c for c in category_conflicts if c not in conflicts]
         complexity = self._assess_complexity(prompt, categorized)
+        intent = classify_prompt_intent(prompt)
 
         return {
             "original_prompt": prompt,
             "length": len(prompt),
             "word_count": len(prompt.split()),
             "elements": categorized,
-            "conflicts": conflicts,
+            "conflicts": all_conflicts,
+            "semantic_conflicts": conflicts,
             "complexity_score": complexity,
-            "optimization_needed": complexity > 0.7 or len(conflicts) > 0,
-            "recommendations": self._generate_recommendations(prompt, categorized, conflicts, complexity),
+            "intent": intent,
+            "optimization_needed": complexity > 0.7 or len(all_conflicts) > 0,
+            "recommendations": self._generate_recommendations(prompt, categorized, all_conflicts, complexity, intent),
         }
 
-    def _parse_prompt_elements(self, prompt: str) -> List[str]:
+    def _parse_prompt_elements(self, prompt: str) -> List[Tuple[str, float]]:
         """Parse prompt into individual elements."""
         # Split by commas and clean up
         elements = [elem.strip() for elem in prompt.split(",")]
@@ -348,9 +534,11 @@ class PromptAnalyzer:
         complexity_factors = {
             "length": min(len(prompt) / 500, 1.0) * 0.3,  # Length factor
             "element_count": min(sum(len(elements) for elements in categorized.values()) / 20, 1.0) * 0.2,
-            "category_diversity": len([cat for cat, elements in categorized.items() if elements])
-            / len(self.categories)
-            * 0.2,
+            "category_diversity": (
+                len([cat for cat, elements in categorized.items() if elements])
+                / len(self.categories)
+                * 0.2
+            ) if self.categories else 0.0,
             "emphasis_usage": self._count_emphasis_markers(prompt) / 10 * 0.1,
             "technical_terms": self._count_technical_terms(prompt) / 5 * 0.2,
         }
@@ -393,6 +581,7 @@ class PromptAnalyzer:
         categorized: Dict[str, List[PromptElement]],
         conflicts: List[Dict[str, Any]],
         complexity: float,
+        intent: str = "scene",
     ) -> List[str]:
         """Generate optimization recommendations."""
         recommendations = []
@@ -404,11 +593,25 @@ class PromptAnalyzer:
         elif prompt_length > self.length_thresholds["too_long"]:
             recommendations.append("Prompt is too long - consider simplifying or using multi-stage generation")
 
-        # Conflict recommendations
-        if conflicts:
-            recommendations.append(f"Found {len(conflicts)} conflicts - resolve contradictory terms")
-            for conflict in conflicts:
-                if conflict["severity"] == "high":
+        # Semantic conflict recommendations (cross-category)
+        semantic = [c for c in conflicts if "term_a" in c]
+        if semantic:
+            recommendations.append(
+                f"Found {len(semantic)} semantic contradiction(s) - "
+                "these will fight each other during generation"
+            )
+            for c in semantic:
+                recommendations.append(
+                    f"Contradiction: '{c['term_a']}' vs '{c['term_b']}' ({c['description']}) — "
+                    f"keep the one that matches your intent, remove the other"
+                )
+
+        # Category conflict recommendations
+        category_conflicts = [c for c in conflicts if "type" in c]
+        if category_conflicts:
+            recommendations.append(f"Found {len(category_conflicts)} category conflicts - resolve contradictory terms")
+            for conflict in category_conflicts:
+                if conflict.get("severity") == "high":
                     recommendations.append(f"High priority: resolve {conflict['type']} conflicts")
 
         # Complexity recommendations
@@ -428,6 +631,13 @@ class PromptAnalyzer:
 
         if element_counts.get("style", 0) == 0:
             recommendations.append("Consider specifying art style")
+
+        # Intent-specific recommendations
+        intent_boosts = _INTENT_QUALITY_BOOSTS.get(intent, [])
+        if intent_boosts and element_counts.get("quality", 0) < 2:
+            recommendations.append(
+                f"For {intent} intent, consider adding: {', '.join(intent_boosts[:2])}"
+            )
 
         # Over-specification warnings
         if element_counts.get("technical", 0) > 3:
@@ -554,8 +764,10 @@ class PromptOptimizer:
                 if target_style and target_style.lower() in elem.content.lower():
                     new_priority *= 1.3
 
-                elem.priority = new_priority
-                prioritized[category].append(elem)
+                # Create a copy to avoid mutating the shared element
+                updated_elem = copy.copy(elem)
+                updated_elem.priority = new_priority
+                prioritized[category].append(updated_elem)
 
             # Sort by priority within category
             prioritized[category].sort(key=lambda x: x.priority, reverse=True)
@@ -634,7 +846,7 @@ class PromptOptimizer:
         self, elements: Dict[str, List[PromptElement]], analysis: Dict[str, Any], target_style: str
     ) -> Tuple[Dict[str, List[PromptElement]], str]:
         """Enhance prompt clarity by adding missing essential elements."""
-        enhanced = dict(elements)  # Copy
+        enhanced = {cat: list(elem_list) for cat, elem_list in elements.items()}  # Deep-enough copy
         additions = 0
 
         # Check for missing essential elements
@@ -762,3 +974,144 @@ class PromptOptimizer:
 def create_advanced_prompting_system():
     """Create complete advanced prompting system."""
     return {"analyzer": PromptAnalyzer(), "optimizer": PromptOptimizer()}
+
+
+# ---------------------------------------------------------------------------
+# CreativeRAGOptimizer: full pipeline combining all systems
+# ---------------------------------------------------------------------------
+
+class CreativeRAGOptimizer:
+    """
+    Full creative pipeline:
+    1. Semantic conflict resolution (cross-category, not just within-category)
+    2. Intent classification → strategy selection
+    3. PromptOptimizer (structural optimization)
+    4. Intent-specific quality boosts
+    5. CreativeRAGEngine enrichment (novelty + grounding via moondream2 + Qwen2.5)
+
+    This is the recommended entry point for maximum output quality.
+    """
+
+    def __init__(self, *, device: str = "cpu") -> None:
+        self.analyzer = PromptAnalyzer()
+        self.optimizer = PromptOptimizer()
+        self._device = device
+        self._rag_engine: Optional[Any] = None  # lazy-loaded
+
+    def _get_rag_engine(self) -> Optional[Any]:
+        if self._rag_engine is None:
+            try:
+                from utils.prompt.creative_rag import CreativeRAGEngine
+                self._rag_engine = CreativeRAGEngine(device=self._device)
+            except Exception:
+                self._rag_engine = None
+        return self._rag_engine
+
+    def optimize(
+        self,
+        prompt: str,
+        *,
+        reference_image_path: Optional[str] = None,
+        reference_image_paths: Optional[Sequence[str]] = None,
+        facts: Optional[Sequence[str]] = None,
+        creativity_level: float = 0.7,
+        optimization_level: str = "balanced",
+        max_length: int = 350,
+        seed: int = 42,
+        use_rag: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Full creative optimization pipeline.
+
+        Args:
+            prompt: User's original prompt.
+            reference_image_path: Optional reference image for moondream2 understanding.
+            reference_image_paths: Optional multiple references (combined with Creative RAGEngine caps).
+            facts: Optional retrieved facts for grounding.
+            creativity_level: 0-1. Controls novelty injection strength.
+            optimization_level: "minimal" | "balanced" | "aggressive"
+            max_length: Maximum character length of final prompt.
+            seed: Deterministic seed.
+            use_rag: Whether to run the CreativeRAG enrichment step.
+
+        Returns:
+            Dict with keys: optimized_prompt, negative_additions, analysis,
+            semantic_conflicts_resolved, rag_result, intent, improvement_score.
+        """
+        prompt = (prompt or "").strip()
+        if not prompt:
+            return {"optimized_prompt": "", "negative_additions": "", "intent": "scene"}
+
+        # Step 1: Resolve semantic conflicts before anything else
+        resolved_prompt, removed_terms = resolve_semantic_conflicts(prompt)
+        conflicts_resolved = len(removed_terms)
+
+        # Step 2: Classify intent
+        intent = classify_prompt_intent(resolved_prompt)
+
+        # Step 3: Structural optimization
+        opt_result = self.optimizer.optimize_prompt(
+            resolved_prompt,
+            optimization_level=optimization_level,
+            max_length=max_length,
+        )
+        structurally_optimized = opt_result["optimized_prompt"]
+
+        # Step 4: Intent-specific quality boosts (add if not already present)
+        intent_boosts = _INTENT_QUALITY_BOOSTS.get(intent, [])
+        prompt_lower = structurally_optimized.lower()
+        missing_boosts = [b for b in intent_boosts[:2] if b.lower() not in prompt_lower]
+        if missing_boosts:
+            structurally_optimized = f"{structurally_optimized}, {', '.join(missing_boosts)}"
+
+        # Step 5: Creative RAG enrichment
+        rag_result = None
+        negative_additions = ""
+        final_prompt = structurally_optimized
+
+        if use_rag:
+            engine = self._get_rag_engine()
+            if engine is not None:
+                try:
+                    rag_result = engine.enrich(
+                        structurally_optimized,
+                        reference_image_path=reference_image_path,
+                        reference_image_paths=reference_image_paths,
+                        facts=facts,
+                        creativity_level=creativity_level,
+                        seed=seed,
+                    )
+                    final_prompt = rag_result.enriched_prompt
+                    negative_additions = rag_result.negative_additions
+                except Exception:
+                    pass
+
+        # Enforce max_length
+        if len(final_prompt) > max_length:
+            parts = [p.strip() for p in final_prompt.split(",") if p.strip()]
+            trimmed: List[str] = []
+            length = 0
+            for p in parts:
+                if length + len(p) + 2 > max_length:
+                    break
+                trimmed.append(p)
+                length += len(p) + 2
+            final_prompt = ", ".join(trimmed)
+
+        # Compute improvement score
+        analysis = self.analyzer.analyze_prompt(final_prompt)
+        original_analysis = self.analyzer.analyze_prompt(prompt)
+        improvement = self.optimizer._calculate_improvement_score(original_analysis, analysis)
+
+        return {
+            "original_prompt": prompt,
+            "optimized_prompt": final_prompt,
+            "negative_additions": negative_additions,
+            "intent": intent,
+            "semantic_conflicts_resolved": conflicts_resolved,
+            "removed_terms": removed_terms,
+            "analysis": analysis,
+            "rag_result": rag_result,
+            "improvement_score": improvement,
+            "optimization_log": opt_result.get("optimization_log", []),
+        }

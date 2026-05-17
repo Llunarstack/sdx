@@ -22,6 +22,13 @@ extern "C" {
 /** In-place; rows are contiguous blocks of ``dim`` floats. ``eps`` avoids div-by-zero. */
 SDX_CUDA_L2_API int sdx_cuda_l2_normalize_rows_f32_host(float *host_data, int n_rows, int dim, float eps);
 
+/**
+ * Pick candidate row with max dot product vs ``query`` (rows should be L2-normalized).
+ * ``candidates`` is row-major ``(n_cand, dim)``.
+ */
+SDX_CUDA_L2_API int sdx_cuda_style_pick_best_f32_host(const float *query, const float *candidates, int n_cand,
+                                                      int dim, int *out_index, float *out_score);
+
 #ifdef __cplusplus
 }
 #endif

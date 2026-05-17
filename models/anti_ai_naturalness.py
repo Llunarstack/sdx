@@ -80,7 +80,7 @@ import torch.nn as nn
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(slots=True)
 class MediumProfile:
     """Detected or user-specified medium for naturalness routing."""
 

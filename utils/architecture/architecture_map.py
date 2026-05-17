@@ -25,7 +25,7 @@ class ParityStatus(str, Enum):
     NOT_IN_REPO = "not_in_repo"  # Not present
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ThemeMapping:
     theme_id: str
     label: str

@@ -22,7 +22,7 @@ __all__ = [
 MitigationMode = Literal["none", "auto", "all"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ShortcomingSpec:
     id: str
     keywords: Tuple[str, ...]

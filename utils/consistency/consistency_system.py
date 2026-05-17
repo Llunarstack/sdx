@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image
 
 
-@dataclass
+@dataclass(slots=True)
 class CharacterProfile:
     """Stores consistent character information."""
 
@@ -31,7 +31,7 @@ class CharacterProfile:
             self.generation_history = []
 
 
-@dataclass
+@dataclass(slots=True)
 class StyleProfile:
     """Stores consistent style information."""
 
@@ -54,7 +54,7 @@ class StyleProfile:
         return ", ".join(elements)
 
 
-@dataclass
+@dataclass(slots=True)
 class SceneContext:
     """Stores scene context for continuity."""
 
@@ -590,10 +590,14 @@ class ConsistencyManager:
         similarities = []
         for prompt in recent_prompts:
             prompt_words = set(prompt.lower().split())
-            similarity = len(original_words & prompt_words) / len(original_words | prompt_words)
-            similarities.append(similarity)
+            union = original_words | prompt_words
+            if not union:
+                similarities.append(1.0)
+            else:
+                similarity = len(original_words & prompt_words) / len(union)
+                similarities.append(similarity)
 
-        avg_similarity = sum(similarities) / len(similarities)
+        avg_similarity = sum(similarities) / len(similarities) if similarities else 1.0
         drift_score = 1.0 - avg_similarity
 
         return {

@@ -553,6 +553,38 @@ def prepend_adherence_boost(caption: str, repeat_factor: int = 2) -> str:
     return f"{extra}, {caption}".strip()
 
 
+def apply_training_guidance_to_caption_pair(
+    caption: str,
+    negative_caption: str = "",
+    *,
+    shortcomings_mode: str = "none",
+    shortcomings_2d: bool = False,
+    art_guidance_mode: str = "none",
+    anatomy_guidance: str = "none",
+    style_guidance_mode: str = "none",
+    style_guidance_artists: bool = True,
+    include_art_guidance_photography: bool = True,
+) -> Tuple[str, str]:
+    """
+    Apply training guidance (shortcomings, art medium, style) via PromptStack.
+
+    Single code path shared with ``t2i_dataset``, ``normalize_captions``, and inference stack.
+    """
+    from utils.prompt.stack.stages.guidance import apply_training_guidance_pair
+
+    return apply_training_guidance_pair(
+        caption,
+        negative_caption or "",
+        shortcomings_mode=shortcomings_mode,
+        shortcomings_2d=shortcomings_2d,
+        art_guidance_mode=art_guidance_mode,
+        anatomy_guidance=anatomy_guidance,
+        style_guidance_mode=style_guidance_mode,
+        style_guidance_artists=style_guidance_artists,
+        include_art_guidance_photography=include_art_guidance_photography,
+    )
+
+
 def apply_shortcomings_to_caption_pair(
     caption: str,
     negative_caption: str,
@@ -564,22 +596,15 @@ def apply_shortcomings_to_caption_pair(
     Append positive/negative fragments from ``config.defaults.ai_image_shortcomings`` (same taxonomy as
     ``sample.py --shortcomings-mitigation``). ``mode`` is ``none``, ``auto``, or ``all``.
     """
-    m = (mode or "none").strip().lower()
-    if m not in ("auto", "all") or not (caption or "").strip():
-        return caption, negative_caption
-    try:
-        from config.defaults.ai_image_shortcomings import merge_csv_unique, mitigation_fragments
-
-        pos, neg = mitigation_fragments(caption, m, include_2d_pack=bool(include_2d))
-    except Exception:
-        return caption, negative_caption
-    out_cap = caption
-    out_neg = negative_caption or ""
-    if pos:
-        out_cap = f"{out_cap}, {pos}".strip().strip(",")
-    if neg:
-        out_neg = merge_csv_unique(out_neg, neg)
-    return out_cap, out_neg
+    return apply_training_guidance_to_caption_pair(
+        caption,
+        negative_caption,
+        shortcomings_mode=mode,
+        shortcomings_2d=include_2d,
+        art_guidance_mode="none",
+        anatomy_guidance="none",
+        style_guidance_mode="none",
+    )
 
 
 def apply_art_guidance_to_caption_pair(
@@ -594,28 +619,15 @@ def apply_art_guidance_to_caption_pair(
     Append medium-specific positive/negative fragments from ``config.defaults.art_mediums``.
     Mirrors ``sample.py --art-guidance-mode`` and ``--anatomy-guidance`` behavior.
     """
-    m = (mode or "none").strip().lower()
-    a = (anatomy_mode or "none").strip().lower()
-    if (m not in ("auto", "all") and a not in ("lite", "strong")) or not (caption or "").strip():
-        return caption, negative_caption
-    try:
-        from config.defaults.art_mediums import guidance_fragments, merge_csv_unique
-
-        pos, neg = guidance_fragments(
-            caption,
-            m,  # type: ignore[arg-type]
-            include_photography=bool(include_photography),
-            anatomy_mode=a,  # type: ignore[arg-type]
-        )
-    except Exception:
-        return caption, negative_caption
-    out_cap = caption
-    out_neg = negative_caption or ""
-    if pos:
-        out_cap = f"{out_cap}, {pos}".strip().strip(",")
-    if neg:
-        out_neg = merge_csv_unique(out_neg, neg)
-    return out_cap, out_neg
+    return apply_training_guidance_to_caption_pair(
+        caption,
+        negative_caption,
+        shortcomings_mode="none",
+        art_guidance_mode=mode,
+        anatomy_guidance=anatomy_mode,
+        include_art_guidance_photography=include_photography,
+        style_guidance_mode="none",
+    )
 
 
 def apply_style_guidance_to_caption_pair(
@@ -630,27 +642,14 @@ def apply_style_guidance_to_caption_pair(
     ``style_artists`` bucket/facet hints (merged inside ``style_guidance_fragments``).
     When ``mode`` is ``none``, only artist-reference lines (if any) and style-tag hints apply.
     """
-    m = (mode or "none").strip().lower()
-    out_cap = caption
-    out_neg = negative_caption or ""
-    if not (caption or "").strip():
-        return caption, negative_caption
-    eff_mode = m if m in ("auto", "all") else "none"
-    try:
-        from config.defaults.style_guidance import merge_csv_unique, style_guidance_fragments
-
-        pos, neg = style_guidance_fragments(
-            caption,
-            eff_mode,  # type: ignore[arg-type]
-            include_artist_refs=bool(include_artist_refs),
-        )
-    except Exception:
-        return caption, negative_caption
-    if pos:
-        out_cap = f"{out_cap}, {pos}".strip().strip(",")
-    if neg:
-        out_neg = merge_csv_unique(out_neg, neg)
-    return out_cap, out_neg
+    return apply_training_guidance_to_caption_pair(
+        caption,
+        negative_caption,
+        shortcomings_mode="none",
+        art_guidance_mode="none",
+        style_guidance_mode=mode,
+        style_guidance_artists=include_artist_refs,
+    )
 
 
 def boost_quality_tags(caption: str, repeat_factor: int = 3) -> str:

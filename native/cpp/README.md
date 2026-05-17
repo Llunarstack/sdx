@@ -26,6 +26,10 @@ Squared-cosine v2 training betas (same as `diffusion.schedules.squared_cosine_be
 - **Source:** `src/sdx_beta_schedules.cpp`
 - **Export:** `sdx_squared_cosine_betas_v2`
 
+## CUDA
+
+GPU kernels are under **`cuda/`** only ([cuda/README.md](cuda/README.md)). Enable with `-DSDX_BUILD_CUDA=ON`.
+
 ## Build
 
 From `native/cpp`:

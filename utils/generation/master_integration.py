@@ -3,6 +3,7 @@ Master Integration System - Central hub connecting all SDX components and advanc
 Provides unified interface for all functionality with proper initialization and error handling.
 """
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -10,9 +11,10 @@ import torch
 
 # Core SDX imports
 try:
-    from config.train_config import TrainConfig
     from diffusion import create_diffusion
     from models import DiT_models_text
+
+    from config.train_config import TrainConfig
 except ImportError as e:
     print(f"Warning: Core SDX imports failed: {e}")
     print("Make sure you're running from the SDX root directory")
@@ -202,10 +204,9 @@ class SDXMaster:
             # Create diffusion
             self.diffusion = create_diffusion(
                 timestep_respacing=self.config.timestep_respacing,
-                noise_schedule=self.config.beta_schedule,
-                model_mean_type="epsilon",
-                model_var_type="learned_range",
-                loss_type="mse",
+                num_timesteps=getattr(self.config, "num_timesteps", 1000),
+                beta_schedule=self.config.beta_schedule,
+                prediction_type=getattr(self.config, "prediction_type", "epsilon"),
             )
 
             self.logger.info("Diffusion components loaded")
@@ -308,7 +309,7 @@ class SDXMaster:
             else:
                 consistency_manager = self.consistency_system["consistency_manager"]
                 profile = consistency_manager.create_character_profile(name, description, reference_prompt)
-                return profile.__dict__
+                return asdict(profile)
 
         except Exception as e:
             self.logger.error(f"Character creation failed: {e}")
@@ -322,7 +323,7 @@ class SDXMaster:
             else:
                 consistency_manager = self.consistency_system["consistency_manager"]
                 profile = consistency_manager.create_style_profile(name, description, reference_prompt)
-                return profile.__dict__
+                return asdict(profile)
 
         except Exception as e:
             self.logger.error(f"Style creation failed: {e}")

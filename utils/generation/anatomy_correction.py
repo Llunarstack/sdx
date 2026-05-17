@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 
-@dataclass
+@dataclass(slots=True)
 class BodyPart:
     """Represents a body part with anatomical constraints."""
 
@@ -18,7 +18,7 @@ class BodyPart:
     confidence: float = 1.0
 
 
-@dataclass
+@dataclass(slots=True)
 class Pose:
     """Represents a complete human pose."""
 

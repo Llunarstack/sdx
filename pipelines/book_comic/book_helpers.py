@@ -40,7 +40,7 @@ VIT_DEPENDENT_PICK_METRICS: frozenset[str] = frozenset(
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class BookAccuracyPreset:
     """Resolved sampling + post settings for a ``--book-accuracy`` tier."""
 
@@ -248,7 +248,6 @@ def audit_book_run_flags(
     pick_vit_ckpt: str = "",
     beam_width: int = 0,
     book_challenge_pack: str = "none",
-    safety_mode: str = "",
     clip_guard_threshold: float = 0.0,
     clip_monitor_every: int = 0,
     adherence_pack: str = "none",
@@ -274,18 +273,6 @@ def audit_book_run_flags(
         warnings.append(
             f"--beam-width {bw} is intended with a single latent branch (--sample-candidates 1); "
             f"got sample_candidates={sc}."
-        )
-    ch = str(book_challenge_pack or "none").strip().lower()
-    sm = str(safety_mode or "").strip().lower()
-    if ch == "mature_coherence" and sm != "nsfw":
-        warnings.append(
-            "--book-challenge-pack mature_coherence is a no-op unless pipeline safety resolves to nsfw "
-            f"(current safety_mode={sm!r})."
-        )
-    if ch == "max" and sm not in ("nsfw",) and sm:
-        warnings.append(
-            "--book-challenge-pack max includes mature-coherence cues only when safety_mode=nsfw "
-            f"(current safety_mode={sm!r})."
         )
     try:
         cgt = float(clip_guard_threshold or 0.0)
@@ -849,6 +836,10 @@ def extend_sample_py_adherence_quality_cmd(cmd: List[str], args: Any) -> None:
         cmd.append("--deterministic")
     if bool(getattr(args, "no_cache", False)):
         cmd.append("--no-cache")
+
+    from utils.visual_design.argv import extend_sample_argv_visual_design
+
+    extend_sample_argv_visual_design(cmd, args)
 
 
 def adherence_quality_argv_for_sample(args: Any) -> List[str]:

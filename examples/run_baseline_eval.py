@@ -5,8 +5,8 @@ Run `sample.py` over `examples/eval_prompts_baseline.json` (or another pack).
 Dry-run default (prints commands). Pass ``--execute`` to actually invoke sample.
 
 We load ``eval_prompt_pack`` via ``importlib`` so this script does **not** import
-``utils.generation``'s package ``__init__`` (which re-exports heavy modules and
-pulls hundreds of transitive types into static analysis / CI).
+``utils.generation`` at all (even its ``__init__.py`` is intentionally light, but
+explicit ``importlib`` keeps this script decoupled).
 
 Usage (repo root)::
 

@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from utils.runtime.jsonutil import dumps as json_dumps
+from utils.runtime.plain_dict import to_plain_dict as _config_to_plain_dict
 
 
 def seed_all(seed: int) -> None:
@@ -249,7 +250,7 @@ def main() -> int:
         ckpt = {
             "state_dict": model.state_dict(),
             "ema_state_dict": ema.state_dict(),
-            "config": vars(cfg),
+            "config": _config_to_plain_dict(cfg),
             "epoch": epoch + 1,
             "loss": avg_loss,
         }
@@ -275,7 +276,7 @@ def main() -> int:
                 torch.save(
                     {
                         "state_dict": model_ema.state_dict(),
-                        "config": vars(cfg),
+                        "config": _config_to_plain_dict(cfg),
                         "epoch": epoch + 1,
                         "loss": avg_loss,
                         "is_ema": True,

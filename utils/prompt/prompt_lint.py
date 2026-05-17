@@ -44,7 +44,7 @@ def get_pos_neg_text(row: dict) -> Tuple[str, str]:
     return pos, neg
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PromptLintOptions:
     min_caption_len_chars: int = 0
     max_caption_tokens: int = 0  # distinct token set size heuristic

@@ -1,6 +1,6 @@
 """
 SNR / alpha_cumprod helpers for schedule inspection and tooling.
-
+ 
 Uses the Rust ``sdx_diffusion_math`` cdylib when built (no NumPy overhead,
 no GIL contention). Falls back to pure NumPy otherwise.
 

@@ -26,7 +26,7 @@ def cfg_predict(
     cfg_rescale: float = 0.0,
 ) -> torch.Tensor:
     """One CFG-combined prediction (cond / uncond), channel-trimmed to ``x``."""
-    if model_kwargs_uncond is not None and cfg_scale != 1.0 and cfg_scale > 0:
+    if model_kwargs_uncond is not None and cfg_scale != 1.0:
         oc = model(x, t_batch, **model_kwargs_cond)
         ou = model(x, t_batch, **model_kwargs_uncond)
         if oc.shape != x.shape and oc.shape[1] > x.shape[1]:

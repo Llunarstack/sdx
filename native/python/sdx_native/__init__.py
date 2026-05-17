@@ -41,6 +41,12 @@ from .native_fast_stack_status import fast_numpy_stack_status
 from .numpy_chw_pack import channel_mean_std, chw_f32_to_hwc_u8, hwc_u8_to_chw_f32, stack_chw_batch
 from .numpy_latent_ops import batch_latent_rms, center_crop_hw, latent_flat_cosine, latent_mse, reflect_pad_hw
 from .prompt_hash_fast import blake2b_hex, normalized_caption_key, try_xxhash_hex
+from .prompt_ops_native import (
+    get_prompt_ops_lib,
+    maybe_filter_negative_by_positive,
+    maybe_merge_caption_csv,
+    merge_caption_csv as merge_caption_csv_rust,
+)
 from .relpath_norm_fast import relpath_if_under, to_posix_key, unique_preserve_order
 from .resize_nearest_np import downscale_max_hwc, resize_hwc_nearest
 from .rmsnorm_native import maybe_rmsnorm_rows_cuda

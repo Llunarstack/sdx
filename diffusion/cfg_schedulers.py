@@ -77,6 +77,24 @@ def cfg_scale_piecewise(
     return float(base_cfg) * m
 
 
+def cfg_scale_snr_aware_multiplier(
+    alpha_cumprod: float,
+    *,
+    low_noise_multiplier: float = 0.9,
+    high_noise_multiplier: float = 0.7,
+) -> float:
+    """
+    Scalar counterpart to ``cfg_scale_snr_aware`` for timestep-dependent CFG ramps.
+    Uses the same logistic-on-log-SNR shaping as ``z = sigmoid(log SNR)`` ≈ SNR/(1+SNR).
+    """
+    a = float(max(1e-9, min(1.0 - 1e-9, float(alpha_cumprod))))
+    snr = a / (1.0 - a + 1e-8)
+    z = snr / (1.0 + snr + 1e-8)
+    ln = float(low_noise_multiplier)
+    hn = float(high_noise_multiplier)
+    return hn + (ln - hn) * z
+
+
 def cfg_scale_snr_aware(
     base_cfg: float,
     alpha_cumprod_t: torch.Tensor,
@@ -92,7 +110,7 @@ def cfg_scale_snr_aware(
     """
     a = alpha_cumprod_t.to(dtype=torch.float32)
     snr = a / (1.0 - a + 1e-8)
-    # Map log-SNR roughly to [0,1] via sigmoid.
+    # Map log-SNR roughly to [0,1]; matches ``cfg_scale_snr_aware_multiplier`` scalar path.
     z = torch.sigmoid(torch.log(snr + 1e-8))
     m = float(high_noise_multiplier) + (float(low_noise_multiplier) - float(high_noise_multiplier)) * z
     return torch.full_like(m, float(base_cfg)) * m

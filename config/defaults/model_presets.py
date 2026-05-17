@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 
-@dataclass
+@dataclass(slots=True)
 class SamplerPreset:
     name: str
     description: str

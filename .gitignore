@@ -28,7 +28,7 @@ venv/
 .vscode/*
 !.vscode/c_cpp_properties.json
 
-# Cursor (local IDE; do not publish to the remote repo)
+# Local IDE / agent config (do not publish)
 .cursor/
 .cursorignore
 

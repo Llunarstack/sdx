@@ -14,6 +14,12 @@ import runpy
 import sys
 from pathlib import Path
 
+_REPO = Path(__file__).resolve().parents[2]
+for _p in (_REPO, _REPO / "native" / "python"):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
+
 _HERE = Path(__file__).resolve().parent
 
 # command name -> path to canonical script (under scripts/tools/)
@@ -22,13 +28,15 @@ _CANONICAL: dict[str, Path] = {
     "smoke_imports": _HERE / "dev" / "smoke_imports.py",
     "quick_test": _HERE / "dev" / "quick_test.py",
     "ar_mask_inspect": _HERE / "dev" / "ar_mask_inspect.py",
-    "noise_schedule_export": _HERE / "tr" / "noise_schedule_export.py",
-    "mine_preference_pairs": _HERE / "tr" / "mine_preference_pairs.py",
+    "noise_schedule_export": _HERE / "training" / "noise_schedule_export.py",
+    "mine_preference_pairs": _HERE / "training" / "mine_preference_pairs.py",
     "data_quality": _HERE / "data" / "data_quality.py",
     "manifest_paths": _HERE / "data" / "manifest_paths.py",
     "jsonl_merge": _HERE / "data" / "jsonl_merge.py",
     "manifest_gate": _HERE / "data" / "manifest_gate.py",
     "manifest_enrich": _HERE / "data" / "manifest_enrich.py",
+    "caption_hygiene": _HERE / "data" / "caption_hygiene.py",
+    "ar_tag_manifest": _HERE / "data" / "ar_tag_manifest.py",
     "prompt_lint": _HERE / "prompt" / "prompt_lint.py",
     "tag_coverage": _HERE / "prompt" / "tag_coverage.py",
     "suggest_style_packs": _HERE / "prompt" / "suggest_style_packs.py",
@@ -44,6 +52,9 @@ _CANONICAL: dict[str, Path] = {
     "benchmark_suite": _HERE / "benchmark_suite.py",
     "normalize_captions": _HERE / "normalize_captions.py",
     "preview_generation_prompt": _HERE / "preview_generation_prompt.py",
+    "preview_prompt_stack": _HERE / "preview_prompt_stack.py",
+    "explore_styles": _HERE / "explore_styles.py",
+    "test_style_native_stack": _HERE / "dev" / "test_style_native_stack.py",
     "vit_inspect": _HERE / "vit_inspect.py",
     "seed_explorer": _HERE / "seed_explorer.py",
     "eval_prompts": _HERE / "eval_prompts.py",
@@ -54,18 +65,17 @@ _CANONICAL: dict[str, Path] = {
     "spatial_coverage": _HERE / "spatial_coverage.py",
     "complex_prompt_coverage": _HERE / "complex_prompt_coverage.py",
     "prompt_gap_scout": _HERE / "prompt_gap_scout.py",
-    "prompt_i18n": _HERE / "prompt_i18n.py",
     "book_scene_split": _HERE / "book_scene_split.py",
+    "edit_inpaint": _HERE / "edit_inpaint.py",
     "visual_memory_patch": _HERE / "visual_memory_patch.py",
     "book_prompt_audit": _HERE / "book_prompt_audit.py",
     "book_manifest_check": _HERE / "book_manifest_check.py",
-    "dump_prompt_tag_csvs": _HERE / "dump_prompt_tag_csvs.py",
     "fetch_danbooru_tags": _HERE / "fetch_danbooru_tags.py",
     "download_all_danbooru_categorized_tags": _HERE / "download_all_danbooru_categorized_tags.py",
     "split_danbooru_general_tags": _HERE / "split_danbooru_general_tags.py",
     "merge_danbooru_categorized_tags": _HERE / "merge_danbooru_categorized_tags.py",
-    "train_diffusion_dpo": _HERE / "tr" / "train_diffusion_dpo.py",
-    "train_kd_distill": _HERE / "tr" / "train_kd_distill.py",
+    "train_diffusion_dpo": _HERE / "training" / "train_diffusion_dpo.py",
+    "train_kd_distill": _HERE / "training" / "train_kd_distill.py",
     "make_gallery": _HERE / "dev" / "make_gallery.py",
     "generate_sdx_architecture_diagram": _HERE / "dev" / "generate_sdx_architecture_diagram.py",
     "architecture_themes": _HERE / "dev" / "architecture_themes.py",

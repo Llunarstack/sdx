@@ -19,7 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-@dataclass
+@dataclass(slots=True)
 class LADDConfig:
     """Weights for composite LADD-style objective."""
 

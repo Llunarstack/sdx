@@ -26,7 +26,7 @@ def _l2_normalize_rows(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     return x / np.maximum(n, eps)
 
 
-@dataclass
+@dataclass(slots=True)
 class InMemoryVectorIndex:
     """
     Embeddings shape ``(N, D)``, parallel list of manifest rows or path strings.

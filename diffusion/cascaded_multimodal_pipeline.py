@@ -8,7 +8,7 @@ import torch.nn as nn
 from models.rae_latent_bridge import RAELatentBridge
 
 
-@dataclass
+@dataclass(slots=True)
 class CascadedPipelineOutput:
     base_latents: torch.Tensor
     refined_latents: torch.Tensor
