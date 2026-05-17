@@ -333,7 +333,6 @@ class EnhancedDiTBlock(DiTBlock):
         character_id: Optional[torch.Tensor] = None,
         style_id: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-
         # Standard DiT processing
         x = super().forward(x, c)
 
@@ -521,7 +520,8 @@ class EnhancedDiT(nn.Module):
             if getattr(block, "gradient_checkpointing", False):
                 x = torch.utils.checkpoint.checkpoint(
                     lambda _x, _c: block(_x, _c, **block_kwargs),
-                    x, c,
+                    x,
+                    c,
                     use_reentrant=False,
                 )
             else:
@@ -529,7 +529,7 @@ class EnhancedDiT(nn.Module):
 
         # Final processing — pass c so FinalLayer can apply adaLN conditioning
         x = self.final_layer(x, c)  # [B, N, patch_size^2 * out_channels]
-        x = self.unpatchify(x)      # [B, out_channels, H, W]
+        x = self.unpatchify(x)  # [B, out_channels, H, W]
 
         return x
 
@@ -549,8 +549,8 @@ def EnhancedDiT_B_2(**kwargs):
 
 EnhancedDiT_models: dict = {
     "EnhancedDiT-XL/2": EnhancedDiT_XL_2,
-    "EnhancedDiT-L/2":  EnhancedDiT_L_2,
-    "EnhancedDiT-B/2":  EnhancedDiT_B_2,
+    "EnhancedDiT-L/2": EnhancedDiT_L_2,
+    "EnhancedDiT-B/2": EnhancedDiT_B_2,
 }
 
 __all__ = [

@@ -209,9 +209,7 @@ def run_book_preflight(
         errors = list(path_issues)
         pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
         if pick_metric_requires_vit_ckpt(pb_eff) and not pv:
-            errors.append(
-                f"--book-preflight strict requires --pick-vit-ckpt when effective pick-best is {pb_eff!r}"
-            )
+            errors.append(f"--book-preflight strict requires --pick-vit-ckpt when effective pick-best is {pb_eff!r}")
         return errors, align_warns
 
     # warn

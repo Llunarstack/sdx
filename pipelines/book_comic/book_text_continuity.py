@@ -48,9 +48,7 @@ def text_continuity_clause(spec: Mapping[str, Any]) -> str:
     """
     bits: List[str] = []
     if bool(spec.get("strict_script", False)):
-        bits.append(
-            "strict script fidelity: every visible word in balloons and captions matches the writer script"
-        )
+        bits.append("strict script fidelity: every visible word in balloons and captions matches the writer script")
 
     raw_p = spec.get("locked_phrases") or spec.get("must_include") or spec.get("must_include_phrases")
     phrases: List[str] = []

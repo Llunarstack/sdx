@@ -16,10 +16,7 @@ def test_block_visit_order_supports_new_orders():
 def test_create_block_causal_mask_supports_new_orders():
     h = w = 8
     b = 2
-    masks = {
-        o: create_block_causal_mask_2d(h, w, b, block_order=o)
-        for o in ("raster", "zorder", "snake", "spiral")
-    }
+    masks = {o: create_block_causal_mask_2d(h, w, b, block_order=o) for o in ("raster", "zorder", "snake", "spiral")}
     for m in masks.values():
         assert m.shape == (h * w, h * w)
         assert torch.isfinite(m.diag()).all()

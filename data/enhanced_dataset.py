@@ -181,9 +181,7 @@ def collate_enhanced(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             ref = next(b[key] for b in batch if key in b)
             tensors = [b.get(key, torch.zeros_like(ref)) for b in batch]
             out[key] = torch.stack(tensors)
-            out[f"{key}_valid"] = torch.tensor(
-                [key in b for b in batch], dtype=torch.bool
-            )
+            out[f"{key}_valid"] = torch.tensor([key in b for b in batch], dtype=torch.bool)
 
     for key in ("character_id", "style_id"):
         if any(key in b for b in batch):

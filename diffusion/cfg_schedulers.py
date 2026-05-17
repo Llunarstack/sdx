@@ -114,4 +114,3 @@ def cfg_scale_snr_aware(
     z = torch.sigmoid(torch.log(snr + 1e-8))
     m = float(high_noise_multiplier) + (float(low_noise_multiplier) - float(high_noise_multiplier)) * z
     return torch.full_like(m, float(base_cfg)) * m
-

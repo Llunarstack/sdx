@@ -49,7 +49,7 @@ class TACA(nn.Module):
         assert hidden_size % num_heads == 0
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.base_temp = float(base_temp)
         self.temp_range = float(temp_range)
 
@@ -86,9 +86,7 @@ class TACA(nn.Module):
         d = self._t_emb_dim
         half = d // 2
         device = t.device
-        freqs = torch.exp(
-            -math.log(self._max_t) * torch.arange(half, device=device, dtype=torch.float32) / half
-        )
+        freqs = torch.exp(-math.log(self._max_t) * torch.arange(half, device=device, dtype=torch.float32) / half)
         args = t.float().unsqueeze(1) * freqs.unsqueeze(0)  # (B, half)
         return torch.cat([args.cos(), args.sin()], dim=-1)  # (B, d)
 
@@ -125,7 +123,7 @@ class TACA(nn.Module):
 
         # Compute temperature
         if timestep is not None:
-            t_emb = self._sinusoidal_t(timestep)          # (B, t_emb_dim)
+            t_emb = self._sinusoidal_t(timestep)  # (B, t_emb_dim)
             delta = self.t_embed(t_emb) * self.temp_range  # (B, 1)
             temp = (self.base_temp + delta).clamp(min=0.1).unsqueeze(-1).unsqueeze(-1)  # (B,1,1,1)
         else:

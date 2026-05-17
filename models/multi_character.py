@@ -35,9 +35,11 @@ from .model_enhancements import RMSNorm
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class CharacterSpec:
     """Specification for one character in a multi-character scene."""
+
     character_id: str
     name: str
     # Bounding box in normalised [0,1] coords: (x1, y1, x2, y2)
@@ -53,6 +55,7 @@ class CharacterSpec:
 @dataclass(slots=True)
 class InteractionSpec:
     """Specification for an interaction between two characters."""
+
     char_a: str  # character_id
     char_b: str  # character_id
     relation: str  # "touching", "hugging", "fighting", "facing", "holding_hands", etc.
@@ -62,6 +65,7 @@ class InteractionSpec:
 # ---------------------------------------------------------------------------
 # Character Slot Embeddings
 # ---------------------------------------------------------------------------
+
 
 class CharacterSlotEmbedding(nn.Module):
     """
@@ -146,7 +150,7 @@ class CharacterSlotEmbedding(nn.Module):
         Returns: (num_chars, D)
         """
         slots = []
-        for i, spec in enumerate(specs[:self.max_characters]):
+        for i, spec in enumerate(specs[: self.max_characters]):
             slot = self.get_slot(
                 i,
                 bbox=spec.bbox,
@@ -160,6 +164,7 @@ class CharacterSlotEmbedding(nn.Module):
 # ---------------------------------------------------------------------------
 # Character Isolation Attention
 # ---------------------------------------------------------------------------
+
 
 class CharacterIsolationAttention(nn.Module):
     """
@@ -199,9 +204,7 @@ class CharacterIsolationAttention(nn.Module):
         self.k_norm = RMSNorm(self.head_dim)
 
         # Learnable per-head isolation gate
-        self.isolation_gate = nn.Parameter(
-            torch.full((num_heads,), isolation_strength)
-        )
+        self.isolation_gate = nn.Parameter(torch.full((num_heads,), isolation_strength))
 
         nn.init.zeros_(self.out_proj.weight)
 
@@ -265,7 +268,7 @@ class CharacterIsolationAttention(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        scale = self.head_dim ** -0.5
+        scale = self.head_dim**-0.5
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale  # (B, H, N, N)
 
         # Apply isolation bias
@@ -282,6 +285,7 @@ class CharacterIsolationAttention(nn.Module):
 # ---------------------------------------------------------------------------
 # Clothing / Object Attribution
 # ---------------------------------------------------------------------------
+
 
 class ClothingAttributionModule(nn.Module):
     """
@@ -405,6 +409,7 @@ class ClothingAttributionModule(nn.Module):
 # Interaction Encoder
 # ---------------------------------------------------------------------------
 
+
 class InteractionEncoder(nn.Module):
     """
     Encodes inter-character interactions (touching, hugging, fighting, etc.)
@@ -419,9 +424,19 @@ class InteractionEncoder(nn.Module):
     """
 
     RELATIONS = [
-        "neutral", "touching", "hugging", "fighting", "holding_hands",
-        "facing", "back_to_back", "side_by_side", "one_behind_other",
-        "carrying", "dancing", "shaking_hands", "pointing_at",
+        "neutral",
+        "touching",
+        "hugging",
+        "fighting",
+        "holding_hands",
+        "facing",
+        "back_to_back",
+        "side_by_side",
+        "one_behind_other",
+        "carrying",
+        "dancing",
+        "shaking_hands",
+        "pointing_at",
     ]
 
     def __init__(self, hidden_size: int, num_relation_types: int = 0):
@@ -464,9 +479,7 @@ class InteractionEncoder(nn.Module):
             (1, D) interaction conditioning vector.
         """
         rel_id = self.relation_to_id.get(spec.relation, 0)
-        rel_emb = self.relation_embed(
-            torch.tensor(rel_id, device=char_a_slot.device)
-        ).unsqueeze(0)  # (1, D)
+        rel_emb = self.relation_embed(torch.tensor(rel_id, device=char_a_slot.device)).unsqueeze(0)  # (1, D)
 
         # Combine: relation + character pair
         pair = char_a_slot + char_b_slot + rel_emb  # (1, D)
@@ -509,6 +522,7 @@ class InteractionEncoder(nn.Module):
 # Spatial Mask Generator
 # ---------------------------------------------------------------------------
 
+
 class SpatialMaskGenerator:
     """
     Generates per-character spatial masks from bounding boxes.
@@ -539,16 +553,13 @@ class SpatialMaskGenerator:
         # Patch grid centres
         ys = torch.linspace(0.5 / h_patches, 1 - 0.5 / h_patches, h_patches, device=device)
         xs = torch.linspace(0.5 / w_patches, 1 - 0.5 / w_patches, w_patches, device=device)
-        grid_y, grid_x = torch.meshgrid(ys, xs, indexing='ij')  # (H, W)
+        grid_y, grid_x = torch.meshgrid(ys, xs, indexing="ij")  # (H, W)
 
         if soft:
             # Gaussian falloff from bbox centre
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
             sx, sy = max((x2 - x1) / 4, 0.05), max((y2 - y1) / 4, 0.05)
-            mask = torch.exp(
-                -0.5 * ((grid_x - cx) / sx) ** 2
-                - 0.5 * ((grid_y - cy) / sy) ** 2
-            )
+            mask = torch.exp(-0.5 * ((grid_x - cx) / sx) ** 2 - 0.5 * ((grid_y - cy) / sy) ** 2)
         else:
             mask = ((grid_x >= x1) & (grid_x <= x2) & (grid_y >= y1) & (grid_y <= y2)).float()
 
@@ -581,6 +592,7 @@ class SpatialMaskGenerator:
 # ---------------------------------------------------------------------------
 # Multi-Character Conditioner (top-level)
 # ---------------------------------------------------------------------------
+
 
 class MultiCharacterConditioner(nn.Module):
     """

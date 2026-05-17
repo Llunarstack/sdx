@@ -16,8 +16,6 @@ Torch-heavy modules therefore do not load when you only ``import utils.prompt``.
 
 """
 
-
-
 from __future__ import annotations
 
 from importlib import import_module
@@ -26,9 +24,7 @@ from pathlib import Path
 _pkg_dir = Path(__file__).resolve().parent
 
 _SUBMODULE_NAMES: frozenset[str] = frozenset(
-
     p.stem for p in _pkg_dir.glob("*.py") if p.name != "__init__.py"
-
 ) | frozenset({"stack"})
 
 __all__: list[str] = sorted(_SUBMODULE_NAMES)  # pyright: ignore[reportUnsupportedDunderAll]

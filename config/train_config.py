@@ -79,8 +79,8 @@ class TrainConfig:
     # "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused
     # (see utils/modeling/text_encoder_bundle.py).
     text_encoder_mode: str = "t5"
-    clip_text_encoder_l: str = ""    # empty = resolve via utils/modeling/model_paths.py
-    clip_text_encoder_bigg: str = "" # empty = resolve via utils/modeling/model_paths.py
+    clip_text_encoder_l: str = ""  # empty = resolve via utils/modeling/model_paths.py
+    clip_text_encoder_bigg: str = ""  # empty = resolve via utils/modeling/model_paths.py
     vae_model: str = "stabilityai/sd-vae-ft-mse"
     # "kl"  = AutoencoderKL (classic Stable Diffusion VAE)
     # "rae" = AutoencoderRAE (Representation Autoencoder)
@@ -125,10 +125,10 @@ class TrainConfig:
     # Soft per-token routing gate (does not change compute graph).
     token_routing_enabled: bool = False
     token_routing_strength: float = 1.0
-    token_keep_ratio: float = 1.0       # top-k keep over patch tokens (1.0 = disabled)
-    token_keep_min_value: float = 0.0   # residual gate floor for dropped tokens
-    drop_path_rate: float = 0.0         # stochastic depth (0 = off)
-    layerscale_init: float = 0.0        # > 0 enables LayerScale residual gains (e.g. 1e-5)
+    token_keep_ratio: float = 1.0  # top-k keep over patch tokens (1.0 = disabled)
+    token_keep_min_value: float = 0.0  # residual gate floor for dropped tokens
+    drop_path_rate: float = 0.0  # stochastic depth (0 = off)
+    layerscale_init: float = 0.0  # > 0 enables LayerScale residual gains (e.g. 1e-5)
     # QK-norm (SD3.5-style): normalise Q and K per head before attention.
     # Improves training stability at high resolution and large batch sizes.
     # Note: changes model architecture — not compatible with checkpoints trained without it.
@@ -148,18 +148,18 @@ class TrainConfig:
     ar_order_mix: str = ""
     use_xformers: bool = True
     negative_prompt_weight: float = 0.5
-    style_embed_dim: int = 0        # > 0 enables T5-encoded style conditioning
-    style_strength: float = 0.7     # blend strength for style (0.6–0.8 recommended)
-    control_cond_dim: int = 0       # 1 = enable ControlNet; 0 = off
-    control_num_types: int = 0      # 0 = off; e.g. 9 for canny/depth/pose/seg/…
-    control_scale: float = 0.85     # ControlNet strength (0.7–1.0 recommended)
+    style_embed_dim: int = 0  # > 0 enables T5-encoded style conditioning
+    style_strength: float = 0.7  # blend strength for style (0.6–0.8 recommended)
+    control_cond_dim: int = 0  # 1 = enable ControlNet; 0 = off
+    control_num_types: int = 0  # 0 = off; e.g. 9 for canny/depth/pose/seg/…
+    control_scale: float = 0.85  # ControlNet strength (0.7–1.0 recommended)
     # Creativity/diversity scalar conditioning (0 = off; set to hidden dim, e.g. 64).
     creativity_embed_dim: int = 0
     creativity_max: float = 1.0
     creativity_jitter_std: float = 0.0  # extra noise on creativity scalar during training
     # Randomly inject originality tokens into captions during training.
     train_originality_augment_prob: float = 0.0  # 0 = off; try 0.1–0.25
-    train_originality_strength: float = 0.5      # 0–1 controls token insertion density
+    train_originality_strength: float = 0.5  # 0–1 controls token insertion density
     # PixArt-style (h, w) latent grid → timestep conditioning (0 = off).
     size_embed_dim: int = 0
     # Channel gate on patch tokens after embed (zero-init = identity at start).
@@ -171,10 +171,10 @@ class TrainConfig:
     # -------------------------------------------------------------------------
     num_timesteps: int = 1000
     timestep_respacing: str = ""
-    beta_schedule: str = "linear"      # "linear" | "cosine" | "sigmoid" | "squaredcos_cap_v2"
-    prediction_type: str = "epsilon"   # "epsilon" | "v" | "x0"
-    noise_offset: float = 0.0          # SD-style noise offset for light/dark balance (e.g. 0.1)
-    min_snr_gamma: float = 5.0         # min-SNR loss cap (0 = off; 5 is typical)
+    beta_schedule: str = "linear"  # "linear" | "cosine" | "sigmoid" | "squaredcos_cap_v2"
+    prediction_type: str = "epsilon"  # "epsilon" | "v" | "x0"
+    noise_offset: float = 0.0  # SD-style noise offset for light/dark balance (e.g. 0.1)
+    min_snr_gamma: float = 5.0  # min-SNR loss cap (0 = off; 5 is typical)
     # "min_snr" | "min_snr_soft" | "unit" | "edm" | "v" | "eps"
     loss_weighting: str = "min_snr"
     loss_weighting_sigma_data: float = 0.5  # used when loss_weighting="edm"
@@ -185,15 +185,15 @@ class TrainConfig:
     spectral_sfp_high_sigma: float = 0.22
     spectral_sfp_tau_power: float = 1.0
     # OT noise–latent mini-batch coupling (see utils/training/ot_noise_pairing.py).
-    ot_noise_pair_reg: float = 0.0   # 0 = off; Sinkhorn regulariser (e.g. 0.05)
+    ot_noise_pair_reg: float = 0.0  # 0 = off; Sinkhorn regulariser (e.g. 0.05)
     ot_noise_pair_iters: int = 40
     ot_noise_pair_mode: str = "soft"  # "soft" | "hungarian" (hungarian requires scipy)
     # Rectified-flow training (see diffusion/flow_matching.py).
     # Mutually exclusive with MDM masked training.
     flow_matching_training: bool = False
     # VP bridge auxiliary regulariser (shuffle-pair latent mix).
-    bridge_aux_weight: float = 0.0   # 0 = off; try 0.02–0.15
-    bridge_aux_lambda: float = 0.2   # mix x0 = (1-λ)x + λ·shuffle(x); in (0, 1]
+    bridge_aux_weight: float = 0.0  # 0 = off; try 0.02–0.15
+    bridge_aux_lambda: float = 0.2  # mix x0 = (1-λ)x + λ·shuffle(x); in (0, 1]
     # Timestep sampling distribution (see diffusion/timestep_sampling.py).
     timestep_sample_mode: str = "uniform"  # "uniform" | "logit_normal" | "high_noise" | "low_noise"
     timestep_logit_mean: float = 0.0
@@ -206,11 +206,11 @@ class TrainConfig:
     # Training length
     # Priority: passes > max_steps > epochs
     # -------------------------------------------------------------------------
-    passes: int = 0      # full passes over dataset (steps = passes × steps_per_epoch)
-    max_steps: int = 0   # hard step cap (0 = use epochs)
-    epochs: int = 100    # used only when passes == 0 and max_steps == 0
+    passes: int = 0  # full passes over dataset (steps = passes × steps_per_epoch)
+    max_steps: int = 0  # hard step cap (0 = use epochs)
+    epochs: int = 100  # used only when passes == 0 and max_steps == 0
     lr: float = 1e-4
-    min_lr: float = 1e-6        # cosine schedule floor
+    min_lr: float = 1e-6  # cosine schedule floor
     lr_warmup_steps: int = 500  # linear warmup then cosine
     weight_decay: float = 0.01
     max_grad_norm: float = 1.0
@@ -223,8 +223,8 @@ class TrainConfig:
     # -------------------------------------------------------------------------
     # Validation + early stopping
     # -------------------------------------------------------------------------
-    val_split: float = 0.0          # fraction held out for validation (0 = off)
-    val_every: int = 2000           # evaluate every N steps
+    val_split: float = 0.0  # fraction held out for validation (0 = off)
+    val_every: int = 2000  # evaluate every N steps
     early_stopping_patience: int = 0  # stop after N val checks with no improvement (0 = off)
     val_max_batches: Optional[int] = None  # cap val batches per eval (None = full set)
 
@@ -232,7 +232,7 @@ class TrainConfig:
     # Refinement
     # -------------------------------------------------------------------------
     refinement_prob: float = 0.25  # probability of sampling small-t refinement steps
-    refinement_max_t: int = 150    # upper bound for refinement timestep range
+    refinement_max_t: int = 150  # upper bound for refinement timestep range
 
     # -------------------------------------------------------------------------
     # Img2img training
@@ -247,14 +247,14 @@ class TrainConfig:
     # Step-dependent mask ratio schedule: list of (t_step, mask_ratio) breakpoints.
     # Example: [(0, 0.05), (500, 0.25), (999, 0.35)]
     mdm_mask_schedule: Optional[List[tuple]] = None
-    mdm_patch_size: int = 2         # must match DiT patch embed size (typically 2)
+    mdm_patch_size: int = 2  # must match DiT patch embed size (typically 2)
     mdm_loss_only_masked: bool = True
-    mdm_min_mask_patches: int = 1   # minimum masked patches per sample
+    mdm_min_mask_patches: int = 1  # minimum masked patches per sample
 
     # -------------------------------------------------------------------------
     # Mixture-of-Experts (MoE) FFN upgrade
     # -------------------------------------------------------------------------
-    moe_num_experts: int = 0        # 0 = off; replaces dense FFN with sparse MoE
+    moe_num_experts: int = 0  # 0 = off; replaces dense FFN with sparse MoE
     moe_top_k: int = 2
     moe_balance_loss_weight: float = 0.0  # router load-balancing auxiliary loss
 
@@ -264,8 +264,8 @@ class TrainConfig:
     # Curriculum
     # -------------------------------------------------------------------------
     # Increase max caption length at these step thresholds.
-    curriculum_caption_steps: Optional[List[int]] = None   # e.g. [5000, 15000, 30000]
-    curriculum_max_lengths: Optional[List[int]] = None     # e.g. [77, 150, 300]
+    curriculum_caption_steps: Optional[List[int]] = None  # e.g. [5000, 15000, 30000]
+    curriculum_max_lengths: Optional[List[int]] = None  # e.g. [77, 150, 300]
     # Difficulty curriculum: prefer easy/hard samples at different training stages.
     curriculum_difficulty_steps: Optional[List[int]] = None  # e.g. [0, 5000, 10000]
     curriculum_difficulty_easy_first: bool = True
@@ -290,14 +290,14 @@ class TrainConfig:
     resume: Optional[str] = None  # path to checkpoint to resume from
     # Load model/EMA (and aux modules) from checkpoint but start step 0 with a fresh optimizer.
     init_from: Optional[str] = None
-    wandb_project: Optional[str] = None    # e.g. "sdx" to enable WandB logging
+    wandb_project: Optional[str] = None  # e.g. "sdx" to enable WandB logging
     tensorboard_dir: Optional[str] = None  # e.g. "runs" to enable TensorBoard
-    log_images_every: int = 0              # 0 = off; log a sample image every N steps
+    log_images_every: int = 0  # 0 = off; log a sample image every N steps
     log_images_prompt: str = "a photo of a cat"
-    dry_run: bool = False          # run 1 step then exit (verify setup)
-    save_run_manifest: bool = True # persist run_manifest.json + config.train.json
+    dry_run: bool = False  # run 1 step then exit (verify setup)
+    save_run_manifest: bool = True  # persist run_manifest.json + config.train.json
     strict_warnings: bool = False  # escalate project warnings to errors
-    save_polyak: int = 0           # > 0: keep running avg of weights, save as polyak.pt
+    save_polyak: int = 0  # > 0: keep running avg of weights, save as polyak.pt
 
     # -------------------------------------------------------------------------
     # Reproducibility

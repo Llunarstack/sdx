@@ -73,4 +73,3 @@ def test_style_guidance_none_includes_tag_bucket_hints():
     )
     assert "2d digital" in pos.lower() or "focal hierarchy" in pos.lower()
     assert neg.strip()
-

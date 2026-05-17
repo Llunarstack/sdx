@@ -282,31 +282,48 @@ class DiTBlockText(nn.Module):
             x = x + self.drop_path(self.ls_cross(token_gate * cross_out))
             mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
             if isinstance(self.mlp, MoEFeedForward):
-                x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
-                    mlp_in,
-                    routing_context=c,
-                    router_override=router_override,
-                    report_aux_loss=True,
-                )))
+                x = x + self.drop_path(
+                    self.ls_mlp(
+                        gate_mlp.unsqueeze(1)
+                        * token_gate
+                        * self.mlp(
+                            mlp_in,
+                            routing_context=c,
+                            router_override=router_override,
+                            report_aux_loss=True,
+                        )
+                    )
+                )
             else:
                 x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
             return x, attn_weights
-        x = x + self.drop_path(self.ls_cross(token_gate * self.cross_attn(
-            cross_in,
-            text_emb,
-            use_xformers=use_xformers,
-            routing_context=c,
-            router_override=router_override,
-            report_aux_loss=False,
-        )))
+        x = x + self.drop_path(
+            self.ls_cross(
+                token_gate
+                * self.cross_attn(
+                    cross_in,
+                    text_emb,
+                    use_xformers=use_xformers,
+                    routing_context=c,
+                    router_override=router_override,
+                    report_aux_loss=False,
+                )
+            )
+        )
         mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
         if isinstance(self.mlp, MoEFeedForward):
-            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
-                mlp_in,
-                routing_context=c,
-                router_override=router_override,
-                report_aux_loss=True,
-            )))
+            x = x + self.drop_path(
+                self.ls_mlp(
+                    gate_mlp.unsqueeze(1)
+                    * token_gate
+                    * self.mlp(
+                        mlp_in,
+                        routing_context=c,
+                        router_override=router_override,
+                        report_aux_loss=True,
+                    )
+                )
+            )
         else:
             x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
         return x
@@ -726,6 +743,7 @@ class DiT_Text(nn.Module):
                     # block only and proceed — the caller gets attention weights at the cost of
                     # slightly higher peak memory for this one block.
                     import warnings
+
                     warnings.warn(
                         "return_attn=True with grad_checkpointing: disabling checkpointing for "
                         "block 0 to capture attention weights (minor peak-memory increase).",

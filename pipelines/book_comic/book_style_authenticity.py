@@ -53,9 +53,7 @@ _AUTH_POSITIVE: Dict[str, Dict[str, str]] = {
         ),
     },
     "webtoon": {
-        "lite": (
-            "vertical-scroll friendly shapes, restrained digital smoothing, readable silhouette at phone scale"
-        ),
+        "lite": ("vertical-scroll friendly shapes, restrained digital smoothing, readable silhouette at phone scale"),
         "standard": (
             "webtoon-native painting: soft gradients with hand-placed breaks, intentional rim-light "
             "variation, avoid plastic skin sheen, costume folds drawn not airbrushed flat"
@@ -141,16 +139,14 @@ _AUTH_NEGATIVE: Dict[str, Dict[str, str]] = {
             "background asset paste repetition, HDR bloom on flat comic color"
         ),
         "strong": (
-            "render-engine lighting on 2d comic, subsurface abuse, copy-paste eyes, "
-            "waxy lips, procedural fabric noise"
+            "render-engine lighting on 2d comic, subsurface abuse, copy-paste eyes, waxy lips, procedural fabric noise"
         ),
     },
     "graphic_novel": {
         "lite": "over-smoothed painterly, digital mud in shadows",
         "standard": "AI painterly soup, uniform brush stamps, posterized value steps, uncanny hands",
         "strong": (
-            "CGI sheen in painted comics, texture tiling, symmetrical faces across cast, "
-            "stock photo integration seams"
+            "CGI sheen in painted comics, texture tiling, symmetrical faces across cast, stock photo integration seams"
         ),
     },
     "comic_us": {

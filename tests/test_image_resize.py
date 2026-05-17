@@ -31,4 +31,3 @@ def test_fit_saliency_crop_prefers_bright_region():
     # Right-biased bright block should survive saliency crop better than center crop.
     ctr = fit_image_to_size(img, 40, 40, mode="center_crop")
     assert float(out.mean()) >= float(ctr.mean())
-

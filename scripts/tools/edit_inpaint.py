@@ -113,9 +113,7 @@ def main() -> int:
             tmp_mask_dir = tempfile.mkdtemp(prefix="sdx_inpaint_mask_")
             mask_path_disk = Path(tmp_mask_dir) / "mask.png"
             guide = (
-                Image.open(args.init_image)
-                .convert("RGB")
-                .resize((args.width, args.height), Image.Resampling.LANCZOS)
+                Image.open(args.init_image).convert("RGB").resize((args.width, args.height), Image.Resampling.LANCZOS)
             )
             res = build_segmentation_mask_for_edit(
                 guide,

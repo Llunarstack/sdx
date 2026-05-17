@@ -11,6 +11,7 @@ for roadmap items.
 Example (introspection only)::
 
     from utils.generation.orchestration import pipeline_roles
+
     for r in pipeline_roles():
         print(r.name, "->", r.sdx_module_hint)
 """
@@ -65,6 +66,5 @@ def sample_cli_hint(
     See **scripts/tools/ops/orchestrate_pipeline.py** (run: ``python -m scripts.tools orchestrate_pipeline``).
     """
     return (
-        f'python sample.py --ckpt CKPT --prompt "..." --num {num_candidates} '
-        f'--pick-best {pick_metric} --out {out_path}'
+        f'python sample.py --ckpt CKPT --prompt "..." --num {num_candidates} --pick-best {pick_metric} --out {out_path}'
     )

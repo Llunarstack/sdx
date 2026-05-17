@@ -333,7 +333,9 @@ def _score_candidates_with_vit(
             rgb = np.array(img, dtype=np.uint8)
             ocr = float(score_ocr_match(rgb, expected_text)) if str(expected_text).strip() else 0.5
             people_s = float(score_people_count_match(rgb, int(expected_people_count or 0)))
-            obj_s = float(score_object_count_match(rgb, int(expected_object_count or 0), str(expected_object_hint or "")))
+            obj_s = float(
+                score_object_count_match(rgb, int(expected_object_count or 0), str(expected_object_hint or ""))
+            )
             count_s = float(max(people_s, obj_s))
             sat_s = float(score_saturation_balance(rgb))
             fused = fuse_vit_scores(
@@ -472,7 +474,9 @@ def main() -> int:
     )
     p.add_argument("--shape-scaffold-strength", type=float, default=1.0)
     p.add_argument("--shape-max-actors", type=int, default=4)
-    p.add_argument("--pareto-elite", action="store_true", help="Select iteration winner from Pareto front of objectives.")
+    p.add_argument(
+        "--pareto-elite", action="store_true", help="Select iteration winner from Pareto front of objectives."
+    )
     p.add_argument("--pareto-topk", type=int, default=4, help="Cap Pareto elite pool to top-K by consensus.")
     p.add_argument("--adaptive-num", action="store_true", help="Increase candidate count when consensus is weak.")
     p.add_argument("--adaptive-threshold", type=float, default=0.80)
@@ -483,7 +487,9 @@ def main() -> int:
     p.add_argument("--consensus-count-weight", type=float, default=0.08)
     p.add_argument("--consensus-saturation-weight", type=float, default=0.05)
     p.add_argument("--constraint-anneal", choices=("none", "up", "down"), default="up")
-    p.add_argument("--elite-memory-size", type=int, default=8, help="Cross-iteration elite memory size for diversity bonus.")
+    p.add_argument(
+        "--elite-memory-size", type=int, default=8, help="Cross-iteration elite memory size for diversity bonus."
+    )
     p.add_argument("--diversity-bonus-weight", type=float, default=0.05)
     p.add_argument("--uncertainty-threshold", type=float, default=0.42)
     p.add_argument("--uncertainty-extra-iterations", type=int, default=1)
@@ -658,9 +664,9 @@ def main() -> int:
             except Exception:
                 bonus = 0.0
             rr["v4_diversity_bonus"] = float(bonus)
-            rr["v4_final_score"] = float(rr.get("vit_consensus_score", 0.0)) + float(args.diversity_bonus_weight) * float(
-                bonus
-            )
+            rr["v4_final_score"] = float(rr.get("vit_consensus_score", 0.0)) + float(
+                args.diversity_bonus_weight
+            ) * float(bonus)
             selection_pool_enriched.append(rr)
         selection_pool_enriched.sort(key=lambda r: float(r.get("v4_final_score", 0.0)), reverse=True)
         selection_pool = selection_pool_enriched or selection_pool

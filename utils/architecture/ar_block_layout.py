@@ -17,9 +17,7 @@ from models.ar_masks_extended import (
 )
 
 
-def macro_block_centers_patch_space(
-    h: int, w: int, num_ar_blocks: int
-) -> Dict[Tuple[int, int], Tuple[float, float]]:
+def macro_block_centers_patch_space(h: int, w: int, num_ar_blocks: int) -> Dict[Tuple[int, int], Tuple[float, float]]:
     """
     For each macro-block (bi, bj), return approximate center (row, col) in patch coordinates.
     """

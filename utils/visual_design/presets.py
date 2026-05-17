@@ -51,4 +51,9 @@ def apply_visual_design_preset_to_prompt(prompt: str, preset: str) -> Tuple[str,
     return merged, domain, intensity
 
 
-__all__ = ["VISUAL_DESIGN_PRESETS", "preset_ids", "resolve_visual_design_preset", "apply_visual_design_preset_to_prompt"]
+__all__ = [
+    "VISUAL_DESIGN_PRESETS",
+    "preset_ids",
+    "resolve_visual_design_preset",
+    "apply_visual_design_preset_to_prompt",
+]

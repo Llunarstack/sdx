@@ -55,19 +55,21 @@ _CLIP_L_PATH = _PRETRAINED / "CLIP-ViT-L-14"
 # Critic action: what to do based on the evaluation
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class CriticAction:
     """Action recommended by the critic after evaluating a denoising step."""
+
     step: int
-    alignment_score: float          # 0-1: how well x0_pred matches the prompt
-    structure_score: float          # 0-1: how coherent the structure is
-    combined_score: float           # weighted combination
+    alignment_score: float  # 0-1: how well x0_pred matches the prompt
+    structure_score: float  # 0-1: how coherent the structure is
+    combined_score: float  # weighted combination
 
     should_boost_cfg: bool = False  # boost CFG on next steps
-    cfg_multiplier: float = 1.0     # how much to boost (e.g. 1.15)
+    cfg_multiplier: float = 1.0  # how much to boost (e.g. 1.15)
 
-    should_rewind: bool = False     # rewind to a saved checkpoint
-    rewind_to_step: int = -1        # which step to rewind to
+    should_rewind: bool = False  # rewind to a saved checkpoint
+    rewind_to_step: int = -1  # which step to rewind to
 
     should_inject_noise: bool = False  # add small noise to escape local minimum
     noise_scale: float = 0.0
@@ -78,6 +80,7 @@ class CriticAction:
 # ---------------------------------------------------------------------------
 # Lazy model loader
 # ---------------------------------------------------------------------------
+
 
 class _ModelCache:
     """Lazy-loads and caches vision models."""
@@ -96,6 +99,7 @@ class _ModelCache:
             return None
         try:
             from transformers import AutoModel
+
             model = AutoModel.from_pretrained(str(_DINOV2_PATH))
             model = model.to(device).eval()
             for p in model.parameters():
@@ -112,6 +116,7 @@ class _ModelCache:
             return None, None
         try:
             from transformers import AutoModel, AutoProcessor
+
             model = AutoModel.from_pretrained(str(_SIGLIP_PATH))
             model = model.to(device).eval()
             for p in model.parameters():
@@ -130,6 +135,7 @@ class _ModelCache:
             return None, None
         try:
             from transformers import CLIPModel, CLIPProcessor
+
             model = CLIPModel.from_pretrained(str(_CLIP_L_PATH))
             model = model.to(device).eval()
             for p in model.parameters():
@@ -148,6 +154,7 @@ _GLOBAL_CACHE = _ModelCache()
 # ---------------------------------------------------------------------------
 # Latent → image decoder (fast approximate decode)
 # ---------------------------------------------------------------------------
+
 
 def _decode_latent_fast(
     latent: torch.Tensor,
@@ -174,10 +181,7 @@ def _decode_latent_fast(
 
             # Resize to small size for fast scoring
             if decoded.shape[-1] > max_size or decoded.shape[-2] > max_size:
-                decoded = F.interpolate(
-                    decoded, size=(max_size, max_size),
-                    mode="bilinear", align_corners=False
-                )
+                decoded = F.interpolate(decoded, size=(max_size, max_size), mode="bilinear", align_corners=False)
 
             img = decoded[0].permute(1, 2, 0).cpu().numpy()
             return (img * 255).round().astype(np.uint8)
@@ -188,6 +192,7 @@ def _decode_latent_fast(
 # ---------------------------------------------------------------------------
 # Individual scoring functions
 # ---------------------------------------------------------------------------
+
 
 @torch.no_grad()
 def _score_clip_alignment(
@@ -202,6 +207,7 @@ def _score_clip_alignment(
 
     try:
         from PIL import Image
+
         pil = Image.fromarray(image_rgb)
         inputs = clip_processor(
             text=[prompt[:77]],
@@ -233,6 +239,7 @@ def _score_siglip_alignment(
 
     try:
         from PIL import Image
+
         pil = Image.fromarray(image_rgb)
         inputs = siglip_processor(
             text=[prompt[:64]],
@@ -272,10 +279,12 @@ def _score_dinov2_structure(
         from PIL import Image
 
         pil = Image.fromarray(image_rgb).resize((224, 224))
-        transform = T.Compose([
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
+        transform = T.Compose(
+            [
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
         img_t = transform(pil).unsqueeze(0).to(device)
 
         outputs = dinov2(pixel_values=img_t)
@@ -328,6 +337,7 @@ def _score_latent_coherence(latent: torch.Tensor) -> float:
 # ---------------------------------------------------------------------------
 # Main critic class
 # ---------------------------------------------------------------------------
+
 
 class ViTCriticLoop:
     """
@@ -456,10 +466,7 @@ class ViTCriticLoop:
         # Decode latent to image for scoring
         image_rgb = None
         if self.vae is not None:
-            image_rgb = _decode_latent_fast(
-                x0_pred, self.vae, self.latent_scale,
-                self.ae_type, self.rae_bridge
-            )
+            image_rgb = _decode_latent_fast(x0_pred, self.vae, self.latent_scale, self.ae_type, self.rae_bridge)
 
         # Compute scores
         scores = {}
@@ -588,6 +595,7 @@ class ViTCriticLoop:
 # ---------------------------------------------------------------------------
 # Trajectory monitor: track score evolution across the full generation
 # ---------------------------------------------------------------------------
+
 
 class TrajectoryMonitor:
     """

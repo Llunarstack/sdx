@@ -332,7 +332,9 @@ def verify_gen_searcher_8b_local(path: str) -> Dict[str, object]:
             "found_shards": [],
         }
     missing = [filename for filename in required if not (base_path / filename).is_file()]
-    found_shards = sorted([file_path.name for file_path in base_path.glob("model-*-of-*.safetensors") if file_path.is_file()])
+    found_shards = sorted(
+        [file_path.name for file_path in base_path.glob("model-*-of-*.safetensors") if file_path.is_file()]
+    )
     return {
         "is_local_dir": True,
         "all_required_present": len(missing) == 0,

@@ -134,4 +134,3 @@ def test_apply_style_guidance_appends_tag_hints_when_mode_none():
     )
     assert "traditional medium" in cap.lower() or "paper tooth" in cap.lower()
     assert "plastic airbrush" in neg.lower() or "smoothness" in neg.lower()
-

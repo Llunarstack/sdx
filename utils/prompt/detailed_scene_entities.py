@@ -146,8 +146,7 @@ def apply_detailed_scene_boost(
     )
 
     pose_strong_pos = (
-        pose_lite_pos
-        + ", contact shadows under shoes and props, consistent cast shadow direction for the whole scene"
+        pose_lite_pos + ", contact shadows under shoes and props, consistent cast shadow direction for the whole scene"
     )
     pose_strong_neg = pose_lite_neg + ", contradictory shadow directions, hovering furniture"
 

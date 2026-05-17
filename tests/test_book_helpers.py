@@ -503,7 +503,9 @@ def test_append_sample_py_quality_flags_combo_vit_realism_forwards_expected_text
 
 
 def test_append_sample_py_quality_flags_combo_count_forwards_count_args():
-    settings = book_helpers.resolve_book_sample_settings(_args(book_accuracy="none", sample_candidates=2, pick_best="combo_count"))
+    settings = book_helpers.resolve_book_sample_settings(
+        _args(book_accuracy="none", sample_candidates=2, pick_best="combo_count")
+    )
     cmd = ["python", "sample.py"]
     book_helpers.append_sample_py_quality_flags(
         cmd,
@@ -556,4 +558,3 @@ def test_build_extra_ocr_flags_includes_shortcomings():
     assert "--art-guidance-mode" in flags
     assert "--anatomy-guidance" in flags
     assert "--style-guidance-mode" in flags
-

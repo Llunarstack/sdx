@@ -32,60 +32,62 @@ import torch.nn.functional as F
 
 LAYER_PATTERNS = {
     "primary_subject": [
-        r'\b(portrait|photo|painting|illustration|render|image|picture)\s+of\b',
-        r'\b(a|an|the)\s+\w+\s+(man|woman|girl|boy|person|figure|character|creature|monster|robot|alien)\b',
+        r"\b(portrait|photo|painting|illustration|render|image|picture)\s+of\b",
+        r"\b(a|an|the)\s+\w+\s+(man|woman|girl|boy|person|figure|character|creature|monster|robot|alien)\b",
     ],
     "secondary_elements": [
-        r'\b(wearing|holding|carrying|with|beside|near|next to|surrounded by)\b',
-        r'\b(background|foreground|setting|environment|scene|landscape|interior|exterior)\b',
+        r"\b(wearing|holding|carrying|with|beside|near|next to|surrounded by)\b",
+        r"\b(background|foreground|setting|environment|scene|landscape|interior|exterior)\b",
     ],
     "mood_lighting": [
-        r'\b(lighting|light|shadow|glow|illuminat|ambient|dramatic|soft|harsh|golden|neon|moonlight|sunlight|candlelight)\b',
-        r'\b(mood|atmosphere|vibe|tone|feeling|emotion|dark|bright|moody|ethereal|cinematic)\b',
-        r'\b(fog|mist|haze|smoke|rain|snow|dust|particles|bokeh|depth of field)\b',
+        r"\b(lighting|light|shadow|glow|illuminat|ambient|dramatic|soft|harsh|golden|neon|moonlight|sunlight|candlelight)\b",
+        r"\b(mood|atmosphere|vibe|tone|feeling|emotion|dark|bright|moody|ethereal|cinematic)\b",
+        r"\b(fog|mist|haze|smoke|rain|snow|dust|particles|bokeh|depth of field)\b",
     ],
     "camera_technical": [
-        r'\b(shot on|photographed|filmed|captured|taken with|lens|mm|f\/|aperture|iso|shutter)\b',
-        r'\b(angle|pov|perspective|view|close.?up|wide.?angle|macro|telephoto|fisheye|tilt.?shift)\b',
-        r'\b(rule of thirds|golden ratio|leading lines|negative space|framing|composition)\b',
-        r'\b(35mm|50mm|85mm|24mm|anamorphic|prime|zoom|bokeh|dof|shallow|deep focus)\b',
+        r"\b(shot on|photographed|filmed|captured|taken with|lens|mm|f\/|aperture|iso|shutter)\b",
+        r"\b(angle|pov|perspective|view|close.?up|wide.?angle|macro|telephoto|fisheye|tilt.?shift)\b",
+        r"\b(rule of thirds|golden ratio|leading lines|negative space|framing|composition)\b",
+        r"\b(35mm|50mm|85mm|24mm|anamorphic|prime|zoom|bokeh|dof|shallow|deep focus)\b",
     ],
     "style_medium": [
-        r'\b(style|art style|medium|technique|rendered in|painted in|drawn in|digital art|oil painting|watercolor|pencil|ink|charcoal)\b',
-        r'\b(hyperrealistic|photorealistic|impressionist|expressionist|surrealist|abstract|minimalist|maximalist)\b',
-        r'\b(4k|8k|hd|ultra.?hd|high.?res|detailed|intricate|sharp|crisp|smooth|rough|textured)\b',
+        r"\b(style|art style|medium|technique|rendered in|painted in|drawn in|digital art|oil painting|watercolor|pencil|ink|charcoal)\b",
+        r"\b(hyperrealistic|photorealistic|impressionist|expressionist|surrealist|abstract|minimalist|maximalist)\b",
+        r"\b(4k|8k|hd|ultra.?hd|high.?res|detailed|intricate|sharp|crisp|smooth|rough|textured)\b",
     ],
     "micro_details": [
-        r'\b(texture|fabric|material|surface|pattern|grain|noise|imperfection|scratch|wear|aged|weathered)\b',
-        r'\b(hair|skin|eyes|lips|hands|fingers|nails|jewelry|accessories|tattoo|scar|freckle)\b',
+        r"\b(texture|fabric|material|surface|pattern|grain|noise|imperfection|scratch|wear|aged|weathered)\b",
+        r"\b(hair|skin|eyes|lips|hands|fingers|nails|jewelry|accessories|tattoo|scar|freckle)\b",
     ],
 }
 
 INLINE_NEGATIVE_PATTERNS = [
-    r'\bbut\s+(?:no|not|without|avoid|excluding|except)\b(.+?)(?:\.|,\s+(?:and|but|with)|$)',
-    r'\bwithout\b\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)',
-    r'\bno\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)',
-    r'\bavoid(?:ing)?\b\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)',
-    r'\bexcluding\b\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)',
-    r'\bexcept\s+(?:for\s+)?(.+?)(?:\.|,\s+(?:and|but|with)|$)',
-    r'\bnot\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)',
+    r"\bbut\s+(?:no|not|without|avoid|excluding|except)\b(.+?)(?:\.|,\s+(?:and|but|with)|$)",
+    r"\bwithout\b\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)",
+    r"\bno\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)",
+    r"\bavoid(?:ing)?\b\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)",
+    r"\bexcluding\b\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)",
+    r"\bexcept\s+(?:for\s+)?(.+?)(?:\.|,\s+(?:and|but|with)|$)",
+    r"\bnot\s+(.+?)(?:\.|,\s+(?:and|but|with)|$)",
 ]
 
 
 @dataclass(slots=True)
 class ParsedLongPrompt:
     """Result of hierarchical prompt parsing."""
+
     raw: str
-    positive_text: str                          # prompt with inline negatives stripped
-    inline_negatives: List[str]                 # extracted negative clauses
-    layers: Dict[str, str]                      # semantic layer -> text
-    layer_weights: Dict[str, float]             # importance weight per layer
+    positive_text: str  # prompt with inline negatives stripped
+    inline_negatives: List[str]  # extracted negative clauses
+    layers: Dict[str, str]  # semantic layer -> text
+    layer_weights: Dict[str, float]  # importance weight per layer
     token_priority: Optional[torch.Tensor] = None  # (L,) per-token importance
 
 
 # ---------------------------------------------------------------------------
 # Inline Negative Extractor
 # ---------------------------------------------------------------------------
+
 
 class InlineNegativeExtractor:
     """
@@ -107,20 +109,21 @@ class InlineNegativeExtractor:
 
         for pattern in INLINE_NEGATIVE_PATTERNS:
             for match in re.finditer(pattern, cleaned, re.IGNORECASE):
-                neg_text = match.group(1).strip().rstrip('.,;')
+                neg_text = match.group(1).strip().rstrip(".,;")
                 if neg_text:
                     negatives.append(neg_text)
             # Remove matched spans from cleaned prompt
-            cleaned = re.sub(pattern, ' ', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(pattern, " ", cleaned, flags=re.IGNORECASE)
 
         # Clean up extra whitespace and punctuation
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip().strip('.,;')
+        cleaned = re.sub(r"\s+", " ", cleaned).strip().strip(".,;")
         return cleaned, negatives
 
 
 # ---------------------------------------------------------------------------
 # Hierarchical Prompt Parser
 # ---------------------------------------------------------------------------
+
 
 class HierarchicalPromptParser:
     """
@@ -132,20 +135,19 @@ class HierarchicalPromptParser:
     """
 
     LAYER_WEIGHTS = {
-        "primary_subject":   1.0,
-        "camera_technical":  0.9,
+        "primary_subject": 1.0,
+        "camera_technical": 0.9,
         "secondary_elements": 0.8,
-        "mood_lighting":     0.7,
-        "style_medium":      0.6,
-        "micro_details":     0.5,
-        "unclassified":      0.65,
+        "mood_lighting": 0.7,
+        "style_medium": 0.6,
+        "micro_details": 0.5,
+        "unclassified": 0.65,
     }
 
     def __init__(self):
         self.neg_extractor = InlineNegativeExtractor()
         self._compiled = {
-            layer: [re.compile(p, re.IGNORECASE) for p in patterns]
-            for layer, patterns in LAYER_PATTERNS.items()
+            layer: [re.compile(p, re.IGNORECASE) for p in patterns] for layer, patterns in LAYER_PATTERNS.items()
         }
 
     def _classify_clause(self, clause: str) -> str:
@@ -161,7 +163,7 @@ class HierarchicalPromptParser:
         positive_text, inline_negatives = self.neg_extractor.extract(prompt)
 
         # Step 2: split into clauses (comma / semicolon / period separated)
-        clauses = re.split(r'[,;.]\s*', positive_text)
+        clauses = re.split(r"[,;.]\s*", positive_text)
         clauses = [c.strip() for c in clauses if c.strip()]
 
         # Step 3: classify each clause
@@ -172,7 +174,7 @@ class HierarchicalPromptParser:
             layers[layer].append(clause)
 
         # Step 4: merge clauses per layer
-        layer_texts = {k: ', '.join(v) for k, v in layers.items() if v}
+        layer_texts = {k: ", ".join(v) for k, v in layers.items() if v}
 
         # Step 5: compute layer weights
         layer_weights = {k: self.LAYER_WEIGHTS.get(k, 0.65) for k in layer_texts}
@@ -189,6 +191,7 @@ class HierarchicalPromptParser:
 # ---------------------------------------------------------------------------
 # Chunked Text Encoder
 # ---------------------------------------------------------------------------
+
 
 class ChunkedTextEncoder(nn.Module):
     """
@@ -219,9 +222,7 @@ class ChunkedTextEncoder(nn.Module):
         self.hidden_size = hidden_size
 
         # Cross-chunk attention: lets chunks attend to each other
-        self.cross_chunk_attn = nn.MultiheadAttention(
-            hidden_size, num_heads=8, batch_first=True, dropout=0.0
-        )
+        self.cross_chunk_attn = nn.MultiheadAttention(hidden_size, num_heads=8, batch_first=True, dropout=0.0)
         self.cross_chunk_norm = nn.LayerNorm(hidden_size)
 
         # Priority weighter: up-weights important tokens
@@ -292,6 +293,7 @@ class ChunkedTextEncoder(nn.Module):
 # Prompt Priority Weighter
 # ---------------------------------------------------------------------------
 
+
 class PromptPriorityWeighter(nn.Module):
     """
     Assigns importance weights to text tokens so critical tokens
@@ -306,11 +308,11 @@ class PromptPriorityWeighter(nn.Module):
 
     # High-priority keywords (get boosted weight)
     HIGH_PRIORITY = re.compile(
-        r'\b(portrait|character|person|woman|man|girl|boy|creature|'
-        r'shot on|photographed|lens|mm|angle|pov|perspective|'
-        r'close.?up|wide.?angle|bird.?s.?eye|worm.?s.?eye|'
-        r'first.?person|third.?person|over.?the.?shoulder)\b',
-        re.IGNORECASE
+        r"\b(portrait|character|person|woman|man|girl|boy|creature|"
+        r"shot on|photographed|lens|mm|angle|pov|perspective|"
+        r"close.?up|wide.?angle|bird.?s.?eye|worm.?s.?eye|"
+        r"first.?person|third.?person|over.?the.?shoulder)\b",
+        re.IGNORECASE,
     )
 
     def __init__(self, hidden_size: int):
@@ -357,6 +359,7 @@ class PromptPriorityWeighter(nn.Module):
 # ---------------------------------------------------------------------------
 # Negative Prompt Fusion
 # ---------------------------------------------------------------------------
+
 
 class NegativePromptFusion(nn.Module):
     """
@@ -475,6 +478,7 @@ class NegativePromptFusion(nn.Module):
 # ---------------------------------------------------------------------------
 # Long Prompt Controller (top-level)
 # ---------------------------------------------------------------------------
+
 
 class LongPromptController:
     """

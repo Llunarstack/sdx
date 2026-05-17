@@ -3,7 +3,7 @@ Helpers for built-in content-control tag packs (see ``content_control_tags_built
 
 Legacy CSV layout (removed from the repo) used columns::
 
-    pack,mode,tag
+    pack, mode, tag
 
 - ``pack`` — logical name (e.g. ``pose_positive``, ``sfw_positive``).
 - ``mode`` — sub-key for dict-valued packs; use ``_`` for flat lists (single mode).

@@ -16,9 +16,7 @@ from pathlib import Path
 from . import edit_masks, sample_edit_runner, segmentation_to_mask  # noqa: F401
 
 _pkg_dir = Path(__file__).resolve().parent
-_SUBMODULE_NAMES: frozenset[str] = frozenset(
-    p.stem for p in _pkg_dir.glob("*.py") if p.name != "__init__.py"
-)
+_SUBMODULE_NAMES: frozenset[str] = frozenset(p.stem for p in _pkg_dir.glob("*.py") if p.name != "__init__.py")
 # Subpackage module names (stable order for tab-completion / ``from pkg import *``).
 __all__: list[str] = sorted(_SUBMODULE_NAMES)  # pyright: ignore[reportUnsupportedDunderAll]
 

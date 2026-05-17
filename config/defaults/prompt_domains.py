@@ -292,8 +292,7 @@ ANTI_AI_LOOK_NEGATIVE = (
 
 # Stronger de-AI / de-CG pack (use with --anti-ai-pack strong or NATURAL_LOOK_POSITIVE_DEEP).
 ANTI_AI_LOOK_NEGATIVE_STRONG = (
-    ANTI_AI_LOOK_NEGATIVE
-    + ", midjourney look, generic AI illustration, same-face syndrome, "
+    ANTI_AI_LOOK_NEGATIVE + ", midjourney look, generic AI illustration, same-face syndrome, "
     "floating specular highlights, subsurface abuse, waxy teeth, dead glassy eyes, "
     "uniform skin porelessness, beauty filter face, snapchat smooth skin, "
     "tilt-shift miniature fake, tilt shift cliché, lens blur fake, computational hdr, "
@@ -308,8 +307,7 @@ NATURAL_LOOK_POSITIVE = (
 
 # Deeper natural / human-capture cues (prepend with --naturalize-deep or human-media packs).
 NATURAL_LOOK_POSITIVE_DEEP = (
-    NATURAL_LOOK_POSITIVE
-    + ", authentic photograph, candid moment, imperfect but real, "
+    NATURAL_LOOK_POSITIVE + ", authentic photograph, candid moment, imperfect but real, "
     "shot on camera, natural white balance, organic grain, micro-contrast natural, "
     "shallow depth of field natural, lens character subtle"
 )

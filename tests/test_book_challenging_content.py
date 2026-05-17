@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pipelines.book_comic import book_challenging_content
 from pipelines.book_comic.consistency_helpers import positive_block_from_mapping
+
+
 def test_challenge_pack_positive_mature_coherence() -> None:
     frag = book_challenging_content.challenge_pack_positive("mature_coherence")
     assert "mature-rated" in frag

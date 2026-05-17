@@ -116,7 +116,11 @@ def resolve_style_genome_for_args(args: Any, base_prompt: str) -> Optional[Style
                 genomes = [pg] + [g for g in genomes if g.id != pg.id]
         if bool(getattr(args, "style_genome_hypermutate", False)) and genomes:
             genomes = [
-                hypermutate(g, intensity=float(getattr(args, "style_chaos_level", 0.85) or 0.85), seed=int(getattr(args, "seed", 42)))
+                hypermutate(
+                    g,
+                    intensity=float(getattr(args, "style_chaos_level", 0.85) or 0.85),
+                    seed=int(getattr(args, "seed", 42)),
+                )
                 for g in genomes
             ]
         clauses = str(getattr(args, "prompt_clauses", "") or "")

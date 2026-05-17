@@ -51,7 +51,7 @@ def _render_block(names: list[str]) -> str:
         "_NATIVE_EXPORTS: frozenset[str] = frozenset(",
         "    {",
     ]
-    lines.extend(f'        {repr(n)},' for n in names)
+    lines.extend(f"        {repr(n)}," for n in names)
     lines.extend(["    }", ")", _END, ""])
     return "\n".join(lines)
 

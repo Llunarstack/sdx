@@ -159,6 +159,7 @@ if _TORCH_AVAILABLE:
         ]
     )
 else:
+
     def __getattr__(name: str):  # type: ignore[misc]
         raise ModuleNotFoundError(
             f"torch is required for diffusion.{name}, but torch is not installed in this environment."

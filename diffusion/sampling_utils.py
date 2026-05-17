@@ -45,7 +45,7 @@ def _gaussian_blur_torch(x: torch.Tensor, sigma: float) -> torch.Tensor:
     r = min(7, max(1, int(s * 2)))
     k = 2 * r + 1
     coords = torch.arange(-r, r + 1, device=device, dtype=torch.float32)
-    g1d = torch.exp(-(coords ** 2) / (2.0 * s * s + 1e-8))
+    g1d = torch.exp(-(coords**2) / (2.0 * s * s + 1e-8))
     g1d = g1d / (g1d.sum() + 1e-8)
     k2d = torch.outer(g1d, g1d)
     k2d = k2d / (k2d.sum() + 1e-8)

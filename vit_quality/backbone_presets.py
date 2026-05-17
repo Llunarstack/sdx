@@ -32,4 +32,3 @@ def describe_presets_for_help() -> str:
         lines.append(f"  {name} — {why}")
     lines.append(f"Tier shortcuts (not auto-resolved; use full timm name): {TIER_ALIASES}")
     return "\n".join(lines)
-

@@ -75,9 +75,7 @@ def parse_num_ar_blocks_from_row(row: Mapping[str, Any], *, max_nested_depth: in
     return _parse_num_ar_blocks_from_row_depth(row, depth=0, max_depth=max_nested_depth)
 
 
-def _parse_num_ar_blocks_from_row_depth(
-    row: Mapping[str, Any], *, depth: int, max_depth: int
-) -> int:
+def _parse_num_ar_blocks_from_row_depth(row: Mapping[str, Any], *, depth: int, max_depth: int) -> int:
     for key in _AR_FLAT_KEYS:
         if key in row:
             return normalize_num_ar_blocks(row.get(key))
@@ -227,4 +225,3 @@ __all__ = [
     "tag_manifest_row_ar",
     "vit_text_total_dim",
 ]
-

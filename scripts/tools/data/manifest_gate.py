@@ -32,7 +32,9 @@ def _try_import_pil() -> bool:
         return False
 
 
-def _run_prompt_lint(manifest: Path, *, min_caption_len_chars: int, max_caption_tokens: int, fail_on_overlap: bool) -> Dict[str, Any]:
+def _run_prompt_lint(
+    manifest: Path, *, min_caption_len_chars: int, max_caption_tokens: int, fail_on_overlap: bool
+) -> Dict[str, Any]:
     from utils.prompt.prompt_lint import PromptLintOptions, lint_jsonl_path
 
     opts = PromptLintOptions(
@@ -74,7 +76,9 @@ def _run_caption_hygiene(manifest: Path, *, report_dups: bool, report_overlap: b
                 fp = caption_fingerprint(cap, algorithm="sha256", normalize_first=True)
                 dup_buckets[fp] += 1
             if report_overlap and neg.strip():
-                _i, _u, j = pos_neg_token_overlap(normalize_caption_for_training(cap), normalize_caption_for_training(neg))
+                _i, _u, j = pos_neg_token_overlap(
+                    normalize_caption_for_training(cap), normalize_caption_for_training(neg)
+                )
                 if _i > 0 and j > 0.0:
                     overlap_rows += 1
 
@@ -192,7 +196,9 @@ def main() -> int:
     ap.add_argument("--report-dups", action="store_true")
     ap.add_argument("--report-overlap", action="store_true")
     ap.add_argument("--fail-on-dup-groups", type=int, default=0, help="Fail if dup_groups > N (0=off)")
-    ap.add_argument("--fail-on-caption-overlap-rows", type=int, default=0, help="Fail if pos/neg overlap rows > N (0=off)")
+    ap.add_argument(
+        "--fail-on-caption-overlap-rows", type=int, default=0, help="Fail if pos/neg overlap rows > N (0=off)"
+    )
 
     # Image QC (optional)
     ap.add_argument("--image-qc", action="store_true", help="Run image sharpness/contrast QC (requires PIL).")
@@ -246,9 +252,9 @@ def main() -> int:
         args.fail_on_dup_groups
     ):
         fail = True
-    if int(args.fail_on_caption_overlap_rows or 0) > 0 and int(report["caption_hygiene"].get("pos_neg_overlap_rows", 0)) > int(
-        args.fail_on_caption_overlap_rows
-    ):
+    if int(args.fail_on_caption_overlap_rows or 0) > 0 and int(
+        report["caption_hygiene"].get("pos_neg_overlap_rows", 0)
+    ) > int(args.fail_on_caption_overlap_rows):
         fail = True
     if isinstance(report.get("image_qc"), dict) and bool(report["image_qc"].get("fail", False)):
         fail = True
@@ -275,4 +281,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

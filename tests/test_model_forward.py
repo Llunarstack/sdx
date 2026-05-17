@@ -17,9 +17,11 @@ import torch
 # Config → build kwargs
 # ---------------------------------------------------------------------------
 
+
 class TestBuildKwargs:
     def test_default_config_builds(self):
         from config.train_config import TrainConfig, get_dit_build_kwargs
+
         cfg = TrainConfig()
         kw = get_dit_build_kwargs(cfg, class_dropout_prob=0.0)
         assert "input_size" in kw
@@ -28,30 +30,35 @@ class TestBuildKwargs:
 
     def test_text_dim_xxl(self):
         from config.train_config import TrainConfig, get_dit_build_kwargs
+
         cfg = TrainConfig(text_encoder="google/t5-v1_1-xxl")
         kw = get_dit_build_kwargs(cfg)
         assert kw["text_dim"] == 4096
 
     def test_text_dim_xl(self):
         from config.train_config import TrainConfig, get_dit_build_kwargs
+
         cfg = TrainConfig(text_encoder="google/t5-v1_1-xl")
         kw = get_dit_build_kwargs(cfg)
         assert kw["text_dim"] == 1024
 
     def test_class_dropout_override(self):
         from config.train_config import TrainConfig, get_dit_build_kwargs
+
         cfg = TrainConfig(caption_dropout_prob=0.1)
         kw = get_dit_build_kwargs(cfg, class_dropout_prob=0.0)
         assert kw["class_dropout_prob"] == 0.0
 
     def test_latent_size_256(self):
         from config.train_config import TrainConfig, get_dit_build_kwargs
+
         cfg = TrainConfig(image_size=256)
         kw = get_dit_build_kwargs(cfg)
         assert kw["input_size"] == 32
 
     def test_latent_size_512(self):
         from config.train_config import TrainConfig, get_dit_build_kwargs
+
         cfg = TrainConfig(image_size=512)
         kw = get_dit_build_kwargs(cfg)
         assert kw["input_size"] == 64
@@ -60,6 +67,7 @@ class TestBuildKwargs:
 # ---------------------------------------------------------------------------
 # DiT-XL/2-Text forward pass (CPU, small latent)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def dit_xl_model():
@@ -123,9 +131,11 @@ class TestDiTForward:
 # RAELatentBridge
 # ---------------------------------------------------------------------------
 
+
 class TestRAELatentBridge:
     def test_rae_to_dit_shape(self):
         from models.rae_latent_bridge import RAELatentBridge
+
         bridge = RAELatentBridge(rae_channels=16, dit_channels=4)
         z = torch.randn(2, 16, 8, 8)
         out = bridge.rae_to_dit(z)
@@ -133,6 +143,7 @@ class TestRAELatentBridge:
 
     def test_dit_to_rae_shape(self):
         from models.rae_latent_bridge import RAELatentBridge
+
         bridge = RAELatentBridge(rae_channels=16, dit_channels=4)
         z = torch.randn(2, 4, 8, 8)
         out = bridge.dit_to_rae(z)
@@ -140,6 +151,7 @@ class TestRAELatentBridge:
 
     def test_cycle_loss_positive(self):
         from models.rae_latent_bridge import RAELatentBridge
+
         bridge = RAELatentBridge(rae_channels=16, dit_channels=4)
         z = torch.randn(2, 16, 8, 8)
         loss = bridge.cycle_loss(z)
@@ -148,6 +160,7 @@ class TestRAELatentBridge:
 
     def test_invalid_channels_raises(self):
         from models.rae_latent_bridge import RAELatentBridge
+
         with pytest.raises(ValueError):
             RAELatentBridge(rae_channels=0, dit_channels=4)
 
@@ -156,16 +169,20 @@ class TestRAELatentBridge:
 # Latent geometry helpers
 # ---------------------------------------------------------------------------
 
+
 class TestLatentGeometry:
     def test_num_patch_tokens(self):
         from sdx_native.latent_geometry import num_patch_tokens
+
         # 256px image, VAE scale 8, patch size 2 → 32×32 latent → 16×16 patches → 256 tokens
         assert num_patch_tokens(256, 8, 2) == 256
 
     def test_num_patch_tokens_512(self):
         from sdx_native.latent_geometry import num_patch_tokens
+
         assert num_patch_tokens(512, 8, 2) == 1024
 
     def test_invalid_returns_zero(self):
         from sdx_native.latent_geometry import num_patch_tokens
+
         assert num_patch_tokens(255, 8, 2) == 0  # not divisible

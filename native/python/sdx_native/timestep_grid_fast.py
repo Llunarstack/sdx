@@ -34,7 +34,7 @@ def cosine_spacing_int(num_steps: int, t_max: int, t_min: int = 0) -> np.ndarray
     """More steps near high noise (cosine spacing in index space)."""
     if num_steps < 1:
         raise ValueError("num_steps >= 1")
-    u = (1.0 - np.cos(np.linspace(0, np.pi / 2, num_steps)))  # 0..1 monotonic
+    u = 1.0 - np.cos(np.linspace(0, np.pi / 2, num_steps))  # 0..1 monotonic
     ts = t_max - u * (t_max - t_min)
     return np.round(ts).astype(np.int64).clip(t_min, t_max)
 

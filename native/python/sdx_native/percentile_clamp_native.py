@@ -29,10 +29,10 @@ class CudaPercentileClampLib:
             return
         lib.sdx_cuda_percentile_clamp_f32.argtypes = [
             ctypes.c_void_p,  # data_host (B, row_len), modified in-place
-            ctypes.c_int,     # B
-            ctypes.c_int,     # row_len
-            ctypes.c_float,   # quantile
-            ctypes.c_float,   # floor_val
+            ctypes.c_int,  # B
+            ctypes.c_int,  # row_len
+            ctypes.c_float,  # quantile
+            ctypes.c_float,  # floor_val
         ]
         lib.sdx_cuda_percentile_clamp_f32.restype = ctypes.c_int
         self._lib = lib

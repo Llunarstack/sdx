@@ -81,4 +81,3 @@ def apply_step_plan_to_kwargs(
     mk["cfg_scale"] = float(plan.cfg_scale)
     mk["refine_strength"] = float(plan.refine_strength)
     return mk
-

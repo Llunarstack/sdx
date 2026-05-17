@@ -1,6 +1,6 @@
 """
 SNR / alpha_cumprod helpers for schedule inspection and tooling.
- 
+
 Uses the Rust ``sdx_diffusion_math`` cdylib when built (no NumPy overhead,
 no GIL contention). Falls back to pure NumPy otherwise.
 
@@ -22,6 +22,7 @@ def alpha_cumprod_from_betas(betas: NDArray[Any]) -> NDArray[Any]:
     """``alpha_cumprod[t] = prod_{s<=t} (1 - beta[s])``."""
     try:
         from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust
+
         result = maybe_alpha_cumprod_rust(np.asarray(betas, dtype=np.float64))
         if result is not None:
             return result
@@ -35,6 +36,7 @@ def snr_from_alpha_cumprod(alpha_cumprod: NDArray[Any]) -> NDArray[Any]:
     """``SNR(t) = alpha_bar[t] / (1 - alpha_bar[t])`` for VP diffusion."""
     try:
         from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust
+
         result = maybe_snr_from_alpha_cumprod_rust(np.asarray(alpha_cumprod, dtype=np.float64))
         if result is not None:
             return result

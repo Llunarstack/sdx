@@ -164,9 +164,11 @@ _CULTURAL_CONTEXTS: Dict[str, List[str]] = {
 # Mutation strategies
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class MutationResult:
     """A single prompt mutation with metadata."""
+
     prompt: str
     strategy: str
     changes: List[str] = field(default_factory=list)
@@ -226,7 +228,7 @@ class PromptMutationEngine:
         strategy_cycle = list(self.strategies) * (self.n_mutations // len(self.strategies) + 1)
         rng.shuffle(strategy_cycle)
 
-        for strategy in strategy_cycle[:self.n_mutations]:
+        for strategy in strategy_cycle[: self.n_mutations]:
             try:
                 mutation = self._apply_strategy(prompt, strategy, rng)
                 if mutation and mutation.prompt != prompt:
@@ -242,7 +244,7 @@ class PromptMutationEngine:
                 seen.add(r.prompt)
                 deduped.append(r)
 
-        return deduped[:self.n_mutations + 1]
+        return deduped[: self.n_mutations + 1]
 
     def _apply_strategy(
         self,
@@ -292,7 +294,7 @@ class PromptMutationEngine:
             return None
 
         return MutationResult(
-            prompt=", ".join(new_parts)[:self.max_length],
+            prompt=", ".join(new_parts)[: self.max_length],
             strategy="synonym",
             changes=changes,
             confidence=0.8,
@@ -316,7 +318,7 @@ class PromptMutationEngine:
 
         new_prompt = prompt + ", " + ", ".join(additions)
         return MutationResult(
-            prompt=new_prompt[:self.max_length],
+            prompt=new_prompt[: self.max_length],
             strategy="specificity",
             changes=additions,
             confidence=0.9,
@@ -332,7 +334,7 @@ class PromptMutationEngine:
                 if anchor.lower() not in prompt_lower:
                     new_prompt = f"{prompt}, {anchor}"
                     return MutationResult(
-                        prompt=new_prompt[:self.max_length],
+                        prompt=new_prompt[: self.max_length],
                         strategy="style_anchor",
                         changes=[anchor],
                         confidence=0.85,
@@ -370,7 +372,7 @@ class PromptMutationEngine:
             return None
 
         return MutationResult(
-            prompt=new_prompt[:self.max_length],
+            prompt=new_prompt[: self.max_length],
             strategy="reorder",
             changes=["moved subject to front"],
             confidence=0.75,
@@ -402,7 +404,7 @@ class PromptMutationEngine:
             return None
 
         return MutationResult(
-            prompt=", ".join(new_parts)[:self.max_length],
+            prompt=", ".join(new_parts)[: self.max_length],
             strategy="emphasis",
             changes=[f"emphasized {emphasized} elements"],
             confidence=0.7,
@@ -412,8 +414,7 @@ class PromptMutationEngine:
         """Add quality anchor tags if missing."""
         prompt_lower = prompt.lower()
         quality_present = any(
-            q in prompt_lower
-            for q in ["masterpiece", "best quality", "award", "professional", "8k", "4k"]
+            q in prompt_lower for q in ["masterpiece", "best quality", "award", "professional", "8k", "4k"]
         )
 
         if quality_present:
@@ -423,7 +424,7 @@ class PromptMutationEngine:
         new_prompt = f"{anchor}, {prompt}"
 
         return MutationResult(
-            prompt=new_prompt[:self.max_length],
+            prompt=new_prompt[: self.max_length],
             strategy="quality_anchor",
             changes=[anchor],
             confidence=0.85,
@@ -439,7 +440,7 @@ class PromptMutationEngine:
                 if context.lower() not in prompt_lower:
                     new_prompt = f"{prompt}, {context}"
                     return MutationResult(
-                        prompt=new_prompt[:self.max_length],
+                        prompt=new_prompt[: self.max_length],
                         strategy="cultural_context",
                         changes=[context],
                         confidence=0.8,
@@ -453,8 +454,7 @@ class PromptMutationEngine:
 
         # Only add if not already heavily technical
         technical_count = sum(
-            1 for t in ["depth of field", "bokeh", "f/", "mm", "iso", "aperture", "shutter"]
-            if t in prompt_lower
+            1 for t in ["depth of field", "bokeh", "f/", "mm", "iso", "aperture", "shutter"] if t in prompt_lower
         )
         if technical_count >= 2:
             return None
@@ -484,7 +484,7 @@ class PromptMutationEngine:
         if spec.lower() not in prompt_lower:
             new_prompt = f"{prompt}, {spec}"
             return MutationResult(
-                prompt=new_prompt[:self.max_length],
+                prompt=new_prompt[: self.max_length],
                 strategy="technical_spec",
                 changes=[spec],
                 confidence=0.75,
@@ -529,7 +529,7 @@ class PromptMutationEngine:
             return None
 
         return MutationResult(
-            prompt=", ".join(new_parts)[:self.max_length],
+            prompt=", ".join(new_parts)[: self.max_length],
             strategy="negative_inversion",
             changes=changes,
             confidence=0.7,
@@ -540,10 +540,12 @@ class PromptMutationEngine:
 # Full mutation + generation + pick pipeline
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class MutationPipelineResult:
     """Result of the full mutation + generation + pick pipeline."""
-    best_image: Any                         # numpy array (H, W, 3) uint8
+
+    best_image: Any  # numpy array (H, W, 3) uint8
     best_prompt: str
     best_score: float
     original_prompt: str
@@ -626,6 +628,7 @@ class MutationGenerationPipeline:
                 images.append(img)
             except Exception as e:
                 import sys
+
                 print(f"Generation failed for mutation {i} ({mutation.strategy}): {e}", file=sys.stderr)
                 images.append(None)
 
@@ -640,6 +643,7 @@ class MutationGenerationPipeline:
         # Score all images
         try:
             from utils.quality.test_time_pick import pick_best_indices
+
             best_idx, scores = pick_best_indices(
                 valid_images,
                 original_prompt,  # Score against original intent

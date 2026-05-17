@@ -47,4 +47,3 @@ def test_recommend_photo_post_profile_prefers_realism_metric():
     assert rec["pick_best_metric"] == "combo_realism"
     assert float(rec["photo_post_strength"]) >= 0.7
     assert rec["photo_grain_style"] == "fine_35mm"
-

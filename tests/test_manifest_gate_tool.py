@@ -19,4 +19,3 @@ def test_manifest_gate_smoke(tmp_path: Path):
     finally:
         _sys.argv = old
     assert rc == 0
-

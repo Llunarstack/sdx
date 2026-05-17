@@ -107,7 +107,10 @@ def build_character_prompt_additions(
     if not uncensored_mode:
         lowered = [t.lower() for t in positive_tokens]
         if any("futa" in t or "trap" in t for t in lowered):
-            positive_tokens = ["androgynous presentation" if ("futa" in t.lower() or "trap" in t.lower()) else t for t in positive_tokens]
+            positive_tokens = [
+                "androgynous presentation" if ("futa" in t.lower() or "trap" in t.lower()) else t
+                for t in positive_tokens
+            ]
             negative_tokens.append("explicit genital content")
 
     # Uncensored mode: remove anti-explicit blocks if present in provided negatives.

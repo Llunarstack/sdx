@@ -33,4 +33,3 @@ def test_infer_auto_original_character_style_context_bias():
     assert ("stylized topology-friendly hair silhouette" in prof.visual_traits) or (
         "clean anime face planes" in prof.visual_traits
     )
-

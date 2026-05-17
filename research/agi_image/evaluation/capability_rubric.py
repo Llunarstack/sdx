@@ -47,10 +47,7 @@ def aggregate_stub(dimensions_list: List[CapabilityDimensions]) -> CapabilityDim
     if not dimensions_list:
         return CapabilityDimensions()
     n = float(len(dimensions_list))
-    accum = [
-        sum(getattr(x, f.name) for x in dimensions_list) / n
-        for f in fields(CapabilityDimensions)
-    ]
+    accum = [sum(getattr(x, f.name) for x in dimensions_list) / n for f in fields(CapabilityDimensions)]
     return CapabilityDimensions(*accum)
 
 

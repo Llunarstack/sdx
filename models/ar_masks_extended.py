@@ -31,9 +31,7 @@ def block_grid_dims(h: int, w: int, num_ar_blocks: int) -> Tuple[int, int]:
     return bh, bw
 
 
-def patch_to_block_indices(
-    i: int, j: int, h: int, w: int, num_ar_blocks: int
-) -> Tuple[int, int]:
+def patch_to_block_indices(i: int, j: int, h: int, w: int, num_ar_blocks: int) -> Tuple[int, int]:
     """Map patch row,col to block row,col."""
     bh, bw = block_grid_dims(h, w, num_ar_blocks)
     return i // bh, j // bw

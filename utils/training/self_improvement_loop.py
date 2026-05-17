@@ -59,15 +59,17 @@ _PRETRAINED = Path(__file__).resolve().parents[2] / "pretrained"
 # Quality filter
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class QualityFilterConfig:
     """Configuration for quality filtering of self-generated images."""
-    min_edge_sharpness: float = 150.0   # Laplacian variance threshold
-    min_clip_score: float = 0.22        # CLIP image-text similarity
-    min_aesthetic_score: float = 0.45   # LAION aesthetic score
-    min_combined_score: float = 0.55    # Combined weighted score
-    max_aspect_ratio: float = 4.0       # Reject extreme aspect ratios
-    min_resolution: int = 128           # Minimum side length
+
+    min_edge_sharpness: float = 150.0  # Laplacian variance threshold
+    min_clip_score: float = 0.22  # CLIP image-text similarity
+    min_aesthetic_score: float = 0.45  # LAION aesthetic score
+    min_combined_score: float = 0.55  # Combined weighted score
+    max_aspect_ratio: float = 4.0  # Reject extreme aspect ratios
+    min_resolution: int = 128  # Minimum side length
 
 
 class QualityFilter:
@@ -94,11 +96,7 @@ class QualityFilter:
                 + 0.114 * image_rgb[:, :, 2].astype(float)
             )
             # Simple Laplacian
-            lap = (
-                -gray[:-2, 1:-1] - gray[2:, 1:-1]
-                - gray[1:-1, :-2] - gray[1:-1, 2:]
-                + 4 * gray[1:-1, 1:-1]
-            )
+            lap = -gray[:-2, 1:-1] - gray[2:, 1:-1] - gray[1:-1, :-2] - gray[1:-1, 2:] + 4 * gray[1:-1, 1:-1]
             return float(lap.var())
         except Exception:
             return 0.0
@@ -119,8 +117,11 @@ class QualityFilter:
 
             pil = Image.fromarray(image_rgb)
             inputs = self._clip_processor(
-                text=[prompt[:77]], images=[pil],
-                return_tensors="pt", padding=True, truncation=True,
+                text=[prompt[:77]],
+                images=[pil],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
             )
             with torch.no_grad():
                 outputs = self._clip_model(**inputs)
@@ -157,6 +158,7 @@ class QualityFilter:
 # Caption generator (moondream2)
 # ---------------------------------------------------------------------------
 
+
 class MoondreamCaptioner:
     """
     Generate detailed captions for images using moondream2.
@@ -179,9 +181,8 @@ class MoondreamCaptioner:
             return False
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                str(moondream_path), trust_remote_code=True
-            )
+
+            self._tokenizer = AutoTokenizer.from_pretrained(str(moondream_path), trust_remote_code=True)
             self._model = AutoModelForCausalLM.from_pretrained(
                 str(moondream_path),
                 trust_remote_code=True,
@@ -255,9 +256,11 @@ class MoondreamCaptioner:
 # Self-improvement cycle
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class CycleStats:
     """Statistics from one self-improvement cycle."""
+
     cycle_id: int
     total_generated: int = 0
     passed_quality: int = 0
@@ -272,15 +275,16 @@ class CycleStats:
 @dataclass(slots=True)
 class SelfImprovementConfig:
     """Configuration for the self-improvement flywheel."""
+
     output_dir: str = "./self_improvement_data"
     quality_threshold: float = 0.55
-    n_per_prompt: int = 4           # Generate N images per prompt, keep best
-    caption_style: str = "detailed" # "detailed" | "danbooru" | "concise"
+    n_per_prompt: int = 4  # Generate N images per prompt, keep best
+    caption_style: str = "detailed"  # "detailed" | "danbooru" | "concise"
     max_samples_per_cycle: int = 1000
     min_samples_per_cycle: int = 10  # Skip cycle if fewer than this pass
     base_seed: int = 42
-    save_rejected: bool = False      # Save rejected images for analysis
-    mix_with_original: bool = True   # Include original prompt in caption
+    save_rejected: bool = False  # Save rejected images for analysis
+    mix_with_original: bool = True  # Include original prompt in caption
     device: str = "cpu"
 
 
@@ -371,9 +375,8 @@ class SelfImprovementFlywheel:
                 if not self.quality_filter.passes(scores):
                     if self.cfg.save_rejected:
                         from PIL import Image as _PIL
-                        _PIL.fromarray(img).save(
-                            images_dir / f"rejected_p{prompt_idx:04d}_s{seed}.png"
-                        )
+
+                        _PIL.fromarray(img).save(images_dir / f"rejected_p{prompt_idx:04d}_s{seed}.png")
                     continue
 
                 stats.passed_quality += 1
@@ -390,6 +393,7 @@ class SelfImprovementFlywheel:
                 img_path = images_dir / img_filename
                 try:
                     from PIL import Image as _PIL
+
                     _PIL.fromarray(img).save(img_path)
                 except Exception as e:
                     _log.warning(f"Failed to save image: {e}")
@@ -434,17 +438,21 @@ class SelfImprovementFlywheel:
 
         stats_path = cycle_dir / "stats.json"
         with open(stats_path, "w") as f:
-            json.dump({
-                "cycle_id": stats.cycle_id,
-                "total_generated": stats.total_generated,
-                "passed_quality": stats.passed_quality,
-                "added_to_dataset": stats.added_to_dataset,
-                "mean_quality_score": stats.mean_quality_score,
-                "mean_clip_score": stats.mean_clip_score,
-                "prompts_used": stats.prompts_used,
-                "duration_seconds": stats.duration_seconds,
-                "manifest_path": stats.manifest_path,
-            }, f, indent=2)
+            json.dump(
+                {
+                    "cycle_id": stats.cycle_id,
+                    "total_generated": stats.total_generated,
+                    "passed_quality": stats.passed_quality,
+                    "added_to_dataset": stats.added_to_dataset,
+                    "mean_quality_score": stats.mean_quality_score,
+                    "mean_clip_score": stats.mean_clip_score,
+                    "prompts_used": stats.prompts_used,
+                    "duration_seconds": stats.duration_seconds,
+                    "manifest_path": stats.manifest_path,
+                },
+                f,
+                indent=2,
+            )
 
         _log.info(
             f"Cycle {cycle_id} complete: "
@@ -490,11 +498,7 @@ class SelfImprovementFlywheel:
                 accumulated_manifests.append(stats.manifest_path)
 
             # Trigger training if requested
-            if (
-                train_fn is not None
-                and (cycle_id + 1) % train_every_n_cycles == 0
-                and accumulated_manifests
-            ):
+            if train_fn is not None and (cycle_id + 1) % train_every_n_cycles == 0 and accumulated_manifests:
                 # Merge manifests for training
                 merged_path = self.output_dir / f"merged_cycles_0_{cycle_id}.jsonl"
                 with open(merged_path, "w") as out_f:
@@ -516,19 +520,13 @@ class SelfImprovementFlywheel:
     def get_training_command(self, cycle_id: int) -> str:
         """Return the train.py command to train on this cycle's data."""
         manifest = self.output_dir / f"cycle_{cycle_id:03d}" / "manifest.jsonl"
-        return (
-            f"python train.py "
-            f"--manifest-jsonl {manifest} "
-            f"--max-steps 1000 "
-            f"--lr 1e-5 "
-            f"--no-cache "
-            f"--log-every 50"
-        )
+        return f"python train.py --manifest-jsonl {manifest} --max-steps 1000 --lr 1e-5 --no-cache --log-every 50"
 
 
 # ---------------------------------------------------------------------------
 # Prompt diversity engine (for flywheel prompts)
 # ---------------------------------------------------------------------------
+
 
 class PromptDiversityEngine:
     """
@@ -542,22 +540,55 @@ class PromptDiversityEngine:
     """
 
     _DOMAINS = [
-        "portrait", "landscape", "character design", "scene", "still life",
-        "architecture", "fantasy", "sci-fi", "abstract", "nature",
+        "portrait",
+        "landscape",
+        "character design",
+        "scene",
+        "still life",
+        "architecture",
+        "fantasy",
+        "sci-fi",
+        "abstract",
+        "nature",
     ]
     _STYLES = [
-        "photorealistic", "anime style", "oil painting", "watercolor",
-        "digital art", "concept art", "3d render", "illustration",
+        "photorealistic",
+        "anime style",
+        "oil painting",
+        "watercolor",
+        "digital art",
+        "concept art",
+        "3d render",
+        "illustration",
     ]
     _SUBJECTS = [
-        "a young woman", "a warrior", "a wizard", "a samurai", "a scientist",
-        "a dragon", "a robot", "a city", "a forest", "a mountain",
-        "a castle", "a spaceship", "a market", "a garden", "a library",
+        "a young woman",
+        "a warrior",
+        "a wizard",
+        "a samurai",
+        "a scientist",
+        "a dragon",
+        "a robot",
+        "a city",
+        "a forest",
+        "a mountain",
+        "a castle",
+        "a spaceship",
+        "a market",
+        "a garden",
+        "a library",
     ]
     _MODIFIERS = [
-        "at sunset", "in the rain", "at night", "in golden hour",
-        "in a storm", "underwater", "in space", "in winter",
-        "in autumn", "at dawn",
+        "at sunset",
+        "in the rain",
+        "at night",
+        "in golden hour",
+        "in a storm",
+        "underwater",
+        "in space",
+        "in winter",
+        "in autumn",
+        "at dawn",
     ]
     _QUALITY = [
         "masterpiece, best quality, highly detailed",
@@ -568,6 +599,7 @@ class PromptDiversityEngine:
 
     def __init__(self, seed: int = 42):
         import random
+
         self.rng = random.Random(seed)
 
     def generate(self, n: int = 100) -> List[str]:

@@ -22,8 +22,9 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
+    from utils.prompt.stack import PromptContext, StackMode, run_prompt_stack
+
     from config import DEFAULT_NEGATIVE_PROMPT
-    from utils.prompt.stack import StackMode, PromptContext, run_prompt_stack
 
     p = argparse.ArgumentParser(description="Preview SDX PromptStack output (pos/neg + trace).")
     p.add_argument("--prompt", required=True)

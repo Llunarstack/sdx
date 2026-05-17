@@ -56,8 +56,7 @@ def apply_sample_prompt_stack(
     )
 
     if args is not None and (
-        int(getattr(args, "invent_styles", 0) or 0) > 0
-        or str(getattr(args, "style_genome_file", "") or "").strip()
+        int(getattr(args, "invent_styles", 0) or 0) > 0 or str(getattr(args, "style_genome_file", "") or "").strip()
     ):
         try:
             from utils.prompt.style_explore import resolve_style_genome_for_args

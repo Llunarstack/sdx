@@ -42,6 +42,7 @@ def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch
 # AdaLN conditioning (timestep + optional class/text pooled embedding)
 # ---------------------------------------------------------------------------
 
+
 class AdaLNModulation(nn.Module):
     """AdaLN-Zero: produces 6 modulation params from a conditioning vector."""
 
@@ -67,6 +68,7 @@ class AdaLNModulation(nn.Module):
 # Self-attention with 2D RoPE + QK-Norm
 # ---------------------------------------------------------------------------
 
+
 class SelfAttentionRoPE2D(nn.Module):
     """Self-attention with 2D RoPE and optional QK-Norm."""
 
@@ -81,7 +83,7 @@ class SelfAttentionRoPE2D(nn.Module):
         assert hidden_size % num_heads == 0
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
         self.out_proj = nn.Linear(hidden_size, hidden_size, bias=False)
@@ -122,11 +124,13 @@ class SelfAttentionRoPE2D(nn.Module):
             k_patch = k[:, :, n_prefix:, :]
             cos, sin = self.rope.get_freqs(height, width, device=x.device, dtype=x.dtype)
             from .rope2d import apply_rope2d
+
             # apply_rope2d expects (B, H, N, D)
             q_patch_rot, k_patch_rot = apply_rope2d(
                 q_patch.transpose(1, 2),  # (B, N, H, D)
                 k_patch.transpose(1, 2),
-                cos, sin,
+                cos,
+                sin,
             )
             q[:, :, n_prefix:, :] = q_patch_rot.transpose(1, 2)
             k[:, :, n_prefix:, :] = k_patch_rot.transpose(1, 2)
@@ -139,6 +143,7 @@ class SelfAttentionRoPE2D(nn.Module):
 # ---------------------------------------------------------------------------
 # FFN (SwiGLU — better than GELU for transformers)
 # ---------------------------------------------------------------------------
+
 
 class SwiGLUFFN(nn.Module):
     """SwiGLU feed-forward: 2/3 of standard FFN params, better performance."""
@@ -160,6 +165,7 @@ class SwiGLUFFN(nn.Module):
 # ---------------------------------------------------------------------------
 # SuperiorViT Block
 # ---------------------------------------------------------------------------
+
 
 class SuperiorViTBlock(nn.Module):
     """
@@ -213,9 +219,7 @@ class SuperiorViTBlock(nn.Module):
                 hidden_size, num_heads, context_size=linear_context_size, qk_norm=qk_norm
             )
         elif use_window_attn:
-            self.attn = LocalWindowAttention(
-                hidden_size, num_heads, window_size=window_size, qk_norm=qk_norm
-            )
+            self.attn = LocalWindowAttention(hidden_size, num_heads, window_size=window_size, qk_norm=qk_norm)
         else:
             self.attn = SelfAttentionRoPE2D(hidden_size, num_heads, qk_norm=qk_norm)
 
@@ -225,10 +229,14 @@ class SuperiorViTBlock(nn.Module):
             self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
         # FFN
-        self.ffn = SwiGLUFFN(hidden_size) if use_swiglu else nn.Sequential(
-            nn.Linear(hidden_size, hidden_size * 4),
-            nn.GELU(),
-            nn.Linear(hidden_size * 4, hidden_size),
+        self.ffn = (
+            SwiGLUFFN(hidden_size)
+            if use_swiglu
+            else nn.Sequential(
+                nn.Linear(hidden_size, hidden_size * 4),
+                nn.GELU(),
+                nn.Linear(hidden_size * 4, hidden_size),
+            )
         )
 
         # LayerScale
@@ -281,6 +289,7 @@ class SuperiorViTBlock(nn.Module):
 # ---------------------------------------------------------------------------
 # SuperiorViT — full model
 # ---------------------------------------------------------------------------
+
 
 class SuperiorViT(nn.Module):
     """
@@ -361,6 +370,7 @@ class SuperiorViT(nn.Module):
             )
         else:
             from timm.models.vision_transformer import PatchEmbed
+
             self.patch_embed = PatchEmbed(input_size, patch_size, in_channels, hidden_size)
 
         # Register tokens
@@ -373,11 +383,13 @@ class SuperiorViT(nn.Module):
 
         # Timestep embedding
         from .dit import TimestepEmbedder
+
         self.t_embedder = TimestepEmbedder(hidden_size)
 
         # Class embedding (optional)
         if num_classes > 0:
             from .dit import LabelEmbedder
+
             self.y_embedder = LabelEmbedder(num_classes, hidden_size, dropout_prob=0.1)
         else:
             self.y_embedder = None
@@ -395,24 +407,27 @@ class SuperiorViT(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
 
         # Transformer blocks
-        self.blocks = nn.ModuleList([
-            SuperiorViTBlock(
-                hidden_size=hidden_size,
-                num_heads=num_heads,
-                cond_dim=cond_dim,
-                text_dim=hidden_size if text_dim > 0 else 0,
-                use_rope2d=use_rope2d,
-                use_taca=use_taca,
-                use_swiglu=use_swiglu,
-                layer_scale_init=layer_scale_init,
-                drop_path=dpr[i],
-                qk_norm=qk_norm,
-            )
-            for i in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                SuperiorViTBlock(
+                    hidden_size=hidden_size,
+                    num_heads=num_heads,
+                    cond_dim=cond_dim,
+                    text_dim=hidden_size if text_dim > 0 else 0,
+                    use_rope2d=use_rope2d,
+                    use_taca=use_taca,
+                    use_swiglu=use_swiglu,
+                    layer_scale_init=layer_scale_init,
+                    drop_path=dpr[i],
+                    qk_norm=qk_norm,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # Final layer (AdaLN + linear out)
         from .dit import FinalLayer
+
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
 
         self._init_weights()
@@ -423,6 +438,7 @@ class SuperiorViT(nn.Module):
                 nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
+
         self.apply(_basic_init)
 
     def _get_num_prefix_tokens(self) -> int:
@@ -488,13 +504,16 @@ class SuperiorViT(nn.Module):
         # Post-process jumbo token
         if self.use_jumbo:
             n_prefix = self.num_registers + 1  # registers + jumbo
-            jumbo_out = tokens[:, self.num_registers:self.num_registers + 1, :]
+            jumbo_out = tokens[:, self.num_registers : self.num_registers + 1, :]
             jumbo_out = self.jumbo.process(jumbo_out)
-            tokens = torch.cat([
-                tokens[:, :self.num_registers, :],
-                jumbo_out,
-                tokens[:, n_prefix:, :],
-            ], dim=1)
+            tokens = torch.cat(
+                [
+                    tokens[:, : self.num_registers, :],
+                    jumbo_out,
+                    tokens[:, n_prefix:, :],
+                ],
+                dim=1,
+            )
 
         # Strip prefix tokens (registers + jumbo)
         n_prefix = self._get_num_prefix_tokens()
@@ -514,14 +533,18 @@ class SuperiorViT(nn.Module):
 # Model configs
 # ---------------------------------------------------------------------------
 
+
 def SuperiorViT_XL_2(**kwargs):
     return SuperiorViT(hidden_size=1152, depth=28, num_heads=16, patch_size=2, **kwargs)
+
 
 def SuperiorViT_L_2(**kwargs):
     return SuperiorViT(hidden_size=1024, depth=24, num_heads=16, patch_size=2, **kwargs)
 
+
 def SuperiorViT_B_2(**kwargs):
     return SuperiorViT(hidden_size=768, depth=12, num_heads=12, patch_size=2, **kwargs)
+
 
 def SuperiorViT_S_2(**kwargs):
     return SuperiorViT(hidden_size=384, depth=12, num_heads=6, patch_size=2, **kwargs)

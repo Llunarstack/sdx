@@ -33,7 +33,9 @@ class CudaRopeLib:
     def available(self) -> bool:
         return self._lib is not None
 
-    def apply_rope_host(self, q: np.ndarray, k: np.ndarray, *, theta_base: float = 10000.0) -> Tuple[np.ndarray, np.ndarray]:
+    def apply_rope_host(
+        self, q: np.ndarray, k: np.ndarray, *, theta_base: float = 10000.0
+    ) -> Tuple[np.ndarray, np.ndarray]:
         if not self._lib:
             raise RuntimeError("sdx_cuda_rope not built")
         q = np.asarray(q, dtype=np.float32, order="C")

@@ -63,18 +63,14 @@ def build_2d_rope_freqs(
         ValueError: If head_dim is not divisible by 4.
     """
     if head_dim % 4 != 0:
-        raise ValueError(
-            f"head_dim must be divisible by 4 for 2D RoPE, got {head_dim}"
-        )
+        raise ValueError(f"head_dim must be divisible by 4 for 2D RoPE, got {head_dim}")
     half = head_dim // 2  # half for rows, half for cols
 
     # 1D frequencies for each axis
     def _freqs_1d(length: int, dim: int) -> torch.Tensor:
         # dim//2 unique inverse-frequencies using the standard RoPE formula:
         #   theta_i = 1 / base^(2i / dim)  for i in 0..dim//2-1
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, device=device, dtype=dtype) / dim)
-        )  # (dim//2,)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device, dtype=dtype) / dim))  # (dim//2,)
         pos = torch.arange(length, device=device, dtype=dtype)
         freqs = torch.outer(pos, inv_freq)  # (length, dim//2)
         # Duplicate for the rotate_half convention: first half and second half
@@ -82,7 +78,7 @@ def build_2d_rope_freqs(
         return torch.cat([freqs, freqs], dim=-1)  # (length, dim)
 
     row_freqs = _freqs_1d(height, half)  # (H, half)
-    col_freqs = _freqs_1d(width, half)   # (W, half)
+    col_freqs = _freqs_1d(width, half)  # (W, half)
 
     # Broadcast to (H, W, half) then flatten
     row_freqs = row_freqs.unsqueeze(1).expand(height, width, half)  # (H, W, half)
@@ -172,9 +168,7 @@ class RoPE2D(torch.nn.Module):
         # torch.device('cuda', 0) hash to the same key.
         key = (height, width, str(device), dtype)
         if key not in self._cache:
-            cos, sin = build_2d_rope_freqs(
-                height, width, self.head_dim, self.base, device=device, dtype=dtype
-            )
+            cos, sin = build_2d_rope_freqs(height, width, self.head_dim, self.base, device=device, dtype=dtype)
             self._cache[key] = (cos, sin)
             if len(self._cache) > self._MAX_CACHE:
                 # Evict the oldest entry (insertion-order dict, Python 3.7+)

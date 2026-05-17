@@ -125,10 +125,7 @@ def suggest_creature_prompt_addons(
         neg_parts.append(extra_neg)
 
     # Drop context if nothing domain-specific matched (avoid prepending only sfw/nsfw banner).
-    if len(pos) <= 1 and not any(
-        k in lower
-        for k in anthro_kw + robot_kw + monster_kw + creature_kw
-    ):
+    if len(pos) <= 1 and not any(k in lower for k in anthro_kw + robot_kw + monster_kw + creature_kw):
         return "", ""
 
     out_pos = ", ".join(pos)

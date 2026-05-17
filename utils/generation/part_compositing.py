@@ -104,8 +104,8 @@ def build_init_and_inpaint_mask(
 
         # Composite crop onto base using mask.
         m3 = (m_arr[..., None] / 255.0).astype(np.float32)
-        base_arr = (base_arr.astype(np.float32) * (1.0 - m3) + crop_arr.astype(np.float32) * m3).round().astype(
-            np.uint8
+        base_arr = (
+            (base_arr.astype(np.float32) * (1.0 - m3) + crop_arr.astype(np.float32) * m3).round().astype(np.uint8)
         )
 
         # Update preserve map (keep these pixels).
@@ -133,4 +133,3 @@ def build_init_and_inpaint_mask(
 
 
 __all__ = ["CompositeSpec", "build_init_and_inpaint_mask"]
-

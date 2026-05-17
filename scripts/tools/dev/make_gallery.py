@@ -52,16 +52,26 @@ def _run_sample(
     cmd = [
         sys.executable,
         str(ROOT / "sample.py"),
-        "--ckpt", ckpt,
-        "--prompt", prompt,
-        "--negative-prompt", DEFAULT_NEGATIVE,
-        "--holy-grail-preset", preset,
-        "--steps", str(steps),
-        "--cfg-scale", str(cfg),
-        "--width", str(width),
-        "--height", str(height),
-        "--seed", str(seed),
-        "--out", str(out),
+        "--ckpt",
+        ckpt,
+        "--prompt",
+        prompt,
+        "--negative-prompt",
+        DEFAULT_NEGATIVE,
+        "--holy-grail-preset",
+        preset,
+        "--steps",
+        str(steps),
+        "--cfg-scale",
+        str(cfg),
+        "--width",
+        str(width),
+        "--height",
+        str(height),
+        "--seed",
+        str(seed),
+        "--out",
+        str(out),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -144,7 +154,7 @@ def main():
         slug = prompt[:40].lower().replace(" ", "_").replace(",", "").replace(".", "")
         slug = "".join(c for c in slug if c.isalnum() or c == "_")
         out = out_dir / f"{i:02d}_{slug}.png"
-        print(f"[{i+1}/{len(prompts)}] {prompt[:60]}…")
+        print(f"[{i + 1}/{len(prompts)}] {prompt[:60]}…")
         ok = _run_sample(
             args.ckpt,
             prompt,

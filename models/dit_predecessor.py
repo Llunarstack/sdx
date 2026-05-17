@@ -286,22 +286,33 @@ class DiTBlockSupreme(nn.Module):
             report_aux_loss=False,
         )
         x = x + self.drop_path(self.ls_attn(gate_msa.unsqueeze(1) * token_gate * attn_out))
-        x = x + self.drop_path(self.ls_cross(token_gate * self.cross_attn(
-            self.norm_cross(x),
-            text_emb,
-            use_xformers=use_xformers,
-            routing_context=c,
-            router_override=router_override,
-            report_aux_loss=False,
-        )))
+        x = x + self.drop_path(
+            self.ls_cross(
+                token_gate
+                * self.cross_attn(
+                    self.norm_cross(x),
+                    text_emb,
+                    use_xformers=use_xformers,
+                    routing_context=c,
+                    router_override=router_override,
+                    report_aux_loss=False,
+                )
+            )
+        )
         mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
         if isinstance(self.mlp, MoEExperts):
-            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
-                mlp_in,
-                routing_context=c,
-                router_override=router_override,
-                report_aux_loss=True,
-            )))
+            x = x + self.drop_path(
+                self.ls_mlp(
+                    gate_mlp.unsqueeze(1)
+                    * token_gate
+                    * self.mlp(
+                        mlp_in,
+                        routing_context=c,
+                        router_override=router_override,
+                        report_aux_loss=True,
+                    )
+                )
+            )
         else:
             x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
         return x
@@ -423,22 +434,33 @@ class DiTBlockPredecessor(nn.Module):
             report_aux_loss=False,
         )
         x = x + self.drop_path(self.ls_attn(gate_msa.unsqueeze(1) * token_gate * attn_out))
-        x = x + self.drop_path(self.ls_cross(token_gate * self.cross_attn(
-            self.norm_cross(x),
-            text_emb,
-            use_xformers=use_xformers,
-            routing_context=c,
-            router_override=router_override,
-            report_aux_loss=False,
-        )))
+        x = x + self.drop_path(
+            self.ls_cross(
+                token_gate
+                * self.cross_attn(
+                    self.norm_cross(x),
+                    text_emb,
+                    use_xformers=use_xformers,
+                    routing_context=c,
+                    router_override=router_override,
+                    report_aux_loss=False,
+                )
+            )
+        )
         mlp_in = modulate(self.norm2(x), shift_mlp, scale_mlp)
         if isinstance(self.mlp, MoEExperts):
-            x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(
-                mlp_in,
-                routing_context=c,
-                router_override=router_override,
-                report_aux_loss=True,
-            )))
+            x = x + self.drop_path(
+                self.ls_mlp(
+                    gate_mlp.unsqueeze(1)
+                    * token_gate
+                    * self.mlp(
+                        mlp_in,
+                        routing_context=c,
+                        router_override=router_override,
+                        report_aux_loss=True,
+                    )
+                )
+            )
         else:
             x = x + self.drop_path(self.ls_mlp(gate_mlp.unsqueeze(1) * token_gate * self.mlp(mlp_in)))
         return x

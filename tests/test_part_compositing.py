@@ -48,4 +48,3 @@ def test_build_init_and_mask_preserves_foreground(tmp_path: Path) -> None:
     # Corner should remain background and be inpaintable (mask white).
     assert (init_np[0, 0] == np.array([128, 128, 128])).all()
     assert mask_np[0, 0] == 255
-

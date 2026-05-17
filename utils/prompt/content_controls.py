@@ -162,6 +162,7 @@ _INFER_ADHERENCE_STRICT_KW: Tuple[str, ...] = (
     "no additions beyond",
 )
 
+
 def infer_content_controls_from_prompt(prompt: str) -> Dict[str, str]:
     """
     Infer likely control modes from prompt keywords.
@@ -197,9 +198,7 @@ def infer_content_controls_from_prompt(prompt: str) -> Dict[str, str]:
         bool(tagset & {"2girls", "2boys", "3girls"}) if comma_rich else _contains_any(p, ("2girls", "2boys", "3girls"))
     )
     if comma_rich:
-        solo_hit = bool(tagset & {"1girl", "1boy", "1other", "solo"}) or _contains_any(
-            p, ("single girl", "single boy")
-        )
+        solo_hit = bool(tagset & {"1girl", "1boy", "1other", "solo"}) or _contains_any(p, ("single girl", "single boy"))
     else:
         solo_hit = _contains_any(p, ("1girl", "1boy", "1other", "single girl", "single boy", "solo"))
 

@@ -112,8 +112,12 @@ def test_native_manifest_preflight_without_rust_tools(monkeypatch, tmp_path):
     manifest = tmp_path / "manifest.jsonl"
     manifest.write_text('{"image_path":"a.png","caption":"hello"}\n', encoding="utf-8")
 
-    monkeypatch.setattr(bth, "run_rust_jsonl_validate", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no rust")))
-    monkeypatch.setattr(bth, "run_rust_jsonl_stats", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no rust")))
+    monkeypatch.setattr(
+        bth, "run_rust_jsonl_validate", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no rust"))
+    )
+    monkeypatch.setattr(
+        bth, "run_rust_jsonl_stats", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no rust"))
+    )
 
     info = bth.run_native_manifest_preflight(manifest)
     assert info["exists"] is True

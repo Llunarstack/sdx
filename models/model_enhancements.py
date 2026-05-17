@@ -30,9 +30,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self._use_native:
-            return torch.nn.functional.rms_norm(
-                x, self.weight.shape, self.weight, self.eps
-            )
+            return torch.nn.functional.rms_norm(x, self.weight.shape, self.weight, self.eps)
         dtype = x.dtype
         v = x.float().pow(2).mean(dim=-1, keepdim=True)
         x = x * torch.rsqrt(v + self.eps)
@@ -45,9 +43,7 @@ class DropPath(nn.Module):
     def __init__(self, drop_prob: float = 0.0):
         super().__init__()
         if not 0.0 <= float(drop_prob) < 1.0:
-            raise ValueError(
-                f"DropPath drop_prob must be in [0, 1), got {drop_prob!r}"
-            )
+            raise ValueError(f"DropPath drop_prob must be in [0, 1), got {drop_prob!r}")
         self.drop_prob = float(drop_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

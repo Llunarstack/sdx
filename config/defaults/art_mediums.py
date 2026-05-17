@@ -282,7 +282,13 @@ MEDIUM_SPECS: Tuple[MediumSpec, ...] = (
     ),
     MediumSpec(
         id="miniature_diorama_photo",
-        keywords=("miniature diorama photo", "miniature photo", "diorama photography", "tabletop miniature", "scale model photo"),
+        keywords=(
+            "miniature diorama photo",
+            "miniature photo",
+            "diorama photography",
+            "tabletop miniature",
+            "scale model photo",
+        ),
         positive_hints="convincing scale cues, controlled macro depth behavior, realistic miniature lighting ratios",
         negative_hints="scale-breaking blur behavior, toy-like plastic highlights, inconsistent depth-of-field physics",
         is_photography=True,
@@ -373,8 +379,14 @@ def _color_render_fragments(spec_ids: Sequence[str]) -> Tuple[str, str]:
 
     has_3d = bool(ids & {"hard_surface_3d", "archviz_3d", "toon_3d", "stylized_game_texture"})
     has_photo = any(i.endswith("_photo") or "photo" in i for i in ids)
-    has_traditional = bool(ids & {"oil_painting", "watercolor", "gouache_acrylic", "pastel_crayon", "tempera_fresco", "ink_wash_calligraphy"})
-    has_digital_2d = bool(ids & {"digital_painting", "concept_matte", "vector_flat", "pixel_art", "anime_digital_render", "matte_concept_dev"})
+    has_traditional = bool(
+        ids
+        & {"oil_painting", "watercolor", "gouache_acrylic", "pastel_crayon", "tempera_fresco", "ink_wash_calligraphy"}
+    )
+    has_digital_2d = bool(
+        ids
+        & {"digital_painting", "concept_matte", "vector_flat", "pixel_art", "anime_digital_render", "matte_concept_dev"}
+    )
 
     if has_traditional:
         pos_parts.append(TRADITIONAL_COLOR_MIX_POS)
@@ -439,4 +451,3 @@ def guidance_fragments(
     neg = merge_csv_unique(neg, cneg)
     apos, aneg = _anatomy_fragments(prompt, anatomy_mode)
     return merge_csv_unique(pos, apos), merge_csv_unique(neg, aneg)
-

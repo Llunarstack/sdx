@@ -41,7 +41,15 @@ def composed_prompt_length_report(
     parts["total_chars"] = sum(parts[k] for k in parts if k != "total_chars")
     parts["approx_tokens"] = approximate_token_estimate(
         ", ".join(
-            (narration_prefix, consistency_block, panel_hint, rolling_context, visual_memory_fragment, oc_block, user_prompt)
+            (
+                narration_prefix,
+                consistency_block,
+                panel_hint,
+                rolling_context,
+                visual_memory_fragment,
+                oc_block,
+                user_prompt,
+            )
         )
     )
     return parts

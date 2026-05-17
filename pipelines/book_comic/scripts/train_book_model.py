@@ -45,7 +45,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ar-profile",
         type=str,
         default="auto",
-        choices=["auto", "none", "layout", "strong", "zorder", "vit_layout", "vit_strong", "comic_snake", "cinema_spiral"],
+        choices=[
+            "auto",
+            "none",
+            "layout",
+            "strong",
+            "zorder",
+            "vit_layout",
+            "vit_strong",
+            "comic_snake",
+            "cinema_spiral",
+        ],
         help="One-flag AR setup: classic (layout/strong/zorder) or upgraded (vit_layout/vit_strong/comic_snake/cinema_spiral).",
     )
     p.add_argument("--num-ar-blocks", type=int, default=-1, choices=[-1, 0, 2, 4], help="Explicit AR blocks override.")
@@ -99,7 +109,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run manifest_gate (prompt lint + hygiene + optional image QC) before training.",
     )
     p.add_argument("--manifest-gate-image-qc", action="store_true", help="Include image sharpness/contrast QC in gate.")
-    p.add_argument("--manifest-gate-image-root", type=str, default="", help="Optional base dir for image paths during QC.")
+    p.add_argument(
+        "--manifest-gate-image-root", type=str, default="", help="Optional base dir for image paths during QC."
+    )
     p.add_argument("--manifest-gate-sample", type=int, default=0, help="Image QC sample size (0=all).")
     p.add_argument("--manifest-gate-min-sharpness", type=float, default=0.0)
     p.add_argument("--manifest-gate-min-contrast", type=float, default=0.0)

@@ -40,14 +40,10 @@ class DiffusionMathLib:
         lib.sdx_snr_from_alpha_cumprod_f64.argtypes = [_f64p, _f64p, ctypes.c_size_t]
         lib.sdx_snr_from_alpha_cumprod_f64.restype = ctypes.c_int32
 
-        lib.sdx_linear_beta_schedule_f64.argtypes = [
-            _f64p, ctypes.c_size_t, ctypes.c_double, ctypes.c_double
-        ]
+        lib.sdx_linear_beta_schedule_f64.argtypes = [_f64p, ctypes.c_size_t, ctypes.c_double, ctypes.c_double]
         lib.sdx_linear_beta_schedule_f64.restype = ctypes.c_int32
 
-        lib.sdx_squaredcos_beta_schedule_v2_f64.argtypes = [
-            _f64p, ctypes.c_size_t, ctypes.c_double
-        ]
+        lib.sdx_squaredcos_beta_schedule_v2_f64.argtypes = [_f64p, ctypes.c_size_t, ctypes.c_double]
         lib.sdx_squaredcos_beta_schedule_v2_f64.restype = ctypes.c_int32
 
         lib.sdx_cosine_beta_schedule_f64.argtypes = [_f64p, ctypes.c_size_t]
@@ -84,9 +80,7 @@ class DiffusionMathLib:
             raise RuntimeError(f"sdx_snr_from_alpha_cumprod_f64 failed (rc={rc})")
         return out
 
-    def linear_beta_schedule(
-        self, n: int, beta_start: float = 1e-4, beta_end: float = 2e-2
-    ) -> np.ndarray:
+    def linear_beta_schedule(self, n: int, beta_start: float = 1e-4, beta_end: float = 2e-2) -> np.ndarray:
         out, out_ptr = self._out_f64(n)
         rc = self._lib.sdx_linear_beta_schedule_f64(
             out_ptr,
@@ -100,9 +94,7 @@ class DiffusionMathLib:
 
     def squaredcos_beta_schedule_v2(self, n: int, max_beta: float = 0.999) -> np.ndarray:
         out, out_ptr = self._out_f64(n)
-        rc = self._lib.sdx_squaredcos_beta_schedule_v2_f64(
-            out_ptr, ctypes.c_size_t(n), ctypes.c_double(max_beta)
-        )
+        rc = self._lib.sdx_squaredcos_beta_schedule_v2_f64(out_ptr, ctypes.c_size_t(n), ctypes.c_double(max_beta))
         if rc != 0:
             raise RuntimeError(f"sdx_squaredcos_beta_schedule_v2_f64 failed (rc={rc})")
         return out
@@ -135,16 +127,12 @@ def maybe_snr_from_alpha_cumprod_rust(alpha_cumprod: np.ndarray) -> Optional[np.
     return lib.snr_from_alpha_cumprod(alpha_cumprod) if lib.available else None
 
 
-def maybe_linear_beta_schedule_rust(
-    n: int, beta_start: float = 1e-4, beta_end: float = 2e-2
-) -> Optional[np.ndarray]:
+def maybe_linear_beta_schedule_rust(n: int, beta_start: float = 1e-4, beta_end: float = 2e-2) -> Optional[np.ndarray]:
     lib = _get_lib()
     return lib.linear_beta_schedule(n, beta_start, beta_end) if lib.available else None
 
 
-def maybe_squaredcos_beta_schedule_v2_rust(
-    n: int, max_beta: float = 0.999
-) -> Optional[np.ndarray]:
+def maybe_squaredcos_beta_schedule_v2_rust(n: int, max_beta: float = 0.999) -> Optional[np.ndarray]:
     lib = _get_lib()
     return lib.squaredcos_beta_schedule_v2(n, max_beta) if lib.available else None
 

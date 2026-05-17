@@ -24,4 +24,3 @@ def tta_predict(
     a = torch.stack([o["adherence_score"] for o in outs], dim=0).mean(dim=0)
     e = torch.stack([o["embedding"] for o in outs], dim=0).mean(dim=0)
     return {"quality_logit": q, "adherence_score": a, "embedding": e}
-

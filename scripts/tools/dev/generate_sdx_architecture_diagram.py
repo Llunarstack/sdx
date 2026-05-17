@@ -139,7 +139,12 @@ def main() -> None:
     r = ProRenderer(draw, shadow_layer)
 
     r.text((w / 2, 56), "SDX MODEL ARCHITECTURE", size=42, bold=True)
-    r.text((w / 2, 98), "Code-aligned view from train.py, sample.py, models/, data/, diffusion/, utils/", size=18, color=Theme.TEXT_SUB)
+    r.text(
+        (w / 2, 98),
+        "Code-aligned view from train.py, sample.py, models/, data/, diffusion/, utils/",
+        size=18,
+        color=Theme.TEXT_SUB,
+    )
 
     pixel_col = (40, 150, 430, 1110)
     latent_col = (460, 150, 1480, 1110)
@@ -175,25 +180,47 @@ def main() -> None:
     r.text((1275, 505), "Output head\nepsilon/v\n(+ flow velocity)", size=16, bold=True)
 
     r.card((500, 790, 1440, 910), Theme.INFER[0], Theme.INFER[1], radius=14)
-    r.text((970, 850), "Sampling loop (sample.py + diffusion.sample_loop): CFG, scheduler/solver, optional rescale/threshold", size=18, bold=True)
+    r.text(
+        (970, 850),
+        "Sampling loop (sample.py + diffusion.sample_loop): CFG, scheduler/solver, optional rescale/threshold",
+        size=18,
+        bold=True,
+    )
 
     r.card((1540, 230, 2130, 340), Theme.CARD_BG, Theme.COND[1])
     r.text((1835, 285), "Prompt stack\nutils/prompt/content_controls + neg_filter + emphasis", size=16, bold=True)
     r.card((1540, 370, 2130, 510), Theme.CARD_BG, Theme.COND[1])
-    r.text((1835, 440), "Text encoder bundle\nT5 (default) or triple: T5 + CLIP-L + CLIP-bigG fusion", size=16, bold=True)
+    r.text(
+        (1835, 440), "Text encoder bundle\nT5 (default) or triple: T5 + CLIP-L + CLIP-bigG fusion", size=16, bold=True
+    )
     r.card((1540, 540, 2130, 680), Theme.CARD_BG, Theme.COND[1])
     r.text((1835, 610), "Adapters\nLoRA / DoRA / LyCORIS\n(role budgets + stage routing)", size=16, bold=True)
     r.card((1540, 710, 2130, 850), Theme.CARD_BG, Theme.COND[1])
-    r.text((1835, 780), "Optional condition paths\ncontrol_image, reference tokens,\nstyle/creativity conditioning", size=16, bold=True)
+    r.text(
+        (1835, 780),
+        "Optional condition paths\ncontrol_image, reference tokens,\nstyle/creativity conditioning",
+        size=16,
+        bold=True,
+    )
     r.card((1540, 880, 2130, 1040), Theme.CARD_BG, Theme.NATIVE[1])
-    r.text((1835, 960), "Native + tooling layer\nCUDA kernels, Rust tools, toolkit/env checks,\ncheckpoint manager + manifests/loggers", size=16, bold=True)
+    r.text(
+        (1835, 960),
+        "Native + tooling layer\nCUDA kernels, Rust tools, toolkit/env checks,\ncheckpoint manager + manifests/loggers",
+        size=16,
+        bold=True,
+    )
 
     r.arrow((1540, 440), (1400, 560), color=Theme.COND[1], width=3)
     r.arrow((1540, 610), (1120, 640), color=Theme.COND[1], width=3, dashed=True)
     r.arrow((1540, 780), (1400, 700), color=Theme.COND[1], width=3, dashed=True)
 
     r.card((40, 1140, 2160, 1260), Theme.CARD_BG, Theme.CORE[1], radius=16)
-    r.text((1100, 1200), "Training objectives (train.py): main diffusion/flow loss + optional bridge/OT/part-aware losses; runtime bf16+compile+DDP; artifacts checkpoints/EMA/config/logs", size=17, bold=True)
+    r.text(
+        (1100, 1200),
+        "Training objectives (train.py): main diffusion/flow loss + optional bridge/OT/part-aware losses; runtime bf16+compile+DDP; artifacts checkpoints/EMA/config/logs",
+        size=17,
+        bold=True,
+    )
 
     shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=6 * SCALE))
     out = Image.new("RGBA", (w * SCALE, h * SCALE), (0, 0, 0, 0))

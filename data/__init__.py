@@ -18,9 +18,7 @@ __all__ = ["Text2ImageDataset", "collate_t2i", "ResolutionBucketBatchSampler"]
 def __getattr__(name: str) -> Any:
     if name == "Text2ImageDataset" or name == "collate_t2i":
         if not _HAS_TORCH:
-            raise RuntimeError(
-                f"sdx.data.{name} requires PyTorch; install torch or import caption utilities only."
-            )
+            raise RuntimeError(f"sdx.data.{name} requires PyTorch; install torch or import caption utilities only.")
         mod = import_module(".t2i_dataset", __package__)
         return getattr(mod, name)
     if name == "ResolutionBucketBatchSampler":

@@ -52,6 +52,7 @@ _log = logging.getLogger(__name__)
 # Multi-scale patch discriminator
 # ---------------------------------------------------------------------------
 
+
 class PatchDiscriminatorBlock(nn.Module):
     """Single scale of the multi-scale discriminator."""
 
@@ -101,10 +102,9 @@ class MultiScalePatchDiscriminator(nn.Module):
         super().__init__()
         self.n_scales = n_scales
 
-        self.discriminators = nn.ModuleList([
-            PatchDiscriminatorBlock(in_channels, hidden, n_layers)
-            for _ in range(n_scales)
-        ])
+        self.discriminators = nn.ModuleList(
+            [PatchDiscriminatorBlock(in_channels, hidden, n_layers) for _ in range(n_scales)]
+        )
 
         # Optional feature discriminator (operates on DiT intermediate features)
         self.feature_disc = None
@@ -154,6 +154,7 @@ class MultiScalePatchDiscriminator(nn.Module):
 # ---------------------------------------------------------------------------
 # ADD loss functions
 # ---------------------------------------------------------------------------
+
 
 def hinge_d_loss(real_preds: List[torch.Tensor], fake_preds: List[torch.Tensor]) -> torch.Tensor:
     """Hinge loss for discriminator: max(0, 1-real) + max(0, 1+fake)."""
@@ -222,6 +223,7 @@ def regression_loss(
 # Student sampler: K-step generation
 # ---------------------------------------------------------------------------
 
+
 class StudentSampler:
     """
     K-step sampler for the student model.
@@ -245,6 +247,7 @@ class StudentSampler:
         else:
             # Cosine spacing: more steps at low noise (fine detail)
             import math
+
             steps = []
             for i in range(self.k):
                 t_frac = 1.0 - i / (self.k - 1)
@@ -312,25 +315,27 @@ class StudentSampler:
 # ADD Distiller: main training class
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class ADDConfig:
     """Configuration for ADD distillation."""
-    k_steps: int = 4                    # Student inference steps (1, 2, or 4)
-    teacher_cfg_scale: float = 7.5      # CFG for teacher generation
-    student_cfg_scale: float = 7.5      # CFG for student generation
-    regression_weight: float = 1.0      # Weight for regression loss
-    adversarial_weight: float = 0.1     # Weight for adversarial loss
+
+    k_steps: int = 4  # Student inference steps (1, 2, or 4)
+    teacher_cfg_scale: float = 7.5  # CFG for teacher generation
+    student_cfg_scale: float = 7.5  # CFG for student generation
+    regression_weight: float = 1.0  # Weight for regression loss
+    adversarial_weight: float = 0.1  # Weight for adversarial loss
     feature_matching_weight: float = 10.0  # Weight for feature matching
     regression_loss_type: str = "lpips_proxy"  # "l1", "l2", "huber", "lpips_proxy"
-    disc_lr: float = 1e-4               # Discriminator learning rate
-    student_lr: float = 5e-5            # Student learning rate
-    disc_hidden: int = 64               # Discriminator hidden channels
-    disc_n_scales: int = 3              # Number of discriminator scales
-    disc_n_layers: int = 3              # Layers per discriminator scale
-    grad_clip: float = 1.0             # Gradient clipping
-    disc_update_every: int = 1          # Update discriminator every N student steps
-    warmup_steps: int = 1000            # Steps before adversarial loss kicks in
-    latent_scale: float = 0.18215       # VAE latent scale
+    disc_lr: float = 1e-4  # Discriminator learning rate
+    student_lr: float = 5e-5  # Student learning rate
+    disc_hidden: int = 64  # Discriminator hidden channels
+    disc_n_scales: int = 3  # Number of discriminator scales
+    disc_n_layers: int = 3  # Layers per discriminator scale
+    grad_clip: float = 1.0  # Gradient clipping
+    disc_update_every: int = 1  # Update discriminator every N student steps
+    warmup_steps: int = 1000  # Steps before adversarial loss kicks in
+    latent_scale: float = 0.18215  # VAE latent scale
     log_every: int = 100
     save_every: int = 2000
     save_dir: str = "./add_checkpoints"
@@ -414,8 +419,11 @@ class ADDDistiller:
         # ---- Step 1: Generate teacher sample (frozen, no grad) ----
         with torch.no_grad():
             teacher_x0 = self.sampler.sample_teacher(
-                self.teacher, self.diffusion, shape,
-                model_kwargs_cond, self.device,
+                self.teacher,
+                self.diffusion,
+                shape,
+                model_kwargs_cond,
+                self.device,
                 cfg_scale=self.cfg.teacher_cfg_scale,
                 model_kwargs_uncond=model_kwargs_uncond,
             )
@@ -424,8 +432,11 @@ class ADDDistiller:
         # ---- Step 2: Generate student sample ----
         self.student.train()
         student_x0 = self.sampler.sample_student(
-            self.student, self.diffusion, shape,
-            model_kwargs_cond, self.device,
+            self.student,
+            self.diffusion,
+            shape,
+            model_kwargs_cond,
+            self.device,
             cfg_scale=self.cfg.student_cfg_scale,
             model_kwargs_uncond=model_kwargs_uncond,
         )
@@ -451,7 +462,8 @@ class ADDDistiller:
 
         # Regression loss
         reg_loss = regression_loss(
-            student_x0, teacher_x0.detach(),
+            student_x0,
+            teacher_x0.detach(),
             loss_type=self.cfg.regression_loss_type,
         )
 
@@ -571,12 +583,15 @@ class ADDDistiller:
 
     def export_student(self, output_path: str) -> None:
         """Export the distilled student model as a standard SDX checkpoint."""
-        torch.save({
-            "model": self.student.state_dict(),
-            "add_distilled": True,
-            "k_steps": self.cfg.k_steps,
-            "distillation_steps": self._step,
-        }, output_path)
+        torch.save(
+            {
+                "model": self.student.state_dict(),
+                "add_distilled": True,
+                "k_steps": self.cfg.k_steps,
+                "distillation_steps": self._step,
+            },
+            output_path,
+        )
         _log.info(f"Exported distilled student to {output_path}")
 
 

@@ -31,6 +31,7 @@ try:
     import torch.nn.functional as F
 
     from .model_enhancements import RMSNorm
+
     _TORCH_AVAILABLE = True
 except ModuleNotFoundError as e:
     if e.name != "torch":
@@ -46,9 +47,7 @@ except ModuleNotFoundError as e:
         Module = _TorchMissingModuleBase
 
         def __getattr__(self, name: str):
-            raise ModuleNotFoundError(
-                "torch is required for this model component, but torch is not installed."
-            )
+            raise ModuleNotFoundError("torch is required for this model component, but torch is not installed.")
 
     nn = _StubNN()  # type: ignore[assignment]
     RMSNorm = None  # type: ignore[assignment]
@@ -58,17 +57,19 @@ except ModuleNotFoundError as e:
 # Prompt complexity analysis
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class PromptComplexityProfile:
     """Analysis of a prompt's complexity and content type."""
-    complexity_score: float = 0.0       # 0=simple, 1=extremely complex
+
+    complexity_score: float = 0.0  # 0=simple, 1=extremely complex
     is_nsfw: bool = False
     is_surreal: bool = False
     is_physics_heavy: bool = False
     is_creature_character_heavy: bool = False
     is_multi_concept: bool = False
     concept_count: int = 1
-    dominant_mode: str = "standard"     # standard, nsfw, surreal, creature, physics, ...
+    dominant_mode: str = "standard"  # standard, nsfw, surreal, creature, physics, ...
     physics_tags: List[str] = field(default_factory=list)
     creature_tags: List[str] = field(default_factory=list)
     concept_groups: List[List[str]] = field(default_factory=list)
@@ -80,47 +81,47 @@ class PromptComplexityAnalyzer:
     """
 
     _NSFW = re.compile(
-        r'\b(nude|naked|topless|bottomless|explicit|nsfw|erotic|sexual|'
-        r'nipple|breast|penis|vagina|genitalia|intercourse|orgasm|'
-        r'lingerie|bikini|underwear|bra|panties|thong|'
-        r'bondage|bdsm|fetish|kink|latex|leather restraint|'
-        r'tentacle|hentai|ecchi|lewd|suggestive|sensual|seductive)\b',
-        re.IGNORECASE
+        r"\b(nude|naked|topless|bottomless|explicit|nsfw|erotic|sexual|"
+        r"nipple|breast|penis|vagina|genitalia|intercourse|orgasm|"
+        r"lingerie|bikini|underwear|bra|panties|thong|"
+        r"bondage|bdsm|fetish|kink|latex|leather restraint|"
+        r"tentacle|hentai|ecchi|lewd|suggestive|sensual|seductive)\b",
+        re.IGNORECASE,
     )
     _SURREAL = re.compile(
-        r'\b(surreal|impossible|paradox|melting|floating|inverted|'
-        r'dreamlike|nightmare|eldritch|lovecraftian|non-euclidean|'
-        r'glitch|distorted|warped|fractured|fragmented|abstract|'
-        r'dali|escher|magritte|kafkaesque|liminal|backrooms)\b',
-        re.IGNORECASE
+        r"\b(surreal|impossible|paradox|melting|floating|inverted|"
+        r"dreamlike|nightmare|eldritch|lovecraftian|non-euclidean|"
+        r"glitch|distorted|warped|fractured|fragmented|abstract|"
+        r"dali|escher|magritte|kafkaesque|liminal|backrooms)\b",
+        re.IGNORECASE,
     )
     _PHYSICS = re.compile(
-        r'\b(liquid|fluid|water|lava|slime|goo|gel|viscous|flowing|meniscus|splash|droplet|pour|pouring|'
-        r'underwater|submerged|vapor|steam|mist|fog|rain|ocean|wave|surf|turbulent|vortex|'
-        r'fabric|cloth|silk|velvet|draping|billowing|rippling|'
-        r'hair|fur|feathers|scales|tentacles|vines|chains|rope|'
-        r'smoke|fire|flame|explosion|shatter|breaking|crumbling|'
-        r'elastic|stretching|morphing|transforming|melting|freezing|'
-        r'transparent|translucent|glass|refraction|caustic|caustics|fresnel|see-through|crystalline)\b',
-        re.IGNORECASE
+        r"\b(liquid|fluid|water|lava|slime|goo|gel|viscous|flowing|meniscus|splash|droplet|pour|pouring|"
+        r"underwater|submerged|vapor|steam|mist|fog|rain|ocean|wave|surf|turbulent|vortex|"
+        r"fabric|cloth|silk|velvet|draping|billowing|rippling|"
+        r"hair|fur|feathers|scales|tentacles|vines|chains|rope|"
+        r"smoke|fire|flame|explosion|shatter|breaking|crumbling|"
+        r"elastic|stretching|morphing|transforming|melting|freezing|"
+        r"transparent|translucent|glass|refraction|caustic|caustics|fresnel|see-through|crystalline)\b",
+        re.IGNORECASE,
     )
     _CREATURE_CHAR = re.compile(
-        r'\b(creature|beast|monster|kaiju|dragon|griffin|gryphon|wyvern|alien|xenomorph|'
-        r'anthro|anthropomorphic|furry|fursona|kemono|muzzle|feral|'
-        r'robot|android|mech|mecha|cyborg|gundam|automaton|synthetic humanoid|hard-surface character|'
-        r'orc|ogre|troll|goblin|kobold|demon|devil|imp|daemon|succubus|incubus|cambion|'
-        r'vampire|dhampir|nosferatu|zombie|undead|lich|werewolf|lycan|revenant|wraith|banshee|'
-        r'minotaur|centaur|satyr|faun|naga|harpy|mermaid|merfolk|golem|tiefling|aasimar|drow|'
-        r'angel|archangel|seraph|oni|yokai|kitsune|lamia|arachne|gargoyle|sphinx|medusa|gorgon)\b',
-        re.IGNORECASE
+        r"\b(creature|beast|monster|kaiju|dragon|griffin|gryphon|wyvern|alien|xenomorph|"
+        r"anthro|anthropomorphic|furry|fursona|kemono|muzzle|feral|"
+        r"robot|android|mech|mecha|cyborg|gundam|automaton|synthetic humanoid|hard-surface character|"
+        r"orc|ogre|troll|goblin|kobold|demon|devil|imp|daemon|succubus|incubus|cambion|"
+        r"vampire|dhampir|nosferatu|zombie|undead|lich|werewolf|lycan|revenant|wraith|banshee|"
+        r"minotaur|centaur|satyr|faun|naga|harpy|mermaid|merfolk|golem|tiefling|aasimar|drow|"
+        r"angel|archangel|seraph|oni|yokai|kitsune|lamia|arachne|gargoyle|sphinx|medusa|gorgon)\b",
+        re.IGNORECASE,
     )
     _HORROR = re.compile(
-        r'\b(body horror|grotesque|mutant|hybrid|chimera|eldritch|'
-        r'extra limbs|multiple heads|fused|merged|corrupted|infected|'
-        r'parasite|symbiote|transformation|metamorphosis|visceral)\b',
-        re.IGNORECASE
+        r"\b(body horror|grotesque|mutant|hybrid|chimera|eldritch|"
+        r"extra limbs|multiple heads|fused|merged|corrupted|infected|"
+        r"parasite|symbiote|transformation|metamorphosis|visceral)\b",
+        re.IGNORECASE,
     )
-    _CONCEPT_SEPARATORS = re.compile(r'\s*(?:\+|and|meets|combined with|fused with|mixed with)\s*', re.IGNORECASE)
+    _CONCEPT_SEPARATORS = re.compile(r"\s*(?:\+|and|meets|combined with|fused with|mixed with)\s*", re.IGNORECASE)
 
     def analyze(self, prompt: str) -> PromptComplexityProfile:
         words = prompt.split()
@@ -136,15 +137,18 @@ class PromptComplexityAnalyzer:
         is_multi = concept_count > 2
 
         # Complexity score
-        score = min(1.0, (
-            len(words) / 200.0 * 0.3 +
-            (0.2 if is_nsfw else 0) +
-            (0.2 if is_surreal else 0) +
-            (0.15 if is_physics else 0) +
-            (0.15 if is_horror else 0) +
-            (0.12 if is_creature else 0) +
-            min(concept_count / 5.0, 0.2)
-        ))
+        score = min(
+            1.0,
+            (
+                len(words) / 200.0 * 0.3
+                + (0.2 if is_nsfw else 0)
+                + (0.2 if is_surreal else 0)
+                + (0.15 if is_physics else 0)
+                + (0.15 if is_horror else 0)
+                + (0.12 if is_creature else 0)
+                + min(concept_count / 5.0, 0.2)
+            ),
+        )
 
         # Dominant mode
         if is_horror or is_surreal:
@@ -172,7 +176,7 @@ class PromptComplexityAnalyzer:
             "tentacle",
             "elastic",
         ]:
-            if re.search(rf'\b{tag}\b', prompt, re.IGNORECASE):
+            if re.search(rf"\b{tag}\b", prompt, re.IGNORECASE):
                 physics_tags.append(tag)
 
         creature_tags: List[str] = []
@@ -194,7 +198,7 @@ class PromptComplexityAnalyzer:
             "cyborg",
             "alien",
         ):
-            if re.search(rf'\b{re.escape(tag)}\b', prompt, re.IGNORECASE):
+            if re.search(rf"\b{re.escape(tag)}\b", prompt, re.IGNORECASE):
                 creature_tags.append(tag)
 
         return PromptComplexityProfile(
@@ -215,6 +219,7 @@ class PromptComplexityAnalyzer:
 # ---------------------------------------------------------------------------
 # Concept Fusion Module
 # ---------------------------------------------------------------------------
+
 
 class ConceptFusionModule(nn.Module):
     """
@@ -288,10 +293,10 @@ class ConceptFusionModule(nn.Module):
 
         concept_outputs = []
         for c in range(self.max_concepts):
-            c_rep = concept_reps[:, c:c+1, :]  # (B, 1, D) — single concept token
+            c_rep = concept_reps[:, c : c + 1, :]  # (B, 1, D) — single concept token
             k = self.k_proj(c_rep).reshape(B, 1, self.num_heads, self.head_dim).transpose(1, 2)
             v = self.v_proj(c_rep).reshape(B, 1, self.num_heads, self.head_dim).transpose(1, 2)
-            out = F.scaled_dot_product_attention(q, k, v, scale=self.head_dim ** -0.5)
+            out = F.scaled_dot_product_attention(q, k, v, scale=self.head_dim**-0.5)
             out = out.transpose(1, 2).reshape(B, N, D)
             concept_outputs.append(out)
 
@@ -315,6 +320,7 @@ class ConceptFusionModule(nn.Module):
 # Physics-Aware Token Tagger
 # ---------------------------------------------------------------------------
 
+
 class PhysicsAwareTokenTagger(nn.Module):
     """
     Tags image tokens with physical property hints (liquid, rigid, soft, etc.)
@@ -330,8 +336,19 @@ class PhysicsAwareTokenTagger(nn.Module):
         hidden_size: Token dimension.
     """
 
-    PHYSICS_TYPES = ["rigid", "liquid", "fabric", "hair", "fire", "smoke",
-                     "elastic", "tentacle", "crystal", "organic", "mechanical"]
+    PHYSICS_TYPES = [
+        "rigid",
+        "liquid",
+        "fabric",
+        "hair",
+        "fire",
+        "smoke",
+        "elastic",
+        "tentacle",
+        "crystal",
+        "organic",
+        "mechanical",
+    ]
 
     def __init__(self, hidden_size: int):
         super().__init__()
@@ -382,7 +399,7 @@ class PhysicsAwareTokenTagger(nn.Module):
         # Weighted sum of physics embeddings per patch
         # (B, N, num_types) x (num_types, D) -> (B, N, D)
         phys_emb = self.physics_embed.weight  # (num_types, D)
-        physics_context = torch.einsum('bnt,td->bnd', physics_probs, phys_emb)
+        physics_context = torch.einsum("bnt,td->bnd", physics_probs, phys_emb)
 
         # If specific physics tags are provided, boost those types
         if physics_tags:
@@ -395,6 +412,7 @@ class PhysicsAwareTokenTagger(nn.Module):
 # ---------------------------------------------------------------------------
 # NSFW Anatomy Router
 # ---------------------------------------------------------------------------
+
 
 class NSFWAnatomyRouter(nn.Module):
     """
@@ -415,11 +433,11 @@ class NSFWAnatomyRouter(nn.Module):
 
     # Anatomy token patterns (explicit + implicit)
     _ANATOMY = re.compile(
-        r'\b(body|torso|chest|breast|nipple|abdomen|stomach|waist|hip|'
-        r'buttock|ass|groin|thigh|leg|knee|ankle|foot|toe|'
-        r'arm|elbow|wrist|hand|finger|shoulder|neck|face|'
-        r'penis|vagina|vulva|genitalia|pubic|intimate|private)\b',
-        re.IGNORECASE
+        r"\b(body|torso|chest|breast|nipple|abdomen|stomach|waist|hip|"
+        r"buttock|ass|groin|thigh|leg|knee|ankle|foot|toe|"
+        r"arm|elbow|wrist|hand|finger|shoulder|neck|face|"
+        r"penis|vagina|vulva|genitalia|pubic|intimate|private)\b",
+        re.IGNORECASE,
     )
 
     def __init__(self, hidden_size: int, num_heads: int, precision_heads: int = 4):
@@ -489,7 +507,7 @@ class NSFWAnatomyRouter(nn.Module):
         k = self.precision_k(anatomy_text).reshape(B, L, H, Dh).transpose(1, 2)
         v = self.precision_v(anatomy_text).reshape(B, L, H, Dh).transpose(1, 2)
 
-        out = F.scaled_dot_product_attention(q, k, v, scale=Dh ** -0.5)
+        out = F.scaled_dot_product_attention(q, k, v, scale=Dh**-0.5)
         out = out.transpose(1, 2).reshape(B, N, H * Dh)
         out = self.precision_out(out)
 
@@ -503,6 +521,7 @@ class NSFWAnatomyRouter(nn.Module):
 # ---------------------------------------------------------------------------
 # Complex Prompt Conditioner (top-level)
 # ---------------------------------------------------------------------------
+
 
 class ComplexPromptConditioner(nn.Module):
     """

@@ -54,4 +54,3 @@ def fuse_condition_scales(
         c_mul = 0.9 + 0.2 * p
     a_mul = 0.9 + 0.25 * p
     return float(base_control_scale) * c_mul, float(base_adapter_scale) * a_mul
-

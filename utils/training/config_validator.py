@@ -204,9 +204,7 @@ def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> Lis
 
     # Latent grid / model IO sanity (catches bad JSON exports early)
     if int(cfg.image_size) < 8 or int(cfg.image_size) % 8 != 0:
-        errors.append(
-            f"image_size must be >= 8 and a multiple of 8 (VAE latent alignment); got {cfg.image_size}"
-        )
+        errors.append(f"image_size must be >= 8 and a multiple of 8 (VAE latent alignment); got {cfg.image_size}")
 
     te = str(getattr(cfg, "text_encoder", "") or "").strip()
     if not te:
@@ -237,9 +235,7 @@ def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> Lis
                 break
             hi, wi = int(pair[0]), int(pair[1])
             if hi < 8 or wi < 8 or hi % 8 != 0 or wi % 8 != 0:
-                errors.append(
-                    f"resolution_buckets (H, W) must be >= 8 and multiples of 8; got ({hi}, {wi})"
-                )
+                errors.append(f"resolution_buckets (H, W) must be >= 8 and multiples of 8; got ({hi}, {wi})")
                 break
 
     crop_mode = str(getattr(cfg, "crop_mode", "center") or "center").lower().strip()

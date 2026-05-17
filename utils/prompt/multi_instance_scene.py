@@ -72,9 +72,7 @@ _PRESETS: dict[str, MultiInstanceAugment] = {
         ),
         min_candidates=6,
         suggested_expected_count=None,
-        workflow_note=(
-            "Name titles/colors per book; combo_count + text constraints; inpaint spine rows."
-        ),
+        workflow_note=("Name titles/colors per book; combo_count + text constraints; inpaint spine rows."),
     ),
     "turnaround_sheet": MultiInstanceAugment(
         prompt_suffix=(
@@ -88,9 +86,7 @@ _PRESETS: dict[str, MultiInstanceAugment] = {
         ),
         min_candidates=8,
         suggested_expected_count=4,
-        workflow_note=(
-            "Prefer --reference-image + strength; otherwise render panels separately and composite."
-        ),
+        workflow_note=("Prefer --reference-image + strength; otherwise render panels separately and composite."),
     ),
     "panel_strip": MultiInstanceAugment(
         prompt_suffix=(
@@ -99,14 +95,11 @@ _PRESETS: dict[str, MultiInstanceAugment] = {
             "consistent line weight and lettering style across panels"
         ),
         negative_suffix=(
-            "panels melting together, duplicated frame content, "
-            "same screenshot repeated, ambiguous panel boundaries"
+            "panels melting together, duplicated frame content, same screenshot repeated, ambiguous panel boundaries"
         ),
         min_candidates=8,
         suggested_expected_count=None,
-        workflow_note=(
-            "Set --multi-instance-count = panel count; --composition-brief auto for legibility."
-        ),
+        workflow_note=("Set --multi-instance-count = panel count; --composition-brief auto for legibility."),
     ),
     "group_portrait": MultiInstanceAugment(
         prompt_suffix=(
@@ -121,9 +114,7 @@ _PRESETS: dict[str, MultiInstanceAugment] = {
         ),
         min_candidates=8,
         suggested_expected_count=None,
-        workflow_note=(
-            "Set --multi-instance-count = people; widen --width; combo_count aligns with head count."
-        ),
+        workflow_note=("Set --multi-instance-count = people; widen --width; combo_count aligns with head count."),
     ),
 }
 

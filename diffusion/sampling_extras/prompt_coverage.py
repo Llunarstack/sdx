@@ -50,4 +50,3 @@ def coverage_shortfall_loss(
         den = tw.sum(dim=1).clamp(min=1e-8)
         return ((per * tw).sum(dim=1) / den).mean()
     return per.mean()
-

@@ -168,9 +168,7 @@ def main() -> int:
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     skipped_display = sorted(SKIP_DIRS_DEFAULT & skip_extra)
-    now_line = (
-        f"> Generated: **{now}** · max depth: **{args.max_depth}** · repo root: `{REPO_ROOT.name}/`"
-    )
+    now_line = f"> Generated: **{now}** · max depth: **{args.max_depth}** · repo root: `{REPO_ROOT.name}/`"
     if skipped_display:
         now_line += f"\n>\n> Skipped directories: **{', '.join(skipped_display)}** (see `--help` to include)."
     md = f"""# SDX project structure

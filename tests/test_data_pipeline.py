@@ -20,6 +20,7 @@ from PIL import Image
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_image(path: Path, size: tuple[int, int] = (64, 64)) -> None:
     img = Image.fromarray(np.random.randint(0, 255, (*size, 3), dtype=np.uint8))
     img.save(str(path))
@@ -45,12 +46,16 @@ def _make_jsonl_dataset(root: Path, n: int = 4) -> Path:
     for i in range(n):
         img_path = root / f"img_{i:03d}.png"
         _make_image(img_path)
-        lines.append(json.dumps({
-            "image_path": str(img_path),
-            "caption": f"a test image number {i}",
-            "negative_caption": "blurry, low quality",
-            "weight": 1.0,
-        }))
+        lines.append(
+            json.dumps(
+                {
+                    "image_path": str(img_path),
+                    "caption": f"a test image number {i}",
+                    "negative_caption": "blurry, low quality",
+                    "weight": 1.0,
+                }
+            )
+        )
     manifest.write_text("\n".join(lines), encoding="utf-8")
     return manifest
 
@@ -59,15 +64,18 @@ def _make_jsonl_dataset(root: Path, n: int = 4) -> Path:
 # Text2ImageDataset — folder mode
 # ---------------------------------------------------------------------------
 
+
 class TestText2ImageDatasetFolder:
     def test_loads_samples(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         root = _make_folder_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(root), image_size=32)
         assert len(ds) == 4
 
     def test_item_keys(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         root = _make_folder_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(root), image_size=32)
         item = ds[0]
@@ -76,6 +84,7 @@ class TestText2ImageDatasetFolder:
 
     def test_pixel_values_shape(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         root = _make_folder_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(root), image_size=32)
         item = ds[0]
@@ -83,6 +92,7 @@ class TestText2ImageDatasetFolder:
 
     def test_pixel_values_range(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         root = _make_folder_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(root), image_size=32)
         pv = ds[0]["pixel_values"]
@@ -91,6 +101,7 @@ class TestText2ImageDatasetFolder:
 
     def test_caption_is_string(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         root = _make_folder_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(root), image_size=32)
         assert isinstance(ds[0]["caption"], str)
@@ -99,6 +110,7 @@ class TestText2ImageDatasetFolder:
     @pytest.mark.parametrize("crop_mode", ["center", "random", "largest_center"])
     def test_crop_modes(self, tmp_path, crop_mode):
         from data.t2i_dataset import Text2ImageDataset
+
         root = _make_folder_dataset(tmp_path / f"data_{crop_mode}")
         ds = Text2ImageDataset(str(root), image_size=32, crop_mode=crop_mode)
         pv = ds[0]["pixel_values"]
@@ -109,15 +121,18 @@ class TestText2ImageDatasetFolder:
 # Text2ImageDataset — JSONL mode
 # ---------------------------------------------------------------------------
 
+
 class TestText2ImageDatasetJSONL:
     def test_loads_samples(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         manifest = _make_jsonl_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(manifest), image_size=32)
         assert len(ds) == 4
 
     def test_negative_caption_present(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         manifest = _make_jsonl_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(manifest), image_size=32)
         item = ds[0]
@@ -125,6 +140,7 @@ class TestText2ImageDatasetJSONL:
 
     def test_weight_present(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
+
         manifest = _make_jsonl_dataset(tmp_path / "data")
         ds = Text2ImageDataset(str(manifest), image_size=32)
         assert "weight" in ds[0]
@@ -224,6 +240,7 @@ class TestText2ImageDatasetJSONL:
 # collate_t2i
 # ---------------------------------------------------------------------------
 
+
 class TestCollateT2I:
     def _make_batch(self, n: int = 3, size: int = 32):
         return [
@@ -239,17 +256,20 @@ class TestCollateT2I:
 
     def test_pixel_values_stacked(self):
         from data.t2i_dataset import collate_t2i
+
         batch = collate_t2i(self._make_batch(3))
         assert batch["pixel_values"].shape == (3, 3, 32, 32)
 
     def test_captions_list(self):
         from data.t2i_dataset import collate_t2i
+
         batch = collate_t2i(self._make_batch(3))
         assert isinstance(batch["captions"], list)
         assert len(batch["captions"]) == 3
 
     def test_sample_weights_tensor(self):
         from data.t2i_dataset import collate_t2i
+
         batch = collate_t2i(self._make_batch(3))
         assert "sample_weights" in batch
         assert batch["sample_weights"].shape == (3,)
@@ -257,6 +277,7 @@ class TestCollateT2I:
     def test_grounding_mask_collation(self):
         """Batches with mixed grounding mask presence should pad missing masks."""
         from data.t2i_dataset import collate_t2i
+
         items = self._make_batch(3)
         items[0]["grounding_mask"] = torch.zeros(1, 32, 32)
         batch = collate_t2i(items)
@@ -271,15 +292,18 @@ class TestCollateT2I:
 # Part-aware training utilities
 # ---------------------------------------------------------------------------
 
+
 class TestPartAwareTraining:
     def test_image_mask_to_patch_weights_shape(self):
         from utils.training.part_aware_training import image_mask_to_patch_weights
+
         mask = torch.rand(2, 1, 32, 32)
         weights = image_mask_to_patch_weights(mask, num_patches_h=4, num_patches_w=4)
         assert weights.shape == (2, 16)
 
     def test_image_mask_to_patch_weights_range(self):
         from utils.training.part_aware_training import image_mask_to_patch_weights
+
         mask = torch.rand(2, 1, 32, 32).clamp(0, 1)
         weights = image_mask_to_patch_weights(mask, num_patches_h=4, num_patches_w=4)
         assert weights.min() >= 0.0
@@ -287,11 +311,13 @@ class TestPartAwareTraining:
 
     def test_image_mask_to_patch_weights_invalid_shape(self):
         from utils.training.part_aware_training import image_mask_to_patch_weights
+
         with pytest.raises(ValueError):
             image_mask_to_patch_weights(torch.rand(2, 3, 32, 32), num_patches_h=4, num_patches_w=4)
 
     def test_foreground_attention_alignment_loss_shape(self):
         from utils.training.part_aware_training import foreground_attention_alignment_loss
+
         B, H, N, L = 2, 4, 16, 32
         attn = torch.rand(B, H, N, L)
         mask = torch.rand(B, N).clamp(0, 1)
@@ -300,6 +326,7 @@ class TestPartAwareTraining:
 
     def test_token_coverage_loss_shape(self):
         from utils.training.part_aware_training import token_coverage_loss
+
         B, H, N, L = 2, 4, 16, 32
         attn = torch.rand(B, H, N, L)
         loss = token_coverage_loss(attn, target_coverage=0.025)
@@ -307,6 +334,7 @@ class TestPartAwareTraining:
 
     def test_merge_hierarchical_captions(self):
         from utils.training.part_aware_training import merge_hierarchical_captions
+
         result = merge_hierarchical_captions(
             "base caption",
             caption_global="global scene",
@@ -318,6 +346,7 @@ class TestPartAwareTraining:
 
     def test_foveated_random_crop_box_bounds(self):
         from utils.training.part_aware_training import foveated_random_crop_box
+
         y0, x0, y1, x1 = foveated_random_crop_box(64, 64, crop_frac=0.5)
         assert 0 <= y0 < y1 <= 64
         assert 0 <= x0 < x1 <= 64

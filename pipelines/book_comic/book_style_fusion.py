@@ -18,12 +18,8 @@ _IDIOM: Dict[str, str] = {
         "manga-native pacing: expressive eyes, screentone-friendly values, speed-line grammar, "
         "right-to-left flow where appropriate"
     ),
-    "webtoon": (
-        "vertical-scroll webtoon readability: large shapes, soft painterly blends, thumb-scroll staging"
-    ),
-    "graphic_novel": (
-        "graphic-novel wash and ink fusion: painterly passages with disciplined sequential gutters"
-    ),
+    "webtoon": ("vertical-scroll webtoon readability: large shapes, soft painterly blends, thumb-scroll staging"),
+    "graphic_novel": ("graphic-novel wash and ink fusion: painterly passages with disciplined sequential gutters"),
     "comic_us": (
         "American comic construction: bold spot blacks, zip texture discipline, left-to-right gutters, "
         "heroic figure drawing"

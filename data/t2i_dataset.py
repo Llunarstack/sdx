@@ -311,11 +311,7 @@ class Text2ImageDataset(Dataset):
         skip_foveate: bool = False,
     ) -> Tuple[Image.Image, Optional[Image.Image]]:
         H, W = self._hw_for_index(idx)
-        if (
-            skip_foveate
-            or self.foveated_train_prob <= 0
-            or random.random() >= self.foveated_train_prob
-        ):
+        if skip_foveate or self.foveated_train_prob <= 0 or random.random() >= self.foveated_train_prob:
             return self._crop_image(pil, idx), (self._crop_mask_pil(mask_l, idx) if mask_l is not None else None)
         arr = np.array(pil.convert("RGB"))
         ih, iw = arr.shape[:2]

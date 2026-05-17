@@ -216,4 +216,3 @@ def build_train_config_from_args(args) -> TrainConfig:
         log_images_every=getattr(args, "log_images_every", 0),
         log_images_prompt=getattr(args, "log_images_prompt", "a photo of a cat"),
     )
-

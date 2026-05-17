@@ -68,9 +68,7 @@ def test_cover_skips_page_overrides(tmp_path: Path) -> None:
 def test_entities_list_form(tmp_path: Path) -> None:
     data = {
         "version": 1,
-        "entities": [
-            {"id": "x", "kind": "prop", "display_name": "Sword", "canonical_look": "curved saber"}
-        ],
+        "entities": [{"id": "x", "kind": "prop", "display_name": "Sword", "canonical_look": "curved saber"}],
     }
     p = tmp_path / "l.json"
     p.write_text(json.dumps(data), encoding="utf-8")

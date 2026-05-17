@@ -33,4 +33,3 @@ class ModelEMA:
     @torch.no_grad()
     def load_state_dict(self, state: dict[str, torch.Tensor]) -> None:
         self.shadow = {k: v.clone() for k, v in state.items()}
-

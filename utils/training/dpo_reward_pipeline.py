@@ -52,6 +52,7 @@ _PRETRAINED = Path(__file__).resolve().parents[2] / "pretrained"
 # Reward model: unified interface over multiple quality scorers
 # ---------------------------------------------------------------------------
 
+
 class RewardModel:
     """
     Unified reward model that combines multiple quality scorers.
@@ -111,6 +112,7 @@ class RewardModel:
             return None
         try:
             import ImageReward as RM
+
             model = RM.load(str(ir_path), device=str(self.device))
             self._image_reward_model = model
             return model
@@ -125,6 +127,7 @@ class RewardModel:
             return None, None
         try:
             from transformers import AutoModel, AutoProcessor
+
             processor = AutoProcessor.from_pretrained(str(ps_path))
             model = AutoModel.from_pretrained(str(ps_path)).to(self.device).eval()
             self._pickscore_model = model
@@ -163,6 +166,7 @@ class RewardModel:
         try:
             # LAION aesthetic predictor: linear head on CLIP features
             import clip
+
             model, _ = clip.load("ViT-L/14", device=str(self.device))
             # Load aesthetic head weights
             head_path = aes_path / "sac+logos+ava1-l14-linearMSE.pth"
@@ -184,6 +188,7 @@ class RewardModel:
             return 0.5
         try:
             from PIL import Image
+
             pil = Image.fromarray(image_rgb)
             score = model.score(prompt, pil)
             # ImageReward scores are roughly in [-2, 2]; normalize to [0, 1]
@@ -199,6 +204,7 @@ class RewardModel:
             return 0.5
         try:
             from PIL import Image
+
             pil = Image.fromarray(image_rgb)
             inputs = processor(
                 text=[prompt],
@@ -223,6 +229,7 @@ class RewardModel:
         try:
             import clip
             from PIL import Image
+
             clip_model, head = result
             pil = Image.fromarray(image_rgb)
             preprocess = clip.load("ViT-L/14")[1]
@@ -314,9 +321,11 @@ class RewardModel:
 # Preference pair miner
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class PreferencePair:
     """A (winner, loser) pair for DPO training."""
+
     prompt: str
     winner_image_path: str
     loser_image_path: str
@@ -375,7 +384,7 @@ class PreferencePairMiner:
         all_pairs: List[PreferencePair] = []
 
         for prompt_idx, prompt in enumerate(prompts):
-            _log.info(f"Mining pairs for prompt {prompt_idx+1}/{len(prompts)}: {prompt[:60]}...")
+            _log.info(f"Mining pairs for prompt {prompt_idx + 1}/{len(prompts)}: {prompt[:60]}...")
 
             # Generate N images
             images = []
@@ -388,6 +397,7 @@ class PreferencePairMiner:
 
                     if save_images:
                         from PIL import Image
+
                         img_path = self.output_dir / f"prompt_{prompt_idx:04d}_seed_{seed}.png"
                         Image.fromarray(img).save(img_path)
                         image_paths.append(str(img_path))
@@ -454,6 +464,7 @@ class PreferencePairMiner:
 # DPO trainer
 # ---------------------------------------------------------------------------
 
+
 class DPOTrainer:
     """
     DPO fine-tuning trainer for SDX DiT.
@@ -517,7 +528,7 @@ class DPOTrainer:
 
         pred = model(x_t, t, **model_kwargs)
         if pred.shape[1] > latent.shape[1]:
-            pred = pred[:, :latent.shape[1]]
+            pred = pred[:, : latent.shape[1]]
 
         return (pred - target).pow(2).mean(dim=(1, 2, 3))
 
@@ -621,6 +632,7 @@ class DPOTrainer:
 
         history = []
         import random
+
         rng = random.Random(42)
 
         for step in range(steps):
@@ -672,11 +684,14 @@ class DPOTrainer:
 
             if step % save_every == 0 and step > 0:
                 ckpt_path = save_path / f"dpo_step_{step:06d}.pt"
-                torch.save({
-                    "model": self.policy.state_dict(),
-                    "step": step,
-                    "losses": losses,
-                }, ckpt_path)
+                torch.save(
+                    {
+                        "model": self.policy.state_dict(),
+                        "step": step,
+                        "losses": losses,
+                    },
+                    ckpt_path,
+                )
                 _log.info(f"Saved DPO checkpoint: {ckpt_path}")
 
         return history
@@ -685,6 +700,7 @@ class DPOTrainer:
 # ---------------------------------------------------------------------------
 # Reward-weighted sampler for training
 # ---------------------------------------------------------------------------
+
 
 class RewardWeightedSampler:
     """
@@ -733,8 +749,8 @@ class RewardWeightedSampler:
         """
         scores = []
         for i in range(0, len(images), batch_size):
-            batch_imgs = images[i:i+batch_size]
-            batch_prompts = prompts[i:i+batch_size]
+            batch_imgs = images[i : i + batch_size]
+            batch_prompts = prompts[i : i + batch_size]
             for img, prompt in zip(batch_imgs, batch_prompts):
                 score = self.reward_model.score(img, prompt)["combined"]
                 scores.append(score)

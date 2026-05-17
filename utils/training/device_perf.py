@@ -39,9 +39,7 @@ class DevicePerfHints:
 def parallel_train_torchrun_example(n_gpu: int = 2, extra: str = "YOUR_TRAIN_ARGS") -> str:
     """Minimal ``torchrun`` one-liner (Linux + Windows CUDA)."""
     n = max(1, int(n_gpu))
-    return (
-        f'python -m torch.distributed.run --standalone --nproc_per_node={n} train.py {extra}'.strip()
-    )
+    return f"python -m torch.distributed.run --standalone --nproc_per_node={n} train.py {extra}".strip()
 
 
 def configure_training_cuda_and_cpu(
@@ -119,7 +117,7 @@ def log_cuda_quick_stats(logger: logging.Logger, *, prefix: str = "") -> None:
     free_b, total_b = torch.cuda.mem_get_info(idx)
 
     def _to_gib(b):
-        return round(float(b) / (1024.0 ** 3), 2)
+        return round(float(b) / (1024.0**3), 2)
 
     logger.info(
         "%sGPU[%s] %s — free %.2f / total %.2f GiB",

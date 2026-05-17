@@ -31,9 +31,11 @@ import torch.nn.functional as F
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class SemanticTriple:
     """A (subject, attribute, relation) triple parsed from a prompt."""
+
     subject: str
     attributes: List[str] = field(default_factory=list)
     relations: List[str] = field(default_factory=list)
@@ -54,6 +56,7 @@ class ParsedPrompt:
 # Prompt Parser
 # ---------------------------------------------------------------------------
 
+
 class PromptParser:
     """
     Lightweight rule-based parser that extracts semantic structure from prompts.
@@ -65,24 +68,34 @@ class PromptParser:
 
     # Colour, texture, size, material attributes
     _ATTR_PATTERNS = [
-        r'\b(red|orange|yellow|green|blue|purple|pink|black|white|gray|grey|brown|golden|silver|dark|light|bright|pale|vivid|neon)\b',
-        r'\b(large|small|big|tiny|huge|tall|short|wide|narrow|thick|thin|long)\b',
-        r'\b(wooden|metal|leather|silk|cotton|wool|plastic|glass|stone|fabric|denim|lace)\b',
-        r'\b(striped|checkered|floral|plain|patterned|solid|transparent|opaque|shiny|matte|glossy)\b',
-        r'\b(old|new|worn|torn|clean|dirty|wet|dry|crumpled|pressed|fitted|loose|tight)\b',
+        r"\b(red|orange|yellow|green|blue|purple|pink|black|white|gray|grey|brown|golden|silver|dark|light|bright|pale|vivid|neon)\b",
+        r"\b(large|small|big|tiny|huge|tall|short|wide|narrow|thick|thin|long)\b",
+        r"\b(wooden|metal|leather|silk|cotton|wool|plastic|glass|stone|fabric|denim|lace)\b",
+        r"\b(striped|checkered|floral|plain|patterned|solid|transparent|opaque|shiny|matte|glossy)\b",
+        r"\b(old|new|worn|torn|clean|dirty|wet|dry|crumpled|pressed|fitted|loose|tight)\b",
     ]
 
     # Clothing / object nouns
-    _CLOTHING = r'\b(shirt|blouse|dress|skirt|pants|jeans|jacket|coat|hoodie|sweater|vest|suit|tie|scarf|hat|cap|shoes|boots|sneakers|heels|gloves|socks|underwear|bra|bikini|swimsuit|uniform|robe|cloak|armor|helmet)\b'
-    _OBJECTS  = r'\b(bag|backpack|purse|wallet|watch|glasses|sunglasses|necklace|bracelet|ring|earrings|sword|gun|staff|wand|book|phone|laptop|cup|bottle|umbrella|flower|crown|mask)\b'
+    _CLOTHING = r"\b(shirt|blouse|dress|skirt|pants|jeans|jacket|coat|hoodie|sweater|vest|suit|tie|scarf|hat|cap|shoes|boots|sneakers|heels|gloves|socks|underwear|bra|bikini|swimsuit|uniform|robe|cloak|armor|helmet)\b"
+    _OBJECTS = r"\b(bag|backpack|purse|wallet|watch|glasses|sunglasses|necklace|bracelet|ring|earrings|sword|gun|staff|wand|book|phone|laptop|cup|bottle|umbrella|flower|crown|mask)\b"
 
     # Negation words
-    _NEGATION = r'\b(no|not|without|lacking|missing|absent|devoid of|free of)\b'
+    _NEGATION = r"\b(no|not|without|lacking|missing|absent|devoid of|free of)\b"
 
     # Count words
     _COUNTS = {
-        'one': 1, 'a': 1, 'an': 1, 'two': 2, 'three': 3, 'four': 4,
-        'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+        "one": 1,
+        "a": 1,
+        "an": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
     }
 
     def parse(self, prompt: str) -> ParsedPrompt:
@@ -103,7 +116,7 @@ class PromptParser:
                 negation_indices.append(i)
 
         # Find clothing/object mentions and bind preceding attributes
-        attr_re = re.compile('|'.join(self._ATTR_PATTERNS), re.I)
+        attr_re = re.compile("|".join(self._ATTR_PATTERNS), re.I)
         cloth_re = re.compile(self._CLOTHING, re.I)
         obj_re = re.compile(self._OBJECTS, re.I)
 
@@ -147,6 +160,7 @@ class PromptParser:
 # ---------------------------------------------------------------------------
 # Attribute Binding Module
 # ---------------------------------------------------------------------------
+
 
 class AttributeBindingModule(nn.Module):
     """
@@ -221,7 +235,7 @@ class AttributeBindingModule(nn.Module):
             # spatial_mask: (B, S, N) — which patches belong to which subject
             # For each patch, find its subject, then boost attention to that subject's tokens
             # (B, S, N) x (B, S, L) -> (B, N, L) via einsum
-            patch_to_token_affinity = torch.einsum('bsn,bsl->bnl', spatial_mask, binding_mask)  # (B, N, L)
+            patch_to_token_affinity = torch.einsum("bsn,bsl->bnl", spatial_mask, binding_mask)  # (B, N, L)
             # Convert to bias: positive for matching tokens, negative for non-matching
             bias = (patch_to_token_affinity - 0.5) * 2.0  # scale to [-1, 1]
             # Apply per-head gate
@@ -242,6 +256,7 @@ class AttributeBindingModule(nn.Module):
 # ---------------------------------------------------------------------------
 # Negation Gate
 # ---------------------------------------------------------------------------
+
 
 class NegationGate(nn.Module):
     """
@@ -301,6 +316,7 @@ class NegationGate(nn.Module):
 # Count Constraint
 # ---------------------------------------------------------------------------
 
+
 class CountConstraint(nn.Module):
     """
     Enforces object count via slot-based attention.
@@ -358,7 +374,7 @@ class CountConstraint(nn.Module):
         slots = self.instance_slots[:count]  # (count, D)
 
         # Weighted sum of slot embeddings per token
-        slot_context = torch.einsum('bnc,cd->bnd', assignments, slots)  # (B, N, D)
+        slot_context = torch.einsum("bnc,cd->bnd", assignments, slots)  # (B, N, D)
         x_routed = x + 0.2 * slot_context
 
         # Diversity loss: penalise if all patches assign to same slot
@@ -373,6 +389,7 @@ class CountConstraint(nn.Module):
 # ---------------------------------------------------------------------------
 # Semantic Grounding Loss (training)
 # ---------------------------------------------------------------------------
+
 
 class SemanticGroundingLoss(nn.Module):
     """
@@ -417,10 +434,10 @@ class SemanticGroundingLoss(nn.Module):
             # For each subject, compute how much its attribute tokens attend outside its region
             # attn_maps: (B, H, N, L), spatial_masks: (B, S, N)
             # Expected: patches in subject S attend to tokens in subject S's binding
-            expected_attn = torch.einsum('bsn,bsl->bnl', spatial_masks, binding_mask)  # (B, N, L)
+            expected_attn = torch.einsum("bsn,bsl->bnl", spatial_masks, binding_mask)  # (B, N, L)
             actual_attn = attn_maps.mean(dim=1)  # (B, N, L) — average over heads
             binding_loss = F.mse_loss(actual_attn, expected_attn.detach())
-            losses['binding_loss'] = binding_loss
+            losses["binding_loss"] = binding_loss
 
         # Count diversity loss
         if count_targets:
@@ -428,18 +445,19 @@ class SemanticGroundingLoss(nn.Module):
             for token_idx, count in count_targets.items():
                 # Use the token embedding as a proxy for the subject's image tokens
                 # In practice, would use the actual image tokens for that subject
-                dummy_x = text_emb[:, token_idx:token_idx+1, :].expand(-1, 16, -1)
+                dummy_x = text_emb[:, token_idx : token_idx + 1, :].expand(-1, 16, -1)
                 _, div_loss = self.count_constraint(dummy_x, count)
                 total_div_loss = total_div_loss + div_loss
-            losses['count_diversity_loss'] = total_div_loss / max(len(count_targets), 1)
+            losses["count_diversity_loss"] = total_div_loss / max(len(count_targets), 1)
 
-        losses['total'] = sum(losses.values())
+        losses["total"] = sum(losses.values())
         return losses
 
 
 # ---------------------------------------------------------------------------
 # Prompt Adherence Controller (inference wrapper)
 # ---------------------------------------------------------------------------
+
 
 class PromptAdherenceController:
     """

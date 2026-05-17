@@ -251,6 +251,7 @@ def _build_fallback_enrichment(
     Returns (additions_csv, negative_additions, concept_layers_dict).
     """
     import random
+
     rng = random.Random(rng_seed)
 
     additions: List[str] = []
@@ -270,7 +271,7 @@ def _build_fallback_enrichment(
     # Cross-domain bridges
     layer_keys = list(layers.keys())
     for i, la in enumerate(layer_keys):
-        for lb in layer_keys[i + 1:]:
+        for lb in layer_keys[i + 1 :]:
             key = (la, lb) if (la, lb) in _CROSS_DOMAIN_BRIDGES else (lb, la)
             bridge = _CROSS_DOMAIN_BRIDGES.get(key, [])
             if bridge and rng.random() < creativity_level:
@@ -307,6 +308,7 @@ def _build_fallback_enrichment(
 # ---------------------------------------------------------------------------
 # Heavy model helpers (lazy-loaded, gracefully degraded)
 # ---------------------------------------------------------------------------
+
 
 def _moondream_describe_many(
     image_paths: Sequence[str],
@@ -496,7 +498,7 @@ def _qwen_synthesize(
                 pad_token_id=tok.eos_token_id,
             )
 
-        response = tok.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+        response = tok.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True).strip()
 
         # Parse structured response
         enriched = _extract_field(response, "ENRICHED_ADDITIONS")
@@ -521,6 +523,7 @@ def _extract_field(text: str, field_name: str) -> str:
 # Main engine
 # ---------------------------------------------------------------------------
 
+
 class CreativeRAGEngine:
     """
     Multimodal RAG engine for creative prompt enrichment.
@@ -539,9 +542,7 @@ class CreativeRAGEngine:
         self._cache: Dict[str, RAGEnrichmentResult] = {}
         self._cache_size = cache_size
 
-    def _cache_key(
-        self, prompt: str, ref_paths_seq: Sequence[str], creativity_level: float
-    ) -> str:
+    def _cache_key(self, prompt: str, ref_paths_seq: Sequence[str], creativity_level: float) -> str:
         refs = "|".join(str(p) for p in ref_paths_seq)
         raw = f"{prompt}|{refs}|{creativity_level:.2f}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
@@ -728,6 +729,7 @@ class CreativeRAGEngine:
     ) -> RAGEnrichmentResult:
         """Convenience: load facts from JSONL then enrich."""
         from utils.prompt.rag_prompt import load_facts_from_jsonl
+
         facts = load_facts_from_jsonl(facts_path, max_entries=max_facts)
         return self.enrich(
             prompt,
@@ -749,6 +751,7 @@ class CreativeRAGEngine:
     ) -> RAGEnrichmentResult:
         """Convenience: load Gen-Searcher output then enrich."""
         from utils.prompt.rag_prompt import load_facts_from_gen_searcher_json
+
         facts = load_facts_from_gen_searcher_json(searcher_json_path, max_entries=max_facts)
         return self.enrich(
             prompt,
@@ -763,6 +766,7 @@ class CreativeRAGEngine:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _facts_to_tokens(facts: List[str], max_tokens: int = 4) -> str:
     """
     Distill a list of facts into a small set of prompt-compatible tokens.
@@ -771,7 +775,7 @@ def _facts_to_tokens(facts: List[str], max_tokens: int = 4) -> str:
     # Simple heuristic: extract capitalized nouns and distinctive adjectives
     tokens: List[str] = []
     seen: set = set()
-    for fact in facts[:max_tokens * 3]:
+    for fact in facts[: max_tokens * 3]:
         # Extract short phrases (1-3 words) that look like visual descriptors
         words = re.findall(r"\b[A-Za-z][a-z]{2,}\b", fact)
         for w in words:
@@ -780,10 +784,32 @@ def _facts_to_tokens(facts: List[str], max_tokens: int = 4) -> str:
                 continue
             # Skip common stop words
             if wl in {
-                "that", "this", "with", "from", "have", "been", "were",
-                "they", "their", "there", "which", "when", "where", "what",
-                "also", "some", "more", "than", "into", "over", "after",
-                "about", "through", "during", "before", "between",
+                "that",
+                "this",
+                "with",
+                "from",
+                "have",
+                "been",
+                "were",
+                "they",
+                "their",
+                "there",
+                "which",
+                "when",
+                "where",
+                "what",
+                "also",
+                "some",
+                "more",
+                "than",
+                "into",
+                "over",
+                "after",
+                "about",
+                "through",
+                "during",
+                "before",
+                "between",
             }:
                 continue
             seen.add(wl)

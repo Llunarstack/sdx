@@ -84,6 +84,4 @@ def sample_training_timesteps(
         t = (u * float(T - 1)).round().to(dtype=torch.long)
         return t.to(dtype=dtype)
 
-    raise ValueError(
-        f"Unknown timestep_sample_mode {mode!r}; use uniform | logit_normal | high_noise | low_noise"
-    )
+    raise ValueError(f"Unknown timestep_sample_mode {mode!r}; use uniform | logit_normal | high_noise | low_noise")

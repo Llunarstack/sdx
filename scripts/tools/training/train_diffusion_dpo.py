@@ -104,9 +104,7 @@ def main() -> int:
         print("CUDA not available; using CPU.", file=sys.stderr)
         device = "cpu"
 
-    policy, cfg, rae_bridge, _name, _fusion = load_dit_text_checkpoint(
-        args.ckpt, device=device, reject_enhanced=True
-    )
+    policy, cfg, rae_bridge, _name, _fusion = load_dit_text_checkpoint(args.ckpt, device=device, reject_enhanced=True)
     policy.train()
     for p in policy.parameters():
         p.requires_grad = True

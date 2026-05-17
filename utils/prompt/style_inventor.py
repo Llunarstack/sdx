@@ -11,7 +11,7 @@ import re
 import textwrap
 import uuid
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List
 
 from .style_genome import StyleGenome, is_genome_novel_enough
 from .style_genome_chaos import InventionMode, apply_chaos_level, invent_insane_batch
@@ -303,9 +303,7 @@ class StyleInventor:
 
         if len(genomes) < n and mode not in insane_modes:
             need = n - len(genomes)
-            genomes.extend(
-                _fallback_invent_genomes(prompt, need, seed=seed, creativity_level=creativity_level)
-            )
+            genomes.extend(_fallback_invent_genomes(prompt, need, seed=seed, creativity_level=creativity_level))
         elif len(genomes) < n:
             genomes.extend(
                 invent_insane_batch(

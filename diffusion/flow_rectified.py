@@ -42,8 +42,10 @@ import torch.nn as nn
 # Time samplers
 # ---------------------------------------------------------------------------
 
+
 class UniformTimeSampler:
     """Uniform t ~ U[0, 1]."""
+
     def sample(self, batch_size: int, device: torch.device) -> torch.Tensor:
         return torch.rand(batch_size, device=device, dtype=torch.float32)
 
@@ -60,6 +62,7 @@ class LogitNormalTimeSampler:
     mean=-1.0 biases toward cleaner images (lower t).
     mean=1.0 biases toward noisier images (higher t).
     """
+
     def __init__(self, mean: float = 0.0, std: float = 1.0):
         self.mean = float(mean)
         self.std = float(std)
@@ -75,6 +78,7 @@ class CosineTimeSampler:
     Cosine-weighted time sampler: p(t) ∝ sin(π*t).
     Emphasizes mid-range t values, similar to cosine noise schedules.
     """
+
     def sample(self, batch_size: int, device: torch.device) -> torch.Tensor:
         # Inverse CDF of sin(π*t)/2: t = arccos(1 - 2u) / π
         u = torch.rand(batch_size, device=device, dtype=torch.float32)
@@ -84,6 +88,7 @@ class CosineTimeSampler:
 # ---------------------------------------------------------------------------
 # Core rectified flow loss
 # ---------------------------------------------------------------------------
+
 
 class RectifiedFlowLoss:
     """
@@ -127,8 +132,7 @@ class RectifiedFlowLoss:
         if self.noise_offset > 0:
             # Noise offset: add low-frequency noise component for better light/dark balance
             offset = self.noise_offset * torch.randn(
-                epsilon.shape[0], epsilon.shape[1], 1, 1,
-                device=epsilon.device, dtype=epsilon.dtype
+                epsilon.shape[0], epsilon.shape[1], 1, 1, device=epsilon.device, dtype=epsilon.dtype
             )
             epsilon = epsilon + offset
         return (1.0 - t_view) * x0 + t_view * epsilon
@@ -208,7 +212,7 @@ class RectifiedFlowLoss:
 
         # Handle learn_sigma: split if output has double channels
         if pred.shape[1] > x0.shape[1]:
-            pred = pred[:, :x0.shape[1]]
+            pred = pred[:, : x0.shape[1]]
 
         # Per-sample MSE
         per_sample_loss = (pred - target).pow(2).mean(dim=(1, 2, 3))
@@ -230,6 +234,7 @@ class RectifiedFlowLoss:
 # ---------------------------------------------------------------------------
 # Rectified flow sampler (ODE solver)
 # ---------------------------------------------------------------------------
+
 
 class RectifiedFlowSampler:
     """
@@ -276,7 +281,7 @@ class RectifiedFlowSampler:
             rho = 7.0
             t_max, t_min = self.t_start, max(self.t_end, 1e-4)
             i = torch.linspace(0, 1, self.steps + 1)
-            return (t_max**(1/rho) + i * (t_min**(1/rho) - t_max**(1/rho)))**rho
+            return (t_max ** (1 / rho) + i * (t_min ** (1 / rho) - t_max ** (1 / rho))) ** rho
         else:
             return torch.linspace(self.t_start, self.t_end, self.steps + 1)
 
@@ -312,7 +317,7 @@ class RectifiedFlowSampler:
                 pred_double = model(x_double, t_double, **kwargs_combined)
 
             if pred_double.shape[1] > x.shape[1]:
-                pred_double = pred_double[:, :x.shape[1]]
+                pred_double = pred_double[:, : x.shape[1]]
 
             pred_cond, pred_uncond = pred_double.chunk(2, dim=0)
 
@@ -328,7 +333,7 @@ class RectifiedFlowSampler:
             with torch.no_grad():
                 pred = model(x, t_idx, **model_kwargs_cond)
             if pred.shape[1] > x.shape[1]:
-                pred = pred[:, :x.shape[1]]
+                pred = pred[:, : x.shape[1]]
 
         return pred
 
@@ -437,6 +442,7 @@ class RectifiedFlowSampler:
 # Reflow: straighten trajectories for fewer-step inference
 # ---------------------------------------------------------------------------
 
+
 class ReflowPairing:
     """
     "Reflow" step (Liu et al. 2023): straighten the learned flow by pairing
@@ -491,6 +497,7 @@ class ReflowPairing:
 # ---------------------------------------------------------------------------
 # Consistency flow loss (for 1-step distillation)
 # ---------------------------------------------------------------------------
+
 
 class ConsistencyFlowLoss:
     """
@@ -574,13 +581,13 @@ class ConsistencyFlowLoss:
         # Student prediction at t
         pred_student = self.student(x_t, t_idx, **model_kwargs)
         if pred_student.shape[1] > x0.shape[1]:
-            pred_student = pred_student[:, :x0.shape[1]]
+            pred_student = pred_student[:, : x0.shape[1]]
 
         # Teacher prediction at t+δt (no grad)
         with torch.no_grad():
             pred_teacher = self.teacher(x_t_next, t_next_idx, **model_kwargs)
             if pred_teacher.shape[1] > x0.shape[1]:
-                pred_teacher = pred_teacher[:, :x0.shape[1]]
+                pred_teacher = pred_teacher[:, : x0.shape[1]]
 
         # Consistency: student(t) should match teacher(t+δt)
         loss = (pred_student - pred_teacher.detach()).pow(2).mean(dim=(1, 2, 3))
@@ -595,6 +602,7 @@ class ConsistencyFlowLoss:
 # ---------------------------------------------------------------------------
 # Velocity-to-x0 conversion (for decode preview during training)
 # ---------------------------------------------------------------------------
+
 
 def velocity_to_x0(
     v_pred: torch.Tensor,
@@ -628,6 +636,7 @@ def velocity_to_epsilon(
 # ---------------------------------------------------------------------------
 # Optimal transport noise coupling (reduces variance, improves training)
 # ---------------------------------------------------------------------------
+
 
 def ot_noise_coupling(
     x0: torch.Tensor,

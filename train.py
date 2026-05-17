@@ -138,6 +138,7 @@ def _apply_runtime_ar(raw_model, *, num_ar_blocks: int, ar_block_order: str) -> 
 
 def _safe_git_info(repo_root: Path) -> dict:
     """Best-effort git metadata for reproducibility manifests."""
+
     def _run(args):
         try:
             return subprocess.check_output(args, cwd=str(repo_root), text=True, stderr=subprocess.DEVNULL).strip()
@@ -779,17 +780,13 @@ def eval_val_loss(
                     if ot_noise_val is not None
                     else torch.randn_like(latents, device=device, dtype=latents.dtype)
                 )
-                fp_v = flow_matching_per_sample_losses(
-                    ema_model, latents, eps_v, diffusion.num_timesteps, model_kwargs
-                )
+                fp_v = flow_matching_per_sample_losses(ema_model, latents, eps_v, diffusion.num_timesteps, model_kwargs)
                 if sample_weights is not None:
                     wv = sample_weights.view(-1).to(dtype=fp_v.dtype)
                     lm_v = (fp_v * wv).sum() / (wv.sum() + 1e-8)
                 else:
                     lm_v = fp_v.mean()
-                loss_dict = {
-                    "loss": lm_v + _bw_v * _bridge_aux_loss_val() if _bw_v > 0.0 else lm_v
-                }
+                loss_dict = {"loss": lm_v + _bw_v * _bridge_aux_loss_val() if _bw_v > 0.0 else lm_v}
             elif float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
                 loss_dict = compute_mdm_training_loss(
                     diffusion,
@@ -970,15 +967,16 @@ def create_logger(log_dir):
 def main(cfg: TrainConfig):
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "CUDA is not available. Training requires a CUDA-capable GPU. "
-            "Run `nvidia-smi` to check driver status."
+            "CUDA is not available. Training requires a CUDA-capable GPU. Run `nvidia-smi` to check driver status."
         )
 
     # Enhanced error handling and validation
     logger = setup_logging()
 
     if bool(getattr(cfg, "strict_warnings", False)):
-        warnings.filterwarnings("error", category=UserWarning, module=r"^(train|config|data|diffusion|models|training|utils)(\.|$)")
+        warnings.filterwarnings(
+            "error", category=UserWarning, module=r"^(train|config|data|diffusion|models|training|utils)(\.|$)"
+        )
         warnings.filterwarnings(
             "error", category=FutureWarning, module=r"^(train|config|data|diffusion|models|training|utils)(\.|$)"
         )
@@ -1044,6 +1042,7 @@ def main(cfg: TrainConfig):
     if rank == 0:
         Path(cfg.results_dir).mkdir(parents=True, exist_ok=True)
         import time as _time
+
         _ts = _time.strftime("%Y%m%d_%H%M%S")
         exp_dir = Path(cfg.results_dir) / f"{_ts}-{cfg.model_name.replace('/', '-')}"
         exp_dir.mkdir(parents=True, exist_ok=True)
@@ -1238,9 +1237,7 @@ def main(cfg: TrainConfig):
                 "Use a single GPU or omit --resolution-buckets."
             )
         if val_split > 0 and val_split < 1:
-            raise ValueError(
-                "--resolution-buckets requires --val-split 0 (no train/val split) in this version."
-            )
+            raise ValueError("--resolution-buckets requires --val-split 0 (no train/val split) in this version.")
         for h, w in res_buckets:
             if int(h) % 8 != 0 or int(w) % 8 != 0:
                 raise ValueError(f"Resolution bucket ({h},{w}) must be divisible by 8 (VAE stride).")
@@ -1487,7 +1484,9 @@ def main(cfg: TrainConfig):
                     _apply_runtime_ar(raw_model_for_ar, num_ar_blocks=curr[0], ar_block_order=curr[1])
                     last_runtime_ar = curr
                     if rank == 0:
-                        logger.info("AR runtime update @step=%d -> num_ar_blocks=%d ar_block_order=%s", steps, curr[0], curr[1])
+                        logger.info(
+                            "AR runtime update @step=%d -> num_ar_blocks=%d ar_block_order=%s", steps, curr[0], curr[1]
+                        )
             # LR schedule (step-based: cosine after warmup)
             if use_step_based:
                 lr = get_lr_cosine(
@@ -1672,19 +1671,10 @@ def main(cfg: TrainConfig):
                 ot_noise = _maybe_ot_pair_noise(cfg, latents, device)
                 attn_gw = float(getattr(cfg, "attn_grounding_loss_weight", 0.0))
                 is_flow = bool(getattr(cfg, "flow_matching_training", False))
-                is_mdm = float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(
-                    cfg, "mdm_mask_schedule", None
-                )
+                is_mdm = float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None)
                 gv = batch.get("grounding_mask_valid")
-                has_mask_supervision = "grounding_mask" in batch and (
-                    gv is None or bool(gv.any().item())
-                )
-                use_attn_grounding = (
-                    attn_gw > 0.0
-                    and has_mask_supervision
-                    and not is_flow
-                    and not is_mdm
-                )
+                has_mask_supervision = "grounding_mask" in batch and (gv is None or bool(gv.any().item()))
+                use_attn_grounding = attn_gw > 0.0 and has_mask_supervision and not is_flow and not is_mdm
                 cov_w = float(getattr(cfg, "attn_token_coverage_loss_weight", 0.0))
                 use_attn_coverage = cov_w > 0.0 and not is_flow and not is_mdm
                 use_attn_aux = use_attn_grounding or use_attn_coverage
@@ -1731,9 +1721,7 @@ def main(cfg: TrainConfig):
                         loss_main = (fp * w).sum() / (w.sum() + 1e-8)
                     else:
                         loss_main = fp.mean()
-                    loss_dict = {
-                        "loss": loss_main + _bw * _bridge_aux_loss() if _bw > 0.0 else loss_main
-                    }
+                    loss_dict = {"loss": loss_main + _bw * _bridge_aux_loss() if _bw > 0.0 else loss_main}
                 elif float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None):
                     loss_dict = compute_mdm_training_loss(
                         diffusion,

@@ -84,7 +84,9 @@ def refresh_block_ar_mask_on_model(
     Mirrors ``train._apply_runtime_ar`` so inference scripts can switch AR regime without reloading weights.
     """
     b = int(num_ar_blocks if num_ar_blocks is not None else getattr(model, "num_ar_blocks", 0) or 0)
-    order = str(ar_block_order if ar_block_order is not None else getattr(model, "ar_block_order", "raster") or "raster")
+    order = str(
+        ar_block_order if ar_block_order is not None else getattr(model, "ar_block_order", "raster") or "raster"
+    )
     setattr(model, "num_ar_blocks", b)
     setattr(model, "ar_block_order", order)
     if b <= 0:

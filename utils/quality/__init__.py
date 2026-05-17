@@ -30,9 +30,7 @@ def _public_names_quality_py() -> frozenset[str]:
     return frozenset(names)
 
 
-_SUBMODULE_NAMES: frozenset[str] = frozenset(
-    p.stem for p in _pkg_dir.glob("*.py") if p.name != "__init__.py"
-)
+_SUBMODULE_NAMES: frozenset[str] = frozenset(p.stem for p in _pkg_dir.glob("*.py") if p.name != "__init__.py")
 _QUALITY_PUBLIC: frozenset[str] = _public_names_quality_py()
 _EXPORT_NAMES: frozenset[str] = _SUBMODULE_NAMES | _QUALITY_PUBLIC
 __all__: list[str] = sorted(_EXPORT_NAMES)  # pyright: ignore[reportUnsupportedDunderAll]

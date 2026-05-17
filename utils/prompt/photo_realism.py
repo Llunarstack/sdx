@@ -222,4 +222,3 @@ def photo_realism_fragments(
     # Light weighting syntax compatible with existing prompt emphasis parsing.
     weighted = f"({pos}:{s:.2f})" if pos else ""
     return weighted, neg
-

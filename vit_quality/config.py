@@ -44,4 +44,3 @@ class ViTConfig:
     device: str = "cuda"
     seed: int = 42
     out_dir: str = "vit_runs"
-

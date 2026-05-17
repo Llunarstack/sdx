@@ -65,7 +65,10 @@ class ViTManifestDataset(Dataset):
             self.transform = transforms.Compose(
                 [
                     transforms.RandomResizedCrop(
-                        image_size, scale=(0.85, 1.0), ratio=(0.9, 1.1), interpolation=transforms.InterpolationMode.BILINEAR
+                        image_size,
+                        scale=(0.85, 1.0),
+                        ratio=(0.9, 1.1),
+                        interpolation=transforms.InterpolationMode.BILINEAR,
                     ),
                     transforms.RandomHorizontalFlip(p=0.5),
                     transforms.ColorJitter(brightness=0.08, contrast=0.08, saturation=0.08, hue=0.02),
@@ -167,4 +170,3 @@ def collate_vit_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
     else:
         out["adherence_scores"] = None
     return out
-

@@ -65,9 +65,7 @@ def main() -> int:
         print("CUDA not available; using CPU.", file=sys.stderr)
         device = "cpu"
 
-    teacher, cfg, rae_bridge, _, _ = load_dit_text_checkpoint(
-        args.teacher_ckpt, device=device, reject_enhanced=True
-    )
+    teacher, cfg, rae_bridge, _, _ = load_dit_text_checkpoint(args.teacher_ckpt, device=device, reject_enhanced=True)
     teacher.eval()
     for p in teacher.parameters():
         p.requires_grad = False

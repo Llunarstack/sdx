@@ -237,7 +237,9 @@ def demonstrate_cli_usage():
     print("Character Management Commands:")
     print("  # Create a character")
     print("  python scripts/cli.py character create 'Elena Rodriguez' --references ref1.jpg ref2.jpg ref3.jpg")
-    print("  python scripts/cli.py character create 'Elena Rodriguez' --face-shape oval --eye-color hazel --hair-color brown")
+    print(
+        "  python scripts/cli.py character create 'Elena Rodriguez' --face-shape oval --eye-color hazel --hair-color brown"
+    )
     print()
     print("  # List characters")
     print("  python scripts/cli.py character list")

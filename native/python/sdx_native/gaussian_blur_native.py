@@ -31,11 +31,11 @@ class CudaGaussianBlurLib:
         lib.sdx_cuda_gaussian_blur_latent_f32.argtypes = [
             ctypes.c_void_p,  # src_host
             ctypes.c_void_p,  # dst_host
-            ctypes.c_int,     # B
-            ctypes.c_int,     # C
-            ctypes.c_int,     # H
-            ctypes.c_int,     # W
-            ctypes.c_float,   # sigma
+            ctypes.c_int,  # B
+            ctypes.c_int,  # C
+            ctypes.c_int,  # H
+            ctypes.c_int,  # W
+            ctypes.c_float,  # sigma
         ]
         lib.sdx_cuda_gaussian_blur_latent_f32.restype = ctypes.c_int
         self._lib = lib

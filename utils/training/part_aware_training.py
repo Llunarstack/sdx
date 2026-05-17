@@ -144,9 +144,7 @@ def image_mask_to_patch_weights(
             mask_np = mask_b1hw.detach().float().cpu().numpy()
             result = maybe_mask_to_patch_weights_native(mask_np, patch_rows, patch_cols)
             if result is not None:
-                return torch.from_numpy(result).to(
-                    device=mask_b1hw.device, dtype=mask_b1hw.dtype
-                )
+                return torch.from_numpy(result).to(device=mask_b1hw.device, dtype=mask_b1hw.dtype)
         except Exception:
             pass
 
@@ -188,9 +186,9 @@ def foreground_attention_alignment_loss(
     token_start_idx = max(0, min(token_start, token_end_idx))
     attention_patch_mean = attn_weights[:, :, :, token_start_idx:token_end_idx].mean(dim=(1, 3))  # (B, N)
     attention_patch_mean = attention_patch_mean.to(dtype=torch.float32)
-    patch_foreground = patch_foreground_b_n.to(device=attention_patch_mean.device, dtype=attention_patch_mean.dtype).clamp(
-        0.0, 1.0
-    )
+    patch_foreground = patch_foreground_b_n.to(
+        device=attention_patch_mean.device, dtype=attention_patch_mean.dtype
+    ).clamp(0.0, 1.0)
 
     row_ok = torch.ones(batch_size, device=attention_patch_mean.device, dtype=torch.bool)
     if sample_valid is not None:
@@ -211,7 +209,9 @@ def foreground_attention_alignment_loss(
     return attn_weights.mean() * 0.0
 
 
-def token_coverage_from_cross_attention(attn_weights: torch.Tensor, *, token_start: int = 0, token_end: int = 0) -> torch.Tensor:
+def token_coverage_from_cross_attention(
+    attn_weights: torch.Tensor, *, token_start: int = 0, token_end: int = 0
+) -> torch.Tensor:
     """
     Return per-sample per-token coverage scores from cross-attention maps.
 
@@ -242,7 +242,9 @@ def token_coverage_loss(
 
     Loss = mean(relu(target_coverage - coverage_token)), optionally weighted by token_weights.
     """
-    token_coverage = token_coverage_from_cross_attention(attn_weights, token_start=token_start, token_end=token_end)  # (B, Lt)
+    token_coverage = token_coverage_from_cross_attention(
+        attn_weights, token_start=token_start, token_end=token_end
+    )  # (B, Lt)
     per_token_loss = torch.relu(float(target_coverage) - token_coverage)
     if token_weights is not None:
         token_weight_values = token_weights.to(device=per_token_loss.device, dtype=per_token_loss.dtype)

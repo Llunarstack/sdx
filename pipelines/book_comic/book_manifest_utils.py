@@ -158,7 +158,9 @@ def validate_book_manifest(
     pv = manifest.get("pick_vit_ckpt")
     pv_s = str(pv).strip() if pv is not None else ""
     if pick_metric_requires_vit_ckpt(pb) and not pv_s:
-        warnings.append(f"pick_best={pb!r} but pick_vit_ckpt missing in manifest (run may have used neutral ViT scores)")
+        warnings.append(
+            f"pick_best={pb!r} but pick_vit_ckpt missing in manifest (run may have used neutral ViT scores)"
+        )
 
     bw = manifest.get("beam_width")
     try:

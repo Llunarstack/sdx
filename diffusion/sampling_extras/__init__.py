@@ -57,4 +57,3 @@ __all__ = [
     "sanitize_holy_grail_kwargs",
     "recommend_holy_grail_preset",
 ]
-
