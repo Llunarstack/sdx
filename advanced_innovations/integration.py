@@ -1,6 +1,7 @@
 """
 Advanced Innovations Integration: Wire all systems together into unified pipeline.
 Provides unified interface for core SDX generation with all enhancements.
+Includes agentic quality control for perfect prompt adherence.
 """
 
 import torch
@@ -9,6 +10,27 @@ from typing import Dict, Optional, List, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Lazy imports for agentic systems (optional)
+def _get_quality_control_system():
+    """Lazy-load quality control system."""
+    try:
+        from .agentic import QualityControlSystem
+        return QualityControlSystem()
+    except ImportError:
+        logger.warning("Agentic quality control not available")
+        return None
+
+
+def _get_adherence_monitor():
+    """Lazy-load prompt adherence monitor."""
+    try:
+        from .agentic import PromptAdherenceMonitor
+        return PromptAdherenceMonitor()
+    except ImportError:
+        logger.warning("Prompt adherence monitoring not available")
+        return None
 
 
 class SDXAdvancedPipeline(nn.Module):
@@ -23,6 +45,8 @@ class SDXAdvancedPipeline(nn.Module):
         enable_consistency: bool = True,
         enable_multimodal: bool = True,
         enable_novel: bool = True,
+        enable_quality_control: bool = True,
+        enable_prompt_adherence: bool = True,
     ):
         super().__init__()
         self.config = {
@@ -33,10 +57,13 @@ class SDXAdvancedPipeline(nn.Module):
             "consistency": enable_consistency,
             "multimodal": enable_multimodal,
             "novel": enable_novel,
+            "quality_control": enable_quality_control,
+            "prompt_adherence": enable_prompt_adherence,
         }
 
         # Lazy imports to avoid circular dependencies
         self._components = {}
+        self._agentic_systems = {}
         self._initialized = False
 
     def initialize(self):
@@ -99,6 +126,23 @@ class SDXAdvancedPipeline(nn.Module):
                 logger.info("✓ Novel capabilities engine initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize novel: {e}")
+
+        # Initialize agentic systems
+        if self.config["quality_control"]:
+            try:
+                from .agentic import QualityControlSystem
+                self._agentic_systems["quality_control"] = QualityControlSystem()
+                logger.info("✓ Quality control system initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize quality control: {e}")
+
+        if self.config["prompt_adherence"]:
+            try:
+                from .agentic import PromptAdherenceMonitor
+                self._agentic_systems["adherence_monitor"] = PromptAdherenceMonitor()
+                logger.info("✓ Prompt adherence monitor initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize adherence monitor: {e}")
 
         self._initialized = True
 
@@ -216,6 +260,43 @@ class SDXAdvancedPipeline(nn.Module):
 
         return output
 
+    def assess_quality(
+        self,
+        prompt: str,
+        t5_embedding: torch.Tensor,
+        clip_embeddings: Dict,
+        generated_latent: torch.Tensor,
+    ):
+        """Assess generation quality using agentic system."""
+        quality_control = self._agentic_systems.get("quality_control")
+        if quality_control is None:
+            logger.warning("Quality control not available")
+            return None
+
+        assessment, should_refine = quality_control.evaluate_generation(
+            prompt, t5_embedding, clip_embeddings, generated_latent
+        )
+        return assessment
+
+    def ensure_prompt_adherence(
+        self,
+        prompt: str,
+        t5_embedding: torch.Tensor,
+        clip_embeddings: Dict,
+        generation_func,
+        max_iterations: int = 5,
+    ):
+        """Generate with enforced prompt adherence."""
+        monitor = self._agentic_systems.get("adherence_monitor")
+        if monitor is None:
+            logger.warning("Adherence monitor not available")
+            return None, 0.0
+
+        final_latent, adherence = monitor.generate_with_adherence(
+            prompt, t5_embedding, clip_embeddings, generation_func, max_iterations
+        )
+        return final_latent, adherence
+
     def get_status(self) -> Dict[str, bool]:
         """Get status of all components."""
         self.initialize()
@@ -227,6 +308,8 @@ class SDXAdvancedPipeline(nn.Module):
             "consistency": "consistency" in self._components,
             "multimodal": "multimodal" in self._components,
             "novel": "novel" in self._components,
+            "quality_control": "quality_control" in self._agentic_systems,
+            "prompt_adherence": "adherence_monitor" in self._agentic_systems,
         }
 
 
