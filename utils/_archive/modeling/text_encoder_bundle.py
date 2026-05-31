@@ -16,7 +16,6 @@ from typing import List, Optional, Union
 
 import torch
 import torch.nn as nn
-
 from utils.modeling.model_paths import (
     default_clip_bigg_path,
     default_clip_h14_path,

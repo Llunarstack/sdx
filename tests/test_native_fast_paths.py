@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from sdx_native.buffer_scan_fast import scan_file_chunks
 from sdx_native.c_buffer_stats_native import count_newlines_py, newline_and_sum, sum_bytes_py
 from sdx_native.caption_csv_fast import merge_caption_csv, normalize_caption_csv, token_overlap_ratio

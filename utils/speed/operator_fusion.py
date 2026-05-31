@@ -2,10 +2,11 @@
 Operator fusion: combine multiple operations into single kernel for 3-5x speedup.
 """
 
+import logging
+from typing import List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Callable, List, Tuple
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +220,6 @@ class GraphRewriter:
     def eliminate_redundancy(self) -> None:
         """Eliminate redundant computations."""
         # Detect common subexpressions
-        seen_computations = {}
         optimizations = 0
 
         for i, op1 in enumerate(self.optimized_graph or []):
@@ -269,7 +269,7 @@ class KernelOptimizer:
     def use_flash_attention() -> None:
         """Enable flash attention v2 if available."""
         try:
-            from flash_attn import flash_attn_func
+            import flash_attn  # noqa: F401
 
             logger.info("Flash Attention V2 available (5x faster attention)")
         except ImportError:

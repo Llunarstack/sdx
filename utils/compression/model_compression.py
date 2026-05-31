@@ -3,11 +3,12 @@ Advanced model compression: weight sharing, structured pruning, adaptive quantiz
 Target: 5-10x model size reduction with minimal quality loss.
 """
 
+import logging
+from typing import Dict, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Dict, Tuple, List, Optional
-import logging
 
 logger = logging.getLogger(__name__)
 

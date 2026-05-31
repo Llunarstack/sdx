@@ -1,9 +1,9 @@
 """Adaptive training strategies."""
 
 from .adaptive_trainer import (
+    AdaptiveLossScaling,
     AdaptiveTrainingConfig,
     AdaptiveWeightDecay,
-    AdaptiveLossScaling,
     CurriculumLearning,
     DynamicBatchNormalization,
     GradientAdaptation,

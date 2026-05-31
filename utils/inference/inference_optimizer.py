@@ -3,13 +3,14 @@ Inference optimization suite: dynamic batching, KV cache management, speculative
 Designed for 10-50x inference speedup.
 """
 
+import logging
+import time
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import List, Tuple, Optional, Dict, Any
-from dataclasses import dataclass
-from collections import deque
-import time
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,6 @@ class DynamicBatcher:
             return None
 
         batch_size = min(len(self.queue), self.max_batch_size)
-        batch = []
 
         # Find max sequence length in batch
         max_seq_len = 0

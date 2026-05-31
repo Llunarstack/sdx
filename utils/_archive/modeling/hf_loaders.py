@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
-
 from utils.modeling import hf_scaffold
 from utils.modeling.model_paths import (
     default_blip2_flan_t5_xl_path,

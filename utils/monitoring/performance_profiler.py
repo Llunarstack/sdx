@@ -2,14 +2,15 @@
 Real-time performance monitoring and profiling with automatic kernel recommendations.
 """
 
+import logging
+import time
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-import time
-import numpy as np
-from typing import Dict, List, Tuple, Optional, Callable
-from dataclasses import dataclass
-from collections import defaultdict
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,6 @@ class OperationProfiler:
         """Register forward/backward hooks."""
 
         def forward_hook(module, input, output):
-            start = time.perf_counter()
-
             # Compute FLOPs
             flops = self._estimate_flops(module, input, output)
 
@@ -229,13 +228,13 @@ class KernelRecommender:
         # Sort by potential speedup
         for kernel, operations in sorted(
             by_kernel.items(),
-            key=lambda x: sum(time for _, time in x[1]),
+            key=lambda x: sum(t for _, t in x[1]),
             reverse=True,
         ):
             total_time = sum(time for _, time in operations)
             report += f"\n{kernel} (Potential Speedup: ~3-5x)\n"
             report += f"  Total Time to Optimize: {total_time:.3f}ms\n"
-            report += f"  Operations:\n"
+            report += "  Operations:\n"
 
             for op_name, op_time in sorted(operations, key=lambda x: x[1], reverse=True):
                 report += f"    - {op_name}: {op_time:.3f}ms\n"
@@ -274,7 +273,7 @@ class RuntimeMonitor:
             peak = torch.cuda.max_memory_allocated() / 1e6
             current = torch.cuda.memory_allocated() / 1e6
             return peak, current
-        except:
+        except RuntimeError:
             return 0.0, 0.0
 
     def report(self) -> str:

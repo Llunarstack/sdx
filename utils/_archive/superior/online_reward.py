@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 import numpy as np
-
 from utils.quality import test_time_pick as ttp
 
 
@@ -58,7 +57,6 @@ class OnlineRewardModel:
                 import tempfile
 
                 from PIL import Image
-
                 from utils.superior.vit_mining import score_image_vit
 
                 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:

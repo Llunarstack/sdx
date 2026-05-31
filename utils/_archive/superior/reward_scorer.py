@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-
 from utils.quality import test_time_pick as ttp
 
 
@@ -58,7 +57,6 @@ class UnifiedRewardScorer:
             import tempfile
 
             from PIL import Image
-
             from utils.superior.vit_mining import score_image_vit
 
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:

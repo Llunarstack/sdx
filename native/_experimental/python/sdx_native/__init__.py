@@ -25,6 +25,8 @@ from .diffusion_sigma_fast import (
     clip_snr,
     effective_noise_weight,
     sigma_from_alpha_cumprod,
+)
+from .diffusion_sigma_fast import (
     snr_from_alpha_cumprod as snr_from_alpha_cumprod_numpy,
 )
 from .image_metrics_native import maybe_count_components_native, maybe_image_stats_native
@@ -45,6 +47,8 @@ from .prompt_ops_native import (
     get_prompt_ops_lib,
     maybe_filter_negative_by_positive,
     maybe_merge_caption_csv,
+)
+from .prompt_ops_native import (
     merge_caption_csv as merge_caption_csv_rust,
 )
 from .relpath_norm_fast import relpath_if_under, to_posix_key, unique_preserve_order

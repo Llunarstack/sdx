@@ -197,7 +197,6 @@ class LatentMixing:
     @staticmethod
     def style_content_mix(z_style: torch.Tensor, z_content: torch.Tensor, style_weight: float = 0.5) -> torch.Tensor:
         """Mix style and content latents."""
-        z_style_stats = torch.cat([z_style.mean(dim=-1), z_style.std(dim=-1)], dim=-1)
         z_content_norm = F.normalize(z_content, dim=-1)
 
         mixed = z_content_norm * (1.0 - style_weight) + F.normalize(z_style, dim=-1) * style_weight
