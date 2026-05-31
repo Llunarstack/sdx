@@ -65,7 +65,6 @@ from utils.modeling.model_paths import (
     default_vit_gpt2_coco_path,
     default_watermark_detector_path,
     default_zoedepth_path,
-    model_dir,
 )
 
 
