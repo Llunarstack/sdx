@@ -1,10 +1,44 @@
-# SDX documentation
+# SDX Documentation Index
 
-Quick links to all project docs, grouped by purpose.
+Complete reference for SDX from basic concepts to advanced implementation.
+
+**New to SDX?** Start with [What is SDX?](#what-is-sdx) below, then review [Getting Started](#getting-started).
 
 ---
 
-## Project map & architecture
+## What is SDX?
+
+SDX is a research framework for training and sampling text-to-image diffusion transformers.
+
+Core components:
+
+- Training: flow matching, DPO, distillation, part-aware attention
+- Inference: Holy Grail per-step scheduling, TCIS quality filtering, LoRA routing
+- Style: Style Genome for aesthetic invention (not artist imitation)
+- Prompts: PromptStack v2 unified conditioning in training and sampling
+
+Key files:
+
+- train.py: training loop (200 lines, readable)
+- sample.py: inference with Holy Grail and TCIS (300 lines)
+- demo.py: one-command generation
+
+---
+
+## Getting Started
+
+| Task | Documentation |
+|------|---|
+| Install and first image | Quick start in [../README.md](../README.md) |
+| Train on your data | [TRAINING_TEXT_TO_PIXELS.md](#project-map--architecture) |
+| Understand codebase | [CODEBASE.md](#project-map--architecture) |
+| Advanced sampling | [HOLY_GRAIL_OVERVIEW.md](#project-map--architecture) |
+| Style Genome guide | [Style Genome](../README.md#style-genome-invent-novel-aesthetics) in main README |
+| Complete beginners guide | [GETTING_STARTED.md](GETTING_STARTED.md) |
+
+---
+
+## Project Architecture and Map
 
 | Doc | Description |
 |-----|--------------|
@@ -39,7 +73,7 @@ Quick links to all project docs, grouped by purpose.
 
 ---
 
-## Operations & features
+## Operations and Features
 
 | Doc | Description |
 |-----|--------------|
@@ -54,7 +88,7 @@ Quick links to all project docs, grouped by purpose.
 
 ---
 
-## Releases (versioned source)
+## Release Notes
 
 | Doc | Description |
 |-----|-------------|
@@ -69,7 +103,7 @@ Quick links to all project docs, grouped by purpose.
 
 ---
 
-## Roadmap & inspiration
+## Research Roadmap and Inspiration
 
 | Doc | Description |
 |-----|--------------|

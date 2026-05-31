@@ -13,9 +13,9 @@
    ╚══════╝╚═════╝ ╚═╝  ╚═╝
 ```
 
-### Diffusion transformers for people who want to **see** the stack
+# **SDX: Advanced Text-to-Image Generation with Diffusion Transformers**
 
-**Train · sample · invent styles · adapt per step**
+**A research framework for training & sampling custom image generation models with unprecedented control**
 
 <br/>
 
@@ -26,30 +26,94 @@
 
 <br/>
 
-[**Quick start**](#quick-start) · [**What's new in v8**](#whats-new-in-v8) · [**Style Genome**](#style-genome-invent-original-looks) · [**Training**](#training) · [**Sampling**](#sampling) · [**Architecture**](#architecture) · [**Docs**](#documentation)
+[**Quick start**](#quick-start) · [**What is SDX?**](#what-is-sdx) · [**Key features**](#-key-features) · [**Style Genome**](#style-genome-invent-original-looks) · [**Training**](#training) · [**Sampling**](#sampling) · [**Docs**](#documentation)
 
 <br/>
 
 </div>
 
+---
+
+## What is SDX?
+
+**SDX** (Stable Diffusion Transformer eXtended) is a research framework for building and deploying custom text-to-image generation models. Unlike general-purpose diffusion libraries, SDX is purpose-built for:
+
+- **Training custom models** on your own data with advanced objectives (flow matching, DPO, distillation)
+- **Precise control** with per-step adapters, LoRA routing, and dynamic CFG scheduling
+- **Style invention** — generate novel aesthetics beyond artist imitation using Style Genome
+- **Research and experimentation** with transparent, modular code (not node graphs)
+
+<br/>
+
 > **New in [v8](docs/releases/v8.md):** **Style Genome** (invent orthogonal aesthetics, not artist-name clones) · **PromptStack v2** (one pipeline for `sample.py` and training captions) · chaos / fusion / apocalypse modes · native style ops (Rust, CUDA, Go, Mojo) with Python fallbacks.
 
 ---
 
-## What's new in v8
+## Key Features
 
-| | v7 | **v8** |
-|---|:--:|:--:|
-| Prompt path | Fragmented helpers | **PromptStack v2** — staged, traceable, training parity |
-| Style creativity | Tag / artist banks | **Style Genome** — palette, line, surface, camera, signature axes |
-| Exploration | Manual prompts | **`explore_styles`** CLI + JSONL manifests + dedupe |
-| Native | General fast paths | **Style pick / merge / manifest** + cleaned `native/cpp/cuda/` layout |
+### Style Genome: Invent Novel Aesthetics
 
-Full notes: **[`docs/releases/v8.md`](docs/releases/v8.md)** · prior: [v7](docs/releases/v7.md) · [v6](docs/releases/v6.md) · [v5](docs/releases/v5.md)
+Instead of "in the style of Artist X," create structured aesthetic systems with:
+
+- Palette - color theory and dominant hues
+- Line - stroke mechanics and contour style
+- Surface - texture and material properties
+- Camera - perspective and composition angles
+- Signature - recurring motifs and visual fingerprints
+
+### PromptStack v2: Transparent Prompt Pipeline
+
+Single, traceable pipeline from user input to model conditioning:
+
+```
+Raw prompt → Intelligence → Style genome → Guidance → Negatives → Encoders → DiT
+```
+
+Same logic in training and inference—reproducible, debuggable, observable.
+
+### Holy Grail Scheduling: Per-Step Adaptation
+
+Adaptive generation instead of fixed CFG scales:
+
+- Dynamic CFG strength based on noise level
+- Conditional LoRA blending per step
+- Solver and step count optimization
+- Works with flow matching and VP diffusion
+
+### TCIS: Quality Filtering with ViT Committee
+
+For difficult prompts (text in images, exact layouts):
+
+- DiT generates candidate images
+- ViT model scores quality and adherence
+- Consensus selection and optional refinement
+
+### Advanced Training
+
+Modern training objectives and techniques:
+
+- Flow matching: faster convergence, better latent paths
+- Bridge regularization: balanced schedule adherence
+- Part-aware attention: hands, faces, objects ground correctly
+- DPO and knowledge distillation: learn from feedback and teacher models
 
 ---
 
-## Game-changing capabilities
+## What's New in v8
+
+| Feature | v7 | v8 |
+|---|:---:|:---:|
+| Prompt pipeline | Fragmented | PromptStack v2 (unified, traceable) |
+| Style system | Artist tags | Style Genome (5-axis invention) |
+| Exploration | Manual prompts | explore_styles CLI + manifests |
+| Native operations | Basic | Rust/CUDA/Go/Mojo optimized ops |
+
+Full details: [docs/releases/v8.md](docs/releases/v8.md)  
+Previous versions: [v7](docs/releases/v7.md) · [v6](docs/releases/v6.md) · [v5](docs/releases/v5.md)
+
+---
+
+## Game-Changing Capabilities
 
 <table>
 <tr>
@@ -130,35 +194,81 @@ flowchart LR
 
 ---
 
-## Why SDX
+## Why SDX?
 
-SDX is a **DiT-centric** research framework — not a ComfyUI checkpoint graph fork. Training lives in `train.py`, sampling in `sample.py`, boundaries are explicit.
+A transparent research framework, not a checkpoint fork.
 
-| | SDX | diffusers DiT | ComfyUI |
+Most diffusion tools fall into categories:
+- ComfyUI: node graph workflows (good for inference, hard to reason about)
+- diffusers: library for sampling (missing training and style systems)
+- Closed-source: proprietary, can't see how they work
+
+**SDX advantages:**
+
+- **Full stack**: data loading → training → inference scheduling
+- **Transparent**: train.py is 200 lines, sample.py is 300 lines—read the full pipeline
+- **Research-grade**: Flow matching, DPO, TCIS, Holy Grail all integrated
+- **Training-first**: not just sampling. Full checkpoint metadata and config snapshots
+
+| Feature | SDX | diffusers | ComfyUI |
 |---|:---:|:---:|:---:|
-| Training loop | ● | ○ | ○ |
-| Flow + VP + bridge objectives | ● | partial | ○ |
-| Multi-LoRA role routing | ● | basic | plugins |
-| Holy Grail adaptive CFG | ● | ○ | ○ |
-| Style Genome invention | ● | ○ | ○ |
-| Run manifests + config snapshots | ● | ○ | ○ |
+| Training loop | Yes | No | No |
+| Flow matching + VP + bridge | Yes | Partial | No |
+| Multi-LoRA role routing | Yes | Basic | Plugins |
+| Holy Grail adaptive CFG | Yes | No | No |
+| Style Genome | Yes | No | No |
+| Run reproducibility | Yes | No | No |
 
 ---
 
-## Quick start
+---
+
+## Use Cases
+
+**Research and Custom Models**
+
+- Train diffusion transformers on your datasets (anime, architecture, products, etc.)
+- Compare training objectives (flow matching vs VP diffusion vs bridge loss)
+- Export checkpoints with reproducibility metadata
+
+**Style Invention and Curation**
+
+- Generate novel aesthetic systems from prompts
+- Rank variants with ViT quality scoring (TCIS)
+- Batch-generate images with consistent styles
+
+**Production Sampling**
+
+- Per-step CFG, LoRA, and control scheduling (Holy Grail)
+- Quality filtering for difficult prompts (TCIS)
+- Adaptive step counts and solver selection
+
+**Custom Data and Training**
+
+- Train on custom datasets (folder or JSONL manifest format)
+- Hierarchical captions (global, local, entity-level)
+- Part-aware attention for hands, faces, and objects
+
+---
+
+## Quick Start
 
 ```bash
+# Install & health check
 pip install -r requirements.txt
 python -m toolkit.training.env_health    # VRAM + CUDA check
-python demo.py                           # one-command image (HF weights)
-python -m scripts.tools quick_test       # smoke (no GPU)
-```
 
-**Your checkpoint:**
+# Try sampling with pretrained weights
+python demo.py                           # one-command generation
+python -m scripts.tools quick_test       # CPU-only smoke test
 
-```bash
-python sample.py --ckpt results/.../best.pt \
-  --prompt "cinematic portrait, dramatic lighting" --out out.png
+# Train on your own data
+python train.py --data-path datasets/train --results-dir results --flow-matching-training
+
+# Generate from your checkpoint
+python sample.py --ckpt results/*/best.pt \
+  --prompt "cinematic portrait, dramatic lighting" \
+  --holy-grail-preset auto --out out.png
 ```
 
 ---
