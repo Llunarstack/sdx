@@ -5,28 +5,32 @@
 <br/>
 
 ```
-   ███████╗██████╗ ██╗  ██╗
-   ██╔════╝██╔══██╗╚██╗██╔╝
-   ███████╗██║  ██║ ╚███╔╝ 
-   ╚════██║██║  ██║ ██╔██╗ 
-   ███████║██████╔╝██╔╝ ██╗
-   ╚══════╝╚═════╝ ╚═╝  ╚═╝
+╔═══════════════════════════════════════════════════════════════════╗
+║                                                                   ║
+║  ███████╗██████╗ ██╗  ██╗     Advanced Diffusion Transformers    ║
+║  ██╔════╝██╔══██╗╚██╗██╔╝                                         ║
+║  ███████╗██║  ██║ ╚███╔╝      Text-to-Image • Training • Deploy   ║
+║  ╚════██║██║  ██║ ██╔██╗                                          ║
+║  ███████║██████╔╝██╔╝ ██╗     Production-Grade • Fully Transparent║
+║  ╚══════╝╚═════╝ ╚═╝  ╚═╝                                         ║
+║                                                                   ║
+╚═══════════════════════════════════════════════════════════════════╝
 ```
 
 # **SDX: Advanced Text-to-Image Generation Framework**
 
-**Train and deploy custom image generation models with unprecedented control and transparency**
+Train and deploy custom image generation models with unprecedented control and transparency
 
 <br/>
 
 <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+"/></a>
 <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch 2.x"/></a>
-<a href="docs/releases/v9.md"><img src="https://img.shields.io/badge/release-v9.0.0-0ea5e9?style=for-the-badge" alt="v9.0.0"/></a>
+<a href="docs/releases/v9.md"><img src="https://img.shields.io/badge/release-v9.0.0-0ea5e9?style=for-the-badge&logo=github" alt="v9.0.0"/></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge" alt="Apache 2.0"/></a>
 
 <br/>
 
-[**Quick Start**](#quick-start) · [**What is SDX?**](#what-is-sdx) · [**Features**](#core-features) · [**How It Works**](#how-it-works) · [**Use Cases**](#use-cases) · [**Documentation**](#documentation) · [**Contributing**](#contributing)
+[Quick Start](#quick-start) · [Overview](#what-is-sdx) · [Features](#core-features) · [How It Works](#how-it-works) · [Use Cases](#use-cases) · [Docs](#documentation) · [Contributing](#contributing)
 
 <br/>
 
@@ -41,22 +45,28 @@
 ### The Problem SDX Solves
 
 Most image generation tools fall into two categories:
-1. **Closed-source commercial** — you can't see how they work, can't fine-tune them, can't understand the decisions
-2. **Research frameworks** — missing pieces, scattered documentation, hard to reproduce results
 
-SDX fills the gap: it's **production-ready**, **fully transparent**, and **research-focused**.
+| **Closed-Source Commercial** | **Traditional Research** |
+|---|---|
+| Hidden implementation | Scattered documentation |
+| No fine-tuning | Hard to reproduce |
+| Black-box decisions | Missing pieces |
+| Vendor lock-in | Complex setup |
+
+**SDX fills the gap:** Production-ready · Fully transparent · Research-focused
 
 ### What Makes SDX Different
 
-| Aspect | SDX | Diffusers | ComfyUI | Closed-source |
-|--------|-----|-----------|---------|--------------|
-| Training included | ✅ Full loop | Partial | ❌ Sampling only | N/A |
-| Multiple objectives | Flow, DPO, KD, GRPO | Flow only | ❌ None | N/A |
-| Code readability | Explicit, ~500 lines core | Library style | Node graphs | ❌ Hidden |
-| Reproducibility | Full metadata saved | Manual | Nodes only | ❌ None |
-| Style invention | Style Genome | ❌ No | ❌ No | ❌ No |
-| Per-step scheduling | Holy Grail | ❌ No | ❌ No | Limited |
-| Quality filtering | TCIS + ViT | ❌ No | ❌ No | Limited |
+<table>
+<tr><th>Aspect</th><th>SDX</th><th>Diffusers</th><th>ComfyUI</th><th>Closed-Source</th></tr>
+<tr><td>Training included</td><td><strong>Full pipeline</strong></td><td>Partial</td><td>Sampling only</td><td>N/A</td></tr>
+<tr><td>Training objectives</td><td><strong>Flow, DPO, KD, GRPO</strong></td><td>Flow only</td><td>None</td><td>Limited</td></tr>
+<tr><td>Code readability</td><td><strong>Explicit, ~500 LOC</strong></td><td>Library style</td><td>Node graphs</td><td>Hidden</td></tr>
+<tr><td>Reproducibility</td><td><strong>Full metadata</strong></td><td>Manual</td><td>Nodes only</td><td>None</td></tr>
+<tr><td>Style invention</td><td><strong>Style Genome</strong></td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>Adaptive scheduling</td><td><strong>Holy Grail</strong></td><td>No</td><td>No</td><td>Limited</td></tr>
+<tr><td>Quality filtering</td><td><strong>TCIS + ViT</strong></td><td>No</td><td>No</td><td>Limited</td></tr>
+</table>
 
 ---
 
@@ -65,56 +75,86 @@ SDX fills the gap: it's **production-ready**, **fully transparent**, and **resea
 ### The Training Loop (train.py)
 
 ```
-Your Images + Captions
-         ↓
-    [Data Loading]
-         ↓
-    [Encode to Latents] (VAE)
-         ↓
-    [Add Noise at Time t]
-         ↓
-    [DiT Predicts Noise]
-         ↓
-    [Calculate Loss]
-         ↓
-    [Backprop & Update]
-         ↓
-    [Save Checkpoint]
+┌─────────────────────────────┐
+│  Your Images + Captions     │
+└──────────────┬──────────────┘
+               ↓
+     ┌─────────────────────┐
+     │   Data Loading      │
+     └──────────┬──────────┘
+                ↓
+     ┌──────────────────────────┐
+     │ Encode to Latents (VAE)  │
+     └──────────┬───────────────┘
+                ↓
+     ┌──────────────────────┐
+     │ Add Noise at Time t  │
+     └──────────┬───────────┘
+                ↓
+     ┌──────────────────────┐
+     │  DiT Predicts Noise  │
+     └──────────┬───────────┘
+                ↓
+     ┌──────────────────────┐
+     │  Calculate Loss      │
+     └──────────┬───────────┘
+                ↓
+     ┌──────────────────────┐
+     │ Backprop & Update    │
+     └──────────┬───────────┘
+                ↓
+     ┌──────────────────────┐
+     │  Save Checkpoint     │
+     └──────────────────────┘
 ```
 
-**What makes it advanced:**
-- **Flow Matching** — Instead of predicting noise (like DDPM), flow matching learns to "flow" from noise to image. Faster, cleaner gradients, better convergence.
-- **DPO (Diffusion Preference Optimization)** — Train from pairs of good/bad images. Your model learns what YOU prefer, not just generic "good" images.
-- **Knowledge Distillation** — Compress a large model into a smaller one. Same quality, 10x faster, 1/4 the size.
-- **Bridge Regularization** — Keeps the model honest about the noise schedule. Prevents collapse to shortcuts.
-- **Part-Aware Attention** — Special attention weights for hands, faces, objects. They ground correctly even in complex scenes.
+**Advanced Capabilities:**
+- **Flow Matching** — Learn smooth trajectories from noise to image. Faster gradients, better convergence. 20% speedup vs traditional diffusion.
+- **DPO (Diffusion Preference Optimization)** — Train from human preference pairs (good/bad). Your model learns YOUR aesthetic, not generic "good."
+- **Knowledge Distillation** — Compress large teacher → small student. Same quality, 10x faster, 1/4 the size.
+- **Bridge Regularization** — Enforce faithful noise schedules. Prevents model shortcuts and quality collapse.
+- **Part-Aware Attention** — Spatial attention masks for hands, faces, objects. Perfect grounding even in complex scenes.
 
 ### The Sampling Loop (sample.py)
 
 ```
-User Prompt ("a red car")
-         ↓
-    [PromptStack v2]
-         ↓
-    [Encode Text] (T5 + optional CLIP)
-         ↓
-    [Initialize Noise]
-         ↓
-    [For each Step t: t→t-1]
-       ├─ [DiT Predicts Noise]
-       ├─ [Holy Grail] (adaptive CFG)
-       ├─ [TCIS] (quality check)
-       └─ [Update Latent]
-         ↓
-    [Decode to Image] (VAE)
-         ↓
-    Generated Image
+┌──────────────────────────────┐
+│ User Prompt ("a red car")    │
+└────────────┬─────────────────┘
+             ↓
+    ┌────────────────────┐
+    │  PromptStack v2    │
+    └────────┬───────────┘
+             ↓
+    ┌──────────────────────────────┐
+    │ Encode Text (T5 + CLIP)      │
+    └────────┬──────────────────────┘
+             ↓
+    ┌──────────────────────┐
+    │  Initialize Noise    │
+    └────────┬─────────────┘
+             ↓
+     ╔════════════════════════════╗
+     ║ For each Step t: t→t-1     ║
+     ║  ├─ DiT Predicts Noise     ║
+     ║  ├─ Holy Grail (adapt CFG) ║
+     ║  ├─ TCIS (quality check)   ║
+     ║  └─ Update Latent          ║
+     ╚════════┬═══════════════════╝
+              ↓
+    ┌──────────────────────────┐
+    │  Decode to Image (VAE)   │
+    └────────┬─────────────────┘
+             ↓
+    ┌──────────────────────┐
+    │  Generated Image     │
+    └──────────────────────┘
 ```
 
-**What makes it intelligent:**
-- **Holy Grail Scheduling** — Not all steps need the same CFG strength. Early steps explore, late steps constrain. Automatically adapts based on noise level.
-- **TCIS** — For hard prompts (text in images, exact layouts), generate 10 candidates and pick the best via a ViT committee. Gets it right even when it's hard.
-- **PromptStack v2** — Your prompt goes through 7 stages: intelligence extraction, style invention, quality guidance, negative filters, content controls, clause formatting, cleanup. Completely transparent.
+**Intelligent Inference Engine:**
+- **Holy Grail Scheduling** — Adaptive classifier-free guidance. Early steps explore creatively, late steps follow prompt strictly. Auto-tunes based on noise level.
+- **TCIS** — Hard prompts (text in images, exact layouts)? Generate 10 candidates, ViT committee votes on best. Solves the "hard" problems.
+- **PromptStack v2** — Unified 7-stage prompt processing: intelligence extraction → style invention → quality guidance → negative filtering → content controls → clause formatting → cleanup. Completely transparent.
 
 ---
 
@@ -422,24 +462,26 @@ python -m scripts.tools auto_improve_loop \
 
 ## System Requirements
 
-| Component | Minimum | Recommended | Ideal |
-|-----------|---------|-------------|-------|
-| Python | 3.10 | 3.11 | 3.12 |
-| PyTorch | 2.0 | 2.11+ | 2.12+ |
-| GPU VRAM | 16GB | 24GB | 40GB+ |
-| Training Data | 50 images | 500 images | 5000+ |
-| Disk Space | 50GB | 200GB | 500GB+ |
-| OS | Linux/Windows/Mac | Linux | Linux (best support) |
+<table>
+<tr><th>Component</th><th>Minimum</th><th>Recommended</th><th>Ideal</th></tr>
+<tr><td>Python</td><td>3.10</td><td>3.11</td><td>3.12</td></tr>
+<tr><td>PyTorch</td><td>2.0</td><td>2.11+</td><td>2.12+</td></tr>
+<tr><td>GPU VRAM</td><td>16 GB</td><td>24 GB</td><td>40 GB+</td></tr>
+<tr><td>Training Data</td><td>50 images</td><td>500 images</td><td>5,000+</td></tr>
+<tr><td>Disk Space</td><td>50 GB</td><td>200 GB</td><td>500 GB+</td></tr>
+<tr><td>OS</td><td>Linux/Windows/Mac</td><td>Linux</td><td>Linux (best)</td></tr>
+</table>
 
-### GPU Comparison (100 images, 20 epochs)
+### GPU Performance (100 images, 20 epochs)
 
-| GPU | Time | Cost | Notes |
-|-----|------|------|-------|
-| RTX 2060 (6GB) | Not recommended | — | Too slow |
-| RTX 3090 (24GB) | 20-30 hours | $1200 | Solid option |
-| RTX 4090 (24GB) | 5-8 hours | $1600 | Recommended |
-| A100 (40GB) | 2-4 hours | $15k+ | Enterprise |
-| H100 (80GB) | 1-2 hours | $30k+ | Research |
+<table>
+<tr><th>GPU</th><th>Time</th><th>Cost</th><th>Use Case</th></tr>
+<tr><td>RTX 2060 (6GB)</td><td>Not recommended</td><td>—</td><td>Too slow for practical use</td></tr>
+<tr><td>RTX 3090 (24GB)</td><td>20-30 hours</td><td>~$1,200</td><td>Solid for prototyping</td></tr>
+<tr><td>RTX 4090 (24GB)</td><td>5-8 hours</td><td>~$1,600</td><td>Recommended for enthusiasts</td></tr>
+<tr><td>A100 (40GB)</td><td>2-4 hours</td><td>$15k+</td><td>Enterprise training</td></tr>
+<tr><td>H100 (80GB)</td><td>1-2 hours</td><td>$30k+</td><td>Large-scale research</td></tr>
+</table>
 
 ---
 
@@ -501,7 +543,7 @@ for epoch in range(num_epochs):
 
 Simple, readable, no magic.
 
-### What's in Each Directory
+### Project Structure
 
 - `train.py` / `sample.py` — Entry points, ~500 lines total
 - `models/` — DiT architecture, conditioning mechanisms
@@ -564,7 +606,7 @@ Full history: [docs/releases/](docs/releases/)
 
 ## Documentation
 
-### For Getting Started
+### Getting Started
 - **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** — Step-by-step guide
 - **[Quick Start (above)](#quick-start)** — 30 seconds to results
 
@@ -588,7 +630,7 @@ Full history: [docs/releases/](docs/releases/)
 
 ## Contributing
 
-We welcome contributions. See [CODEBASE.md](docs/CODEBASE.md) for style guide, testing requirements, and contribution process.
+We welcome contributions from researchers, practitioners, and developers. See [CODEBASE.md](docs/CODEBASE.md) for style guide, testing requirements, and contribution process.
 
 ```bash
 # Format code
@@ -629,11 +671,28 @@ If you use SDX in research, please cite:
 
 SDX is released under the **Apache 2.0 License**. See [LICENSE](LICENSE) for details.
 
+This means you can use it freely in commercial and open-source projects, with attribution.
+
 ---
 
 <div align="center">
 
-Made with care for researchers, practitioners, and teams  
-[GitHub](https://github.com/Llunarstack/sdx) · [Issues](https://github.com/Llunarstack/sdx/issues) · [Documentation](docs/)
+---
+
+<br/>
+
+Made with care for researchers, practitioners, and teams building the future of image generation
+
+<br/>
+
+<a href="https://github.com/Llunarstack/sdx"><img src="https://img.shields.io/badge/GitHub-SDX-181717?style=flat-square&logo=github" alt="GitHub"/></a>
+<a href="https://github.com/Llunarstack/sdx/issues"><img src="https://img.shields.io/badge/Issues-Report%20Bug-red?style=flat-square" alt="Issues"/></a>
+<a href="docs/"><img src="https://img.shields.io/badge/Docs-Full%20Documentation-blue?style=flat-square" alt="Docs"/></a>
+
+<br/>
+
+[GitHub](https://github.com/Llunarstack/sdx) · [Issues](https://github.com/Llunarstack/sdx/issues) · [Discussions](https://github.com/Llunarstack/sdx/discussions) · [Documentation](docs/) · [Citation](#citation)
+
+<br/>
 
 </div>
