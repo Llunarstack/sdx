@@ -266,7 +266,7 @@ def depth_map(path: str, output_path: str, *, device: str = "cuda", prefer: str 
 def score_hpsv2(rgb_uint8: np.ndarray, prompt: str, *, device: str = "cuda") -> Optional[float]:
     """Human preference score in [0, 1] or None if model unavailable."""
     model_id = default_hpsv2_path()
-    if not _has_weights_at(model_id) and "/" not in model_id:
+    if not _has_weights_at(model_id):
         return None
 
     def _load() -> Tuple[Any, Any]:
