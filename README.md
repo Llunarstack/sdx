@@ -13,20 +13,20 @@
    ╚══════╝╚═════╝ ╚═╝  ╚═╝
 ```
 
-# **SDX: Advanced Text-to-Image Generation with Diffusion Transformers**
+# **SDX: Advanced Text-to-Image Generation Framework**
 
-**A research framework for training & sampling custom image generation models with unprecedented control**
+**Train and deploy custom image generation models with unprecedented control and transparency**
 
 <br/>
 
 <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+"/></a>
 <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch 2.x"/></a>
-<a href="docs/releases/v9.md"><img src="https://img.shields.io/badge/release-v9-0ea5e9?style=for-the-badge" alt="v9"/></a>
+<a href="docs/releases/v9.md"><img src="https://img.shields.io/badge/release-v9.0.0-0ea5e9?style=for-the-badge" alt="v9.0.0"/></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge" alt="Apache 2.0"/></a>
 
 <br/>
 
-[**Quick start**](#quick-start) · [**What is SDX?**](#what-is-sdx) · [**Key features**](#-key-features) · [**Style Genome**](#style-genome-invent-original-looks) · [**Training**](#training) · [**Sampling**](#sampling) · [**Docs**](#documentation)
+[**Quick Start**](#quick-start) · [**Features**](#core-features) · [**Use Cases**](#use-cases) · [**Documentation**](#documentation) · [**Contributing**](#contributing)
 
 <br/>
 
@@ -36,447 +36,361 @@
 
 ## What is SDX?
 
-**SDX** (Stable Diffusion Transformer eXtended) is a research framework for building and deploying custom text-to-image generation models. Unlike general-purpose diffusion libraries, SDX is purpose-built for:
-
-- **Training custom models** on your own data with advanced objectives (flow matching, DPO, distillation)
-- **Precise control** with per-step adapters, LoRA routing, and dynamic CFG scheduling
-- **Style invention** — generate novel aesthetics beyond artist imitation using Style Genome
-- **Research and experimentation** with transparent, modular code (not node graphs)
-
-<br/>
-
-> **New in [v9](docs/releases/v9.md):** **6 GRPO variants** for adaptive training · **Superior Stack** (ensemble, caching, quality gates) · **Agentic Stack** (self-improving agents) · **Visual Brain** (image understanding) · comprehensive documentation (Getting Started, Codebase Guide) · full ruff formatting · dependency updates.
-
----
-
-## Key Features
-
-### Style Genome: Invent Novel Aesthetics
-
-Instead of "in the style of Artist X," create structured aesthetic systems with:
-
-- Palette - color theory and dominant hues
-- Line - stroke mechanics and contour style
-- Surface - texture and material properties
-- Camera - perspective and composition angles
-- Signature - recurring motifs and visual fingerprints
-
-### PromptStack v2: Transparent Prompt Pipeline
-
-Single, traceable pipeline from user input to model conditioning:
-
-```
-Raw prompt → Intelligence → Style genome → Guidance → Negatives → Encoders → DiT
-```
-
-Same logic in training and inference—reproducible, debuggable, observable.
-
-### Holy Grail Scheduling: Per-Step Adaptation
-
-Adaptive generation instead of fixed CFG scales:
-
-- Dynamic CFG strength based on noise level
-- Conditional LoRA blending per step
-- Solver and step count optimization
-- Works with flow matching and VP diffusion
-
-### TCIS: Quality Filtering with ViT Committee
-
-For difficult prompts (text in images, exact layouts):
-
-- DiT generates candidate images
-- ViT model scores quality and adherence
-- Consensus selection and optional refinement
-
-### Advanced Training
-
-Modern training objectives and techniques:
-
-- Flow matching: faster convergence, better latent paths
-- Bridge regularization: balanced schedule adherence
-- Part-aware attention: hands, faces, objects ground correctly
-- DPO and knowledge distillation: learn from feedback and teacher models
-
----
-
-## What's New in v8
-
-| Feature | v7 | v8 |
-|---|:---:|:---:|
-| Prompt pipeline | Fragmented | PromptStack v2 (unified, traceable) |
-| Style system | Artist tags | Style Genome (5-axis invention) |
-| Exploration | Manual prompts | explore_styles CLI + manifests |
-| Native operations | Basic | Rust/CUDA/Go/Mojo optimized ops |
-
-Full details: [docs/releases/v8.md](docs/releases/v8.md)  
-Previous versions: [v7](docs/releases/v7.md) · [v6](docs/releases/v6.md) · [v5](docs/releases/v5.md)
-
----
-
-## Game-Changing Capabilities
-
-<table>
-<tr>
-<td width="33%" valign="top">
-
-### Style Genome
-
-Invent **novel** look systems as structured genomes — compile to pos/neg/style-channel text. Modes from `normal` to `apocalypse`; fusion, hypermutation, and chaos presets.
-
-```bash
-python -m scripts.tools explore_styles \
-  --prompt "samurai at dusk" --mode chimera --chaos 0.9
-```
-
-</td>
-<td width="33%" valign="top">
-
-### PromptStack v2
-
-One ordered pipeline: intelligence → genome → guidance → negatives → controls → clauses → filter. **Same guidance stage** in training via `caption_utils`.
-
-```bash
-python -m scripts.tools preview_prompt_stack \
-  --prompt "portrait, rim light" --json
-```
-
-</td>
-<td width="33%" valign="top">
-
-### Holy Grail + TCIS
-
-Per-step **CFG / control / adapter** scheduling — not fixed constants. **TCIS** loops DiT proposals through a ViT committee for hard prompts.
-
-```bash
-python sample.py ... --holy-grail-preset auto
-python -m scripts.tools hybrid_dit_vit_generate ...
-```
-
-</td>
-</tr>
-</table>
-
----
-
-## System diagram
-
-```mermaid
-flowchart LR
-  subgraph in[" "]
-    PR[Prompt]
-  end
-  subgraph enc["Encoders"]
-    TE[T5 / triple CLIP]
-  end
-  subgraph core[" "]
-    PS[PromptStack v2]
-    SG[Style Genome]
-    DIT[DiT]
-    DE[Diffusion / flow]
-    HG[Holy Grail]
-    VAE[VAE]
-  end
-  PR --> PS
-  PS --> SG
-  SG --> TE
-  TE --> DIT --> DE --> HG --> VAE --> IM[Image]
-```
-
-<details>
-<summary>ASCII fallback (any editor)</summary>
-
-```text
-  Prompt → PromptStack v2 → Style Genome? → T5/triple → DiT → diffusion/flow
-         → Holy Grail + extras → VAE → image
-```
-
-</details>
-
----
-
-## Why SDX?
-
-A transparent research framework, not a checkpoint fork.
-
-Most diffusion tools fall into categories:
-- ComfyUI: node graph workflows (good for inference, hard to reason about)
-- diffusers: library for sampling (missing training and style systems)
-- Closed-source: proprietary, can't see how they work
-
-**SDX advantages:**
-
-- **Full stack**: data loading → training → inference scheduling
-- **Transparent**: train.py is 200 lines, sample.py is 300 lines—read the full pipeline
-- **Research-grade**: Flow matching, DPO, TCIS, Holy Grail all integrated
-- **Training-first**: not just sampling. Full checkpoint metadata and config snapshots
-
-| Feature | SDX | diffusers | ComfyUI |
-|---|:---:|:---:|:---:|
-| Training loop | Yes | No | No |
-| Flow matching + VP + bridge | Yes | Partial | No |
-| Multi-LoRA role routing | Yes | Basic | Plugins |
-| Holy Grail adaptive CFG | Yes | No | No |
-| Style Genome | Yes | No | No |
-| Run reproducibility | Yes | No | No |
-
----
-
----
-
-## Use Cases
-
-**Research and Custom Models**
-
-- Train diffusion transformers on your datasets (anime, architecture, products, etc.)
-- Compare training objectives (flow matching vs VP diffusion vs bridge loss)
-- Export checkpoints with reproducibility metadata
-
-**Style Invention and Curation**
-
-- Generate novel aesthetic systems from prompts
-- Rank variants with ViT quality scoring (TCIS)
-- Batch-generate images with consistent styles
-
-**Production Sampling**
-
-- Per-step CFG, LoRA, and control scheduling (Holy Grail)
-- Quality filtering for difficult prompts (TCIS)
-- Adaptive step counts and solver selection
-
-**Custom Data and Training**
-
-- Train on custom datasets (folder or JSONL manifest format)
-- Hierarchical captions (global, local, entity-level)
-- Part-aware attention for hands, faces, and objects
+**SDX** is a production-grade research framework for building custom text-to-image generation models. Unlike general diffusion libraries, SDX provides:
+
+- **Complete training pipelines** with flow matching, DPO, and knowledge distillation
+- **Advanced inference optimization** with model ensembles, quality filtering, and adaptive scheduling
+- **Novel style invention** that creates original aesthetics instead of copying artists
+- **Transparent, readable code** where you understand exactly what's happening
+- **Research integration** connecting academic papers to working implementations
+
+Built for researchers, practitioners, and teams who want full control over their image generation systems.
 
 ---
 
 ## Quick Start
 
+### 30 Seconds: Generate Your First Image
+
 ```bash
-# Install & health check
+# Install
 pip install -r requirements.txt
-python -m toolkit.training.env_health    # VRAM + CUDA check
 
-# Try sampling with pretrained weights
-python demo.py                           # one-command generation
-python -m scripts.tools quick_test       # CPU-only smoke test
+# Generate with pretrained model
+python demo.py
 
-# Train on your own data
-python train.py --data-path datasets/train --results-dir results --flow-matching-training
+# Output: out.png with a generated image
+```
 
-# Generate from your checkpoint
-python sample.py --ckpt results/*/best.pt \
-  --prompt "cinematic portrait, dramatic lighting" \
-  --holy-grail-preset auto --out out.png
+### 5 Minutes: Train on Your Data
+
+```bash
+# Prepare your images with captions (in a folder or JSON)
+# images/
+#   ├── photo1.png
+#   ├── photo1.txt (caption)
+#   ├── photo2.png
+#   └── photo2.txt (caption)
+
+# Train a model
+python train.py \
+  --data-path images/ \
+  --results-dir outputs/ \
+  --flow-matching-training
+
+# Generate from your trained model
+python sample.py \
+  --ckpt outputs/best.pt \
+  --prompt "your description" \
+  --out result.png
 ```
 
 ---
 
-## Style Genome — invent original looks
+## Core Features
 
-A **genome** is an invented aesthetic bundle (not “in the style of Artist X”):
+### 1. Style Genome: Invent Original Aesthetics
 
-| Axis | Example |
-|------|---------|
-| palette | oxidized copper, tea-stained paper |
-| line | broken contour, dry brush |
-| surface | chalk dust, cracked glaze |
-| camera | worm's-eye, tilted horizon |
-| signature | recurring motif, border bleed |
-
-**Single image with invention:**
+Stop copying artists. Create structured, original visual styles:
 
 ```bash
-python sample.py --ckpt results/.../best.pt \
-  --prompt "lone figure in rain" \
-  --invent-styles 1 --style-inventor-mode insane \
-  --style-chaos-level 0.8 --out out.png
-```
+# Generate a unique style for your prompt
+python sample.py --ckpt model.pt \
+  --prompt "warrior at sunset" \
+  --invent-styles 1 \
+  --style-chaos-level 0.8
 
-**Explore many genomes → manifest → batch:**
-
-```bash
+# Explore multiple style variations
 python -m scripts.tools explore_styles \
-  --prompt "void priest in cathedral" --genomes 6 --mode apocalypse
-
-python sample.py --ckpt ... --explore-styles-insane --num 4 --out dir/
+  --prompt "forest landscape" \
+  --genomes 10 --mode apocalypse
 ```
 
-**Insane shortcut on sample.py:** `--explore-styles-insane` (invents + chaos clauses + multi-candidate pick).
+**What gets invented:** palette, line, surface, camera angle, visual signature
 
-Modules: `utils/prompt/style_genome.py`, `style_inventor.py`, `style_explore.py`, `style_genome_chaos.py` · stack stage: `utils/prompt/stack/stages/style_genome.py`
+### 2. Advanced Training Methods
 
----
-
-## Training
+Choose from multiple training objectives:
 
 ```bash
-python train.py --data-path datasets/train --results-dir results
+# Flow matching (faster, recommended for new projects)
+python train.py --data-path images/ --flow-matching-training
+
+# Learn from feedback (DPO)
+python scripts/tools/training/train_diffusion_dpo \
+  --data-path preferences/ \
+  --reference-ckpt baseline.pt
+
+# Shrink your model (knowledge distillation)
+python scripts/tools/training/train_kd_distill \
+  --student-ckpt small.pt --teacher-ckpt large.pt
+
+# New in v9: 6 GRPO variants for adaptive training
+python scripts/tools/training/train_flow_grpo \
+  --data-path images/ --ckpt-init base.pt
 ```
 
-**Flow matching (recommended for new runs):**
+### 3. Intelligent Inference
+
+Generate better images with adaptive scheduling:
 
 ```bash
-python train.py --data-path datasets/train --flow-matching-training --results-dir results
-```
+# Single image generation
+python sample.py --ckpt model.pt --prompt "..." --out result.png
 
-**Triple encoders (T5 + CLIP-L + CLIP-bigG):**
+# Generate and pick the best (quality filtered)
+python sample.py --ckpt model.pt \
+  --prompt "..." --num 4 --pick-best auto
 
-```bash
-python train.py --data-path datasets/train --text-encoder-mode triple --results-dir results
-```
-
-**Multi-GPU:**
-
-```bash
-torchrun --nproc_per_node=2 train.py --data-path datasets/train --results-dir results
-```
-
-| Flag | Purpose |
-|------|---------|
-| `--flow-matching-training` | Rectified-flow objective |
-| `--bridge-aux-weight` | Bridge regularization |
-| `--use-hierarchical-captions` | Global / local / entity captions |
-| `--attn-grounding-loss-weight` | Part-aware attention grounding |
-| `--grad-checkpointing` | Lower VRAM (default on) |
-
-`python train.py --help` for the full list · [TRAINING_TEXT_TO_PIXELS.md](docs/TRAINING_TEXT_TO_PIXELS.md)
-
----
-
-## Sampling
-
-```bash
-python sample.py --ckpt results/.../best.pt --prompt "..." \
-  --holy-grail-preset auto --cfg-scale 6 --steps 40 --out out.png
-```
-
-**Adapters:** `--lora path:scale:role` · **styles:** `--style "anime::0.7 | cinematic::0.3"`
-
-**Flow-trained ckpt:** add `--flow-matching-sample --flow-solver heun`
-
-**Pick-best / beam:** `--num 4 --pick-best auto --pick-vit-ckpt vq/runs/best.pt`
-
-**Hard prompts (TCIS):**
-
-```bash
+# For hard prompts (text, exact layouts)
 python -m scripts.tools hybrid_dit_vit_generate \
-  --ckpt results/.../best.pt --vit-ckpt vq/runs/best.pt \
-  --prompt "poster title NEON STORM, exactly 2 characters" \
-  --num 6 --iterations 4 --pick-best combo_hq --out out.png
+  --ckpt model.pt --vit-ckpt quality_model.pt \
+  --prompt "poster with text HELLO WORLD" \
+  --iterations 6 --constraint-anneal up
+
+# Model ensemble (blend multiple models)
+python sample.py --ckpt-ensemble model1.pt:model2.pt:model3.pt \
+  --prompt "..."
 ```
 
-See [Holy Grail README](diffusion/holy_grail/README.md) · [TCIS overview](docs/TCIS_OVERVIEW.md)
+### 4. Reproducibility & Evaluation
+
+All training is reproducible:
+
+```bash
+# Training saves configuration
+# Later, reproduce exactly:
+python train.py --config results/config.train.json
+
+# Evaluate against baselines
+python examples/run_baseline_eval.py \
+  --ckpt results/best.pt \
+  --execute --output scores.json
+
+# Compare multiple models
+python -m scripts.tools benchmark_suite \
+  --ckpt model1.pt model2.pt \
+  --seed-list 42,123,999 \
+  --robustness-penalty 0.15
+```
+
+### 5. New in v9: Production Stacks
+
+**Superior Stack** — Inference optimization and ensembles
+- Model soup (average multiple checkpoints)
+- Quality gates and filtering
+- Feature caching (2-3x speedup)
+- Reward-based scoring
+
+**Agentic Stack** — Self-improving training
+- Agent-driven optimization loops
+- Planning and reflection
+- Experience memory and replay
+
+**Visual Brain** — Image understanding
+- Scene analysis and composition
+- Image similarity search
+- Automatic caption generation
+
+---
+
+## Use Cases
+
+### For Researchers
+- Compare training objectives (flow matching vs VP diffusion)
+- Implement new conditioning mechanisms
+- Study prompt adherence and quality trade-offs
+- Reproduce papers in a modern, readable codebase
+
+### For Practitioners
+- Train models on custom datasets
+- Create original visual styles (not artist imitation)
+- Deploy with adaptive scheduling
+- Measure and improve quality systematically
+
+### For Teams
+- Version control training runs with metadata
+- Evaluate models fairly across seeds
+- Build production pipelines with quality gates
+- Share transparent, auditable training processes
+
+### Example Projects
+```bash
+# Create an anime character generator
+python train.py --data-path anime_dataset/ \
+  --text-encoder-mode triple \
+  --flow-matching-training
+
+# Fine-tune on specialized domain
+python train.py --data-path architecture_photos/ \
+  --init-ckpt pretrained.pt \
+  --learning-rate 1e-5
+
+# Optimize for consistency
+python -m scripts.tools auto_improve_loop \
+  --base-ckpt model.pt \
+  --iterations 3 \
+  --promote-best
+```
+
+---
+
+## System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| Python | 3.10 | 3.11+ |
+| PyTorch | 2.0 | 2.11+ |
+| GPU VRAM | 16GB | 24GB+ |
+| Disk Space | 50GB | 200GB+ |
+| OS | Linux/Windows/Mac | Linux preferred |
+
+---
+
+## Installation
+
+### Standard Install
+
+```bash
+git clone https://github.com/Llunarstack/sdx.git
+cd sdx
+pip install -r requirements.txt
+
+# Verify installation
+python -m toolkit.training.env_health
+```
+
+### Optional: Native Acceleration
+
+For 3-5x faster inference:
+
+```bash
+cd native/cpp && cmake build
+cd ../rust/sdx-prompt-ops && cargo build --release
+```
+
+### Optional: GPU-Specific (NVIDIA)
+
+```bash
+pip install --force-reinstall -r requirements-cuda128.txt
+```
 
 ---
 
 ## Architecture
 
-| Layer | Location |
-|-------|----------|
-| DiT + text | `models/dit_text.py` |
-| Encoders | `utils/modeling/text_encoder_bundle.py` |
-| PromptStack | `utils/prompt/stack/` |
-| Style Genome | `utils/prompt/style_*.py` |
-| Diffusion / flow | `diffusion/` |
-| Holy Grail | `diffusion/holy_grail/` |
-| Native (optional) | `native/` → [native/README.md](native/README.md) |
-
-```text
-datasets/ → train.py → checkpoints/ → sample.py → images
+```
+Your Data
+    ↓
+train.py ──→ Model Checkpoint
+    ↓
+sample.py ──→ Generated Images
 ```
 
----
+**Key Components:**
 
-## Data formats
+| Component | Purpose |
+|-----------|---------|
+| `train.py` | Main training loop (200 lines) |
+| `sample.py` | Generation with Holy Grail scheduling (300 lines) |
+| `models/` | DiT architecture and conditioning |
+| `diffusion/` | Flow matching, VP diffusion, scheduling |
+| `utils/` | Organized into specialized packages |
+| `diffusion/sampling_extras/` | Holy Grail, TCIS, quality gates |
+| `native/` | Optional C++/CUDA/Rust acceleration |
 
-**Folder mode** — `image.png` + `image.txt` (caption line 1, optional negative line 2).
-
-**JSONL** — one object per line:
-
-```json
-{"image_path": "/path/img.png", "caption": "...", "negative_caption": "blurry"}
-```
-
-```bash
-python train.py --manifest-jsonl data/train.jsonl --results-dir results
-```
-
----
-
-## Repo layout
-
-```text
-sdx/
-├── train.py · sample.py · demo.py · inference.py
-├── config/ · data/ · diffusion/ · models/ · utils/
-│   └── utils/prompt/stack/     # PromptStack v2
-│   └── utils/prompt/style_*    # Style Genome
-├── scripts/tools/              # explore_styles, preview_prompt_stack, …
-├── native/                     # Rust · Zig · C · C++ · cuda · Go · Mojo
-├── vit_quality/                # ViT quality / TCIS scoring
-├── pipelines/book_comic/       # sequential art
-└── docs/                       # full index → docs/README.md
-```
+Everything is readable. No hidden magic.
 
 ---
 
 ## Documentation
 
-| Doc | Topic |
-|-----|--------|
-| [docs/README.md](docs/README.md) | Full index |
-| [docs/releases/v8.md](docs/releases/v8.md) | **v8 release notes** |
-| [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) | PromptStack v2 stages |
-| [docs/HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md) | Adaptive sampling |
-| [docs/TCIS_OVERVIEW.md](docs/TCIS_OVERVIEW.md) | Hybrid DiT + ViT loop |
-| [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) | Train → sample walkthrough |
-| [native/README.md](native/README.md) | Native build + layout |
-| [scripts/tools/README.md](scripts/tools/README.md) | CLI tooling index |
+### Getting Started
+- **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** — Complete beginner guide
+- **[Quick Start (above)](#quick-start)** — 30 seconds to first image
+
+### Learning the Framework
+- **[CODEBASE_GUIDE.md](docs/CODEBASE_GUIDE.md)** — How everything is organized
+- **[MODEL_STACK.md](docs/MODEL_STACK.md)** — Available models and encoders
+- **[PROMPT_STACK.md](docs/PROMPT_STACK.md)** — Text conditioning pipeline
+
+### Advanced Topics
+- **[SUPERIOR_STACK.md](docs/SUPERIOR_STACK.md)** — Inference optimization
+- **[AGENTIC_STACK.md](docs/agentic/AGENTIC_STACK.md)** — Autonomous training
+- **[VISUAL_BRAIN.md](docs/brain/VISUAL_BRAIN.md)** — Image understanding
+- **[TRAINING_TEXT_TO_PIXELS.md](docs/TRAINING_TEXT_TO_PIXELS.md)** — Text encoding details
+- **[HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md)** — Adaptive scheduling
+
+### Research & References
+- **[Release Notes](docs/releases/)** — What's new in each version (v9, v8, v7, ...)
+- **[IMAGE_QUALITY_LEVERS_2026.md](docs/research/IMAGE_QUALITY_LEVERS_2026.md)** — Papers → implementation
+- **[LANDSCAPE_2026.md](docs/LANDSCAPE_2026.md)** — Industry context and architecture decisions
+- **[BLUEPRINTS.md](docs/BLUEPRINTS.md)** — Flow matching, distillation, advanced methods
 
 ---
 
-## Pretrained weights
+## Version History
 
-```bash
-python scripts/download/download_models.py --t5 --vae
-python -m scripts.tools pretrained_status
-```
+| Version | Release | Key Features |
+|---------|---------|--------------|
+| **v9** | May 2026 | GRPO training, Superior/Agentic/Brain stacks, full documentation |
+| **v8** | May 2026 | Style Genome, PromptStack v2, native ops |
+| **v7** | April 2026 | CI/CD, reproducibility, evaluation framework |
+| **v6** | April 2026 | Native acceleration, book generation, ViT quality |
+| **v5** | April 2026 | Inference scaling, beam search, data curation |
+| **v0.2** | March 2026 | Flow matching, DPO, KD, modular organization |
+| **v0.1** | March 2026 | Core framework: train.py, sample.py |
 
-Local `pretrained/<name>` overrides Hugging Face hub IDs — see [MODEL_STACK.md](docs/MODEL_STACK.md).
+Full release notes: [docs/releases/](docs/releases/)
 
 ---
 
 ## Contributing
 
-```bash
-ruff check . && ruff format .
-pytest tests/ -m "not cuda and not slow" -q
-python -m scripts.tools quick_test
+We welcome contributions! Here's how:
+
+1. **Check the codebase:** [CODEBASE.md](docs/CODEBASE.md) covers style, structure, and testing
+2. **Run tests:** `pytest tests/ -v`
+3. **Format code:** `ruff check . --fix && ruff format .`
+4. **Submit PR** with a clear description of what changed and why
+
+---
+
+## Support & Community
+
+- **Documentation:** See [Documentation](#documentation) above
+- **Issues:** [GitHub Issues](https://github.com/Llunarstack/sdx/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Llunarstack/sdx/discussions)
+- **Security:** See [SECURITY.md](SECURITY.md) to report vulnerabilities
+
+---
+
+## Citation
+
+If you use SDX in research, please cite:
+
+```bibtex
+@software{sdx_2026,
+  title={SDX: Advanced Text-to-Image Generation Framework},
+  author={Llunarstack},
+  year={2026},
+  url={https://github.com/Llunarstack/sdx}
+}
 ```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) · mirror CI: [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md)
-
 ---
-
-## FAQ
-
-**Is this production-ready?**  
-Structure and tooling are operator-grade; image quality depends on your data and training budget.
-
-**Need native CUDA/Rust?**  
-No — Python fallbacks cover style ops, manifest stats, and pick-best paths.
-
-**v7 vs v8?**  
-v7 = CI + eval + security baseline. v8 = **Style Genome + PromptStack v2 + native style layer** on top of that baseline.
-
----
-
-## Acknowledgements
-
-Built on ideas from [DiT](https://github.com/facebookresearch/DiT), [ControlNet](https://github.com/lllyasviel/ControlNet), [FLUX](https://github.com/black-forest-labs/flux), and the broader diffusion research community — [INSPIRATION.md](docs/INSPIRATION.md).
 
 ## License
 
-Apache 2.0 — [LICENSE](LICENSE)
+SDX is released under the **Apache 2.0 License**. See [LICENSE](LICENSE) for details.
+
+You're free to use SDX for commercial and personal projects.
+
+---
+
+<div align="center">
+
+Made with care for researchers and practitioners  
+[GitHub](https://github.com/Llunarstack/sdx) · [Issues](https://github.com/Llunarstack/sdx/issues) · [Documentation](docs/)
+
+</div>
