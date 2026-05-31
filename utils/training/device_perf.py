@@ -19,6 +19,8 @@ from typing import Optional
 
 __all__ = [
     "DevicePerfHints",
+    "configure_inference_cuda",
+    "configure_pytorch_attention_backends",
     "configure_training_cuda_and_cpu",
     "log_cuda_quick_stats",
     "log_training_perf_hints",
@@ -40,6 +42,49 @@ def parallel_train_torchrun_example(n_gpu: int = 2, extra: str = "YOUR_TRAIN_ARG
     """Minimal ``torchrun`` one-liner (Linux + Windows CUDA)."""
     n = max(1, int(n_gpu))
     return f"python -m torch.distributed.run --standalone --nproc_per_node={n} train.py {extra}".strip()
+
+
+def configure_pytorch_attention_backends(*, logger: Optional[logging.Logger] = None) -> None:
+    """Enable fast SDPA kernels (Flash / memory-efficient) when PyTorch supports them."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return
+    cuda_be = getattr(torch.backends, "cuda", None)
+    if cuda_be is None:
+        return
+    for name in ("enable_flash_sdp", "enable_mem_efficient_sdp", "enable_math_sdp"):
+        fn = getattr(cuda_be, name, None)
+        if callable(fn):
+            try:
+                fn(True)
+            except Exception:
+                pass
+    if logger:
+        logger.info(
+            "SDPA backends: flash=%s mem_efficient=%s math=%s",
+            getattr(cuda_be, "flash_sdp_enabled", lambda: "?")(),
+            getattr(cuda_be, "mem_efficient_sdp_enabled", lambda: "?")(),
+            getattr(cuda_be, "math_sdp_enabled", lambda: "?")(),
+        )
+
+
+def configure_inference_cuda(
+    *,
+    cudnn_benchmark: bool = True,
+    enable_tf32: bool = True,
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    """Fast defaults for sample.py / inference (TF32 + cuDNN benchmark + SDPA)."""
+    configure_training_cuda_and_cpu(
+        deterministic=False,
+        cudnn_benchmark=cudnn_benchmark,
+        enable_tf32=enable_tf32,
+        cpu_num_threads=0,
+        cpu_num_interop_threads=0,
+        logger=logger,
+    )
+    configure_pytorch_attention_backends(logger=logger)
 
 
 def configure_training_cuda_and_cpu(
@@ -103,6 +148,8 @@ def configure_training_cuda_and_cpu(
             pass
         if logger:
             logger.info("TF32 disabled (highest FP32 precision for matmul where supported).")
+
+    configure_pytorch_attention_backends(logger=logger)
 
 
 def log_cuda_quick_stats(logger: logging.Logger, *, prefix: str = "") -> None:

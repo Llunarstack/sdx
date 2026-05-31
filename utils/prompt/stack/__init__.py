@@ -16,7 +16,7 @@ from .intelligence import PromptAnalysis, analyze_prompt
 from .runner import run_prompt_stack
 from .sample_bridge import apply_sample_prompt_stack
 from .stages.guidance import apply_training_guidance_pair, merge_guidance_for_training_caption
-from .tokens import append_unique, join_tags, merge_fragments, split_tags
+from .tokens import append_csv, append_unique, join_tags, merge_fragments, split_tags, token_set
 
 __all__ = [
     "CLAUSE_REGISTRY",
@@ -32,8 +32,10 @@ __all__ = [
     "apply_sample_prompt_stack",
     "apply_training_guidance_pair",
     "merge_content_control_overrides",
+    "append_csv",
     "append_unique",
     "join_tags",
+    "token_set",
     "list_clauses",
     "merge_fragments",
     "merge_guidance_for_training_caption",

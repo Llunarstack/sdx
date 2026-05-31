@@ -48,6 +48,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
+"sample.py" = ["E402"]  # repo-root sys.path bootstrap + early --help parser before heavy imports
 "vit_quality/**" = ["E402"]  # repo-root sys.path bootstrap before utils imports
 "native/python/sdx_native/__init__.py" = ["I001"]  # large explicit re-export surface; isort splits combined imports
 "utils/latent_geometry.py" = ["E402", "F403"]

@@ -22,20 +22,32 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--text-encoder-mode",
         type=str,
         default="t5",
-        choices=["t5", "triple"],
-        help="t5=T5 only; triple=T5+CLIP-L+CLIP-bigG with trainable fusion (match downloaded model/ stack)",
+        choices=["t5", "triple", "penta"],
+        help="t5=T5 only; triple=T5+CLIP-L+CLIP-bigG; penta=T5+CLIP-L+bigG+H+LongCLIP-L with trainable fusion",
     )
     argument_parser.add_argument(
         "--clip-text-encoder-l",
         type=str,
         default="",
-        help="CLIP-ViT-L/14 folder or HF id (triple mode; empty = default)",
+        help="CLIP-ViT-L/14 folder or HF id (triple/penta; empty = default)",
     )
     argument_parser.add_argument(
         "--clip-text-encoder-bigg",
         type=str,
         default="",
-        help="CLIP-ViT-bigG/14 folder or HF id (triple mode; empty = default)",
+        help="CLIP-ViT-bigG/14 folder or HF id (triple/penta; empty = default)",
+    )
+    argument_parser.add_argument(
+        "--clip-text-encoder-h",
+        type=str,
+        default="",
+        help="CLIP-ViT-H/14 folder or HF id (penta mode; empty = default)",
+    )
+    argument_parser.add_argument(
+        "--clip-text-encoder-long",
+        type=str,
+        default="",
+        help="LongCLIP-L folder or HF id (penta mode; empty = default)",
     )
     argument_parser.add_argument(
         "--vae-model",
@@ -68,7 +80,45 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--global-batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--num-workers", type=int, default=-1, help="DataLoader workers (-1 = auto heuristic)")
+    parser.add_argument(
+        "--auto-num-workers",
+        action="store_true",
+        help="Pick num_workers from CPU count and dataset size (overrides --num-workers)",
+    )
+    parser.add_argument(
+        "--prefetch-factor",
+        type=int,
+        default=4,
+        help="DataLoader prefetch_factor per worker (0 = disable explicit prefetch)",
+    )
+    parser.add_argument(
+        "--no-auto-num-workers",
+        action="store_true",
+        help="Use --num-workers literally instead of the CPU/dataset heuristic",
+    )
+    parser.add_argument(
+        "--no-fused-adamw",
+        action="store_true",
+        help="Disable fused CUDA AdamW optimizer kernel",
+    )
+    parser.add_argument(
+        "--no-batch-text-encode",
+        action="store_true",
+        help="Separate T5 forwards for negative/style (slower; debug only)",
+    )
+    parser.add_argument(
+        "--no-cuda-stream-prefetch",
+        action="store_true",
+        help="Disable CUDA-stream batch prefetch (H2D/compute overlap)",
+    )
+    parser.add_argument(
+        "--compile-mode",
+        type=str,
+        default="reduce-overhead",
+        choices=["default", "reduce-overhead", "max-autotune"],
+        help="torch.compile mode when compile is enabled",
+    )
     parser.add_argument("--log-every", type=int, default=50)
     parser.add_argument("--ckpt-every", type=int, default=5000)
     parser.add_argument("--no-bf16", action="store_true", help="Disable bf16")
@@ -565,7 +615,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--train-prompt-emphasis",
         action="store_true",
-        help="Strip ( )/[ ] from captions for T5 (same as sample.py) and pass DiT token_weights (1.2 / 0.8); triple text appends two 1.0 weights for CLIP tokens",
+        help="Strip ( )/[ ] from captions for T5 (same as sample.py) and pass DiT token_weights (1.2 / 0.8); triple/penta append 1.0 weights for fused CLIP tokens",
     )
     parser.add_argument(
         "--attn-grounding-loss-weight",

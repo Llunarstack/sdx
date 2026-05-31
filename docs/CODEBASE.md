@@ -185,6 +185,7 @@ Keep new work in predictable places so imports and docs stay stable.
 
 ## See also
 
+- [CODEBASE_GUIDE.md](CODEBASE_GUIDE.md) — narrative guide: files, relationships, train/sample flows  
 - [FILES.md](FILES.md) — per-file map  
 - [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — diagram + config ↔ checkpoint ↔ sample (§13)  
 - [PROMPT_STACK.md](PROMPT_STACK.md) — inference prompt pipeline before T5  

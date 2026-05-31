@@ -16,7 +16,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .model_enhancements import RMSNorm
 
@@ -121,22 +120,26 @@ class TACA(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        # Compute temperature
+        # Temperature + imbalance as Q/K prescale (same softmax math, fused SDPA path)
         if timestep is not None:
-            t_emb = self._sinusoidal_t(timestep)  # (B, t_emb_dim)
-            delta = self.t_embed(t_emb) * self.temp_range  # (B, 1)
-            temp = (self.base_temp + delta).clamp(min=0.1).unsqueeze(-1).unsqueeze(-1)  # (B,1,1,1)
+            t_emb = self._sinusoidal_t(timestep)
+            delta = self.t_embed(t_emb) * self.temp_range
+            temp = (self.base_temp + delta).clamp(min=0.1).view(B, 1, 1, 1, 1)
         else:
-            temp = torch.tensor(self.base_temp, device=x.device, dtype=x.dtype)
+            temp = torch.tensor(self.base_temp, device=x.device, dtype=x.dtype).view(1, 1, 1, 1, 1)
+        fac = (self.imbalance_scale.view(1, self.num_heads, 1, 1) / temp.clamp(min=1e-4)).sqrt()
+        q = q * fac.unsqueeze(-1)
+        k = k * fac.unsqueeze(-1)
 
-        # Scaled dot-product with temperature and imbalance correction
-        # imbalance_scale compensates for N >> L token count disparity
-        attn = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # (B, H, N, L)
-        attn = attn * self.imbalance_scale / temp
-        attn = F.softmax(attn, dim=-1)
+        from .attention import memory_efficient_attention
 
-        out = torch.matmul(attn, v)  # (B, H, N, D)
-        out = out.transpose(1, 2).reshape(B, N, D)
+        out = memory_efficient_attention(
+            q.transpose(1, 2),
+            k.transpose(1, 2),
+            v.transpose(1, 2),
+            scale=self.scale,
+        )
+        out = out.reshape(B, N, D)
         return self.out_proj(out)
 
 

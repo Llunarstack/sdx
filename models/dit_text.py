@@ -730,7 +730,23 @@ class DiT_Text(nn.Module):
         reinject_every = int(kwargs.get("prompt_reinject_every_n", self.prompt_reinject_every_n))
         reinject_alpha = float(kwargs.get("prompt_reinject_alpha", self.prompt_reinject_alpha))
         reinject_decay = float(kwargs.get("prompt_reinject_decay", self.prompt_reinject_decay))
+        block_cache = kwargs.get("block_cache")
+        skip_blocks = set(kwargs.get("skip_blocks") or ())
+        if block_cache is not None:
+            _fp_x = x[:, : self.num_patches, :] if x.shape[1] > self.num_patches else x
+            _cfg_split = bool(
+                kwargs.get(
+                    "dbc_separate_cfg", getattr(getattr(block_cache, "config", None), "cfg_split_fingerprint", False)
+                )
+            )
+            block_cache.begin_forward(block_cache.fingerprint_from_tensors(t_emb, _fp_x, cfg_split=_cfg_split))
         for i, block in enumerate(self.blocks):
+            if i in skip_blocks:
+                continue
+            if block_cache is not None and block_cache.should_skip_block(i):
+                x = block_cache.apply_residual(x, i)
+                continue
+            x_before = x
             text_emb_i = text_emb
             if reinject_every > 0 and reinject_alpha > 0.0 and i > 0 and (i % reinject_every == 0):
                 k = max(0, i // reinject_every - 1)
@@ -778,6 +794,8 @@ class DiT_Text(nn.Module):
                     use_xformers=self.use_xformers,
                     num_patch_tokens=self.num_patches,
                 )
+            if block_cache is not None:
+                block_cache.note_block(i, x_before, x)
         # REPA: expose projected token features (pool over patches) before final output mapping.
         x_out = x[:, : self.num_patches, :] if x.shape[1] > self.num_patches else x
         if self.repa_head is not None:

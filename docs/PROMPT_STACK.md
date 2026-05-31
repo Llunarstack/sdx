@@ -33,7 +33,7 @@ SDX_PROMPT_STACK_TRACE=1 python -m scripts.tools preview_prompt_stack --prompt "
 ## End-to-end path (inference)
 
 1. **User input** — `--prompt`, optional `--negative-prompt`, `--tags` / `--tags-file`, `--lora-trigger`, character sheet / scene blueprint JSON, emphasis `(word)` / `[word]` in `sample.py`.
-2. **Defaults** — If negative is empty, `config.reference.prompt_domains` supplies `DEFAULT_NEGATIVE_PROMPT` (or text-in-image variants when `--text-in-image` or detected phrases).
+2. **Defaults** — If negative is empty, `config.defaults.prompt_domains` (shim: `config.prompt_domains` / `config.reference.prompt_domains`) supplies `DEFAULT_NEGATIVE_PROMPT` (or text-in-image variants when `--text-in-image` or detected phrases).
 3. **Optional prefixes** — `--hard-style`, `--naturalize` / `--naturalize-deep`, `--anti-bleed`, `--diversity`, originality tokens, etc. (see `sample.py` after the prompt is assembled).
 4. **`utils.prompt.content_controls.apply_content_controls`** — Quality packs (including **`micro_detail`** texture/material), **`adherence_pack`** (standard/strict literalism), pose/view/domain, Civitai trigger banks, **one-shot** scaffolding, **anti-AI** / **human-media** / **LoRA scaffold** packs, composition guards, etc. (`--less-ai`, `--auto-content-fix`, …). Tag packs are built-in (no CSV). With **`--auto-content-fix`** (default on), long prompts can auto-pick **`standard`** / **`strict`** adherence from length + keywords. **`--uncensored-mode`** (default on) disables character-sheet safety sanitization.
 5. **Extra negatives** — Scale distortion, character/scene negatives, **multi-LoRA** `LORA_STACK_NEGATIVE` when two+ `--lora` paths.
@@ -53,7 +53,7 @@ SDX_PROMPT_STACK_TRACE=1 python -m scripts.tools preview_prompt_stack --prompt "
 | Content controls | [`utils/prompt/content_controls.py`](../utils/prompt/content_controls.py) | `apply_content_controls`, `infer_content_controls_from_prompt` |
 | Pos/neg conflict filter | [`utils/prompt/neg_filter.py`](../utils/prompt/neg_filter.py) | `filter_negative_by_positive`, `positive_token_set` |
 | Domain / anti-AI strings | [`config/defaults/prompt_domains.py`](../config/defaults/prompt_domains.py) | Defaults, `ANTI_AI_*`, `NATURAL_LOOK_*`, `LORA_STACK_NEGATIVE`, tips |
-| Shims | [`config/prompt_domains.py`](../config/defaults/prompt_domains.py) | Re-exports reference module |
+| Shims | [`config/prompt_domains.py`](../config/prompt_domains.py) | Re-exports `config.defaults.prompt_domains` |
 | Sampling CLI | [`sample.py`](../sample.py) | Orchestrates the chain above |
 | Emphasis → token weights | [`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py) | `( )` / `[ ]` parsing + T5 `offset_mapping` weights; **`train.py --train-prompt-emphasis`** for training–inference parity |
 | Originality injection | [`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py) | **`sample.py --originality`** / **`train.py --train-originality-prob`** — composition tokens after subject tags |

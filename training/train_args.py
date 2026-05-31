@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from utils.modeling.model_paths import default_t5_path
-
 from config.train_config import TrainConfig
+from utils.modeling.model_paths import default_t5_path
 
 
 def parse_caption_dropout_schedule(s: Optional[str]):
@@ -64,6 +63,8 @@ def build_train_config_from_args(args) -> TrainConfig:
         text_encoder_mode=str(getattr(args, "text_encoder_mode", "t5")),
         clip_text_encoder_l=str(getattr(args, "clip_text_encoder_l", "") or ""),
         clip_text_encoder_bigg=str(getattr(args, "clip_text_encoder_bigg", "") or ""),
+        clip_text_encoder_h=str(getattr(args, "clip_text_encoder_h", "") or ""),
+        clip_text_encoder_long=str(getattr(args, "clip_text_encoder_long", "") or ""),
         image_size=args.image_size,
         resolution_buckets=parse_resolution_buckets(args.resolution_buckets or None),
         vae_model=args.vae_model,
@@ -74,6 +75,14 @@ def build_train_config_from_args(args) -> TrainConfig:
         epochs=args.epochs,
         lr=args.lr,
         num_workers=args.num_workers,
+        prefetch_factor=int(getattr(args, "prefetch_factor", 2)),
+        cuda_stream_prefetch=not bool(getattr(args, "no_cuda_stream_prefetch", False)),
+        auto_num_workers=(
+            not bool(getattr(args, "no_auto_num_workers", False)) or bool(getattr(args, "auto_num_workers", False))
+        ),
+        fused_adamw=not bool(getattr(args, "no_fused_adamw", False)),
+        batch_text_encode=not bool(getattr(args, "no_batch_text_encode", False)),
+        compile_mode=str(getattr(args, "compile_mode", "reduce-overhead") or "reduce-overhead"),
         log_every=args.log_every,
         ckpt_every=args.ckpt_every,
         use_bf16=not args.no_bf16,

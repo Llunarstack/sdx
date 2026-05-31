@@ -31,6 +31,7 @@ class PromptCase:
     expected_count_object: str = ""
     width: int = 1024
     height: int = 1024
+    prompt_layout: str = ""  # optional JSON path for --prompt-layout (penta/triple CLIP routing)
 
 
 DEFAULT_SUITE: List[PromptCase] = [
@@ -138,6 +139,7 @@ SUITE_PACKS: Dict[str, List[PromptCase]] = {
             expected_text="SPRING DESIGN EXPO",
             width=896,
             height=1152,
+            prompt_layout="examples/prompt_layout.example.json",
         ),
         PromptCase(
             name="slide_like_infographic",
@@ -187,6 +189,7 @@ def _load_suite(path: Optional[Path], suite_pack: str = "standard_v1") -> List[P
                 expected_count_object=str(row.get("expected_count_object", "") or ""),
                 width=int(row.get("width", 1024) or 1024),
                 height=int(row.get("height", 1024) or 1024),
+                prompt_layout=str(row.get("prompt_layout", "") or row.get("prompt_layout_path", "") or ""),
             )
         )
     return [c for c in out if c.prompt]
@@ -330,6 +333,17 @@ def _run_sample(
         cmd.append("--auto-expected-text")
     else:
         cmd.append("--no-auto-expected-text")
+    if str(getattr(args, "local_rag_jsonl", "") or "").strip():
+        cmd.extend(["--local-rag-jsonl", str(args.local_rag_jsonl).strip()])
+    if str(getattr(args, "pick_vit_ckpt", "") or "").strip():
+        cmd.extend(["--pick-vit-ckpt", str(args.pick_vit_ckpt).strip()])
+    pl = str(getattr(case, "prompt_layout", "") or "").strip()
+    if pl:
+        layout_path = Path(pl)
+        if not layout_path.is_file():
+            layout_path = Path(__file__).resolve().parents[2] / pl
+        if layout_path.is_file():
+            cmd.extend(["--prompt-layout", str(layout_path)])
     for tok in args.sample_arg:
         cmd.append(str(tok))
     subprocess.run(cmd, check=True)
@@ -341,16 +355,31 @@ def _write_preference_jsonl(
     *,
     min_margin: float,
     max_pairs_per_case: int,
+    vit_ckpt: str = "",
+    vit_mine: bool = False,
+    device: str = "cuda",
 ) -> int:
-    # Local import avoids hard dependency when users only need benchmarking.
-    from scripts.tools.training.mine_preference_pairs import mine_pairs
+    if vit_mine and vit_ckpt.strip():
+        from utils.superior.vit_mining import ViTMineConfig, mine_vit_preference_pairs
 
-    pairs = mine_pairs(
-        rows,
-        min_margin=float(min_margin),
-        max_pairs_per_case=int(max_pairs_per_case),
-        require_existing_files=False,
-    )
+        pairs = mine_vit_preference_pairs(
+            rows,
+            ViTMineConfig(
+                vit_ckpt=vit_ckpt.strip(),
+                min_margin=float(min_margin),
+                max_pairs_per_case=int(max_pairs_per_case),
+                device=device,
+            ),
+        )
+    else:
+        from scripts.tools.training.mine_preference_pairs import mine_pairs
+
+        pairs = mine_pairs(
+            rows,
+            min_margin=float(min_margin),
+            max_pairs_per_case=int(max_pairs_per_case),
+            require_existing_files=False,
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:
         for r in pairs:
@@ -467,6 +496,28 @@ def main() -> None:
         "--sample-arg", action="append", default=[], help="Extra token passed to sample.py; repeat as needed."
     )
     ap.add_argument(
+        "--local-rag-jsonl",
+        type=str,
+        default="",
+        help="Pass --local-rag-jsonl to sample.py for grounded benchmark prompts.",
+    )
+    ap.add_argument(
+        "--pick-vit-ckpt",
+        type=str,
+        default="",
+        help="Pass --pick-vit-ckpt to sample.py; also used for ViT scoring when --vit-score is set.",
+    )
+    ap.add_argument(
+        "--vit-score",
+        action="store_true",
+        help="Add vit_quality/vit_reward/blended_score to each result row (requires --pick-vit-ckpt).",
+    )
+    ap.add_argument(
+        "--vit-mine-preferences",
+        action="store_true",
+        help="When exporting preferences, use ViT-weighted mining (requires --pick-vit-ckpt).",
+    )
+    ap.add_argument(
         "--export-preference-jsonl",
         type=str,
         default="",
@@ -505,6 +556,18 @@ def main() -> None:
     for ckpt_s in checkpoints:
         ckpt = Path(ckpt_s)
         tag = ckpt.stem
+        from utils.modeling.ckpt_text_stack import (
+            fusion_present_in_checkpoint,
+            text_encoder_mode_from_checkpoint,
+            text_encoder_mode_label,
+        )
+
+        te_mode = text_encoder_mode_from_checkpoint(str(ckpt))
+        te_fusion = fusion_present_in_checkpoint(str(ckpt))
+        print(
+            f"[benchmark_suite] checkpoint {tag}: text_encoder_mode={te_mode} "
+            f"({text_encoder_mode_label(te_mode)}), fusion_weights={te_fusion}"
+        )
         model_dir = out_dir / tag
         model_dir.mkdir(parents=True, exist_ok=True)
         for i, case in enumerate(cases):
@@ -521,9 +584,23 @@ def main() -> None:
                     clip_model=str(args.clip_model),
                     device=str(args.device),
                 )
+                if bool(args.vit_score) and str(args.pick_vit_ckpt or "").strip():
+                    from utils.superior.vit_mining import blended_reward, score_image_vit
+
+                    _q, vit_r = score_image_vit(
+                        out_png,
+                        case.prompt,
+                        vit_ckpt=str(args.pick_vit_ckpt),
+                        device=str(args.device),
+                    )
+                    met["vit_quality"] = _q
+                    met["vit_reward"] = vit_r
+                    met["blended_score"] = blended_reward(float(met.get("composite", 0)), vit_r)
                 row = {
                     "model": tag,
                     "checkpoint": str(ckpt),
+                    "text_encoder_mode": te_mode,
+                    "text_encoder_fusion": te_fusion,
                     "case": case.name,
                     "seed": int(seed),
                     "output": str(out_png),
@@ -560,6 +637,9 @@ def main() -> None:
             results,
             min_margin=float(args.preference_min_margin),
             max_pairs_per_case=int(args.preference_max_pairs_per_case),
+            vit_ckpt=str(args.pick_vit_ckpt or ""),
+            vit_mine=bool(args.vit_mine_preferences),
+            device=str(args.device),
         )
         print(f"[benchmark_suite] wrote {n_pairs} preference pairs: {pref_path}")
     if str(args.export_hardcases_jsonl).strip():

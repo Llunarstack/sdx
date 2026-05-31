@@ -444,7 +444,7 @@ class HybridAdaptiveCFG:
         """Update with current latent for delta tracking."""
         if self.delta is not None:
             self.delta.update(latent, self._prev_latent)
-        self._prev_latent = latent.detach().cpu()
+        self._prev_latent = latent.detach()
 
     def get_cfg(
         self,
@@ -485,7 +485,7 @@ class HybridAdaptiveCFG:
         if self.delta is not None:
             if latent is not None:
                 self.delta.update(latent, self._prev_latent)
-                self._prev_latent = latent.detach().cpu()
+                self._prev_latent = latent.detach()
             cfgs.append(self.delta.get_cfg(step))
             weights.append(0.2)
 

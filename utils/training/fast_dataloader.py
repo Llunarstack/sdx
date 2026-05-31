@@ -117,11 +117,13 @@ class PrefetchDataLoader:
         self.device = device
         self.non_blocking = non_blocking
 
-    def _to_device(self, x: Any) -> Any:
+    def _to_device(self, x: Any, *, _key: str | None = None) -> Any:
         if isinstance(x, torch.Tensor):
+            if _key == "grounding_mask_valid":
+                return x
             return x.to(self.device, non_blocking=self.non_blocking)
         if isinstance(x, dict):
-            return {k: self._to_device(v) for k, v in x.items()}
+            return {k: self._to_device(v, _key=k) for k, v in x.items()}
         if isinstance(x, (list, tuple)):
             converted = [self._to_device(v) for v in x]
             return type(x)(converted)
@@ -297,8 +299,9 @@ class LatentCacheBuilder:
 
     def _encode_batch(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """Encode a batch of pixel values to latents."""
-        with torch.no_grad():
-            pv = pixel_values.to(self.device, dtype=torch.float32)
+        with torch.inference_mode():
+            nbc = self.device.type == "cuda"
+            pv = pixel_values.to(self.device, dtype=torch.float32, non_blocking=nbc)
             enc = self.vae.encode(pv)
             if hasattr(enc, "latent_dist"):
                 z = enc.latent_dist.sample() * self.latent_scale
@@ -603,11 +606,66 @@ class DataLoaderProfiler:
         return "\n".join(lines)
 
 
+def dataloader_perf_kwargs(
+    *,
+    num_workers: int,
+    prefetch_factor: int = 2,
+    pin_memory: bool = True,
+    persistent_workers: bool = True,
+    worker_init_fn: Optional[Callable] = None,
+) -> Dict[str, Any]:
+    """
+    Shared DataLoader kwargs for train.py (pin_memory, prefetch, persistent workers).
+
+    ``prefetch_factor`` is omitted when ``num_workers == 0``.
+    """
+    use_pin = pin_memory and torch.cuda.is_available()
+    use_persistent = persistent_workers and num_workers > 0
+    kw: Dict[str, Any] = {
+        "num_workers": num_workers,
+        "pin_memory": use_pin,
+        "persistent_workers": use_persistent,
+    }
+    if worker_init_fn is not None:
+        kw["worker_init_fn"] = worker_init_fn
+    if num_workers > 0 and prefetch_factor > 0:
+        kw["prefetch_factor"] = int(prefetch_factor)
+    return kw
+
+
+def maybe_cuda_prefetch_dataloader(
+    loader: DataLoader,
+    device: torch.device,
+    *,
+    enabled: bool = True,
+) -> PrefetchDataLoader | DataLoader:
+    """Overlap H2D copies with GPU compute when training on CUDA."""
+    if not enabled or device.type != "cuda" or not torch.cuda.is_available():
+        return loader
+    return PrefetchDataLoader(loader, device)
+
+
+def resolve_training_num_workers(
+    num_workers: int,
+    dataset_size: int,
+    batch_size: int,
+    *,
+    auto: bool = False,
+) -> int:
+    """Return effective worker count (``auto`` or negative values pick a heuristic)."""
+    if auto or num_workers < 0:
+        return optimal_num_workers(dataset_size, batch_size)
+    return max(0, int(num_workers))
+
+
 __all__ = [
     "PrefetchDataLoader",
     "build_fast_dataloader",
+    "dataloader_perf_kwargs",
     "LatentCacheBuilder",
     "AsyncCaptionPrefetcher",
     "DataLoaderProfiler",
+    "maybe_cuda_prefetch_dataloader",
     "optimal_num_workers",
+    "resolve_training_num_workers",
 ]

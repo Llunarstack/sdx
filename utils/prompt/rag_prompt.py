@@ -197,3 +197,16 @@ def load_facts_from_gen_searcher_json(
     except Exception:
         return []
     return facts_from_gen_searcher_payload(payload, max_entries=max_entries, max_item_chars=max_item_chars)
+
+
+def retrieve_facts_for_query_local(
+    query: str,
+    corpus_path: Union[str, Path],
+    *,
+    top_k: int = 8,
+) -> List[str]:
+    """TF-IDF retrieval from a JSONL corpus (see ``utils.superior.retrieval``)."""
+    from utils.superior.retrieval import build_tfidf_index_from_jsonl, retrieve_facts_for_query
+
+    index = build_tfidf_index_from_jsonl(corpus_path)
+    return retrieve_facts_for_query(query, index, top_k=top_k)

@@ -8,7 +8,8 @@ and one negative string.
 
 Use with ``sample.py --prompt-layout path.json`` or call :func:`compile_prompt_layout`.
 Sampling uses :func:`substitute_compiled_layout_in_t5_prompt` / ``--t5-layout-encode`` for T5, and
-:func:`triple_clip_caption` so CLIP-L and CLIP-bigG (triple mode) get the same labeled, 77-token-friendly line.
+:func:`multi_clip_caption` so CLIP encoders (triple/penta) get the same labeled, 77-token-friendly line.
+LongCLIP in penta mode receives the full flat prompt (248 tokens).
 
 Schema (all keys optional except you should set at least one content section):
 
@@ -40,6 +41,7 @@ __all__ = [
     "t5_segment_texts_for_full_prompt",
     "t5_segment_texts_from_layout",
     "triple_clip_caption",
+    "multi_clip_caption",
 ]
 
 # Short labels so T5 can attend to section boundaries without special tokens.
@@ -324,7 +326,7 @@ def layout_tail_suffix(full_text: str, compiled: CompiledPromptLayout) -> str:
 
 def triple_clip_caption(compiled: CompiledPromptLayout, flat_full: str) -> str:
     """
-    One string for **both** CLIP-L and CLIP-bigG in triple mode: short labeled sections (high signal
+    One string for short-context CLIP encoders in triple/penta mode: labeled sections (high signal
     in the first tokens) plus any suffix after the layout core. CLIP tokenizers truncate at 77 tokens.
     """
     flat = (flat_full or "").strip()
@@ -344,6 +346,11 @@ def triple_clip_caption(compiled: CompiledPromptLayout, flat_full: str) -> str:
     if tail:
         return f"{head} . {tail}"
     return head
+
+
+def multi_clip_caption(compiled: CompiledPromptLayout, flat_full: str) -> str:
+    """Alias for :func:`triple_clip_caption` (CLIP-L / bigG / H in penta mode)."""
+    return triple_clip_caption(compiled, flat_full)
 
 
 def t5_segment_texts_for_full_prompt(compiled: CompiledPromptLayout, flat_full: str) -> List[str]:

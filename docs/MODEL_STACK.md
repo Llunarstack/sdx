@@ -26,6 +26,58 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | CRAFT text detector | `pretrained/CRAFT-text-detector` or `boomb0om/CRAFT-text-detector` |
 | OwlViT (open-vocab detector) | `pretrained/OwlViT-base-patch32` or `google/owlvit-base-patch32` |
 | Donut (doc/layout understanding) | `pretrained/Donut-base` or `naver-clova-ix/donut-base` |
+| Florence-2 (caption / vision tasks) | `pretrained/Florence-2-base` or `microsoft/Florence-2-base` |
+| BLIP-2 (strong captions) | `pretrained/BLIP2-opt-2.7b` or `Salesforce/blip2-opt-2.7b` |
+| Qwen2-VL-2B (compact VLM) | `pretrained/Qwen2-VL-2B-Instruct` or `Qwen/Qwen2-VL-2B-Instruct` |
+| Depth-Anything-V2-Small | `pretrained/Depth-Anything-V2-Small` or hub id |
+| CLIP ViT-H/14 | `pretrained/CLIP-ViT-H-14` or LAION hub id |
+| OWLv2 detector | `pretrained/OWLv2-base-patch16-ensemble` |
+| ControlNet Canny | `pretrained/ControlNet-Canny` or `lllyasviel/sd-controlnet-canny` |
+| ControlNet Depth / OpenPose / Lineart / Scribble | `pretrained/ControlNet-*` or lllyasviel hub ids |
+| SmolVLM-256M (tiny VLM) | `pretrained/SmolVLM-256M-Instruct` |
+| Florence-2-large | `pretrained/Florence-2-large` |
+| OneAlign (IQA/reward) | `pretrained/OneAlign` or `Q-Future/OneAlign` |
+| MetaCLIP / AIMv2 / AltCLIP | vision encoder alternatives for alignment experiments |
+| CAFE Aesthetic | `pretrained/CAFE-Aesthetic` |
+| GroundingDINO-Tiny | lightweight open-vocab detector scaffold |
+| SmolVLM2-2B / Qwen2-VL-7B / Phi-3.5-vision | additional VLM scaffolds |
+| GIT-base/large-coco | caption models |
+| ControlNet MLSD / SoftEdge / Seg / Normal | extended control scaffolds |
+| GroundingDINO-SwinT / OWLv2-Large | stronger detectors |
+| MUSIQ / PerceptCLIP / ImageReward | extended HF reward panel |
+| EVA02-CLIP-L-14 / CLIP-ViT-L-336 | CLIP alignment variants |
+| GOT-OCR2 / TrOCR-small | document OCR scaffolds |
+| SAM-ViT-Huge | segmentation scaffold |
+| T5-XL / T5-Large / CLIP-ViT-B-32 | lighter text encoder scaffolds |
+| SigLIP2 / DINOv2-Base/Small | lighter vision encoder scaffolds |
+| LLaVA-1.5-7B / InternVL2-2B / Qwen2.5-VL-3B | additional VLMs |
+| ControlNet HED / SDXL canny+depth | extended control scaffolds |
+| ZoeDepth / Metric3D / Marigold depth | depth estimation alternatives |
+| DETR / Mask2Former / SAM2-Tiny | detection & segmentation |
+| LayoutLMv3 / Donut-docvqa | document layout OCR |
+| NSFW-Detector | safety gate scaffold |
+| sd-vae-ft-mse / sdxl-vae-fp16-fix | VAE decode scaffolds |
+| LLaVA-v1.6 / Qwen2.5-VL-7B / PaliGemma2 / InternVL2-1B | latest VLM wave |
+| DINOv3 / MobileCLIP-S2 / UMT5-XXL | next-gen encoders |
+| ControlNet Union/OpenPose SDXL | SDXL control scaffolds |
+| SAM2 Base/Small + GroundingDINO-1.5 | mid-tier seg/detect |
+| Pix2Struct / DePlot / vit-gpt2-coco | doc/chart/caption helpers |
+| Watermark-Detector / CLIP-IQA | QA + reward scaffolds |
+| GFPGAN / SwinIR-classical | face restore + upscale scaffolds |
+
+Registry index: ``utils/modeling/hf_index.py`` (`summary()`, `role_counts()`). Upscale helpers: ``utils/modeling/hf_upscale.py``.
+
+## Config-only scaffold (no checkpoint download)
+
+Fetch folder structure + configs/tokenizers without weight files:
+
+```bash
+python scripts/download/download_hf_scaffold.py --all
+python scripts/download/download_hf_scaffold.py --role vlm --role reward
+python scripts/download/download_hf_scaffold.py --list
+```
+
+Runtime uses `resolve_model_path_require_weights()` so config-only local folders do **not** block Hugging Face fallback. Lazy loaders: `utils/modeling/hf_loaders.py`, unified reward panel: `utils/modeling/hf_reward.py`.
 
 ## How this maps to the SDX pipeline
 
@@ -40,7 +92,22 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
   ```bash
   python train.py --data-path ... --text-encoder-mode triple
   ```
-  Checkpoints store `text_encoder_fusion` next to the DiT weights.
+- **Penta text encoders:** T5 + CLIP-L + CLIP-bigG + CLIP-H + LongCLIP-L (4 fused CLIP tokens):
+  ```bash
+  python train.py --data-path ... --text-encoder-mode penta
+  ```
+  Download weights (or config scaffolds):
+  ```bash
+  python scripts/download/download_models.py --penta-text-encoders
+  python scripts/download/download_hf_scaffold.py --penta
+  python -m scripts.tools.ops.pretrained_status --text-encoder-mode penta
+  ```
+JSONL fields (optional, for triple/penta training):
+
+- ``prompt_layout``: inline layout object (same schema as ``examples/prompt_layout.example.json``)
+- ``prompt_layout_path``: path to layout JSON (relative to manifest / image root)
+
+When set, CLIP encoders receive labeled section captions; LongCLIP (penta) receives the full training caption.
 
 ## Sampling
 

@@ -6,9 +6,23 @@ Uses ``transformers`` + ``PIL``. If imports fail, helpers return conservative de
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Optional, Tuple
 
 import torch
+
+_clip_bundle: Optional[Tuple[object, object, str]] = None
+
+
+def _get_clip_model(model_id: str, device: torch.device) -> Tuple[object, object]:
+    global _clip_bundle
+    if _clip_bundle is not None and _clip_bundle[2] == model_id:
+        return _clip_bundle[0], _clip_bundle[1]
+    from transformers import CLIPModel, CLIPProcessor
+
+    proc = CLIPProcessor.from_pretrained(model_id)
+    model = CLIPModel.from_pretrained(model_id).to(device).eval()
+    _clip_bundle = (model, proc, model_id)
+    return model, proc
 
 
 def tensor_chw01_to_pil(t: torch.Tensor):
@@ -28,14 +42,12 @@ def clip_image_text_cosine(
     """
     Normalized CLIP cosine similarity in roughly [-1, 1] (typical positives ~0.2–0.35 for arbitrary prompts).
     """
-    from transformers import CLIPModel, CLIPProcessor
-
+    model, proc = _get_clip_model(model_id, device)
     pil = tensor_chw01_to_pil(image_chw_01)
-    proc = CLIPProcessor.from_pretrained(model_id)
-    model = CLIPModel.from_pretrained(model_id).to(device).eval()
     inputs = proc(text=[prompt], images=pil, return_tensors="pt", padding=True)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    with torch.no_grad():
+    nbc = device.type == "cuda"
+    inputs = {k: v.to(device, non_blocking=nbc) for k, v in inputs.items()}
+    with torch.inference_mode():
         img_f = model.get_image_features(pixel_values=inputs["pixel_values"])
         txt_f = model.get_text_features(
             input_ids=inputs["input_ids"],
@@ -43,7 +55,8 @@ def clip_image_text_cosine(
         )
         img_f = img_f / (img_f.norm(dim=-1, keepdim=True) + 1e-8)
         txt_f = txt_f / (txt_f.norm(dim=-1, keepdim=True) + 1e-8)
-        return float((img_f * txt_f).sum(dim=-1).squeeze().cpu().item())
+        sim = (img_f * txt_f).sum(dim=-1).squeeze()
+    return float(sim.item())
 
 
 def decode_latent_preview_rgb(
@@ -61,7 +74,7 @@ def decode_latent_preview_rgb(
         z = z / float(latent_scale)
     elif ae_type == "rae" and rae_bridge is not None:
         z = rae_bridge.dit_to_rae(z)
-    with torch.no_grad():
+    with torch.inference_mode():
         im = vae.decode(z).sample
     im = (im * 0.5 + 0.5).clamp(0, 1)
     return im[0]

@@ -6,8 +6,9 @@ Loads a DiT-Text checkpoint, freezes a **reference** copy of the weights, and op
 **policy** with a DPO term built from per-sample VP diffusion losses at a **shared** timestep
 ``t`` and **shared** Gaussian noise ``epsilon`` (Wallace-style coupling).
 
-Uses ``train.encode_text`` with ``load_text_encoder_bundle`` when the checkpoint config has
-``text_encoder_mode == "triple"`` (T5 + CLIP-L + bigG + fusion); otherwise T5-only.
+Uses ``train.encode_text`` with ``load_text_bundle_for_training`` when the checkpoint config has
+``text_encoder_mode`` in ``triple`` or ``penta`` (multi-CLIP fusion + T5); otherwise T5-only.
+Fusion weights are loaded from ``text_encoder_fusion`` in the checkpoint when present.
 
 Example::
 
@@ -31,16 +32,20 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
+from config.train_config import get_dit_build_kwargs
 from diffusion import create_diffusion
 from models import DiT_models_text
 from torch.utils.data import DataLoader
 from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
-from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
-from utils.training.diffusion_dpo_loss import dpo_preference_loss
+from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions, load_text_bundle_for_training
+from utils.training.dpo_advanced import (
+    ema_update_reference,
+    safeguarded_dpo_preference_loss,
+    timestep_dpo_weight,
+)
 from utils.training.preference_image_dataset import PreferenceImageDataset, collate_preference_batch
 
 import train as train_mod
-from config.train_config import get_dit_build_kwargs
 
 
 def _build_reference(policy: torch.nn.Module, cfg, device: str) -> torch.nn.Module:
@@ -93,6 +98,31 @@ def main() -> int:
         default=0,
         help="If >0: copy policy weights into the frozen reference every n steps (keeps DPO margin meaningful).",
     )
+    ap.add_argument(
+        "--ref-ema-alpha",
+        type=float,
+        default=0.0,
+        help="If >0: soft EMA update of reference toward policy each step (alternative to --sync-ref-every).",
+    )
+    ap.add_argument(
+        "--timestep-dpo-weight",
+        type=str,
+        default="high_noise",
+        choices=["high_noise", "low_noise", "uniform"],
+        help="Reweight DPO loss by diffusion timestep (high_noise recommended for diffusion-DPO).",
+    )
+    ap.add_argument(
+        "--timestep-dpo-power",
+        type=float,
+        default=0.5,
+        help="Exponent for --timestep-dpo-weight curve.",
+    )
+    ap.add_argument(
+        "--safeguarded-dpo",
+        type=float,
+        default=0.85,
+        help="SDPO-style safeguard strength (0=off, 0.85=default). Caps destructive loser pushes.",
+    )
     ap.add_argument("--save-every", type=int, default=250)
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--max-caption-length", type=int, default=300)
@@ -104,14 +134,14 @@ def main() -> int:
         print("CUDA not available; using CPU.", file=sys.stderr)
         device = "cpu"
 
-    policy, cfg, rae_bridge, _name, _fusion = load_dit_text_checkpoint(args.ckpt, device=device, reject_enhanced=True)
+    policy, cfg, rae_bridge, _name, fusion_sd = load_dit_text_checkpoint(args.ckpt, device=device, reject_enhanced=True)
     policy.train()
     for p in policy.parameters():
         p.requires_grad = True
 
     ref = _build_reference(policy, cfg, device)
     tokenizer, text_encoder, ae = train_mod.get_t5_and_vae(device, cfg)
-    text_bundle = load_text_encoder_bundle(cfg, torch.device(device))
+    text_bundle = load_text_bundle_for_training(cfg, torch.device(device), fusion_sd)
 
     image_size = int(getattr(cfg, "image_size", 256))
     ds = PreferenceImageDataset(
@@ -179,6 +209,7 @@ def main() -> int:
             dtype=torch.bfloat16 if use_amp else torch.float32,
             text_bundle=text_bundle,
             train_fusion=False,
+            **encode_kwargs_for_captions(prompts, text_bundle),
         )
         mk = {"encoder_hidden_states": enc}
         if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
@@ -252,13 +283,24 @@ def main() -> int:
                 )
 
         lc = float(args.dpo_logit_clip)
-        dpo = dpo_preference_loss(
+        tw = None
+        if str(args.timestep_dpo_weight) != "uniform":
+            tw = timestep_dpo_weight(
+                t,
+                diffusion.num_timesteps,
+                mode=str(args.timestep_dpo_weight),
+                power=float(args.timestep_dpo_power),
+            )
+        sg = max(0.0, float(args.safeguarded_dpo))
+        dpo = safeguarded_dpo_preference_loss(
             -loss_w_p.float(),
             -loss_l_p.float(),
             -loss_w_r.float(),
             -loss_l_r.float(),
             beta=float(args.dpo_beta),
             logit_clip=lc if lc > 0.0 else None,
+            safeguard_strength=sg,
+            timestep_weights=tw,
         )
 
         opt.zero_grad(set_to_none=True)
@@ -271,7 +313,10 @@ def main() -> int:
             opt.step()
 
         global_step += 1
-        if int(args.sync_ref_every) > 0 and global_step % int(args.sync_ref_every) == 0:
+        ref_ema = float(args.ref_ema_alpha)
+        if ref_ema > 0.0:
+            ema_update_reference(ref, policy, alpha=ref_ema)
+        elif int(args.sync_ref_every) > 0 and global_step % int(args.sync_ref_every) == 0:
             ref.load_state_dict(policy.state_dict())
             ref.eval()
             for p in ref.parameters():
