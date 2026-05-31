@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import torch
 import torch.nn.functional as F
@@ -54,7 +53,6 @@ class HardNegativeMiner:
         - Prediction uncertainty (entropy of model predictions)
         - Prediction-target divergence
         """
-        batch_size = model_output.shape[0]
         normalized_loss = min(1.0, loss / 10.0)
 
         if model_output.shape[-1] > 1:

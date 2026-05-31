@@ -73,8 +73,6 @@ class AlignmentLoss(torch.nn.Module):
         Returns:
             Scalar loss
         """
-        batch_size = image_embed.shape[0]
-
         image_embed = F.normalize(image_embed, dim=1)
         text_embed = F.normalize(text_embed, dim=1)
 
@@ -183,8 +181,6 @@ class SupConLoss(torch.nn.Module):
         Returns:
             Scalar loss
         """
-        batch_size = features.shape[0]
-
         features = F.normalize(features, dim=1)
 
         similarity_matrix = torch.matmul(features, features.t())

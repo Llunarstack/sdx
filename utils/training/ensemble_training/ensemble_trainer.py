@@ -106,8 +106,6 @@ class EnsembleTrainer:
         2. Consensus loss
         3. Diversity encouragement loss
         """
-        batch_size = targets.shape[0]
-
         individual_losses = []
         for pred in predictions:
             loss = F.mse_loss(pred, targets)

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 import torch
-import torch.nn.functional as F
 
 
 class LayoutPosition(Enum):
