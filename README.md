@@ -21,7 +21,7 @@
 
 <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+"/></a>
 <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch 2.x"/></a>
-<a href="docs/releases/v8.md"><img src="https://img.shields.io/badge/release-v8-0ea5e9?style=for-the-badge" alt="v8"/></a>
+<a href="docs/releases/v9.md"><img src="https://img.shields.io/badge/release-v9-0ea5e9?style=for-the-badge" alt="v9"/></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge" alt="Apache 2.0"/></a>
 
 <br/>
@@ -45,7 +45,7 @@
 
 <br/>
 
-> **New in [v8](docs/releases/v8.md):** **Style Genome** (invent orthogonal aesthetics, not artist-name clones) · **PromptStack v2** (one pipeline for `sample.py` and training captions) · chaos / fusion / apocalypse modes · native style ops (Rust, CUDA, Go, Mojo) with Python fallbacks.
+> **New in [v9](docs/releases/v9.md):** **6 GRPO variants** for adaptive training · **Superior Stack** (ensemble, caching, quality gates) · **Agentic Stack** (self-improving agents) · **Visual Brain** (image understanding) · comprehensive documentation (Getting Started, Codebase Guide) · full ruff formatting · dependency updates.
 
 ---
 
