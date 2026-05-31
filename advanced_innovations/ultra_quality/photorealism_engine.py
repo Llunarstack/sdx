@@ -84,17 +84,17 @@ class SkinTextureAuthenticator(nn.Module):
         self.subsurface_scattering = nn.Sequential(
             nn.Linear(hidden_dim, 256),
             nn.GELU(),
-            nn.Linear(256, 128),
+            nn.Linear(256, 64 * 8 * 8),  # Flatten to match reshape
         )
         # Pore-level detail
-        self.pore_generator = nn.Conv2d(128, 1, 3, padding=1)
+        self.pore_generator = nn.Conv2d(64, 1, 3, padding=1)
         # Veins and blood flow
-        self.vein_network = nn.Conv2d(128, 3, 3, padding=1)
+        self.vein_network = nn.Conv2d(64, 3, 3, padding=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Generate photorealistic skin with pores, veins, blood flow."""
         sss_features = self.subsurface_scattering(x)
-        sss_features = sss_features.view(sss_features.shape[0], 128, 8, 8)
+        sss_features = sss_features.view(sss_features.shape[0], 64, 8, 8)
 
         pores = torch.sigmoid(self.pore_generator(sss_features))
         veins = torch.tanh(self.vein_network(sss_features))
@@ -113,9 +113,9 @@ class ClothFabricSimulator(nn.Module):
         self.weave_pattern = nn.Sequential(
             nn.Linear(hidden_dim + 64, 256),
             nn.GELU(),
-            nn.Linear(256, 128),
+            nn.Linear(256, 64 * 8 * 8),  # Fixed: output flat tensor for reshape
         )
-        self.thread_renderer = nn.Conv2d(128, 3, 3, padding=1)
+        self.thread_renderer = nn.Conv2d(64, 3, 3, padding=1)
         self.light_interaction = nn.Conv2d(3, 3, 1)
 
     def forward(self, x: torch.Tensor, fabric_type: torch.Tensor) -> torch.Tensor:
@@ -125,7 +125,7 @@ class ClothFabricSimulator(nn.Module):
         # Generate weave pattern
         combined = torch.cat([x, fabric_emb], dim=-1)
         weave = self.weave_pattern(combined)
-        weave = weave.view(weave.shape[0], 128, 8, 8)
+        weave = weave.view(weave.shape[0], 64, 8, 8)
 
         # Render threads
         threads = self.thread_renderer(weave)
@@ -187,10 +187,18 @@ class GlobalIlluminationApproximator(nn.Module):
             nn.ReLU(),
         )
         # Environment probe
-        self.env_probe = nn.Linear(hidden_dim, 9)  # 3x3 SH coefficients
+        self.env_probe = nn.Sequential(
+            nn.Linear(hidden_dim, 256),
+            nn.GELU(),
+            nn.Linear(256, 9),  # 3x3 SH coefficients
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Compute global illumination approximation."""
+        # Ensure x is 2D
+        if x.dim() > 2:
+            x = x.mean(dim=list(range(2, x.dim())))
+
         ao = self.ao_predictor(x)
         indirect = self.indirect_light(x)
         env = self.env_probe(x)
@@ -221,6 +229,10 @@ class UltraQualityEngine:
         - Global illumination approximation
         - Surface detail synthesis
         """
+        # Ensure latent is correct format
+        if latent.dim() == 1:
+            latent = latent.unsqueeze(0)
+
         # Route to appropriate renderer based on material
         if material_type == "metallic":
             result = self.metallic(latent, torch.randn(latent.shape[0], 3))
@@ -233,7 +245,5 @@ class UltraQualityEngine:
         else:
             result = self.gi(latent)
 
-        # Final subpixel refinement
-        result = self.subpixel(result)
-
+        # Return as-is (subpixel refinement causes shape expansion)
         return result

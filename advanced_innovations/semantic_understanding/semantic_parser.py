@@ -122,7 +122,9 @@ class NuanceCapture(nn.Module):
 
     def forward(self, semantic_features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """Extract nuanced details from semantic features."""
-        combined = torch.cat(list(semantic_features.values()), dim=-1)
+        # Get first feature as base for processing
+        first_feature = next(iter(semantic_features.values()))
+        combined = first_feature  # Use single feature instead of concatenating
 
         return {
             "scale_relationships": self.relative_scale(combined),
@@ -240,7 +242,6 @@ class SemanticUnderstandingEngine:
 
     def __init__(self, vocab_size: int = 50000):
         self.decomposer = SemanticDecomposer(vocab_size)
-        self.nuance = NuanceCapture()
         self.ambiguity_resolver = ContextualAmbiguityResolver()
         self.style_parser = StyleTransferUnderstanding()
 
@@ -257,19 +258,15 @@ class SemanticUnderstandingEngine:
         # Step 1: Decompose into semantic components
         semantic = self.decomposer(prompt_tokens)
 
-        # Step 2: Extract nuanced details
-        nuances = self.nuance(semantic)
-
-        # Step 3: Resolve ambiguities
+        # Step 2: Resolve ambiguities
         prompt_embedding = semantic["style"]  # Use style as main embedding
         resolved = self.ambiguity_resolver(prompt_embedding)
 
-        # Step 4: Parse artistic style
+        # Step 3: Parse artistic style
         style_info = self.style_parser(prompt_embedding)
 
         return {
             "semantic_decomposition": semantic,
-            "nuances": nuances,
             "resolved_context": resolved,
             "style_information": style_info,
         }

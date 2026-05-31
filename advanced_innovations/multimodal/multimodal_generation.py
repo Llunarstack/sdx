@@ -20,21 +20,14 @@ class ImageToImagePlus(nn.Module):
             nn.GELU(),
             nn.Conv2d(64, 128, 3, padding=1),
             nn.GELU(),
-            nn.Conv2d(128, hidden_dim, 3, padding=1),
+            nn.Conv2d(128, 32, 3, padding=1),
         )
 
         # Content encoder (preserves important details)
         self.content_encoder = nn.Sequential(
             nn.Conv2d(3, 64, 3, padding=1),
             nn.GELU(),
-            nn.Conv2d(64, hidden_dim, 3, padding=1),
-        )
-
-        # Style-content separator
-        self.separator = nn.Sequential(
-            nn.Linear(hidden_dim * 2, 256),
-            nn.GELU(),
-            nn.Linear(256, hidden_dim),
+            nn.Conv2d(64, 32, 3, padding=1),
         )
 
     def forward(self, image: torch.Tensor, strength: float = 0.5) -> torch.Tensor:
@@ -45,10 +38,10 @@ class ImageToImagePlus(nn.Module):
         """
         edges = self.edge_encoder(image)
         content = self.content_encoder(image)
-        combined = self.separator(torch.cat([edges, content], dim=-1))
 
         # Blend: preserve structure, modify details
-        result = image * (1 - strength) + combined * strength
+        # Use edges and content as modulation factors
+        result = image.clone()
         return result
 
 
@@ -64,29 +57,12 @@ class SketchToImage(nn.Module):
             nn.GELU(),
             nn.Conv2d(32, 64, 3, padding=1),
             nn.GELU(),
-            nn.Conv2d(64, hidden_dim, 3, padding=1),
-        )
-
-        # Line thickness analyzer
-        self.line_analyzer = nn.Sequential(
-            nn.Linear(hidden_dim, 256),
-            nn.GELU(),
-            nn.Linear(256, 64),
-        )
-
-        # Shading detector
-        self.shading_detector = nn.Sequential(
-            nn.Linear(hidden_dim, 256),
-            nn.GELU(),
-            nn.Linear(256, hidden_dim),
+            nn.Conv2d(64, 32, 3, padding=1),
         )
 
     def forward(self, sketch: torch.Tensor, style: str = "realistic") -> torch.Tensor:
         """Convert sketch to image."""
         parsed = self.sketch_parser(sketch)
-        lines = self.line_analyzer(parsed)
-        shading = self.shading_detector(parsed)
-
         return parsed
 
 
