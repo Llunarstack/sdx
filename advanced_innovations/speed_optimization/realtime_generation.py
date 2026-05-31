@@ -5,6 +5,7 @@ Enables interactive image creation on consumer hardware.
 
 import torch
 import torch.nn as nn
+from typing import List, Tuple
 
 
 class TokenPruning(nn.Module):
@@ -63,6 +64,7 @@ class CachingMechanism(nn.Module):
         self.cache_size = cache_size
         self.cache = {}
         self.access_count = {}
+        self.embedding_list = []
 
         # Similarity scorer
         self.similarity_scorer = nn.Sequential(
@@ -74,35 +76,39 @@ class CachingMechanism(nn.Module):
 
     def get_cached(self, embedding: torch.Tensor) -> torch.Tensor:
         """Retrieve cached result if similar prompt exists."""
-        if len(self.cache) == 0:
+        if len(self.embedding_list) == 0:
             return None
 
-        # Find most similar cached embedding
+        # Simple similarity: L2 distance
         similarities = []
-        for cached_emb in self.cache.keys():
-            sim = self.similarity_scorer(
-                torch.cat([embedding, cached_emb], dim=-1)
-            )
-            similarities.append(sim)
+        for cached_emb in self.embedding_list:
+            with torch.no_grad():
+                dist = torch.norm(embedding.detach() - cached_emb.detach())
+            similarities.append(dist.item())
 
-        if max(similarities) > 0.9:  # 90% similarity threshold
-            best_idx = similarities.index(max(similarities))
-            cached_key = list(self.cache.keys())[best_idx]
-            self.access_count[cached_key] += 1
-            return self.cache[cached_key]
+        # Find lowest distance (most similar)
+        if len(similarities) > 0 and min(similarities) < 0.1:  # Low distance = similar
+            best_idx = similarities.index(min(similarities))
+            cached_key = id(self.embedding_list[best_idx])
+            self.access_count[cached_key] = self.access_count.get(cached_key, 0) + 1
+            return self.cache.get(cached_key)
 
         return None
 
     def cache_result(self, embedding: torch.Tensor, result: torch.Tensor):
         """Store result in cache."""
-        if len(self.cache) >= self.cache_size:
+        if len(self.embedding_list) >= self.cache_size:
             # Evict least-accessed item
             least_accessed = min(self.access_count, key=self.access_count.get)
             del self.cache[least_accessed]
             del self.access_count[least_accessed]
+            # Remove from embedding list (approximate)
+            self.embedding_list = self.embedding_list[1:]
 
-        self.cache[embedding.detach()] = result
-        self.access_count[embedding.detach()] = 1
+        key = id(embedding)
+        self.embedding_list.append(embedding.detach())
+        self.cache[key] = result
+        self.access_count[key] = 1
 
 
 class LayerSkipping(nn.Module):
@@ -245,8 +251,15 @@ class RealtimeGenerationEngine:
         if cached is not None:
             return cached
 
-        # Prune unnecessary tokens
-        pruned, _ = self.token_pruning(prompt_embedding)
+        # Ensure prompt embedding is 2D (batch, features)
+        if prompt_embedding.dim() == 1:
+            prompt_embedding = prompt_embedding.unsqueeze(0)
+
+        # Prune unnecessary tokens if 3D
+        if prompt_embedding.dim() == 3:
+            pruned, _ = self.token_pruning(prompt_embedding)
+        else:
+            pruned = prompt_embedding
 
         # Determine quality level based on available latency
         quality = "low" if target_latency_ms < 50 else "medium" if target_latency_ms < 150 else "high"

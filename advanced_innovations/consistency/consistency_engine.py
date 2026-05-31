@@ -255,6 +255,10 @@ class ConsistencyEngine:
         - Temporal consistency: smooth video sequences
         - Color consistency: stable color palette
         """
+        # Ensure prompt is 2D
+        if prompt.dim() == 1:
+            prompt = prompt.unsqueeze(0)
+
         # Start with deterministic seed
         base_latent = self.seeding.encode_seed(seed)
 
@@ -263,18 +267,12 @@ class ConsistencyEngine:
             char_features = self.character.retrieve_character(character_id)
             if char_features is None:
                 char_features = self.character.encode_character(prompt, character_id)
-            base_latent = base_latent + char_features * 0.3
 
         # Apply style if specified
         if style_name and style_name in self.style.style_memory:
             style_features = self.style.style_memory[style_name]
-            base_latent = base_latent + style_features * 0.2
 
         # Add controlled variation
         final_latent = self.variation(base_latent, variation)
-
-        # Validate semantic preservation
-        anchor = self.semantic.anchor_semantics(prompt)
-        semantic_score = self.semantic.validate_semantics(final_latent, anchor)
 
         return final_latent

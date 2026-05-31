@@ -16,13 +16,30 @@ Modules:
 __version__ = "1.0.0"
 __author__ = "SDX Team"
 
-from ultra_quality.photorealism_engine import UltraQualityEngine
-from semantic_understanding.semantic_parser import SemanticUnderstandingEngine
-from fine_control.precision_control import PrecisionControlSystem
-from speed_optimization.realtime_generation import RealtimeGenerationEngine
-from consistency.consistency_engine import ConsistencyEngine
-from multimodal.multimodal_generation import MultimodalFusionEngine
-from advanced_features.novel_capabilities import NovelCapabilitiesEngine
+# Lazy imports to avoid circular dependencies
+def __getattr__(name):
+    if name == "UltraQualityEngine":
+        from .ultra_quality.photorealism_engine import UltraQualityEngine
+        return UltraQualityEngine
+    elif name == "SemanticUnderstandingEngine":
+        from .semantic_understanding.semantic_parser import SemanticUnderstandingEngine
+        return SemanticUnderstandingEngine
+    elif name == "PrecisionControlSystem":
+        from .fine_control.precision_control import PrecisionControlSystem
+        return PrecisionControlSystem
+    elif name == "RealtimeGenerationEngine":
+        from .speed_optimization.realtime_generation import RealtimeGenerationEngine
+        return RealtimeGenerationEngine
+    elif name == "ConsistencyEngine":
+        from .consistency.consistency_engine import ConsistencyEngine
+        return ConsistencyEngine
+    elif name == "MultimodalFusionEngine":
+        from .multimodal.multimodal_generation import MultimodalFusionEngine
+        return MultimodalFusionEngine
+    elif name == "NovelCapabilitiesEngine":
+        from .advanced_features.novel_capabilities import NovelCapabilitiesEngine
+        return NovelCapabilitiesEngine
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "UltraQualityEngine",
