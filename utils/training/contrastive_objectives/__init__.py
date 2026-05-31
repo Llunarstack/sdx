@@ -1,6 +1,13 @@
 """Contrastive learning objectives."""
 
-from .contrastive_losses import AlignmentLoss, ImageTextMatchingLoss, NTXentLoss, SupConLoss, TripletLoss, UniformityLoss
+from .contrastive_losses import (
+    AlignmentLoss,
+    ImageTextMatchingLoss,
+    NTXentLoss,
+    SupConLoss,
+    TripletLoss,
+    UniformityLoss,
+)
 
 __all__ = [
     "AlignmentLoss",
