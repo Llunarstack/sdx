@@ -2,10 +2,11 @@
 Numba JIT compilation for ultra-fast Python kernels (10-100x speedup).
 """
 
-import numpy as np
-from numba import jit, cuda, prange
-import numba
 import logging
+
+import numba
+import numpy as np
+from numba import cuda, jit, prange
 
 logger = logging.getLogger(__name__)
 

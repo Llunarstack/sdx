@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Callable, Dict, List, Sequence
 
 from PIL import Image, ImageFilter
-
 from utils.modeling import hf_scaffold
 from utils.modeling.model_paths import (
     default_controlnet_canny_path,

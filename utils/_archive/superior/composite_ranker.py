@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
-
 from utils.quality import test_time_pick as ttp
 
 

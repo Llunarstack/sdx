@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 import torch
-
 from utils.generation.inference_research_hooks import RewindState, score_latent_prompt_alignment, should_rewind
 
 

@@ -2,11 +2,11 @@
 Extreme quantization: INT4, INT2, binary networks for 4-16x speedup.
 """
 
+import logging
+from typing import Tuple
+
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Tuple, Optional
-import logging
 
 logger = logging.getLogger(__name__)
 

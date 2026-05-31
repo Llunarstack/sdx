@@ -10,7 +10,6 @@ See https://github.com/vipshop/cache-dit (``enable_separate_cfg``).
 from __future__ import annotations
 
 import torch
-
 from utils.superior.block_cache import BlockDiTCache
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -201,7 +200,7 @@ class PostTrainingQuantization:
     def apply_ptq(self, calibration_data) -> nn.Module:
         """Apply post-training quantization."""
         calibrator = QuantizationCalibrator(self.model, calibration_data, num_batches=100)
-        stats = calibrator.calibrate()
+        calibrator.calibrate()
 
         quantizer = DynamicQuantizer(self.config)
         quantized_model, mapping = quantizer.quantize_model_weights(self.model)

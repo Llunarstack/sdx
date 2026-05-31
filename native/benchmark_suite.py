@@ -6,12 +6,13 @@ Measures and compares performance across Rust, C++, Go, Mojo, and Julia implemen
 Run: python benchmark_suite.py
 """
 
-import numpy as np
-import time
-import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Callable, Tuple, List
+from typing import Callable, List
+
+import numpy as np
+
 
 class BenchmarkResult:
     def __init__(self, name: str, language: str, operation: str, elapsed_ms: float, speedup: float = 1.0):
@@ -80,7 +81,7 @@ class NativeKernelBenchmark:
             print(f"✓ {result}")
 
         except ImportError:
-            print(f"⊘ Rust: sdx_native not available (install with: cd native/rust && maturin develop)")
+            print("⊘ Rust: sdx_native not available (install with: cd native/rust && maturin develop)")
 
     def benchmark_python_baseline(self) -> None:
         """Establish NumPy baseline for all operations."""
@@ -194,9 +195,9 @@ class NativeKernelBenchmark:
     def generate_report(self) -> str:
         """Generate markdown benchmark report."""
         report = "# SDX Native Kernels Benchmark Report\n\n"
-        report += f"## Configuration\n"
+        report += "## Configuration\n"
         report += f"- Data Size: {self.data_size:,} elements\n"
-        report += f"- Iterations: 100\n\n"
+        report += "- Iterations: 100\n\n"
 
         report += "## Results by Operation\n\n"
 

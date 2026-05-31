@@ -3,12 +3,12 @@ Intelligent native kernel selector that automatically chooses the best implement
 based on hardware availability, data size, and operation type.
 """
 
-import os
-import sys
-import numpy as np
-from typing import Callable, Optional, Any, Literal
-from enum import Enum
 import logging
+import os
+from enum import Enum
+from typing import Callable
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class HardwareProfile:
     def _check_rust(self) -> bool:
         """Check if Rust PyO3 bindings are available."""
         try:
-            import sdx_native
+            __import__("sdx_native")
             return True
         except ImportError:
             return False
@@ -68,7 +68,7 @@ class HardwareProfile:
         try:
             import torch
             return torch.cuda.device_count()
-        except:
+        except (ImportError, RuntimeError):
             return 0
 
     def report(self) -> str:

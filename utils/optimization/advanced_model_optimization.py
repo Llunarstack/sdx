@@ -3,11 +3,12 @@ Advanced model optimization techniques: structured pruning, distillation, knowle
 Designed for 100x model quality improvement.
 """
 
+import logging
+from typing import List, Optional, Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
-from typing import Callable, Optional, Tuple, List
-import logging
 
 logger = logging.getLogger(__name__)
 
