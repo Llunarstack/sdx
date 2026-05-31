@@ -8,9 +8,10 @@ sees compositional variety tokens, not only at sample time. Token list:
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 __all__ = ["inject_originality_tokens", "default_originality_tokens"]
 
@@ -21,12 +22,7 @@ def default_originality_tokens() -> List[str]:
 
         return list(ORIGINALITY_POSITIVE_TOKENS)
     except ImportError:
-        try:
-            from config.defaults.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
-
-            return list(ORIGINALITY_POSITIVE_TOKENS)
-        except ImportError:
-            return []
+        return []
 
 
 def inject_originality_tokens(

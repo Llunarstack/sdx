@@ -15,7 +15,7 @@ class TrainConfig:
     # Optional list of (H, W) targets for multi-resolution / aspect-ratio bucketing.
     # None = single square crop at --image-size.
     resolution_buckets: Optional[List[Tuple[int, int]]] = None
-    num_workers: int = 8
+    num_workers: int = -1  # -1 or --auto-num-workers: CPU/dataset heuristic; else explicit count
     global_batch_size: int = 128
     caption_dropout_prob: float = 0.1
     # Step-dependent caption dropout schedule: list of (step, prob) breakpoints.
@@ -76,11 +76,14 @@ class TrainConfig:
     # T5-XXL like PixArt/ReVe; accepts HF id or local path (e.g. pretrained/T5-XXL).
     text_encoder: str = "google/t5-v1_1-xxl"
     # "t5" = T5 only (default).
-    # "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused
-    # (see utils/modeling/text_encoder_bundle.py).
+    # "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused.
+    # "penta" = T5 + CLIP-L + CLIP-bigG + CLIP-H + LongCLIP-L (4 extra fused tokens).
+    # See utils/modeling/text_encoder_bundle.py.
     text_encoder_mode: str = "t5"
     clip_text_encoder_l: str = ""  # empty = resolve via utils/modeling/model_paths.py
     clip_text_encoder_bigg: str = ""  # empty = resolve via utils/modeling/model_paths.py
+    clip_text_encoder_h: str = ""  # penta: CLIP-ViT-H/14
+    clip_text_encoder_long: str = ""  # penta: LongCLIP-L
     vae_model: str = "stabilityai/sd-vae-ft-mse"
     # "kl"  = AutoencoderKL (classic Stable Diffusion VAE)
     # "rae" = AutoencoderRAE (Representation Autoencoder)
@@ -310,6 +313,12 @@ class TrainConfig:
     # -------------------------------------------------------------------------
     cudnn_benchmark: bool = True  # ignored when deterministic=True
     enable_tf32: bool = True  # Ampere+: faster matmul/conv; disable for stricter FP32
+    prefetch_factor: int = 4  # DataLoader batches per worker (0 = disable explicit prefetch)
+    cuda_stream_prefetch: bool = True  # overlap H2D with GPU step (CUDA only)
+    auto_num_workers: bool = True  # pick num_workers from CPU count + dataset size
+    fused_adamw: bool = True  # fused CUDA AdamW when available (same math, faster step)
+    batch_text_encode: bool = True  # one T5 forward for neg + style when both are used
+    compile_mode: str = "reduce-overhead"  # torch.compile mode: reduce-overhead | max-autotune | default
     torch_cpu_num_threads: int = 0  # 0 = do not call set_num_threads
     torch_cpu_num_interop_threads: int = 0  # 0 = do not call set_num_interop_threads
 
@@ -419,7 +428,7 @@ cfg = TrainConfig(
     lr=5e-5,
     epochs=50,
     data_path="./data",
-    num_workers=4,
+    num_workers=-1,
     use_bf16=True,
     grad_checkpointing=True,
     grad_accum_steps=2,

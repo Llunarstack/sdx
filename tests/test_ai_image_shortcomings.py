@@ -1,13 +1,12 @@
 """Tests for config.defaults.ai_image_shortcomings (prompt mitigation packs)."""
 
-from data.caption_utils import apply_shortcomings_to_caption_pair
-
 from config.defaults.ai_image_shortcomings import (
     detect_shortcoming_ids,
     merge_csv_unique,
     mitigation_fragments,
     spec_by_id,
 )
+from data.caption_utils import apply_shortcomings_to_caption_pair
 
 
 def test_merge_csv_unique_dedupes():

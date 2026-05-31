@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import torch
-
 from config.train_config import TrainConfig
 
 

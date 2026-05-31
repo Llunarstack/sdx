@@ -27,15 +27,17 @@ def cfg_predict(
 ) -> torch.Tensor:
     """One CFG-combined prediction (cond / uncond), channel-trimmed to ``x``."""
     if model_kwargs_uncond is not None and cfg_scale != 1.0:
-        oc = model(x, t_batch, **model_kwargs_cond)
-        ou = model(x, t_batch, **model_kwargs_uncond)
-        if oc.shape != x.shape and oc.shape[1] > x.shape[1]:
-            oc, ou = oc[:, : x.shape[1]], ou[:, : x.shape[1]]
-        delta = oc - ou
-        if cfg_rescale > 0:
-            sig = delta.std() + 1e-8
-            delta = delta / max(sig / cfg_rescale, 1.0)
-        return ou + float(cfg_scale) * delta
+        from utils.generation.cfg_batched import batched_cfg_forward
+
+        return batched_cfg_forward(
+            model,
+            x,
+            t_batch,
+            model_kwargs_cond=model_kwargs_cond,
+            model_kwargs_uncond=model_kwargs_uncond,
+            cfg_scale=float(cfg_scale),
+            cfg_rescale=float(cfg_rescale),
+        )
     o = model(x, t_batch, **model_kwargs_cond)
     if o.shape != x.shape and o.shape[1] > x.shape[1]:
         o = o[:, : x.shape[1]]
@@ -88,7 +90,7 @@ def speculative_cfg_prediction(
     if float(close_thresh) <= 0.0:
         return pf
     delta = (pf - pd).abs().mean()
-    if float(delta.detach().cpu().item()) < float(close_thresh):
+    if bool((delta < float(close_thresh)).item()):
         a = float(max(0.0, min(1.0, blend_on_close)))
         return (1.0 - a) * pf + a * pd
     return pf

@@ -38,9 +38,18 @@ VAE_REPOS = [
     ("stabilityai/sdxl-vae", "sdxl-vae"),  # SDXL: better decode quality
     ("madebyollin/sdxl-vae-fp16-fix", "sdxl-vae-fp16-fix"),  # SDXL VAE, fp16-safe
 ]
-# CLIP: optional for future dual-encoder (T5 + CLIP) pipelines
+# CLIP: optional for triple / penta text encoder stacks
 CLIP_REPOS = [
     ("openai/clip-vit-large-patch14", "CLIP-ViT-L-14"),
+]
+TRIPLE_TEXT_REPOS = [
+    ("google/t5-v1_1-xxl", "T5-XXL"),
+    ("openai/clip-vit-large-patch14", "CLIP-ViT-L-14"),
+    ("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", "CLIP-ViT-bigG-14"),
+]
+PENTA_TEXT_REPOS = TRIPLE_TEXT_REPOS + [
+    ("laion/CLIP-ViT-H-14-laion2B-s32B-b79K", "CLIP-ViT-H-14"),
+    ("creative-graphic-design/LongCLIP-L", "LongCLIP-L"),
 ]
 LLM_DEFAULT = "HuggingFaceTB/SmolLM2-360M-Instruct"
 LLM_BEST = "Qwen/Qwen2.5-7B-Instruct"
@@ -107,6 +116,33 @@ ALLOW_ADVANCED_GENERIC = [
     "*.pth",
 ]
 
+ALLOW_CONFIG_ONLY = [
+    "**/*.json",
+    "**/*.jinja",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.txt",
+    "**/*.md",
+    "**/.gitattributes",
+    "**/tokenizer.model",
+    "**/spiece.model",
+    "**/vocab.json",
+    "**/merges.txt",
+]
+
+IGNORE_WEIGHTS = [
+    "*.safetensors",
+    "**/*.safetensors",
+    "*.bin",
+    "**/*.bin",
+    "*.pt",
+    "**/*.pt",
+    "*.pth",
+    "**/*.pth",
+    "*.ckpt",
+    "**/*.ckpt",
+]
+
 CODEFORMER_FILES = {
     "weights/CodeFormer/codeformer.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
     "weights/facelib/detection_Resnet50_Final.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth",
@@ -114,12 +150,14 @@ CODEFORMER_FILES = {
 }
 
 
-def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=None):
+def download(repo_id: str, local_dir: str, max_workers: int = 4, allow_patterns=None, ignore_patterns=None):
     from huggingface_hub import snapshot_download
 
     kwargs = {"repo_id": repo_id, "local_dir": local_dir, "max_workers": max_workers}
     if allow_patterns:
         kwargs["allow_patterns"] = allow_patterns
+    if ignore_patterns:
+        kwargs["ignore_patterns"] = ignore_patterns
     snapshot_download(**kwargs)
     return local_dir
 
@@ -136,7 +174,17 @@ def main():
         "--vae", action="store_true", help="Download VAEs: sd-vae-ft-mse, sd-vae-ft-ema, sdxl-vae, sdxl-vae-fp16-fix"
     )
     parser.add_argument(
-        "--clip", action="store_true", help="Download CLIP ViT-L/14 (optional, for future T5+CLIP dual-encoder)"
+        "--clip", action="store_true", help="Download CLIP ViT-L/14 (optional, for triple/penta stacks)"
+    )
+    parser.add_argument(
+        "--triple-text-encoders",
+        action="store_true",
+        help="Download triple stack weights: T5-XXL + CLIP-L + CLIP-bigG",
+    )
+    parser.add_argument(
+        "--penta-text-encoders",
+        action="store_true",
+        help="Download penta stack weights: T5-XXL + CLIP-L + bigG + H + LongCLIP-L",
     )
     parser.add_argument("--llm", action="store_true", help="Download default LLM (SmolLM2-360M) for prompt expansion")
     parser.add_argument(
@@ -147,6 +195,11 @@ def main():
         action="store_true",
         help="Download advanced optional models (LongCLIP, moondream2, Marigold, TAESD, CodeFormer, ConvNeXtV2, consistency decoder, aesthetic predictor, AnyDoor ref).",
     )
+    parser.add_argument(
+        "--config-only",
+        action="store_true",
+        help="With --advanced: download configs/tokenizers only (no checkpoint weights). Prefer scripts/download/download_hf_scaffold.py for the full registry.",
+    )
     parser.add_argument("--all", action="store_true", help="Download all T5 sizes, all VAEs, CLIP, and both LLMs")
     parser.add_argument("--max-workers", type=int, default=4, help="Parallel download workers")
     args = parser.parse_args()
@@ -154,6 +207,8 @@ def main():
     do_t5 = args.t5 or args.all
     do_vae = args.vae or args.all
     do_clip = args.clip or args.all
+    do_triple_text = args.triple_text_encoders
+    do_penta_text = args.penta_text_encoders
     do_llm = args.llm or args.all
     do_llm_best = args.llm_best or args.all
     do_advanced = args.advanced
@@ -188,8 +243,33 @@ def main():
             local_dir = os.path.join(args.model_dir, folder)
             print(f"Downloading CLIP (essential files only): {repo_id} -> {local_dir}")
             download(repo_id, local_dir, args.max_workers, allow_patterns=ALLOW_CLIP)
-            print(f"  -> For future dual-encoder: load from {local_dir}")
+            print(f"  -> For triple/penta: load from {local_dir}")
             n += 1
+
+    if do_triple_text:
+        for repo_id, folder in TRIPLE_TEXT_REPOS:
+            local_dir = os.path.join(args.model_dir, folder)
+            allow = ALLOW_T5 if folder.startswith("T5") else ALLOW_CLIP
+            print(f"Downloading triple text encoder: {repo_id} -> {local_dir}")
+            download(repo_id, local_dir, args.max_workers, allow_patterns=allow)
+            n += 1
+        print("  -> Train: python train.py ... --text-encoder-mode triple")
+        n += 0
+
+    if do_penta_text:
+        for repo_id, folder in PENTA_TEXT_REPOS:
+            local_dir = os.path.join(args.model_dir, folder)
+            if folder.startswith("T5"):
+                allow = ALLOW_T5
+            elif folder.startswith("LongCLIP"):
+                allow = ALLOW_ADVANCED_GENERIC
+            else:
+                allow = ALLOW_CLIP
+            print(f"Downloading penta text encoder: {repo_id} -> {local_dir}")
+            download(repo_id, local_dir, args.max_workers, allow_patterns=allow)
+            n += 1
+        print("  -> Train: python train.py ... --text-encoder-mode penta")
+        n += 0
 
     if do_llm:
         local_dir = os.path.join(args.model_dir, "SmolLM2-360M-Instruct")
@@ -204,21 +284,29 @@ def main():
         n += 1
 
     if do_advanced:
+        adv_allow = ALLOW_CONFIG_ONLY if args.config_only else ALLOW_ADVANCED_GENERIC
+        adv_ignore = IGNORE_WEIGHTS if args.config_only else None
         for repo_id, folder in ADVANCED_REPOS:
             local_dir = os.path.join(args.model_dir, folder)
-            print(f"Downloading advanced model (essential files only): {repo_id} -> {local_dir}")
-            download(repo_id, local_dir, args.max_workers, allow_patterns=ALLOW_ADVANCED_GENERIC)
+            label = "config-only" if args.config_only else "essential files only"
+            print(f"Downloading advanced model ({label}): {repo_id} -> {local_dir}")
+            download(repo_id, local_dir, args.max_workers, allow_patterns=adv_allow, ignore_patterns=adv_ignore)
             n += 1
-        codeformer_root = os.path.join(args.model_dir, "CodeFormer")
-        for rel, url in CODEFORMER_FILES.items():
-            target = os.path.join(codeformer_root, rel)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            print(f"Downloading CodeFormer weight: {url} -> {target}")
-            urllib.request.urlretrieve(url, target)
-        n += 1
+        if not args.config_only:
+            codeformer_root = os.path.join(args.model_dir, "CodeFormer")
+            for rel, url in CODEFORMER_FILES.items():
+                target = os.path.join(codeformer_root, rel)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                print(f"Downloading CodeFormer weight: {url} -> {target}")
+                urllib.request.urlretrieve(url, target)
+            n += 1
 
     if n == 0:
-        print("Choose at least one: --t5, --vae, --clip, --llm, --llm-best, --advanced, or --all", file=sys.stderr)
+        print(
+            "Choose at least one: --t5, --vae, --clip, --triple-text-encoders, --penta-text-encoders, "
+            "--llm, --llm-best, --advanced, or --all",
+            file=sys.stderr,
+        )
         return 1
 
     print(f"Done. {n} model(s) in {args.model_dir}")

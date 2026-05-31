@@ -168,6 +168,12 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
         cmd.extend(["--sag-scale", str(getattr(args, "sag_scale", 0.0))])
     if getattr(args, "less_ai", False):
         cmd.append("--less-ai")
+    _hm = str(getattr(args, "human_made", "none") or "none").lower()
+    if _hm not in ("none", "off", "0", ""):
+        cmd.extend(["--human-made", _hm])
+        _hms = float(getattr(args, "human_made_strength", -1.0) or -1.0)
+        if _hms >= 0.0:
+            cmd.extend(["--human-made-strength", str(_hms)])
     if str(getattr(args, "anti_ai_pack", "none") or "none") != "none":
         cmd.extend(["--anti-ai-pack", str(getattr(args, "anti_ai_pack"))])
     if str(getattr(args, "human_media_mode", "none") or "none") != "none":

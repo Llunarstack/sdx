@@ -16,6 +16,42 @@ from .spectral_sfp import spectral_sfp_per_sample_loss
 _SOLVER_DDIM = "ddim"
 _SOLVER_HEUN = "heun"
 
+
+def _build_block_cache(
+    threshold: float,
+    recompute_every: int,
+    *,
+    taylor: bool = False,
+    taylor_order: int = 1,
+    taylor_interval: int = 4,
+    dbc_separate_cfg: bool = True,
+):
+    if float(threshold) <= 0.0:
+        return None
+    if bool(taylor):
+        from utils.superior.taylor_cache import TaylorBlockCache, TaylorCacheConfig
+
+        return TaylorBlockCache(
+            TaylorCacheConfig(
+                rel_l1_threshold=float(threshold),
+                recompute_every=max(1, int(recompute_every)),
+                use_taylor=True,
+                max_order=max(0, int(taylor_order)),
+                cache_interval=max(1, int(taylor_interval)),
+            )
+        )
+    from utils.superior.block_cache import BlockCacheConfig, BlockDiTCache
+
+    return BlockDiTCache(
+        BlockCacheConfig(
+            rel_l1_threshold=float(threshold),
+            max_reuse_streak=max(1, int(recompute_every)),
+            recompute_every=max(1, int(recompute_every)),
+            cfg_split_fingerprint=bool(dbc_separate_cfg),
+        )
+    )
+
+
 INFERENCE_SOLVERS = (_SOLVER_DDIM, _SOLVER_HEUN)
 FLOW_INFERENCE_SOLVERS = ("euler", "heun")
 
@@ -531,6 +567,35 @@ class GaussianDiffusion:
         cfg_guidance_linear_end_multiplier: float = 1.0,
         cfg_guidance_cosine_min_multiplier: float = 0.65,
         cfg_guidance_cosine_max_multiplier: float = 1.0,
+        fdg_cfg_strength: float = 0.0,
+        fdg_cutoff_frac: float = 0.15,
+        feature_cache_delta_threshold: float = 0.0,
+        feature_cache_max_reuse: int = 2,
+        block_cache_threshold: float = 0.0,
+        block_cache_recompute_every: int = 4,
+        taylor_cache: bool = False,
+        taylor_cache_order: int = 1,
+        taylor_cache_interval: int = 4,
+        apg_parallel_eta: float = -1.0,
+        rcfgpp_tangent: float = 0.0,
+        zeresfdg_strength: float = 0.0,
+        cfg_zero_star: bool = False,
+        cfg_zero_init_frac: float = 0.04,
+        cfg_pp_lambda: float = 0.0,
+        cfg_skip_early_frac: float = 0.0,
+        cfg_skip_late_frac: float = 0.0,
+        qsilk_micrograin: float = 0.0,
+        dynamic_dit_width: bool = False,
+        dynamic_dit_early: float = 0.88,
+        dynamic_sdt: bool = False,
+        apg_momentum_beta: float = 0.0,
+        tcfg_damping: float = 0.0,
+        slg_scale: float = 0.0,
+        slg_skip_blocks: str = "",
+        slg_start_frac: float = 0.01,
+        slg_stop_frac: float = 0.30,
+        cfg_rejection_rerank: bool = False,
+        dbc_separate_cfg: bool = True,
     ) -> torch.Tensor:
         """
         Sample to match ``diffusion.flow_matching.flow_matching_per_sample_losses`` training:
@@ -570,6 +635,44 @@ class GaussianDiffusion:
             s_vals = torch.linspace(1.0, 0.0, n + 1, device=device, dtype=torch.float64)
 
         cfg_box = [float(cfg_scale)]
+        feat_cache = None
+        if float(feature_cache_delta_threshold) > 0.0:
+            from utils.superior.feature_cache import FeatureCacheConfig, FeatureCachePolicy
+
+            feat_cache = FeatureCachePolicy(
+                FeatureCacheConfig(
+                    delta_threshold=float(feature_cache_delta_threshold),
+                    max_reuse_streak=max(1, int(feature_cache_max_reuse)),
+                )
+            )
+        block_cache = _build_block_cache(
+            block_cache_threshold,
+            block_cache_recompute_every,
+            taylor=taylor_cache,
+            taylor_order=taylor_cache_order,
+            taylor_interval=taylor_cache_interval,
+            dbc_separate_cfg=bool(dbc_separate_cfg),
+        )
+        from utils.generation.zeresfdg import SpectralGuidanceEMA
+
+        _spectral_ema = SpectralGuidanceEMA() if float(zeresfdg_strength) > 0.0 else None
+        _guidance_sess = None
+        if float(apg_momentum_beta) > 0.0 and float(apg_parallel_eta) >= 0.0:
+            from utils.generation.guidance_session import GuidanceSession
+
+            _guidance_sess = GuidanceSession(apg_momentum_beta=float(apg_momentum_beta))
+        _guidance_probe = None
+        if bool(cfg_rejection_rerank):
+            from utils.generation.guidance_probe import GuidanceProbe
+
+            _guidance_probe = GuidanceProbe()
+            self._last_guidance_probe = _guidance_probe
+        from utils.generation.slg_guidance import parse_skip_blocks
+
+        _slg_blocks = parse_skip_blocks(
+            str(slg_skip_blocks or ""),
+            depth=len(getattr(model, "blocks", [])) or 28,
+        )
         spec_draft = float(speculative_draft_cfg_scale)
         spec_thr = float(speculative_close_thresh)
         spec_blend = float(speculative_blend)
@@ -640,6 +743,8 @@ class GaussianDiffusion:
             return float(cfg_scale) * vr
 
         def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor, step_idx: int) -> torch.Tensor:
+            if feat_cache is not None and feat_cache.should_skip_forward(x_in):
+                return feat_cache.cached_prediction()
             mk_c = model_kwargs_cond
             mk_u = model_kwargs_uncond
             plan = None
@@ -684,7 +789,7 @@ class GaussianDiffusion:
             if use_spec_cfg and cs != 1.0 and mk_u:
                 from utils.generation.speculative_denoise import speculative_cfg_prediction
 
-                return speculative_cfg_prediction(
+                out = speculative_cfg_prediction(
                     model,
                     x_in,
                     t_batch,
@@ -696,21 +801,57 @@ class GaussianDiffusion:
                     close_thresh=spec_thr,
                     blend_on_close=spec_blend,
                 )
-            if cs != 1.0 and mk_u:
-                out_cond = model(x_in, t_batch, **mk_c)
-                out_uncond = model(x_in, t_batch, **mk_u)
-                if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
-                    out_cond, out_uncond = out_cond[:, : x_in.shape[1]], out_uncond[:, : x_in.shape[1]]
-                delta = out_cond - out_uncond
-                if cfg_rescale > 0:
-                    sig = delta.std() + 1e-8
-                    scale = max(sig / cfg_rescale, 1.0)
-                    delta = delta / scale
-                return out_uncond + cs * delta
-            o = model(x_in, t_batch, **mk_c)
-            if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
-                o = o[:, : x_in.shape[1]]
-            return o
+            elif cs != 1.0 and mk_u:
+                from utils.generation.cfg_batched import batched_cfg_forward
+
+                _prog = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
+                _slg_on = float(slg_start_frac) <= _prog <= float(slg_stop_frac)
+                out = batched_cfg_forward(
+                    model,
+                    x_in,
+                    t_batch,
+                    model_kwargs_cond=mk_c,
+                    model_kwargs_uncond=mk_u,
+                    cfg_scale=float(cs),
+                    cfg_rescale=float(cfg_rescale),
+                    zeresfdg_strength=float(zeresfdg_strength),
+                    fdg_strength=float(fdg_cfg_strength),
+                    fdg_cutoff_frac=float(fdg_cutoff_frac),
+                    apg_parallel_eta=float(apg_parallel_eta),
+                    block_cache=block_cache,
+                    rcfgpp_tangent=float(rcfgpp_tangent),
+                    cfg_zero_star=bool(cfg_zero_star),
+                    cfg_pp_lambda=float(cfg_pp_lambda),
+                    tcfg_damping=float(tcfg_damping),
+                    cfg_skip_early_frac=float(cfg_skip_early_frac),
+                    cfg_skip_late_frac=float(cfg_skip_late_frac),
+                    sample_step=int(step_idx),
+                    total_steps=int(n),
+                    cfg_zero_init_frac=float(cfg_zero_init_frac),
+                    spectral_ema=_spectral_ema,
+                    guidance_session=_guidance_sess,
+                    slg_scale=float(slg_scale),
+                    slg_skip_blocks=_slg_blocks,
+                    slg_active=bool(_slg_on),
+                    guidance_probe=_guidance_probe,
+                    dbc_separate_cfg=bool(dbc_separate_cfg),
+                )
+            else:
+                o = model(x_in, t_batch, block_cache=block_cache, **mk_c)
+                if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
+                    o = o[:, : x_in.shape[1]]
+                out = o
+            if bool(dynamic_dit_width) or bool(dynamic_sdt):
+                from utils.superior.dynamic_dit import apply_dynamic_width, apply_sdt_latent_blend
+
+                prog = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
+                if bool(dynamic_sdt):
+                    out = apply_sdt_latent_blend(x_in, out)
+                if bool(dynamic_dit_width):
+                    out = apply_dynamic_width(out, prog, early=float(dynamic_dit_early))
+            if feat_cache is not None:
+                feat_cache.note_fresh(x_in, out)
+            return out
 
         def _t_batch_from_s(s: float) -> torch.Tensor:
             ti = int(round(float(s) * float(denom)))
@@ -755,6 +896,10 @@ class GaussianDiffusion:
                     quantile=float(holy_grail_clamp_quantile),
                     floor=float(holy_grail_clamp_floor),
                 )
+        if float(qsilk_micrograin) > 0.0:
+            from utils.generation.micrograin_stabilizer import qsilk_micrograin_stabilize
+
+            x = qsilk_micrograin_stabilize(x, detail_amount=float(qsilk_micrograin))
         return x
 
     def sample_loop(
@@ -836,6 +981,35 @@ class GaussianDiffusion:
         flow_solver: str = "euler",
         flow_init_noise: Optional[torch.Tensor] = None,
         return_intermediate_state: bool = False,
+        fdg_cfg_strength: float = 0.0,
+        fdg_cutoff_frac: float = 0.15,
+        feature_cache_delta_threshold: float = 0.0,
+        feature_cache_max_reuse: int = 2,
+        block_cache_threshold: float = 0.0,
+        block_cache_recompute_every: int = 4,
+        taylor_cache: bool = False,
+        taylor_cache_order: int = 1,
+        taylor_cache_interval: int = 4,
+        apg_parallel_eta: float = -1.0,
+        rcfgpp_tangent: float = 0.0,
+        zeresfdg_strength: float = 0.0,
+        cfg_zero_star: bool = False,
+        cfg_zero_init_frac: float = 0.04,
+        cfg_pp_lambda: float = 0.0,
+        cfg_skip_early_frac: float = 0.0,
+        cfg_skip_late_frac: float = 0.0,
+        qsilk_micrograin: float = 0.0,
+        dynamic_dit_width: bool = False,
+        dynamic_dit_early: float = 0.88,
+        dynamic_sdt: bool = False,
+        apg_momentum_beta: float = 0.0,
+        tcfg_damping: float = 0.0,
+        slg_scale: float = 0.0,
+        slg_skip_blocks: str = "",
+        slg_start_frac: float = 0.01,
+        slg_stop_frac: float = 0.30,
+        cfg_rejection_rerank: bool = False,
+        dbc_separate_cfg: bool = True,
     ):
         """
         Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
@@ -947,6 +1121,35 @@ class GaussianDiffusion:
                 cfg_guidance_linear_end_multiplier=float(cfg_guidance_linear_end_multiplier),
                 cfg_guidance_cosine_min_multiplier=float(cfg_guidance_cosine_min_multiplier),
                 cfg_guidance_cosine_max_multiplier=float(cfg_guidance_cosine_max_multiplier),
+                fdg_cfg_strength=float(fdg_cfg_strength),
+                fdg_cutoff_frac=float(fdg_cutoff_frac),
+                feature_cache_delta_threshold=float(feature_cache_delta_threshold),
+                feature_cache_max_reuse=int(feature_cache_max_reuse),
+                block_cache_threshold=float(block_cache_threshold),
+                block_cache_recompute_every=int(block_cache_recompute_every),
+                taylor_cache=bool(taylor_cache),
+                taylor_cache_order=int(taylor_cache_order),
+                taylor_cache_interval=int(taylor_cache_interval),
+                apg_parallel_eta=float(apg_parallel_eta),
+                rcfgpp_tangent=float(rcfgpp_tangent),
+                zeresfdg_strength=float(zeresfdg_strength),
+                cfg_zero_star=bool(cfg_zero_star),
+                cfg_zero_init_frac=float(cfg_zero_init_frac),
+                cfg_pp_lambda=float(cfg_pp_lambda),
+                cfg_skip_early_frac=float(cfg_skip_early_frac),
+                cfg_skip_late_frac=float(cfg_skip_late_frac),
+                qsilk_micrograin=float(qsilk_micrograin),
+                dynamic_dit_width=bool(dynamic_dit_width),
+                dynamic_dit_early=float(dynamic_dit_early),
+                dynamic_sdt=bool(dynamic_sdt),
+                apg_momentum_beta=float(apg_momentum_beta),
+                tcfg_damping=float(tcfg_damping),
+                slg_scale=float(slg_scale),
+                slg_skip_blocks=str(slg_skip_blocks or ""),
+                slg_start_frac=float(slg_start_frac),
+                slg_stop_frac=float(slg_stop_frac),
+                cfg_rejection_rerank=bool(cfg_rejection_rerank),
+                dbc_separate_cfg=bool(dbc_separate_cfg),
             )
         ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).strip()
         sol_backend = canonicalize_vp_solver(solver)
@@ -970,6 +1173,44 @@ class GaussianDiffusion:
         early_exit_patience = int(ada_early_exit_patience)
         early_exit_min_steps = int(ada_early_exit_min_steps)
         early_exit_counter = 0
+        feat_cache = None
+        if float(feature_cache_delta_threshold) > 0.0:
+            from utils.superior.feature_cache import FeatureCacheConfig, FeatureCachePolicy
+
+            feat_cache = FeatureCachePolicy(
+                FeatureCacheConfig(
+                    delta_threshold=float(feature_cache_delta_threshold),
+                    max_reuse_streak=max(1, int(feature_cache_max_reuse)),
+                )
+            )
+        block_cache = _build_block_cache(
+            block_cache_threshold,
+            block_cache_recompute_every,
+            taylor=taylor_cache,
+            taylor_order=taylor_cache_order,
+            taylor_interval=taylor_cache_interval,
+            dbc_separate_cfg=bool(dbc_separate_cfg),
+        )
+        from utils.generation.zeresfdg import SpectralGuidanceEMA
+
+        _spectral_ema_vp = SpectralGuidanceEMA() if float(zeresfdg_strength) > 0.0 else None
+        _guidance_sess_vp = None
+        if float(apg_momentum_beta) > 0.0 and float(apg_parallel_eta) >= 0.0:
+            from utils.generation.guidance_session import GuidanceSession
+
+            _guidance_sess_vp = GuidanceSession(apg_momentum_beta=float(apg_momentum_beta))
+        _guidance_probe_vp = None
+        if bool(cfg_rejection_rerank):
+            from utils.generation.guidance_probe import GuidanceProbe
+
+            _guidance_probe_vp = GuidanceProbe()
+            self._last_guidance_probe = _guidance_probe_vp
+        from utils.generation.slg_guidance import parse_skip_blocks
+
+        _slg_blocks_vp = parse_skip_blocks(
+            str(slg_skip_blocks or ""),
+            depth=len(getattr(model, "blocks", [])) or 28,
+        )
         cfg_box = [float(cfg_scale)]
         vol_deltas: list = []
         v_boost = float(volatile_cfg_boost)
@@ -1061,6 +1302,8 @@ class GaussianDiffusion:
                 return float(cfg_scale) * vr
 
             def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
+                if feat_cache is not None and feat_cache.should_skip_forward(x_in):
+                    return feat_cache.cached_prediction()
                 mk_c = model_kwargs_cond
                 mk_u = model_kwargs_uncond
                 plan = None
@@ -1107,7 +1350,7 @@ class GaussianDiffusion:
                 if use_spec_cfg and cs != 1.0 and mk_u:
                     from utils.generation.speculative_denoise import speculative_cfg_prediction
 
-                    return speculative_cfg_prediction(
+                    out = speculative_cfg_prediction(
                         model,
                         x_in,
                         t_batch,
@@ -1119,21 +1362,57 @@ class GaussianDiffusion:
                         close_thresh=spec_thr,
                         blend_on_close=spec_blend,
                     )
-                if cs != 1.0 and mk_u:
-                    out_cond = model(x_in, t_batch, **mk_c)
-                    out_uncond = model(x_in, t_batch, **mk_u)
-                    if out_cond.shape != x_in.shape and out_cond.shape[1] > x_in.shape[1]:
-                        out_cond, out_uncond = out_cond[:, : x_in.shape[1]], out_uncond[:, : x_in.shape[1]]
-                    delta = out_cond - out_uncond
-                    if cfg_rescale > 0:
-                        sig = delta.std() + 1e-8
-                        scale = max(sig / cfg_rescale, 1.0)
-                        delta = delta / scale
-                    return out_uncond + cs * delta
-                o = model(x_in, t_batch, **mk_c)
-                if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
-                    o = o[:, : x_in.shape[1]]
-                return o
+                elif cs != 1.0 and mk_u:
+                    from utils.generation.cfg_batched import batched_cfg_forward
+
+                    _prog_vp = float(i) / float(max(len(timesteps) - 1, 1))
+                    _slg_on_vp = float(slg_start_frac) <= _prog_vp <= float(slg_stop_frac)
+                    out = batched_cfg_forward(
+                        model,
+                        x_in,
+                        t_batch,
+                        model_kwargs_cond=mk_c,
+                        model_kwargs_uncond=mk_u,
+                        cfg_scale=float(cs),
+                        cfg_rescale=float(cfg_rescale),
+                        zeresfdg_strength=float(zeresfdg_strength),
+                        fdg_strength=float(fdg_cfg_strength),
+                        fdg_cutoff_frac=float(fdg_cutoff_frac),
+                        apg_parallel_eta=float(apg_parallel_eta),
+                        block_cache=block_cache,
+                        rcfgpp_tangent=float(rcfgpp_tangent),
+                        cfg_zero_star=bool(cfg_zero_star),
+                        cfg_pp_lambda=float(cfg_pp_lambda),
+                        tcfg_damping=float(tcfg_damping),
+                        cfg_skip_early_frac=float(cfg_skip_early_frac),
+                        cfg_skip_late_frac=float(cfg_skip_late_frac),
+                        sample_step=int(i),
+                        total_steps=len(timesteps),
+                        cfg_zero_init_frac=float(cfg_zero_init_frac),
+                        spectral_ema=_spectral_ema_vp,
+                        guidance_session=_guidance_sess_vp,
+                        slg_scale=float(slg_scale),
+                        slg_skip_blocks=_slg_blocks_vp,
+                        slg_active=bool(_slg_on_vp),
+                        guidance_probe=_guidance_probe_vp,
+                        dbc_separate_cfg=bool(dbc_separate_cfg),
+                    )
+                else:
+                    o = model(x_in, t_batch, block_cache=block_cache, **mk_c)
+                    if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
+                        o = o[:, : x_in.shape[1]]
+                    out = o
+                if bool(dynamic_dit_width) or bool(dynamic_sdt):
+                    from utils.superior.dynamic_dit import apply_dynamic_width, apply_sdt_latent_blend
+
+                    prog = 1.0 if len(timesteps) <= 1 else float(i) / float(max(len(timesteps) - 1, 1))
+                    if bool(dynamic_sdt):
+                        out = apply_sdt_latent_blend(x_in, out)
+                    if bool(dynamic_dit_width):
+                        out = apply_dynamic_width(out, prog, early=float(dynamic_dit_early))
+                if feat_cache is not None:
+                    feat_cache.note_fresh(x_in, out)
+                return out
 
             def _apply_sag(x_in: torch.Tensor, t_batch: torch.Tensor, base_out: torch.Tensor) -> torch.Tensor:
                 if float(sag_scale) > 0.0 and float(sag_blur_sigma) > 0.0:
@@ -1254,6 +1533,10 @@ class GaussianDiffusion:
                     quantile=float(holy_grail_clamp_quantile),
                     floor=float(holy_grail_clamp_floor),
                 )
+        if float(qsilk_micrograin) > 0.0 and x_0_pred is not None:
+            from utils.generation.micrograin_stabilizer import qsilk_micrograin_stabilize
+
+            x_0_pred = qsilk_micrograin_stabilize(x_0_pred, detail_amount=float(qsilk_micrograin))
         if return_intermediate_state:
             return x, x_0_pred, int(last_t_next_val)
         return x_0_pred

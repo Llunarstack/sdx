@@ -194,9 +194,8 @@ def run_quick_test():
 
     try:
         # Test configuration validation
-        from utils.training.config_validator import validate_train_config
-
         from config.train_config import TrainConfig
+        from utils.training.config_validator import validate_train_config
 
         cfg = TrainConfig(data_path="./datasets/test", model_name="DiT-XL/2-Text", global_batch_size=16, passes=1)
 

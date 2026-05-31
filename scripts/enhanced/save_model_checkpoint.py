@@ -12,9 +12,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
-from models.enhanced_dit import EnhancedDiT_XL_2
-
 from config.train_config import TrainConfig
+from models.enhanced_dit import EnhancedDiT_XL_2
 
 
 def save_model_checkpoint():

@@ -9,6 +9,20 @@ import torch.nn.functional as F
 from .moe import MoEProjection
 
 _XFORMERS_AVAILABLE = False
+_XFORMERS_DISABLED = False  # set after first runtime failure (version/CUDA mismatch)
+_LINEAR_ATTN_FRAC: float = 0.0
+
+
+def set_linear_attention_fraction(frac: float) -> None:
+    """Global blend for SLA-style linear attention in ``memory_efficient_attention``."""
+    global _LINEAR_ATTN_FRAC
+    _LINEAR_ATTN_FRAC = float(max(0.0, min(1.0, frac)))
+
+
+def get_linear_attention_fraction() -> float:
+    return float(_LINEAR_ATTN_FRAC)
+
+
 try:
     import xformers.ops as xops
 
@@ -24,6 +38,7 @@ def memory_efficient_attention(
     attn_mask: Optional[torch.Tensor] = None,
     scale: Optional[float] = None,
     use_xformers: bool = True,
+    linear_attn_frac: Optional[float] = None,
 ) -> torch.Tensor:
     """
     q, k, v: (B, N, H, D) or (B, H, N, D). Returns (B, N, H, D).
@@ -36,7 +51,18 @@ def memory_efficient_attention(
     if scale is None:
         scale = D**-0.5
 
-    if use_xformers and _XFORMERS_AVAILABLE and q.is_cuda:
+    lf = float(linear_attn_frac) if linear_attn_frac is not None else _LINEAR_ATTN_FRAC
+    if lf > 0.0 and attn_mask is None and q.is_cuda:
+        from utils.superior.linear_attention import hybrid_attention_fraction
+
+        qh = q.transpose(1, 2)
+        kh = k.transpose(1, 2)
+        vh = v.transpose(1, 2)
+        out_h = hybrid_attention_fraction(qh, kh, vh, linear_frac=lf, scale=scale)
+        return out_h.transpose(1, 2)
+
+    global _XFORMERS_DISABLED
+    if use_xformers and _XFORMERS_AVAILABLE and not _XFORMERS_DISABLED and q.is_cuda:
         try:
             # xformers wants (B, N, H, D)
             out = xops.memory_efficient_attention(
@@ -48,7 +74,7 @@ def memory_efficient_attention(
             )
             return out
         except Exception:
-            pass
+            _XFORMERS_DISABLED = True
 
     # Fallback: (B, N, H, D) -> (B, H, N, D) for PyTorch SDPA
     q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)

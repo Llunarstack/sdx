@@ -9,6 +9,7 @@ import argparse
 import json
 from pathlib import Path
 
+from utils.modeling.hf_index import role_counts, summary
 from utils.modeling.model_paths import pretrained_catalog, verify_gen_searcher_8b_local
 
 
@@ -61,9 +62,48 @@ def _print_human(report: dict) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Show SDX pretrained model wiring status.")
     ap.add_argument("--out-json", type=str, default="", help="Optional JSON path for machine-readable report.")
+    ap.add_argument(
+        "--role", action="append", default=[], help="Filter by HF scaffold role (vlm, reward, control, ...)."
+    )
+    ap.add_argument("--summary", action="store_true", help="Print HF registry summary only.")
+    ap.add_argument(
+        "--text-encoder-mode",
+        type=str,
+        default="",
+        choices=["", "t5", "triple", "penta"],
+        help="Show readiness for a text encoder stack (t5 / triple / penta).",
+    )
     args = ap.parse_args()
 
+    if args.text_encoder_mode:
+        from utils.modeling.text_encoder_stack import stack_download_hint, stack_status, stack_status_lines
+
+        mode = str(args.text_encoder_mode)
+        st = stack_status(mode)
+        print(f"Text encoder stack ({mode}):")
+        for line in stack_status_lines(mode):
+            print(line)
+        print(f"Ready for training/sampling: {st.ready}")
+        if st.weights_count < len(st.slots):
+            print(f"Download hint:\n  {stack_download_hint(mode)}")
+        return 0
+
+    if args.summary:
+        s = summary()
+        print(
+            f"HF registry: total={s['total_registry']} local={s['local_folders']} weights={s['with_weights']} config_only={s['config_only']}"
+        )
+        rc = role_counts()
+        print("Roles:", ", ".join(f"{k}={v}" for k, v in rc.items()))
+        return 0
+
     report = build_report()
+    if args.role:
+        role_set = {r.strip().lower() for r in args.role}
+        from utils.modeling.hf_scaffold import scaffold_registry
+
+        names = {e.name for e in scaffold_registry() if e.role.lower() in role_set}
+        report["models"] = [r for r in report["models"] if str(r.get("name")) in names]
     _print_human(report)
     if str(args.out_json).strip():
         p = Path(str(args.out_json).strip())

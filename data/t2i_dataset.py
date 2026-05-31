@@ -382,6 +382,10 @@ class Text2ImageDataset(Dataset):
                         cg = d.get("caption_global")
                         cl = d.get("caption_local")
                         ec = d.get("entity_captions")
+                        pl_inline = d.get("prompt_layout")
+                        pl_path = d.get("prompt_layout_path") or ""
+                        if not isinstance(pl_inline, dict):
+                            pl_inline = None
                         self.samples.append(
                             {
                                 "path": path,
@@ -398,6 +402,8 @@ class Text2ImageDataset(Dataset):
                                 "caption_global": cg if isinstance(cg, str) else None,
                                 "caption_local": cl if isinstance(cl, str) else None,
                                 "entity_captions": ec if isinstance(ec, dict) else None,
+                                "prompt_layout": pl_inline,
+                                "prompt_layout_path": pl_path if isinstance(pl_path, str) else "",
                             }
                         )
             return
@@ -522,6 +528,22 @@ class Text2ImageDataset(Dataset):
                 pass
         if style_text:
             out["style"] = style_text
+        pl = s.get("prompt_layout")
+        if isinstance(pl, dict):
+            out["prompt_layout"] = pl
+        else:
+            pl_rel = (s.get("prompt_layout_path") or "").strip()
+            if pl_rel:
+                rp = self._resolve_aux_path(pl_rel)
+                if rp is not None and rp.is_file():
+                    try:
+                        import json
+
+                        raw = json.loads(rp.read_text(encoding="utf-8", errors="ignore"))
+                        if isinstance(raw, dict):
+                            out["prompt_layout"] = raw
+                    except Exception:
+                        pass
         ctrl_path = s.get("control_image", "")
         ctrl_type = s.get("control_type", "")
         if ctrl_path:
@@ -541,8 +563,8 @@ class Text2ImageDataset(Dataset):
                 out["pixel_values"] = torch.zeros(3, h_i, w_i)
                 if init_path:
                     try:
-                        init_pil = Image.open(init_path).convert("RGB")
-                        init_pil = self._crop_image(init_pil, idx)
+                        with Image.open(init_path) as _init:
+                            init_pil = self._crop_image(_init.convert("RGB"), idx)
                         init_arr = np.array(init_pil).astype(np.float32) / 255.0
                         init_arr = (init_arr - 0.5) / 0.5
                         out["init_pixel_values"] = torch.from_numpy(init_arr).permute(2, 0, 1)
@@ -550,8 +572,8 @@ class Text2ImageDataset(Dataset):
                         pass
                 if ctrl_path:
                     try:
-                        ctrl_pil = Image.open(ctrl_path).convert("RGB")
-                        ctrl_pil = self._crop_image(ctrl_pil, idx)
+                        with Image.open(ctrl_path) as _ctrl:
+                            ctrl_pil = self._crop_image(_ctrl.convert("RGB"), idx)
                         ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
                         ctrl_arr = (ctrl_arr - 0.5) / 0.5
                         out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
@@ -565,13 +587,15 @@ class Text2ImageDataset(Dataset):
                 return out
             except Exception:
                 pass
-        pil = Image.open(path).convert("RGB")
+        with Image.open(path) as _img:
+            pil = _img.convert("RGB")
         mask_l: Optional[Image.Image] = None
         if mask_rel:
             rp = self._resolve_aux_path(mask_rel)
             if rp is not None and rp.exists():
                 try:
-                    mask_l = Image.open(rp).convert("L")
+                    with Image.open(rp) as _mask:
+                        mask_l = _mask.convert("L")
                 except Exception:
                     mask_l = None
         pil, mask_l = self._maybe_foveate(pil, mask_l, idx, skip_foveate=skip_fov)
@@ -583,8 +607,8 @@ class Text2ImageDataset(Dataset):
             out["grounding_mask"] = self._mask_image_to_tensor(mask_l)
         if init_path:
             try:
-                init_pil = Image.open(init_path).convert("RGB")
-                init_pil = self._crop_image(init_pil, idx)
+                with Image.open(init_path) as _init:
+                    init_pil = self._crop_image(_init.convert("RGB"), idx)
                 init_arr = np.array(init_pil).astype(np.float32) / 255.0
                 init_arr = (init_arr - 0.5) / 0.5
                 out["init_pixel_values"] = torch.from_numpy(init_arr).permute(2, 0, 1)
@@ -592,8 +616,8 @@ class Text2ImageDataset(Dataset):
                 pass
         if ctrl_path:
             try:
-                ctrl_pil = Image.open(ctrl_path).convert("RGB")
-                ctrl_pil = self._crop_image(ctrl_pil, idx)
+                with Image.open(ctrl_path) as _ctrl:
+                    ctrl_pil = self._crop_image(_ctrl.convert("RGB"), idx)
                 ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
                 ctrl_arr = (ctrl_arr - 0.5) / 0.5
                 out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
@@ -639,4 +663,6 @@ def collate_t2i(batch: List[Dict]) -> Dict[str, Any]:
                 valid.append(False)
         out["grounding_mask"] = torch.stack(masks)
         out["grounding_mask_valid"] = torch.tensor(valid, dtype=torch.bool)
+    if any("prompt_layout" in b for b in batch):
+        out["prompt_layout"] = [b.get("prompt_layout") for b in batch]
     return out
