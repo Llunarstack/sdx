@@ -11,10 +11,9 @@ import torch
 
 # Core SDX imports
 try:
+    from config.train_config import TrainConfig
     from diffusion import create_diffusion
     from models import DiT_models_text
-
-    from config.train_config import TrainConfig
 except ImportError as e:
     print(f"Warning: Core SDX imports failed: {e}")
     print("Make sure you're running from the SDX root directory")
@@ -49,6 +48,7 @@ class SDXMaster:
         self.diffusion = None
         self.tokenizer = None
         self.text_encoder = None
+        self.text_bundle = None
         self.vae = None
         self.config = None
 
@@ -198,8 +198,31 @@ class SDXMaster:
             if self.config is None:
                 raise ValueError("Config must be loaded before diffusion components")
 
-            # This would load T5 and VAE - placeholder for now
-            self.logger.info("T5 and VAE loading would happen here")
+            from utils.modeling.model_paths import default_t5_path
+            from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
+
+            bundle = load_text_encoder_bundle(self.config, torch.device(self.device))
+            self.text_bundle = bundle
+            if bundle is not None:
+                self.tokenizer = bundle.tokenizer
+                self.text_encoder = bundle.text_encoder
+                self.logger.info("Loaded text encoder bundle (mode=%s)", bundle.mode)
+            else:
+                from transformers import AutoTokenizer, T5EncoderModel
+
+                t5_path = getattr(self.config, "text_encoder", None) or default_t5_path()
+                self.tokenizer = AutoTokenizer.from_pretrained(t5_path)
+                self.text_encoder = T5EncoderModel.from_pretrained(t5_path).to(self.device).eval()
+                self.logger.info("Loaded T5 text encoder from %s", t5_path)
+
+            from diffusers import AutoencoderKL, AutoencoderRAE
+
+            ae_type = str(getattr(self.config, "ae_type", "kl") or "kl").lower()
+            if ae_type == "rae":
+                self.vae = AutoencoderRAE.from_pretrained(getattr(self.config, "vae_model", ""))
+            else:
+                self.vae = AutoencoderKL.from_pretrained(getattr(self.config, "vae_model", "stabilityai/sd-vae-ft-mse"))
+            self.vae = self.vae.to(self.device).eval()
 
             # Create diffusion
             self.diffusion = create_diffusion(

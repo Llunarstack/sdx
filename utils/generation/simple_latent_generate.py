@@ -60,6 +60,8 @@ def sample_one_image_pil(
     # Local import keeps `utils.generation` importable without loading `sample` at package import time.
     from sample import encode_text
 
+    from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions
+
     dev = torch.device(device) if isinstance(device, str) else device
     if seed is not None:
         torch.manual_seed(int(seed))
@@ -71,24 +73,17 @@ def sample_one_image_pil(
         vae.eval()
         text_encoder.eval()
 
-    cond = encode_text(
-        [prompt],
+    both = encode_text(
+        [prompt, negative_prompt],
         tokenizer,
         text_encoder,
         dev,
         max_length=max_length,
         dtype=dtype,
         text_bundle=text_bundle,
+        **encode_kwargs_for_captions([prompt, negative_prompt], text_bundle),
     )
-    uncond = encode_text(
-        [negative_prompt],
-        tokenizer,
-        text_encoder,
-        dev,
-        max_length=max_length,
-        dtype=dtype,
-        text_bundle=text_bundle,
-    )
+    cond, uncond = both[0:1], both[1:2]
     model_kwargs_cond: dict[str, Any] = {"encoder_hidden_states": cond}
     model_kwargs_uncond: dict[str, Any] = {"encoder_hidden_states": uncond}
 

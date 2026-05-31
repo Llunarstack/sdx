@@ -20,8 +20,27 @@ from pathlib import Path
 from time import time
 from typing import Optional
 
+# Show CLI help without importing the heavy GPU stack: build the (torch-free)
+# argument parser early and exit before ``import torch`` runs. Keeps
+# ``python train.py --help`` fast and dependency-light (tests/test_cli_entrypoints.py).
+if __name__ == "__main__" and any(_h in sys.argv[1:] for _h in ("-h", "--help")):
+    import importlib.util as _ilu
+
+    # Load the (argparse-only) parser module directly by path so we do not
+    # trigger ``training/__init__.py`` (which imports torch).
+    _spec = _ilu.spec_from_file_location(
+        "_sdx_train_cli_parser",
+        Path(__file__).resolve().parent / "training" / "train_cli_parser.py",
+    )
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    _mod.build_train_arg_parser().parse_args()
+
 import torch
 import torch.distributed as dist
+
+# Project imports (run from repo root: python train.py ...)
+from config.train_config import TrainConfig, get_dit_build_kwargs
 from data import ResolutionBucketBatchSampler, Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from diffusion.losses.timestep_loss_weight import get_timestep_loss_weight
@@ -32,6 +51,8 @@ from models.rae_latent_bridge import RAELatentBridge
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
+from training.train_args import build_train_config_from_args
+from training.train_cli_parser import build_train_arg_parser
 from utils.checkpoint.checkpoint_manager import CheckpointManager
 from utils.generation.run_artifacts import RUN_MANIFEST_FILENAME, TRAIN_CONFIG_SNAPSHOT_FILENAME
 from utils.runtime.jsonutil import dumps as json_dumps
@@ -40,13 +61,18 @@ from utils.training.ar_curriculum import parse_ar_order_mix, resolve_ar_for_step
 from utils.training.config_validator import estimate_memory_usage, validate_train_config
 from utils.training.device_perf import configure_training_cuda_and_cpu, log_cuda_quick_stats, log_training_perf_hints
 from utils.training.error_handling import get_model_info, log_gpu_memory, setup_logging
+from utils.training.fast_dataloader import (
+    dataloader_perf_kwargs,
+    maybe_cuda_prefetch_dataloader,
+    resolve_training_num_workers,
+)
 from utils.training.metrics import MetricsTracker, log_system_info
+from utils.training.throughput import (
+    create_adamw_optimizer,
+    encode_neg_and_style_embeddings,
+    to_train_device,
+)
 from utils.training.timestep_curriculum import resolve_timestep_kwargs_for_step
-
-# Project imports (run from repo root: python train.py ...)
-from config.train_config import TrainConfig, get_dit_build_kwargs
-from training.train_args import build_train_config_from_args
-from training.train_cli_parser import build_train_arg_parser
 
 
 def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
@@ -67,7 +93,28 @@ def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Op
 
 
 from utils.modeling.model_viz import print_model_summary  # noqa: E402
+from utils.modeling.multi_encoder_encode import (  # noqa: E402
+    encode_kwargs_for_captions,
+    prepare_multi_encoder_kwargs,
+)
 from utils.modeling.text_encoder_bundle import load_text_encoder_bundle  # noqa: E402
+
+
+def _encode_kw_for_batch(
+    captions: list,
+    text_bundle,
+    *,
+    layout_specs=None,
+) -> dict:
+    """Multi-encoder kwargs for a batch (optional per-row layout specs from JSONL)."""
+    if layout_specs is not None and any(x is not None for x in layout_specs):
+        return prepare_multi_encoder_kwargs(
+            captions,
+            text_bundle,
+            layout_specs=layout_specs,
+            flat_full_prompts=captions,
+        )
+    return encode_kwargs_for_captions(captions, text_bundle)
 
 
 def _sample_training_timesteps(
@@ -263,9 +310,10 @@ def encode_text(
     text_bundle=None,
     train_fusion: bool = False,
     clip_captions=None,
+    long_clip_captions=None,
     segment_texts=None,
 ):
-    """Encode captions to hidden states (B, L, text_dim). Triple mode appends two CLIP tokens (train fusion when train_fusion=True)."""
+    """Encode captions to hidden states (B, L, text_dim). Multi-encoder modes append fused CLIP tokens."""
     if text_bundle is not None:
         return text_bundle.encode(
             captions,
@@ -274,6 +322,7 @@ def encode_text(
             dtype=dtype,
             train_fusion=train_fusion,
             clip_captions=clip_captions,
+            long_clip_captions=long_clip_captions,
             segment_texts=segment_texts,
         )
     if segment_texts is not None:
@@ -282,7 +331,7 @@ def encode_text(
         return encode_t5_segment_concat(
             segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
         )
-    with torch.no_grad():
+    with torch.inference_mode():
         tok = tokenizer(
             captions,
             padding="max_length",
@@ -290,14 +339,14 @@ def encode_text(
             truncation=True,
             return_tensors="pt",
         )
-        input_ids = tok.input_ids.to(device)
-        attention_mask = tok.attention_mask.to(device)
+        input_ids = tok.input_ids.to(device, non_blocking=device.type == "cuda")
+        attention_mask = tok.attention_mask.to(device, non_blocking=device.type == "cuda")
         out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
         hidden = out.last_hidden_state
         return hidden.to(dtype)
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def encode_images_vae(images: torch.Tensor, ae: torch.nn.Module, scale: float = 0.18215) -> torch.Tensor:
     """Encode images to latents.
 
@@ -378,7 +427,7 @@ def _get_repa_vision(device, cfg):
     return _repa_vision_model
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def _repa_features(pixel_values: torch.Tensor, device, cfg) -> torch.Tensor:
     """pixel_values: (B,3,H,W) in [-1,1] -> features: (B,repa_out_dim)."""
     vision_model = _get_repa_vision(device, cfg)
@@ -434,7 +483,7 @@ def compute_mdm_training_loss(
     B, C, H, W = x_start.shape
     sk = spectral_kwargs if spectral_kwargs is not None else {}
 
-    if refinement_prob > 0 and refinement_max_t > 0 and torch.rand(1, device=device).item() < refinement_prob:
+    if refinement_prob > 0 and refinement_max_t > 0 and torch.rand((), device=device) < refinement_prob:
         t = torch.randint(0, min(refinement_max_t, diffusion.num_timesteps), (B,), device=device, dtype=t.dtype)
 
     # Standard forward diffusion for the whole latent (we'll overwrite parts with clean context).
@@ -535,16 +584,16 @@ def compute_mdm_training_loss(
     if mdm_min_mask_patches > 0:
         flat = patch_mask.view(B, -1)
         counts = flat.sum(dim=1)
-        zero_or_low = (counts < float(mdm_min_mask_patches)).nonzero(as_tuple=False).view(-1)
-        if zero_or_low.numel() > 0:
-            for bi in zero_or_low.tolist():
-                # Flip random patches until we meet the minimum.
-                while flat[bi].sum().item() < float(mdm_min_mask_patches):
-                    zeros = (flat[bi] <= 0).nonzero(as_tuple=False).view(-1)
-                    if zeros.numel() == 0:
-                        break
-                    pos = zeros[torch.randint(0, zeros.numel(), (1,), device=device)].item()
-                    flat[bi, pos] = 1.0
+        deficit = (float(mdm_min_mask_patches) - counts).clamp(min=0).long()
+        rows = (deficit > 0).nonzero(as_tuple=False).view(-1)
+        for bi in rows.tolist():
+            d = int(deficit[bi])
+            zeros = (flat[bi] <= 0).nonzero(as_tuple=False).view(-1)
+            if zeros.numel() == 0 or d <= 0:
+                continue
+            d = min(d, int(zeros.numel()))
+            pick = zeros[torch.randperm(zeros.numel(), device=device)[:d]]
+            flat[bi, pick] = 1.0
 
     # Upsample patch mask to latent pixel resolution (nearest in patch space).
     mask_latent = patch_mask.repeat_interleave(mdm_patch_size, dim=2).repeat_interleave(mdm_patch_size, dim=3)
@@ -599,7 +648,7 @@ def compute_mdm_training_loss(
     return {"loss": loss}
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.9999) -> None:
     """
     Exponential moving average update for all parameters **and** persistent buffers.
@@ -627,7 +676,7 @@ def update_ema(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float 
             ema_val.copy_(live_val)
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def eval_val_loss(
     ema_model,
     diffusion,
@@ -655,7 +704,7 @@ def eval_val_loss(
     for batch in val_loader:
         if max_batches is not None and n_batches >= max_batches:
             break
-        pixel_values = batch["pixel_values"].to(device, non_blocking=True)
+        pixel_values = to_train_device(batch["pixel_values"], device)
         captions = batch["captions"]
         negative_captions = batch.get("negative_captions") or [""] * len(captions)
         styles = batch.get("styles") or [""] * len(captions)
@@ -663,7 +712,7 @@ def eval_val_loss(
         control_type_ids = batch.get("control_type_id")
         with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
             if "latent_values" in batch:
-                latents = batch["latent_values"].to(device, non_blocking=True).to(torch.bfloat16)
+                latents = to_train_device(batch["latent_values"], device, dtype=torch.bfloat16)
             else:
                 latents = encode_images_vae(pixel_values, vae, latent_scale)
             if rae_bridge is not None and latents.shape[1] != 4:
@@ -682,42 +731,35 @@ def eval_val_loss(
                     dtype=torch.bfloat16,
                     text_bundle=text_bundle,
                 )
-            encoder_hidden = encode_text(
-                pos_caps,
-                tokenizer,
-                text_encoder,
-                device,
-                dtype=torch.bfloat16,
-                max_length=max_caption_len,
-                text_bundle=text_bundle,
-                train_fusion=False,
-            )
+
+            layout_batch = batch.get("prompt_layout")
+
+            def _val_enc(caps: list, *, with_layout: bool = False) -> torch.Tensor:
+                return encode_text(
+                    caps,
+                    tokenizer,
+                    text_encoder,
+                    device,
+                    dtype=torch.bfloat16,
+                    max_length=max_caption_len,
+                    text_bundle=text_bundle,
+                    train_fusion=False,
+                    **_encode_kw_for_batch(
+                        caps,
+                        text_bundle,
+                        layout_specs=layout_batch if with_layout else None,
+                    ),
+                )
+
+            encoder_hidden = _val_enc(pos_caps, with_layout=True)
             neg_caps = _negatives_strip_emphasis(negative_captions, train_pe)
-            encoder_hidden_neg = None
-            if any(n and n.strip() for n in neg_caps):
-                encoder_hidden_neg = encode_text(
-                    [n or "" for n in neg_caps],
-                    tokenizer,
-                    text_encoder,
-                    device,
-                    dtype=torch.bfloat16,
-                    max_length=max_caption_len,
-                    text_bundle=text_bundle,
-                    train_fusion=False,
-                )
-            style_embedding = None
-            if getattr(cfg, "style_embed_dim", 0) and any(s and s.strip() for s in styles):
-                style_embedding = encode_text(
-                    [s or "" for s in styles],
-                    tokenizer,
-                    text_encoder,
-                    device,
-                    dtype=torch.bfloat16,
-                    max_length=max_caption_len,
-                    text_bundle=text_bundle,
-                    train_fusion=False,
-                )
-                style_embedding = style_embedding.mean(dim=1)
+            encoder_hidden_neg, style_embedding = encode_neg_and_style_embeddings(
+                neg_caps,
+                styles,
+                style_embed_dim=int(getattr(cfg, "style_embed_dim", 0) or 0),
+                encode_fn=_val_enc,
+                batch_text_encode=bool(getattr(cfg, "batch_text_encode", True)),
+            )
             t = _sample_training_timesteps(
                 cfg, diffusion.num_timesteps, latents.shape[0], device, global_step=global_step
             )
@@ -899,10 +941,11 @@ def _log_sample_image(
                 tokenizer,
                 text_encoder,
                 device,
-                max_length=77,
+                max_length=300,
                 dtype=torch.bfloat16,
                 text_bundle=text_bundle,
                 train_fusion=False,
+                **_encode_kw_for_batch([demo_prompt], text_bundle),
             )
             ae_type = getattr(cfg, "autoencoder_type", "kl")
             latent_scale = getattr(cfg, "latent_scale", 0.18215) if ae_type == "kl" else 1.0
@@ -1072,7 +1115,13 @@ def main(cfg: TrainConfig):
     tokenizer, text_encoder, vae = get_t5_and_vae(device, cfg)
     text_bundle = load_text_encoder_bundle(cfg, device)
     if text_bundle is not None:
-        logger.info("Triple text encoder enabled: T5 + CLIP-L + CLIP-bigG (fusion layers trained with DiT).")
+        if text_bundle.mode == "penta":
+            logger.info(
+                "Penta text encoder enabled: T5 + CLIP-L + CLIP-bigG + CLIP-H + LongCLIP-L "
+                "(fusion layers trained with DiT)."
+            )
+        else:
+            logger.info("Triple text encoder enabled: T5 + CLIP-L + CLIP-bigG (fusion layers trained with DiT).")
 
     ae_type = getattr(cfg, "autoencoder_type", "kl")
     effective_latent_scale = getattr(cfg, "latent_scale", 0.18215) if ae_type == "kl" else 1.0
@@ -1157,11 +1206,11 @@ def main(cfg: TrainConfig):
         opt_params += list(rae_bridge.parameters())
     if text_bundle is not None and text_bundle.fusion is not None:
         opt_params += list(text_bundle.fusion.parameters())
-    opt = torch.optim.AdamW(
+    opt = create_adamw_optimizer(
         opt_params,
         lr=cfg.lr,
         weight_decay=cfg.weight_decay,
-        betas=(0.9, 0.999),
+        fused=bool(getattr(cfg, "fused_adamw", True)),
     )
     # GradScaler is only meaningful for FP16, where gradient underflow is a
     # real problem.  BF16 has the same exponent range as FP32 and does NOT
@@ -1285,6 +1334,27 @@ def main(cfg: TrainConfig):
 
     val_loader = None
     train_dataset = dataset
+    train_num_workers = resolve_training_num_workers(
+        int(cfg.num_workers),
+        len(dataset),
+        int(cfg.per_device_batch_size),
+        auto=bool(getattr(cfg, "auto_num_workers", True)),
+    )
+    dl_common = dataloader_perf_kwargs(
+        num_workers=train_num_workers,
+        prefetch_factor=int(getattr(cfg, "prefetch_factor", 4)),
+        worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
+    )
+    cuda_prefetch = bool(getattr(cfg, "cuda_stream_prefetch", True))
+    if rank == 0 and train_num_workers != int(cfg.num_workers):
+        logger.info("DataLoader num_workers=%d (requested %d)", train_num_workers, int(cfg.num_workers))
+    if rank == 0 and cuda_prefetch and device.type == "cuda":
+        logger.info("CUDA stream prefetch enabled (overlap H2D with training step)")
+    if rank == 0 and not getattr(cfg, "latent_cache_dir", None):
+        logger.info(
+            "Tip: precompute VAE latents (python -m scripts.training.precompute_latents) "
+            "and pass --latent-cache-dir for 3-10x faster epochs when IO-bound."
+        )
     if val_split > 0 and val_split < 1:
         n_total = len(dataset)
         n_val = max(1, int(n_total * val_split))
@@ -1293,16 +1363,17 @@ def main(cfg: TrainConfig):
             dataset, [n_train, n_val], generator=torch.Generator().manual_seed(cfg.global_seed)
         )
         if rank == 0:
-            val_loader = DataLoader(
-                val_dataset,
-                batch_size=cfg.per_device_batch_size,
-                shuffle=False,
-                num_workers=cfg.num_workers,
-                pin_memory=True,
-                drop_last=False,
-                collate_fn=collate_t2i,
-                persistent_workers=cfg.num_workers > 0,
-                worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
+            val_loader = maybe_cuda_prefetch_dataloader(
+                DataLoader(
+                    val_dataset,
+                    batch_size=cfg.per_device_batch_size,
+                    shuffle=False,
+                    drop_last=False,
+                    collate_fn=collate_t2i,
+                    **dl_common,
+                ),
+                device,
+                enabled=cuda_prefetch,
             )
         logger.info(f"Train/val split: {len(train_dataset)} train, {len(val_dataset)} val")
     else:
@@ -1324,11 +1395,8 @@ def main(cfg: TrainConfig):
         loader = DataLoader(
             train_dataset,
             batch_sampler=bucket_sampler,
-            num_workers=cfg.num_workers,
-            pin_memory=True,
             collate_fn=collate_t2i,
-            persistent_workers=cfg.num_workers > 0,
-            worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
+            **dl_common,
         )
     else:
         loader = DataLoader(
@@ -1336,16 +1404,14 @@ def main(cfg: TrainConfig):
             batch_size=cfg.per_device_batch_size,
             shuffle=(sampler is None),
             sampler=sampler,
-            num_workers=cfg.num_workers,
-            pin_memory=True,
             drop_last=True,
             collate_fn=collate_t2i,
-            persistent_workers=cfg.num_workers > 0,
-            worker_init_fn=_worker_init if getattr(cfg, "deterministic", False) else None,
             generator=torch.Generator().manual_seed(cfg.global_seed + rank)
             if getattr(cfg, "deterministic", False)
             else None,
+            **dl_common,
         )
+    loader = maybe_cuda_prefetch_dataloader(loader, device, enabled=cuda_prefetch)
     logger.info(f"Train size: {len(train_dataset)}, batch per device: {cfg.per_device_batch_size}")
 
     # Training length: passes (best) > max_steps > epochs
@@ -1407,18 +1473,19 @@ def main(cfg: TrainConfig):
     if dynamic_ar_runtime and cfg.use_compile:
         logger.warning("Skipping torch.compile because dynamic AR runtime is enabled (curriculum/order-mix).")
     elif cfg.use_compile and hasattr(torch, "compile"):
+        compile_mode = str(getattr(cfg, "compile_mode", "reduce-overhead") or "reduce-overhead")
         try:
-            train_model = torch.compile(model, mode="reduce-overhead")
-            logger.info("Model compiled with torch.compile(mode='reduce-overhead')")
+            train_model = torch.compile(model, mode=compile_mode)
+            logger.info("Model compiled with torch.compile(mode=%r)", compile_mode)
         except Exception as e:
             logger.warning(f"compile failed: {e}, continuing without compile")
 
     steps = start_step
     log_steps = 0
-    running_loss = 0.0
-    running_ag_sum = 0.0
+    running_loss_t: Optional[torch.Tensor] = None
+    running_ag_sum_t: Optional[torch.Tensor] = None
     running_ag_count = 0
-    running_cov_sum = 0.0
+    running_cov_sum_t: Optional[torch.Tensor] = None
     running_cov_count = 0
     start_time = time()
     refinement_prob = getattr(cfg, "refinement_prob", 0.0)
@@ -1464,8 +1531,8 @@ def main(cfg: TrainConfig):
         batch_iter = loader
 
         for batch in batch_iter:
-            last_attn_grounding: Optional[float] = None
-            last_attn_cov: Optional[float] = None
+            last_attn_grounding_t: Optional[torch.Tensor] = None
+            last_attn_cov_t: Optional[torch.Tensor] = None
             if dynamic_ar_runtime:
                 b_now, o_now = resolve_ar_for_step(
                     steps,
@@ -1499,7 +1566,12 @@ def main(cfg: TrainConfig):
                 for g in opt.param_groups:
                     g["lr"] = lr
 
-            pixel_values = batch["pixel_values"].to(device, non_blocking=True)
+            _need_pixels = (
+                float(getattr(cfg, "repa_weight", 0.0)) > 0
+                or float(getattr(cfg, "rule_loss_weight", 0.0)) > 0
+                or "latent_values" not in batch
+            )
+            pixel_values = to_train_device(batch["pixel_values"], device) if _need_pixels else None
             captions = batch["captions"]
             if float(getattr(cfg, "train_originality_augment_prob", 0.0)) > 0:
                 import numpy as np
@@ -1525,9 +1597,9 @@ def main(cfg: TrainConfig):
             )
 
             with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
-                with torch.no_grad():
+                with torch.inference_mode():
                     if "latent_values" in batch:
-                        latents = batch["latent_values"].to(device, non_blocking=True).to(torch.bfloat16)
+                        latents = to_train_device(batch["latent_values"], device, dtype=torch.bfloat16)
                     else:
                         latents = encode_images_vae(pixel_values, vae, effective_latent_scale)
                     # Img2img training (FLUX/NoobAI-style): sometimes use init_image as x_start so model learns to edit from it
@@ -1535,10 +1607,15 @@ def main(cfg: TrainConfig):
                     if init_pixel_values is not None and getattr(cfg, "img2img_prob", 0) > 0:
                         use_init = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) < cfg.img2img_prob
                         if use_init.any():
-                            init_latents = encode_images_vae(
-                                init_pixel_values.to(device, non_blocking=True), vae, effective_latent_scale
+                            nbc = device.type == "cuda"
+                            idx = use_init.nonzero(as_tuple=False).view(-1)
+                            init_lat_subset = encode_images_vae(
+                                init_pixel_values.to(device, non_blocking=nbc)[idx],
+                                vae,
+                                effective_latent_scale,
                             )
-                            latents = torch.where(use_init.view(-1, 1, 1, 1).expand_as(latents), init_latents, latents)
+                            latents = latents.clone()
+                            latents[idx] = init_lat_subset
                     train_pe = bool(getattr(cfg, "train_prompt_emphasis", False))
                     pos_caps = captions
                     token_weights = None
@@ -1553,6 +1630,7 @@ def main(cfg: TrainConfig):
                             dtype=torch.bfloat16,
                             text_bundle=text_bundle,
                         )
+                    layout_batch = batch.get("prompt_layout")
                     encoder_hidden = encode_text(
                         pos_caps,
                         tokenizer,
@@ -1562,6 +1640,7 @@ def main(cfg: TrainConfig):
                         max_length=max_caption_len,
                         text_bundle=text_bundle,
                         train_fusion=True,
+                        **_encode_kw_for_batch(pos_caps, text_bundle, layout_specs=layout_batch),
                     )
                     # IMPROVEMENTS 1.3: scheduled caption dropout (replace with empty with prob p); only when schedule set
                     cap_drop_schedule = getattr(cfg, "caption_dropout_schedule", None)
@@ -1579,6 +1658,7 @@ def main(cfg: TrainConfig):
                                     max_length=max_caption_len,
                                     text_bundle=text_bundle,
                                     train_fusion=True,
+                                    **_encode_kw_for_batch([""], text_bundle),
                                 )
                             empty_embed = empty_embed_cache[max_caption_len].expand(B, -1, -1)
                             mask = (torch.rand(B, device=device, dtype=torch.bfloat16) < current_cap_dropout).view(
@@ -1588,12 +1668,11 @@ def main(cfg: TrainConfig):
                             if token_weights is not None:
                                 mw = mask.squeeze(-1)  # (B, 1)
                                 token_weights = token_weights * (1 - mw) + mw.expand_as(token_weights)
-                    # Negative prompt: encode so model can try really hard not to add those features
                     neg_caps = _negatives_strip_emphasis(negative_captions, train_pe)
-                    encoder_hidden_neg = None
-                    if any(n and n.strip() for n in neg_caps):
-                        encoder_hidden_neg = encode_text(
-                            [n or "" for n in neg_caps],
+
+                    def _enc_batch(caps: list) -> torch.Tensor:
+                        return encode_text(
+                            caps,
                             tokenizer,
                             text_encoder,
                             device,
@@ -1601,21 +1680,16 @@ def main(cfg: TrainConfig):
                             max_length=max_caption_len,
                             text_bundle=text_bundle,
                             train_fusion=True,
+                            **encode_kwargs_for_captions(caps, text_bundle),
                         )
-                    # Style conditioning (T5-encoded style text, blended with strength)
-                    style_embedding = None
-                    if getattr(cfg, "style_embed_dim", 0) and any(s and s.strip() for s in styles):
-                        style_embedding = encode_text(
-                            [s or "" for s in styles],
-                            tokenizer,
-                            text_encoder,
-                            device,
-                            dtype=torch.bfloat16,
-                            max_length=max_caption_len,
-                            text_bundle=text_bundle,
-                            train_fusion=True,
-                        )
-                        style_embedding = style_embedding.mean(dim=1)
+
+                    encoder_hidden_neg, style_embedding = encode_neg_and_style_embeddings(
+                        neg_caps,
+                        styles,
+                        style_embed_dim=int(getattr(cfg, "style_embed_dim", 0) or 0),
+                        encode_fn=_enc_batch,
+                        batch_text_encode=bool(getattr(cfg, "batch_text_encode", True)),
+                    )
                 latents_raw = latents
                 if rae_bridge is not None and latents_raw.shape[1] != 4:
                     latents = rae_bridge.rae_to_dit(latents_raw)
@@ -1653,7 +1727,7 @@ def main(cfg: TrainConfig):
                     model_kwargs["size_embed"] = _size_embed_from_latents(latents, device)
                 sample_weights = batch.get("sample_weights")
                 if sample_weights is not None:
-                    sample_weights = sample_weights.to(device)
+                    sample_weights = sample_weights.to(device, non_blocking=device.type == "cuda")
                 curriculum_diff_steps = getattr(cfg, "curriculum_difficulty_steps", None) or []
                 if curriculum_diff_steps and "difficulty" in batch:
                     diff = batch["difficulty"].to(device)
@@ -1673,7 +1747,7 @@ def main(cfg: TrainConfig):
                 is_flow = bool(getattr(cfg, "flow_matching_training", False))
                 is_mdm = float(getattr(cfg, "mdm_mask_ratio", 0.0)) > 0 or getattr(cfg, "mdm_mask_schedule", None)
                 gv = batch.get("grounding_mask_valid")
-                has_mask_supervision = "grounding_mask" in batch and (gv is None or bool(gv.any().item()))
+                has_mask_supervision = "grounding_mask" in batch and (gv is None or bool(gv.any()))
                 use_attn_grounding = attn_gw > 0.0 and has_mask_supervision and not is_flow and not is_mdm
                 cov_w = float(getattr(cfg, "attn_token_coverage_loss_weight", 0.0))
                 use_attn_coverage = cov_w > 0.0 and not is_flow and not is_mdm
@@ -1782,10 +1856,9 @@ def main(cfg: TrainConfig):
                         noise_offset=float(getattr(cfg, "noise_offset", 0.0)),
                     )
                     if use_attn_grounding:
-                        gm = batch["grounding_mask"].to(device=device, dtype=torch.float32)
+                        nbc = device.type == "cuda"
+                        gm = batch["grounding_mask"].to(device=device, dtype=torch.float32, non_blocking=nbc)
                         gv_t = batch.get("grounding_mask_valid")
-                        if gv_t is not None:
-                            gv_t = gv_t.to(device=device)
                         ag = grounding_loss_from_attn(
                             attn_w=attn_w,
                             train_model=train_model,
@@ -1796,7 +1869,7 @@ def main(cfg: TrainConfig):
                             min_fg_patch_mass=float(getattr(cfg, "attn_grounding_min_fg_patch_mass", 0.0)),
                         )
                         loss = loss + attn_gw * ag
-                        last_attn_grounding = float(ag.detach().float().cpu().item())
+                        last_attn_grounding_t = ag.detach()
                     if use_attn_coverage:
                         cov = token_coverage_loss_from_attn(
                             attn_w=attn_w,
@@ -1807,7 +1880,7 @@ def main(cfg: TrainConfig):
                             token_weights=token_weights if token_weights is not None else None,
                         )
                         loss = loss + cov_w * cov
-                        last_attn_cov = float(cov.detach().float().cpu().item())
+                        last_attn_cov_t = cov.detach()
                 # MoE router balance auxiliary loss (optional).
                 moe_w = float(getattr(cfg, "moe_balance_loss_weight", 0.0))
                 moe_aux_loss = getattr(train_model, "moe_aux_loss", None)
@@ -1816,7 +1889,7 @@ def main(cfg: TrainConfig):
 
                 # REPA: align DiT internal representation with a frozen vision encoder.
                 repa_w = float(getattr(cfg, "repa_weight", 0.0))
-                if repa_w > 0:
+                if repa_w > 0 and pixel_values is not None:
                     repa_pred = getattr(train_model, "_repa_projected", None)
                     if repa_pred is not None:
                         repa_pred = repa_pred.to(device=device)
@@ -1828,7 +1901,7 @@ def main(cfg: TrainConfig):
                     if cw > 0:
                         loss = loss + cw * rae_bridge.cycle_loss(z_cycle)
                 rule_loss_weight = getattr(cfg, "rule_loss_weight", 0.0)
-                if rule_loss_weight > 0:
+                if rule_loss_weight > 0 and pixel_values is not None:
                     rule_loss = get_rule_loss(batch, pixel_values, vae, device, cfg)
                     if rule_loss is not None and rule_loss.numel() > 0 and rule_loss.isfinite().all():
                         loss = loss + rule_loss_weight * rule_loss.mean()
@@ -1849,7 +1922,7 @@ def main(cfg: TrainConfig):
                 update_ema(ema, model.module if use_ddp else model, cfg.ema_decay)
                 # IMPROVEMENTS 1.5: Polyak (running average of last N steps)
                 save_polyak = getattr(cfg, "save_polyak", 0)
-                if save_polyak > 0 and rank == 0:
+                if save_polyak > 0 and rank == 0 and steps % max(1, int(cfg.log_every)) == 0:
                     raw = model.module if use_ddp else model
                     sd = raw.state_dict()
                     if polyak_buf is None:
@@ -1859,21 +1932,28 @@ def main(cfg: TrainConfig):
                         for k in polyak_buf:
                             polyak_buf[k].mul_(1.0 - inv_n).add_(sd[k].detach().cpu(), alpha=inv_n)
 
-            running_loss += loss.item() * cfg.grad_accum_steps
-            if last_attn_grounding is not None:
-                running_ag_sum += last_attn_grounding
+            if running_loss_t is None:
+                running_loss_t = torch.zeros((), device=device)
+            running_loss_t = running_loss_t + loss.detach() * cfg.grad_accum_steps
+            if last_attn_grounding_t is not None:
+                if running_ag_sum_t is None:
+                    running_ag_sum_t = torch.zeros((), device=device)
+                running_ag_sum_t = running_ag_sum_t + last_attn_grounding_t.float()
                 running_ag_count += 1
-            if last_attn_cov is not None:
-                running_cov_sum += last_attn_cov
+            if last_attn_cov_t is not None:
+                if running_cov_sum_t is None:
+                    running_cov_sum_t = torch.zeros((), device=device)
+                running_cov_sum_t = running_cov_sum_t + last_attn_cov_t.float()
                 running_cov_count += 1
             log_steps += 1
             steps += 1
 
             if steps % cfg.log_every == 0:
-                torch.cuda.synchronize()
+                if device.type == "cuda":
+                    torch.cuda.synchronize()
                 elapsed = time() - start_time
                 steps_per_sec = log_steps / elapsed if elapsed > 0 else 0
-                avg_loss = running_loss / log_steps
+                avg_loss = (running_loss_t / log_steps).item() if running_loss_t is not None else 0.0
                 if use_ddp:
                     t = torch.tensor([avg_loss], device=device)
                     dist.all_reduce(t, op=dist.ReduceOp.SUM)
@@ -1882,13 +1962,13 @@ def main(cfg: TrainConfig):
                 lr_str = f" lr={lr_val:.2e}" if use_step_based else ""
                 ag_extra = ""
                 avg_ag = None
-                if running_ag_count > 0:
-                    avg_ag = running_ag_sum / running_ag_count
+                if running_ag_count > 0 and running_ag_sum_t is not None:
+                    avg_ag = (running_ag_sum_t / running_ag_count).item()
                     ag_extra = f" attn_grnd={avg_ag:.4f}"
                 cov_extra = ""
                 avg_cov = None
-                if running_cov_count > 0:
-                    avg_cov = running_cov_sum / running_cov_count
+                if running_cov_count > 0 and running_cov_sum_t is not None:
+                    avg_cov = (running_cov_sum_t / running_cov_count).item()
                     cov_extra = f" attn_cov={avg_cov:.4f}"
                 logger.info(
                     f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}{ag_extra}{cov_extra}"
@@ -1958,10 +2038,11 @@ def main(cfg: TrainConfig):
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
                     logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
-                running_loss = 0.0
-                running_ag_sum = 0.0
+                if running_loss_t is not None:
+                    running_loss_t.zero_()
+                running_ag_sum_t = None
                 running_ag_count = 0
-                running_cov_sum = 0.0
+                running_cov_sum_t = None
                 running_cov_count = 0
                 log_steps = 0
                 start_time = time()

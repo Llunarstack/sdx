@@ -16,13 +16,12 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from models.enhanced_dit import EnhancedDiT  # noqa: E402
+from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
 from utils.consistency.character_consistency import (  # noqa: E402
     CharacterDatabase,
     PhysicalFeatures,
     StylePreferences,
 )
-
-from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
 
 
 def create_sample_reference_images(character_name: str, output_dir: str = "./sample_references"):

@@ -62,15 +62,17 @@ def token_weights_from_cleaned_segments(
     tokenizer,
     max_length: int,
     *,
-    device: Optional[torch.device] = None,
-    dtype: torch.dtype = torch.float32,
-) -> Optional[torch.Tensor]:
+    device: Optional["torch.device"] = None,
+    dtype: Optional["torch.dtype"] = None,
+) -> Optional["torch.Tensor"]:
     """
     Return ``(max_length,)`` per-token weights using tokenizer ``offset_mapping``, or ``None``
     if the tokenizer does not support it.
     """
     if torch is None:  # pragma: no cover (torch required for tensor ops)
         raise ModuleNotFoundError("torch is required for token-weight tensor operations.")
+    if dtype is None:
+        dtype = torch.float32
     try:
         enc = tokenizer(
             [cleaned],
@@ -117,7 +119,8 @@ def batch_encoder_token_weights(
 
     Returns:
         ``(cleaned_captions, token_weights)`` with ``token_weights`` shape ``(B, L)`` where
-        ``L == max_length`` for T5-only, or ``max_length + 2`` for triple text (extra two = 1.0).
+        ``L == max_length`` for T5-only, or ``max_length + N`` for triple/penta text
+        (extra N tokens = 1.0; N is 2 for triple, 4 for penta).
 
     If offset mapping is unavailable for any row, returns ``(cleaned_captions, None)`` — caller
     should still encode *cleaned_captions* but omit ``token_weights`` in ``model_kwargs``.
@@ -139,11 +142,10 @@ def batch_encoder_token_weights(
         rows.append(w)
 
     stacked = torch.stack(rows, dim=0).to(device=device, dtype=dtype)
-    if (
-        text_bundle is not None
-        and getattr(text_bundle, "mode", "") == "triple"
-        and getattr(text_bundle, "fusion", None) is not None
-    ):
+    extra = 0
+    if text_bundle is not None and getattr(text_bundle, "fusion", None) is not None:
+        extra = int(text_bundle.extra_fusion_tokens())
+    if extra > 0:
         b = stacked.shape[0]
-        stacked = torch.cat([stacked, torch.ones(b, 2, device=device, dtype=dtype)], dim=1)
+        stacked = torch.cat([stacked, torch.ones(b, extra, device=device, dtype=dtype)], dim=1)
     return cleaned_caps, stacked

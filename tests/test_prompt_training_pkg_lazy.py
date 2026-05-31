@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_TORCH = importlib.util.find_spec("torch") is not None
 # OpenMP duplicate-runtime abort (MKL + other libs) in one-shot ``python -c`` smokes.
 _SUBPROC_ENV = {**os.environ, "KMP_DUPLICATE_LIB_OK": "TRUE"}
 
@@ -67,6 +71,7 @@ assert "utils.modeling.model_paths" in sys.modules
     )
 
 
+@pytest.mark.skipif(not _TORCH, reason="accesses torch-backed lazy submodule utils.checkpoint.checkpoint_loading")
 def test_utils_flat_packages_lazy_checkpoint_analysis_consistency_arch_quality() -> None:
     code = r"""
 import importlib

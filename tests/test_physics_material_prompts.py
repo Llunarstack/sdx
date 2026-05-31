@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from research.physics_visual_guidance import suggest_physics_prompt_addons
-
 from config.defaults import prompt_domains
 from config.defaults.physics_material_prompts import PHYSICS_MATERIAL_DOMAIN_NAMES
+from research.physics_visual_guidance import suggest_physics_prompt_addons
 
 
 def test_merged_domains_in_prompt_domains() -> None:

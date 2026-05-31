@@ -37,13 +37,25 @@ class ResolutionBucketBatchSampler(Sampler[List[int]]):
         self.drop_last = drop_last
         self.shuffle_batches = shuffle_batches
         self.generator = generator
+        self._cached_epoch: Optional[int] = None
+        self._cached_groups: Optional[dict[int, List[int]]] = None
+
+    def _bucket_groups(self) -> dict[int, List[int]]:
+        epoch = int(getattr(self.dataset, "_epoch", 0))
+        if self._cached_groups is not None and self._cached_epoch == epoch:
+            return self._cached_groups
+        groups: defaultdict[int, List[int]] = defaultdict(list)
+        for i in range(len(self.dataset)):
+            groups[self.dataset._bucket_assign[i]].append(i)
+        self._cached_groups = dict(groups)
+        self._cached_epoch = epoch
+        return self._cached_groups
 
     def __len__(self) -> int:
-        groups: defaultdict[int, int] = defaultdict(int)
-        for i in range(len(self.dataset)):
-            groups[self.dataset._bucket_assign[i]] += 1
+        groups = self._bucket_groups()
         total = 0
-        for c in groups.values():
+        for idxs in groups.values():
+            c = len(idxs)
             if self.drop_last:
                 total += c // self.batch_size
             else:
@@ -52,10 +64,7 @@ class ResolutionBucketBatchSampler(Sampler[List[int]]):
 
     def __iter__(self) -> Iterator[List[int]]:
         rng = self.generator
-        groups: defaultdict[int, List[int]] = defaultdict(list)
-        for i in range(len(self.dataset)):
-            b = self.dataset._bucket_assign[i]
-            groups[b].append(i)
+        groups = self._bucket_groups()
         batches: List[List[int]] = []
         for idxs in groups.values():
             if rng is not None:

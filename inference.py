@@ -5,23 +5,26 @@ This is **not** a full prompt-to-image path — use ``sample.py`` or ``demo.py``
 Use ``--verify`` to run a single ``refine_latent_once`` step on random latents after loading weights.
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
 
-import torch
-
 # Run from repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from diffusion import create_diffusion
-from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
+# NOTE: torch and the diffusion/checkpoint stack are imported lazily inside the
+# functions below so that ``python inference.py --help`` works without importing
+# the heavy GPU stack (see tests/test_cli_entrypoints.py).
 from utils.terminal import configure_stdio_for_console
 
 configure_stdio_for_console()
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
+    from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
+
     model, cfg, rae_bridge, _fusion_sd = load_sampler_checkpoint(
         ckpt_path, device=device, reject_enhanced=False, verbose=True
     )
@@ -33,7 +36,9 @@ def refine_latent_once(diffusion, model, x_0_latent, encoder_hidden_states, t_re
     Add a small amount of noise to x_0 then denoise once to fix artifacts.
     User can skip this by setting allow_imperfect_output=True.
     """
-    with torch.no_grad():
+    import torch
+
+    with torch.inference_mode():
         t = torch.full((x_0_latent.shape[0],), t_refine, device=device, dtype=torch.long)
         noise = torch.randn_like(x_0_latent, device=device)
         diffusion._to_device(device)
@@ -70,6 +75,9 @@ def main():
     )
     args = parser.parse_args()
 
+    import torch
+    from diffusion import create_diffusion
+
     refine = args.refine_output and not args.allow_imperfect
     print(f"Refinement pass: {'enabled (fix imperfections)' if refine else 'disabled (allow imperfect output)'}")
 
@@ -78,6 +86,10 @@ def main():
         dev = "cpu"
         print("CUDA not available; using CPU.", file=sys.stderr)
     device = torch.device(dev)
+    if device.type == "cuda":
+        from utils.training.device_perf import configure_inference_cuda
+
+        configure_inference_cuda()
 
     model, cfg, rae_bridge = load_model_from_ckpt(args.ckpt, dev)
     model.eval()

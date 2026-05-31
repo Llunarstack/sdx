@@ -26,15 +26,15 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
+from config.train_config import get_dit_build_kwargs
 from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from models import DiT_models_text
 from torch.utils.data import DataLoader
 from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
-from utils.modeling.text_encoder_bundle import load_text_encoder_bundle
+from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions, load_text_bundle_for_training
 
 import train as train_mod
-from config.train_config import get_dit_build_kwargs
 
 
 def main() -> int:
@@ -65,7 +65,9 @@ def main() -> int:
         print("CUDA not available; using CPU.", file=sys.stderr)
         device = "cpu"
 
-    teacher, cfg, rae_bridge, _, _ = load_dit_text_checkpoint(args.teacher_ckpt, device=device, reject_enhanced=True)
+    teacher, cfg, rae_bridge, _, fusion_sd = load_dit_text_checkpoint(
+        args.teacher_ckpt, device=device, reject_enhanced=True
+    )
     teacher.eval()
     for p in teacher.parameters():
         p.requires_grad = False
@@ -79,7 +81,7 @@ def main() -> int:
     student.train()
 
     tokenizer, text_encoder, vae = train_mod.get_t5_and_vae(device, cfg)
-    text_bundle = load_text_encoder_bundle(cfg, torch.device(device))
+    text_bundle = load_text_bundle_for_training(cfg, torch.device(device), fusion_sd)
 
     image_size = int(getattr(cfg, "image_size", 256))
     ds = Text2ImageDataset(
@@ -141,6 +143,7 @@ def main() -> int:
             dtype=torch.bfloat16 if use_amp else torch.float32,
             text_bundle=text_bundle,
             train_fusion=False,
+            **encode_kwargs_for_captions(caps, text_bundle),
         )
         mk: dict = {"encoder_hidden_states": enc}
         if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:

@@ -65,3 +65,15 @@ def test_pretrained_catalog_has_core_rows():
     assert "ConvNeXtV2-Large" in names
     assert "LAION-Aesthetic-v2" in names
     assert "AnyDoor-Ref" in names
+    assert "Florence-2-base" in names
+    assert "BLIP2-opt-2.7b" in names
+    assert "Qwen2-VL-2B-Instruct" in names
+    assert "Depth-Anything-V2-Small" in names
+    assert "ControlNet-Canny" in names
+    assert "SmolVLM2-2B-Instruct" in names
+    assert "GIT-base-coco" in names
+    assert "MUSIQ" in names
+    assert "LLaVA-1.5-7B" in names
+    assert "ZoeDepth" in names
+    assert "GFPGAN" in names
+    assert "UMT5-XXL" in names

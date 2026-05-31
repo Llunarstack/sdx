@@ -111,6 +111,30 @@ def main() -> int:
     ap.add_argument("--iterations", type=int, default=1, help="How many full loop rounds to run.")
     ap.add_argument("--promote-best", action="store_true", help="Copy best loop checkpoint to --promote-path.")
     ap.add_argument("--promote-path", type=str, default="auto_improve_loop/best_auto.pt")
+    ap.add_argument(
+        "--vit-ckpt",
+        type=str,
+        default="",
+        help="ViT quality checkpoint for vit-weighted preference mining and benchmark scoring.",
+    )
+    ap.add_argument(
+        "--local-rag-jsonl",
+        type=str,
+        default="",
+        help="JSONL corpus passed to sample.py during benchmark (--local-rag-jsonl).",
+    )
+    ap.add_argument(
+        "--model-soup",
+        action="store_true",
+        help="After DPO, blend base + DPO checkpoints into soup_policy.pt and benchmark that too.",
+    )
+    ap.add_argument(
+        "--use-hard-negatives",
+        action="store_true",
+        help="Mine failure tags from pre-DPO benchmark and pass --negative-prompt to post-DPO benchmark.",
+    )
+    ap.add_argument("--soup-weight-base", type=float, default=0.35)
+    ap.add_argument("--soup-weight-dpo", type=float, default=0.65)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -180,6 +204,17 @@ def main() -> int:
                     str(int(args.hardcase_max_rows)),
                 ]
             )
+        if str(getattr(args, "local_rag_jsonl", "") or "").strip():
+            bench_cmd_1.extend(["--local-rag-jsonl", str(args.local_rag_jsonl).strip()])
+        if str(getattr(args, "vit_ckpt", "") or "").strip():
+            bench_cmd_1.extend(
+                [
+                    "--pick-vit-ckpt",
+                    str(args.vit_ckpt).strip(),
+                    "--vit-score",
+                    "--vit-mine-preferences",
+                ]
+            )
         rc = _run(bench_cmd_1, cwd=root, dry_run=bool(args.dry_run))
         if rc != 0:
             return rc
@@ -238,14 +273,26 @@ def main() -> int:
         if rc != 0:
             return rc
 
-        # 3) Benchmark base vs DPO.
+        soup_ckpt = (it_dir / "soup_policy.pt").resolve()
+        ckpts_compare = [current_base, dpo_ckpt]
+        if bool(getattr(args, "model_soup", False)):
+            if not args.dry_run:
+                from utils.superior.model_soup import save_soup_checkpoint, soup_checkpoints
+
+                w_base = float(getattr(args, "soup_weight_base", 0.35))
+                w_dpo = float(getattr(args, "soup_weight_dpo", 0.65))
+                avg = soup_checkpoints([current_base, dpo_ckpt], weights=[w_base, w_dpo])
+                save_soup_checkpoint(avg, template_path=current_base, out_path=soup_ckpt)
+                print(f"[auto_improve_loop] model soup -> {soup_ckpt}")
+            ckpts_compare.append(soup_ckpt)
+
+        # 3) Benchmark base vs DPO (+ soup if enabled).
         bench_cmd_2 = [
             sys.executable,
             "-m",
             "scripts.tools.benchmark_suite",
             "--ckpt",
-            str(current_base),
-            str(dpo_ckpt),
+            *[str(p) for p in ckpts_compare],
             "--out-dir",
             str(bench_after),
             "--preset",
@@ -265,6 +312,24 @@ def main() -> int:
             "--robustness-penalty",
             str(float(args.robustness_penalty)),
         ]
+        if str(getattr(args, "local_rag_jsonl", "") or "").strip():
+            bench_cmd_2.extend(["--local-rag-jsonl", str(args.local_rag_jsonl).strip()])
+        if str(getattr(args, "vit_ckpt", "") or "").strip():
+            bench_cmd_2.extend(["--pick-vit-ckpt", str(args.vit_ckpt).strip(), "--vit-score"])
+        if bool(getattr(args, "use_hard_negatives", False)):
+            results_path = bench_before / "results.json"
+            if results_path.is_file() and not args.dry_run:
+                from utils.superior.hard_negative import (
+                    benchmark_sample_args_for_negatives,
+                    load_hard_negatives_from_results,
+                )
+
+                bundle = load_hard_negatives_from_results(results_path, threshold=float(args.hardcase_threshold))
+                neg_args = benchmark_sample_args_for_negatives(bundle)
+                for tok in neg_args:
+                    bench_cmd_2.extend(["--sample-arg", tok])
+                if bundle.negative_suffix:
+                    print(f"[auto_improve_loop] hard negatives: {bundle.negative_suffix[:120]}...")
         rc = _run(bench_cmd_2, cwd=root, dry_run=bool(args.dry_run))
         if rc != 0:
             return rc
@@ -274,7 +339,7 @@ def main() -> int:
             rows = _read_leaderboard(lb_path)
             br = _best_row(rows)
             best_tag = _best_model_tag(rows)
-            iter_best_ckpt = _resolve_ckpt_by_tag([current_base, dpo_ckpt], best_tag)
+            iter_best_ckpt = _resolve_ckpt_by_tag(list(ckpts_compare), best_tag)
             if br is not None and iter_best_ckpt is not None:
                 iter_best_score = float(br.get("mean_composite", 0.0) or 0.0)
                 print(f"[auto_improve_loop] iter best: {iter_best_ckpt} score={iter_best_score:.4f}")

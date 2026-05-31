@@ -72,9 +72,8 @@ class TestBuildKwargs:
 @pytest.fixture(scope="module")
 def dit_xl_model():
     """Build a DiT-XL/2-Text on CPU with minimal config."""
-    from models import DiT_models_text
-
     from config.train_config import TrainConfig, get_dit_build_kwargs
+    from models import DiT_models_text
 
     cfg = TrainConfig(image_size=64)  # 8×8 latent — fast on CPU
     kw = get_dit_build_kwargs(cfg, class_dropout_prob=0.0)

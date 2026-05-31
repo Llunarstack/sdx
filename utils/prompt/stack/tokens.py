@@ -5,8 +5,20 @@ from __future__ import annotations
 from typing import Set
 
 from utils.prompt.fast_paths import (
+    append_unique,
+    join_tags,
     merge_fragments,
+    split_tags,
 )
+
+__all__ = [
+    "append_csv",
+    "append_unique",
+    "join_tags",
+    "merge_fragments",
+    "split_tags",
+    "token_set",
+]
 
 
 def token_set(text: str) -> Set[str]:

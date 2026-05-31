@@ -37,13 +37,7 @@ def filter_negative_by_positive_python(positive: str, negative: str) -> str:
 
 
 def filter_negative_by_positive(positive: str, negative: str) -> str:
-    """Prefer Rust ``sdx_prompt_ops`` when built; else pure Python."""
-    try:
-        from sdx_native.prompt_ops_native import maybe_filter_negative_by_positive
+    """Delegate to ``utils.prompt.fast_paths`` (native + Python fallback)."""
+    from utils.prompt.fast_paths import filter_negative_by_positive as _filter
 
-        out = maybe_filter_negative_by_positive(positive, negative)
-        if out is not None:
-            return out
-    except ImportError:
-        pass
-    return filter_negative_by_positive_python(positive, negative)
+    return _filter(positive, negative)

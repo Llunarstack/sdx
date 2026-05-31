@@ -15,6 +15,7 @@ import torch
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT))
 
+from config.train_config import TrainConfig
 from utils.analysis.data_analysis import DatasetAnalyzer
 from utils.checkpoint.checkpoint_manager import CheckpointManager, analyze_checkpoint_differences, merge_checkpoints
 from utils.generation.advanced_inference import PromptOptimizer
@@ -22,8 +23,6 @@ from utils.generation.master_integration import create_sdx_master, quick_generat
 from utils.modeling.model_viz import analyze_model_architecture, print_model_summary
 from utils.training.config_validator import estimate_memory_usage, suggest_optimizations, validate_train_config
 from utils.training.error_handling import validate_checkpoint
-
-from config.train_config import TrainConfig
 
 
 def cmd_analyze_dataset(args):

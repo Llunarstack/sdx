@@ -84,7 +84,6 @@ def _convert_dit_imagenet_to_sdx(raw_pt: Path, out_pt: Path) -> Path:
     so sample.py can run it with --class-label for a quick smoke test.
     """
     import torch
-
     from config.train_config import TrainConfig
 
     if out_pt.exists() and out_pt.stat().st_size > 1_000_000:

@@ -56,5 +56,6 @@ def test_sample_one_image_pil_smoke(mock_encode: MagicMock) -> None:
     )
     assert pil.size == (32, 32)
     assert pil.mode == "RGB"
-    assert mock_encode.call_count == 2
+    assert mock_encode.call_count == 1
+    assert len(mock_encode.call_args[0][0]) == 2
     diffusion.sample_loop.assert_called_once()

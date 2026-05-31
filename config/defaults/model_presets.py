@@ -99,6 +99,22 @@ PRESETS: Dict[str, SamplerPreset] = {
         anti_artifacts=True,
         strong_watermark=True,
     ),
+    # Superior Stack: balanced CFG + quality flags for composite pick / self-correct flows.
+    "superior": SamplerPreset(
+        name="superior",
+        description="Superior Stack preset: strong adherence, natural look, anti-artifact; pair with --pick-best superior_composite.",
+        cfg_scale=7.0,
+        cfg_rescale=0.7,
+        scheduler="ddim",
+        steps=28,
+        hard_style="realistic",
+        naturalize=True,
+        naturalize_grain=0.012,
+        anti_bleed=True,
+        diversity=True,
+        anti_artifacts=True,
+        strong_watermark=True,
+    ),
 }
 
 

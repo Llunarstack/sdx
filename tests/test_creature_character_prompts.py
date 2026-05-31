@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from models.complex_prompt_handler import PromptComplexityAnalyzer
-from research.creature_character_guidance import suggest_creature_prompt_addons
-
 from config.defaults import prompt_domains
 from config.defaults.creature_character_prompts import (
     CREATURE_CHARACTER_DOMAIN_NAMES,
     HUMANOID_MONSTER_PROMPT_KEYWORDS,
 )
+from models.complex_prompt_handler import PromptComplexityAnalyzer
+from research.creature_character_guidance import suggest_creature_prompt_addons
 
 
 def test_merged_creature_domains() -> None:

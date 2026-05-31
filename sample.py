@@ -15,6 +15,8 @@ Profiling (optional): pass ``--profile-out PATH`` (plus ``--profile-sort cumulat
 ``--profile-top N``) to write cProfile ``.prof`` and a text summary next to PATH.
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import os
@@ -24,545 +26,12 @@ import sys
 from pathlib import Path
 from typing import Tuple
 
-import numpy as np
-import torch
-from PIL import Image
-from utils.runtime.jsonutil import loads as json_loads
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from diffusion import create_diffusion, list_timestep_schedules
-from diffusion.sampling_extras import (
-    apply_holy_grail_preset_to_args,
-    list_holy_grail_presets,
-    recommend_holy_grail_preset,
-    sanitize_holy_grail_kwargs,
-)
-from models.controlnet import control_type_to_id, infer_control_type_from_path
-from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
-from utils.terminal import configure_stdio_for_console
 
-from config.defaults.model_presets import apply_op_mode_to_args, apply_preset_to_args
-
-configure_stdio_for_console()
-
-
-def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
-    """Map RAE latent (B,C,h,w) to DiT 4-channel space when checkpoint includes RAELatentBridge."""
-    if z is None or ae_type != "rae" or rae_bridge is None:
-        return z
-    if z.shape[1] == 4:
-        return z
-    return rae_bridge.rae_to_dit(z)
-
-
-def load_model_from_ckpt(ckpt_path, device="cuda"):
-    from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
-
-    return load_sampler_checkpoint(ckpt_path, device=device, reject_enhanced=True, verbose=True)
-
-
-# T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
-_t5_cache = {}
-_T5_CACHE_MAX = 32  # limit entries to avoid unbounded memory
-
-
-def _parse_scale_csv(value: str) -> list:
-    """Parse comma-separated scale modifiers (longer,bigger,wider) into a stable list."""
-    allowed = {"longer", "bigger", "wider"}
-    if not value:
-        return []
-    parts = [p.strip().lower() for p in value.split(",")]
-    out = []
-    for p in parts:
-        if p in allowed and p not in out:
-            out.append(p)
-    return out
-
-
-def _parse_lora_role_budgets(raw: str) -> dict:
-    """Parse 'character=1.8,style=1.0,detail=0.8' into dict."""
-    out = {}
-    if not raw:
-        return out
-    for part in str(raw).split(","):
-        p = part.strip()
-        if not p or "=" not in p:
-            continue
-        k, v = p.split("=", 1)
-        try:
-            out[str(k).strip().lower()] = float(v.strip())
-        except Exception:
-            continue
-    return out
-
-
-def _parse_lora_role_stage_weights(raw: str) -> dict:
-    """
-    Parse per-role stage multipliers:
-    "character=1.15/1.0/0.85,style=0.9/1.0/1.1"
-    where values are early/mid/late.
-    """
-    out = {}
-    if not raw:
-        return out
-    for part in str(raw).split(","):
-        p = part.strip()
-        if not p or "=" not in p:
-            continue
-        k, v = p.split("=", 1)
-        nums = [x.strip() for x in v.split("/") if x.strip()]
-        if len(nums) != 3:
-            continue
-        try:
-            out[str(k).strip().lower()] = (float(nums[0]), float(nums[1]), float(nums[2]))
-        except Exception:
-            continue
-    return out
-
-
-def _parse_lora_spec(spec: str, *, default_role: str = "style") -> Tuple[str, float, str]:
-    """
-    Parse LoRA/DoRA/LyCORIS spec.
-    Supported:
-      - path
-      - path:scale
-      - path:scale:role
-    """
-    s = str(spec or "").strip()
-    if not s:
-        return "", 0.8, str(default_role or "style").lower()
-    parts = s.split(":")
-    role = str(default_role or "style").strip().lower()
-    if len(parts) >= 3:
-        maybe_role = parts[-1].strip().lower()
-        try:
-            scale = float(parts[-2].strip())
-            path = ":".join(parts[:-2]).strip()
-            if path:
-                return path, scale, maybe_role or role
-        except Exception:
-            pass
-    if len(parts) >= 2:
-        try:
-            scale = float(parts[-1].strip())
-            path = ":".join(parts[:-1]).strip()
-            if path:
-                return path, scale, role
-        except Exception:
-            pass
-    return s, 0.8, role
-
-
-def _parse_weighted_style_mix(raw: str) -> list:
-    """
-    Parse weighted multi-style prompt.
-    Supported forms (segments separated by '|'):
-      - "anime::0.6 | watercolor::0.4"
-      - "anime:0.6 | watercolor:0.4"
-      - "anime | watercolor" (equal weights)
-    Returns list[(text, normalized_weight)].
-    """
-    s = str(raw or "").strip()
-    if not s:
-        return []
-    segs = [p.strip() for p in s.split("|") if p.strip()]
-    out = []
-    for seg in segs:
-        txt = seg
-        w = 1.0
-        if "::" in seg:
-            a, b = seg.rsplit("::", 1)
-            try:
-                w = float(b.strip())
-                txt = a.strip()
-            except Exception:
-                pass
-        elif ":" in seg:
-            a, b = seg.rsplit(":", 1)
-            try:
-                w = float(b.strip())
-                txt = a.strip()
-            except Exception:
-                pass
-        if txt:
-            out.append((txt, max(0.0, float(w))))
-    if not out:
-        return []
-    sw = sum(w for _, w in out)
-    if sw <= 1e-8:
-        n = float(len(out))
-        return [(t, 1.0 / n) for t, _ in out]
-    return [(t, w / sw) for t, w in out]
-
-
-def _parse_control_spec(
-    spec: str,
-    *,
-    default_type: str = "auto",
-    default_scale: float = 0.85,
-) -> Tuple[str, str, float]:
-    """
-    Parse ControlNet spec with Windows-path-safe rules.
-    Supported:
-      - path
-      - path:scale
-      - path:type
-      - path:type:scale
-      - path:scale:type
-    """
-    s = str(spec or "").strip()
-    if not s:
-        return "", str(default_type or "auto").lower(), float(default_scale)
-    parts = s.split(":")
-    ctype = str(default_type or "auto").strip().lower()
-    cscale = float(default_scale)
-    if len(parts) >= 3:
-        a = parts[-2].strip()
-        b = parts[-1].strip().lower()
-        # Try path:scale:type
-        try:
-            sc = float(a)
-            path = ":".join(parts[:-2]).strip()
-            if path:
-                return path, (b or ctype), sc
-        except Exception:
-            pass
-        # Try path:type:scale
-        try:
-            sc = float(parts[-1].strip())
-            path = ":".join(parts[:-2]).strip()
-            t = parts[-2].strip().lower()
-            if path:
-                return path, (t or ctype), sc
-        except Exception:
-            pass
-    if len(parts) >= 2:
-        tail = parts[-1].strip()
-        path = ":".join(parts[:-1]).strip()
-        if path:
-            try:
-                return path, ctype, float(tail)
-            except Exception:
-                return path, tail.lower() or ctype, cscale
-    return s, ctype, cscale
-
-
-def _resize_control_tensor(ctrl: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
-    """Resize control tensor preserving 4D (B,C,H,W) or 5D (B,K,C,H,W) layout."""
-    if ctrl.ndim == 4:
-        return torch.nn.functional.interpolate(
-            ctrl,
-            size=(target_h, target_w),
-            mode="bilinear",
-            align_corners=False,
-        )
-    if ctrl.ndim == 5:
-        b, k, c, h, w = ctrl.shape
-        flat = ctrl.reshape(b * k, c, h, w)
-        out = torch.nn.functional.interpolate(
-            flat,
-            size=(target_h, target_w),
-            mode="bilinear",
-            align_corners=False,
-        )
-        return out.view(b, k, c, target_h, target_w)
-    raise ValueError(f"Unsupported control tensor shape: {tuple(ctrl.shape)}")
-
-
-def _apply_gender_swap(prompt: str) -> str:
-    """
-    Swap common gendered tags/phrases in Danbooru-ish prompts.
-    Note: this is heuristic text replacement; it does not guarantee semantic correctness.
-    """
-    if not prompt:
-        return prompt
-    p = prompt
-
-    # Danbooru counts (use placeholders to avoid double-swaps)
-    p = re.sub(r"\b(\d+)girls\b", r"\1__TMP_BOYS__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b(\d+)boys\b", r"\1__TMP_GIRLS__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b(\d+)__TMP_BOYS__\b", r"\1boys", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b(\d+)__TMP_GIRLS__\b", r"\1girls", p, flags=re.IGNORECASE)
-
-    # Single tags
-    p = re.sub(r"\bgirl\b", "__TMP_GIRL__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\bboy\b", "girl", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b__TMP_GIRL__\b", "boy", p, flags=re.IGNORECASE)
-
-    p = re.sub(r"\bwoman\b", "__TMP_WOMAN__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\bman\b", "woman", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b__TMP_WOMAN__\b", "man", p, flags=re.IGNORECASE)
-
-    # Adjectives
-    p = re.sub(r"\bfemale\b", "__TMP_FEMALE__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\bmale\b", "female", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b__TMP_FEMALE__\b", "male", p, flags=re.IGNORECASE)
-
-    # Pronouns (simple placeholders)
-    p = re.sub(r"\bshe\b", "__TMP_SHE__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\bhe\b", "she", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b__TMP_SHE__\b", "he", p, flags=re.IGNORECASE)
-
-    p = re.sub(r"\bher\b", "__TMP_HER__", p, flags=re.IGNORECASE)
-    p = re.sub(r"\bhis\b", "her", p, flags=re.IGNORECASE)
-    p = re.sub(r"\b__TMP_HER__\b", "his", p, flags=re.IGNORECASE)
-
-    return p
-
-
-def _build_size_tokens(anatomy_scales: list, object_scales: list, scene_scales: list) -> str:
-    """Return comma-separated prompt tokens for requested size modifiers."""
-    anatomy_map = {
-        "longer": "longer limbs, longer legs, longer arms",
-        "bigger": "larger body, bigger frame, broader build",
-        "wider": "wider shoulders, broader chest, wider hips",
-    }
-    object_map = {
-        "longer": "elongated props, longer objects",
-        "bigger": "oversized props, larger accessories",
-        "wider": "wider objects, broad props",
-    }
-    scene_map = {
-        "longer": "extended composition, longer scene layout",
-        "bigger": "large-scale scene, big environment",
-        "wider": "wide view, wider perspective",
-    }
-    tokens: list[str] = []
-    for s in anatomy_scales:
-        tokens.append(anatomy_map[s])
-    for s in object_scales:
-        tokens.append(object_map[s])
-    for s in scene_scales:
-        tokens.append(scene_map[s])
-    return ", ".join([t for t in tokens if t])
-
-
-SCALE_DISTORTION_NEGATIVE = (
-    # Keep scaling requests “shape-like” without drifting into warped outputs.
-    "deformed, warped anatomy, stretched anatomy, bad proportions, misproportioned, wrong scale, "
-    "extra limbs, fused limbs, melted, distorted"
-)
-
-
-def _parse_expected_texts(raw: str) -> list:
-    """
-    Parse expected text for OCR validation.
-    Accepts: comma-separated string or a JSON list string.
-    """
-    raw = (raw or "").strip()
-    if not raw:
-        return []
-    try:
-        if raw.startswith("["):
-            data = json_loads(raw)
-            if isinstance(data, list):
-                return [str(x).strip() for x in data if str(x).strip()]
-    except Exception:
-        pass
-    parts = [p.strip() for p in raw.split(",")]
-    return [p for p in parts if p]
-
-
-def _infer_expected_texts_from_prompt(prompt: str) -> list:
-    """
-    Infer likely intended on-image text from quoted fragments in prompt.
-    """
-    p = str(prompt or "")
-    if not p.strip():
-        return []
-    out = []
-    for m in re.finditer(r'"([^"\n]{1,80})"', p):
-        t = (m.group(1) or "").strip()
-        if not t:
-            continue
-        if not re.search(r"[A-Za-z0-9]", t):
-            continue
-        out.append(t)
-    # Keep stable order + de-duplicate.
-    dedup = []
-    seen = set()
-    for t in out:
-        k = t.lower()
-        if k in seen:
-            continue
-        seen.add(k)
-        dedup.append(t)
-    return dedup[:4]
-
-
-def _maybe_append_text_says(prompt: str, expected_texts: list) -> str:
-    """Ensure prompt contains 'text that says "<t>"' for expected OCR text."""
-    p = prompt or ""
-    if not expected_texts:
-        return p
-    # Use first expected string as the "anchor" for exact OCR.
-    t = expected_texts[0]
-    if not t:
-        return p
-    quoted = f'"{t}"'
-    if quoted.lower() in p.lower() or t.lower() in p.lower():
-        return p
-    # Append in a way our prompt-negative logic understands (TEXT_IN_IMAGE_PHRASES).
-    # "text that says" is also used in config defaults.
-    return f"{p.strip()}, text that says {quoted}"
-
-
-def _refine_gate_score(
-    *,
-    image_rgb_u8: np.ndarray,
-    expected_texts: list,
-) -> tuple[float, dict]:
-    """
-    Return (score in [0,1], details) where higher means "already good enough".
-    """
-    try:
-        from utils.quality import test_time_pick as _ttp
-    except Exception:
-        return 0.0, {"reason": "metrics_unavailable"}
-    edge = float(_ttp.score_edge_sharpness(image_rgb_u8))
-    exp = float(_ttp.score_exposure_balance(image_rgb_u8))
-    edge_n = float(np.clip(edge / 400.0, 0.0, 1.0))
-    parts = [0.45 * edge_n, 0.45 * exp]
-    details = {"edge_sharpness": edge, "edge_norm": edge_n, "exposure_balance": exp}
-    if expected_texts:
-        try:
-            ocr = float(_ttp.score_ocr_match(image_rgb_u8, str(expected_texts[0])))
-        except Exception:
-            ocr = 0.5
-        details["ocr_match"] = ocr
-        parts.append(0.10 * ocr)
-    score = float(np.clip(sum(parts), 0.0, 1.0))
-    details["score"] = score
-    return score, details
-
-
-SHEET_FUTA_REPLACEMENT = "androgynous presentation"
-SHEET_SAFE_WARN_PREFIX = "Character sheet safety sanitizer:"
-
-
-def _normalize_list_or_str(v) -> list:
-    """Accept either a string or list[str] and return list[str]."""
-    if v is None:
-        return []
-    if isinstance(v, str):
-        if not v.strip():
-            return []
-        return [v.strip()]
-    if isinstance(v, list):
-        out = []
-        for x in v:
-            if isinstance(x, str) and x.strip():
-                out.append(x.strip())
-        return out
-    return []
-
-
-def _sanitize_character_prompt_tokens(
-    tokens: list, negative_tokens: list, *, uncensored_mode: bool = False
-) -> Tuple[list, list]:
-    """
-    Prevent explicitly sexual tokens from being injected.
-    If user includes "futa" or similar, we replace with androgynous presentation.
-    """
-    if uncensored_mode:
-        return tokens, negative_tokens
-    banned_direct = ["futa", "trap"]
-    lowered = [t.lower() for t in tokens]
-    swapped = False
-    for i, t in enumerate(tokens):
-        tl = lowered[i]
-        if any(b in tl for b in banned_direct):
-            tokens[i] = SHEET_FUTA_REPLACEMENT
-            swapped = True
-    if swapped:
-        # Add a mild negative to reduce explicit outcomes.
-        negative_tokens.extend(["explicit genital content"])
-        # Keep warning concise; don't spam if this is called repeatedly.
-        print(
-            f"{SHEET_SAFE_WARN_PREFIX} Replaced explicit gender term with '{SHEET_FUTA_REPLACEMENT}'.", file=sys.stderr
-        )
-    return tokens, negative_tokens
-
-
-def _load_character_sheet(
-    sheet_path: str, *, uncensored_mode: bool = False, character_strength: float = 1.0
-) -> Tuple[str, str]:
-    """
-    Load a character sheet JSON file and return (positive_additions, negative_additions).
-    Supported keys (all optional):
-      - prompt / positive / appearance / style_tags / clothing / accessories
-      - negative / negative_prompt
-      - gender_presentation: androgynous|male|female
-      - subject_label / character_slot: short name for multi-sheet labeling (e.g. left girl)
-      - spatial_anchor / screen_position: e.g. left side, right foreground, background center
-    Values can be strings or lists of strings.
-    """
-    p = Path(sheet_path)
-    if not p.exists():
-        raise ValueError(f"character-sheet not found: {p}")
-
-    data = json_loads(p.read_text(encoding="utf-8", errors="ignore"))
-
-    from utils.consistency.character_customization import build_character_prompt_additions
-
-    pos, neg = build_character_prompt_additions(
-        data,
-        uncensored_mode=uncensored_mode,
-        character_strength=character_strength,
-    )
-    return pos, neg
-
-
-def _apply_character_gender_presentation(tokens: list, gender_presentation: str) -> list:
-    gp = (gender_presentation or "").strip().lower()
-    if gp in {"", "auto"}:
-        return tokens
-    if gp == "androgynous":
-        tokens.append("androgynous presentation")
-    elif gp == "male":
-        tokens.append("male-presenting")
-    elif gp == "female":
-        tokens.append("female-presenting")
-    return tokens
-
-
-@torch.no_grad()
-def encode_text(
-    captions,
-    tokenizer,
-    text_encoder,
-    device,
-    max_length=300,
-    dtype=torch.float32,
-    text_bundle=None,
-    clip_captions=None,
-    segment_texts=None,
-):
-    if text_bundle is not None:
-        return text_bundle.encode(
-            captions,
-            device,
-            max_length=max_length,
-            dtype=dtype,
-            train_fusion=False,
-            clip_captions=clip_captions,
-            segment_texts=segment_texts,
-        )
-    if segment_texts is not None:
-        from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
-
-        return encode_t5_segment_concat(
-            segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
-        )
-    tok = tokenizer(captions, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt")
-    input_ids = tok.input_ids.to(device)
-    attention_mask = tok.attention_mask.to(device)
-    out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
-    return out.last_hidden_state.to(dtype)
-
-
-def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyzer complexity limits
+def build_sample_parser() -> "argparse.ArgumentParser":
+    """Build the sample.py CLI parser. Kept import-light so ``--help``
+    works without importing the heavy GPU stack (test_cli_entrypoints.py)."""
     parser = argparse.ArgumentParser(
         description="Generate image: prompt, negative prompt, steps, width, height, CFG, and scheduler."
     )
@@ -1324,8 +793,200 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             "combo_count",
             "combo_realism",
             "aesthetic_realism",
+            "superior_composite",
         ],
-        help="With --num > 1, score candidates; see IMPROVEMENTS.md. Includes aesthetic, aesthetic_realism, combo_vit_*.",
+        help="With --num > 1, score candidates; see IMPROVEMENTS.md. Includes aesthetic, aesthetic_realism, combo_vit_*, superior_composite.",
+    )
+    parser.add_argument(
+        "--local-rag-jsonl",
+        type=str,
+        default="",
+        help="JSONL corpus for local TF-IDF RAG (utils/superior/retrieval.py); merges top facts into prompt before encode.",
+    )
+    parser.add_argument(
+        "--local-rag-top-k",
+        type=int,
+        default=8,
+        help="Max facts retrieved from --local-rag-jsonl.",
+    )
+    parser.add_argument(
+        "--superior-self-correct",
+        action="store_true",
+        help="After sampling, CLIP-gate a short refine pass when alignment score is low (see utils/superior/self_correct.py).",
+    )
+    parser.add_argument(
+        "--expand-prompt",
+        action="store_true",
+        help="Heuristic prompt expansion before encode (utils/superior/prompt_expand.py).",
+    )
+    parser.add_argument(
+        "--fdg-cfg-strength",
+        type=float,
+        default=0.0,
+        help="Frequency-decoupled CFG blend (0=standard CFG, 1=full FDG; see utils/superior/frequency_cfg.py).",
+    )
+    parser.add_argument(
+        "--fdg-cutoff-frac",
+        type=float,
+        default=0.15,
+        help="Radial FFT cutoff for --fdg-cfg-strength (low vs high freq split).",
+    )
+    parser.add_argument(
+        "--feature-cache-delta",
+        type=float,
+        default=0.0,
+        help="Reuse DiT prediction when latent mean delta < threshold (SpeCa-lite; 0=off).",
+    )
+    parser.add_argument(
+        "--feature-cache-max-reuse",
+        type=int,
+        default=2,
+        help="Max consecutive feature-cache reuses per sample.",
+    )
+    parser.add_argument(
+        "--block-cache-thresh",
+        type=float,
+        default=0.0,
+        help="Block-wise DiT cache (BWCache-lite; 0=off, 0.15–0.25 typical).",
+    )
+    parser.add_argument(
+        "--block-cache-recompute-every",
+        type=int,
+        default=4,
+        help="Force full DiT block recompute every N denoise steps when block cache is on.",
+    )
+    parser.add_argument(
+        "--taylor-cache",
+        action="store_true",
+        help="Use TaylorSeer forecast for block cache (ICCV 2025; needs --block-cache-thresh).",
+    )
+    parser.add_argument(
+        "--taylor-cache-order",
+        type=int,
+        default=1,
+        help="Taylor expansion order for --taylor-cache (0=reuse, 1=linear forecast).",
+    )
+    parser.add_argument(
+        "--rcfgpp-tangent",
+        type=float,
+        default=0.0,
+        help="Rectified-CFG++ tangent norm cap on flow/CFG delta (0=off, 0.85 typical).",
+    )
+    parser.add_argument(
+        "--apg-parallel-eta",
+        type=float,
+        default=-1.0,
+        help="Adaptive Projected Guidance: parallel component weight (0=remove oversaturation, 1=CFG). "
+        "<0 disables. Mutually preferred over --rcfgpp-tangent when both set; FDG takes priority if --fdg-cfg-strength>0.",
+    )
+    parser.add_argument(
+        "--zeresfdg-strength",
+        type=float,
+        default=0.0,
+        help="ZeResFDG unified guidance (FDG+zero-projection+energy rescale). 0=off, 1=full (CADE 2.5).",
+    )
+    parser.add_argument(
+        "--cfg-zero-star",
+        action="store_true",
+        help="CFG-Zero* for flow matching: optimized scale + zero-init early steps (arXiv:2503.18886).",
+    )
+    parser.add_argument(
+        "--cfg-zero-init-frac",
+        type=float,
+        default=0.04,
+        help="Fraction of ODE steps to zero when --cfg-zero-star (default 4%%).",
+    )
+    parser.add_argument(
+        "--qsilk-micrograin",
+        type=float,
+        default=0.0,
+        help="QSilk micrograin latent stabilizer strength at end of sampling (0=off, 0.12 typical).",
+    )
+    parser.add_argument(
+        "--dynamic-dit-width",
+        action="store_true",
+        help="DyDiT-style timestep dynamic width: scale early-step predictions (training-free).",
+    )
+    parser.add_argument(
+        "--dynamic-dit-early",
+        type=float,
+        default=0.88,
+        help="Early-step width multiplier when --dynamic-dit-width (default 0.88).",
+    )
+    parser.add_argument(
+        "--dynamic-sdt",
+        action="store_true",
+        help="Spatial dynamic tokens: attenuate updates on low-importance latent regions.",
+    )
+    parser.add_argument(
+        "--apg-momentum-beta",
+        type=float,
+        default=0.0,
+        help="APG reverse momentum across steps (0=off, 0.2 typical; needs --apg-parallel-eta>=0).",
+    )
+    parser.add_argument(
+        "--cfg-pp-lambda",
+        type=float,
+        default=0.0,
+        help="CFG++ manifold guidance strength in [0,1] (0=off, 0.55 typical; ICLR 2025).",
+    )
+    parser.add_argument(
+        "--cfg-skip-early-frac",
+        type=float,
+        default=0.0,
+        help="Skip CFG for first fraction of denoise steps (e.g. 0.15).",
+    )
+    parser.add_argument(
+        "--cfg-skip-late-frac",
+        type=float,
+        default=0.0,
+        help="Skip CFG for last fraction of denoise steps (e.g. 0.1).",
+    )
+    parser.add_argument(
+        "--linear-attn-fraction",
+        type=float,
+        default=0.0,
+        help="Blend linear attention into DiT blocks (0=off, 0.25 experimental SLA scaffold).",
+    )
+    parser.add_argument(
+        "--tcfg-damping",
+        type=float,
+        default=0.0,
+        help="TCFG tangential damping on uncond branch (0=off, 1=full; CVPR 2025).",
+    )
+    parser.add_argument(
+        "--slg-scale",
+        type=float,
+        default=0.0,
+        help="Skip Layer Guidance scale (0=off, 2.8 typical; extra cond forward).",
+    )
+    parser.add_argument(
+        "--slg-skip-blocks",
+        type=str,
+        default="auto",
+        help="Block indices to skip for SLG (comma list or auto).",
+    )
+    parser.add_argument(
+        "--cfg-rejection-rerank",
+        action="store_true",
+        help="Rerank multi-sample batch by early CFG gap before decode (--num>1).",
+    )
+    parser.add_argument(
+        "--dbc-separate-cfg",
+        action="store_true",
+        help="Cache-DiT style: fingerprint block cache on cond half of CFG batch only.",
+    )
+    parser.add_argument(
+        "--lcm-ckpt",
+        type=str,
+        default="",
+        help="Consistency-distilled student checkpoint for few-step flow sampling.",
+    )
+    parser.add_argument(
+        "--lcm-steps",
+        type=int,
+        default=4,
+        help="Inference steps when --lcm-ckpt is set (overrides --steps unless --steps explicitly high).",
     )
     parser.add_argument(
         "--pick-save-all", action="store_true", help="Also save each candidate as stem_cand{i} when using --pick-best"
@@ -1464,6 +1125,11 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--vae-tiling", action="store_true", help="Enable VAE tiling for decode (lower VRAM for large output)"
     )
     parser.add_argument(
+        "--compile-inference",
+        action="store_true",
+        help="torch.compile DiT after load for faster sampling (warm-up compile; same numerics)",
+    )
+    parser.add_argument(
         "--grid", action="store_true", help="When --num > 1, also save a single N-up grid image (e.g. 2x2 for 4)"
     )
     parser.add_argument(
@@ -1474,7 +1140,12 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     parser.add_argument(
         "--no-cache", action="store_true", help="Disable T5 encoding cache (use when prompt/negative change every run)"
     )
-    _ts_list = tuple(sorted(list_timestep_schedules()))
+    try:
+        from diffusion import list_timestep_schedules as _lts
+
+        _ts_list = tuple(sorted(_lts()))
+    except Exception:
+        _ts_list = ()
     parser.add_argument(
         "--scheduler",
         type=str,
@@ -1839,6 +1510,19 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "--less-ai",
         action="store_true",
         help="Shorthand: --anti-ai-pack lite + --human-media photographic (when those are still none)",
+    )
+    parser.add_argument(
+        "--human-made",
+        type=str,
+        default="none",
+        choices=["none", "lite", "standard", "strong"],
+        help="Human-made polish: anti-AI prompts + speckle/plastic/halo cleanup post-process.",
+    )
+    parser.add_argument(
+        "--human-made-strength",
+        type=float,
+        default=-1.0,
+        help="Override human-made post strength 0-1 (default: preset default).",
     )
     parser.add_argument(
         "--anti-ai-pack",
@@ -2459,7 +2143,12 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         choices=["portrait", "fullbody", "anime_char"],
         help="High-level OP mode (applied after preset)",
     )
-    _hg_preset_choices = ["auto"] + list_holy_grail_presets()
+    try:
+        from diffusion.sampling_extras import list_holy_grail_presets as _lhgp
+
+        _hg_preset_choices = ["auto"] + _lhgp()
+    except Exception:
+        _hg_preset_choices = ["auto"]
     parser.add_argument(
         "--holy-grail-preset",
         type=str,
@@ -2483,6 +2172,551 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         "Triple mode + layout: CLIP-L and CLIP-bigG use a labeled compact caption (same string for both); "
         "T5 uses blocks/segmented/flat per this flag. Use flat if you rely on (word)/[word] emphasis.",
     )
+    return parser
+
+
+if __name__ == "__main__" and any(_h in sys.argv[1:] for _h in ("-h", "--help")):
+    build_sample_parser().parse_args()
+
+
+import numpy as np
+import torch
+from config.defaults.model_presets import apply_op_mode_to_args, apply_preset_to_args
+from diffusion import create_diffusion
+from diffusion.sampling_extras import (
+    apply_holy_grail_preset_to_args,
+    recommend_holy_grail_preset,
+    sanitize_holy_grail_kwargs,
+)
+from models.controlnet import control_type_to_id, infer_control_type_from_path
+from PIL import Image
+from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
+from utils.runtime.jsonutil import loads as json_loads
+from utils.terminal import configure_stdio_for_console
+
+configure_stdio_for_console()
+
+
+def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
+    """Map RAE latent (B,C,h,w) to DiT 4-channel space when checkpoint includes RAELatentBridge."""
+    if z is None or ae_type != "rae" or rae_bridge is None:
+        return z
+    if z.shape[1] == 4:
+        return z
+    return rae_bridge.rae_to_dit(z)
+
+
+def load_model_from_ckpt(ckpt_path, device="cuda"):
+    from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
+
+    return load_sampler_checkpoint(ckpt_path, device=device, reject_enhanced=True, verbose=True)
+
+
+# T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
+_t5_cache = {}
+_T5_CACHE_MAX = 32  # limit entries to avoid unbounded memory
+
+
+def _parse_scale_csv(value: str) -> list:
+    """Parse comma-separated scale modifiers (longer,bigger,wider) into a stable list."""
+    allowed = {"longer", "bigger", "wider"}
+    if not value:
+        return []
+    parts = [p.strip().lower() for p in value.split(",")]
+    out = []
+    for p in parts:
+        if p in allowed and p not in out:
+            out.append(p)
+    return out
+
+
+def _parse_lora_role_budgets(raw: str) -> dict:
+    """Parse 'character=1.8,style=1.0,detail=0.8' into dict."""
+    out = {}
+    if not raw:
+        return out
+    for part in str(raw).split(","):
+        p = part.strip()
+        if not p or "=" not in p:
+            continue
+        k, v = p.split("=", 1)
+        try:
+            out[str(k).strip().lower()] = float(v.strip())
+        except Exception:
+            continue
+    return out
+
+
+def _parse_lora_role_stage_weights(raw: str) -> dict:
+    """
+    Parse per-role stage multipliers:
+    "character=1.15/1.0/0.85,style=0.9/1.0/1.1"
+    where values are early/mid/late.
+    """
+    out = {}
+    if not raw:
+        return out
+    for part in str(raw).split(","):
+        p = part.strip()
+        if not p or "=" not in p:
+            continue
+        k, v = p.split("=", 1)
+        nums = [x.strip() for x in v.split("/") if x.strip()]
+        if len(nums) != 3:
+            continue
+        try:
+            out[str(k).strip().lower()] = (float(nums[0]), float(nums[1]), float(nums[2]))
+        except Exception:
+            continue
+    return out
+
+
+def _parse_lora_spec(spec: str, *, default_role: str = "style") -> Tuple[str, float, str]:
+    """
+    Parse LoRA/DoRA/LyCORIS spec.
+    Supported:
+      - path
+      - path:scale
+      - path:scale:role
+    """
+    s = str(spec or "").strip()
+    if not s:
+        return "", 0.8, str(default_role or "style").lower()
+    parts = s.split(":")
+    role = str(default_role or "style").strip().lower()
+    if len(parts) >= 3:
+        maybe_role = parts[-1].strip().lower()
+        try:
+            scale = float(parts[-2].strip())
+            path = ":".join(parts[:-2]).strip()
+            if path:
+                return path, scale, maybe_role or role
+        except Exception:
+            pass
+    if len(parts) >= 2:
+        try:
+            scale = float(parts[-1].strip())
+            path = ":".join(parts[:-1]).strip()
+            if path:
+                return path, scale, role
+        except Exception:
+            pass
+    return s, 0.8, role
+
+
+def _parse_weighted_style_mix(raw: str) -> list:
+    """
+    Parse weighted multi-style prompt.
+    Supported forms (segments separated by '|'):
+      - "anime::0.6 | watercolor::0.4"
+      - "anime:0.6 | watercolor:0.4"
+      - "anime | watercolor" (equal weights)
+    Returns list[(text, normalized_weight)].
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return []
+    segs = [p.strip() for p in s.split("|") if p.strip()]
+    out = []
+    for seg in segs:
+        txt = seg
+        w = 1.0
+        if "::" in seg:
+            a, b = seg.rsplit("::", 1)
+            try:
+                w = float(b.strip())
+                txt = a.strip()
+            except Exception:
+                pass
+        elif ":" in seg:
+            a, b = seg.rsplit(":", 1)
+            try:
+                w = float(b.strip())
+                txt = a.strip()
+            except Exception:
+                pass
+        if txt:
+            out.append((txt, max(0.0, float(w))))
+    if not out:
+        return []
+    sw = sum(w for _, w in out)
+    if sw <= 1e-8:
+        n = float(len(out))
+        return [(t, 1.0 / n) for t, _ in out]
+    return [(t, w / sw) for t, w in out]
+
+
+def _parse_control_spec(
+    spec: str,
+    *,
+    default_type: str = "auto",
+    default_scale: float = 0.85,
+) -> Tuple[str, str, float]:
+    """
+    Parse ControlNet spec with Windows-path-safe rules.
+    Supported:
+      - path
+      - path:scale
+      - path:type
+      - path:type:scale
+      - path:scale:type
+    """
+    s = str(spec or "").strip()
+    if not s:
+        return "", str(default_type or "auto").lower(), float(default_scale)
+    parts = s.split(":")
+    ctype = str(default_type or "auto").strip().lower()
+    cscale = float(default_scale)
+    if len(parts) >= 3:
+        a = parts[-2].strip()
+        b = parts[-1].strip().lower()
+        # Try path:scale:type
+        try:
+            sc = float(a)
+            path = ":".join(parts[:-2]).strip()
+            if path:
+                return path, (b or ctype), sc
+        except Exception:
+            pass
+        # Try path:type:scale
+        try:
+            sc = float(parts[-1].strip())
+            path = ":".join(parts[:-2]).strip()
+            t = parts[-2].strip().lower()
+            if path:
+                return path, (t or ctype), sc
+        except Exception:
+            pass
+    if len(parts) >= 2:
+        tail = parts[-1].strip()
+        path = ":".join(parts[:-1]).strip()
+        if path:
+            try:
+                return path, ctype, float(tail)
+            except Exception:
+                return path, tail.lower() or ctype, cscale
+    return s, ctype, cscale
+
+
+def _resize_control_tensor(ctrl: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
+    """Resize control tensor preserving 4D (B,C,H,W) or 5D (B,K,C,H,W) layout."""
+    if ctrl.ndim == 4:
+        return torch.nn.functional.interpolate(
+            ctrl,
+            size=(target_h, target_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+    if ctrl.ndim == 5:
+        b, k, c, h, w = ctrl.shape
+        flat = ctrl.reshape(b * k, c, h, w)
+        out = torch.nn.functional.interpolate(
+            flat,
+            size=(target_h, target_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+        return out.view(b, k, c, target_h, target_w)
+    raise ValueError(f"Unsupported control tensor shape: {tuple(ctrl.shape)}")
+
+
+def _apply_gender_swap(prompt: str) -> str:
+    """
+    Swap common gendered tags/phrases in Danbooru-ish prompts.
+    Note: this is heuristic text replacement; it does not guarantee semantic correctness.
+    """
+    if not prompt:
+        return prompt
+    p = prompt
+
+    # Danbooru counts (use placeholders to avoid double-swaps)
+    p = re.sub(r"\b(\d+)girls\b", r"\1__TMP_BOYS__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b(\d+)boys\b", r"\1__TMP_GIRLS__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b(\d+)__TMP_BOYS__\b", r"\1boys", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b(\d+)__TMP_GIRLS__\b", r"\1girls", p, flags=re.IGNORECASE)
+
+    # Single tags
+    p = re.sub(r"\bgirl\b", "__TMP_GIRL__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\bboy\b", "girl", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b__TMP_GIRL__\b", "boy", p, flags=re.IGNORECASE)
+
+    p = re.sub(r"\bwoman\b", "__TMP_WOMAN__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\bman\b", "woman", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b__TMP_WOMAN__\b", "man", p, flags=re.IGNORECASE)
+
+    # Adjectives
+    p = re.sub(r"\bfemale\b", "__TMP_FEMALE__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\bmale\b", "female", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b__TMP_FEMALE__\b", "male", p, flags=re.IGNORECASE)
+
+    # Pronouns (simple placeholders)
+    p = re.sub(r"\bshe\b", "__TMP_SHE__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\bhe\b", "she", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b__TMP_SHE__\b", "he", p, flags=re.IGNORECASE)
+
+    p = re.sub(r"\bher\b", "__TMP_HER__", p, flags=re.IGNORECASE)
+    p = re.sub(r"\bhis\b", "her", p, flags=re.IGNORECASE)
+    p = re.sub(r"\b__TMP_HER__\b", "his", p, flags=re.IGNORECASE)
+
+    return p
+
+
+def _build_size_tokens(anatomy_scales: list, object_scales: list, scene_scales: list) -> str:
+    """Return comma-separated prompt tokens for requested size modifiers."""
+    anatomy_map = {
+        "longer": "longer limbs, longer legs, longer arms",
+        "bigger": "larger body, bigger frame, broader build",
+        "wider": "wider shoulders, broader chest, wider hips",
+    }
+    object_map = {
+        "longer": "elongated props, longer objects",
+        "bigger": "oversized props, larger accessories",
+        "wider": "wider objects, broad props",
+    }
+    scene_map = {
+        "longer": "extended composition, longer scene layout",
+        "bigger": "large-scale scene, big environment",
+        "wider": "wide view, wider perspective",
+    }
+    tokens: list[str] = []
+    for s in anatomy_scales:
+        tokens.append(anatomy_map[s])
+    for s in object_scales:
+        tokens.append(object_map[s])
+    for s in scene_scales:
+        tokens.append(scene_map[s])
+    return ", ".join([t for t in tokens if t])
+
+
+SCALE_DISTORTION_NEGATIVE = (
+    # Keep scaling requests “shape-like” without drifting into warped outputs.
+    "deformed, warped anatomy, stretched anatomy, bad proportions, misproportioned, wrong scale, "
+    "extra limbs, fused limbs, melted, distorted"
+)
+
+
+def _parse_expected_texts(raw: str) -> list:
+    """
+    Parse expected text for OCR validation.
+    Accepts: comma-separated string or a JSON list string.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    try:
+        if raw.startswith("["):
+            data = json_loads(raw)
+            if isinstance(data, list):
+                return [str(x).strip() for x in data if str(x).strip()]
+    except Exception:
+        pass
+    parts = [p.strip() for p in raw.split(",")]
+    return [p for p in parts if p]
+
+
+def _infer_expected_texts_from_prompt(prompt: str) -> list:
+    """
+    Infer likely intended on-image text from quoted fragments in prompt.
+    """
+    p = str(prompt or "")
+    if not p.strip():
+        return []
+    out = []
+    for m in re.finditer(r'"([^"\n]{1,80})"', p):
+        t = (m.group(1) or "").strip()
+        if not t:
+            continue
+        if not re.search(r"[A-Za-z0-9]", t):
+            continue
+        out.append(t)
+    # Keep stable order + de-duplicate.
+    dedup = []
+    seen = set()
+    for t in out:
+        k = t.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        dedup.append(t)
+    return dedup[:4]
+
+
+def _maybe_append_text_says(prompt: str, expected_texts: list) -> str:
+    """Ensure prompt contains 'text that says "<t>"' for expected OCR text."""
+    p = prompt or ""
+    if not expected_texts:
+        return p
+    # Use first expected string as the "anchor" for exact OCR.
+    t = expected_texts[0]
+    if not t:
+        return p
+    quoted = f'"{t}"'
+    if quoted.lower() in p.lower() or t.lower() in p.lower():
+        return p
+    # Append in a way our prompt-negative logic understands (TEXT_IN_IMAGE_PHRASES).
+    # "text that says" is also used in config defaults.
+    return f"{p.strip()}, text that says {quoted}"
+
+
+def _refine_gate_score(
+    *,
+    image_rgb_u8: np.ndarray,
+    expected_texts: list,
+) -> tuple[float, dict]:
+    """
+    Return (score in [0,1], details) where higher means "already good enough".
+    """
+    try:
+        from utils.quality import test_time_pick as _ttp
+    except Exception:
+        return 0.0, {"reason": "metrics_unavailable"}
+    edge = float(_ttp.score_edge_sharpness(image_rgb_u8))
+    exp = float(_ttp.score_exposure_balance(image_rgb_u8))
+    edge_n = float(np.clip(edge / 400.0, 0.0, 1.0))
+    parts = [0.45 * edge_n, 0.45 * exp]
+    details = {"edge_sharpness": edge, "edge_norm": edge_n, "exposure_balance": exp}
+    if expected_texts:
+        try:
+            ocr = float(_ttp.score_ocr_match(image_rgb_u8, str(expected_texts[0])))
+        except Exception:
+            ocr = 0.5
+        details["ocr_match"] = ocr
+        parts.append(0.10 * ocr)
+    score = float(np.clip(sum(parts), 0.0, 1.0))
+    details["score"] = score
+    return score, details
+
+
+SHEET_FUTA_REPLACEMENT = "androgynous presentation"
+SHEET_SAFE_WARN_PREFIX = "Character sheet safety sanitizer:"
+
+
+def _normalize_list_or_str(v) -> list:
+    """Accept either a string or list[str] and return list[str]."""
+    if v is None:
+        return []
+    if isinstance(v, str):
+        if not v.strip():
+            return []
+        return [v.strip()]
+    if isinstance(v, list):
+        out = []
+        for x in v:
+            if isinstance(x, str) and x.strip():
+                out.append(x.strip())
+        return out
+    return []
+
+
+def _sanitize_character_prompt_tokens(
+    tokens: list, negative_tokens: list, *, uncensored_mode: bool = False
+) -> Tuple[list, list]:
+    """
+    Prevent explicitly sexual tokens from being injected.
+    If user includes "futa" or similar, we replace with androgynous presentation.
+    """
+    if uncensored_mode:
+        return tokens, negative_tokens
+    banned_direct = ["futa", "trap"]
+    lowered = [t.lower() for t in tokens]
+    swapped = False
+    for i, t in enumerate(tokens):
+        tl = lowered[i]
+        if any(b in tl for b in banned_direct):
+            tokens[i] = SHEET_FUTA_REPLACEMENT
+            swapped = True
+    if swapped:
+        # Add a mild negative to reduce explicit outcomes.
+        negative_tokens.extend(["explicit genital content"])
+        # Keep warning concise; don't spam if this is called repeatedly.
+        print(
+            f"{SHEET_SAFE_WARN_PREFIX} Replaced explicit gender term with '{SHEET_FUTA_REPLACEMENT}'.", file=sys.stderr
+        )
+    return tokens, negative_tokens
+
+
+def _load_character_sheet(
+    sheet_path: str, *, uncensored_mode: bool = False, character_strength: float = 1.0
+) -> Tuple[str, str]:
+    """
+    Load a character sheet JSON file and return (positive_additions, negative_additions).
+    Supported keys (all optional):
+      - prompt / positive / appearance / style_tags / clothing / accessories
+      - negative / negative_prompt
+      - gender_presentation: androgynous|male|female
+      - subject_label / character_slot: short name for multi-sheet labeling (e.g. left girl)
+      - spatial_anchor / screen_position: e.g. left side, right foreground, background center
+    Values can be strings or lists of strings.
+    """
+    p = Path(sheet_path)
+    if not p.exists():
+        raise ValueError(f"character-sheet not found: {p}")
+
+    data = json_loads(p.read_text(encoding="utf-8", errors="ignore"))
+
+    from utils.consistency.character_customization import build_character_prompt_additions
+
+    pos, neg = build_character_prompt_additions(
+        data,
+        uncensored_mode=uncensored_mode,
+        character_strength=character_strength,
+    )
+    return pos, neg
+
+
+def _apply_character_gender_presentation(tokens: list, gender_presentation: str) -> list:
+    gp = (gender_presentation or "").strip().lower()
+    if gp in {"", "auto"}:
+        return tokens
+    if gp == "androgynous":
+        tokens.append("androgynous presentation")
+    elif gp == "male":
+        tokens.append("male-presenting")
+    elif gp == "female":
+        tokens.append("female-presenting")
+    return tokens
+
+
+@torch.inference_mode()
+def encode_text(
+    captions,
+    tokenizer,
+    text_encoder,
+    device,
+    max_length=300,
+    dtype=torch.float32,
+    text_bundle=None,
+    clip_captions=None,
+    long_clip_captions=None,
+    segment_texts=None,
+):
+    if text_bundle is not None:
+        return text_bundle.encode(
+            captions,
+            device,
+            max_length=max_length,
+            dtype=dtype,
+            train_fusion=False,
+            clip_captions=clip_captions,
+            long_clip_captions=long_clip_captions,
+            segment_texts=segment_texts,
+        )
+    if segment_texts is not None:
+        from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
+
+        return encode_t5_segment_concat(
+            segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
+        )
+    nbc = device.type == "cuda"
+    tok = tokenizer(captions, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt")
+    input_ids = tok.input_ids.to(device, non_blocking=nbc)
+    attention_mask = tok.attention_mask.to(device, non_blocking=nbc)
+    out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+    return out.last_hidden_state.to(dtype)
+
+
+def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyzer complexity limits
+    parser = build_sample_parser()
     args = parser.parse_args()
     pick_report: dict = {
         "prompt": str(getattr(args, "prompt", "") or ""),
@@ -2507,6 +2741,17 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 has_lora=bool(getattr(args, "lora", [])),
             )
         apply_holy_grail_preset_to_args(args, hg_name)
+
+    if str(getattr(args, "human_made", "none") or "none").lower() not in ("none", "off", "0", ""):
+        from utils.quality.human_made import apply_human_made_prompt_flags
+
+        apply_human_made_prompt_flags(args)
+
+    _lin_attn = float(getattr(args, "linear_attn_fraction", 0.0) or 0.0)
+    if _lin_attn > 0.0:
+        from models.attention import set_linear_attention_fraction
+
+        set_linear_attention_fraction(_lin_attn)
 
     has_tags = bool(getattr(args, "tags", "").strip() or getattr(args, "tags_file", "").strip())
     has_prompt_file = bool(getattr(args, "prompt_file", "").strip())
@@ -2753,11 +2998,34 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             except Exception:
                 pass
     elif device.type == "cuda":
-        # Fixed latent shapes across steps: pick faster conv algorithms (not bit-reproducible).
-        torch.backends.cudnn.benchmark = True
+        from utils.training.device_perf import configure_inference_cuda
+
+        configure_inference_cuda(cudnn_benchmark=True, enable_tf32=True)
 
     print("Loading checkpoint and encoders...")
     model, cfg, rae_bridge, fusion_sd = load_model_from_ckpt(args.ckpt, device)
+
+    lcm_ckpt = str(getattr(args, "lcm_ckpt", "") or "").strip()
+    if lcm_ckpt:
+        from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+
+        lcm_model, _lcm_cfg, _lcm_bridge, _, _ = load_dit_text_checkpoint(
+            lcm_ckpt, device=str(device), reject_enhanced=True
+        )
+        model.load_state_dict(lcm_model.state_dict(), strict=False)
+        lcm_steps = int(getattr(args, "lcm_steps", 4) or 4)
+        if int(args.steps) >= 16:
+            args.steps = max(2, lcm_steps)
+        if not getattr(args, "flow_matching_training", False):
+            setattr(args, "flow_matching_sample", True)
+        print(f"LCM few-step mode: loaded {lcm_ckpt}, steps={args.steps}, flow sampler.", file=sys.stderr)
+
+    if getattr(args, "compile_inference", False) and device.type == "cuda" and hasattr(torch, "compile"):
+        try:
+            model = torch.compile(model, mode="reduce-overhead")
+            print("Inference: torch.compile enabled (mode=reduce-overhead).")
+        except Exception as comp_ex:
+            print(f"Inference: torch.compile skipped ({comp_ex}).", file=sys.stderr)
 
     # Apply LoRAs
     if args.lora:
@@ -2797,15 +3065,19 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     from utils.modeling.text_encoder_bundle import attach_fusion_weights, load_text_encoder_bundle
 
     text_bundle = None
-    if str(getattr(cfg, "text_encoder_mode", "t5") or "t5").lower() == "triple":
+    _enc_mode = str(getattr(cfg, "text_encoder_mode", "t5") or "t5").lower()
+    if _enc_mode in ("triple", "penta"):
         text_bundle = load_text_encoder_bundle(cfg, device)
         if text_bundle is None:
-            raise RuntimeError("Checkpoint config requests triple text encoders but bundle failed to load.")
+            raise RuntimeError(f"Checkpoint config requests {_enc_mode} text encoders but bundle failed to load.")
         if fusion_sd is not None:
             attach_fusion_weights(text_bundle, fusion_sd)
         tokenizer = text_bundle.tokenizer
         text_encoder = text_bundle.text_encoder
-        print("Triple text encoder (T5 + CLIP-L + CLIP-bigG) loaded.")
+        if _enc_mode == "penta":
+            print("Penta text encoder (T5 + CLIP-L + CLIP-bigG + CLIP-H + LongCLIP-L) loaded.")
+        else:
+            print("Triple text encoder (T5 + CLIP-L + CLIP-bigG) loaded.")
     else:
         tokenizer = AutoTokenizer.from_pretrained(cfg.text_encoder)
         text_encoder = T5EncoderModel.from_pretrained(cfg.text_encoder).to(device).eval()
@@ -2911,6 +3183,34 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         prompt_to_encode, _emphasis_segments = parse_prompt_emphasis(args.prompt)
     else:
         prompt_to_encode, _emphasis_segments = args.prompt, []
+    if getattr(args, "expand_prompt", False) and prompt_to_encode.strip():
+        from utils.superior.prompt_expand import expand_prompt_heuristic
+
+        prompt_to_encode = expand_prompt_heuristic(prompt_to_encode)
+        args.prompt = prompt_to_encode
+        print("Superior: expanded prompt heuristically.", file=sys.stderr)
+    _hm = str(getattr(args, "human_made", "none") or "none").lower().strip()
+    if _hm not in ("none", "off", "0", ""):
+        from utils.quality.human_made import append_human_made_prompt_fragments
+
+        prompt_to_encode, args.negative_prompt = append_human_made_prompt_fragments(
+            prompt_to_encode,
+            str(getattr(args, "negative_prompt", "") or ""),
+            _hm,
+        )
+        args.prompt = prompt_to_encode
+    local_rag = str(getattr(args, "local_rag_jsonl", "") or "").strip()
+    if local_rag:
+        try:
+            from utils.prompt.rag_prompt import merge_facts_into_prompt
+            from utils.superior.auto_stack import SuperiorPromptStack
+
+            stack = SuperiorPromptStack(rag_jsonl=local_rag, rag_top_k=int(getattr(args, "local_rag_top_k", 8) or 8))
+            prompt_to_encode = stack.enrich(prompt_to_encode)
+            args.prompt = prompt_to_encode
+            print(f"Local RAG: enriched prompt from {local_rag}", file=sys.stderr)
+        except Exception as e:
+            print(f"Local RAG skipped: {e}", file=sys.stderr)
     # Optional agentic-search grounding (e.g. Gen-Searcher JSON/JSONL output).
     facts_path = str(getattr(args, "agentic_facts_json", "") or "").strip()
     if facts_path:
@@ -3263,6 +3563,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     t5_positive_prompt = _t5_hint if _t5_hint else prompt_to_encode
     segment_texts = None
     clip_caps = None
+    long_clip_caps = None
     if compiled_layout is not None and t5_layout_enc == "blocks":
         from utils.prompt.prompt_layout import substitute_compiled_layout_in_t5_prompt
 
@@ -3272,9 +3573,11 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
 
         segment_texts = t5_segment_texts_for_full_prompt(compiled_layout, prompt_to_encode)
     if text_bundle is not None and compiled_layout is not None:
-        from utils.prompt.prompt_layout import triple_clip_caption
+        from utils.prompt.prompt_layout import multi_clip_caption
 
-        clip_caps = [triple_clip_caption(compiled_layout, prompt_to_encode)]
+        clip_caps = [multi_clip_caption(compiled_layout, prompt_to_encode)]
+    if text_bundle is not None and getattr(text_bundle, "mode", "") == "penta":
+        long_clip_caps = [prompt_to_encode]
 
     layout_cache_tag = (
         (t5_layout_enc, str(getattr(args, "prompt_layout", "") or "")) if compiled_layout is not None else ("flat", "")
@@ -3293,16 +3596,32 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             style_emb_cached = style_emb_cached.to(device)
         print("T5 cache hit.")
     else:
-        cond_emb = encode_text(
-            [t5_positive_prompt],
-            tokenizer,
-            text_encoder,
-            device,
-            text_bundle=text_bundle,
-            clip_captions=clip_caps,
-            segment_texts=segment_texts,
-        )
-        uncond_emb = encode_text([negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle)
+        if segment_texts is not None:
+            cond_emb = encode_text(
+                [t5_positive_prompt],
+                tokenizer,
+                text_encoder,
+                device,
+                text_bundle=text_bundle,
+                clip_captions=clip_caps,
+                long_clip_captions=long_clip_caps,
+                segment_texts=segment_texts,
+            )
+            uncond_emb = encode_text([negative_text], tokenizer, text_encoder, device, text_bundle=text_bundle)
+        else:
+            both_long = long_clip_caps
+            if text_bundle is not None and getattr(text_bundle, "mode", "") == "penta":
+                both_long = [prompt_to_encode, negative_text]
+            both_emb = encode_text(
+                [t5_positive_prompt, negative_text],
+                tokenizer,
+                text_encoder,
+                device,
+                text_bundle=text_bundle,
+                clip_captions=clip_caps,
+                long_clip_captions=both_long,
+            )
+            cond_emb, uncond_emb = both_emb[0:1], both_emb[1:2]
         style_emb_cached = None
         if effective_style and getattr(cfg, "style_embed_dim", 0):
             if style_mix and len(style_mix) > 1:
@@ -3664,6 +3983,37 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         ),
         ada_early_exit_min_steps=int(getattr(args, "ada_exit_min_steps", 0)),
     )
+    _superior_kw = dict(
+        fdg_cfg_strength=float(getattr(args, "fdg_cfg_strength", 0.0) or 0.0),
+        fdg_cutoff_frac=float(getattr(args, "fdg_cutoff_frac", 0.15) or 0.15),
+        feature_cache_delta_threshold=float(getattr(args, "feature_cache_delta", 0.0) or 0.0),
+        feature_cache_max_reuse=int(getattr(args, "feature_cache_max_reuse", 2) or 2),
+        block_cache_threshold=float(getattr(args, "block_cache_thresh", 0.0) or 0.0),
+        block_cache_recompute_every=int(getattr(args, "block_cache_recompute_every", 4) or 4),
+        taylor_cache=bool(getattr(args, "taylor_cache", False)),
+        taylor_cache_order=int(getattr(args, "taylor_cache_order", 1) or 1),
+        taylor_cache_interval=int(getattr(args, "block_cache_recompute_every", 4) or 4),
+        rcfgpp_tangent=float(getattr(args, "rcfgpp_tangent", 0.0) or 0.0),
+        apg_parallel_eta=float(getattr(args, "apg_parallel_eta", -1.0) or -1.0),
+        zeresfdg_strength=float(getattr(args, "zeresfdg_strength", 0.0) or 0.0),
+        cfg_zero_star=bool(getattr(args, "cfg_zero_star", False)),
+        cfg_zero_init_frac=float(getattr(args, "cfg_zero_init_frac", 0.04) or 0.04),
+        qsilk_micrograin=float(getattr(args, "qsilk_micrograin", 0.0) or 0.0),
+        dynamic_dit_width=bool(getattr(args, "dynamic_dit_width", False)),
+        dynamic_dit_early=float(getattr(args, "dynamic_dit_early", 0.88) or 0.88),
+        dynamic_sdt=bool(getattr(args, "dynamic_sdt", False)),
+        apg_momentum_beta=float(getattr(args, "apg_momentum_beta", 0.0) or 0.0),
+        cfg_pp_lambda=float(getattr(args, "cfg_pp_lambda", 0.0) or 0.0),
+        cfg_skip_early_frac=float(getattr(args, "cfg_skip_early_frac", 0.0) or 0.0),
+        cfg_skip_late_frac=float(getattr(args, "cfg_skip_late_frac", 0.0) or 0.0),
+        tcfg_damping=float(getattr(args, "tcfg_damping", 0.0) or 0.0),
+        slg_scale=float(getattr(args, "slg_scale", 0.0) or 0.0),
+        slg_skip_blocks=str(getattr(args, "slg_skip_blocks", "auto") or "auto"),
+        cfg_rejection_rerank=bool(getattr(args, "cfg_rejection_rerank", False))
+        and int(getattr(args, "num", 1) or 1) > 1,
+        dbc_separate_cfg=bool(getattr(args, "dbc_separate_cfg", False))
+        or float(getattr(args, "block_cache_thresh", 0.0) or 0.0) > 0.0,
+    )
 
     _clip_mon_n = int(getattr(args, "clip_monitor_every", 0) or 0)
     if _clip_mon_n > 0:
@@ -3788,6 +4138,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_control_kw,
                 **_holy_kw,
                 **_periodic_kw,
+                **_superior_kw,
                 **_guidance_kw,
             )
             x0_up = torch.nn.functional.interpolate(x0.float(), size=(fh, fw), mode="bicubic", align_corners=False).to(
@@ -3853,6 +4204,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_control_kw,
                 **_holy_kw,
                 **_periodic_kw,
+                **_superior_kw,
                 **_guidance_kw,
             )
     else:
@@ -3917,6 +4269,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_control_kw,
                         **_holy_kw,
                         **_ada_kw,
+                        **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
                         return_intermediate_state=True,
@@ -4036,6 +4389,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_control_kw,
                         **_holy_kw,
                         **_ada_kw,
+                        **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
                         return_intermediate_state=True,
@@ -4079,6 +4433,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_control_kw,
                         **_holy_kw,
                         **_ada_kw,
+                        **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
                         return_intermediate_state=True,
@@ -4168,9 +4523,18 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             **_control_kw,
             **_holy_kw,
             **_ada_kw,
+            **_superior_kw,
             **_periodic_kw,
             **_guidance_kw,
         )
+
+    if bool(getattr(args, "cfg_rejection_rerank", False)) and num_gen > 1:
+        _probe = getattr(diffusion, "_last_guidance_probe", None)
+        if _probe is not None:
+            _order = _probe.rerank_indices()
+            if _order and len(_order) == int(x0.shape[0]):
+                x0 = x0[_order]
+                print(f"CFG-rejection rerank order={_order}", file=sys.stderr)
 
     if float(getattr(args, "clip_guard_threshold", 0.0) or 0.0) > 0.0:
         try:
@@ -4222,6 +4586,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                     **_flow_kw,
                     **_control_kw,
                     **_holy_kw,
+                    **_superior_kw,
                     **_guidance_kw,
                 )
 
@@ -4242,6 +4607,70 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             )
         except Exception as e:
             print(f"CLIP guard refine skipped: {e}", file=sys.stderr)
+
+    if (
+        getattr(args, "superior_self_correct", False)
+        and float(getattr(args, "clip_guard_threshold", 0.0) or 0.0) <= 0.0
+    ):
+        try:
+            from utils.superior.self_correct import SelfCorrectConfig, SelfCorrectPolicy
+
+            _sc_pol = SelfCorrectPolicy(
+                SelfCorrectConfig(clip_model_id=str(getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32")))
+            )
+            _sc_score = _sc_pol.score(
+                x0,
+                prompt_to_encode,
+                vae=vae,
+                latent_scale=latent_scale,
+                ae_type=ae_type,
+                rae_bridge=rae_bridge,
+                device=device,
+            )
+            if _sc_pol.needs_correction(_sc_score):
+                t_s, n_st = _sc_pol.refine_plan(num_timesteps)
+
+                def _sc_refiner(xc: torch.Tensor, t_start: int, n_steps: int) -> torch.Tensor:
+                    noise2 = torch.randn_like(xc, device=device, dtype=xc.dtype)
+                    tb2 = torch.tensor([t_start], device=device, dtype=torch.long).expand(xc.shape[0])
+                    xi2 = diffusion.q_sample(xc, tb2, noise=noise2)
+                    return diffusion.sample_loop(
+                        model,
+                        xc.shape,
+                        model_kwargs_cond=model_kwargs_cond,
+                        model_kwargs_uncond=model_kwargs_uncond,
+                        cfg_scale=cfg_scale,
+                        cfg_rescale=cfg_rescale,
+                        num_inference_steps=max(4, int(n_steps)),
+                        eta=0.0,
+                        device=device,
+                        dtype=torch.float32,
+                        x_init=xi2,
+                        start_timestep=t_start,
+                        dynamic_threshold_percentile=dyn_thresh_p,
+                        scheduler="euler",
+                        solver=getattr(args, "solver", "ddim"),
+                        inpaint_mask=None,
+                        inpaint_x0=None,
+                        inpaint_noise=None,
+                        inpaint_freeze_known=False,
+                        ada_early_exit_delta_threshold=0.0,
+                        sag_blur_sigma=0.0,
+                        sag_scale=0.0,
+                        **_vol_kw,
+                        **_spec_kw,
+                        **_flow_kw,
+                        **_control_kw,
+                        **_holy_kw,
+                        **_superior_kw,
+                        **_guidance_kw,
+                    )
+
+                x0 = _sc_refiner(x0, t_s, n_st)
+                _sc_pol.note_refinement_done()
+                print(f"Superior self-correct: refined (score={_sc_score:.3f}, t={t_s})", file=sys.stderr)
+        except Exception as e:
+            print(f"Superior self-correct skipped: {e}", file=sys.stderr)
 
     if float(getattr(args, "domain_prior_latent", 0.0) or 0.0) > 0.0:
         try:
@@ -4354,6 +4783,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_control_kw,
                         **_holy_kw,
                         **_periodic_kw,
+                        **_superior_kw,
                         **_guidance_kw,
                     )
                 print(
@@ -4586,6 +5016,16 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 img_np = apply_artistic_pipeline(img_np, _art_cfg)
             except Exception as e:
                 print(f"Artistic post-process failed (non-fatal): {e}", file=sys.stderr)
+        _hm_cfg = None
+        try:
+            from utils.quality.human_made import apply_human_made_pipeline, config_from_args
+
+            _hm_cfg = config_from_args(args)
+            if _hm_cfg is not None:
+                _hm_cfg.seed = int(args.seed) + i
+                img_np = apply_human_made_pipeline(img_np, _hm_cfg)
+        except Exception as e:
+            print(f"Human-made post-process failed (non-fatal): {e}", file=sys.stderr)
         if getattr(args, "face_enhance", False):
             try:
                 from utils.quality.face_region_enhance import enhance_faces_in_rgb
@@ -4654,25 +5094,36 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         print(f"pick-best auto -> {pick_m}", file=sys.stderr)
     best_idx = 0
     if num_gen > 1 and pick_m != "none":
-        from utils.quality.test_time_pick import pick_best_indices
-
         exp_ocr = ""
         if isinstance(expected_texts, list) and expected_texts:
             exp_ocr = str(expected_texts[0])
-        best_idx, scores = pick_best_indices(
-            processed,
-            prompt_to_encode,
-            pick_m,
-            str(device),
-            exp_ocr,
-            getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32"),
-            int(getattr(args, "expected_count", 0) or 0),
-            str(getattr(args, "expected_count_target", "auto") or "auto"),
-            str(getattr(args, "expected_count_object", "") or ""),
-            str(getattr(args, "pick_vit_ckpt", "") or ""),
-            bool(getattr(args, "pick_vit_use_adherence", False)),
-            int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
-        )
+        if pick_m == "superior_composite":
+            from utils.superior.composite_ranker import CompositeRanker
+
+            ranker = CompositeRanker()
+            best_idx, scores = ranker.pick_best_index(
+                processed,
+                prompt=prompt_to_encode,
+                device=str(device),
+                vit_ckpt=str(getattr(args, "pick_vit_ckpt", "") or ""),
+            )
+        else:
+            from utils.quality.test_time_pick import pick_best_indices
+
+            best_idx, scores = pick_best_indices(
+                processed,
+                prompt_to_encode,
+                pick_m,
+                str(device),
+                exp_ocr,
+                getattr(args, "pick_clip_model", "openai/clip-vit-base-patch32"),
+                int(getattr(args, "expected_count", 0) or 0),
+                str(getattr(args, "expected_count_target", "auto") or "auto"),
+                str(getattr(args, "expected_count_object", "") or ""),
+                str(getattr(args, "pick_vit_ckpt", "") or ""),
+                bool(getattr(args, "pick_vit_use_adherence", False)),
+                int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
+            )
         print(f"pick-best ({pick_m}): scores={scores} -> best index {best_idx}")
         pick_report["pick_best"] = {
             "metric": str(pick_m),
