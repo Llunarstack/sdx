@@ -1,1 +1,8 @@
-{"extraPaths":["native/python","."],"pythonVersion":"3.10"}
+{
+  "extraPaths": ["native/python", "."],
+  "pythonVersion": "3.10",
+  "reportMissingImports": false,
+  "ignore": [
+    "**/native/_experimental/**"
+  ]
+}
