@@ -6,7 +6,7 @@ Includes agentic quality control for perfect prompt adherence.
 
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Callable
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,86 @@ def _get_adherence_monitor():
         return PromptAdherenceMonitor()
     except ImportError:
         logger.warning("Prompt adherence monitoring not available")
+        return None
+
+
+def _get_visual_reasoning_system():
+    """Lazy-load visual reasoning system."""
+    try:
+        from .agentic import VisualReasoningSystem
+        return VisualReasoningSystem()
+    except ImportError:
+        logger.warning("Visual reasoning not available")
+        return None
+
+
+def _get_adaptive_learning_system():
+    """Lazy-load adaptive learning system."""
+    try:
+        from .agentic import AdaptiveLearningSystem
+        return AdaptiveLearningSystem()
+    except ImportError:
+        logger.warning("Adaptive learning not available")
+        return None
+
+
+def _get_prompt_optimization_system():
+    """Lazy-load prompt optimization system."""
+    try:
+        from .agentic import PromptOptimizationSystem
+        return PromptOptimizationSystem()
+    except ImportError:
+        logger.warning("Prompt optimization not available")
+        return None
+
+
+def _get_ensemble_validator():
+    """Lazy-load ensemble validator."""
+    try:
+        from .agentic import EnsembleValidationSystem
+        return EnsembleValidationSystem()
+    except ImportError:
+        logger.warning("Ensemble validation not available")
+        return None
+
+
+def _get_robustness_system():
+    """Lazy-load adversarial robustness system."""
+    try:
+        from .agentic import AdversarialRobustnessSystem
+        return AdversarialRobustnessSystem()
+    except ImportError:
+        logger.warning("Adversarial robustness testing not available")
+        return None
+
+
+def _get_memory_preference_system():
+    """Lazy-load memory and preference system."""
+    try:
+        from .agentic import MemoryPreferenceSystem
+        return MemoryPreferenceSystem()
+    except ImportError:
+        logger.warning("Memory and preference system not available")
+        return None
+
+
+def _get_semantic_composition_reasoner():
+    """Lazy-load semantic composition reasoner."""
+    try:
+        from .agentic import SemanticCompositionReasoner
+        return SemanticCompositionReasoner()
+    except ImportError:
+        logger.warning("Semantic composition reasoning not available")
+        return None
+
+
+def _get_refinement_loop():
+    """Lazy-load iterative refinement loop."""
+    try:
+        from .agentic import IterativeRefinementLoop
+        return IterativeRefinementLoop()
+    except ImportError:
+        logger.warning("Iterative refinement loop not available")
         return None
 
 
@@ -143,6 +223,63 @@ class SDXAdvancedPipeline(nn.Module):
                 logger.info("✓ Prompt adherence monitor initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize adherence monitor: {e}")
+
+        # Initialize additional agentic systems
+        try:
+            from .agentic import VisualReasoningSystem
+            self._agentic_systems["visual_reasoning"] = VisualReasoningSystem()
+            logger.info("✓ Visual reasoning system initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize visual reasoning: {e}")
+
+        try:
+            from .agentic import AdaptiveLearningSystem
+            self._agentic_systems["adaptive_learning"] = AdaptiveLearningSystem()
+            logger.info("✓ Adaptive learning system initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize adaptive learning: {e}")
+
+        try:
+            from .agentic import PromptOptimizationSystem
+            self._agentic_systems["prompt_optimization"] = PromptOptimizationSystem()
+            logger.info("✓ Prompt optimization system initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize prompt optimization: {e}")
+
+        try:
+            from .agentic import EnsembleValidationSystem
+            self._agentic_systems["ensemble_validator"] = EnsembleValidationSystem()
+            logger.info("✓ Ensemble validation system initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize ensemble validator: {e}")
+
+        try:
+            from .agentic import AdversarialRobustnessSystem
+            self._agentic_systems["robustness_testing"] = AdversarialRobustnessSystem()
+            logger.info("✓ Adversarial robustness system initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize robustness testing: {e}")
+
+        try:
+            from .agentic import MemoryPreferenceSystem
+            self._agentic_systems["memory_preference"] = MemoryPreferenceSystem()
+            logger.info("✓ Memory and preference system initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize memory preference system: {e}")
+
+        try:
+            from .agentic import SemanticCompositionReasoner
+            self._agentic_systems["semantic_composition"] = SemanticCompositionReasoner()
+            logger.info("✓ Semantic composition reasoner initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize semantic composition: {e}")
+
+        try:
+            from .agentic import IterativeRefinementLoop
+            self._agentic_systems["refinement_loop"] = IterativeRefinementLoop()
+            logger.info("✓ Iterative refinement loop initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize refinement loop: {e}")
 
         self._initialized = True
 
@@ -297,6 +434,197 @@ class SDXAdvancedPipeline(nn.Module):
         )
         return final_latent, adherence
 
+    def analyze_visual_reasoning(
+        self,
+        image_latent: torch.Tensor,
+        reference_embedding: torch.Tensor,
+    ) -> Dict:
+        """Analyze image using visual reasoning system."""
+        system = self._agentic_systems.get("visual_reasoning")
+        if system is None:
+            logger.warning("Visual reasoning not available")
+            return {}
+
+        return system.analyze_generated_image(image_latent, reference_embedding)
+
+    def add_learning_feedback(
+        self,
+        prompt: str,
+        generated_features: torch.Tensor,
+        user_rating: float,
+        quality_score: float,
+        adherence_score: float,
+    ):
+        """Add feedback to adaptive learning system."""
+        system = self._agentic_systems.get("adaptive_learning")
+        if system is None:
+            logger.warning("Adaptive learning not available")
+            return
+
+        system.add_generation_feedback(
+            prompt,
+            generated_features,
+            user_rating,
+            quality_score,
+            adherence_score,
+        )
+
+    def optimize_prompt(
+        self,
+        prompt: str,
+        prompt_embedding: torch.Tensor,
+    ) -> Dict:
+        """Optimize prompt using prompt optimization system."""
+        system = self._agentic_systems.get("prompt_optimization")
+        if system is None:
+            logger.warning("Prompt optimization not available")
+            return {"original": prompt, "optimized": prompt}
+
+        optimization = system.optimize_prompt(prompt, prompt_embedding)
+        return optimization
+
+    def ensemble_validate(
+        self,
+        prompt_embedding: torch.Tensor,
+        generated_embedding: torch.Tensor,
+        encoder_features: Optional[List[torch.Tensor]] = None,
+    ) -> Dict:
+        """Validate using ensemble validator."""
+        system = self._agentic_systems.get("ensemble_validator")
+        if system is None:
+            logger.warning("Ensemble validator not available")
+            return {}
+
+        result = system.validate(prompt_embedding, generated_embedding, encoder_features)
+        return system.get_validator_report(result)
+
+    def test_robustness(
+        self,
+        prompt: str,
+        prompt_embedding: torch.Tensor,
+        quality_score: float,
+        embedding_func,
+        scoring_func,
+    ) -> Dict:
+        """Test robustness using adversarial robustness system."""
+        system = self._agentic_systems.get("robustness_testing")
+        if system is None:
+            logger.warning("Robustness testing not available")
+            return {}
+
+        report = system.test_robustness(
+            prompt,
+            prompt_embedding,
+            quality_score,
+            embedding_func,
+            scoring_func,
+        )
+        return system.get_robustness_report(report)
+
+    def record_user_preference(
+        self,
+        user_id: str,
+        generated_features: torch.Tensor,
+        user_rating: float,
+        subject: Optional[str] = None,
+        style: Optional[str] = None,
+        mood: Optional[str] = None,
+        lighting: Optional[str] = None,
+    ):
+        """Record user preference in memory system."""
+        system = self._agentic_systems.get("memory_preference")
+        if system is None:
+            logger.warning("Memory preference system not available")
+            return
+
+        system.record_generation(
+            user_id,
+            generated_features,
+            user_rating,
+            subject=subject,
+            style=style,
+            mood=mood,
+            lighting=lighting,
+        )
+
+    def get_user_recommendations(self, user_id: str) -> Dict:
+        """Get personalized recommendations for user."""
+        system = self._agentic_systems.get("memory_preference")
+        if system is None:
+            logger.warning("Memory preference system not available")
+            return {}
+
+        return system.get_recommendations(user_id)
+
+    def analyze_concept_composition(
+        self,
+        concepts: List[str],
+        embedding: torch.Tensor,
+    ) -> Dict:
+        """Analyze how concepts compose together."""
+        system = self._agentic_systems.get("semantic_composition")
+        if system is None:
+            logger.warning("Semantic composition reasoner not available")
+            return {}
+
+        return system.analyze_composition(concepts, embedding=embedding)
+
+    def predict_concept_quality(
+        self,
+        concepts: List[str],
+        embedding: torch.Tensor,
+    ) -> float:
+        """Predict generation quality from concept composition."""
+        system = self._agentic_systems.get("semantic_composition")
+        if system is None:
+            logger.warning("Semantic composition reasoner not available")
+            return 0.5
+
+        return system.predict_generation_quality(concepts, embedding)
+
+    def refine_until_perfect(
+        self,
+        initial_latent: torch.Tensor,
+        prompt: str,
+        prompt_embedding: torch.Tensor,
+        quality_assessor: Callable,
+        refinement_generator: Callable,
+        quality_threshold: float = 0.90,
+        verbose: bool = True,
+    ) -> Tuple[torch.Tensor, Dict]:
+        """
+        Iteratively refine image until perfect quality.
+
+        Args:
+            initial_latent: Initial generated image latent
+            prompt: Text prompt used for generation
+            prompt_embedding: Encoded prompt
+            quality_assessor: Function that scores quality (0-1)
+            refinement_generator: Function that refines latent
+            quality_threshold: Target quality (default 0.90)
+            verbose: Whether to log progress
+
+        Returns:
+            Tuple of (refined_latent, refinement_report_dict)
+        """
+        system = self._agentic_systems.get("refinement_loop")
+        if system is None:
+            logger.warning("Refinement loop not available")
+            return initial_latent, {}
+
+        system.configure_thresholds(quality_threshold=quality_threshold)
+
+        refined_latent, report = system.refine_until_perfect(
+            initial_latent,
+            prompt,
+            prompt_embedding,
+            quality_assessor,
+            refinement_generator,
+            verbose=verbose,
+        )
+
+        return refined_latent, system.get_refinement_report(report)
+
     def get_status(self) -> Dict[str, bool]:
         """Get status of all components."""
         self.initialize()
@@ -310,6 +638,14 @@ class SDXAdvancedPipeline(nn.Module):
             "novel": "novel" in self._components,
             "quality_control": "quality_control" in self._agentic_systems,
             "prompt_adherence": "adherence_monitor" in self._agentic_systems,
+            "visual_reasoning": "visual_reasoning" in self._agentic_systems,
+            "adaptive_learning": "adaptive_learning" in self._agentic_systems,
+            "prompt_optimization": "prompt_optimization" in self._agentic_systems,
+            "ensemble_validator": "ensemble_validator" in self._agentic_systems,
+            "robustness_testing": "robustness_testing" in self._agentic_systems,
+            "memory_preference": "memory_preference" in self._agentic_systems,
+            "semantic_composition": "semantic_composition" in self._agentic_systems,
+            "refinement_loop": "refinement_loop" in self._agentic_systems,
         }
 
 
