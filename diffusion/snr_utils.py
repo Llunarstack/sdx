@@ -21,7 +21,7 @@ __all__ = ["alpha_cumprod_from_betas", "snr_from_alpha_cumprod", "snr_from_betas
 def alpha_cumprod_from_betas(betas: NDArray[Any]) -> NDArray[Any]:
     """``alpha_cumprod[t] = prod_{s<=t} (1 - beta[s])``."""
     try:
-        from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust
+        from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust  # type: ignore
 
         result = maybe_alpha_cumprod_rust(np.asarray(betas, dtype=np.float64))
         if result is not None:
@@ -35,7 +35,7 @@ def alpha_cumprod_from_betas(betas: NDArray[Any]) -> NDArray[Any]:
 def snr_from_alpha_cumprod(alpha_cumprod: NDArray[Any]) -> NDArray[Any]:
     """``SNR(t) = alpha_bar[t] / (1 - alpha_bar[t])`` for VP diffusion."""
     try:
-        from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust
+        from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust  # type: ignore
 
         result = maybe_snr_from_alpha_cumprod_rust(np.asarray(alpha_cumprod, dtype=np.float64))
         if result is not None:
@@ -43,7 +43,7 @@ def snr_from_alpha_cumprod(alpha_cumprod: NDArray[Any]) -> NDArray[Any]:
     except Exception:
         pass
     try:
-        from sdx_native.diffusion_sigma_fast import snr_from_alpha_cumprod as snr_from_alpha_bar_numpy
+        from sdx_native.diffusion_sigma_fast import snr_from_alpha_cumprod as snr_from_alpha_bar_numpy  # type: ignore
 
         return snr_from_alpha_bar_numpy(np.asarray(alpha_cumprod, dtype=np.float64))
     except Exception:
