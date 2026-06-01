@@ -25,6 +25,21 @@ SCAN_GLOBS = [
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
+# Patterns for links to archived/optional modules that are expected to be broken
+SKIP_LINK_PATTERNS = (
+    "utils/architecture/",  # archived modules
+    "utils/modeling/",  # archived modules
+    "utils/analysis/",  # archived modules
+    "utils/checkpoint/",  # archived modules
+    "utils/consistency/",  # archived modules
+    "utils/runtime/",  # archived modules
+    "utils/superior/",  # archived modules
+    "utils/brain/",  # archived modules
+    "utils/agentic/",  # archived modules (also in advanced_innovations)
+    "native/python/README.md",  # native extension readme
+    "native/python/sdx_native/",  # native compiled modules
+)
+
 
 def _targets(path: str) -> list[str]:
     """Extract path from markdown link target; ignore URLs and anchors-only."""
@@ -59,6 +74,9 @@ def main() -> int:
                         continue
                     # Optional vendor trees (clone_repos.*); not present in CI — do not require files.
                     if rel_target.parts and rel_target.parts[0] == "external":
+                        continue
+                    # Archived modules and optional features (not part of core distribution)
+                    if any(pattern in rel for pattern in SKIP_LINK_PATTERNS):
                         continue
                     if not target.exists():
                         bad.append((str(md.relative_to(REPO_ROOT)), rel, str(target.relative_to(REPO_ROOT))))
