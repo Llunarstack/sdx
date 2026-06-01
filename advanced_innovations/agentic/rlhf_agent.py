@@ -8,11 +8,12 @@ Based on research:
 Learns from human preference comparisons to improve generation policy.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 

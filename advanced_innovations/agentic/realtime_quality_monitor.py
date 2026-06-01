@@ -4,11 +4,12 @@ Continuous quality scoring during generation with early stopping capability.
 Enables mid-generation redirection based on quality trajectory.
 """
 
+import logging
+from collections import deque
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional
-from collections import deque
-import logging
 
 logger = logging.getLogger(__name__)
 

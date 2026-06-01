@@ -11,10 +11,10 @@ import pytest
 import torch
 from advanced_innovations.agentic import (
     ELIQSystem,
-    GenerationArtifactDetectionSystem,
-    SemanticDriftDetectionSystem,
-    RealTimeQualityMonitoringSystem,
     ExplainableQualityScoringSystem,
+    GenerationArtifactDetectionSystem,
+    RealTimeQualityMonitoringSystem,
+    SemanticDriftDetectionSystem,
 )
 
 
@@ -272,7 +272,7 @@ class TestExplainableQualityScoring:
         assert len(analysis["dimension_scores"]) == 8  # 8 dimensions
 
     def test_penalty_detection(self):
-        image = torch.randn(1, 4096)
+        torch.randn(1, 4096)
         scores = {"test": 0.5}
 
         penalties = self.system.penalty_analyzer.detect_penalties(scores)

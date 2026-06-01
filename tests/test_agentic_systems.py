@@ -7,11 +7,11 @@ ensemble validation, and adversarial robustness.
 import pytest
 import torch
 from advanced_innovations.agentic import (
-    VisualReasoningSystem,
     AdaptiveLearningSystem,
-    PromptOptimizationSystem,
-    EnsembleValidationSystem,
     AdversarialRobustnessSystem,
+    EnsembleValidationSystem,
+    PromptOptimizationSystem,
+    VisualReasoningSystem,
 )
 
 
@@ -351,7 +351,7 @@ class TestPerformance:
 
         import time
         start = time.time()
-        result = system.analyze_generated_image(embedding, embedding)
+        system.analyze_generated_image(embedding, embedding)
         elapsed = time.time() - start
 
         # Should complete in reasonable time

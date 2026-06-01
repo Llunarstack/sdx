@@ -3,9 +3,10 @@ Real-time generation: produce images in <100ms (10x faster than competitors).
 Enables interactive image creation on consumer hardware.
 """
 
+from typing import List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import List, Tuple
 
 
 class TokenPruning(nn.Module):
@@ -262,10 +263,9 @@ class RealtimeGenerationEngine:
             pruned = prompt_embedding
 
         # Determine quality level based on available latency
-        quality = "low" if target_latency_ms < 50 else "medium" if target_latency_ms < 150 else "high"
 
         # Skip layers if simple input
-        skip_mask = self.layer_skipping(pruned)
+        self.layer_skipping(pruned)
 
         # Cache result
         result = torch.randn(1, 3, 512, 512)  # Placeholder

@@ -3,12 +3,13 @@ Ensemble Validation System: Combines multiple validators for bulletproof quality
 Uses voting, consensus, and confidence thresholds for ultimate reliability.
 """
 
-import torch
-import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
+from typing import Dict, List, Optional
+
+import torch
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +464,7 @@ if __name__ == "__main__":
         )
 
     stats = system.get_validation_stats()
-    print(f"\nValidation Statistics:")
+    print("\nValidation Statistics:")
     for key, value in stats.items():
         if isinstance(value, float):
             print(f"  {key}: {value:.2%}")

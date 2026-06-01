@@ -4,10 +4,11 @@ Provides unified interface for core SDX generation with all enhancements.
 Includes agentic quality control for perfect prompt adherence.
 """
 
+import logging
+from typing import Callable, Dict, List, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, List, Tuple, Callable
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +374,7 @@ class SDXAdvancedPipeline(nn.Module):
         self.initialize()
 
         # Step 1: Semantic understanding
-        semantic_info = self.apply_semantic_understanding(prompt_embedding)
+        self.apply_semantic_understanding(prompt_embedding)
 
         # Step 2: Generate with speed optimization
         output = self.generate_fast(prompt_embedding, kwargs.get("target_latency_ms", 100))

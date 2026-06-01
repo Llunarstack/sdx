@@ -3,9 +3,10 @@ Ultra-fine control: pixel-perfect command over every aspect of generation.
 50x more control than Midjourney's advanced settings.
 """
 
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
-from typing import List, Dict, Tuple
 
 
 class SpatialLayoutController(nn.Module):
@@ -121,10 +122,10 @@ class ColorPaletteController(nn.Module):
 
     def forward(self, image: torch.Tensor, color_spec: torch.Tensor) -> torch.Tensor:
         """Apply precise color grading."""
-        primary = self.primary_color(color_spec)
-        secondary = self.secondary_colors(color_spec).view(-1, 3, 3)
-        saturation = self.saturation(color_spec)
-        hue = self.hue_shift(color_spec) * 360  # 0-360 degrees
+        self.primary_color(color_spec)
+        self.secondary_colors(color_spec).view(-1, 3, 3)
+        self.saturation(color_spec)
+        self.hue_shift(color_spec) * 360  # 0-360 degrees
         brightness = self.brightness(color_spec)
         contrast = self.contrast(color_spec)
 

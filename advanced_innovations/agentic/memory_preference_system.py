@@ -3,12 +3,13 @@ Advanced Memory & Preference System: Builds rich user profiles with detailed pre
 Tracks dominant themes, remembers what users like, and recommends improvements.
 """
 
-import torch
-import torch.nn as nn
-from typing import Dict, List, Optional, Tuple, Set
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
+from typing import Dict, List, Optional, Tuple
+
+import torch
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 

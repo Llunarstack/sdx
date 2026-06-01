@@ -4,10 +4,11 @@ Detects GAN artifacts (checkerboard, mode collapse) and diffusion artifacts (spe
 Identifies and localizes problem areas with surgical precision.
 """
 
+import logging
+from typing import Dict, List, Optional
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -403,6 +404,6 @@ if __name__ == "__main__":
     print(f"Artifact-free: {result['artifact_free']}")
     print(f"Severity: {result['severity']}")
     print(f"Dominant artifact: {result['dominant_artifact_type']}")
-    print(f"\nRemediation suggestions:")
+    print("\nRemediation suggestions:")
     for suggestion in result["remediation_suggestions"]:
         print(f"  - {suggestion['strategy']}: {suggestion['strength']:.1%}")

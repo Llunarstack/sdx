@@ -3,11 +3,12 @@ Semantic Composition Reasoner: Understands how visual concepts combine and inter
 Enables logical reasoning about multi-concept generations and concept compatibility.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple, Set
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +288,7 @@ class SemanticCompositionReasoner:
         # Check for conflicts
         conflict_count = sum(1 for r in relations if r.relation_type == "conflicts")
         if conflict_count > 1:
-            recommendations.append(f"Multiple concept conflicts detected. Consider removing conflicting pairs.")
+            recommendations.append("Multiple concept conflicts detected. Consider removing conflicting pairs.")
 
         # If score is low, suggest refinement
         if score < 0.6:
@@ -346,7 +347,7 @@ class SemanticCompositionReasoner:
         # Add supporting concepts
         supporting = [r for r in analysis["pairwise_relations"] if r["relation"] == "supports"]
         if supporting and len(concepts) < 5:
-            suggestions.append(f"Add more supporting concepts for better cohesion")
+            suggestions.append("Add more supporting concepts for better cohesion")
 
         return suggestions
 
@@ -383,11 +384,11 @@ if __name__ == "__main__":
         )
 
     if analysis["conflicts"]:
-        print(f"\nConflicts:")
+        print("\nConflicts:")
         for conflict in analysis["conflicts"]:
             print(f"  - {conflict}")
 
-    print(f"\nRecommendations:")
+    print("\nRecommendations:")
     for rec in analysis["recommendations"]:
         print(f"  - {rec}")
 
@@ -398,6 +399,6 @@ if __name__ == "__main__":
     # Get suggestions
     suggestions = system.suggest_concept_improvements(concepts, embedding)
     if suggestions:
-        print(f"\nConcept Improvement Suggestions:")
+        print("\nConcept Improvement Suggestions:")
         for sug in suggestions:
             print(f"  - {sug}")

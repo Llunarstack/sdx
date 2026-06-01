@@ -3,9 +3,10 @@ Multi-modal generation: text, image, sketch, 3D inputs for ultimate control.
 Generate from any combination of inputs simultaneously.
 """
 
+from typing import Dict, Optional
+
 import torch
 import torch.nn as nn
-from typing import List, Dict, Optional
 
 
 class ImageToImagePlus(nn.Module):
@@ -36,8 +37,8 @@ class ImageToImagePlus(nn.Module):
 
         strength: 0 = original, 1 = completely new
         """
-        edges = self.edge_encoder(image)
-        content = self.content_encoder(image)
+        self.edge_encoder(image)
+        self.content_encoder(image)
 
         # Blend: preserve structure, modify details
         # Use edges and content as modulation factors
@@ -96,7 +97,7 @@ class SceneGraphGeneration(nn.Module):
     def forward(self, scene_graph: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Generate from scene structure."""
         objects = scene_graph.get("objects", [])
-        relationships = scene_graph.get("relationships", [])
+        scene_graph.get("relationships", [])
 
         # Encode objects
         object_embeddings = []
@@ -221,7 +222,7 @@ class AudioToImage(nn.Module):
         analyzed = self.spectrogram_analyzer(audio_spectrogram)
         analyzed = analyzed.squeeze(-1)
 
-        rhythm = self.rhythm_detector(analyzed)
+        self.rhythm_detector(analyzed)
         mood = self.mood_detector(analyzed)
 
         return mood

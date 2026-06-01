@@ -6,10 +6,11 @@ Based on research:
 - https://arxiv.org/pdf/2310.05986
 """
 
+import logging
+from typing import Dict, Optional
+
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Tuple
-import logging
 
 logger = logging.getLogger(__name__)
 

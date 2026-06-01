@@ -3,9 +3,10 @@ Consistency engine: reproducible, controllable results across generations.
 Ensures same prompt + seed = pixel-perfect same image.
 """
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
-from typing import Optional
 
 
 class ConsistentSeeding(nn.Module):
@@ -103,7 +104,7 @@ class StyleConsistency(nn.Module):
         if style_name not in self.style_memory:
             return image
 
-        style_features = self.style_memory[style_name]
+        self.style_memory[style_name]
         # Apply style transformation
         return image
 
@@ -270,7 +271,7 @@ class ConsistencyEngine:
 
         # Apply style if specified
         if style_name and style_name in self.style.style_memory:
-            style_features = self.style.style_memory[style_name]
+            self.style.style_memory[style_name]
 
         # Add controlled variation
         final_latent = self.variation(base_latent, variation)

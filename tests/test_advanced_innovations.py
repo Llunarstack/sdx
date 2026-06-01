@@ -3,11 +3,10 @@ Comprehensive test suite for advanced innovations.
 Tests all components and their integration.
 """
 
+import logging
+
 import pytest
 import torch
-import torch.nn as nn
-from typing import Dict, List
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +23,10 @@ class TestPhotorealismEngine:
         output = module(x)
 
         # PixelShuffle 2x twice = 4x upscale, so output is 256x256
-        assert output.shape[0] == x.shape[0], f"Batch size mismatch"
-        assert output.shape[1] == x.shape[1], f"Channel mismatch"
-        assert output.shape[2] == x.shape[2] * 4, f"Height should be 4x"
-        assert output.shape[3] == x.shape[3] * 4, f"Width should be 4x"
+        assert output.shape[0] == x.shape[0], "Batch size mismatch"
+        assert output.shape[1] == x.shape[1], "Channel mismatch"
+        assert output.shape[2] == x.shape[2] * 4, "Height should be 4x"
+        assert output.shape[3] == x.shape[3] * 4, "Width should be 4x"
 
     def test_metallic_renderer_output_range(self):
         """Test metallic surface rendering outputs valid values."""
@@ -64,9 +63,9 @@ class TestPhotorealismEngine:
     def test_ultra_quality_engine_integration(self):
         """Test photorealism engine components."""
         from advanced_innovations.ultra_quality.photorealism_engine import (
-            SubpixelRefinement,
             MetallicMaterialRenderer,
             SkinTextureAuthenticator,
+            SubpixelRefinement,
         )
 
         # Test each component individually
@@ -117,15 +116,15 @@ class TestSemanticUnderstanding:
     def test_semantic_engine_integration(self):
         """Test semantic understanding engine components."""
         from advanced_innovations.semantic_understanding.semantic_parser import (
-            SemanticDecomposer,
             ContextualAmbiguityResolver,
+            SemanticDecomposer,
             StyleTransferUnderstanding,
         )
 
         vocab_size = 50000
         decomposer = SemanticDecomposer(vocab_size)
-        ambiguity = ContextualAmbiguityResolver()
-        style = StyleTransferUnderstanding()
+        ContextualAmbiguityResolver()
+        StyleTransferUnderstanding()
 
         prompt_tokens = torch.randint(0, vocab_size, (1, 10), dtype=torch.long)
         semantic = decomposer(prompt_tokens)

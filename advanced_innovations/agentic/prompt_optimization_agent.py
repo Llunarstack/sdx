@@ -3,11 +3,12 @@ Prompt Optimization Agent: Automatically improves user prompts for better genera
 Expands vague descriptions, adds technical details, and optimizes for model understanding.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -188,9 +189,9 @@ class PromptEnhancer(nn.Module):
         reduced_features = self.feature_reducer(prompt_features)
 
         # Generate enhancements
-        subject_enh = self.subject_enhancer(reduced_features)
-        style_enh = self.style_enhancer(reduced_features)
-        tech_enh = self.technical_enhancer(reduced_features)
+        self.subject_enhancer(reduced_features)
+        self.style_enhancer(reduced_features)
+        self.technical_enhancer(reduced_features)
 
         enhancements = []
 
@@ -274,7 +275,7 @@ class PromptExpander(nn.Module):
         analysis: PromptAnalysis,
     ) -> str:
         """Expand prompt with contextual details."""
-        context = self.context_generator(prompt_embedding)
+        self.context_generator(prompt_embedding)
 
         expanded = analysis.original_prompt
 
@@ -442,7 +443,7 @@ if __name__ == "__main__":
     print(f"Original: {simple_prompt}")
 
     analysis = system.analyze_prompt(simple_prompt, embedding)
-    print(f"\nAnalysis:")
+    print("\nAnalysis:")
     print(f"  Coverage: {analysis.coverage_score:.2%}")
     print(f"  Vagueness: {analysis.vagueness_score:.2%}")
     print(f"  Specificity: {analysis.specificity_score:.2%}")
