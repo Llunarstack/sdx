@@ -31,7 +31,7 @@ jobs:
         run: |
           OUT="${RUNNER_TEMP}/basedpyright.json"
           python -m basedpyright --outputjson \
-            native/python/sdx_native/diffusion_sigma_fast.py \
+            native/_experimental/python/sdx_native/diffusion_sigma_fast.py \
             utils/generation/run_artifacts.py \
             diffusion/snr_utils.py \
             utils/generation/inference_stages.py \
