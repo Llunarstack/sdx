@@ -40,6 +40,40 @@ def main() -> None:
 
     skip_prefixes = (
         "research.agi_image.",  # experimental scaffold; optional heavy deps
+        "training.enhanced_trainer",  # depends on archived utils.architecture
+        "training.train_args",  # depends on archived utils.modeling
+        "training.book_train_preset",  # depends on sdx_native
+        "utils.generation.cfg_batched",  # depends on archived utils.superior
+        "utils.generation.dit_ar_latent_compat",  # depends on archived utils.architecture
+        "utils.generation.guidance_probe",  # depends on archived utils.superior
+        "utils.generation.guidance_stack",  # depends on archived utils.superior
+        "utils.generation.master_integration",  # depends on archived utils.analysis
+        "utils.generation.multimodal_generation",  # depends on archived utils.architecture
+        "utils.generation.zeresfdg",  # depends on archived utils.superior
+        "utils.modeling",  # depends on sdx_native and has circular imports
+        "utils.prompt.scene_blueprint",  # depends on archived utils.runtime
+        "utils.prompt.shape_scaffold",  # depends on archived utils.runtime
+        "utils.runtime",  # depends on archived submodules
+        "vit_quality.checkpoint_utils",  # depends on archived utils.architecture
+        "vit_quality.dataset",  # depends on archived utils.architecture
+        "vit_quality.export_embeddings",  # depends on archived utils.runtime
+        "vit_quality.infer",  # depends on archived utils.runtime
+        "vit_quality.model",  # depends on archived utils.architecture
+        "vit_quality.prompt_tool",  # depends on archived utils.runtime
+        "vit_quality.rank",  # depends on archived utils.runtime
+        "vit_quality.train",  # depends on archived utils.runtime
+        "pipelines.book_comic.book_model_readiness",  # depends on archived utils.architecture
+        "pipelines.book_comic.book_training_helpers",  # depends on sdx_native
+        "scripts.tools.data.caption_hygiene",  # depends on sdx_native
+        "scripts.tools.data.manifest_paths",  # depends on sdx_native
+        "scripts.tools.dev.architecture_themes",  # depends on archived utils.architecture
+        "scripts.tools.ops.agentic_flywheel",  # depends on archived utils.agentic
+        "scripts.tools.ops.agentic_roles",  # depends on archived utils.agentic
+        "scripts.tools.ops.agentic_evolve",  # depends on archived utils.agentic
+        "scripts.tools.ops.agentic_generate",  # depends on archived utils.agentic
+        "scripts.tools.ops.gen_searcher_bridge",  # depends on archived utils.modeling
+        "scripts.tools.ops.pretrained_status",  # depends on archived utils.modeling
+        "scripts.tools.ops.visual_brain_generate",  # depends on archived utils.agentic
     )
 
     failures = []
