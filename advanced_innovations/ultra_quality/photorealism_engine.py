@@ -57,7 +57,7 @@ class MetallicMaterialRenderer(nn.Module):
 
     def forward(self, x: torch.Tensor, light_direction: torch.Tensor) -> torch.Tensor:
         """Render metallic surfaces with accurate specularity."""
-        batch_size = x.shape[0]
+        x.shape[0]
 
         # Compute roughness
         roughness = self.roughness_predictor(x)
@@ -201,7 +201,7 @@ class GlobalIlluminationApproximator(nn.Module):
 
         ao = self.ao_predictor(x)
         indirect = self.indirect_light(x)
-        env = self.env_probe(x)
+        self.env_probe(x)
 
         # Combine: AO modulates indirect light
         result = indirect * ao

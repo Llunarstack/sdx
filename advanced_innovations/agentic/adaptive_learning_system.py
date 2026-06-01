@@ -3,13 +3,13 @@ Adaptive Learning System: Learns from quality feedback to continuously improve.
 Collects user preferences and optimizes model parameters accordingly.
 """
 
-import torch
-import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
-import logging
+from typing import Dict, List, Optional
+
+import torch
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 

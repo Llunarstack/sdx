@@ -4,11 +4,12 @@ Detects when refinement causes semantic meaning to shift away from original inte
 Prevents 'concept drift' during iterative refinement.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, Optional
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 

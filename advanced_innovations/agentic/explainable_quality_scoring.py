@@ -4,10 +4,11 @@ Generates human-readable explanations for every quality score.
 Users understand exactly why quality is X and what to fix.
 """
 
+import logging
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional
-import logging
 
 logger = logging.getLogger(__name__)
 

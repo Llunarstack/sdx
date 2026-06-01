@@ -10,12 +10,12 @@ Learns detailed human preferences across multiple visual dimensions:
 - Emotional impact (mood, atmosphere, engagement)
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
-from datetime import datetime
-import logging
 
 logger = logging.getLogger(__name__)
 

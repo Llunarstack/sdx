@@ -362,7 +362,7 @@ class TestRefinementPerformance:
     def test_memory_efficiency(self):
         """Test memory efficiency of refinement."""
         loop = IterativeRefinementLoop()
-        latent = torch.randn(1, 4, 64, 64)
+        torch.randn(1, 4, 64, 64)
         embedding = torch.randn(1, 4096)
 
         large_latent = torch.randn(1, 16, 512, 512)

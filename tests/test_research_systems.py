@@ -9,10 +9,10 @@ Tests for cutting-edge research-based systems:
 import pytest
 import torch
 from advanced_innovations.agentic import (
-    VisionRewardSystem,
+    FlowMatchingConsistencySystem,
     PerceptualMetricsSystem,
     RLHFAgent,
-    FlowMatchingConsistencySystem,
+    VisionRewardSystem,
 )
 
 
@@ -277,7 +277,7 @@ class TestResearchSystemsPerformance:
         import time
         start = time.time()
 
-        reward = system.evaluate_image(image_features)
+        system.evaluate_image(image_features)
 
         elapsed = time.time() - start
 
@@ -292,7 +292,7 @@ class TestResearchSystemsPerformance:
         import time
         start = time.time()
 
-        metrics = system.evaluate(img1, img2)
+        system.evaluate(img1, img2)
 
         elapsed = time.time() - start
 
@@ -306,7 +306,7 @@ class TestResearchSystemsPerformance:
         import time
         start = time.time()
 
-        result = system.generate_with_temporal_consistency(initial, num_steps=10)
+        system.generate_with_temporal_consistency(initial, num_steps=10)
 
         elapsed = time.time() - start
 

@@ -3,11 +3,12 @@ Prompt Adherence System: Ensures generation follows user prompt EXACTLY.
 Leverages penta text encoder (T5 + 4 CLIP variants) for semantic validation.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 

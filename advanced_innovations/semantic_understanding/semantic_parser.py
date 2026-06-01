@@ -3,9 +3,10 @@ Advanced semantic understanding: parse prompts with human-level comprehension.
 Captures intent, style, composition, and nuance that other models miss.
 """
 
+from typing import Dict
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Tuple
 
 
 class SemanticDecomposer(nn.Module):

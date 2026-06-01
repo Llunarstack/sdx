@@ -3,9 +3,10 @@ Novel capabilities: features that other image generators can't do.
 Magic that makes SDX the clear winner.
 """
 
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
-from typing import List, Dict
 
 
 class InfiniteOutpainting(nn.Module):
@@ -41,7 +42,7 @@ class InfiniteOutpainting(nn.Module):
         boundary_features = self.boundary_analyzer(image)
 
         # Predict continuation
-        continuation = self.continuation_predictor(boundary_features.mean(dim=[2, 3]))
+        self.continuation_predictor(boundary_features.mean(dim=[2, 3]))
 
         # Generate outpainted region
         new_image = torch.zeros(batch, channels, height + amount, width + amount)
@@ -160,12 +161,12 @@ class AnimationFromImage(nn.Module):
         frames = [image]
 
         # Detect potential motion
-        motion = self.motion_detector(image)
+        self.motion_detector(image)
 
         # Interpolate frames
         for i in range(1, self.num_frames):
             # Generate intermediate frame
-            alpha = i / self.num_frames
+            i / self.num_frames
             frame = self.frame_interpolator(image)
             frames.append(frame)
 
@@ -205,7 +206,7 @@ class ObjectRemixing(nn.Module):
     def remix(self, image1: torch.Tensor, image2: torch.Tensor, swap_list: List[str]) -> torch.Tensor:
         """Swap objects between images."""
         # Segment both images
-        seg1 = self.segmenter(image1)
+        self.segmenter(image1)
         seg2 = self.segmenter(image2)
 
         # Extract objects

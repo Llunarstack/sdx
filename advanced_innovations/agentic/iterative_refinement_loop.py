@@ -3,12 +3,13 @@ Iterative Refinement Loop: Continuously improves generated images until perfect.
 Automatically refines until quality thresholds are met across all dimensions.
 """
 
-import torch
-import torch.nn as nn
-from typing import Dict, List, Optional, Callable, Tuple
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
+from typing import Callable, Dict, List, Optional, Tuple
+
+import torch
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +226,6 @@ class IterativeRefinementLoop:
         refinement_strength = 0.2
 
         iteration = 0
-        previous_score = initial_score
 
         for iteration in range(self.max_iterations):
             # Check if we should refine
@@ -280,18 +280,17 @@ class IterativeRefinementLoop:
             # Check convergence
             if improvement < self.convergence_threshold and iteration > 0:
                 if verbose:
-                    logger.info(f"Converged. Further refinement unlikely to help.")
+                    logger.info("Converged. Further refinement unlikely to help.")
                 break
 
             # Check for deterioration
             if improvement < -0.02:
                 if verbose:
-                    logger.warning(f"Quality decreased. Reverting to previous result.")
+                    logger.warning("Quality decreased. Reverting to previous result.")
                 break
 
             current_latent = refined_latent
             current_score = refined_score
-            previous_score = current_score
 
         elapsed = time.time() - start_time
         improvement_delta = current_score - initial_score

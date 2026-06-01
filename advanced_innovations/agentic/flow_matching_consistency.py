@@ -8,10 +8,11 @@ Based on research:
 Enforces temporal coherence in the learned velocity field for smooth, consistent generation.
 """
 
+import logging
+from typing import Dict, List, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Optional, Tuple
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -363,13 +364,13 @@ if __name__ == "__main__":
 
     report = system.get_consistency_report(result)
 
-    print(f"\nConsistency Report:")
+    print("\nConsistency Report:")
     print(f"  Overall Score: {report['overall_consistency_score']:.1%}")
     print(f"  Velocity Field Consistency: {report['velocity_field_consistency']:.1%}")
     print(f"  Temporal Pair Consistency Loss: {report['temporal_pair_consistency']:.4f}")
     print(f"  Path Quality: {report['path_quality']}")
 
-    print(f"\nTechnical Details:")
+    print("\nTechnical Details:")
     for key, value in report['technical_details'].items():
         if isinstance(value, float):
             print(f"  {key}: {value:.1%}")

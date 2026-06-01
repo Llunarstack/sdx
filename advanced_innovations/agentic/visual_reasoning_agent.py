@@ -3,11 +3,12 @@ Visual Reasoning Agent: Deep understanding of visual concepts and image semantic
 Extracts visual meaning at multiple abstraction levels.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,7 @@ class SceneUnderstandingEngine(nn.Module):
     ) -> VisualScene:
         """Understand complete visual scene."""
         # Analyze composition
-        composition = self.composition_analyzer(embedding)
+        self.composition_analyzer(embedding)
 
         # Analyze lighting
         lighting_features = self.lighting_analyzer(embedding)
@@ -329,7 +330,7 @@ class VisualReasoningAgent(nn.Module):
     def describe_scene(self, reasoning_output: Dict) -> str:
         """Generate natural language scene description."""
         scene = reasoning_output["scene"]
-        concepts = reasoning_output["concepts"]
+        reasoning_output["concepts"]
 
         # Build description
         parts = []

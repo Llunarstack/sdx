@@ -3,11 +3,12 @@ Agentic Quality Control: Multi-agent system for ensuring perfect image generatio
 Uses penta text encoder system for semantic validation and quality assessment.
 """
 
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
-import logging
 
 logger = logging.getLogger(__name__)
 
