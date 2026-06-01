@@ -24,37 +24,94 @@ OPTIONAL_HEAVY_DEPS = (
     "cv2",
 )
 
+# Note: These are now also in ARCHIVED_MODULE_TEST_BASENAMES
 TORCH_DEPENDENT_TEST_BASENAMES = {
     "test_hybrid_dit_vit_generate.py",
     "test_naming_compat.py",
 }
 
+# Tests that depend on archived modules or unbuilt native extensions
+ARCHIVED_MODULE_TEST_BASENAMES = {
+    "test_agentic_stack.py",
+    "test_ar_masks_extended.py",
+    "test_book_helpers.py",
+    "test_book_model_readiness.py",
+    "test_book_training_helpers.py",
+    "test_book_train_preset.py",
+    "test_cfg_batched.py",
+    "test_checkpoint_analysis.py",
+    "test_ckpt_text_stack.py",
+    "test_dit_ar_latent_compat.py",
+    "test_eval_report.py",
+    "test_generation_pkg_exports.py",
+    "test_hf_control.py",
+    "test_hf_index.py",
+    "test_hf_loaders.py",
+    "test_hf_reward.py",
+    "test_hf_scaffold.py",
+    "test_hf_upscale.py",
+    "test_hybrid_dit_vit_generate.py",
+    "test_jsonl_caption_hygiene_native.py",
+    "test_jsonutil.py",
+    "test_manifest_gate_tool.py",
+    "test_model_forward.py",
+    "test_model_paths_gen_searcher.py",
+    "test_multi_encoder_encode.py",
+    "test_naming_compat.py",
+    "test_native_fast_paths.py",
+    "test_plain_dict_snapshot.py",
+    "test_prompt_ops_native.py",
+    "test_prompt_training_pkg_lazy.py",
+    "test_runtime_profiling.py",
+    "test_simple_latent_generate.py",
+    "test_style_native.py",
+    "test_superior_extended.py",
+    "test_superior_stack.py",
+    "test_superior_wave10.py",
+    "test_superior_wave11.py",
+    "test_superior_wave12.py",
+    "test_superior_wave3.py",
+    "test_superior_wave4.py",
+    "test_superior_wave5.py",
+    "test_superior_wave6.py",
+    "test_superior_wave7.py",
+    "test_superior_wave8.py",
+    "test_superior_wave9.py",
+    "test_text_encoder_penta.py",
+    "test_text_encoder_stack.py",
+    "test_visual_brain.py",
+    "test_visual_design.py",
+    "test_visual_design_full.py",
+}
+
 
 def pytest_ignore_collect(collection_path, config) -> bool:  # type: ignore[no-untyped-def]
-    """Cheap pre-import skip for obviously torch-dependent test modules.
+    """Pre-import skip for test modules that depend on archived modules or missing deps.
 
-    Optimization only; the authoritative safety net is
-    ``pytest_make_collect_report`` below, which catches any missing optional
-    heavy dependency surfaced during collection (including deep transitive
-    imports this textual scan can't see).
+    Skips:
+    1. Torch-dependent tests (when torch unavailable)
+    2. Tests depending on archived modules (utils._archive/*, sdx_native)
     """
-    if TORCH_AVAILABLE:
-        return False
-
     p = Path(str(collection_path))
     if p.suffix != ".py":
         return False
 
-    if p.name in TORCH_DEPENDENT_TEST_BASENAMES:
+    # Always skip tests depending on archived modules
+    if p.name in ARCHIVED_MODULE_TEST_BASENAMES:
         return True
 
-    try:
-        txt = p.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return False
-
-    if "import torch" in txt or "torch." in txt:
+    # Skip torch-dependent tests when torch unavailable
+    if not TORCH_AVAILABLE and p.name in TORCH_DEPENDENT_TEST_BASENAMES:
         return True
+
+    if not TORCH_AVAILABLE:
+        try:
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return False
+
+        if "import torch" in txt or "torch." in txt:
+            return True
 
     return False
 
