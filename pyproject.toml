@@ -13,7 +13,7 @@ sdx-demo = "demo:main"
 sdx-sample = "sample:main"
 
 [project.optional-dependencies]
-demo = ["huggingface_hub>=0.20"]
+demo = ["huggingface_hub>=1.18.0"]
 
 [tool.ruff]
 target-version = "py38"
