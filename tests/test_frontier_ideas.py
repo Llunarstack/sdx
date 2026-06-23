@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-import json
 import torch
-
-from frontier.registry import list_ideas, idea_by_id
+from frontier.attention import build_attention_layout_plan
+from frontier.compose import merge_reference_prompts, references_from_layout
 from frontier.guidance import DynamicCFGPicker, GuidanceInterval, cfg_multiplier_for_step
 from frontier.layout import (
     OmostCanvas,
-    canvas_to_box_layout,
-    bind_coordinates_to_prompt,
-    parse_loc_tokens,
     RegionFusionSchedule,
+    bind_coordinates_to_prompt,
+    canvas_to_box_layout,
     fusion_weight_at_step,
+    parse_loc_tokens,
     score_layout_masks,
 )
-from frontier.attention import build_attention_layout_plan
-from frontier.compose import references_from_layout, merge_reference_prompts
-from utils.generation.regional_box_prompting import parse_box_layout, build_latent_region_masks
+from frontier.registry import idea_by_id, list_ideas
+from utils.generation.regional_box_prompting import build_latent_region_masks, parse_box_layout
 
 
 class TestResearchRegistry:
@@ -86,9 +84,7 @@ class TestLayoutMetrics:
 
 class TestAttentionPlan:
     def test_enforce_early_steps(self):
-        spec = parse_box_layout(
-            {"regions": [{"name": "a", "box": [0, 0, 1, 1], "prompt": "x"}]}
-        )
+        spec = parse_box_layout({"regions": [{"name": "a", "box": [0, 0, 1, 1], "prompt": "x"}]})
         plan = build_attention_layout_plan(spec.regions, num_steps=20, inject_frac=0.5)
         assert len(plan.enforce_steps) == 10
 

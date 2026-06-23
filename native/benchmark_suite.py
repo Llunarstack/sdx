@@ -93,10 +93,7 @@ class NativeKernelBenchmark:
 
         # Quantization baseline
         self.benchmark_numpy(
-            "numpy_quantize",
-            "Quantization",
-            lambda: np.clip(data * 127.0, -128, 127).astype(np.int8),
-            100
+            "numpy_quantize", "Quantization", lambda: np.clip(data * 127.0, -128, 127).astype(np.int8), 100
         )
 
         # Softmax baseline
@@ -104,40 +101,20 @@ class NativeKernelBenchmark:
             exp_x = np.exp(x - np.max(x))
             return exp_x / np.sum(exp_x)
 
-        self.benchmark_numpy(
-            "numpy_softmax",
-            "Softmax",
-            lambda: softmax_numpy(data),
-            100
-        )
+        self.benchmark_numpy("numpy_softmax", "Softmax", lambda: softmax_numpy(data), 100)
 
         # Variance baseline
-        self.benchmark_numpy(
-            "numpy_variance",
-            "Variance",
-            lambda: np.var(data),
-            100
-        )
+        self.benchmark_numpy("numpy_variance", "Variance", lambda: np.var(data), 100)
 
         # GELU baseline
         def gelu_numpy(x):
             cdf = 0.5 * (1.0 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * np.power(x, 3))))
             return x * cdf
 
-        self.benchmark_numpy(
-            "numpy_gelu",
-            "GELU",
-            lambda: gelu_numpy(data),
-            50
-        )
+        self.benchmark_numpy("numpy_gelu", "GELU", lambda: gelu_numpy(data), 50)
 
         # Dot product baseline
-        self.benchmark_numpy(
-            "numpy_dot",
-            "Dot Product",
-            lambda: np.dot(data, data),
-            100
-        )
+        self.benchmark_numpy("numpy_dot", "Dot Product", lambda: np.dot(data, data), 100)
 
     def benchmark_all(self) -> None:
         """Run full benchmark suite."""

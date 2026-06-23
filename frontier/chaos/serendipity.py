@@ -7,7 +7,7 @@ Creativity without destroying prompt adherence.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import List, Tuple
 
 import torch
 

@@ -130,8 +130,8 @@ class DINOMetric(nn.Module):
 
         # Final score
         dino_score = (
-            float(similarity.squeeze().detach()) * 0.7 +
-            (float(coherence_a.squeeze().detach()) + float(coherence_b.squeeze().detach())) / 2 * 0.3
+            float(similarity.squeeze().detach()) * 0.7
+            + (float(coherence_a.squeeze().detach()) + float(coherence_b.squeeze().detach())) / 2 * 0.3
         )
 
         return max(0.0, min(1.0, dino_score))
@@ -238,7 +238,7 @@ class PerceptualMetricsSystem:
         lpips_normalized = 1.0 - lpips_score
 
         # Ensemble score
-        ensemble = (lpips_normalized * 0.33 + dino_score * 0.33 + dreamsim_score * 0.34)
+        ensemble = lpips_normalized * 0.33 + dino_score * 0.33 + dreamsim_score * 0.34
 
         result = {
             "lpips": lpips_score,
@@ -282,9 +282,12 @@ class PerceptualMetricsSystem:
             "dreamsim_score": metrics["dreamsim"],
             "human_correlation": metrics["human_correlation"],
             "assessment": (
-                "Excellent" if metrics["ensemble"] > 0.85
-                else "Good" if metrics["ensemble"] > 0.7
-                else "Fair" if metrics["ensemble"] > 0.55
+                "Excellent"
+                if metrics["ensemble"] > 0.85
+                else "Good"
+                if metrics["ensemble"] > 0.7
+                else "Fair"
+                if metrics["ensemble"] > 0.55
                 else "Poor"
             ),
         }
@@ -314,7 +317,7 @@ if __name__ == "__main__":
     # Test images
     reference = torch.randn(1, 4096)
     test1 = reference + torch.randn_like(reference) * 0.01  # Very similar
-    test2 = reference + torch.randn_like(reference) * 0.1   # Somewhat different
+    test2 = reference + torch.randn_like(reference) * 0.1  # Somewhat different
     test3 = torch.randn(1, 4096)  # Completely different
 
     print("=== Perceptual Metrics Evaluation ===\n")

@@ -20,88 +20,90 @@ class QualityDimensionAnalyzer(nn.Module):
         super().__init__()
 
         # Individual dimension analyzers
-        self.analyzers = nn.ModuleDict({
-            "composition": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "color_harmony": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "lighting": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "clarity": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "realism": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "coherence": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "detail_richness": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "aesthetic_appeal": nn.Sequential(
-                nn.Linear(hidden_dim, 1024),
-                nn.GELU(),
-                nn.Linear(1024, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-        })
+        self.analyzers = nn.ModuleDict(
+            {
+                "composition": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "color_harmony": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "lighting": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "clarity": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "realism": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "coherence": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "detail_richness": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "aesthetic_appeal": nn.Sequential(
+                    nn.Linear(hidden_dim, 1024),
+                    nn.GELU(),
+                    nn.Linear(1024, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+            }
+        )
 
         # Dimension weights (how much each contributes to overall quality)
         self.dimension_weights = {
@@ -215,14 +217,16 @@ class PenaltyAnalyzer(nn.Module):
             detection_score = torch.rand(1).detach().item()
 
             if detection_score > 0.5:  # 50% chance for demo
-                detected_penalties.append({
-                    "penalty_type": penalty_name,
-                    "severity": detection_score,
-                    "description": penalty_profile["description"],
-                    "impact": penalty_profile["impact"] * detection_score,
-                    "fixable": penalty_profile["fixable"],
-                    "fix_suggestions": penalty_profile["fix_suggestions"],
-                })
+                detected_penalties.append(
+                    {
+                        "penalty_type": penalty_name,
+                        "severity": detection_score,
+                        "description": penalty_profile["description"],
+                        "impact": penalty_profile["impact"] * detection_score,
+                        "fixable": penalty_profile["fixable"],
+                        "fix_suggestions": penalty_profile["fix_suggestions"],
+                    }
+                )
 
         # Sort by impact
         detected_penalties.sort(key=lambda x: abs(x["impact"]), reverse=True)

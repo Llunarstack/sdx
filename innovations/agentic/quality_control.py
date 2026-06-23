@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class QualityMetrics:
     """Quality assessment results."""
+
     prompt_adherence: float  # 0-1, how well image matches prompt
     semantic: float  # 0-1, consistency across encoders
     visual_quality: float  # 0-1, estimated visual quality
@@ -103,13 +104,14 @@ class PromptAdherenceAgent(nn.Module):
 
         # Check semantic coherence across all 5 encoders
         combined_features = torch.cat(
-            [clip_l_features, clip_bg_features, clip_h_features, clip_long_features, clip_l_features],
-            dim=-1
+            [clip_l_features, clip_bg_features, clip_h_features, clip_long_features, clip_l_features], dim=-1
         )
         coherence = self.coherence_validator(combined_features)
 
         # Score prompt matching
-        prompt_features = torch.cat([t5_features, clip_l_features, clip_bg_features, clip_h_features, clip_long_features], dim=-1)
+        prompt_features = torch.cat(
+            [t5_features, clip_l_features, clip_bg_features, clip_h_features, clip_long_features], dim=-1
+        )
         matching_score = self.matching_scorer(prompt_features)
 
         # Weighted combination
@@ -313,21 +315,17 @@ class PerfectionAgent(nn.Module):
 
         # Combine into overall score
         overall_score = (
-            adherence * 0.4 +  # Prompt adherence is critical
-            consistency * 0.3 +  # Semantic consistency important
-            (1.0 - divergence) * 0.15 +  # Low divergence good
-            visual_quality * 0.15  # Visual quality matters
+            adherence * 0.4  # Prompt adherence is critical
+            + consistency * 0.3  # Semantic consistency important
+            + (1.0 - divergence) * 0.15  # Low divergence good
+            + visual_quality * 0.15  # Visual quality matters
         )
 
         # Determine if refinement needed
         needs_refinement = overall_score < 0.85
 
         # Get refinement recommendations
-        refinements = (
-            self.refinement_agent(torch.randn(1, 512))
-            if needs_refinement
-            else []
-        )
+        refinements = self.refinement_agent(torch.randn(1, 512)) if needs_refinement else []
 
         return QualityMetrics(
             prompt_adherence=adherence,
@@ -425,21 +423,15 @@ class QualityControlSystem:
         round_num = 0
 
         while round_num < self.max_refinement_rounds:
-            assessment, needs_refine = self.evaluate_generation(
-                prompt, t5_embedding, clip_embeddings, current_latent
-            )
+            assessment, needs_refine = self.evaluate_generation(prompt, t5_embedding, clip_embeddings, current_latent)
             assessments.append(assessment)
 
             if not needs_refine or assessment.overall_score > 0.95:
                 logger.info(f"Quality target reached: {assessment.overall_score:.2%}")
                 break
 
-            logger.info(
-                f"Round {round_num + 1}: Applying {len(assessment.refinement_actions)} refinements"
-            )
-            current_latent = self.apply_refinements(
-                current_latent, assessment.refinement_actions
-            )
+            logger.info(f"Round {round_num + 1}: Applying {len(assessment.refinement_actions)} refinements")
+            current_latent = self.apply_refinements(current_latent, assessment.refinement_actions)
 
             round_num += 1
 
@@ -462,9 +454,7 @@ if __name__ == "__main__":
     }
     latent = torch.randn(1, 4, 64, 64)
 
-    assessment, should_refine = system.evaluate_generation(
-        prompt, t5_emb, clip_embs, latent
-    )
+    assessment, should_refine = system.evaluate_generation(prompt, t5_emb, clip_embs, latent)
     print(f"Overall Score: {assessment.overall_score:.2%}")
     print(f"Should Refine: {should_refine}")
     print(f"Refinement Actions: {assessment.refinement_actions}")

@@ -120,9 +120,9 @@ class HardNegativeMiner:
                     self.loss_history[img_path] = ema_loss
 
         if len(self.hard_negatives) > self.max_hard_negatives:
-            self.hard_negatives = sorted(
-                self.hard_negatives, key=lambda x: x.difficulty_score, reverse=True
-            )[: self.max_hard_negatives]
+            self.hard_negatives = sorted(self.hard_negatives, key=lambda x: x.difficulty_score, reverse=True)[
+                : self.max_hard_negatives
+            ]
 
         self.step += 1
         return new_hard
@@ -137,9 +137,7 @@ class HardNegativeMiner:
             reasons.append("high_loss")
 
         if model_out.shape[-1] > 1:
-            entropy = -torch.sum(
-                F.softmax(model_out, dim=-1) * torch.log(F.softmax(model_out, dim=-1) + 1e-8), dim=-1
-            )
+            entropy = -torch.sum(F.softmax(model_out, dim=-1) * torch.log(F.softmax(model_out, dim=-1) + 1e-8), dim=-1)
             if float(entropy) > 2.0:
                 reasons.append("high_uncertainty")
 

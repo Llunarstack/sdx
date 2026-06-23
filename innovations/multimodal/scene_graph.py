@@ -14,14 +14,16 @@ class SceneGraphGeneration(nn.Module):
         self.num_objects = num_objects
 
         # Object node encoder
-        self.object_encoder = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(hidden_dim, 256),
-                nn.GELU(),
-                nn.Linear(256, 128),
-            )
-            for _ in range(num_objects)
-        ])
+        self.object_encoder = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 128),
+                )
+                for _ in range(num_objects)
+            ]
+        )
 
         # Relationship encoder
         self.relationship_encoder = nn.Sequential(

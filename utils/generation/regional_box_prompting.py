@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -131,14 +131,10 @@ def _parse_region_dict(d: Mapping[str, Any], idx: int) -> BoxRegion:
     prompt = str(d.get("prompt", d.get("text", d.get("caption", d.get("description", "")))) or "").strip()
     negative = str(d.get("negative", d.get("negative_prompt", "")) or "").strip()
     priority = int(d.get("priority", 5))
-    sketch_path = str(
-        d.get("sketch", d.get("sketch_path", d.get("drawing", d.get("draw", "")))) or ""
-    ).strip()
+    sketch_path = str(d.get("sketch", d.get("sketch_path", d.get("drawing", d.get("draw", "")))) or "").strip()
     strokes = tuple(parse_strokes(d.get("strokes", d.get("paths", []))))
     sketch_weight = float(d.get("sketch_weight", d.get("draw_weight", 0.7)) or 0.7)
-    reference_path = str(
-        d.get("reference", d.get("reference_image", d.get("ref", ""))) or ""
-    ).strip()
+    reference_path = str(d.get("reference", d.get("reference_image", d.get("ref", ""))) or "").strip()
     reference_weight = float(d.get("reference_weight", d.get("ref_weight", 0.8)) or 0.8)
     reference_mode = str(d.get("reference_mode", "identity") or "identity").strip()
     return BoxRegion(
@@ -346,9 +342,7 @@ def encode_regional_plan(
     if pos_emb.shape[0] != len(prompts):
         raise RuntimeError("encode_fn returned unexpected batch size for regional prompts")
     _ = region_neg
-    region_sketches = build_region_sketch_masks(
-        spec, latent_h, latent_w, device=device, dtype=torch.float32
-    )
+    region_sketches = build_region_sketch_masks(spec, latent_h, latent_w, device=device, dtype=torch.float32)
     sketch_weights = tuple(float(r.sketch_weight) for r in spec.regions)
 
     fusion_weights: Tuple[float, ...] = ()
@@ -358,9 +352,7 @@ def encode_regional_plan(
 
             sched = RegionFusionSchedule()
             n_steps = max(4, int(pixel_size // 32))  # proxy; caller may override via plan
-            fusion_weights = tuple(
-                fusion_weight_at_step(i, n_steps, sched) for i in range(n_steps)
-            )
+            fusion_weights = tuple(fusion_weight_at_step(i, n_steps, sched) for i in range(n_steps))
         except ImportError:
             fusion_weights = ()
 
@@ -397,18 +389,25 @@ def regional_cfg_forward(
     Two model forwards: one uncond, one batched (global + all regions).
     """
     from utils.generation.cfg_batched import combine_cfg_outputs
+
     from .regional_box_sketch import apply_sketch_to_region_mask
 
     B, C, H, W = x.shape
     R = int(plan.region_cond_embs.shape[0])
     device = x.device
 
-    def _model_out(x_in: torch.Tensor, kwargs: Dict[str, Any]) -> torch.Tensor:
+    def _model_out(
+        x_in: torch.Tensor,
+        kwargs: Dict[str, Any],
+        *,
+        t_in: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        ts = t_in if t_in is not None else t_batch
         kw = dict(kwargs)
         if block_cache is not None:
-            out = model(x_in, t_batch, block_cache=block_cache, **kw)
+            out = model(x_in, ts, block_cache=block_cache, **kw)
         else:
-            out = model(x_in, t_batch, **kw)
+            out = model(x_in, ts, **kw)
         if out.shape[1] > x_in.shape[1]:
             out = out[:, : x_in.shape[1]]
         return out
@@ -425,7 +424,7 @@ def regional_cfg_forward(
     mk_n = expand_model_kwargs_batch(model_kwargs_cond, n_batch)
     mk_n["encoder_hidden_states"] = stacked_emb
 
-    outs = _model_out(x_n, mk_n)
+    outs = _model_out(x_n, mk_n, t_in=t_n)
     out_global = outs[0:1].expand(B, -1, -1, -1)
     out_regions = outs[1:]
 
@@ -466,11 +465,7 @@ def regional_cfg_forward(
         )
         m = masks[i : i + 1]
         if plan.region_sketches is not None and i < plan.region_sketches.shape[0]:
-            sw = (
-                plan.region_sketch_weights[i]
-                if i < len(plan.region_sketch_weights)
-                else 0.7
-            )
+            sw = plan.region_sketch_weights[i] if i < len(plan.region_sketch_weights) else 0.7
             if plan.region_sketches[i : i + 1].max() > 1e-4:
                 m = apply_sketch_to_region_mask(m, plan.region_sketches[i : i + 1], sw)
         result = result + guided_r * m

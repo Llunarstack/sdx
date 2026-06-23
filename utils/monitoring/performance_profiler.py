@@ -18,12 +18,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OperationMetrics:
     """Metrics for a single operation."""
+
     name: str
     operation_type: str
     num_calls: int = 0
     total_time_ms: float = 0.0
     avg_time_ms: float = 0.0
-    min_time_ms: float = float('inf')
+    min_time_ms: float = float("inf")
     max_time_ms: float = 0.0
     total_flops: float = 0.0
     throughput_gflops: float = 0.0
@@ -33,9 +34,7 @@ class OperationProfiler:
     """Profile individual operations and identify bottlenecks."""
 
     def __init__(self):
-        self.metrics: Dict[str, OperationMetrics] = defaultdict(
-            lambda: OperationMetrics(name="", operation_type="")
-        )
+        self.metrics: Dict[str, OperationMetrics] = defaultdict(lambda: OperationMetrics(name="", operation_type=""))
         self.operation_hooks = {}
 
     def profile_module(self, module: nn.Module, module_name: str = "") -> None:
@@ -100,9 +99,7 @@ class OperationProfiler:
             # FLOPs = 2 * kernel_ops * output_size
             batch_size = input_data[0].shape[0]
             output_h, output_w = output.shape[-2:]
-            kernel_ops = (
-                module.in_channels * module.kernel_size[0] * module.kernel_size[1]
-            )
+            kernel_ops = module.in_channels * module.kernel_size[0] * module.kernel_size[1]
             return 2 * kernel_ops * output_h * output_w * batch_size
 
         return 0.0
@@ -145,7 +142,7 @@ class OperationProfiler:
             report += (
                 f"{name:<40} {metric.operation_type:<15} {metric.num_calls:<8} "
                 f"{metric.total_time_ms:>8.3f}ms ({percentage:>5.1f}%) "
-                f"{metric.total_flops/1e9:>10.3f}B\n"
+                f"{metric.total_flops / 1e9:>10.3f}B\n"
             )
 
         return report
@@ -263,9 +260,7 @@ class RuntimeMonitor:
         """Update overall metrics."""
         self.metrics["total_time"] += elapsed_ms
         self.metrics["total_tokens"] += num_tokens
-        self.metrics["throughput_tokens_per_sec"] = (
-            self.metrics["total_tokens"] / (self.metrics["total_time"] / 1000.0)
-        )
+        self.metrics["throughput_tokens_per_sec"] = self.metrics["total_tokens"] / (self.metrics["total_time"] / 1000.0)
 
     def get_memory_usage(self) -> Tuple[float, float]:
         """Get peak and average GPU memory usage."""

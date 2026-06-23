@@ -31,11 +31,7 @@ class TestVisionRewardSystem:
         image_features = torch.randn(1, 4096)
         prompt_features = torch.randn(1, 4096)
 
-        reward = self.system.evaluate_image(
-            image_features,
-            prompt_features,
-            user_rating=4.5
-        )
+        reward = self.system.evaluate_image(image_features, prompt_features, user_rating=4.5)
 
         assert reward is not None
         assert 0 <= reward.overall_score <= 1
@@ -275,6 +271,7 @@ class TestResearchSystemsPerformance:
         image_features = torch.randn(1, 4096)
 
         import time
+
         start = time.time()
 
         system.evaluate_image(image_features)
@@ -290,6 +287,7 @@ class TestResearchSystemsPerformance:
         img2 = torch.randn(1, 4096)
 
         import time
+
         start = time.time()
 
         system.evaluate(img1, img2)
@@ -304,6 +302,7 @@ class TestResearchSystemsPerformance:
         initial = torch.randn(1, 4096)
 
         import time
+
         start = time.time()
 
         system.generate_with_temporal_consistency(initial, num_steps=10)

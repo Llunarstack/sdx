@@ -169,8 +169,10 @@ class DatasetCleaner:
         Returns:
             Summary statistics of quality assessment
         """
-        image_files = list(self.dataset_dir.glob("*.png")) + list(self.dataset_dir.glob("*.jpg")) + list(
-            self.dataset_dir.glob("*.jpeg")
+        image_files = (
+            list(self.dataset_dir.glob("*.png"))
+            + list(self.dataset_dir.glob("*.jpg"))
+            + list(self.dataset_dir.glob("*.jpeg"))
         )
 
         valid_count = 0
@@ -203,8 +205,10 @@ class DatasetCleaner:
         Returns:
             Statistics on duplicates found
         """
-        image_files = list(self.dataset_dir.glob("*.png")) + list(self.dataset_dir.glob("*.jpg")) + list(
-            self.dataset_dir.glob("*.jpeg")
+        image_files = (
+            list(self.dataset_dir.glob("*.png"))
+            + list(self.dataset_dir.glob("*.jpg"))
+            + list(self.dataset_dir.glob("*.jpeg"))
         )
 
         self.duplicates = find_duplicate_images([str(f) for f in image_files])
@@ -286,9 +290,9 @@ Dataset Cleaning Report
 ======================
 
 Quality Assessment:
-  Total images: {assessment['total_images']}
-  Valid: {assessment['valid']}
-  Invalid: {assessment['invalid']}
+  Total images: {assessment["total_images"]}
+  Valid: {assessment["valid"]}
+  Invalid: {assessment["invalid"]}
 
 Issues Found:
 """
@@ -297,9 +301,9 @@ Issues Found:
 
         report += f"""
 Duplicate Analysis:
-  Duplicate groups: {dup_report['duplicate_groups']}
-  Total duplicated images: {dup_report['total_duplicated_images']}
-  Potential space savings: {dup_report['can_save_space']}
+  Duplicate groups: {dup_report["duplicate_groups"]}
+  Total duplicated images: {dup_report["total_duplicated_images"]}
+  Potential space savings: {dup_report["can_save_space"]}
 """
 
         return report

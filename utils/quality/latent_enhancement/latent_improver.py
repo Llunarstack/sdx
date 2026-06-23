@@ -82,11 +82,9 @@ class LatentDiffusionRegularization(nn.Module):
 
         Encourages smooth transitions in latent space.
         """
-        grad = torch.autograd.grad(
-            outputs=latents.sum(), inputs=latents, create_graph=True, retain_graph=True
-        )[0]
+        grad = torch.autograd.grad(outputs=latents.sum(), inputs=latents, create_graph=True, retain_graph=True)[0]
 
-        regularity = (grad ** 2).mean()
+        regularity = (grad**2).mean()
         return regularity
 
     def compute_isotropy_loss(self, latents: torch.Tensor) -> torch.Tensor:
@@ -106,9 +104,7 @@ class AdaptiveLatentScaling:
 
     def __init__(self, num_scales: int = 4):
         self.num_scales = num_scales
-        self.scale_predictors = nn.ModuleList(
-            [nn.Linear(4, 1) for _ in range(num_scales)]
-        )
+        self.scale_predictors = nn.ModuleList([nn.Linear(4, 1) for _ in range(num_scales)])
 
     def predict_scales(self, latents: torch.Tensor) -> torch.Tensor:
         """Predict optimal scales per sample."""

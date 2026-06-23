@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # NUMBA CPU JIT OPTIMIZED KERNELS
 # ============================================================================
 
+
 @jit(nopython=True, parallel=True, fastmath=True)
 def quantize_int8_numba(data: np.ndarray, scale: float) -> np.ndarray:
     """Numba JIT quantization (15x faster than NumPy)."""
@@ -200,6 +201,7 @@ def attention_numba(
 # ============================================================================
 # CUDA KERNELS FOR GPU ACCELERATION
 # ============================================================================
+
 
 @cuda.jit
 def quantize_int8_cuda_kernel(data, scale, result):

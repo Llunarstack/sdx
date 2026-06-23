@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GenerationFeedback:
     """Feedback on a generation."""
+
     prompt: str
     generated_features: torch.Tensor
     user_rating: float  # 0-5
@@ -337,9 +338,7 @@ class AdaptiveLearningSystem:
             "high_quality_samples": len(high_quality),
             "high_quality_ratio": len(high_quality) / max(1, total),
             "average_quality": self.feedback_buffer.compute_average_quality(),
-            "average_rating": (
-                sum(f.user_rating for f in self.feedback_buffer.feedbacks) / max(1, total)
-            ),
+            "average_rating": (sum(f.user_rating for f in self.feedback_buffer.feedbacks) / max(1, total)),
             "learned_parameters": self.learned_parameters,
             "has_user_style": self.user_style is not None,
         }

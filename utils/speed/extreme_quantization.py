@@ -59,8 +59,7 @@ class INT4Quantization:
                 module.weight.data = weight_packed.float()
 
                 logger.info(
-                    f"Quantized {name}: {weight.numel() * 4} bits -> "
-                    f"{weight_packed.numel() * 8} bits (4x reduction)"
+                    f"Quantized {name}: {weight.numel() * 4} bits -> {weight_packed.numel() * 8} bits (4x reduction)"
                 )
 
     def _pack_int4(self, weight_q: torch.Tensor) -> torch.Tensor:

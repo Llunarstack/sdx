@@ -117,13 +117,9 @@ class QualityTrajectoryAnalyzer:
         # Trend detection
         if len(scores) > 1:
             recent_change = scores[-1] - scores[-2]
-            avg_change = sum([scores[i] - scores[i-1] for i in range(1, len(scores))]) / (len(scores) - 1)
+            avg_change = sum([scores[i] - scores[i - 1] for i in range(1, len(scores))]) / (len(scores) - 1)
 
-            trend = (
-                "improving" if avg_change > 0.02 else
-                "declining" if avg_change < -0.02 else
-                "stable"
-            )
+            trend = "improving" if avg_change > 0.02 else "declining" if avg_change < -0.02 else "stable"
 
             return {
                 "trend": trend,
@@ -154,9 +150,12 @@ class QualityTrajectoryAnalyzer:
                 "current_quality": scores[-1],
                 "trajectory_slope": slope,
                 "expected_quality_level": (
-                    "excellent" if predicted_final > 0.85
-                    else "good" if predicted_final > 0.7
-                    else "acceptable" if predicted_final > 0.55
+                    "excellent"
+                    if predicted_final > 0.85
+                    else "good"
+                    if predicted_final > 0.7
+                    else "acceptable"
+                    if predicted_final > 0.55
                     else "poor"
                 ),
             }
@@ -317,10 +316,9 @@ class RealTimeQualityMonitoringSystem:
             "max_quality": max(quality_scores),
             "quality_trend": trend,
             "early_stop_recommended_at_steps": [
-                i for i, e in enumerate(self.generation_stream)
-                if e["early_stop_decision"]["should_stop"]
+                i for i, e in enumerate(self.generation_stream) if e["early_stop_decision"]["should_stop"]
             ],
-            "estimated_time_saved": f"{sum(1 - t for t in timestamps if t > 0.7) / max(1, len(timestamps))*100:.0f}%",
+            "estimated_time_saved": f"{sum(1 - t for t in timestamps if t > 0.7) / max(1, len(timestamps)) * 100:.0f}%",
             "monitoring_efficiency": "high" if should_stop_count > 0 else "normal",
         }
 
@@ -342,9 +340,11 @@ if __name__ == "__main__":
 
         result = system.monitor_generation_step(image_state, timestep, step)
 
-        print(f"[Step {step:2d}] Quality: {result['current_quality']}, "
-              f"Trend: {result['quality_trend']}, "
-              f"Stop: {result['early_stop_recommended']}")
+        print(
+            f"[Step {step:2d}] Quality: {result['current_quality']}, "
+            f"Trend: {result['quality_trend']}, "
+            f"Stop: {result['early_stop_recommended']}"
+        )
 
     print("\nMonitoring Report:")
     report = system.get_real_time_report()

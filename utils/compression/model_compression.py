@@ -79,7 +79,7 @@ class WeightSharing:
 
             # Calculate compression ratio
             ratio = len(centers) / param.numel()
-            compression_ratio *= (1.0 / ratio)
+            compression_ratio *= 1.0 / ratio
 
         return compression_ratio
 

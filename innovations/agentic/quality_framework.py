@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class QualityShift:
     """Represents a detected shift in quality perception."""
+
     shift_magnitude: float  # 0-1, how large the shift is
     direction: str  # "upward" or "downward"
     confidence: float  # 0-1, how confident about shift
@@ -61,7 +62,7 @@ class AdaptivePerceptualScale(nn.Module):
         # Reference quality anchor (baseline)
         self.register_buffer(
             "reference_quality_anchor",
-            torch.ones(num_dimensions) * 0.5  # Neutral starting point
+            torch.ones(num_dimensions) * 0.5,  # Neutral starting point
         )
 
         self.generation_count = 0
@@ -75,7 +76,7 @@ class AdaptivePerceptualScale(nn.Module):
 
         # Keep only recent history
         if len(self.quality_history) > self.max_history:
-            self.quality_history = self.quality_history[-self.max_history:]
+            self.quality_history = self.quality_history[-self.max_history :]
 
         self.generation_count += 1
 
@@ -85,7 +86,11 @@ class AdaptivePerceptualScale(nn.Module):
             return None  # Need enough samples
 
         # Split history into old and recent
-        old_history = self.quality_history[:-100] if len(self.quality_history) > 100 else self.quality_history[:max(1, len(self.quality_history)//2)]
+        old_history = (
+            self.quality_history[:-100]
+            if len(self.quality_history) > 100
+            else self.quality_history[: max(1, len(self.quality_history) // 2)]
+        )
         recent_history = self.quality_history[-50:]
 
         if not old_history or not recent_history:
@@ -109,10 +114,7 @@ class AdaptivePerceptualScale(nn.Module):
         if total_shift > 0.1:  # Significant shift detected
             # Determine which dimensions shifted
             dimension_shifts = (recent_mean - old_mean).abs()
-            affected = [
-                i for i in range(len(dimension_shifts))
-                if dimension_shifts[i] > 0.05
-            ]
+            affected = [i for i in range(len(dimension_shifts)) if dimension_shifts[i] > 0.05]
 
             return QualityShift(
                 shift_magnitude=float(total_shift),
@@ -156,8 +158,7 @@ class AdaptivePerceptualScale(nn.Module):
         # Smooth update (don't shift too drastically)
         update_rate = 0.1
         self.reference_quality_anchor = (
-            self.reference_quality_anchor * (1 - update_rate) +
-            new_anchor.squeeze(0) * update_rate
+            self.reference_quality_anchor * (1 - update_rate) + new_anchor.squeeze(0) * update_rate
         )
 
 
@@ -170,32 +171,34 @@ class LabelFreeQualityAssessor(nn.Module):
         self.perceptual_scale = AdaptivePerceptualScale(hidden_dim=256)
 
         # Consistency checkers (no labels needed)
-        self.consistency_checkers = nn.ModuleDict({
-            "aesthetic_internal": nn.Sequential(
-                nn.Linear(hidden_dim, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "semantic_internal": nn.Sequential(
-                nn.Linear(hidden_dim * 2, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-            "technical_internal": nn.Sequential(
-                nn.Linear(hidden_dim, 512),
-                nn.GELU(),
-                nn.Linear(512, 256),
-                nn.GELU(),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
-            ),
-        })
+        self.consistency_checkers = nn.ModuleDict(
+            {
+                "aesthetic_internal": nn.Sequential(
+                    nn.Linear(hidden_dim, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "semantic_internal": nn.Sequential(
+                    nn.Linear(hidden_dim * 2, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+                "technical_internal": nn.Sequential(
+                    nn.Linear(hidden_dim, 512),
+                    nn.GELU(),
+                    nn.Linear(512, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 1),
+                    nn.Sigmoid(),
+                ),
+            }
+        )
 
         # Self-supervised quality predictor
         self.self_supervised_predictor = nn.Sequential(
@@ -237,9 +240,7 @@ class LabelFreeQualityAssessor(nn.Module):
             if prompt_features.dim() == 1:
                 prompt_features = prompt_features.unsqueeze(0)
             combined = torch.cat([image_features, prompt_features], dim=-1)
-            semantic = float(
-                self.consistency_checkers["semantic_internal"](combined).squeeze().detach()
-            )
+            semantic = float(self.consistency_checkers["semantic_internal"](combined).squeeze().detach())
         else:
             semantic = 0.5
 
@@ -253,10 +254,10 @@ class LabelFreeQualityAssessor(nn.Module):
         self.perceptual_scale.record_quality_measurement(scaled_quality)
 
         overall_score = (
-            float(scaled_quality.mean().detach()) * 0.5 +
-            aesthetic_consistency * 0.2 +
-            semantic * 0.15 +
-            technical_consistency * 0.15
+            float(scaled_quality.mean().detach()) * 0.5
+            + aesthetic_consistency * 0.2
+            + semantic * 0.15
+            + technical_consistency * 0.15
         )
 
         # Check for quality shift
@@ -317,8 +318,11 @@ class ELIQSystem:
             "min_quality": min(scores),
             "max_quality": max(scores),
             "quality_trend": (
-                "improving" if scores[-1] > sum(scores[:-10]) / 10 else "stable"
-                if abs(scores[-1] - sum(scores[:-10]) / 10) < 0.05 else "declining"
+                "improving"
+                if scores[-1] > sum(scores[:-10]) / 10
+                else "stable"
+                if abs(scores[-1] - sum(scores[:-10]) / 10) < 0.05
+                else "declining"
             ),
             "shifts_detected": len(self.shift_history),
             "recent_shifts": self.shift_history[-3:] if self.shift_history else [],

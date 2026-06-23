@@ -7,8 +7,8 @@ Unlike tag negation lists, this scores *pairs* of claims (lighting, time, quanti
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Iterable, List, Sequence, Tuple
+from dataclasses import dataclass
+from typing import List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -24,14 +24,34 @@ class Contradiction:
 _CONFLICT_RULES: Tuple[Tuple[str, str, str, str], ...] = (
     (r"\bnoon\b|\bmidday\b", r"\bsunset\b|\bsunrise\b|\bdusk\b|\bdawn\b", "time", "pick one time of day"),
     (r"\bnight\b|\bmidnight\b", r"\bbright\s+day\b|\bnoon\b", "time", "pick day or night"),
-    (r"\bempty\b|\bdeserted\b|\bno\s+people\b|\bno\s+crowd", r"\bcrowd\b|\bpacked\b|\bbusy\b", "quantity", "choose empty or crowded"),
-    (r"\bindoor\b|\binside\b|\binterior\b", r"\boutdoor\b|\boutside\b|\blandscape\b", "space", "choose interior or exterior"),
-    (r"\bmacro\b|\bclose[- ]?up\b", r"\bwide\s+shot\b|\bestablishing\b|\baerial\b", "framing", "choose one framing scale"),
+    (
+        r"\bempty\b|\bdeserted\b|\bno\s+people\b|\bno\s+crowd",
+        r"\bcrowd\b|\bpacked\b|\bbusy\b",
+        "quantity",
+        "choose empty or crowded",
+    ),
+    (
+        r"\bindoor\b|\binside\b|\binterior\b",
+        r"\boutdoor\b|\boutside\b|\blandscape\b",
+        "space",
+        "choose interior or exterior",
+    ),
+    (
+        r"\bmacro\b|\bclose[- ]?up\b",
+        r"\bwide\s+shot\b|\bestablishing\b|\baerial\b",
+        "framing",
+        "choose one framing scale",
+    ),
     (r"\bminimal\b|\bsparse\b", r"\bcluttered\b|\bbusy\s+background\b", "composition", "choose minimal or busy"),
     (r"\bphotorealistic\b|\bhyperreal", r"\bcartoon\b|\banime\b|\billustration\b", "style", "pick one render style"),
     (r"\bunderwater\b", r"\bdesert\b|\barid\b", "environment", "environments are incompatible"),
     (r"\bsnow\b|\bblizzard\b", r"\btropical\b|\bpalm\b", "climate", "pick one climate"),
-    (r"\binvisible\b|\btransparent\b", r"\bvisible\b|\bclearly\b|\bdetailed\b", "visibility", "object cannot be both hidden and prominent"),
+    (
+        r"\binvisible\b|\btransparent\b",
+        r"\bvisible\b|\bclearly\b|\bdetailed\b",
+        "visibility",
+        "object cannot be both hidden and prominent",
+    ),
 )
 
 

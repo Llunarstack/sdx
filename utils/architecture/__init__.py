@@ -8,7 +8,8 @@ from pathlib import Path
 _ARCHIVE = "utils._archive.architecture"
 _pkg_dir = Path(__file__).resolve().parent
 _SUBMODULE_NAMES: frozenset[str] = frozenset(
-    p.stem for p in (Path(__file__).resolve().parent.parent / "_archive" / "architecture").glob("*.py")
+    p.stem
+    for p in (Path(__file__).resolve().parent.parent / "_archive" / "architecture").glob("*.py")
     if p.name != "__init__.py"
 )
 __all__: list[str] = sorted(_SUBMODULE_NAMES)

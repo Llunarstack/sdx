@@ -7,8 +7,8 @@ from typing import Dict
 import torch
 
 from .ambiguity import ContextualAmbiguityResolver
-from .nuance import NuanceCapture
 from .decomposer import SemanticDecomposer
+from .nuance import NuanceCapture
 from .style import StyleTransferUnderstanding
 
 __all__ = [

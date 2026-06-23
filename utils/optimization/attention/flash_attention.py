@@ -15,7 +15,7 @@ class FlashAttentionV2(nn.Module):
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         self.qkv = nn.Linear(dim, dim * 3)
         self.attn_drop = nn.Dropout(attn_drop)
@@ -45,7 +45,7 @@ class FlashAttentionV2(nn.Module):
         """Fallback Flash Attention implementation."""
         B, H, N, D = q.shape
 
-        scale = D ** -0.5
+        scale = D**-0.5
 
         q = q * scale
         attn = q @ k.transpose(-2, -1)
@@ -88,7 +88,7 @@ class GroupedQueryAttention(nn.Module):
             k = k.repeat_interleave(q.shape[1] // k.shape[1], dim=1)
             v = v.repeat_interleave(q.shape[1] // v.shape[1], dim=1)
 
-        scale = self.head_dim ** -0.5
+        scale = self.head_dim**-0.5
         attn = (q @ k.transpose(-2, -1)) * scale
         attn = F.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
@@ -169,7 +169,7 @@ class MultiQueryAttention(nn.Module):
         k = self.k(x).unsqueeze(1).expand(B, self.num_heads, N, self.head_dim)
         v = self.v(x).unsqueeze(1).expand(B, self.num_heads, N, self.head_dim)
 
-        scale = self.head_dim ** -0.5
+        scale = self.head_dim**-0.5
         attn = (q @ k.transpose(-2, -1)) * scale
         attn = F.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)

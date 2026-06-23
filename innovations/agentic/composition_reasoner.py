@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConceptRelation:
     """Relationship between two concepts."""
+
     concept_a: str
     concept_b: str
     relation_type: str  # "enhances", "conflicts", "neutral", "supports"
@@ -45,17 +46,61 @@ class ConceptEmbedder(nn.Module):
         )
 
         self.concept_names = [
-            "person", "animal", "building", "nature", "water",
-            "sky", "fire", "light", "shadow", "color",
-            "texture", "pattern", "geometric", "organic", "abstract",
-            "realistic", "surreal", "fantastical", "dark", "bright",
-            "calm", "chaotic", "ordered", "wild", "peaceful",
-            "energetic", "static", "dynamic", "soft", "sharp",
-            "warm", "cold", "wet", "dry", "transparent",
-            "opaque", "smooth", "rough", "detailed", "simple",
-            "minimalist", "maximalist", "vintage", "modern", "ancient",
-            "futuristic", "natural", "artificial", "organic", "mechanical",
-            "beautiful", "ugly", "elegant", "crude", "balanced"
+            "person",
+            "animal",
+            "building",
+            "nature",
+            "water",
+            "sky",
+            "fire",
+            "light",
+            "shadow",
+            "color",
+            "texture",
+            "pattern",
+            "geometric",
+            "organic",
+            "abstract",
+            "realistic",
+            "surreal",
+            "fantastical",
+            "dark",
+            "bright",
+            "calm",
+            "chaotic",
+            "ordered",
+            "wild",
+            "peaceful",
+            "energetic",
+            "static",
+            "dynamic",
+            "soft",
+            "sharp",
+            "warm",
+            "cold",
+            "wet",
+            "dry",
+            "transparent",
+            "opaque",
+            "smooth",
+            "rough",
+            "detailed",
+            "simple",
+            "minimalist",
+            "maximalist",
+            "vintage",
+            "modern",
+            "ancient",
+            "futuristic",
+            "natural",
+            "artificial",
+            "organic",
+            "mechanical",
+            "beautiful",
+            "ugly",
+            "elegant",
+            "crude",
+            "balanced",
         ]
 
     def embed_concept(self, embedding: torch.Tensor) -> torch.Tensor:
@@ -223,10 +268,7 @@ class SemanticCompositionReasoner:
         """Analyze multi-concept composition."""
         if embedding is not None and concept_embeddings is None:
             # Extract concepts from embedding
-            concept_embeddings = [
-                self.concept_embedder.embed_concept(embedding)
-                for _ in range(len(concepts))
-            ]
+            concept_embeddings = [self.concept_embedder.embed_concept(embedding) for _ in range(len(concepts))]
 
         if not concept_embeddings:
             concept_embeddings = [torch.zeros(1, 256) for _ in concepts]
@@ -234,7 +276,7 @@ class SemanticCompositionReasoner:
         # Analyze pairwise relations
         relations = []
         for i, c_a in enumerate(concepts):
-            for j, c_b in enumerate(concepts[i + 1:], i + 1):
+            for j, c_b in enumerate(concepts[i + 1 :], i + 1):
                 cache_key = tuple(sorted([c_a, c_b]))
                 if cache_key not in self.relation_cache:
                     relation = self.relation_analyzer.analyze_relation(
@@ -303,8 +345,7 @@ class SemanticCompositionReasoner:
         if enhancing:
             pair = enhancing[0]
             recommendations.append(
-                f"Emphasize the pairing of '{pair.concept_a}' with '{pair.concept_b}' "
-                f"for stronger impact."
+                f"Emphasize the pairing of '{pair.concept_a}' with '{pair.concept_b}' for stronger impact."
             )
 
         return recommendations
@@ -378,10 +419,7 @@ if __name__ == "__main__":
 
     print("Pairwise Relations:")
     for rel in analysis["pairwise_relations"]:
-        print(
-            f"  {rel['a']} <{rel['relation']}> {rel['b']} "
-            f"({rel['strength']:.1%})"
-        )
+        print(f"  {rel['a']} <{rel['relation']}> {rel['b']} ({rel['strength']:.1%})")
 
     if analysis["conflicts"]:
         print("\nConflicts:")

@@ -193,6 +193,7 @@ class TestIterativeRefinementLoop:
         embedding = torch.randn(1, 4096)
 
         for run in range(3):
+
             def quality_assessor(lat, emb):
                 return 0.85 + (run * 0.03)
 
@@ -337,6 +338,7 @@ class TestRefinementPerformance:
         embedding = torch.randn(1, 4096)
 
         import time
+
         start = time.time()
 
         def quality_assessor(lat, emb):

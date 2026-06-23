@@ -14,14 +14,16 @@ class SpatialLayoutController(nn.Module):
         self.num_regions = num_regions
 
         # Region descriptor: what should be in each grid region
-        self.region_descriptors = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(hidden_dim, 256),
-                nn.GELU(),
-                nn.Linear(256, 128),
-            )
-            for _ in range(num_regions)
-        ])
+        self.region_descriptors = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 128),
+                )
+                for _ in range(num_regions)
+            ]
+        )
 
         # Object positioning (x, y, z depth)
         self.position_predictor = nn.Sequential(

@@ -2,8 +2,8 @@
 
 from .audio2img import AudioToImage
 from .depth import DepthMapGuided
-from .img2img import ImageToImagePlus
 from .engine import MultimodalFusionEngine
+from .img2img import ImageToImagePlus
 from .scene_graph import SceneGraphGeneration
 from .sketch2img import SketchToImage
 from .text_3d import Text3DFusion

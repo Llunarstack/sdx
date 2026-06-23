@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PreferenceComparison:
     """A human preference comparison between two images."""
+
     image_a_features: torch.Tensor
     image_b_features: torch.Tensor
     preference: int  # 0 = a preferred, 1 = b preferred, 0.5 = tie
@@ -258,7 +259,7 @@ class RLHFAgent:
         if len(self.preference_history) > 2:
             correlations = []
             for i, comp1 in enumerate(self.preference_history):
-                for comp2 in self.preference_history[i+1:]:
+                for comp2 in self.preference_history[i + 1 :]:
                     r1_a, _ = self.reward_model(comp1.image_a_features)
                     r1_b, _ = self.reward_model(comp1.image_b_features)
 
@@ -340,4 +341,5 @@ if __name__ == "__main__":
     print("\nDetailed RLHF Report:")
     report = agent.get_detailed_report()
     import json
+
     print(json.dumps(report, indent=2, default=str))

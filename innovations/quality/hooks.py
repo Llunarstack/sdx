@@ -39,10 +39,10 @@ def refine_latent_embedding(
     engine: Optional[UltraQualityEngine] = None,
 ) -> torch.Tensor:
     """
-  Optional post-conditioning on a pooled latent vector before DiT cross-attn.
+    Optional post-conditioning on a pooled latent vector before DiT cross-attn.
 
-  For image tensors (B,C,H,W) with C=3, use ``SubpixelRefinement`` via the engine's
-  subpixel module directly in training experiments.
+    For image tensors (B,C,H,W) with C=3, use ``SubpixelRefinement`` via the engine's
+    subpixel module directly in training experiments.
     """
     eng = engine or UltraQualityEngine()
     mat = material_type or material_hint_from_prompt(prompt)

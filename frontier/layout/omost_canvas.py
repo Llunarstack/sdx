@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
 # Omost uses 9 anchor boxes; we expose the same grid for LLM compatibility.
 OMOST_GRID: Dict[str, tuple[float, float, float, float]] = {
     "top_left": (0.0, 0.0, 0.33, 0.33),

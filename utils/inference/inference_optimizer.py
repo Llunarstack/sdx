@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class InferenceConfig:
     """Configuration for inference optimization."""
+
     max_batch_size: int = 32
     max_seq_length: int = 2048
     enable_kv_cache: bool = True
@@ -99,9 +100,8 @@ class DynamicBatcher:
         self.queue.append((input_ids, request_id))
 
         # Check if batch should be formed
-        should_batch = (
-            len(self.queue) >= self.max_batch_size or
-            (len(self.queue) > 0 and time.time() - self.last_batch_time > self.max_wait_ms / 1000.0)
+        should_batch = len(self.queue) >= self.max_batch_size or (
+            len(self.queue) > 0 and time.time() - self.last_batch_time > self.max_wait_ms / 1000.0
         )
 
         if should_batch:

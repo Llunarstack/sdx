@@ -350,6 +350,7 @@ class TestPerformance:
         embedding = torch.randn(1, 4096)
 
         import time
+
         start = time.time()
         system.analyze_generated_image(embedding, embedding)
         elapsed = time.time() - start

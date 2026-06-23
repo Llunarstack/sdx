@@ -14,14 +14,16 @@ class LightingController(nn.Module):
         self.num_lights = num_lights
 
         # Per-light controllers
-        self.light_controllers = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(hidden_dim, 256),
-                nn.GELU(),
-                nn.Linear(256, 8),  # (x, y, z, intensity, r, g, b, shadow_softness)
-            )
-            for _ in range(num_lights)
-        ])
+        self.light_controllers = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(hidden_dim, 256),
+                    nn.GELU(),
+                    nn.Linear(256, 8),  # (x, y, z, intensity, r, g, b, shadow_softness)
+                )
+                for _ in range(num_lights)
+            ]
+        )
 
         # Global ambient light
         self.ambient = nn.Sequential(

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SemanticChange:
     """Represents a detected semantic change."""
+
     magnitude: float  # 0-1, how much meaning shifted
     direction: str  # which concepts changed
     concept_shifts: Dict[str, float]  # per-concept shift scores
@@ -55,17 +56,61 @@ class ConceptTracker(nn.Module):
         )
 
         self.concept_names = [
-            "color", "lighting_style", "composition", "subject",
-            "background", "texture", "mood", "artistic_style", "detail_level", "realism",
-            "symmetry", "perspective", "depth", "contrast", "saturation",
-            "warmth", "sharpness", "focus_point", "object_count", "scene_type",
-            "season", "time_of_day", "weather", "materials", "cleanliness",
-            "motion", "emotion_positive", "emotion_negative", "elegance", "chaos",
-            "formality", "simplicity", "complexity", "naturalness", "artificiality",
-            "vintage", "modernity", "abstract", "realistic", "surreal",
-            "geometric", "organic", "symmetrical", "asymmetrical", "balanced",
-            "chaotic", "minimal", "ornate", "professional", "amateur",
-            "bright", "dark", "colorful", "monochrome", "mysterious",
+            "color",
+            "lighting_style",
+            "composition",
+            "subject",
+            "background",
+            "texture",
+            "mood",
+            "artistic_style",
+            "detail_level",
+            "realism",
+            "symmetry",
+            "perspective",
+            "depth",
+            "contrast",
+            "saturation",
+            "warmth",
+            "sharpness",
+            "focus_point",
+            "object_count",
+            "scene_type",
+            "season",
+            "time_of_day",
+            "weather",
+            "materials",
+            "cleanliness",
+            "motion",
+            "emotion_positive",
+            "emotion_negative",
+            "elegance",
+            "chaos",
+            "formality",
+            "simplicity",
+            "complexity",
+            "naturalness",
+            "artificiality",
+            "vintage",
+            "modernity",
+            "abstract",
+            "realistic",
+            "surreal",
+            "geometric",
+            "organic",
+            "symmetrical",
+            "asymmetrical",
+            "balanced",
+            "chaotic",
+            "minimal",
+            "ornate",
+            "professional",
+            "amateur",
+            "bright",
+            "dark",
+            "colorful",
+            "monochrome",
+            "mysterious",
         ][:num_concepts]
 
     def extract_concepts(self, image_features: torch.Tensor) -> torch.Tensor:
@@ -261,17 +306,11 @@ class SemanticDriftDetectionSystem:
             refinement_step = step
 
         # Extract concepts
-        original_concepts = self.drift_detector.concept_tracker.extract_concepts(
-            self.semantic_anchor
-        )
-        current_concepts = self.drift_detector.concept_tracker.extract_concepts(
-            image_features
-        )
+        original_concepts = self.drift_detector.concept_tracker.extract_concepts(self.semantic_anchor)
+        current_concepts = self.drift_detector.concept_tracker.extract_concepts(image_features)
 
         # Get concept importance
-        concept_importance = self.drift_detector.concept_tracker.get_concept_importance(
-            original_concepts
-        )
+        concept_importance = self.drift_detector.concept_tracker.get_concept_importance(original_concepts)
 
         # Detect drift
         drift_info = self.drift_detector.detect_drift(
@@ -315,10 +354,7 @@ class SemanticDriftDetectionSystem:
         if len(steps) > 1:
             slope = (magnitudes[-1] - magnitudes[0]) / (steps[-1] - steps[0] + 1e-6)
             current_magnitude = magnitudes[-1]
-            steps_until_critical = max(
-                0,
-                (max_acceptable_drift - current_magnitude) / (slope + 1e-6)
-            )
+            steps_until_critical = max(0, (max_acceptable_drift - current_magnitude) / (slope + 1e-6))
 
             return {
                 "steps_until_boundary": int(steps_until_critical),
@@ -334,12 +370,8 @@ class SemanticDriftDetectionSystem:
         if not self.refinement_trajectory:
             return {"status": "no_refinements"}
 
-        critical_count = sum(
-            1 for e in self.refinement_trajectory if e["severity"] == "critical"
-        )
-        warning_count = sum(
-            1 for e in self.refinement_trajectory if e["severity"] == "warning"
-        )
+        critical_count = sum(1 for e in self.refinement_trajectory if e["severity"] == "critical")
+        warning_count = sum(1 for e in self.refinement_trajectory if e["severity"] == "warning")
 
         drift_magnitudes = [e["drift_magnitude"] for e in self.refinement_trajectory]
 
@@ -377,8 +409,7 @@ if __name__ == "__main__":
         result = system.check_semantic_drift(current_image, step)
 
         if result["status"] != "anchor_not_set":
-            print(f"Step {step}: Drift = {result['drift_magnitude']:.3f}, "
-                  f"Severity = {result['severity']}")
+            print(f"Step {step}: Drift = {result['drift_magnitude']:.3f}, Severity = {result['severity']}")
             if result["recommendation"] != "Continue refinement, drift within acceptable range":
                 print(f"  WARNING: {result['recommendation']}")
 

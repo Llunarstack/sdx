@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DistributedConfig:
     """Configuration for distributed inference."""
+
     num_gpus: int = 1
     num_machines: int = 1
     parallelism_type: str = "tensor"  # tensor, pipeline, sequence
@@ -137,10 +138,7 @@ class PipelineParallelism:
         num_micro_batches = (batch_size + micro_batch_size - 1) // micro_batch_size
 
         # Split into micro-batches
-        micro_batches = [
-            x[i * micro_batch_size : (i + 1) * micro_batch_size]
-            for i in range(num_micro_batches)
-        ]
+        micro_batches = [x[i * micro_batch_size : (i + 1) * micro_batch_size] for i in range(num_micro_batches)]
 
         # Forward pipeline
         outputs = []
@@ -270,9 +268,7 @@ class DistributedInference:
         num_tokens = output.shape[1] - input_ids.shape[1]
         self.stats["total_tokens"] += num_tokens
         self.stats["total_time"] += elapsed
-        self.stats["throughput_tokens_per_sec"] = (
-            self.stats["total_tokens"] / self.stats["total_time"]
-        )
+        self.stats["throughput_tokens_per_sec"] = self.stats["total_tokens"] / self.stats["total_time"]
 
         # Scalability efficiency (linear scaling = 1.0)
         expected_speedup = self.config.num_gpus

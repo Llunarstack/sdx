@@ -1,8 +1,7 @@
 """One-shot project layout rename: innovations package, diffusion/sampling, agentic modules."""
+
 from __future__ import annotations
 
-import re
-import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

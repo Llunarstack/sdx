@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ValidationLevel(Enum):
     """Validation certainty levels."""
+
     UNKNOWN = 0
     LOW = 1
     MEDIUM = 2
@@ -26,6 +27,7 @@ class ValidationLevel(Enum):
 @dataclass
 class ValidatorOutput:
     """Output from a single validator."""
+
     name: str
     score: float  # 0-1
     confidence: float  # 0-1 (how sure the validator is)
@@ -37,6 +39,7 @@ class ValidatorOutput:
 @dataclass
 class EnsembleValidationResult:
     """Result from ensemble validation."""
+
     overall_score: float
     validator_scores: Dict[str, ValidatorOutput]
     consensus_score: float  # Agreement between validators (0-1)
@@ -183,7 +186,7 @@ class AestheticValidator(nn.Module):
         aesthetic = float(self.aesthetic_scorer(generated_embedding).squeeze().detach())
         harmony = float(self.harmony_checker(generated_embedding).squeeze().detach())
 
-        score = (aesthetic * 0.6 + harmony * 0.4)
+        score = aesthetic * 0.6 + harmony * 0.4
         confidence = (aesthetic + harmony) / 2
 
         return ValidatorOutput(
@@ -272,7 +275,7 @@ class RealisticValidator(nn.Module):
         # Lower artifact = better
         artifact_free = 1.0 - artifact_score
 
-        score = (realism * 0.7 + artifact_free * 0.3)
+        score = realism * 0.7 + artifact_free * 0.3
         confidence = min(realism, artifact_free)
 
         return ValidatorOutput(
@@ -458,10 +461,7 @@ if __name__ == "__main__":
 
     print("Validator Details:")
     for validator_name, validator_report in report["validators"].items():
-        print(
-            f"  {validator_name}: {validator_report['score']:.1%} "
-            f"(confidence: {validator_report['confidence']:.1%})"
-        )
+        print(f"  {validator_name}: {validator_report['score']:.1%} (confidence: {validator_report['confidence']:.1%})")
 
     stats = system.get_validation_stats()
     print("\nValidation Statistics:")

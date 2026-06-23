@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PerturbationTest:
     """Results from a single perturbation test."""
+
     perturbation_type: str
     original_score: float
     perturbed_score: float
@@ -27,6 +28,7 @@ class PerturbationTest:
 @dataclass
 class RobustnessReport:
     """Complete robustness test report."""
+
     original_score: float
     perturbation_tests: Dict[str, PerturbationTest]
     overall_robustness: float  # 0-1 (average across all perturbations)
@@ -322,10 +324,7 @@ class AdversarialRobustnessSystem:
                     perturbation_robustness[perturbation_type] = []
                 perturbation_robustness[perturbation_type].append(test.robustness)
 
-        avg_by_type = {
-            ptype: sum(scores) / len(scores)
-            for ptype, scores in perturbation_robustness.items()
-        }
+        avg_by_type = {ptype: sum(scores) / len(scores) for ptype, scores in perturbation_robustness.items()}
 
         return {
             "total_tests": total,
@@ -393,10 +392,7 @@ if __name__ == "__main__":
 
     print("Perturbation Test Results:")
     for ptype, result in detailed["perturbation_tests"].items():
-        print(
-            f"  {ptype}: {result['robustness']:.1%} "
-            f"(delta: {result['score_delta']:+.2%})"
-        )
+        print(f"  {ptype}: {result['robustness']:.1%} (delta: {result['score_delta']:+.2%})")
 
     recommendations = system.recommend_improvements(report)
     if recommendations:

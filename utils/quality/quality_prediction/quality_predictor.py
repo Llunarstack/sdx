@@ -99,12 +99,8 @@ class ImageSharpnessPredictor:
     @staticmethod
     def compute_edge_density(image: torch.Tensor) -> torch.Tensor:
         """Measure edge density (detail level)."""
-        sobel_x = torch.tensor(
-            [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32, device=image.device
-        )
-        sobel_y = torch.tensor(
-            [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32, device=image.device
-        )
+        sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32, device=image.device)
+        sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32, device=image.device)
 
         if image.dim() == 4:
             image = image.mean(dim=1)
@@ -112,7 +108,7 @@ class ImageSharpnessPredictor:
         edges_x = F.conv2d(image.unsqueeze(1), sobel_x.unsqueeze(0).unsqueeze(0), padding=1)
         edges_y = F.conv2d(image.unsqueeze(1), sobel_y.unsqueeze(0).unsqueeze(0), padding=1)
 
-        edge_magnitude = torch.sqrt(edges_x ** 2 + edges_y ** 2)
+        edge_magnitude = torch.sqrt(edges_x**2 + edges_y**2)
 
         return edge_magnitude.mean()
 

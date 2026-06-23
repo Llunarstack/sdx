@@ -9,7 +9,7 @@ using alignment / smoothness proxies in latent space.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Tuple
+from typing import List, Sequence
 
 import torch
 
@@ -56,11 +56,7 @@ class DynamicCFGPicker:
 
         # Slight preference for mid-range CFG (empirical sweet spot).
         cfg_prior = 1.0 - min(1.0, abs(cfg - 7.5) / 7.5) * 0.15
-        total = (
-            self.alignment_weight * alignment
-            + self.smoothness_weight * smoothness
-            + 0.15 * cfg_prior
-        )
+        total = self.alignment_weight * alignment + self.smoothness_weight * smoothness + 0.15 * cfg_prior
         return LatentStepScore(cfg_scale=cfg, alignment=alignment, smoothness=smoothness, total=total)
 
     def pick(self, x: torch.Tensor, *, default: float = 7.5) -> float:

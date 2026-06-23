@@ -14,9 +14,7 @@ class AdaptiveQualityLevels(nn.Module):
         self.levels = 3  # Low, medium, high quality
 
         # Level-specific generators
-        self.generators = nn.ModuleList([
-            nn.Conv2d(3, 64, 3, padding=1) for _ in range(self.levels)
-        ])
+        self.generators = nn.ModuleList([nn.Conv2d(3, 64, 3, padding=1) for _ in range(self.levels)])
 
     def forward(self, latent: torch.Tensor) -> List[torch.Tensor]:
         """Generate at all quality levels in parallel."""

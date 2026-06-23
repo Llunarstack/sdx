@@ -23,7 +23,7 @@ class LiquidPhysicsRenderer(nn.Module):
         surface = surface.view(surface.shape[0], 64, 8, 8)
         refraction = self.refraction_map(surface)
         caustics = torch.sigmoid(self.caustics_generator(surface))
-        refracted = F.grid_sample(
-            base_color, refraction.permute(0, 2, 3, 1).unsqueeze(1), align_corners=False
-        ).squeeze(2)
+        refracted = F.grid_sample(base_color, refraction.permute(0, 2, 3, 1).unsqueeze(1), align_corners=False).squeeze(
+            2
+        )
         return refracted * (1.0 + caustics * 0.3)

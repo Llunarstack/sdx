@@ -109,7 +109,7 @@ class MetaLearning:
 
         for name, grad in gradients.items():
             if grad is not None:
-                importance[name] = float((grad ** 2).mean())
+                importance[name] = float((grad**2).mean())
 
         return importance
 

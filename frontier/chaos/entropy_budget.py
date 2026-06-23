@@ -7,7 +7,7 @@ Prevents "everything is equally noisy" — spend entropy where it helps composit
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import List, Tuple
 
 import torch
 
@@ -55,7 +55,9 @@ class EntropyBudgetAllocator:
         per_step = [total * w / s for w in per_step]
 
         fg = float(max(0.0, min(1.0, foreground_share)))
-        per_region = (fg, 1.0 - fg) if self.num_regions == 2 else tuple(1.0 / self.num_regions for _ in range(self.num_regions))
+        per_region = (
+            (fg, 1.0 - fg) if self.num_regions == 2 else tuple(1.0 / self.num_regions for _ in range(self.num_regions))
+        )
 
         return EntropyBudget(total=total, per_step=tuple(per_step), per_region=per_region)
 

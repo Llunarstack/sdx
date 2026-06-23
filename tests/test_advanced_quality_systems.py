@@ -372,6 +372,7 @@ class TestPerformanceAdvancedQualitySystems:
 
     def test_eliq_speed(self):
         import time
+
         system = ELIQSystem()
         image = torch.randn(1, 4096)
 
@@ -384,6 +385,7 @@ class TestPerformanceAdvancedQualitySystems:
 
     def test_artifact_detection_speed(self):
         import time
+
         system = GenerationArtifactDetectionSystem()
         image = torch.randn(1, 4096)
 
@@ -396,6 +398,7 @@ class TestPerformanceAdvancedQualitySystems:
 
     def test_monitoring_overhead(self):
         import time
+
         system = RealTimeQualityMonitoringSystem()
 
         start = time.time()

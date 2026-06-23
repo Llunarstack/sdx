@@ -75,7 +75,9 @@ class TestMemoryPreferenceSystem:
         for i in range(8):
             features = torch.randn(1, 4096)
             self.system.record_generation(
-                user_id, features, 4.0 + (i * 0.1),
+                user_id,
+                features,
+                4.0 + (i * 0.1),
                 subject="landscape",
                 style="photorealistic",
             )
@@ -92,7 +94,9 @@ class TestMemoryPreferenceSystem:
         for i in range(5):
             features = torch.randn(1, 4096)
             self.system.record_generation(
-                user_id, features, 4.0,
+                user_id,
+                features,
+                4.0,
                 subject="portrait",
                 style="cinematic",
             )
@@ -110,7 +114,9 @@ class TestMemoryPreferenceSystem:
         for _ in range(3):
             features = torch.randn(1, 4096)
             self.system.record_generation(
-                user_id, features, 4.5,
+                user_id,
+                features,
+                4.5,
                 subject="landscape",
                 style="photorealistic",
                 mood="peaceful",
@@ -131,7 +137,9 @@ class TestMemoryPreferenceSystem:
         for _ in range(5):
             features = torch.randn(1, 4096)
             self.system.record_generation(
-                user_id, features, 4.5,
+                user_id,
+                features,
+                4.5,
                 subject="landscape",
             )
 
@@ -146,7 +154,9 @@ class TestMemoryPreferenceSystem:
 
         features = torch.randn(1, 4096)
         self.system.record_generation(
-            user_id, features, 4.0,
+            user_id,
+            features,
+            4.0,
             subject="landscape",
             style="photorealistic",
         )
@@ -321,16 +331,10 @@ class TestSemanticCompositionReasoner:
         embedding = torch.randn(1, 4096)
 
         # Coherent composition
-        coherent = self.system.analyze_composition(
-            ["landscape", "golden_hour", "peaceful"],
-            embedding=embedding
-        )
+        coherent = self.system.analyze_composition(["landscape", "golden_hour", "peaceful"], embedding=embedding)
 
         # Incoherent composition
-        incoherent = self.system.analyze_composition(
-            ["random", "nonsense", "mismatch"],
-            embedding=embedding
-        )
+        incoherent = self.system.analyze_composition(["random", "nonsense", "mismatch"], embedding=embedding)
 
         # Just verify both return valid scores
         assert 0.0 <= coherent["composition_score"] <= 1.0
@@ -365,15 +369,15 @@ class TestIntegrationAdvancedSystems:
 
         # Record preference
         memory.record_generation(
-            user_id, embedding, 4.5,
+            user_id,
+            embedding,
+            4.5,
             subject=concepts[0],
             mood=concepts[2],
         )
 
         # Analyze composition
-        composition = composer.analyze_composition(
-            concepts, embedding=embedding
-        )
+        composition = composer.analyze_composition(concepts, embedding=embedding)
 
         # Get recommendations
         recs = memory.get_recommendations(user_id)
@@ -391,12 +395,15 @@ class TestPerformanceAdvanced:
         system = MemoryPreferenceSystem()
 
         import time
+
         start = time.time()
 
         for i in range(20):
             features = torch.randn(1, 4096)
             system.record_generation(
-                f"user_{i % 5}", features, 4.0 + (i % 2),
+                f"user_{i % 5}",
+                features,
+                4.0 + (i % 2),
                 subject="landscape",
             )
 
@@ -410,6 +417,7 @@ class TestPerformanceAdvanced:
         system = SemanticCompositionReasoner()
 
         import time
+
         start = time.time()
 
         for _ in range(10):
