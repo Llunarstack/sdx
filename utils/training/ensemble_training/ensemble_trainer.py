@@ -36,7 +36,9 @@ class EnsembleTrainer:
         self.ensemble_size = len(models)
         self.training_stats = {"disagreement": [], "loss_variance": []}
 
-    def forward_ensemble(self, x: torch.Tensor, timesteps: torch.Tensor, conditions: torch.Tensor) -> list[torch.Tensor]:
+    def forward_ensemble(
+        self, x: torch.Tensor, timesteps: torch.Tensor, conditions: torch.Tensor
+    ) -> list[torch.Tensor]:
         """Forward pass through all ensemble members.
 
         Args:
@@ -177,7 +179,7 @@ class EnsembleTrainer:
         for pred in predictions:
             log_probs = F.log_softmax(pred / temperature, dim=-1)
             soft_targets = F.softmax(consensus / temperature, dim=-1)
-            kd_loss += F.kl_div(log_probs, soft_targets, reduction="batchmean") * (temperature ** 2)
+            kd_loss += F.kl_div(log_probs, soft_targets, reduction="batchmean") * (temperature**2)
 
         return kd_loss / len(predictions)
 
@@ -224,6 +226,9 @@ class EnsembleTrainer:
         """Get summary of ensemble training statistics."""
         return {
             "ensemble_size": self.ensemble_size,
-            "avg_disagreement": sum(self.training_stats["disagreement"]) / max(1, len(self.training_stats["disagreement"])),
-            "disagreement_trend": self.training_stats["disagreement"][-10:] if self.training_stats["disagreement"] else [],
+            "avg_disagreement": sum(self.training_stats["disagreement"])
+            / max(1, len(self.training_stats["disagreement"])),
+            "disagreement_trend": self.training_stats["disagreement"][-10:]
+            if self.training_stats["disagreement"]
+            else [],
         }

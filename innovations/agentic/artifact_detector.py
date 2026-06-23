@@ -85,11 +85,7 @@ class GANArtifactDetector(nn.Module):
         artifact_locations = torch.sigmoid(artifact_locations).squeeze()
 
         # Overall GAN artifact score (weighted combination)
-        overall_gan_score = (
-            checkerboard_score * 0.4 +
-            mode_collapse_score * 0.35 +
-            frequency_score * 0.25
-        )
+        overall_gan_score = checkerboard_score * 0.4 + mode_collapse_score * 0.35 + frequency_score * 0.25
 
         return {
             "overall_gan_artifact_score": overall_gan_score,
@@ -98,9 +94,12 @@ class GANArtifactDetector(nn.Module):
             "frequency_artifact_score": frequency_score,
             "artifact_locations": artifact_locations.detach().cpu().numpy(),
             "severity": (
-                "critical" if overall_gan_score > 0.7
-                else "high" if overall_gan_score > 0.5
-                else "moderate" if overall_gan_score > 0.3
+                "critical"
+                if overall_gan_score > 0.7
+                else "high"
+                if overall_gan_score > 0.5
+                else "moderate"
+                if overall_gan_score > 0.3
                 else "low"
             ),
         }
@@ -201,10 +200,7 @@ class DiffusionArtifactDetector(nn.Module):
 
         # Overall diffusion artifact score
         overall_diffusion_score = (
-            speckle_score * 0.35 +
-            banding_score * 0.35 +
-            smoothing_score * 0.2 +
-            temporal_score * 0.1
+            speckle_score * 0.35 + banding_score * 0.35 + smoothing_score * 0.2 + temporal_score * 0.1
         )
 
         return {
@@ -215,9 +211,12 @@ class DiffusionArtifactDetector(nn.Module):
             "temporal_inconsistency_score": temporal_score,
             "artifact_locations": diffusion_locations.detach().cpu().numpy(),
             "severity": (
-                "critical" if overall_diffusion_score > 0.7
-                else "high" if overall_diffusion_score > 0.5
-                else "moderate" if overall_diffusion_score > 0.3
+                "critical"
+                if overall_diffusion_score > 0.7
+                else "high"
+                if overall_diffusion_score > 0.5
+                else "moderate"
+                if overall_diffusion_score > 0.3
                 else "low"
             ),
         }
@@ -312,8 +311,8 @@ class GenerationArtifactDetectionSystem:
 
         # Overall artifact score (average of both)
         overall_artifact_score = (
-            gan_results["overall_gan_artifact_score"] * 0.5 +
-            diffusion_results["overall_diffusion_artifact_score"] * 0.5
+            gan_results["overall_gan_artifact_score"] * 0.5
+            + diffusion_results["overall_diffusion_artifact_score"] * 0.5
         )
 
         # Determine if generation is clean enough
@@ -322,22 +321,29 @@ class GenerationArtifactDetectionSystem:
         # Identify dominant artifact type
         if gan_results["overall_gan_artifact_score"] > diffusion_results["overall_diffusion_artifact_score"]:
             dominant_artifact = (
-                "checkerboard_pattern" if gan_results["checkerboard_pattern_score"] > 0.6
-                else "mode_collapse" if gan_results["mode_collapse_score"] > 0.6
+                "checkerboard_pattern"
+                if gan_results["checkerboard_pattern_score"] > 0.6
+                else "mode_collapse"
+                if gan_results["mode_collapse_score"] > 0.6
                 else "frequency_artifacts"
             )
         else:
             dominant_artifact = (
-                "speckles" if diffusion_results["speckle_score"] > 0.6
-                else "color_banding" if diffusion_results["banding_score"] > 0.6
+                "speckles"
+                if diffusion_results["speckle_score"] > 0.6
+                else "color_banding"
+                if diffusion_results["banding_score"] > 0.6
                 else "over_smoothing"
             )
 
         # Get remediation suggestions
         severity = (
-            "critical" if overall_artifact_score > 0.7
-            else "high" if overall_artifact_score > 0.5
-            else "moderate" if overall_artifact_score > 0.3
+            "critical"
+            if overall_artifact_score > 0.7
+            else "high"
+            if overall_artifact_score > 0.5
+            else "moderate"
+            if overall_artifact_score > 0.3
             else "low"
         )
 
@@ -355,8 +361,7 @@ class GenerationArtifactDetectionSystem:
             "dominant_artifact_type": dominant_artifact,
             "remediation_suggestions": remediation_suggestions,
             "assessment_confidence": (
-                "high" if overall_artifact_score > 0.5 or overall_artifact_score < 0.2
-                else "medium"
+                "high" if overall_artifact_score > 0.5 or overall_artifact_score < 0.2 else "medium"
             ),
         }
 
@@ -369,7 +374,9 @@ class GenerationArtifactDetectionSystem:
             return {"status": "no_detections"}
 
         artifact_free_count = sum(1 for d in self.detection_history if d["artifact_free"])
-        avg_artifact_score = sum(d["overall_artifact_score"] for d in self.detection_history) / len(self.detection_history)
+        avg_artifact_score = sum(d["overall_artifact_score"] for d in self.detection_history) / len(
+            self.detection_history
+        )
 
         artifact_types = {}
         for result in self.detection_history:
@@ -382,9 +389,7 @@ class GenerationArtifactDetectionSystem:
             "average_artifact_score": avg_artifact_score,
             "artifact_type_distribution": artifact_types,
             "most_common_artifact": max(artifact_types, key=artifact_types.get),
-            "critical_artifacts_detected": sum(
-                1 for d in self.detection_history if d["severity"] == "critical"
-            ),
+            "critical_artifacts_detected": sum(1 for d in self.detection_history if d["severity"] == "critical"),
         }
 
 

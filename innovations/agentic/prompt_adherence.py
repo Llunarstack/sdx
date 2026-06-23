@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PromptAnalysis:
     """Analysis of prompt semantic content."""
+
     primary_subject: str  # Main object/character
     style_descriptors: List[str]  # Artistic style
     color: List[str]  # Colors mentioned
@@ -98,8 +99,7 @@ class PentaEncoderSemanticAnalyzer(nn.Module):
 
         # Combine all features
         combined = torch.cat(
-            [subject_features, style_features, detail_features, composition_features, context_features],
-            dim=-1
+            [subject_features, style_features, detail_features, composition_features, context_features], dim=-1
         )
         semantic = self.engine(combined)
 
@@ -173,9 +173,7 @@ class PromptValidator(nn.Module):
             torch.cat([prompt_semantics["detail"], generated_semantics["detail"]], dim=-1)
         )
 
-        style_match = self.style_validator(
-            torch.cat([prompt_semantics["style"], generated_semantics["style"]], dim=-1)
-        )
+        style_match = self.style_validator(torch.cat([prompt_semantics["style"], generated_semantics["style"]], dim=-1))
 
         composition_match = self.composition_validator(
             torch.cat([prompt_semantics["composition"], generated_semantics["composition"]], dim=-1)
@@ -307,9 +305,7 @@ class PromptAdherenceMonitor:
         for aspect, threshold in self.max_deviations.items():
             if aspect in validation_scores:
                 if validation_scores[aspect] < (1.0 - threshold):
-                    violations.append(
-                        f"Poor {aspect} match: {validation_scores[aspect]:.2%}"
-                    )
+                    violations.append(f"Poor {aspect} match: {validation_scores[aspect]:.2%}")
 
         adherence = validation_scores["overall"]
         self.adherence_history.append(adherence)
@@ -354,9 +350,7 @@ class PromptAdherenceMonitor:
 
         for iteration in range(max_iterations):
             # Get enforcement params
-            params = self.get_enforcement_params(
-                prompt_semantics, current_adherence
-            )
+            params = self.get_enforcement_params(prompt_semantics, current_adherence)
 
             logger.info(
                 f"Iteration {iteration + 1}: "
@@ -380,9 +374,7 @@ class PromptAdherenceMonitor:
             }
 
             # Check adherence
-            current_adherence, violations = self.check_adherence(
-                prompt_semantics, current_latent, generated_semantics
-            )
+            current_adherence, violations = self.check_adherence(prompt_semantics, current_latent, generated_semantics)
 
             logger.info(f"Adherence: {current_adherence:.2%}")
             if violations:
@@ -391,10 +383,7 @@ class PromptAdherenceMonitor:
 
             # If adherent enough, stop
             if current_adherence > 0.90 or iteration == max_iterations - 1:
-                logger.info(
-                    f"Final adherence: {current_adherence:.2%} "
-                    f"(Target: >90%)"
-                )
+                logger.info(f"Final adherence: {current_adherence:.2%} (Target: >90%)")
                 break
 
         return current_latent, current_adherence
@@ -424,9 +413,7 @@ if __name__ == "__main__":
         return torch.randn(1, 4, 64, 64)
 
     # Generate with adherence enforcement
-    final_latent, adherence = monitor.generate_with_adherence(
-        prompt, t5_emb, clip_embs, dummy_gen, max_iterations=3
-    )
+    final_latent, adherence = monitor.generate_with_adherence(prompt, t5_emb, clip_embs, dummy_gen, max_iterations=3)
 
     print(f"\nFinal adherence score: {adherence:.2%}")
     print(f"Adherence history: {[f'{x:.2%}' for x in monitor.adherence_history]}")

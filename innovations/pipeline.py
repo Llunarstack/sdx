@@ -18,6 +18,7 @@ def _get_quality_control_system():
     """Lazy-load quality control system."""
     try:
         from .agentic import QualityControlSystem
+
         return QualityControlSystem()
     except ImportError:
         logger.warning("Agentic quality control not available")
@@ -28,6 +29,7 @@ def _get_adherence_monitor():
     """Lazy-load prompt adherence monitor."""
     try:
         from .agentic import PromptAdherenceMonitor
+
         return PromptAdherenceMonitor()
     except ImportError:
         logger.warning("Prompt adherence monitoring not available")
@@ -38,6 +40,7 @@ def _get_visual_reasoning_system():
     """Lazy-load visual reasoning system."""
     try:
         from .agentic import VisualReasoningSystem
+
         return VisualReasoningSystem()
     except ImportError:
         logger.warning("Visual reasoning not available")
@@ -48,6 +51,7 @@ def _get_adaptive_learning_system():
     """Lazy-load adaptive learning system."""
     try:
         from .agentic import AdaptiveLearningSystem
+
         return AdaptiveLearningSystem()
     except ImportError:
         logger.warning("Adaptive learning not available")
@@ -58,6 +62,7 @@ def _get_prompt_optimization_system():
     """Lazy-load prompt optimization system."""
     try:
         from .agentic import PromptOptimizationSystem
+
         return PromptOptimizationSystem()
     except ImportError:
         logger.warning("Prompt optimization not available")
@@ -68,6 +73,7 @@ def _get_ensemble_validator():
     """Lazy-load ensemble validator."""
     try:
         from .agentic import EnsembleValidationSystem
+
         return EnsembleValidationSystem()
     except ImportError:
         logger.warning("Ensemble validation not available")
@@ -78,6 +84,7 @@ def _get_robustness_system():
     """Lazy-load adversarial robustness system."""
     try:
         from .agentic import AdversarialRobustnessSystem
+
         return AdversarialRobustnessSystem()
     except ImportError:
         logger.warning("Adversarial robustness testing not available")
@@ -88,6 +95,7 @@ def _get_memory_preference_system():
     """Lazy-load memory and preference system."""
     try:
         from .agentic import MemoryPreferenceSystem
+
         return MemoryPreferenceSystem()
     except ImportError:
         logger.warning("Memory and preference system not available")
@@ -98,6 +106,7 @@ def _get_semantic_composition_reasoner():
     """Lazy-load semantic composition reasoner."""
     try:
         from .agentic import SemanticCompositionReasoner
+
         return SemanticCompositionReasoner()
     except ImportError:
         logger.warning("Semantic composition reasoning not available")
@@ -108,6 +117,7 @@ def _get_refinement_loop():
     """Lazy-load iterative refinement loop."""
     try:
         from .agentic import IterativeRefinementLoop
+
         return IterativeRefinementLoop()
     except ImportError:
         logger.warning("Iterative refinement loop not available")
@@ -155,6 +165,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["photorealism"]:
             try:
                 from .quality.engine import UltraQualityEngine
+
                 self._components["photorealism"] = UltraQualityEngine()
                 logger.info("✓ Photorealism engine initialized")
             except Exception as e:
@@ -163,6 +174,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["semantic"]:
             try:
                 from .semantics.engine import SemanticUnderstandingEngine
+
                 self._components["semantic"] = SemanticUnderstandingEngine()
                 logger.info("✓ Semantic understanding engine initialized")
             except Exception as e:
@@ -171,6 +183,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["control"]:
             try:
                 from .control.engine import PrecisionControlSystem
+
                 self._components["control"] = PrecisionControlSystem()
                 logger.info("✓ Precision control system initialized")
             except Exception as e:
@@ -179,6 +192,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["speed"]:
             try:
                 from .speed.engine import RealtimeGenerationEngine
+
                 self._components["speed"] = RealtimeGenerationEngine()
                 logger.info("✓ Real-time generation engine initialized")
             except Exception as e:
@@ -187,6 +201,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["consistency"]:
             try:
                 from .consistency.engine import ConsistencyEngine
+
                 self._components["consistency"] = ConsistencyEngine()
                 logger.info("✓ Consistency engine initialized")
             except Exception as e:
@@ -195,6 +210,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["multimodal"]:
             try:
                 from .multimodal.engine import MultimodalFusionEngine
+
                 self._components["multimodal"] = MultimodalFusionEngine()
                 logger.info("✓ Multimodal fusion engine initialized")
             except Exception as e:
@@ -203,6 +219,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["novel"]:
             try:
                 from .capabilities.engine import NovelCapabilitiesEngine
+
                 self._components["novel"] = NovelCapabilitiesEngine()
                 logger.info("✓ Novel capabilities engine initialized")
             except Exception as e:
@@ -212,6 +229,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["quality_control"]:
             try:
                 from .agentic import QualityControlSystem
+
                 self._agentic_systems["quality_control"] = QualityControlSystem()
                 logger.info("✓ Quality control system initialized")
             except Exception as e:
@@ -220,6 +238,7 @@ class SDXAdvancedPipeline(nn.Module):
         if self.config["prompt_adherence"]:
             try:
                 from .agentic import PromptAdherenceMonitor
+
                 self._agentic_systems["adherence_monitor"] = PromptAdherenceMonitor()
                 logger.info("✓ Prompt adherence monitor initialized")
             except Exception as e:
@@ -228,6 +247,7 @@ class SDXAdvancedPipeline(nn.Module):
         # Initialize additional agentic systems
         try:
             from .agentic import VisualReasoningSystem
+
             self._agentic_systems["visual_reasoning"] = VisualReasoningSystem()
             logger.info("✓ Visual reasoning system initialized")
         except Exception as e:
@@ -235,6 +255,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import AdaptiveLearningSystem
+
             self._agentic_systems["adaptive_learning"] = AdaptiveLearningSystem()
             logger.info("✓ Adaptive learning system initialized")
         except Exception as e:
@@ -242,6 +263,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import PromptOptimizationSystem
+
             self._agentic_systems["prompt_optimization"] = PromptOptimizationSystem()
             logger.info("✓ Prompt optimization system initialized")
         except Exception as e:
@@ -249,6 +271,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import EnsembleValidationSystem
+
             self._agentic_systems["ensemble_validator"] = EnsembleValidationSystem()
             logger.info("✓ Ensemble validation system initialized")
         except Exception as e:
@@ -256,6 +279,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import AdversarialRobustnessSystem
+
             self._agentic_systems["robustness_testing"] = AdversarialRobustnessSystem()
             logger.info("✓ Adversarial robustness system initialized")
         except Exception as e:
@@ -263,6 +287,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import MemoryPreferenceSystem
+
             self._agentic_systems["memory_preference"] = MemoryPreferenceSystem()
             logger.info("✓ Memory and preference system initialized")
         except Exception as e:
@@ -270,6 +295,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import SemanticCompositionReasoner
+
             self._agentic_systems["semantic_composition"] = SemanticCompositionReasoner()
             logger.info("✓ Semantic composition reasoner initialized")
         except Exception as e:
@@ -277,6 +303,7 @@ class SDXAdvancedPipeline(nn.Module):
 
         try:
             from .agentic import IterativeRefinementLoop
+
             self._agentic_systems["refinement_loop"] = IterativeRefinementLoop()
             logger.info("✓ Iterative refinement loop initialized")
         except Exception as e:
@@ -354,7 +381,7 @@ class SDXAdvancedPipeline(nn.Module):
         text: Optional[torch.Tensor] = None,
         image: Optional[torch.Tensor] = None,
         sketch: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         """Generate from multiple modalities."""
         multimodal = self.get_component("multimodal")
@@ -709,10 +736,7 @@ class IntegrationValidator:
         return True
 
 
-def create_advanced_pipeline(
-    enable_all: bool = True,
-    **component_flags
-) -> SDXAdvancedPipeline:
+def create_advanced_pipeline(enable_all: bool = True, **component_flags) -> SDXAdvancedPipeline:
     """Factory function to create configured pipeline."""
     if enable_all:
         return SDXAdvancedPipeline()

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VisualConcept:
     """Represents a visual concept extracted from image."""
+
     name: str
     confidence: float  # 0-1
     spatial_location: Tuple[float, float, float, float]  # x, y, w, h (normalized)
@@ -26,6 +27,7 @@ class VisualConcept:
 @dataclass
 class VisualScene:
     """Complete scene understanding."""
+
     primary_subject: VisualConcept
     secondary_objects: List[VisualConcept]
     background: str
@@ -77,10 +79,26 @@ class ConceptDetector(nn.Module):
         )
 
         self.concept_names = [
-            "person", "animal", "landscape", "building", "object",
-            "sky", "water", "vegetation", "light_source", "texture",
-            "pattern", "figure", "face", "hand", "clothing",
-            "vehicle", "food", "furniture", "geometric_shape", "abstract"
+            "person",
+            "animal",
+            "landscape",
+            "building",
+            "object",
+            "sky",
+            "water",
+            "vegetation",
+            "light_source",
+            "texture",
+            "pattern",
+            "figure",
+            "face",
+            "hand",
+            "clothing",
+            "vehicle",
+            "food",
+            "furniture",
+            "geometric_shape",
+            "abstract",
         ]
 
     def forward(self, embedding: torch.Tensor) -> List[VisualConcept]:
@@ -202,12 +220,16 @@ class SceneUnderstandingEngine(nn.Module):
         camera_angle = self.camera_angles[camera_idx]
 
         # Primary subject (highest confidence concept)
-        primary = concepts[0] if concepts else VisualConcept(
-            name="unknown",
-            confidence=0.0,
-            spatial_location=(0.5, 0.5, 1.0, 1.0),
-            semantic_features=embedding,
-            relationships=[],
+        primary = (
+            concepts[0]
+            if concepts
+            else VisualConcept(
+                name="unknown",
+                confidence=0.0,
+                spatial_location=(0.5, 0.5, 1.0, 1.0),
+                semantic_features=embedding,
+                relationships=[],
+            )
         )
 
         secondary = concepts[1:] if len(concepts) > 1 else []
@@ -244,7 +266,11 @@ class RelationshipDetector(nn.Module):
         )
 
         self.relationship_types = [
-            "left_of", "right_of", "above", "below", "inside",
+            "left_of",
+            "right_of",
+            "above",
+            "below",
+            "inside",
         ]
 
     def forward(

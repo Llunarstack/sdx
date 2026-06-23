@@ -7,7 +7,7 @@ Each entry links to a paper/project and notes implementation status in SDX.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Literal
+from typing import List, Literal
 
 Status = Literal["implemented", "partial", "planned", "research"]
 

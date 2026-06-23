@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class UserPreferenceProfile:
     """Complete user preference profile."""
+
     user_id: str
     total_generations: int = 0
     favorite_subjects: Dict[str, float] = field(default_factory=dict)  # subject -> preference score
@@ -89,10 +90,7 @@ class PreferenceMemory(nn.Module):
         if user_id not in self.profiles:
             if len(self.profiles) >= self.max_profiles:
                 # Remove oldest profile
-                oldest_id = min(
-                    self.profiles.keys(),
-                    key=lambda uid: self.profiles[uid].last_updated
-                )
+                oldest_id = min(self.profiles.keys(), key=lambda uid: self.profiles[uid].last_updated)
                 del self.profiles[oldest_id]
 
             self.profiles[user_id] = UserPreferenceProfile(user_id=user_id)
@@ -126,8 +124,7 @@ class PreferenceMemory(nn.Module):
             if subject not in profile.favorite_subjects:
                 profile.favorite_subjects[subject] = 0.0
             profile.favorite_subjects[subject] = (
-                0.9 * profile.favorite_subjects[subject] +
-                0.1 * float(subject_aff.mean().detach()) * weight
+                0.9 * profile.favorite_subjects[subject] + 0.1 * float(subject_aff.mean().detach()) * weight
             )
 
         # Update style preferences
@@ -136,8 +133,7 @@ class PreferenceMemory(nn.Module):
             if style not in profile.favorite_styles:
                 profile.favorite_styles[style] = 0.0
             profile.favorite_styles[style] = (
-                0.9 * profile.favorite_styles[style] +
-                0.1 * float(style_aff.mean().detach()) * weight
+                0.9 * profile.favorite_styles[style] + 0.1 * float(style_aff.mean().detach()) * weight
             )
 
         # Update mood preferences
@@ -146,8 +142,7 @@ class PreferenceMemory(nn.Module):
             if mood not in profile.favorite_moods:
                 profile.favorite_moods[mood] = 0.0
             profile.favorite_moods[mood] = (
-                0.9 * profile.favorite_moods[mood] +
-                0.1 * float(mood_aff.mean().detach()) * weight
+                0.9 * profile.favorite_moods[mood] + 0.1 * float(mood_aff.mean().detach()) * weight
             )
 
         # Update lighting preferences
@@ -155,18 +150,12 @@ class PreferenceMemory(nn.Module):
             weight = user_rating / 5.0
             if lighting not in profile.preferred_lighting:
                 profile.preferred_lighting[lighting] = 0.0
-            profile.preferred_lighting[lighting] = (
-                0.9 * profile.preferred_lighting[lighting] +
-                0.1 * weight
-            )
+            profile.preferred_lighting[lighting] = 0.9 * profile.preferred_lighting[lighting] + 0.1 * weight
 
         # Update stats
         profile.total_generations += 1
         old_avg = profile.average_rating
-        profile.average_rating = (
-            (old_avg * (profile.total_generations - 1) + user_rating) /
-            profile.total_generations
-        )
+        profile.average_rating = (old_avg * (profile.total_generations - 1) + user_rating) / profile.total_generations
 
         # Update satisfaction rate
         high_quality = sum(1 for _ in range(1) if user_rating >= profile.quality_threshold)
@@ -196,10 +185,26 @@ class ThemeAnalyzer(nn.Module):
         )
 
         self.themes = [
-            "nature", "portrait", "landscape", "abstract", "surreal",
-            "fantasy", "sci-fi", "minimalist", "maximalist", "geometric",
-            "organic", "vintage", "modern", "cinematic", "painterly",
-            "photorealistic", "stylized", "fantasy", "dark", "bright"
+            "nature",
+            "portrait",
+            "landscape",
+            "abstract",
+            "surreal",
+            "fantasy",
+            "sci-fi",
+            "minimalist",
+            "maximalist",
+            "geometric",
+            "organic",
+            "vintage",
+            "modern",
+            "cinematic",
+            "painterly",
+            "photorealistic",
+            "stylized",
+            "fantasy",
+            "dark",
+            "bright",
         ]
 
     def extract_themes(
@@ -234,10 +239,7 @@ class ThemeAnalyzer(nn.Module):
             # Get top themes
             top_indices = torch.argsort(theme_scores, descending=True)[:3]
             dominant = self.themes[int(top_indices[0])]
-            secondary = [
-                self.themes[int(idx)] for idx in top_indices[1:3]
-                if float(theme_scores[idx]) > 0.1
-            ]
+            secondary = [self.themes[int(idx)] for idx in top_indices[1:3] if float(theme_scores[idx]) > 0.1]
 
             return dominant, secondary
 
@@ -293,13 +295,17 @@ class RecommendationEngine(nn.Module):
         """Recommend next prompt based on preferences."""
         recommendation = {
             "subject": max(profile.favorite_subjects.items(), default=("landscape", 0.5))[0]
-            if profile.favorite_subjects else "landscape",
+            if profile.favorite_subjects
+            else "landscape",
             "style": max(profile.favorite_styles.items(), default=("photorealistic", 0.5))[0]
-            if profile.favorite_styles else "photorealistic",
+            if profile.favorite_styles
+            else "photorealistic",
             "mood": max(profile.favorite_moods.items(), default=("peaceful", 0.5))[0]
-            if profile.favorite_moods else "peaceful",
+            if profile.favorite_moods
+            else "peaceful",
             "lighting": max(profile.preferred_lighting.items(), default=("natural", 0.5))[0]
-            if profile.preferred_lighting else "natural",
+            if profile.preferred_lighting
+            else "natural",
         }
 
         # Construct prompt
@@ -397,16 +403,10 @@ class MemoryPreferenceSystem:
                 "average_rating": profile.average_rating,
                 "satisfaction_rate": profile.satisfaction_rate,
                 "dominant_theme": profile.dominant_theme,
-                "favorite_subjects": dict(sorted(
-                    profile.favorite_subjects.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:3]),
-                "favorite_styles": dict(sorted(
-                    profile.favorite_styles.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:3]),
+                "favorite_subjects": dict(
+                    sorted(profile.favorite_subjects.items(), key=lambda x: x[1], reverse=True)[:3]
+                ),
+                "favorite_styles": dict(sorted(profile.favorite_styles.items(), key=lambda x: x[1], reverse=True)[:3]),
             },
         }
 
@@ -424,10 +424,12 @@ class MemoryPreferenceSystem:
 
         # Average preference strength
         avg_subject_pref = sum(profile.favorite_subjects.values()) / len(profile.favorite_subjects)
-        avg_style_pref = sum(profile.favorite_styles.values()) / len(profile.favorite_styles) if profile.favorite_styles else 0.5
+        avg_style_pref = (
+            sum(profile.favorite_styles.values()) / len(profile.favorite_styles) if profile.favorite_styles else 0.5
+        )
 
         # Combine with user's quality threshold
-        prediction = (avg_subject_pref * 0.4 + avg_style_pref * 0.4 + profile.quality_threshold / 5.0 * 0.2)
+        prediction = avg_subject_pref * 0.4 + avg_style_pref * 0.4 + profile.quality_threshold / 5.0 * 0.2
 
         return min(1.0, max(0.0, prediction))
 

@@ -41,9 +41,7 @@ def fusion_weight_at_step(
             iso = schedule.min_isolation + (1.0 - schedule.min_isolation) * t
         else:
             t = p / max(1e-6, schedule.isolate_until_frac)
-            iso = schedule.min_isolation + (1.0 - schedule.min_isolation) * (
-                0.5 * (1.0 - math.cos(math.pi * t))
-            )
+            iso = schedule.min_isolation + (1.0 - schedule.min_isolation) * (0.5 * (1.0 - math.cos(math.pi * t)))
         return float(1.0 - iso)
     # Late phase: ramp to full fusion
     q = (p - schedule.isolate_until_frac) / max(1e-6, 1.0 - schedule.isolate_until_frac)

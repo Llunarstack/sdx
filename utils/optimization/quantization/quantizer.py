@@ -38,7 +38,7 @@ class DynamicQuantizer:
             x_max = x.max()
 
             qmin = 0
-            qmax = 2 ** bits - 1
+            qmax = 2**bits - 1
 
             scale = (x_max - x_min) / (qmax - qmin)
             zero_point = qmin - x_min / scale
@@ -52,9 +52,7 @@ class DynamicQuantizer:
 
         return x, torch.tensor(1.0), torch.tensor(0.0)
 
-    def dequantize_tensor(
-        self, x_q: torch.Tensor, scale: torch.Tensor, zero_point: torch.Tensor
-    ) -> torch.Tensor:
+    def dequantize_tensor(self, x_q: torch.Tensor, scale: torch.Tensor, zero_point: torch.Tensor) -> torch.Tensor:
         """Dequantize tensor."""
         return (x_q - zero_point) * scale
 

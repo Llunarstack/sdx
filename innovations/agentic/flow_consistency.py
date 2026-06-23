@@ -122,11 +122,7 @@ class TemporalPairConsistency(nn.Module):
         consistency_loss = torch.nn.functional.mse_loss(v1, v2)
 
         # Weighted by consistency scores
-        weighted_loss = (
-            float(consistency_loss.detach()) *
-            self.consistency_weight *
-            (c1 + c2) / 2
-        )
+        weighted_loss = float(consistency_loss.detach()) * self.consistency_weight * (c1 + c2) / 2
 
         return weighted_loss, {
             "v1_consistency": c1,
@@ -197,17 +193,17 @@ class CurriculumConsistencyModel(nn.Module):
             0: {  # Easy: sample from coarse timesteps
                 "num_steps": 4,
                 "strategy": "uniform",
-                "description": "Coarse sampling (4 steps)"
+                "description": "Coarse sampling (4 steps)",
             },
             1: {  # Medium: sample from medium timesteps
                 "num_steps": 8,
                 "strategy": "balanced",
-                "description": "Medium sampling (8 steps)"
+                "description": "Medium sampling (8 steps)",
             },
             2: {  # Hard: sample from fine timesteps
                 "num_steps": 16,
                 "strategy": "adaptive",
-                "description": "Fine sampling (16 steps)"
+                "description": "Fine sampling (16 steps)",
             },
         }
         return strategies[min(self.curriculum_stage, 2)]
@@ -284,7 +280,7 @@ class FlowMatchingConsistencySystem:
             velocity, consistency = self.velocity_net(x, t, prompt_conditioning)
 
             # Update state
-            dt = timesteps[i] - timesteps[i-1]
+            dt = timesteps[i] - timesteps[i - 1]
             new_state = x + velocity * dt
 
             states.append(new_state)
@@ -295,7 +291,7 @@ class FlowMatchingConsistencySystem:
         avg_consistency = sum(consistencies) / len(consistencies) if consistencies else 0.0
 
         # Check temporal pairs for consistency
-        time_pairs = [(timesteps[i].item(), timesteps[i+1].item()) for i in range(len(timesteps)-1)]
+        time_pairs = [(timesteps[i].item(), timesteps[i + 1].item()) for i in range(len(timesteps) - 1)]
         tpc_metrics = self.tpc_module(initial_state, time_pairs)
 
         result = {
@@ -308,7 +304,7 @@ class FlowMatchingConsistencySystem:
                 "num_steps": num_steps,
                 "velocity_field_consistency": avg_consistency,
                 "temporal_coherence": tpc_metrics["average_consistency"],
-            }
+            },
         }
 
         self.generation_history.append(result)
@@ -334,9 +330,12 @@ class FlowMatchingConsistencySystem:
             "velocity_field_consistency": generation_result["average_velocity_consistency"],
             "temporal_pair_consistency": generation_result["temporal_pair_consistency_loss"],
             "path_quality": (
-                "excellent" if generation_result["overall_consistency_score"] > 0.85
-                else "good" if generation_result["overall_consistency_score"] > 0.7
-                else "acceptable" if generation_result["overall_consistency_score"] > 0.55
+                "excellent"
+                if generation_result["overall_consistency_score"] > 0.85
+                else "good"
+                if generation_result["overall_consistency_score"] > 0.7
+                else "acceptable"
+                if generation_result["overall_consistency_score"] > 0.55
                 else "poor"
             ),
             "technical_details": generation_result["metrics"],
@@ -384,7 +383,7 @@ if __name__ == "__main__":
     print(f"  Path Quality: {report['path_quality']}")
 
     print("\nTechnical Details:")
-    for key, value in report['technical_details'].items():
+    for key, value in report["technical_details"].items():
         if isinstance(value, float):
             print(f"  {key}: {value:.1%}")
         else:

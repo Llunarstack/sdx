@@ -76,7 +76,7 @@ class FusedAttentionGELU(nn.Module):
         v = v.transpose(1, 2)
 
         # Fused attention + output projection + GELU
-        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim**0.5)
         attn = torch.softmax(scores, dim=-1)
         attn_output = torch.matmul(attn, v)
 
@@ -161,9 +161,7 @@ class OperatorFusionOptimizer:
                     next_module = next_layers[idx + 1]
                     next_next_module = next_layers[idx + 2]
 
-                    if isinstance(next_module, nn.BatchNorm2d) and isinstance(
-                        next_next_module, nn.ReLU
-                    ):
+                    if isinstance(next_module, nn.BatchNorm2d) and isinstance(next_next_module, nn.ReLU):
                         opportunities.append((name, "Conv+BatchNorm+ReLU", 3.0))
 
             # Pattern: LayerNorm -> Linear
@@ -184,7 +182,7 @@ class OperatorFusionOptimizer:
 
         total_speedup = 1.0
         for _, pattern, individual_speedup in opportunities:
-            total_speedup *= (1.0 + (individual_speedup - 1.0) * 0.3)  # Weighted blend
+            total_speedup *= 1.0 + (individual_speedup - 1.0) * 0.3  # Weighted blend
 
         return min(total_speedup, 5.0)  # Cap at 5x
 
@@ -204,11 +202,13 @@ class GraphRewriter:
 
         for name, module in self.model.named_modules():
             if isinstance(module, nn.Module):
-                operations.append({
-                    "name": name,
-                    "type": module.__class__.__name__,
-                    "params": sum(p.numel() for p in module.parameters()),
-                })
+                operations.append(
+                    {
+                        "name": name,
+                        "type": module.__class__.__name__,
+                        "params": sum(p.numel() for p in module.parameters()),
+                    }
+                )
 
         # Sort by: memory intensity first, then computation
         operations.sort(key=lambda x: (x["params"], x["name"]))
@@ -225,10 +225,7 @@ class GraphRewriter:
         for i, op1 in enumerate(self.optimized_graph or []):
             for op2 in self.optimized_graph[i + 1 :]:
                 # Simple check: same type and config = duplicate
-                if (
-                    op1["type"] == op2["type"]
-                    and op1["params"] == op2["params"]
-                ):
+                if op1["type"] == op2["type"] and op1["params"] == op2["params"]:
                     # Could cache result
                     optimizations += 1
 
@@ -237,10 +234,7 @@ class GraphRewriter:
     def memory_layout_optimization(self) -> None:
         """Optimize memory layout for sequential access."""
         # Suggest channel-last format for conv layers
-        conv_layers = [
-            name for name, module in self.model.named_modules()
-            if isinstance(module, nn.Conv2d)
-        ]
+        conv_layers = [name for name, module in self.model.named_modules() if isinstance(module, nn.Conv2d)]
 
         logger.info(f"Recommend NHWC layout for {len(conv_layers)} conv layers (2x memory bandwidth)")
 

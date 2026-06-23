@@ -112,7 +112,7 @@ class LayoutDSLCompiler:
                 elif key == "priority":
                     current_region["priority"] = int(value)
                 elif key == "prompt":
-                    current_region["prompt"] = value.strip('"\'')
+                    current_region["prompt"] = value.strip("\"'")
                 else:
                     if "constraints" not in current_region:
                         current_region["constraints"] = {}

@@ -7,7 +7,6 @@ Cheap QA for box layouts before spending GPU on a full sample.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
 
 import torch
 

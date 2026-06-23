@@ -11,7 +11,7 @@ Unified entry: ``SDXAdvancedPipeline`` in ``pipeline.py``.
 Discovery: ``registry.py``.
 """
 
-__version__ = "1.0.0"
+__version__ = "11.0.0"
 
 __all__ = [
     "ConsistencyEngine",

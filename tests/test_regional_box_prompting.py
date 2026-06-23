@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import torch
-
 from utils.generation.regional_box_prompting import (
     build_latent_region_masks,
     layout_text_from_regions,

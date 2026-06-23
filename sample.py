@@ -2203,7 +2203,7 @@ from diffusion.sampling import (
     recommend_holy_grail_preset,
     sanitize_holy_grail_kwargs,
 )
-from models.controlnet import control_type_to_id, infer_control_type_from_path
+from models.controlnet import infer_control_type_from_path
 from PIL import Image
 from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
 from utils.runtime.jsonutil import loads as json_loads
@@ -2825,17 +2825,20 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             layout_line = layout_text_from_regions(box_spec)
             if box_spec.global_prompt:
                 prompt_for_encoding = (
-                    f"{box_spec.global_prompt}, {prompt_for_encoding}" if prompt_for_encoding else box_spec.global_prompt
+                    f"{box_spec.global_prompt}, {prompt_for_encoding}"
+                    if prompt_for_encoding
+                    else box_spec.global_prompt
                 )
             if not prompt_for_encoding:
                 prompt_for_encoding = layout_line
             elif str(getattr(args, "box_layout_mode", "regional_cfg") or "regional_cfg").lower() == "text_only":
-                prompt_for_encoding = layout_line if not prompt_for_encoding else f"{prompt_for_encoding}. {layout_line}"
+                prompt_for_encoding = (
+                    layout_line if not prompt_for_encoding else f"{prompt_for_encoding}. {layout_line}"
+                )
             if box_spec.global_negative and not getattr(args, "negative_prompt", "").strip():
                 args.negative_prompt = box_spec.global_negative
             print(
-                f"Box layout: {len(box_spec.regions)} region(s) "
-                f"({', '.join(r.name for r in box_spec.regions)})",
+                f"Box layout: {len(box_spec.regions)} region(s) ({', '.join(r.name for r in box_spec.regions)})",
                 file=sys.stderr,
             )
         except Exception as e:
@@ -3754,9 +3757,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                     device=device,
                 )
                 model_kwargs_cond["control_image"] = sk.unsqueeze(0)
-                model_kwargs_cond["control_scale"] = float(
-                    getattr(args, "box_sketch_control_scale", 0.75) or 0.75
-                )
+                model_kwargs_cond["control_scale"] = float(getattr(args, "box_sketch_control_scale", 0.75) or 0.75)
                 from models.controlnet import control_type_to_id
 
                 model_kwargs_cond["control_type"] = torch.tensor(
@@ -4237,7 +4238,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_periodic_kw,
                 **_superior_kw,
                 **_guidance_kw,
-            **_regional_kw,
+                **_regional_kw,
             )
             x0_up = torch.nn.functional.interpolate(x0.float(), size=(fh, fw), mode="bicubic", align_corners=False).to(
                 dtype=x0.dtype
@@ -4304,7 +4305,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_periodic_kw,
                 **_superior_kw,
                 **_guidance_kw,
-            **_regional_kw,
+                **_regional_kw,
             )
     else:
         print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
@@ -4371,7 +4372,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
-            **_regional_kw,
+                        **_regional_kw,
                         return_intermediate_state=True,
                     )
 
@@ -4492,7 +4493,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
-            **_regional_kw,
+                        **_regional_kw,
                         return_intermediate_state=True,
                     )
 
@@ -4537,7 +4538,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
-            **_regional_kw,
+                        **_regional_kw,
                         return_intermediate_state=True,
                     )
 
@@ -4691,7 +4692,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                     **_holy_kw,
                     **_superior_kw,
                     **_guidance_kw,
-            **_regional_kw,
+                    **_regional_kw,
                 )
 
             x0 = maybe_clip_refine_latent(
@@ -4768,7 +4769,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_holy_kw,
                         **_superior_kw,
                         **_guidance_kw,
-            **_regional_kw,
+                        **_regional_kw,
                     )
 
                 x0 = _sc_refiner(x0, t_s, n_st)
@@ -4890,7 +4891,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_periodic_kw,
                         **_superior_kw,
                         **_guidance_kw,
-            **_regional_kw,
+                        **_regional_kw,
                     )
                 print(
                     f"Hires-fix: refined latent {tlh}x{tlw} ({hires_steps} steps, t_start={t_hires}, cfg={cfg_h}).",

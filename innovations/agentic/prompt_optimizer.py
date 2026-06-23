@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PromptAnalysis:
     """Analysis of a prompt."""
+
     original_prompt: str
     length: int
     coverage_score: float  # 0-1 (how much detail provided)
@@ -82,9 +83,16 @@ class PromptAnalyzer(nn.Module):
         )
 
         self.aspects = [
-            "lighting", "color", "texture", "mood",
-            "composition", "camera_angle", "scale",
-            "detail_level", "environment", "atmosphere"
+            "lighting",
+            "color",
+            "texture",
+            "mood",
+            "composition",
+            "camera_angle",
+            "scale",
+            "detail_level",
+            "environment",
+            "atmosphere",
         ]
 
     def forward(self, embedding: torch.Tensor, original_text: str = "") -> PromptAnalysis:
@@ -161,22 +169,37 @@ class PromptEnhancer(nn.Module):
 
         # Enhancement vocabulary
         self.style_adjectives = [
-            "photorealistic", "cinematic", "artistic",
-            "hyperdetailed", "professional", "masterpiece",
-            "award-winning", "stunning", "breathtaking"
+            "photorealistic",
+            "cinematic",
+            "artistic",
+            "hyperdetailed",
+            "professional",
+            "masterpiece",
+            "award-winning",
+            "stunning",
+            "breathtaking",
         ]
 
         self.technical_terms = [
-            "physically-based rendering", "ray tracing",
-            "volumetric lighting", "subsurface scattering",
-            "high contrast", "sharp focus", "bokeh",
-            "depth of field", "color graded"
+            "physically-based rendering",
+            "ray tracing",
+            "volumetric lighting",
+            "subsurface scattering",
+            "high contrast",
+            "sharp focus",
+            "bokeh",
+            "depth of field",
+            "color graded",
         ]
 
         self.quality_boosters = [
-            "8k", "4k", "ultra high definition",
-            "intricate details", "high quality",
-            "professional quality", "museum quality"
+            "8k",
+            "4k",
+            "ultra high definition",
+            "intricate details",
+            "high quality",
+            "professional quality",
+            "museum quality",
         ]
 
     def forward(
@@ -394,7 +417,9 @@ class PromptOptimizationSystem:
 
         total = len(self.optimization_history)
         avg_coverage_gain = sum(r["improvements"]["coverage_gain"] for r in self.optimization_history) / total
-        avg_vagueness_reduction = sum(r["improvements"]["vagueness_reduction"] for r in self.optimization_history) / total
+        avg_vagueness_reduction = (
+            sum(r["improvements"]["vagueness_reduction"] for r in self.optimization_history) / total
+        )
         avg_specificity_gain = sum(r["improvements"]["specificity_gain"] for r in self.optimization_history) / total
         avg_technical_gain = sum(r["improvements"]["technical_gain"] for r in self.optimization_history) / total
 

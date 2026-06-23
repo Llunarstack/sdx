@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PreferenceDimension:
     """A single preference dimension score."""
+
     name: str
     score: float  # 0-1
     confidence: float  # 0-1 how sure we are
@@ -32,6 +33,7 @@ class PreferenceDimension:
 @dataclass
 class MultiDimensionalReward:
     """Complete multi-dimensional reward assessment."""
+
     aesthetic_quality: PreferenceDimension
     detail_richness: PreferenceDimension
     semantic_alignment: PreferenceDimension
@@ -92,13 +94,9 @@ class AestheticQualityModule(nn.Module):
         confidence = float(self.confidence_net(image_features).squeeze().detach())
 
         # Weighted combination
-        score = (composition * 0.4 + color * 0.35 + lighting * 0.25)
+        score = composition * 0.4 + color * 0.35 + lighting * 0.25
 
-        reasoning = (
-            f"Composition: {composition:.0%}, "
-            f"Color harmony: {color:.0%}, "
-            f"Lighting: {lighting:.0%}"
-        )
+        reasoning = f"Composition: {composition:.0%}, Color harmony: {color:.0%}, Lighting: {lighting:.0%}"
 
         return PreferenceDimension(
             name="Aesthetic Quality",
@@ -158,13 +156,9 @@ class DetailRichnessModule(nn.Module):
         complexity = float(self.complexity_scorer(image_features).squeeze().detach())
         confidence = float(self.confidence_net(image_features).squeeze().detach())
 
-        score = (texture * 0.4 + sharpness * 0.35 + complexity * 0.25)
+        score = texture * 0.4 + sharpness * 0.35 + complexity * 0.25
 
-        reasoning = (
-            f"Texture detail: {texture:.0%}, "
-            f"Sharpness: {sharpness:.0%}, "
-            f"Complexity: {complexity:.0%}"
-        )
+        reasoning = f"Texture detail: {texture:.0%}, Sharpness: {sharpness:.0%}, Complexity: {complexity:.0%}"
 
         return PreferenceDimension(
             name="Detail Richness",
@@ -228,13 +222,9 @@ class SemanticAlignmentModule(nn.Module):
         context = float(self.context_alignment(pf).squeeze().detach())
         confidence = float(self.confidence_net(pf).squeeze().detach())
 
-        score = (subject * 0.4 + style * 0.35 + context * 0.25)
+        score = subject * 0.4 + style * 0.35 + context * 0.25
 
-        reasoning = (
-            f"Subject match: {subject:.0%}, "
-            f"Style match: {style:.0%}, "
-            f"Context: {context:.0%}"
-        )
+        reasoning = f"Subject match: {subject:.0%}, Style match: {style:.0%}, Context: {context:.0%}"
 
         return PreferenceDimension(
             name="Semantic Alignment",
@@ -294,13 +284,9 @@ class TechnicalExcellenceModule(nn.Module):
         noise = 1.0 - float(self.noise_detector(image_features).squeeze().detach())
         confidence = float(self.confidence_net(image_features).squeeze().detach())
 
-        score = (artifacts * 0.4 + distortion * 0.35 + noise * 0.25)
+        score = artifacts * 0.4 + distortion * 0.35 + noise * 0.25
 
-        reasoning = (
-            f"Artifact-free: {artifacts:.0%}, "
-            f"Distortion-free: {distortion:.0%}, "
-            f"Noise-free: {noise:.0%}"
-        )
+        reasoning = f"Artifact-free: {artifacts:.0%}, Distortion-free: {distortion:.0%}, Noise-free: {noise:.0%}"
 
         return PreferenceDimension(
             name="Technical Excellence",
@@ -360,13 +346,9 @@ class EmotionalImpactModule(nn.Module):
         engagement = float(self.engagement_scorer(image_features).squeeze().detach())
         confidence = float(self.confidence_net(image_features).squeeze().detach())
 
-        score = (mood * 0.4 + atmosphere * 0.35 + engagement * 0.25)
+        score = mood * 0.4 + atmosphere * 0.35 + engagement * 0.25
 
-        reasoning = (
-            f"Mood strength: {mood:.0%}, "
-            f"Atmosphere: {atmosphere:.0%}, "
-            f"Engagement: {engagement:.0%}"
-        )
+        reasoning = f"Mood strength: {mood:.0%}, Atmosphere: {atmosphere:.0%}, Engagement: {engagement:.0%}"
 
         return PreferenceDimension(
             name="Emotional Impact",
@@ -414,11 +396,11 @@ class VisionRewardSystem:
 
         # Calculate overall score
         overall = (
-            aesthetic.score * 0.25 +
-            detail.score * 0.2 +
-            semantic.score * 0.25 +
-            technical.score * 0.15 +
-            emotional.score * 0.15
+            aesthetic.score * 0.25
+            + detail.score * 0.2
+            + semantic.score * 0.25
+            + technical.score * 0.15
+            + emotional.score * 0.15
         )
 
         # Preference strength based on user rating
@@ -513,10 +495,7 @@ if __name__ == "__main__":
 
     print("Dimension Scores:")
     for dim_name, dim_data in report["dimensions"].items():
-        print(
-            f"  {dim_name.replace('_', ' ').title()}: {dim_data['score']:.1%} "
-            f"({dim_data['reasoning']})"
-        )
+        print(f"  {dim_name.replace('_', ' ').title()}: {dim_data['score']:.1%} ({dim_data['reasoning']})")
 
     print("\nImprovement Suggestions:")
     for suggestion in report["suggestions"]:

@@ -3,6 +3,7 @@ Deprecated import path — use ``diffusion.sampling``.
 
 Re-exports lazily from the canonical package.
 """
+
 from __future__ import annotations
 
 from importlib import import_module

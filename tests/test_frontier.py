@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import torch
-
 from frontier import FrontierEngine, analyze_prompt
+from frontier.chaos import EntropyBudgetAllocator, SerendipityInjector
 from frontier.logic import AbsenceExtractor, ContradictionScanner
-from frontier.chaos import SerendipityInjector, EntropyBudgetAllocator
 from frontier.memory import GenerationEchoMemory
 from frontier.narrative import TemporalMomentAnalyzer, WitnessPerspectiveAnalyzer
 from frontier.narrative.witness import WitnessPerspective

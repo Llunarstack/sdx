@@ -66,7 +66,7 @@ class StructuredPruning:
             importance = self.compute_importance(module, torch.randn(1, *module.weight.shape[1:]))
 
             # Identify channels to keep
-            keep_idx = np.argsort(importance)[-( num_channels - num_prune):]
+            keep_idx = np.argsort(importance)[-(num_channels - num_prune) :]
 
             pruning_info[name] = {
                 "original_channels": num_channels,
@@ -74,7 +74,9 @@ class StructuredPruning:
                 "kept_indices": keep_idx,
             }
 
-            logger.info(f"Pruned {name}: {num_channels} -> {num_channels - num_prune} channels ({self.pruning_ratio*100:.1f}%)")
+            logger.info(
+                f"Pruned {name}: {num_channels} -> {num_channels - num_prune} channels ({self.pruning_ratio * 100:.1f}%)"
+            )
 
         return pruned_model, pruning_info
 
@@ -84,7 +86,7 @@ class StructuredPruning:
         for name, info in pruning_info.items():
             if info["pruned_channels"] > 0:
                 ratio = 1.0 - (info["pruned_channels"] / info["original_channels"])
-                total_speedup *= (1.0 / ratio)
+                total_speedup *= 1.0 / ratio
 
         return min(total_speedup, 5.0)  # Cap at 5x
 
@@ -149,9 +151,7 @@ class KnowledgeDistillation:
             student_output = self.student(batch)
 
             # Compute loss
-            loss, distill_loss, hard_loss = self.compute_distillation_loss(
-                student_output, teacher_output, targets
-            )
+            loss, distill_loss, hard_loss = self.compute_distillation_loss(student_output, teacher_output, targets)
 
             # Backward pass
             optimizer.zero_grad()
@@ -232,14 +232,16 @@ class MixturOfExperts:
         self.expert_dim = expert_dim
 
         # Create expert networks
-        self.experts = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(expert_dim, expert_dim * 2),
-                nn.GELU(),
-                nn.Linear(expert_dim * 2, expert_dim),
-            )
-            for _ in range(num_experts)
-        ])
+        self.experts = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(expert_dim, expert_dim * 2),
+                    nn.GELU(),
+                    nn.Linear(expert_dim * 2, expert_dim),
+                )
+                for _ in range(num_experts)
+            ]
+        )
 
         # Router network
         self.router = nn.Sequential(
@@ -281,9 +283,7 @@ class AdaptiveComputation:
         self.halt_threshold = halt_threshold
 
         # Halting units for each layer
-        self.halting_units = nn.ModuleList([
-            nn.Linear(512, 1) for _ in range(num_layers)
-        ])
+        self.halting_units = nn.ModuleList([nn.Linear(512, 1) for _ in range(num_layers)])
 
     def should_halt(self, layer_output: torch.Tensor, layer_idx: int) -> Tuple[bool, float]:
         """Determine if computation should stop at this layer."""

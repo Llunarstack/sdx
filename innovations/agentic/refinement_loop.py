@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RefinementStep:
     """Record of a single refinement step."""
+
     iteration: int
     input_score: float
     output_score: float
@@ -30,6 +31,7 @@ class RefinementStep:
 @dataclass
 class RefinementReport:
     """Complete refinement process report."""
+
     initial_score: float
     final_score: float
     total_iterations: int
@@ -136,9 +138,16 @@ class QualityMetricsAggregator(nn.Module):
         )
 
         self.quality_dimensions = [
-            "adherence", "detail", "lighting", "composition",
-            "colors", "realism", "consistency", "clarity",
-            "coherence", "aesthetic"
+            "adherence",
+            "detail",
+            "lighting",
+            "composition",
+            "colors",
+            "realism",
+            "consistency",
+            "clarity",
+            "coherence",
+            "aesthetic",
         ]
 
     def aggregate_metrics(self, quality_features: torch.Tensor) -> float:
@@ -209,6 +218,7 @@ class IterativeRefinementLoop:
             Tuple of (refined_latent, refinement_report)
         """
         import time
+
         start_time = time.time()
 
         current_latent = initial_latent
@@ -270,9 +280,7 @@ class IterativeRefinementLoop:
 
             if verbose:
                 logger.info(
-                    f"Iteration {iteration + 1}: "
-                    f"{current_score:.1%} → {refined_score:.1%} "
-                    f"(+{improvement:+.1%})"
+                    f"Iteration {iteration + 1}: {current_score:.1%} → {refined_score:.1%} (+{improvement:+.1%})"
                 )
                 if improvements_applied:
                     logger.info(f"  Improvements: {', '.join(improvements_applied)}")

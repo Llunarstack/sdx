@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -37,11 +37,7 @@ def references_from_layout(
     """Collect ``reference`` / ``reference_image`` paths from layout regions."""
     out: List[RegionReference] = []
     for r in regions:
-        ref = str(
-            getattr(r, "reference_path", "")
-            or getattr(r, "reference", "")
-            or ""
-        ).strip()
+        ref = str(getattr(r, "reference_path", "") or getattr(r, "reference", "") or "").strip()
         if not ref:
             continue
         p = _resolve(ref, source_dir)

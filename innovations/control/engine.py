@@ -9,9 +9,9 @@ import torch
 from .camera import CameraController
 from .color import ColorPaletteController
 from .detail import DetailIntensityController
+from .effects import VisualEffectsController
 from .lighting import LightingController
 from .spatial import SpatialLayoutController
-from .effects import VisualEffectsController
 
 __all__ = [
     "CameraController",

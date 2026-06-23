@@ -15,12 +15,13 @@ logger = logging.getLogger(__name__)
 
 class KernelBackend(Enum):
     """Available native kernel backends."""
-    NUMPY = "numpy"        # Pure Python fallback
-    RUST = "rust"          # PyO3 Rust bindings (CPU SIMD)
-    CUDA = "cuda"          # C++ CUDA kernels (GPU)
-    GO = "go"              # Go shared library (goroutines)
-    MOJO = "mojo"          # Mojo SIMD compilation
-    JULIA = "julia"        # Julia multi-threaded
+
+    NUMPY = "numpy"  # Pure Python fallback
+    RUST = "rust"  # PyO3 Rust bindings (CPU SIMD)
+    CUDA = "cuda"  # C++ CUDA kernels (GPU)
+    GO = "go"  # Go shared library (goroutines)
+    MOJO = "mojo"  # Mojo SIMD compilation
+    JULIA = "julia"  # Julia multi-threaded
 
 
 class HardwareProfile:
@@ -47,6 +48,7 @@ class HardwareProfile:
         """Check if CUDA is available."""
         try:
             import torch
+
             return torch.cuda.is_available()
         except (ImportError, RuntimeError):
             return os.path.exists("./libsdx_cuda.so") or os.path.exists("./libsdx_cuda.dll")
@@ -67,6 +69,7 @@ class HardwareProfile:
         """Count available CUDA devices."""
         try:
             import torch
+
             return torch.cuda.device_count()
         except (ImportError, RuntimeError):
             return 0
@@ -113,8 +116,8 @@ class KernelSelector:
         if self.hardware.has_rust:
             order.append(KernelBackend.RUST)  # SIMD quantization
         if self.hardware.has_go:
-            order.append(KernelBackend.GO)    # Goroutine quantization
-        order.append(KernelBackend.NUMPY)     # Fallback
+            order.append(KernelBackend.GO)  # Goroutine quantization
+        order.append(KernelBackend.NUMPY)  # Fallback
         return order
 
     def _prefer_softmax(self) -> list:
@@ -125,7 +128,7 @@ class KernelSelector:
         if self.hardware.has_cuda:
             order.append(KernelBackend.CUDA)  # Warp reduction
         if self.hardware.has_julia:
-            order.append(KernelBackend.JULIA) # Multi-threaded
+            order.append(KernelBackend.JULIA)  # Multi-threaded
         order.append(KernelBackend.NUMPY)
         return order
 
@@ -135,11 +138,11 @@ class KernelSelector:
         if self.hardware.has_cuda:
             order.append(KernelBackend.CUDA)  # GPU attention (5x faster)
         if self.hardware.has_go:
-            order.append(KernelBackend.GO)    # Flash Attention V2 (3x faster)
+            order.append(KernelBackend.GO)  # Flash Attention V2 (3x faster)
         if self.hardware.has_rust:
             order.append(KernelBackend.RUST)  # Parallel attention (4x faster)
         if self.hardware.has_julia:
-            order.append(KernelBackend.JULIA) # Multi-head parallelism
+            order.append(KernelBackend.JULIA)  # Multi-head parallelism
         order.append(KernelBackend.NUMPY)
         return order
 
@@ -163,7 +166,7 @@ class KernelSelector:
         if self.hardware.has_rust:
             order.append(KernelBackend.RUST)  # Cache-optimized matmul
         if self.hardware.has_julia:
-            order.append(KernelBackend.JULIA) # Blocked matmul
+            order.append(KernelBackend.JULIA)  # Blocked matmul
         order.append(KernelBackend.NUMPY)
         return order
 
@@ -175,7 +178,7 @@ class KernelSelector:
         if self.hardware.has_rust:
             order.append(KernelBackend.RUST)  # SIMD convolution
         if self.hardware.has_go:
-            order.append(KernelBackend.GO)    # Goroutine convolution
+            order.append(KernelBackend.GO)  # Goroutine convolution
         order.append(KernelBackend.NUMPY)
         return order
 
@@ -202,12 +205,14 @@ class KernelSelector:
 
         if backend == KernelBackend.RUST:
             import sdx_native
+
             if operation == "quantization":
                 sdx_native.quantize_int8(test_data, 127.0)
         elif backend == KernelBackend.CUDA:
             # Test CUDA availability
             if operation == "quantization":
                 import torch
+
                 torch.cuda.FloatTensor(10)
         # Add other backends as needed
 
@@ -291,6 +296,7 @@ class KernelSelector:
 
     def _load_numpy_kernel(self, operation: str) -> Callable:
         """Load NumPy fallback kernel."""
+
         def quantize_numpy(x, scale):
             return np.clip(x * scale, -128, 127).astype(np.int8)
 
@@ -299,7 +305,7 @@ class KernelSelector:
             return exp_x / np.sum(exp_x)
 
         def gelu_numpy(x):
-            cdf = 0.5 * (1 + np.tanh(np.sqrt(2/np.pi) * (x + 0.044715 * x**3)))
+            cdf = 0.5 * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x**3)))
             return x * cdf
 
         kernels = {

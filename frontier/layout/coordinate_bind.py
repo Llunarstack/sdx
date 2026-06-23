@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from typing import List, Tuple
 
-
 _LOC_TOKEN = re.compile(
     r"<loc_([0-9.]+)_([0-9.]+)_([0-9.]+)_([0-9.]+)>",
     flags=re.IGNORECASE,

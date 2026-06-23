@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Sequence, Tuple
+from typing import List, Tuple
 
 
 class MomentPhase(str, Enum):
