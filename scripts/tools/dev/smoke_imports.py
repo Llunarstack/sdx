@@ -30,6 +30,8 @@ def main() -> None:
         ("config", repo_root / "config"),
         ("data", repo_root / "data"),
         ("diffusion", repo_root / "diffusion"),
+        ("frontier", repo_root / "frontier"),
+        ("innovations", repo_root / "innovations"),
         ("models", repo_root / "models"),
         ("training", repo_root / "training"),
         ("utils", repo_root / "utils"),
@@ -74,6 +76,7 @@ def main() -> None:
         "scripts.tools.ops.gen_searcher_bridge",  # depends on archived utils.modeling
         "scripts.tools.ops.pretrained_status",  # depends on archived utils.modeling
         "scripts.tools.ops.visual_brain_generate",  # depends on archived utils.agentic
+        "scripts.tools.dev.strip_ai_contributors",  # optional git-filter-repo (dev-only)
     )
 
     failures = []

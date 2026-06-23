@@ -6,12 +6,6 @@ from __future__ import annotations
 import re
 import sys
 
-try:
-    import git_filter_repo as fr
-except ImportError:
-    print("ERROR: pip install git-filter-repo", file=sys.stderr)
-    raise SystemExit(1)
-
 _SKIP_SUB = (
     "made-with: cursor",
     "co-authored-by: cursor",
@@ -48,6 +42,12 @@ def message_callback(message: bytes) -> bytes:
 
 
 def main() -> int:
+    try:
+        import git_filter_repo as fr
+    except ImportError:
+        print("ERROR: pip install git-filter-repo", file=sys.stderr)
+        return 1
+
     args = fr.FilteringOptions.parse_args(["--force"])
     repo_filter = fr.RepoFilter(args, message_callback=message_callback)
     repo_filter.run()
