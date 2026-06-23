@@ -92,6 +92,10 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
         cmd.extend(["--character-negative-extra", str(getattr(args, "character_negative_extra"))])
     if getattr(args, "prompt_layout", ""):
         cmd.extend(["--prompt-layout", str(getattr(args, "prompt_layout"))])
+    if getattr(args, "box_layout", ""):
+        cmd.extend(["--box-layout", str(getattr(args, "box_layout"))])
+    if str(getattr(args, "box_layout_mode", "regional_cfg") or "regional_cfg").lower() != "regional_cfg":
+        cmd.extend(["--box-layout-mode", str(getattr(args, "box_layout_mode"))])
     if str(getattr(args, "t5_layout_encode", "auto") or "auto").lower() != "auto":
         cmd.extend(["--t5-layout-encode", str(getattr(args, "t5_layout_encode"))])
     if getattr(args, "scene_blueprint", ""):

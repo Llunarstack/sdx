@@ -4,7 +4,7 @@ Tests for iterative refinement loop system.
 
 import pytest
 import torch
-from advanced_innovations.agentic import IterativeRefinementLoop
+from innovations.agentic import IterativeRefinementLoop
 
 
 class TestIterativeRefinementLoop:
@@ -292,7 +292,7 @@ class TestIterativeRefinementLoop:
 
     def test_decision_maker(self):
         """Test refinement decision making."""
-        from advanced_innovations.agentic import RefinementDecisionMaker
+        from innovations.agentic import RefinementDecisionMaker
 
         maker = RefinementDecisionMaker()
 
@@ -312,7 +312,7 @@ class TestIterativeRefinementLoop:
 
     def test_metrics_aggregator(self):
         """Test metrics aggregation."""
-        from advanced_innovations.agentic import QualityMetricsAggregator
+        from innovations.agentic import QualityMetricsAggregator
 
         agg = QualityMetricsAggregator()
 

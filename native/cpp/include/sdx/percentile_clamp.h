@@ -1,6 +1,6 @@
 /**
  * Per-sample percentile clamp on a float32 tensor (B, row_len).
- * Matches dynamic_percentile_clamp() in diffusion/sampling_extras/latent_refiner.py.
+ * Matches dynamic_percentile_clamp() in diffusion/sampling/latent_refiner.py.
  */
 #ifndef SDX_PERCENTILE_CLAMP_H
 #define SDX_PERCENTILE_CLAMP_H

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Drop AI Co-authored-by / Made-with lines before a commit is recorded.
+# Install: cp scripts/tools/dev/prepare-commit-msg .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
+
+set -euo pipefail
+MSG_FILE="${1:?}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FILTER="${SCRIPT_DIR}/strip_ai_git_trailers.py"
+
+if [[ ! -f "$FILTER" ]]; then
+  exit 0
+fi
+
+filtered="$(python "$FILTER" < "$MSG_FILE")"
+if [[ -n "$filtered" ]]; then
+  printf '%s' "$filtered" > "$MSG_FILE"
+fi

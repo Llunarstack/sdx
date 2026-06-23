@@ -2,7 +2,7 @@
 
 **Holy Grail** is SDX's name for **per-step inference policy**: CFG strength, ControlNet scale, adapter scales, and optional latent refinement change across denoise steps instead of staying fixed.
 
-Implementation code lives under [`diffusion/sampling_extras/`](../diffusion/sampling_extras/) (import path `diffusion.sampling_extras`; `diffusion.holy_grail` re-exports for compatibility). Runtime wiring is in `diffusion/gaussian_diffusion.py` and `sample.py` (`--holy-grail-preset`, related flags).
+Implementation code lives under [`diffusion/sampling/`](../diffusion/sampling/) (import path `diffusion.sampling`; `diffusion.holy_grail` re-exports for compatibility). Runtime wiring is in `diffusion/gaussian_diffusion.py` and `sample.py` (`--holy-grail-preset`, related flags).
 
 ## End-to-end flow
 
@@ -52,5 +52,5 @@ flowchart LR
 
 ## Further reading
 
-- [`diffusion/sampling_extras/README.md`](../diffusion/sampling_extras/README.md) — module list and CLI starter.
+- [`diffusion/sampling/README.md`](../diffusion/sampling/README.md) — module list and CLI starter.
 - [`diffusion/holy_grail/README.md`](../diffusion/holy_grail/README.md) — compatibility entry point.

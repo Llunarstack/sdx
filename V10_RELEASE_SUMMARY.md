@@ -151,11 +151,11 @@ Git Tag: v10.0.0
 ### Key Files
 ```
 Added:
-├── advanced_innovations/agentic/evolving_quality_framework.py
-├── advanced_innovations/agentic/generation_artifact_detector.py
-├── advanced_innovations/agentic/semantic_drift_detector.py
-├── advanced_innovations/agentic/realtime_quality_monitor.py
-├── advanced_innovations/agentic/explainable_quality_scoring.py
+├── innovations/agentic/quality_framework.py
+├── innovations/agentic/artifact_detector.py
+├── innovations/agentic/drift_detector.py
+├── innovations/agentic/quality_monitor.py
+├── innovations/agentic/explainable_scoring.py
 ├── tests/test_advanced_quality_systems.py (34 tests)
 ├── docs/releases/v10.md (2,000+ lines)
 ├── docs/releases/VERSION_COMPARISON.md (800+ lines)
@@ -165,8 +165,8 @@ Added:
 
 Modified:
 ├── README.md (v10 badge + features section)
-├── advanced_innovations/agentic/__init__.py (15 new exports)
-└── advanced_innovations/integration.py (integration updates)
+├── innovations/agentic/__init__.py (15 new exports)
+└── innovations/integration.py (integration updates)
 ```
 
 ---
@@ -224,7 +224,7 @@ Quality Assessment Stack:
 ```
 
 ### Exports
-All systems exported from `advanced_innovations/agentic/__init__.py`:
+All systems exported from `innovations/agentic/__init__.py`:
 - ELIQSystem
 - GenerationArtifactDetectionSystem
 - SemanticDriftDetectionSystem

@@ -18,6 +18,8 @@ CURSOR_EMAILS="${CURSOR_EMAILS:-cursoragent@users.noreply.github.com,cursoragent
 CURSOR_NAMES="${CURSOR_NAMES:-cursoragent,Cursor Agent,Cursoragent}"
 CURSOR_SUBSTRINGS="${CURSOR_SUBSTRINGS:-cursoragent,cursor agent,@cursor.com}"
 WORKDIR="${WORKDIR:-/tmp/repo-clean-$$.git}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STRIP_MSG="$SCRIPT_DIR/strip_ai_git_trailers.py"
 
 if [[ -z "$REPO_URL" ]]; then
   echo "ERROR: Missing repository URL."
@@ -92,6 +94,17 @@ PY
 echo "Rewriting history with git filter-repo..."
 git filter-repo --force --commit-callback "$(cat "$CALLBACK_FILE")"
 rm -f "$CALLBACK_FILE"
+
+if [[ -f "$STRIP_MSG" ]]; then
+  echo "Stripping AI Co-authored-by / Made-with trailers from commit messages..."
+  git filter-repo --force --message-callback "
+import subprocess, sys
+script = ${STRIP_MSG@Q}
+msg = commit.message.decode('utf-8', errors='replace')
+proc = subprocess.run([sys.executable, script], input=msg, text=True, capture_output=True)
+commit.message = proc.stdout.encode('utf-8')
+"
+fi
 
 if ! git remote get-url origin >/dev/null 2>&1; then
   git remote add origin "$REPO_URL"

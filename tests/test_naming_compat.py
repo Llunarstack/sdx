@@ -5,16 +5,16 @@ from utils.architecture.ar_block_conditioning import normalize_num_ar_blocks as 
 from vit_quality.checkpoint_utils import load_vit_quality_checkpoint
 
 
-def test_diffusion_holy_grail_shim_reexports_sampling_extras():
+def test_diffusion_holy_grail_shim_reexports_sampling():
     from diffusion.holy_grail import list_holy_grail_presets  # noqa: PLC0415
-    from diffusion.sampling_extras import list_holy_grail_presets as list_se  # noqa: PLC0415
+    from diffusion.sampling import list_holy_grail_presets as list_se  # noqa: PLC0415
 
     assert list_holy_grail_presets() == list_se()
 
 
-def test_diffusion_holy_grail_all_matches_sampling_extras():
+def test_diffusion_holy_grail_all_matches_sampling():
     import diffusion.holy_grail as hg  # noqa: PLC0415
-    import diffusion.sampling_extras as se  # noqa: PLC0415
+    import diffusion.sampling as se  # noqa: PLC0415
 
     assert sorted(hg.__all__) == sorted(se.__all__)
 

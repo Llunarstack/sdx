@@ -107,11 +107,11 @@ python sample.py --ckpt model.pt \
 ## 📁 What's Included
 
 ### New Systems
-- `evolving_quality_framework.py` (450 LOC)
-- `generation_artifact_detector.py` (550 LOC)
-- `semantic_drift_detector.py` (500 LOC)
-- `realtime_quality_monitor.py` (500 LOC)
-- `explainable_quality_scoring.py` (400 LOC)
+- `quality_framework.py` (450 LOC)
+- `artifact_detector.py` (550 LOC)
+- `drift_detector.py` (500 LOC)
+- `quality_monitor.py` (500 LOC)
+- `explainable_scoring.py` (400 LOC)
 
 ### Tests
 - `test_advanced_quality_systems.py` (34 comprehensive tests)
@@ -129,7 +129,7 @@ python sample.py --ckpt model.pt \
 
 ### Real-Time Monitoring
 ```python
-from advanced_innovations.agentic import RealTimeQualityMonitoringSystem
+from innovations.agentic import RealTimeQualityMonitoringSystem
 
 monitor = RealTimeQualityMonitoringSystem()
 
@@ -144,7 +144,7 @@ for step in range(50):
 
 ### Artifact Detection
 ```python
-from advanced_innovations.agentic import GenerationArtifactDetectionSystem
+from innovations.agentic import GenerationArtifactDetectionSystem
 
 detector = GenerationArtifactDetectionSystem()
 result = detector.detect_artifacts(image)
@@ -159,7 +159,7 @@ for fix in result['remediation_suggestions']:
 
 ### Explainable Scoring
 ```python
-from advanced_innovations.agentic import ExplainableQualityScoringSystem
+from innovations.agentic import ExplainableQualityScoringSystem
 
 scorer = ExplainableQualityScoringSystem()
 result = scorer.score_with_explanation(image)
@@ -270,7 +270,6 @@ Complete documentation available in repository:
 
 ```
 Commit: 56efafe
-Author: Claude Haiku 4.5
 Date: May 31, 2026
 
 Message:
@@ -307,31 +306,17 @@ Files:
 
 4. **Explore the code**
    ```bash
-   ls advanced_innovations/agentic/
-   # See: evolving_quality_framework.py, generation_artifact_detector.py, etc.
+   ls innovations/agentic/
+   # See: quality_framework.py, artifact_detector.py, etc.
    ```
-
----
-
-## 🚀 What's Coming in v11
-
-Based on research and community feedback:
-- **Concept Interaction Tensor** — Smarter concept composition
-- **Uncertainty Quantification** — Know when model is unsure
-- **Interactive Preferences** — Learn from user feedback
-- **Generative Diversity** — Find better generation alternatives
-- **Parameter Sensitivity** — Know which parameters matter
-
-See `IMPROVEMENT_IDEAS.md` for full 50-idea innovation roadmap.
 
 ---
 
 ## 🙏 Credits
 
-- **Implementation**: Claude Haiku 4.5
-- **Research Base**: CVPR 2025, ICCV 2025 papers
-- **Testing**: 129/129 tests (100% pass rate)
-- **Community**: SDX users and contributors
+- **Research base:** CVPR 2025, ICCV 2025 papers
+- **Testing:** 129/129 tests (100% pass rate)
+- **Community:** SDX users and contributors
 
 ---
 

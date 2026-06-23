@@ -1,0 +1,22 @@
+{
+  "global_prompt": "masterpiece, best quality, cohesive scene",
+  "global_negative": "blurry, watermark, bad anatomy",
+  "feather": 12,
+  "overlap_mode": "priority",
+  "regions": [
+    {
+      "name": "left_character",
+      "box": [0.02, 0.08, 0.46, 0.95],
+      "priority": 10,
+      "prompt": "young woman, long red hair, white blouse, pleated skirt, looking at viewer",
+      "negative": "wrong hair color, merged face"
+    },
+    {
+      "name": "right_background",
+      "box": [0.42, 0.0, 1.0, 1.0],
+      "priority": 5,
+      "prompt": "sunset city skyline, warm orange sky, distant buildings, soft bokeh",
+      "negative": "foreground person, character"
+    }
+  ]
+}

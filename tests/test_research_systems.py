@@ -8,7 +8,7 @@ Tests for cutting-edge research-based systems:
 
 import pytest
 import torch
-from advanced_innovations.agentic import (
+from innovations.agentic import (
     FlowMatchingConsistencySystem,
     PerceptualMetricsSystem,
     RLHFAgent,

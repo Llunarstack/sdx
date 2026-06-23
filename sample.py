@@ -2144,7 +2144,7 @@ def build_sample_parser() -> "argparse.ArgumentParser":
         help="High-level OP mode (applied after preset)",
     )
     try:
-        from diffusion.sampling_extras import list_holy_grail_presets as _lhgp
+        from diffusion.sampling import list_holy_grail_presets as _lhgp
 
         _hg_preset_choices = ["auto"] + _lhgp()
     except Exception:
@@ -2155,6 +2155,21 @@ def build_sample_parser() -> "argparse.ArgumentParser":
         default=None,
         choices=_hg_preset_choices,
         help="Apply a holy-grail preset bundle (auto|balanced|photoreal|anime|illustration|aggressive).",
+    )
+    parser.add_argument(
+        "--box-layout",
+        type=str,
+        default="",
+        help="JSON file: Ideogram-style boxes + per-region prompts (optional sketch/draw per box). "
+        "See examples/box_layout.example.json and examples/box_layout_sketch.example.json",
+    )
+    parser.add_argument(
+        "--box-layout-mode",
+        type=str,
+        default="regional_cfg",
+        choices=["regional_cfg", "text_only"],
+        help="With --box-layout: regional_cfg blends per-box prompts during denoising; "
+        "text_only only merges layout into the global T5 prompt.",
     )
     parser.add_argument(
         "--prompt-layout",
@@ -2183,7 +2198,7 @@ import numpy as np
 import torch
 from config.defaults.model_presets import apply_op_mode_to_args, apply_preset_to_args
 from diffusion import create_diffusion
-from diffusion.sampling_extras import (
+from diffusion.sampling import (
     apply_holy_grail_preset_to_args,
     recommend_holy_grail_preset,
     sanitize_holy_grail_kwargs,
@@ -2756,8 +2771,11 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     has_tags = bool(getattr(args, "tags", "").strip() or getattr(args, "tags_file", "").strip())
     has_prompt_file = bool(getattr(args, "prompt_file", "").strip())
     has_prompt_layout = bool(getattr(args, "prompt_layout", "").strip())
-    if not (args.prompt or has_tags or has_prompt_file or has_prompt_layout):
-        parser.error("Provide at least one of --prompt, --prompt-file, --tags, --tags-file, or --prompt-layout")
+    has_box_layout = bool(getattr(args, "box_layout", "").strip())
+    if not (args.prompt or has_tags or has_prompt_file or has_prompt_layout or has_box_layout):
+        parser.error(
+            "Provide at least one of --prompt, --prompt-file, --tags, --tags-file, --prompt-layout, or --box-layout"
+        )
 
     # Build effective prompt from --prompt-file, --tags / --tags-file, and optional --lora-trigger
     if has_prompt_file:
@@ -2796,6 +2814,32 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     args._prompt_layout_negative = ""
     args._used_prompt_layout = False
     args._layout_compiled = None
+    args._box_layout_spec = None
+    args._regional_cfg_plan = None
+    if has_box_layout:
+        try:
+            from utils.generation.regional_box_prompting import layout_text_from_regions, load_box_layout_file
+
+            box_spec = load_box_layout_file(str(args.box_layout).strip())
+            args._box_layout_spec = box_spec
+            layout_line = layout_text_from_regions(box_spec)
+            if box_spec.global_prompt:
+                prompt_for_encoding = (
+                    f"{box_spec.global_prompt}, {prompt_for_encoding}" if prompt_for_encoding else box_spec.global_prompt
+                )
+            if not prompt_for_encoding:
+                prompt_for_encoding = layout_line
+            elif str(getattr(args, "box_layout_mode", "regional_cfg") or "regional_cfg").lower() == "text_only":
+                prompt_for_encoding = layout_line if not prompt_for_encoding else f"{prompt_for_encoding}. {layout_line}"
+            if box_spec.global_negative and not getattr(args, "negative_prompt", "").strip():
+                args.negative_prompt = box_spec.global_negative
+            print(
+                f"Box layout: {len(box_spec.regions)} region(s) "
+                f"({', '.join(r.name for r in box_spec.regions)})",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(f"Warning: --box-layout failed: {e}", file=sys.stderr)
     if has_prompt_layout:
         try:
             from utils.prompt.prompt_layout import load_prompt_layout_file, merge_prompt_with_layout
@@ -3697,6 +3741,30 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         )
         if p:
             control_specs.append((p, t, s))
+    box_spec_ctrl = getattr(args, "_box_layout_spec", None)
+    if box_spec_ctrl is not None and not control_specs:
+        try:
+            from utils.generation.regional_box_sketch import build_composite_sketch_tensor, spec_has_sketches
+
+            if spec_has_sketches(box_spec_ctrl):
+                sk = build_composite_sketch_tensor(
+                    box_spec_ctrl,
+                    image_size,
+                    source_dir=getattr(box_spec_ctrl, "source_dir", None),
+                    device=device,
+                )
+                model_kwargs_cond["control_image"] = sk.unsqueeze(0)
+                model_kwargs_cond["control_scale"] = float(
+                    getattr(args, "box_sketch_control_scale", 0.75) or 0.75
+                )
+                from models.controlnet import control_type_to_id
+
+                model_kwargs_cond["control_type"] = torch.tensor(
+                    [int(control_type_to_id("scribble"))], device=device, dtype=torch.long
+                )
+                print("Box-layout sketch control image enabled (scribble).", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: box sketch control image skipped: {e}", file=sys.stderr)
     if control_specs:
         ctrl_tensors = []
         ctrl_type_ids = []
@@ -3885,6 +3953,34 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             print(f"Img2img: strength={args.strength} -> t_start={start_timestep}")
 
     shape = (num_gen, 4, latent_size, latent_size)
+    regional_cfg_plan = None
+    box_spec = getattr(args, "_box_layout_spec", None)
+    box_mode = str(getattr(args, "box_layout_mode", "regional_cfg") or "regional_cfg").lower()
+    if box_spec is not None and box_mode == "regional_cfg":
+
+        def _encode_regions(captions: list) -> torch.Tensor:
+            return encode_text(captions, tokenizer, text_encoder, device, text_bundle=text_bundle)
+
+        try:
+            from utils.generation.regional_box_prompting import encode_regional_plan
+
+            regional_cfg_plan = encode_regional_plan(
+                box_spec,
+                encode_fn=_encode_regions,
+                device=device,
+                latent_h=latent_size,
+                latent_w=latent_size,
+                pixel_size=image_size,
+                base_negative=str(getattr(args, "negative_prompt", "") or ""),
+            )
+            args._regional_cfg_plan = regional_cfg_plan
+            sketch_n = sum(1 for r in box_spec.regions if r.sketch_path or r.strokes)
+            msg = f"Regional CFG enabled for {len(box_spec.regions)} box(es)."
+            if sketch_n:
+                msg += f" {sketch_n} with draw+describe sketches."
+            print(msg, file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: regional box CFG disabled: {e}", file=sys.stderr)
     if x_init is not None and x_init.shape[0] != num_gen:
         x_init = x_init.expand(num_gen, -1, -1, -1)
         if inpaint_x0 is not None:
@@ -3964,6 +4060,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         cfg_guidance_cosine_min_multiplier=float(getattr(args, "guidance_schedule_cosine_min", 0.65)),
         cfg_guidance_cosine_max_multiplier=float(getattr(args, "guidance_schedule_cosine_max", 1.0)),
     )
+    _regional_kw = dict(regional_cfg_plan=getattr(args, "_regional_cfg_plan", None))
     if use_flow_sample:
         print(
             f"Using flow-matching sampler (solver={_flow_kw['flow_solver']}); "
@@ -4140,6 +4237,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_periodic_kw,
                 **_superior_kw,
                 **_guidance_kw,
+            **_regional_kw,
             )
             x0_up = torch.nn.functional.interpolate(x0.float(), size=(fh, fw), mode="bicubic", align_corners=False).to(
                 dtype=x0.dtype
@@ -4206,6 +4304,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 **_periodic_kw,
                 **_superior_kw,
                 **_guidance_kw,
+            **_regional_kw,
             )
     else:
         print(f"Sampling (steps={args.steps}, num={num_gen}, cfg_scale={cfg_scale})...")
@@ -4272,6 +4371,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
+            **_regional_kw,
                         return_intermediate_state=True,
                     )
 
@@ -4392,6 +4492,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
+            **_regional_kw,
                         return_intermediate_state=True,
                     )
 
@@ -4436,6 +4537,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_superior_kw,
                         **_periodic_kw,
                         **_guidance_kw,
+            **_regional_kw,
                         return_intermediate_state=True,
                     )
 
@@ -4526,6 +4628,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             **_superior_kw,
             **_periodic_kw,
             **_guidance_kw,
+            **_regional_kw,
         )
 
     if bool(getattr(args, "cfg_rejection_rerank", False)) and num_gen > 1:
@@ -4588,6 +4691,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                     **_holy_kw,
                     **_superior_kw,
                     **_guidance_kw,
+            **_regional_kw,
                 )
 
             x0 = maybe_clip_refine_latent(
@@ -4664,6 +4768,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_holy_kw,
                         **_superior_kw,
                         **_guidance_kw,
+            **_regional_kw,
                     )
 
                 x0 = _sc_refiner(x0, t_s, n_st)
@@ -4785,6 +4890,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                         **_periodic_kw,
                         **_superior_kw,
                         **_guidance_kw,
+            **_regional_kw,
                     )
                 print(
                     f"Hires-fix: refined latent {tlh}x{tlw} ({hires_steps} steps, t_start={t_hires}, cfg={cfg_h}).",

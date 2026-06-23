@@ -28,7 +28,7 @@ Train and deploy custom image generation models with unprecedented control and t
 
 <br/>
 
-[Quick Start](#quick-start) · [Overview](#what-is-sdx) · [Features](#core-features) · [How It Works](#how-it-works) · [Use Cases](#use-cases) · [Docs](#documentation) · [Contributing](#contributing)
+[Quick Start](#quick-start) · [Overview](#what-is-sdx) · [Features](#core-features) · [Comparison](#how-sdx-compares) · [Docs](#documentation) · [Contributing](#contributing)
 
 <br/>
 
@@ -63,8 +63,30 @@ Most image generation tools fall into two categories:
 <tr><td>Reproducibility</td><td><strong>Full metadata</strong></td><td>Manual</td><td>Nodes only</td><td>None</td></tr>
 <tr><td>Style invention</td><td><strong>Style Genome</strong></td><td>No</td><td>No</td><td>No</td></tr>
 <tr><td>Adaptive scheduling</td><td><strong>Holy Grail</strong></td><td>No</td><td>No</td><td>Limited</td></tr>
-<tr><td>Quality filtering</td><td><strong>TCIS + ViT</strong></td><td>No</td><td>No</td><td>Limited</td></tr>
+<tr><td>Quality filtering</td><td><strong>TCIS + ViT + ELIQ</strong></td><td>No</td><td>No</td><td>Limited</td></tr>
 </table>
+
+---
+
+## How SDX Compares
+
+SDX is a **full training and inference framework** — not a single frozen checkpoint. The table below compares what you can **build and control** with SDX versus popular open-weight models and closed APIs.
+
+| Capability | SD 1.5 | SDXL | SD3 | Flux | Ideogram | GPT Image | Grok | Gemini Image | **SDX** |
+|---|---|---|---|---|---|---|---|---|---|
+| **Full training pipeline** | Via Diffusers | Via Diffusers | Partial | Dev weights | No | No | No | No | **Native** |
+| **Fine-tune on your data** | LoRA | LoRA | Limited | LoRA | No | No | No | No | **Full stack** |
+| **Transparent training loop** | Library | Library | Partial | Partial | No | No | No | No | **~500 LOC entry points** |
+| **Training objectives** | Diffusion | Diffusion | Flow | Flow | — | — | — | — | **Flow, DPO, KD, GRPO** |
+| **Adaptive inference (Holy Grail)** | Plugins | Plugins | — | Community | Built-in | — | — | — | **Built-in** |
+| **Quality monitoring + explainability** | External | External | — | External | Partial | — | — | — | **ELIQ + 5 systems (v10)** |
+| **Regional box prompting** | Extensions | Extensions | — | Community | **Native** | — | — | — | **Native** |
+| **Original style invention** | LoRA | LoRA | — | — | Presets | — | — | — | **Style Genome** |
+| **Self-improving training loops** | — | — | — | — | — | — | — | — | **Agentic stack** |
+| **Reproducible research artifacts** | Manual | Manual | Partial | Partial | No | No | No | No | **Full metadata** |
+| **Open weights / self-host** | Yes | Yes | Partial | Dev | No | No | No | API | **You own the weights** |
+
+**Where closed APIs still win today:** zero-setup generation, polished default aesthetics, and no GPU required. **Where SDX wins:** you train on *your* data, see every step, add quality systems and agentic loops that commercial APIs cannot expose, and ship a model you fully control.
 
 ---
 
@@ -199,13 +221,6 @@ python sample.py \
   --prompt "your description here" \
   --out result.png
 ```
-
-### Training Performance
-
-- **100 images on RTX 3090** → 20-30 hours for 20 epochs
-- **100 images on RTX 4090** → 5-8 hours
-- **With LoRA** → 3-5x faster, slightly lower quality
-- **With Flow Matching** → 20% faster than VP diffusion
 
 ---
 
@@ -515,17 +530,6 @@ python -m scripts.tools auto_improve_loop \
 <tr><td>OS</td><td>Linux/Windows/Mac</td><td>Linux</td><td>Linux (best)</td></tr>
 </table>
 
-### GPU Performance (100 images, 20 epochs)
-
-<table>
-<tr><th>GPU</th><th>Time</th><th>Cost</th><th>Use Case</th></tr>
-<tr><td>RTX 2060 (6GB)</td><td>Not recommended</td><td>—</td><td>Too slow for practical use</td></tr>
-<tr><td>RTX 3090 (24GB)</td><td>20-30 hours</td><td>~$1,200</td><td>Solid for prototyping</td></tr>
-<tr><td>RTX 4090 (24GB)</td><td>5-8 hours</td><td>~$1,600</td><td>Recommended for enthusiasts</td></tr>
-<tr><td>A100 (40GB)</td><td>2-4 hours</td><td>$15k+</td><td>Enterprise training</td></tr>
-<tr><td>H100 (80GB)</td><td>1-2 hours</td><td>$30k+</td><td>Large-scale research</td></tr>
-</table>
-
 ---
 
 ## Installation
@@ -598,52 +602,22 @@ Simple, readable, no magic.
 
 ---
 
-## Version History & Features
+## Version History
 
-### v9.0.0 (May 2026) — Production Ready
+| Version | Focus | Release notes |
+|---------|-------|---------------|
+| **v10** | Advanced quality & explainability (ELIQ, artifact detection, semantic drift) | [v10.md](docs/releases/v10.md) |
+| **v9** | GRPO training, Superior Stack, Agentic stack, Visual Brain | [v9.md](docs/releases/v9.md) |
+| **v8** | Style Genome, PromptStack v2, native style ops | [v8.md](docs/releases/v8.md) |
+| **v7** | CI/CD, reproducibility, security, benchmarks | [v7.md](docs/releases/v7.md) |
+| **v6** | Native acceleration, book/comic pipeline | [v6.md](docs/releases/v6.md) |
+| **v5** | Inference scaling, beam search, data curation | [v5.md](docs/releases/v5.md) |
+| **v4** | Smart quality filtering, adaptive iteration control | [v4.md](docs/releases/v4.md) |
+| **v3** | Automated hard-case detection, benchmark-driven training | [v3.md](docs/releases/v3.md) |
+| **v0.2** | Flow matching, DPO, knowledge distillation | [v0.2.0.md](docs/releases/v0.2.0.md) |
+| **v0.1** | Core DiT training and sampling framework | [v0.1.0.md](docs/releases/v0.1.0.md) |
 
-**Advanced Training:**
-- 6 GRPO variants (adaptive, multi-trajectory, constrained)
-- Advanced DPO with margin-aware losses
-- Throughput measurement and optimization
-
-**Superior Stack (30+ modules):**
-- Model ensembling and soup averaging
-- Quality gates and filtering
-- Caching for 2-3x speedup
-- Reward-based scoring
-
-**Agentic Stack:**
-- Self-improving training loops
-- Agent planning and reflection
-- Experience memory
-
-**Visual Brain:**
-- Scene understanding
-- Image search and retrieval
-- Automatic captioning
-
-Full release notes: [docs/releases/v9.md](docs/releases/v9.md)
-
-### v8.0.0 (May 2026) — Style Genome
-
-**Key Features:**
-- Style Genome (5-axis aesthetic invention)
-- PromptStack v2 (unified prompt pipeline)
-- Chaos/fusion/hypermutation modes
-- Native style operations (Rust, CUDA, Go, Mojo)
-
-Full release notes: [docs/releases/v8.md](docs/releases/v8.md)
-
-### Earlier Versions
-
-- **v7** — CI/CD, reproducibility, evaluation
-- **v6** — Native acceleration, book generation
-- **v5** — Inference scaling, beam search
-- **v0.2** — Flow matching, DPO, distillation
-- **v0.1** — Core framework
-
-Full history: [docs/releases/](docs/releases/)
+Early releases used `v0.1` / `v0.2` numbering before the project moved to major versions starting at **v3**. Full archive: [docs/releases/](docs/releases/).
 
 ---
 
@@ -675,14 +649,17 @@ Full history: [docs/releases/](docs/releases/)
 
 We welcome contributions from researchers, practitioners, and developers. See [CODEBASE.md](docs/CODEBASE.md) for style guide, testing requirements, and contribution process.
 
+**Note:** Do not add `Co-authored-by` trailers for AI tools in commits — GitHub lists them as contributors. A local hook is available at `scripts/tools/dev/prepare-commit-msg` to strip them automatically.
+
 ```bash
+# Optional: block AI attribution in future commits
+cp scripts/tools/dev/prepare-commit-msg .git/hooks/prepare-commit-msg
+
 # Format code
 ruff check . --fix && ruff format .
 
 # Run tests
 pytest tests/ -v
-
-# Submit PR with clear description
 ```
 
 ---

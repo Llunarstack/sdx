@@ -101,7 +101,7 @@ sdx/
 | File | Role | Calls into | Used by |
 |------|------|------------|---------|
 | **`train.py`** | Main training loop: DDP, AMP, VAE encode, T5 encode, diffusion loss, checkpoints, optional REPA/AR curriculum | `config`, `data`, `diffusion`, `models`, `utils/*` | You, CI, `scripts/training/hf_download_and_train.py` |
-| **`sample.py`** | Full inference CLI: prompt stack, schedulers, CFG, ControlNet, LoRA, post-process | Same packages + `utils/prompt/*`, `diffusion/sampling_extras` | Users, `pipelines/book_comic/*` |
+| **`sample.py`** | Full inference CLI: prompt stack, schedulers, CFG, ControlNet, LoRA, post-process | Same packages + `utils/prompt/*`, `diffusion/sampling` | Users, `pipelines/book_comic/*` |
 | **`inference.py`** | Thin loader + optional refine smoke test | `utils/checkpoint/checkpoint_loading` | Scripts wanting programmatic load without full `sample.py` |
 | **`demo.py`** | Minimal demo / class-label smoke | `train.py` patterns | Quick sanity |
 | **`scripts/cli.py`** | Utility CLI: dataset analysis, config validation, checkpoint tools | `utils/*` | Ops, not hot training path |

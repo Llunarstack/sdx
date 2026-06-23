@@ -596,6 +596,7 @@ class GaussianDiffusion:
         slg_stop_frac: float = 0.30,
         cfg_rejection_rerank: bool = False,
         dbc_separate_cfg: bool = True,
+        regional_cfg_plan=None,
     ) -> torch.Tensor:
         """
         Sample to match ``diffusion.flow_matching.flow_matching_per_sample_losses`` training:
@@ -681,7 +682,7 @@ class GaussianDiffusion:
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         hg_enabled = bool(holy_grail_enable)
         if hg_enabled:
-            from diffusion.sampling_extras import (
+            from diffusion.sampling import (
                 HolyGrailRecipe,
                 apply_condition_noise,
                 build_holy_grail_step_plan,
@@ -700,10 +701,10 @@ class GaussianDiffusion:
 
         def _flow_guided_cs(step_idx: int, t_batch_bt: torch.Tensor) -> float:
             from diffusion.cfg_schedulers import (
-                cfg_multiplier_snr_aware_multiplier,
                 cfg_scale_cosine_ramp,
                 cfg_scale_linear,
                 cfg_scale_piecewise,
+                cfg_scale_snr_aware_multiplier,
             )
 
             vr = float(cfg_box[0]) / float(max(abs(float(cfg_scale)), 1e-8))
@@ -732,7 +733,7 @@ class GaussianDiffusion:
                 elif gn0 in ("snr", "snr_aware"):
                     t_ix = int(t_batch_bt.reshape(-1)[0].detach().cpu().item())
                     ac_a = float(self.alpha_cumprod[t_ix])
-                    mu = cfg_multiplier_snr_aware_multiplier(ac_a)
+                    mu = cfg_scale_snr_aware_multiplier(ac_a)
                     sa = bs_f * mu
                 else:
                     raise ValueError(
@@ -800,6 +801,33 @@ class GaussianDiffusion:
                     cfg_rescale=float(cfg_rescale),
                     close_thresh=spec_thr,
                     blend_on_close=spec_blend,
+                )
+            elif regional_cfg_plan is not None and cs != 1.0 and mk_u:
+                from utils.generation.regional_box_prompting import regional_cfg_forward
+
+                out = regional_cfg_forward(
+                    model,
+                    x_in,
+                    t_batch,
+                    model_kwargs_cond=mk_c,
+                    model_kwargs_uncond=mk_u,
+                    plan=regional_cfg_plan,
+                    cfg_scale=float(cs),
+                    cfg_rescale=float(cfg_rescale),
+                    zeresfdg_strength=float(zeresfdg_strength),
+                    fdg_strength=float(fdg_cfg_strength),
+                    fdg_cutoff_frac=float(fdg_cutoff_frac),
+                    apg_parallel_eta=float(apg_parallel_eta),
+                    block_cache=block_cache,
+                    rcfgpp_tangent=float(rcfgpp_tangent),
+                    cfg_zero_star=bool(cfg_zero_star),
+                    cfg_pp_lambda=float(cfg_pp_lambda),
+                    tcfg_damping=float(tcfg_damping),
+                    cfg_skip_early_frac=float(cfg_skip_early_frac),
+                    cfg_skip_late_frac=float(cfg_skip_late_frac),
+                    sample_step=int(step_idx),
+                    total_steps=int(n),
+                    cfg_zero_init_frac=float(cfg_zero_init_frac),
                 )
             elif cs != 1.0 and mk_u:
                 from utils.generation.cfg_batched import batched_cfg_forward
@@ -881,7 +909,7 @@ class GaussianDiffusion:
             )
         if hg_enabled:
             if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
-                from diffusion.sampling_extras import unsharp_mask_latent
+                from diffusion.sampling import unsharp_mask_latent
 
                 x = unsharp_mask_latent(
                     x,
@@ -889,7 +917,7 @@ class GaussianDiffusion:
                     amount=float(holy_grail_unsharp_amount),
                 )
             if float(holy_grail_clamp_quantile) > 0.0:
-                from diffusion.sampling_extras import dynamic_percentile_clamp
+                from diffusion.sampling import dynamic_percentile_clamp
 
                 x = dynamic_percentile_clamp(
                     x,
@@ -1010,6 +1038,7 @@ class GaussianDiffusion:
         slg_stop_frac: float = 0.30,
         cfg_rejection_rerank: bool = False,
         dbc_separate_cfg: bool = True,
+        regional_cfg_plan=None,
     ):
         """
         Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
@@ -1150,6 +1179,7 @@ class GaussianDiffusion:
                 slg_stop_frac=float(slg_stop_frac),
                 cfg_rejection_rerank=bool(cfg_rejection_rerank),
                 dbc_separate_cfg=bool(dbc_separate_cfg),
+                regional_cfg_plan=regional_cfg_plan,
             )
         ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).strip()
         sol_backend = canonicalize_vp_solver(solver)
@@ -1228,7 +1258,7 @@ class GaussianDiffusion:
         has_control = "control_image" in model_kwargs_cond
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         if hg_enabled:
-            from diffusion.sampling_extras import (
+            from diffusion.sampling import (
                 HolyGrailRecipe,
                 apply_condition_noise,
                 build_holy_grail_step_plan,
@@ -1259,10 +1289,10 @@ class GaussianDiffusion:
 
             def _vp_guided_cs(step_idx: int, t_batch_bt: torch.Tensor) -> float:
                 from diffusion.cfg_schedulers import (
-                    cfg_multiplier_snr_aware_multiplier,
                     cfg_scale_cosine_ramp,
                     cfg_scale_linear,
                     cfg_scale_piecewise,
+                    cfg_scale_snr_aware_multiplier,
                 )
 
                 vr = float(cfg_box[0]) / float(max(abs(float(cfg_scale)), 1e-8))
@@ -1291,7 +1321,7 @@ class GaussianDiffusion:
                     elif gn0 in ("snr", "snr_aware"):
                         t_ix = int(t_batch_bt.reshape(-1)[0].detach().cpu().item())
                         ac_a = float(self.alpha_cumprod[t_ix])
-                        mu = cfg_multiplier_snr_aware_multiplier(ac_a)
+                        mu = cfg_scale_snr_aware_multiplier(ac_a)
                         sa = bs_f * mu
                     else:
                         raise ValueError(
@@ -1361,6 +1391,33 @@ class GaussianDiffusion:
                         cfg_rescale=float(cfg_rescale),
                         close_thresh=spec_thr,
                         blend_on_close=spec_blend,
+                    )
+                elif regional_cfg_plan is not None and cs != 1.0 and mk_u:
+                    from utils.generation.regional_box_prompting import regional_cfg_forward
+
+                    out = regional_cfg_forward(
+                        model,
+                        x_in,
+                        t_batch,
+                        model_kwargs_cond=mk_c,
+                        model_kwargs_uncond=mk_u,
+                        plan=regional_cfg_plan,
+                        cfg_scale=float(cs),
+                        cfg_rescale=float(cfg_rescale),
+                        zeresfdg_strength=float(zeresfdg_strength),
+                        fdg_strength=float(fdg_cfg_strength),
+                        fdg_cutoff_frac=float(fdg_cutoff_frac),
+                        apg_parallel_eta=float(apg_parallel_eta),
+                        block_cache=block_cache,
+                        rcfgpp_tangent=float(rcfgpp_tangent),
+                        cfg_zero_star=bool(cfg_zero_star),
+                        cfg_pp_lambda=float(cfg_pp_lambda),
+                        tcfg_damping=float(tcfg_damping),
+                        cfg_skip_early_frac=float(cfg_skip_early_frac),
+                        cfg_skip_late_frac=float(cfg_skip_late_frac),
+                        sample_step=int(i),
+                        total_steps=len(timesteps),
+                        cfg_zero_init_frac=float(cfg_zero_init_frac),
                     )
                 elif cs != 1.0 and mk_u:
                     from utils.generation.cfg_batched import batched_cfg_forward
@@ -1518,7 +1575,7 @@ class GaussianDiffusion:
                     x_0_pred = inpaint_mask * x_0_pred + (1.0 - inpaint_mask) * inpaint_x0
         if hg_enabled and x_0_pred is not None:
             if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
-                from diffusion.sampling_extras import unsharp_mask_latent
+                from diffusion.sampling import unsharp_mask_latent
 
                 x_0_pred = unsharp_mask_latent(
                     x_0_pred,
@@ -1526,7 +1583,7 @@ class GaussianDiffusion:
                     amount=float(holy_grail_unsharp_amount),
                 )
             if float(holy_grail_clamp_quantile) > 0.0:
-                from diffusion.sampling_extras import dynamic_percentile_clamp
+                from diffusion.sampling import dynamic_percentile_clamp
 
                 x_0_pred = dynamic_percentile_clamp(
                     x_0_pred,

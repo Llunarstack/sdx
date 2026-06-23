@@ -11,7 +11,7 @@
 ## Systems Implemented (5 Major)
 
 ### 1. **ELIQ - Label-Free Evolving Quality Framework**
-- **File**: `evolving_quality_framework.py` (450 LOC)
+- **File**: `quality_framework.py` (450 LOC)
 - **Purpose**: Adaptive quality assessment that evolves as models improve without retraining
 - **Key Components**:
   - `AdaptivePerceptualScale`: Dynamically updates quality assessment scale
@@ -21,7 +21,7 @@
 - **Tests**: 5 tests (initialization, assessment, shift detection, reporting)
 
 ### 2. **Generation-Specific Artifact Detector**
-- **File**: `generation_artifact_detector.py` (550 LOC)
+- **File**: `artifact_detector.py` (550 LOC)
 - **Purpose**: Surgical detection of GAN and diffusion model-specific artifacts
 - **Key Components**:
   - `GANArtifactDetector`: Detects checkerboard patterns, mode collapse, frequency artifacts
@@ -31,7 +31,7 @@
 - **Tests**: 6 tests (detection, artifacts, remediation, reporting)
 
 ### 3. **Semantic Drift Detector**
-- **File**: `semantic_drift_detector.py` (500 LOC)
+- **File**: `drift_detector.py` (500 LOC)
 - **Purpose**: Prevents refinement from corrupting original prompt intent
 - **Key Components**:
   - `ConceptTracker`: Tracks concept presence and importance
@@ -41,7 +41,7 @@
 - **Tests**: 6 tests (anchor, drift detection, trajectory, reporting)
 
 ### 4. **Real-Time Quality Monitoring System**
-- **File**: `realtime_quality_monitor.py` (500 LOC)
+- **File**: `quality_monitor.py` (500 LOC)
 - **Purpose**: Continuous quality scoring with early stopping capability
 - **Key Components**:
   - `StreamingQualityScorer`: Scores quality at each generation timestep
@@ -51,7 +51,7 @@
 - **Tests**: 5 tests (monitoring, trajectory, early stopping)
 
 ### 5. **Explainable Quality Scoring System**
-- **File**: `explainable_quality_scoring.py` (400 LOC)
+- **File**: `explainable_scoring.py` (400 LOC)
 - **Purpose**: Human-readable explanations for quality scores
 - **Key Components**:
   - `QualityDimensionAnalyzer`: Analyzes 8 quality dimensions independently
@@ -126,13 +126,13 @@ TOTAL                         | 129   | PASS
 
 ### File Structure
 ```
-advanced_innovations/agentic/
+innovations/agentic/
 ├── __init__.py (updated: 15 new exports)
-├── evolving_quality_framework.py (NEW - 450 LOC)
-├── generation_artifact_detector.py (NEW - 550 LOC)
-├── semantic_drift_detector.py (NEW - 500 LOC)
-├── realtime_quality_monitor.py (NEW - 500 LOC)
-├── explainable_quality_scoring.py (NEW - 400 LOC)
+├── quality_framework.py (NEW - 450 LOC)
+├── artifact_detector.py (NEW - 550 LOC)
+├── drift_detector.py (NEW - 500 LOC)
+├── quality_monitor.py (NEW - 500 LOC)
+├── explainable_scoring.py (NEW - 400 LOC)
 └── [12 existing systems]
 ```
 
