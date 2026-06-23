@@ -5,7 +5,7 @@ Tests Memory Preference System and Semantic Composition Reasoner.
 
 import pytest
 import torch
-from advanced_innovations.agentic import (
+from innovations.agentic import (
     MemoryPreferenceSystem,
     SemanticCompositionReasoner,
 )

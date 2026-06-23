@@ -244,13 +244,13 @@ Using Real-Time Quality Monitoring:
     --explain-quality
 
 Using Artifact Detection:
-  from advanced_innovations.agentic import GenerationArtifactDetectionSystem
+  from innovations.agentic import GenerationArtifactDetectionSystem
   detector = GenerationArtifactDetectionSystem()
   result = detector.detect_artifacts(image)
   print(result['remediation_suggestions'])
 
 Using Explainable Scoring:
-  from advanced_innovations.agentic import ExplainableQualityScoringSystem
+  from innovations.agentic import ExplainableQualityScoringSystem
   scorer = ExplainableQualityScoringSystem()
   result = scorer.score_with_explanation(image)
   print(result['explanation'])

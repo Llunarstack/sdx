@@ -1,5 +1,20 @@
-# DiT with text conditioning: styles, ControlNet, ref, negative prompt.
-# Blends style + control + prompt without sloppy output.
+"""DiT with text conditioning — the text-to-image denoiser (PixArt-style).
+
+Where the base ``models/dit.py`` conditions on a single class label (added into the
+timestep vector), this variant conditions on a **sequence of text embeddings** (from
+T5/CLIP) via **cross-attention** in every block: spatial patch tokens are the query,
+the text tokens are the keys/values. That's the core change that turns DiT into a
+prompt-driven generator.
+
+On top of that it layers the features needed for real text-to-image work:
+  - classifier-free guidance via text dropout (see ``TextEmbedder``) and negative prompts,
+  - ControlNet-style structural control and reference-image tokens (extra cross-attn),
+  - style conditioning, MoE feed-forwards, and optional block-autoregressive masking.
+
+Reuses ``TimestepEmbedder``, ``FinalLayer`` and the sin/cos position embeddings from
+``models/dit.py`` so the timestep/output machinery stays identical to the base model.
+"""
+
 import torch
 import torch.nn as nn
 from timm.models.vision_transformer import Mlp, PatchEmbed

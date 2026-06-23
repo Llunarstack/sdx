@@ -288,8 +288,8 @@ SDX:          Deterministic    Seed-based ✓
 ## Integration Example
 
 ```python
-from advanced_innovations.integration import create_advanced_pipeline
-from advanced_innovations.agentic import QualityControlSystem
+from innovations.pipeline import create_advanced_pipeline
+from innovations.agentic import QualityControlSystem
 
 # Initialize systems
 pipeline = create_advanced_pipeline(enable_all=True)
@@ -358,7 +358,7 @@ return vae_decode(final_latent)
 ## File Structure
 
 ```
-advanced_innovations/
+innovations/
 ├── ultra_quality/
 │   ├── __init__.py
 │   └── photorealism_engine.py (450 LOC)
@@ -382,8 +382,8 @@ advanced_innovations/
 │   └── novel_capabilities.py (400 LOC)
 ├── agentic/
 │   ├── __init__.py
-│   ├── quality_control_agent.py (600 LOC)
-│   ├── prompt_adherence_system.py (600 LOC)
+│   ├── quality_control.py (600 LOC)
+│   ├── prompt_adherence.py (600 LOC)
 │   └── AGENTIC_SYSTEM_GUIDE.md (600 LOC)
 ├── integration.py (550 LOC)
 ├── __init__.py
@@ -393,7 +393,7 @@ advanced_innovations/
 └── COMPLETE_SYSTEM_OVERVIEW.md (this file)
 
 tests/
-└── test_advanced_innovations.py (600 LOC, 39/39 passing)
+└── test_innovations.py (600 LOC, 39/39 passing)
 ```
 
 ---

@@ -9,7 +9,7 @@ Tests for advanced quality improvement systems:
 
 import pytest
 import torch
-from advanced_innovations.agentic import (
+from innovations.agentic import (
     ELIQSystem,
     ExplainableQualityScoringSystem,
     GenerationArtifactDetectionSystem,

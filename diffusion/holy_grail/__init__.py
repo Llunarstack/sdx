@@ -1,7 +1,7 @@
 """
 Deprecated import path for advanced sampling helpers.
 
-Use ``diffusion.sampling_extras`` for new code. Names resolve lazily against that package.
+Use ``diffusion.sampling`` for new code. Names resolve lazily against that package.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-# Kept in sync with ``diffusion.sampling_extras.__all__`` (update both when extending API).
+# Kept in sync with ``diffusion.sampling.__all__`` (update both when extending API).
 __all__: list[str] = [
     "HolyGrailRecipe",
     "HolyGrailStepPlan",
@@ -40,7 +40,7 @@ __all__: list[str] = [
 def __getattr__(name: str) -> Any:
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    mod = import_module("diffusion.sampling_extras")
+    mod = import_module("diffusion.sampling")
     val = getattr(mod, name)
     globals()[name] = val
     return val

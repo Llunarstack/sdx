@@ -6,7 +6,7 @@ ensemble validation, and adversarial robustness.
 
 import pytest
 import torch
-from advanced_innovations.agentic import (
+from innovations.agentic import (
     AdaptiveLearningSystem,
     AdversarialRobustnessSystem,
     EnsembleValidationSystem,
@@ -328,7 +328,7 @@ class TestIntegrationWithPipeline:
 
     def test_all_systems_accessible_from_pipeline(self):
         """Test that all agentic systems are accessible."""
-        from advanced_innovations.integration import create_advanced_pipeline
+        from innovations.pipeline import create_advanced_pipeline
 
         pipeline = create_advanced_pipeline(enable_all=True)
         status = pipeline.get_status()

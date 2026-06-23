@@ -1,5 +1,15 @@
-# Timestep respacing (DiT/OpenAI-style): ddimN and section-based steps.
-# Ported from external/DiT/diffusion/respace.py; adapted for our GaussianDiffusion.
+"""Timestep respacing (DiT/OpenAI-style): pick a subset of timesteps for sampling.
+
+A model is trained over the full diffusion process (e.g. 1000 steps) but we want
+to *sample* in far fewer (e.g. 50) for speed. "Respacing" chooses which of the
+original timesteps to actually visit. Two strategies are supported:
+  - "ddimN"  -> evenly strided to land on exactly N steps (DDIM-style).
+  - section counts -> spend a chosen number of steps in each portion of the
+    schedule, so you can, say, linger in the high-detail low-noise region.
+
+Ported from external/DiT/diffusion/respace.py; adapted for our GaussianDiffusion.
+"""
+
 import numpy as np
 
 
@@ -17,11 +27,13 @@ def space_timesteps(num_timesteps: int, section_counts) -> np.ndarray:
         if s.startswith("ddim"):
             n = int(s[4:].strip())
             t = int(num_timesteps)
-            # len(np.arange(0, t, stride)) == (t - 1) // stride + 1 for t >= 1, stride >= 1
+            # Search for an integer stride that yields exactly n evenly-spaced steps.
+            # len(np.arange(0, t, stride)) == (t - 1) // stride + 1 for t >= 1, stride >= 1.
             for stride in range(1, t):
                 if (t - 1) // stride + 1 == n:
                     return np.arange(0, t, stride, dtype=np.int64)
-            # Fallback: linear spacing to get ~n steps
+            # No exact stride exists (n doesn't divide evenly): approximate with
+            # linear spacing, which still hits the endpoints and gives ~n steps.
             return np.linspace(0, t - 1, n, dtype=np.int64)
         section_counts = [int(x.strip()) for x in section_counts.split(",") if x.strip()]
     if not section_counts:

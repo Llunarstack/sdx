@@ -35,7 +35,7 @@ SKIP_LINK_PATTERNS = (
     "utils/runtime/",  # archived modules
     "utils/superior/",  # archived modules
     "utils/brain/",  # archived modules
-    "utils/agentic/",  # archived modules (also in advanced_innovations)
+    "utils/agentic/",  # archived modules (also in innovations)
     "native/python/README.md",  # native extension readme
     "native/python/sdx_native/",  # native compiled modules
 )

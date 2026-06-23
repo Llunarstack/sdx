@@ -27,7 +27,6 @@ OPTIONAL_HEAVY_DEPS = (
 # Note: These are now also in ARCHIVED_MODULE_TEST_BASENAMES
 TORCH_DEPENDENT_TEST_BASENAMES = {
     "test_hybrid_dit_vit_generate.py",
-    "test_naming_compat.py",
 }
 
 # Tests that depend on archived modules or unbuilt native extensions
@@ -41,7 +40,6 @@ ARCHIVED_MODULE_TEST_BASENAMES = {
     "test_cfg_batched.py",
     "test_checkpoint_analysis.py",
     "test_ckpt_text_stack.py",
-    "test_dit_ar_latent_compat.py",
     "test_eval_report.py",
     "test_generation_pkg_exports.py",
     "test_hf_control.py",
@@ -57,7 +55,6 @@ ARCHIVED_MODULE_TEST_BASENAMES = {
     "test_model_forward.py",
     "test_model_paths_gen_searcher.py",
     "test_multi_encoder_encode.py",
-    "test_naming_compat.py",
     "test_native_fast_paths.py",
     "test_plain_dict_snapshot.py",
     "test_prompt_ops_native.py",
