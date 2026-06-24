@@ -76,7 +76,7 @@ def main() -> None:
         "scripts.tools.ops.gen_searcher_bridge",  # depends on archived utils.modeling
         "scripts.tools.ops.pretrained_status",  # depends on archived utils.modeling
         "scripts.tools.ops.visual_brain_generate",  # depends on archived utils.agentic
-        "scripts.tools.dev.strip_ai_contributors",  # optional git-filter-repo (dev-only)
+        "scripts.tools.dev.strip_",  # dev git-history helpers (optional git-filter-repo)
     )
 
     failures = []
