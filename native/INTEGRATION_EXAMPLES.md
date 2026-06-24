@@ -394,4 +394,4 @@ CMD ["python", "app.py"]
 4. **Monitor performance** with built-in profiling
 5. **Deploy to production** with containerization
 
-For detailed setup instructions, see [NATIVE_KERNELS_README.md](./NATIVE_KERNELS_README.md).
+For detailed setup instructions, see [NATIVE_KERNELS.md](../docs/NATIVE_KERNELS.md).
