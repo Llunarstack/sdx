@@ -48,11 +48,17 @@ Key files:
 | [HF_DATASET_SHORTLIST.md](HF_DATASET_SHORTLIST.md) | Curated shortlist from provided HF dataset links: primary/secondary/optional picks + initial mix weights. |
 | [CODEBASE.md](CODEBASE.md) | **Start here for code:** layers, conventions, repo tree, `scripts/` layout, contribution rules, ruff, where to edit. |
 | [CODEBASE_GUIDE.md](CODEBASE_GUIDE.md) | **Full codebase guide:** what each area does, how modules connect, train/sample flows (with diagrams). |
-| [SUPERIOR_STACK.md](SUPERIOR_STACK.md) | **Superior Stack:** local RAG, composite pick-best, CLIP self-correction (`utils/superior/`). |
+| [guides/ADVANCED_OPTIMIZATION.md](guides/ADVANCED_OPTIMIZATION.md) | Quantization, speed, and optimization techniques. |
+| [guides/INTEGRATION.md](guides/INTEGRATION.md) | Dataset cleaning, hard-negative mining, spatial DSL integration. |
+| [../innovations/README.md](../innovations/README.md) | Innovations package (quality, semantics, agentic). |
+| [../frontier/README.md](../frontier/README.md) | Frontier research (layout, guidance, narrative). |
+| [NATIVE_KERNELS.md](NATIVE_KERNELS.md) | Native kernel setup and API reference. |
+| [SUPERIOR_STACK.md](SUPERIOR_STACK.md) | **Superior Stack:** local RAG, composite pick-best, CLIP self-correction (`utils/_archive/superior/`). |
 | [CANONICAL_STRUCTURE.md](CANONICAL_STRUCTURE.md) | Canonical-vs-compat folder map and migration table for professional naming/layout. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |
 | [research/SAMPLING_EXPERIMENTS_BACKLOG.md](research/SAMPLING_EXPERIMENTS_BACKLOG.md) | CFG/steps/solver experiment grids. |
+| [research/IMPROVEMENT_IDEAS.md](research/IMPROVEMENT_IDEAS.md) | Creative backlog of future improvements. |
 | [research/IMAGE_QUALITY_LEVERS_2026.md](research/IMAGE_QUALITY_LEVERS_2026.md) | **2026 research map**: CFG/flow sampling, data curation, DPO, perceptual losses — mapped to SDX. |
 | [LANDSCAPE_2026.md](LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow/efficiency + disclaimers — mapped to SDX ([`utils/architecture/architecture_map.py`](../utils/architecture/architecture_map.py)). |
 | [BLUEPRINTS.md](BLUEPRINTS.md) | **Merged research notes:** few-step flow/solvers/distillation (Part 1) + prompt-accuracy / GLS / frequency (Part 2). |
@@ -92,6 +98,8 @@ Key files:
 
 | Doc | Description |
 |-----|-------------|
+| [releases/v11.md](releases/v11.md) | **v11** — Regional box prompting, `frontier/` research layer, `innovations/` restructure, `diffusion/sampling/` consolidation. |
+| [releases/v10.md](releases/v10.md) | **v10** — ELIQ, artifact detection, semantic drift, real-time monitor, explainable scoring. |
 | [releases/v9.md](releases/v9.md) | **v9** — 6 GRPO variants, Superior Stack (ensemble/caching), Agentic Stack (self-improving agents), Visual Brain (image understanding), comprehensive docs (Getting Started/Codebase Guide), full ruff formatting. |
 | [releases/v8.md](releases/v8.md) | **v8** — Style Genome, PromptStack v2, chaos/fusion modes, native style ops, training/inference prompt parity. |
 | [releases/v7.md](releases/v7.md) | **v7** - CI, Dependabot, pre-commit, eval prompt pack + driver, research playbooks, `run_artifacts`, `SECURITY.md`. |

@@ -572,4 +572,4 @@ print(f"Speedup: {speedup['speedup']:.2f}x, Memory saved: {speedup['memory_saved
 3. **Retrain with adaptive methods**: Curriculum + meta-learning (best long-term gains)
 4. **Deploy with quality prediction**: Monitor and optimize in production
 
-See `INTEGRATION_GUIDE.md` for integration with existing systems.
+See [INTEGRATION.md](INTEGRATION.md) for integration with existing systems.

@@ -216,8 +216,7 @@ print(result['explanation'])
 Complete documentation available in repository:
 - `docs/releases/v10.md` — Full release notes with examples
 - `docs/releases/VERSION_COMPARISON.md` — v8 → v9 → v10 progression
-- `IMPLEMENTATION_REPORT.md` — Technical details and metrics
-- `IMPROVEMENT_IDEAS.md` — 50 future improvement ideas
+- `docs/research/IMPROVEMENT_IDEAS.md` — Future improvement ideas
 - `README.md` — Updated with v10 features
 
 ---
