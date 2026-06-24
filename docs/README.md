@@ -53,7 +53,10 @@ Key files:
 | [../innovations/README.md](../innovations/README.md) | Innovations package (quality, semantics, agentic). |
 | [../frontier/README.md](../frontier/README.md) | Frontier research (layout, guidance, narrative). |
 | [NATIVE_KERNELS.md](NATIVE_KERNELS.md) | Native kernel setup and API reference. |
-| [SUPERIOR_STACK.md](SUPERIOR_STACK.md) | **Superior Stack:** local RAG, composite pick-best, CLIP self-correction (`utils/_archive/superior/`). |
+| [SUPERIOR_STACK.md](SUPERIOR_STACK.md) | **Superior Stack:** local RAG, composite pick-best, CLIP self-correction (`utils/superior/` shims). |
+| [agentic/AGENTIC_STACK.md](agentic/AGENTIC_STACK.md) | Generation agent orchestration (`utils/agentic/`). |
+| [agentic/QUALITY_AGENTS.md](agentic/QUALITY_AGENTS.md) | Innovations quality agents (penta-encoder adherence). |
+| [agentic/INNOVATIONS_AGENTIC.md](agentic/INNOVATIONS_AGENTIC.md) | Expanded innovations agentic systems reference. |
 | [CANONICAL_STRUCTURE.md](CANONICAL_STRUCTURE.md) | Canonical-vs-compat folder map and migration table for professional naming/layout. |
 | [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Recent diffusion / flow ideas vs what SDX implements (timestep sampling, roadmap). |
 | [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage diffusion upgrades: data, latents, conditioning, objectives, inference, alignment. |

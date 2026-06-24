@@ -69,13 +69,8 @@ def main() -> None:
         "scripts.tools.data.caption_hygiene",  # depends on sdx_native
         "scripts.tools.data.manifest_paths",  # depends on sdx_native
         "scripts.tools.dev.architecture_themes",  # depends on archived utils.architecture
-        "scripts.tools.ops.agentic_flywheel",  # depends on archived utils.agentic
-        "scripts.tools.ops.agentic_roles",  # depends on archived utils.agentic
-        "scripts.tools.ops.agentic_evolve",  # depends on archived utils.agentic
-        "scripts.tools.ops.agentic_generate",  # depends on archived utils.agentic
         "scripts.tools.ops.gen_searcher_bridge",  # depends on archived utils.modeling
         "scripts.tools.ops.pretrained_status",  # depends on archived utils.modeling
-        "scripts.tools.ops.visual_brain_generate",  # depends on archived utils.agentic
         "scripts.tools.dev.strip_",  # dev git-history helpers (optional git-filter-repo)
     )
 

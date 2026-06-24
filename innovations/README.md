@@ -42,7 +42,7 @@ innovations/
 │   └── hooks.py
 │
 ├── agentic/                   # Quality agents (mature layer)
-│   └── … (20+ modules)
+│   └── … (20+ modules) — docs: [QUALITY_AGENTS.md](../docs/agentic/QUALITY_AGENTS.md)
 │
 ├── pipeline.py                # SDXAdvancedPipeline
 ├── registry.py

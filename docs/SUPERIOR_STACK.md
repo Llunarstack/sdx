@@ -2,7 +2,9 @@
 
 Composable modules that raise **inference and data-prep quality** on top of your trained DiT checkpoint. This is not a separate model — it is orchestration, retrieval, ranking, and correction around `sample.py`.
 
-## Modules (`utils/superior/`)
+## Modules (`utils/superior/` → `utils/_archive/superior/`)
+
+Implementations live in the archive; import via `utils.superior` shims.
 
 | Module | Role |
 |--------|------|
