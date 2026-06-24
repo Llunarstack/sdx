@@ -25,7 +25,9 @@ User prompt
 └──────────┘
 ```
 
-## Modules (`utils/agentic/`)
+## Modules (`utils/agentic/` → `utils/_archive/agentic/`)
+
+Generation orchestration agents (plan → tool → verify → reflect). Implementations live in the archive; import via `utils.agentic` shims.
 
 | Module | Role |
 |--------|------|
@@ -82,8 +84,9 @@ Experience memory appends to `experience_memory.jsonl` for cross-session learnin
 
 ## Relation to Superior Stack
 
-- **Superior Stack** (`utils/superior/`) = tools and quality modules
-- **Agentic Stack** (`utils/agentic/`) = autonomous orchestration over those tools
+- **Superior Stack** (`utils/superior/` → archive) = tools and quality modules
+- **Agentic Stack** (`utils/agentic/` → archive) = autonomous orchestration over those tools
+- **Innovations agentic** (`innovations/agentic/`) = quality/adherence systems (ELIQ, artifacts, drift) — see [QUALITY_AGENTS.md](QUALITY_AGENTS.md)
 - **Research schemas** (`research/agi_image/`) = portable plan/message types
 
 ## Honest scope

@@ -6,7 +6,7 @@
 > python -m scripts.tools update_project_structure
 > ```
 >
-> Generated: **2026-06-24 01:55:40 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-06-24 03:00:20 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -105,7 +105,9 @@ sdx/
 │   └── timestep_sampling.py
 ├── docs/
 │   ├── agentic/
-│   │   └── AGENTIC_STACK.md
+│   │   ├── AGENTIC_STACK.md
+│   │   ├── INNOVATIONS_AGENTIC.md
+│   │   └── QUALITY_AGENTS.md
 │   ├── assets/
 │   │   └── gallery/
 │   ├── brain/
@@ -236,9 +238,7 @@ sdx/
 │   ├── agentic/
 │   │   ├── __init__.py
 │   │   ├── adaptive_learning.py
-│   │   ├── ADVANCED_AGENTIC_GUIDE.md
 │   │   ├── adversarial.py
-│   │   ├── AGENTIC_SYSTEM_GUIDE.md
 │   │   ├── artifact_detector.py
 │   │   ├── composition_reasoner.py
 │   │   ├── drift_detector.py
@@ -786,6 +786,7 @@ sdx/
 │   │   │   ├── architecture_themes.py
 │   │   │   ├── ckpt_info.py
 │   │   │   ├── cursorfix.sh
+│   │   │   ├── gen_archive_shims.py
 │   │   │   ├── generate_sdx_architecture_diagram.py
 │   │   │   ├── make_gallery.py
 │   │   │   ├── prepare-commit-msg
@@ -1142,6 +1143,15 @@ sdx/
 │   │       ├── registry_extra.py
 │   │       ├── sampling.py
 │   │       └── validate.py
+│   ├── agentic/
+│   │   ├── __init__.py
+│   │   ├── agent.py
+│   │   ├── experience.py
+│   │   ├── planner.py
+│   │   ├── reflector.py
+│   │   ├── roles.py
+│   │   ├── state.py
+│   │   └── tools.py
 │   ├── architecture/
 │   │   ├── __init__.py
 │   │   ├── ar_block_conditioning.py
@@ -1149,6 +1159,12 @@ sdx/
 │   │   ├── architecture_map.py
 │   │   ├── dit_architecture.py
 │   │   └── enhanced_utils.py
+│   ├── brain/
+│   │   ├── __init__.py
+│   │   ├── image_search.py
+│   │   ├── scene_brief.py
+│   │   ├── understand.py
+│   │   └── visual_brain.py
 │   ├── compression/
 │   │   └── model_compression.py
 │   ├── data_quality/
@@ -1296,6 +1312,35 @@ sdx/
 │   │   ├── extreme_quantization.py
 │   │   ├── numba_acceleration.py
 │   │   └── operator_fusion.py
+│   ├── superior/
+│   │   ├── __init__.py
+│   │   ├── auto_loop.py
+│   │   ├── auto_stack.py
+│   │   ├── block_cache.py
+│   │   ├── cfg_rejection.py
+│   │   ├── composite_ranker.py
+│   │   ├── dbc_cache.py
+│   │   ├── distill.py
+│   │   ├── dpo_pipeline.py
+│   │   ├── dynamic_dit.py
+│   │   ├── ensemble.py
+│   │   ├── eval_report.py
+│   │   ├── feature_cache.py
+│   │   ├── flywheel.py
+│   │   ├── frequency_cfg.py
+│   │   ├── glyph_encoder.py
+│   │   ├── hard_negative.py
+│   │   ├── inference_pipeline.py
+│   │   ├── linear_attention.py
+│   │   ├── model_soup.py
+│   │   ├── online_reward.py
+│   │   ├── prompt_expand.py
+│   │   ├── quality_gates.py
+│   │   ├── retrieval.py
+│   │   ├── reward_scorer.py
+│   │   ├── self_correct.py
+│   │   ├── taylor_cache.py
+│   │   └── vit_mining.py
 │   ├── training/
 │   │   ├── contrastive_objectives/
 │   │   │   ├── __init__.py

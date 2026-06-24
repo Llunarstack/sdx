@@ -28,6 +28,10 @@ This file tracks active compatibility shims and canonical paths.
 | `config.style_guidance` | `config.defaults.style_guidance` | Shim retained for backward compatibility. |
 | `config.art_mediums` | `config.defaults.art_mediums` | Shim retained for backward compatibility. |
 | `config.ai_image_shortcomings` | `config.defaults.ai_image_shortcomings` | Shim retained for backward compatibility. |
+| `utils.superior.*` | `utils._archive.superior.*` | Thin shims under `utils/superior/` re-export archive implementations. |
+| `utils.agentic.*` | `utils._archive.agentic.*` | Thin shims under `utils/agentic/` re-export archive implementations. |
+| `utils.brain.*` | `utils._archive.brain.*` | Thin shims under `utils/brain/` re-export Visual Brain archive modules. |
+| `innovations.agentic.*` | (canonical) | Quality/adherence agents (ELIQ, artifacts, drift, …) — distinct from generation `utils/agentic/`. |
 | `scripts/book/*.py` launchers | `pipelines/book_comic/scripts/*.py` | **Removed** — use `pipelines/book_comic/scripts/` directly. |
 
 ## Removed legacy path
