@@ -1,0 +1,124 @@
+{
+  "version": 5,
+  "mode": "t2v",
+  "scene": {
+    "prompt": "A samurai draws a sword as thunder rolls and rain begins",
+    "duration_sec": 10,
+    "fps": 24,
+    "style": "cinematic anime"
+  },
+  "studio": {
+    "engine": "anime_2d",
+    "genre": "action"
+  },
+  "frontier": {
+    "tension_curve": [0.25, 0.55, 0.92, 0.4],
+    "causal_events": {
+      "thunder": { "then": ["lightning_flash", "rain_intensify"], "camera": "micro_shake" }
+    },
+    "motifs": {
+      "red_scarf": {
+        "description": "crimson scarf fluttering",
+        "must_appear_by_shot": 1,
+        "resolve_after": 2
+      }
+    },
+    "semantic_gravity": {
+      "samurai": { "weight": 0.95 },
+      "sword": { "weight": 0.7 }
+    },
+    "diegetic_focus": {
+      "enabled": true,
+      "heroes": ["samurai"],
+      "periphery_mode": "fog_of_narrative"
+    },
+    "anticipation": { "enabled": true, "borrow_ratio": 0.2 },
+    "temporal_echo": { "enabled": true, "auto_rhyme": true },
+    "breath_cadence": { "enabled": true },
+    "counterfactuals": {
+      "merge_strategy": "none",
+      "branches": [
+        {
+          "id": "cf_sheathe",
+          "after_shot": "draw",
+          "label": "chooses peace",
+          "alt_prompt": "samurai slowly sheathes sword, rain softens",
+          "probability": 0.35
+        }
+      ]
+    },
+    "screen_direction": { "enabled": true },
+    "offscreen_map": {
+      "wide": ["storm_above"],
+      "draw": ["monster_right"]
+    },
+    "emotional_contagion": { "enabled": true, "source": "samurai" },
+    "material_memory": { "enabled": true, "initial": { "samurai": "dry" } },
+    "camera_empathy": { "enabled": true },
+    "weather_inertia": { "enabled": true, "initial": "rain" },
+    "narrative_threads": {
+      "honor_debt": { "description": "unpaid favor to village elder", "payoff_by_shot": 3 }
+    },
+    "chromatic_arc": ["neutral", "dread", "rage", "grief"],
+    "stinger_frames": { "enabled": true, "style": "anime" },
+    "witness_lens": { "enabled": true },
+    "silence_map": { "close": { "duration_sec": 0.6, "visual": "horror" } },
+    "scar_timeline": { "enabled": true },
+    "parallax_budget": { "enabled": true, "layers": 4 }
+  },
+  "shots": [
+    {
+      "id": "wide",
+      "prompt": "wide shot, storm clouds over feudal village, rain starting",
+      "duration_sec": 2.5,
+      "shot_type": "establishing",
+      "lighting": { "key": "lightning", "motivated": true }
+    },
+    {
+      "id": "draw",
+      "prompt": "medium shot, samurai draws katana as thunder rolls",
+      "duration_sec": 3.5,
+      "stinger": true,
+      "characters": ["samurai"],
+      "objects": ["sword"],
+      "props_state": { "sword": "drawn" },
+      "material_state": { "samurai": "wet" },
+      "emotion": "rage",
+      "screen_direction": "right",
+      "witness": "archivist",
+      "injuries": { "samurai": ["bruised"] },
+      "threads": ["honor_debt"]
+    },
+    {
+      "id": "close",
+      "prompt": "close-up, samurai eyes reflect lightning, rain on face",
+      "duration_sec": 2,
+      "characters": ["samurai"],
+      "gaze": "camera",
+      "emotion": "awe",
+      "witness": "lover",
+      "silence": true,
+      "kinetic": { "energy": 0.5 }
+    },
+    {
+      "id": "resolve",
+      "prompt": "wide pullback, samurai stands in downpour, red scarf visible, honor debt reveal payoff",
+      "duration_sec": 2,
+      "characters": ["samurai"],
+      "threads": ["honor_debt"],
+      "objects": ["sword"],
+      "props_state": { "sword": "drawn" },
+      "kinetic": { "energy": 0.3, "verb": "stand" }
+    }
+  ],
+  "characters": {
+    "samurai": { "description": "armored ronin, crimson scarf", "lock": true }
+  },
+  "objects": {
+    "sword": { "description": "gleaming katana" }
+  },
+  "edit": {
+    "identity_lock": true,
+    "semantic_drift_repair": true
+  }
+}

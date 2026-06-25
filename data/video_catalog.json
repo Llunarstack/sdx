@@ -1,0 +1,20 @@
+{
+  "clips": [
+    {
+      "title": "city establishing wide pan",
+      "tags": ["city", "establishing", "wide", "urban", "slow pan"],
+      "path": "path/to/local/city_pan.mp4",
+      "duration_sec": 8.0,
+      "license": "user",
+      "url": ""
+    },
+    {
+      "title": "portrait close up static",
+      "tags": ["portrait", "close up", "face", "static", "studio"],
+      "path": "path/to/local/portrait.mp4",
+      "duration_sec": 4.0,
+      "license": "user",
+      "url": ""
+    }
+  ]
+}

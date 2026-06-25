@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "mode": "t2v",
+  "scene": {
+    "prompt": "A knight walks through a foggy forest at dusk, then a close-up of their gauntlet",
+    "duration_sec": 8,
+    "fps": 24,
+    "width": 1280,
+    "height": 720,
+    "style": "cinematic fantasy, muted palette"
+  },
+  "characters": {
+    "knight": {
+      "description": "silver plate armor, red cape, face obscured by helm",
+      "lock": true,
+      "negative": "wrong armor color, exposed modern clothing"
+    }
+  },
+  "objects": {
+    "sword": {
+      "description": "longsword at hip, weathered leather grip"
+    }
+  },
+  "effects": {
+    "fog": {},
+    "film_grain": {}
+  },
+  "transforms": {
+    "dusk_grade": "warm rim light, deep blue shadows, dusk sky"
+  },
+  "shots": [
+    {
+      "id": "wide",
+      "prompt": "establishing wide, knight walking between ancient trees",
+      "duration_sec": 4,
+      "shot_type": "establishing",
+      "characters": ["knight"],
+      "objects": ["sword"],
+      "effects": ["fog", "film_grain"],
+      "transforms": ["dusk_grade"],
+      "motion_hint": "slow forward tracking",
+      "transition": "dissolve"
+    },
+    {
+      "id": "detail",
+      "prompt": "extreme close-up of gauntlet gripping sword hilt",
+      "duration_sec": 4,
+      "shot_type": "close_up",
+      "characters": ["knight"],
+      "objects": ["sword"],
+      "effects": ["film_grain"],
+      "transforms": ["dusk_grade"]
+    }
+  ],
+  "retrieval": {
+    "local_library": "data/video_refs",
+    "catalog": "data/video_catalog.json"
+  },
+  "edit": {
+    "keyframe_interval": 6,
+    "edit_strength": 0.55
+  }
+}

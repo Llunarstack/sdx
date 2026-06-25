@@ -621,6 +621,66 @@ def build_sample_parser() -> "argparse.ArgumentParser":
         help="Optional .pt state_dict for ReferenceTokenProjector (train separately; strict=False load).",
     )
     parser.add_argument(
+        "--style-ref",
+        type=str,
+        default="",
+        help="Multi style references: path:strength,path2:strength (Krea-style weighted style transfer).",
+    )
+    parser.add_argument(
+        "--style-references-json",
+        type=str,
+        default="",
+        help="JSON file with references list (see examples/style_references.example.json).",
+    )
+    parser.add_argument(
+        "--moodboard-json",
+        type=str,
+        default="",
+        help="JSON moodboard image list (see examples/moodboard.example.json).",
+    )
+    parser.add_argument(
+        "--moodboard-images",
+        type=str,
+        default="",
+        help="Comma-separated moodboard image paths (pooled into one style embedding).",
+    )
+    parser.add_argument(
+        "--moodboard-strength",
+        type=float,
+        default=1.0,
+        help="Per-image weight for moodboard paths before pooling.",
+    )
+    parser.add_argument(
+        "--creativity-mode",
+        type=str,
+        choices=("raw", "low", "medium", "high"),
+        default="",
+        help="Krea-style prompt expansion: raw=literal, high=more aesthetic fill-in for short prompts.",
+    )
+    parser.add_argument(
+        "--slider-intensity",
+        type=float,
+        default=0.0,
+        help="Generative slider −100…100: muted (−) vs bold stylization (+).",
+    )
+    parser.add_argument(
+        "--slider-complexity",
+        type=float,
+        default=0.0,
+        help="Generative slider −100…100: minimal (−) vs dense detail (+).",
+    )
+    parser.add_argument(
+        "--slider-movement",
+        type=float,
+        default=0.0,
+        help="Generative slider −100…100: static (−) vs dynamic motion (+).",
+    )
+    parser.add_argument(
+        "--krea-turbo-preset",
+        action="store_true",
+        help="Few-step turbo profile (~8 steps, CFG≈1) inspired by Krea 2 Turbo.",
+    )
+    parser.add_argument(
         "--sag-blur-sigma",
         type=float,
         default=0.0,
@@ -2172,6 +2232,101 @@ def build_sample_parser() -> "argparse.ArgumentParser":
         "text_only only merges layout into the global T5 prompt.",
     )
     parser.add_argument(
+        "--frontier", action="store_true", help="Enable frontier research hooks (serendipity, witness POV)."
+    )
+    parser.add_argument(
+        "--frontier-serendipity", type=float, default=0.25, help="Serendipity dial 0–1 when --frontier."
+    )
+    parser.add_argument(
+        "--frontier-auto-resolve",
+        action="store_true",
+        help="With --frontier: auto-rewrite contradictory prompt phrases.",
+    )
+    parser.add_argument(
+        "--frontier-subject",
+        action="store_true",
+        help="Subject-aware frontier: anatomy, creatures, mediums, realism, mature quality.",
+    )
+    parser.add_argument(
+        "--frontier-perfect",
+        action="store_true",
+        help="Full perfect frontier: deep + subject + composition/lighting/materials + safety steering.",
+    )
+    parser.add_argument(
+        "--safety-tier",
+        type=str,
+        choices=("off", "moderate", "strict"),
+        default="moderate",
+        help="Content policy tier when --frontier-perfect (moderate=steer/refuse high-risk prompts).",
+    )
+    parser.add_argument(
+        "--frontier-creative",
+        action="store_true",
+        help="Creative frontier: surreal, cinema, mood physics, mutations — not duplicate art-medium tags.",
+    )
+    parser.add_argument(
+        "--creative-mutate",
+        type=int,
+        default=0,
+        help="With --frontier-creative: generate N prompt variants for explore/auto-refine.",
+    )
+    parser.add_argument(
+        "--creative-random-constraint",
+        action="store_true",
+        help="With --frontier-creative: apply one random art-school constraint (monochrome, silhouette, etc.).",
+    )
+    parser.add_argument(
+        "--character-session",
+        type=str,
+        default="",
+        help="JSON file: locked character prompt additions, refs, and negative.",
+    )
+    parser.add_argument(
+        "--save-character-session",
+        type=str,
+        default="",
+        help="After generation, write character session JSON to this path.",
+    )
+    parser.add_argument(
+        "--box-attn-layout",
+        action="store_true",
+        help="With --box-layout: Dense Diffusion–style cross-attn layout plan (early steps).",
+    )
+    parser.add_argument(
+        "--box-attn-inject-frac", type=float, default=0.4, help="Fraction of steps for box-attn layout."
+    )
+    parser.add_argument("--box-attn-strength", type=float, default=0.85, help="Box-attn bias strength.")
+    parser.add_argument(
+        "--per-region-cads",
+        action="store_true",
+        help="With --box-layout: per-region condition annealing (boosts holy-grail CADS).",
+    )
+    parser.add_argument(
+        "--fix-region",
+        type=str,
+        default="",
+        help="With --init-image and --box-layout: inpaint only this region name (MDM).",
+    )
+    parser.add_argument(
+        "--explain-adherence",
+        type=str,
+        default="",
+        help="Save prompt-adherence heatmap PNG (runs extra attn forward).",
+    )
+    parser.add_argument(
+        "--export-comfy-workflow",
+        type=str,
+        default="",
+        help="Write ComfyUI-style workflow JSON from current args and exit (no sampling).",
+    )
+    parser.add_argument(
+        "--auto-refine",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Generate N seed variants, keep best by heuristic score (N>1).",
+    )
+    parser.add_argument(
         "--prompt-layout",
         type=str,
         default="",
@@ -2757,6 +2912,65 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             )
         apply_holy_grail_preset_to_args(args, hg_name)
 
+    if str(getattr(args, "export_comfy_workflow", "") or "").strip():
+        from utils.generation.comfy_export import sample_args_to_comfy_workflow, write_comfy_workflow
+
+        wf = sample_args_to_comfy_workflow(vars(args))
+        out = write_comfy_workflow(str(args.export_comfy_workflow).strip(), wf)
+        print(f"Wrote Comfy workflow: {out}")
+        return
+
+    _auto_refine_n = int(getattr(args, "auto_refine", 0) or 0)
+    if _auto_refine_n > 1:
+        import shutil
+
+        from utils.generation.sample_features import run_auto_refine_candidates, run_creative_refine
+
+        _stripped = []
+        _skip = False
+        for _tok in sys.argv[1:]:
+            if _skip:
+                _skip = False
+                continue
+            if _tok == "--auto-refine":
+                _skip = True
+                continue
+            if _tok.startswith("--auto-refine="):
+                continue
+            _stripped.append(_tok)
+        _cmd = [sys.executable, str(Path(__file__).resolve())] + _stripped
+        _stem = Path(args.out).stem + "_ar"
+        _seed = int(getattr(args, "seed", 42) or 42)
+        _creative = bool(getattr(args, "frontier_creative", False))
+        _mutate = int(getattr(args, "creative_mutate", 0) or 0)
+        if _creative or _mutate > 0:
+            _res = run_creative_refine(
+                sample_cmd=_cmd,
+                base_prompt=str(getattr(args, "prompt", "") or ""),
+                num_candidates=_auto_refine_n,
+                seed_base=_seed,
+                out_stem=_stem,
+                mutate_count=_mutate if _mutate > 0 else _auto_refine_n,
+                base_serendipity=float(getattr(args, "frontier_serendipity", 0.25) or 0.25),
+            )
+        else:
+            _res = run_auto_refine_candidates(
+                sample_cmd=_cmd,
+                num_candidates=_auto_refine_n,
+                seed_base=_seed,
+                out_stem=_stem,
+            )
+        shutil.copy(_res.outputs[_res.best_index], args.out)
+        _prompt_note = ""
+        if _res.prompts and _res.prompts[_res.best_index]:
+            _prompt_note = f" prompt={_res.prompts[_res.best_index][:80]!r}"
+        print(
+            f"Auto-refine: kept candidate {_res.best_index} "
+            f"(score={_res.scores[_res.best_index]:.3f}){_prompt_note} -> {args.out}",
+            file=sys.stderr,
+        )
+        return
+
     if str(getattr(args, "human_made", "none") or "none").lower() not in ("none", "off", "0", ""):
         from utils.quality.human_made import apply_human_made_prompt_flags
 
@@ -3225,17 +3439,23 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         args.num = num_gen
     if num_gen < 2 and str(getattr(args, "pick_best", "none")).lower() not in ("none", ""):
         print("Note: --pick-best only applies with --num >= 2; ignoring.", file=sys.stderr)
+
+    from utils.generation.sample_features import apply_sample_feature_prompt_phase
+
+    apply_sample_feature_prompt_phase(args, steps=int(getattr(args, "steps", 50) or 50))
+
     # Resolve emphasis (word)/[word] first so we have prompt_to_encode for conflict filter
     if "(" in args.prompt or "[" in args.prompt:
         prompt_to_encode, _emphasis_segments = parse_prompt_emphasis(args.prompt)
     else:
         prompt_to_encode, _emphasis_segments = args.prompt, []
     if getattr(args, "expand_prompt", False) and prompt_to_encode.strip():
-        from utils.superior.prompt_expand import expand_prompt_heuristic
+        if not getattr(args, "_skip_prompt_expansion", False):
+            from utils.superior.prompt_expand import expand_prompt_heuristic
 
-        prompt_to_encode = expand_prompt_heuristic(prompt_to_encode)
-        args.prompt = prompt_to_encode
-        print("Superior: expanded prompt heuristically.", file=sys.stderr)
+            prompt_to_encode = expand_prompt_heuristic(prompt_to_encode)
+            args.prompt = prompt_to_encode
+            print("Superior: expanded prompt heuristically.", file=sys.stderr)
     _hm = str(getattr(args, "human_made", "none") or "none").lower().strip()
     if _hm not in ("none", "off", "0", ""):
         from utils.quality.human_made import append_human_made_prompt_fragments
@@ -3795,33 +4015,23 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
 
     ref_path = str(getattr(args, "reference_image", "") or "").strip()
     ref_strength = float(getattr(args, "reference_strength", 0.0) or 0.0)
-    if ref_path and ref_strength > 0:
+    has_multi_style = bool(
+        str(getattr(args, "style_ref", "") or "").strip()
+        or str(getattr(args, "style_references_json", "") or "").strip()
+        or str(getattr(args, "moodboard_json", "") or "").strip()
+        or str(getattr(args, "moodboard_images", "") or "").strip()
+    )
+    if has_multi_style or (ref_path and ref_strength > 0):
         try:
-            from models.reference_token_projection import ReferenceTokenProjector
-            from utils.generation.clip_reference_embed import encode_reference_image_pil
+            from utils.generation.krea_controls import inject_reference_conditioning
 
-            pil_r = Image.open(ref_path).convert("RGB")
-            clip_id = str(getattr(args, "reference_clip_model", "") or "openai/clip-vit-large-patch14")
-            emb, clip_dim = encode_reference_image_pil(pil_r, device=device, model_id=clip_id, dtype=torch.float32)
-            if num_gen > 1:
-                emb = emb.expand(num_gen, -1)
-            hs = int(getattr(cfg, "hidden_size", 1152))
-            ntok = max(1, int(getattr(args, "reference_tokens", 4) or 4))
-            proj = ReferenceTokenProjector(clip_dim, hs, ntok).to(device)
-            apt = str(getattr(args, "reference_adapter_pt", "") or "").strip()
-            if apt:
-                sd = torch.load(apt, map_location="cpu", weights_only=False)
-                if isinstance(sd, dict):
-                    if "state_dict" in sd and isinstance(sd["state_dict"], dict):
-                        sd = sd["state_dict"]
-                    elif "projector" in sd and isinstance(sd["projector"], dict):
-                        sd = sd["projector"]
-                proj.load_state_dict(sd, strict=False)
-            proj.eval()
-            with torch.no_grad():
-                rt = proj(emb)
-            model_kwargs_cond["reference_tokens"] = rt
-            model_kwargs_cond["reference_scale"] = ref_strength
+            inject_reference_conditioning(
+                model_kwargs_cond,
+                args=args,
+                cfg=cfg,
+                device=device,
+                num_gen=num_gen,
+            )
         except Exception as e:
             print(f"Reference image conditioning skipped: {e}", file=sys.stderr)
 
@@ -3901,6 +4111,27 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             x_init = diffusion.q_sample(x_init, torch.tensor([start_timestep], device=device).expand(x_init.shape[0]))
         print(f"From-z: strength={args.strength} -> t_start={start_timestep}")
     elif args.init_image:
+        _fix_region = str(getattr(args, "fix_region", "") or "").strip()
+        _box_for_fix = getattr(args, "_box_layout_spec", None)
+        if _fix_region and _box_for_fix is not None and not args.mask:
+            try:
+                import tempfile
+
+                from utils.generation.sample_features import write_fix_region_mask
+
+                _mask_path, _reg_prompt = write_fix_region_mask(
+                    _box_for_fix,
+                    _fix_region,
+                    image_size=image_size,
+                    out_path=Path(tempfile.gettempdir()) / f"sdx_fix_{_fix_region}.png",
+                )
+                args.mask = str(_mask_path)
+                args.inpaint_mode = "mdm"
+                if _reg_prompt:
+                    args.prompt = f"{args.prompt}, {_reg_prompt}" if args.prompt else _reg_prompt
+                print(f"Fix-region: inpainting {_fix_region!r} via {args.mask}", file=sys.stderr)
+            except Exception as e:
+                print(f"Warning: --fix-region failed: {e}", file=sys.stderr)
         pil_init = Image.open(args.init_image).convert("RGB")
         if pil_init.size != (image_size, image_size):
             pil_init = pil_init.resize((image_size, image_size), Image.Resampling.LANCZOS)
@@ -4062,6 +4293,12 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         cfg_guidance_cosine_max_multiplier=float(getattr(args, "guidance_schedule_cosine_max", 1.0)),
     )
     _regional_kw = dict(regional_cfg_plan=getattr(args, "_regional_cfg_plan", None))
+    from utils.generation.per_region_cads import merge_cads_into_holy_grail
+    from utils.generation.sample_features import apply_sample_feature_diffusion_phase
+
+    _feature_kw = apply_sample_feature_diffusion_phase(args, steps=int(getattr(args, "steps", 50) or 50))
+    if getattr(args, "_per_region_cads", None) is not None:
+        _holy_kw = merge_cads_into_holy_grail(_holy_kw, args._per_region_cads)
     if use_flow_sample:
         print(
             f"Using flow-matching sampler (solver={_flow_kw['flow_solver']}); "
@@ -4630,6 +4867,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             **_periodic_kw,
             **_guidance_kw,
             **_regional_kw,
+            **_feature_kw,
         )
 
     if bool(getattr(args, "cfg_rejection_rerank", False)) and num_gen > 1:
@@ -4937,16 +5175,30 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
                 x0_refined, _ = diffusion.p_step(model, x_t, t, model_kwargs=model_kwargs_cond)
                 x0 = x0_refined
 
-    if args.save_attn:
+    if args.save_attn or str(getattr(args, "explain_adherence", "") or "").strip():
         with torch.no_grad():
             t0 = torch.zeros(1, device=device, dtype=torch.long)
             out = model(x0[:1], t0, return_attn=True, **model_kwargs_cond)
         if isinstance(out, tuple):
             _, attn_weights = out
-            torch.save({"attn": attn_weights.cpu(), "prompt": args.prompt}, args.save_attn)
-            print(f"Saved attention: {args.save_attn}")
+            if args.save_attn:
+                torch.save({"attn": attn_weights.cpu(), "prompt": args.prompt}, args.save_attn)
+                print(f"Saved attention: {args.save_attn}")
+            _adh_path = str(getattr(args, "explain_adherence", "") or "").strip()
+            if _adh_path:
+                from utils.generation.sample_features import export_adherence_heatmap
+
+                export_adherence_heatmap(
+                    attn_weights,
+                    args.prompt or "",
+                    _adh_path,
+                    latent_h=latent_size,
+                    latent_w=latent_size,
+                    box_spec=getattr(args, "_box_layout_spec", None),
+                )
+                print(f"Saved adherence heatmap: {_adh_path}")
         else:
-            print("Model does not support --save-attn (e.g. DiT-P); skipping.", file=sys.stderr)
+            print("Model does not support attention export; skipping.", file=sys.stderr)
 
     # Decode with VAE / RAE
     if ae_type == "kl":
@@ -5264,6 +5516,23 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             save_path = out_path.parent / f"{stem}_{i}{ext}"
             Image.fromarray(processed[i]).save(save_path)
             print(f"Saved: {save_path}")
+
+    _sess_out = str(getattr(args, "save_character_session", "") or "").strip()
+    if _sess_out:
+        from utils.generation.sample_features import save_character_session
+
+        save_character_session(
+            _sess_out,
+            {
+                "name": Path(_sess_out).stem,
+                "prompt_additions": str(getattr(args, "prompt", "") or ""),
+                "negative_prompt": str(getattr(args, "negative_prompt", "") or ""),
+                "reference_images": [str(args.init_image)] if getattr(args, "init_image", "") else [],
+                "last_output": str(out_path),
+                "seed": int(getattr(args, "seed", 0) or 0),
+            },
+        )
+        print(f"Saved character session: {_sess_out}", file=sys.stderr)
 
     # Optional: write prompt/seed/steps sidecar for reproducibility
     if getattr(args, "save_prompt", False):

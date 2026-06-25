@@ -1,320 +1,208 @@
-<!-- markdownlint-disable MD033 MD041 -->
+<p align="center">
+  <strong>SDX</strong> · Stable Diffusion Transformer eXtended<br/>
+  <sub>Train, layout, direct, and deploy your own image &amp; video models — fully open.</sub>
+</p>
 
-<div align="center">
-
-<img src="https://img.shields.io/badge/SDX-v11.0.0-0ea5e9?style=for-the-badge&labelColor=0f172a" alt="SDX v11"/>
-
-<br/><br/>
-
-<pre style="color: #38bdf8; font-weight: bold; font-size: 14px; line-height: 1.15;">
- ███████╗ ██████╗ ██╗  ██╗
- ██╔════╝██╔═══██╗╚██╗██╔╝
- ███████╗██║   ██║ ╚███╔╝ 
- ╚════██║██║   ██║ ██╔██╗ 
- ███████║╚██████╔╝██╔╝ ██╗
- ╚══════╝ ╚═════╝ ╚═╝  ╚═╝
-</pre>
-
-<h3>Train, layout, and deploy custom text-to-image models — with full transparency</h3>
-
-<p>
+<p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="docs/releases/v11.md"><img src="https://img.shields.io/badge/docs-v11-0ea5e9?style=flat-square" alt="Docs"/></a>
+  <a href="docs/releases/v12.md"><img src="https://img.shields.io/badge/release-v12.0.0-0ea5e9?style=flat-square" alt="v12"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=flat-square" alt="License"/></a>
-  <img src="https://img.shields.io/badge/tests-648%20passed-22c55e?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-803%2B-22c55e?style=flat-square" alt="Tests"/>
 </p>
 
-<p>
-  <a href="#quick-start"><strong>Quick Start</strong></a> ·
-  <a href="#pipelines"><strong>Pipelines</strong></a> ·
-  <a href="#new-in-v11"><strong>v11</strong></a> ·
-  <a href="#how-sdx-compares"><strong>Compare</strong></a> ·
-  <a href="#documentation"><strong>Docs</strong></a>
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-you-get">Features</a> ·
+  <a href="#pipelines">Pipelines</a> ·
+  <a href="#new-in-v12">v12</a> ·
+  <a href="#v1-vs-v12">v1 → v12</a> ·
+  <a href="#docs">Docs</a>
 </p>
-
-<br/>
-
-</div>
 
 ---
 
 ## What is SDX?
 
-**SDX** (Stable Diffusion Transformer eXtended) is an open research framework for building **your own** text-to-image systems — not a wrapper around someone else's checkpoint.
+**SDX** is an open research framework for building **your own** text-to-image and text/image-to-video systems — not a wrapper around a closed API.
 
-You get readable entry points (`train.py`, `sample.py`), every training objective in one place (flow matching, DPO, distillation, GRPO), adaptive inference (Holy Grail), a full quality stack, and **v11** adds **regional box layout control** plus a dedicated research sandbox (`frontier/`).
-
-| Closed APIs | Typical research repos | **SDX** |
-|---|---|---|
-| No fine-tuning | Partial training scripts | **End-to-end training + sampling** |
-| Black box | Scattered docs | **~500 LOC entry points you can read** |
-| Vendor lock-in | Hard to reproduce | **Full metadata + 648 tests** |
-
----
-
-## Pipelines
-
-SDX has two main loops. Each stage below maps to real code you can open and modify.
-
-### Training — `train.py`
-
-**Goal:** teach a DiT to denoise latents conditioned on text (and optionally your layout, style, or preferences).
-
-```mermaid
-flowchart LR
-  A["📁 Images + captions"] --> B["DataLoader"]
-  B --> C["VAE encode<br/><small>pixel → latent</small>"]
-  C --> D["Add noise @ t<br/><small>flow or VP schedule</small>"]
-  D --> E["DiT forward<br/><small>predict noise / velocity</small>"]
-  E --> F["Loss + backward"]
-  F --> G["Checkpoint"]
-
-  style A fill:#1e293b,stroke:#38bdf8,color:#e2e8f0
-  style G fill:#0f766e,stroke:#2dd4bf,color:#ecfdf5
-```
-
-| Step | What happens | Why it matters |
-|------|----------------|----------------|
-| **1. Load data** | Image folders or JSON with captions | Same format for fine-tunes and from-scratch runs |
-| **2. VAE encode** | RGB → compact latent tensor | Trains 64× faster in latent space |
-| **3. Noise @ t** | Flow matching *or* classic diffusion timestep | Flow = simpler math, ~20% faster convergence |
-| **4. DiT predict** | Transformer sees noisy latent + text embed | Core learnable model |
-| **5. Loss** | MSE on noise/velocity; optional DPO, bridge, GRPO aux | One codebase, many objectives |
-| **6. Save** | `best.pt` + training metadata | Reproducible resume and eval |
-
-```bash
-python train.py --data-path images/ --flow-matching-training --num-epochs 20
-```
-
-**Training modes:** Flow matching · DPO (preference pairs) · Knowledge distillation · GRPO (6 variants)
+| | Closed APIs | Typical repos | **SDX** |
+|---|-------------|---------------|---------|
+| Fine-tune your data | ✗ | partial | **✓ end-to-end** |
+| See the full pipeline | ✗ | scattered | **✓ readable entry points** |
+| Layout + video control | vendor-locked | extensions | **✓ scene JSON + box layout** |
+| Reproducibility | ✗ | varies | **✓ 802+ tests + metadata** |
 
 ---
 
-### Sampling — `sample.py`
-
-**Goal:** start from random noise and iteratively denoise into an image that matches your prompt (and optional regional layout).
-
-```mermaid
-flowchart TB
-  subgraph input["Input"]
-    P["Prompt"]
-    L["Box layout JSON<br/><small>optional, v11</small>"]
-  end
-
-  P --> PS["PromptStack v2<br/><small>7-stage text pipeline</small>"]
-  L --> RM["Region masks + per-box prompts"]
-  PS --> ENC["T5 + CLIP encode"]
-  RM --> ENC
-
-  ENC --> N0["Initialize latent noise"]
-  N0 --> LOOP
-
-  subgraph LOOP["Denoise loop (t = T → 0)"]
-    direction TB
-    DIT["DiT predicts denoised direction"]
-    HG["Holy Grail<br/><small>adaptive CFG per step</small>"]
-    RG["Regional CFG blend<br/><small>global + per-box</small>"]
-    QC["Quality monitor<br/><small>optional early stop</small>"]
-    DIT --> HG --> RG --> QC
-  end
-
-  LOOP --> VAE["VAE decode → RGB"]
-  VAE --> OUT["🖼 Output image"]
-
-  style input fill:#1e293b,stroke:#64748b,color:#e2e8f0
-  style LOOP fill:#172554,stroke:#3b82f6,color:#e2e8f0
-  style OUT fill:#0f766e,stroke:#2dd4bf,color:#ecfdf5
-```
-
-| Step | What happens | Why it matters |
-|------|----------------|----------------|
-| **PromptStack** | Cleans, expands, and structures your prompt | Same logic in train *and* sample — no train/serve skew |
-| **Box layout** | Normalized regions with local prompts, sketches, refs | Ideogram-style spatial control without a closed API |
-| **Encode** | Text → conditioning tensors the DiT attends to | Triple-encoder modes for hard prompts |
-| **Denoise loop** | 20–50 steps of guided prediction | Holy Grail adjusts CFG: explore early, lock in late |
-| **Regional blend** | Global prediction + per-region predictions merged by mask | Each box gets its own prompt strength |
-| **Decode** | Latent → pixels via VAE | Final image |
-
-```bash
-# Standard generation
-python sample.py --ckpt outputs/best.pt --prompt "a red car on a beach" --out out.png
-
-# v11: regional layout
-python sample.py --ckpt outputs/best.pt \
-  --box-layout examples/box_layout_sketch.example.json \
-  --prompt "fantasy battlefield" --out layout.png
-```
-
----
-
-## New in v11
-
-<table>
-<tr>
-<td width="33%" valign="top">
-
-**📦 Regional box prompting**
-
-Draw boxes, describe each region, add stroke sketches and reference images.
-
-`utils/generation/regional_box_prompting.py`
-
-</td>
-<td width="33%" valign="top">
-
-**🔬 Frontier research**
-
-Experimental layout, guidance, and narrative modules in `frontier/` — try before promoting to production.
-
-[frontier/README.md](frontier/README.md)
-
-</td>
-<td width="33%" valign="top">
-
-**🗂 Package restructure**
-
-`innovations/` replaces `advanced_innovations/`. Sampling moves to `diffusion/sampling/` with compat shims.
-
-[innovations/README.md](innovations/README.md)
-
-</td>
-</tr>
-</table>
-
-[Full v11 release notes →](docs/releases/v11.md)
-
----
-
-## Quick Start
+## Quick start
 
 ```bash
 git clone https://github.com/Llunarstack/sdx.git && cd sdx
 pip install -r requirements.txt
 
-# Generate (demo checkpoint)
+# Image (demo checkpoint)
 python demo.py
 
-# Train on your images/
+# Train on your folder
 python train.py --data-path images/ --flow-matching-training --num-epochs 20
 
-# Sample from your checkpoint
+# Sample
 python sample.py --ckpt outputs/best.pt --prompt "your prompt" --out result.png
+
+# Video — plan from one scene file (v12)
+python -m scripts.tools video_generate --scene examples/scene_frontier.example.json --plan-only
 ```
 
-Verify install: `python -m toolkit.training.env_health` · Run tests: `pytest tests/ -q`
+**Health check:** `python -m toolkit.training.env_health` · **Tests:** `pytest tests/ -q`
 
 ---
 
-## Core Features
+## What you get
 
 <details open>
-<summary><strong>Style Genome</strong> — invent original aesthetics, not copies</summary>
+<summary><strong>Image generation</strong> — train.py + sample.py</summary>
 
-<br/>
+- DiT + VAE latent diffusion, flow matching, DPO, GRPO (6 variants)
+- Holy Grail adaptive CFG, TCIS committee scoring, Style Genome
+- Regional box prompting (Ideogram-style layout JSON)
+- Agentic quality: ELIQ, artifacts, drift repair, explainability
 
-Structured 5-axis styles (palette, line, surface, camera, signature) that don't exist in training data.
+</details>
+
+<details open>
+<summary><strong>Video studio (v12)</strong> — pipelines/video/</summary>
+
+One **scene JSON** → retrieve → keyframe edit → motion → polish → stitch.
+
+- **Studio:** engine router (realistic / anime / voxel / …), director mode, character & world bibles
+- **Controls:** elements, motion brush, FLF2V, storyboard cuts
+- **Continuity:** eyeline, props, light motivation, thumbnail rehearsal
+- **Frontier:** 25 filmmaker modules (tension curve, causal ripples, witness lens, …)
 
 ```bash
-python sample.py --ckpt model.pt --prompt "warrior at sunset" \
-  --invent-styles 1 --style-chaos-level 0.8
+python -m scripts.tools video_generate --list-frontier
+python -m scripts.tools video_generate --scene examples/scene_studio.example.json --preflight
 ```
 
 </details>
 
 <details>
-<summary><strong>Holy Grail + TCIS</strong> — adaptive inference and hard-prompt committee scoring</summary>
+<summary><strong>Frontier research</strong> — frontier/</summary>
 
-<br/>
+80+ experimental modules: layout, guidance, narrative, realism, cinema, fusion. Browse the registry:
 
-Holy Grail varies CFG by noise level. TCIS generates multiple candidates and a ViT committee picks the best for text-in-image and layout-heavy prompts.
-
-```bash
-python sample.py --ckpt model.pt --prompt "poster with HELLO WORLD text" \
-  --holy-grail-preset auto
-```
-
-</details>
-
-<details>
-<summary><strong>Agentic quality stack (v10+)</strong> — ELIQ, artifacts, drift, explainability</summary>
-
-<br/>
-
-| System | Purpose |
-|--------|---------|
-| ELIQ | Label-free adaptive quality |
-| Artifact detector | GAN/diffusion-specific defects |
-| Semantic drift | Stops refinement from corrupting intent |
-| Real-time monitor | Early stopping during generation |
-| Explainable scoring | Human-readable quality breakdown |
-
-```bash
-python sample.py --ckpt model.pt --prompt "portrait" \
-  --use-quality-monitoring --explain-quality --out out.png
+```python
+from frontier.registry import list_ideas
+implemented = list_ideas(status="implemented")
 ```
 
 </details>
 
 ---
 
-## How SDX Compares
+## Pipelines
 
-SDX is a **framework you train** — not a single hosted model. This table compares **capabilities you control**, not out-of-the-box photorealism scores.
+Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile and dark mode.
 
-| Capability | SD 1.5 | SDXL | SD3 | Flux | Ideogram | GPT Image | **SDX** |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Full training pipeline | ◐ | ◐ | ◐ | ◐ | ✗ | ✗ | **✓** |
-| Flow / DPO / GRPO native | ✗ | ✗ | ◐ | ◐ | ✗ | ✗ | **✓** |
-| Regional box prompting | ext | ext | ✗ | ext | **✓** | ✗ | **✓** |
-| Style invention (Genome) | LoRA | LoRA | ✗ | ✗ | presets | ✗ | **✓** |
-| Quality + explainability stack | ext | ext | ✗ | ext | ◐ | ✗ | **✓** |
-| Self-improving training loops | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Open / self-host weights | ✓ | ✓ | ◐ | ◐ | ✗ | ✗ | **✓** |
+### Training (`train.py`)
 
-◐ = partial / via extensions · ✗ = not available · ✓ = built in
+| Step | What happens |
+|------|----------------|
+| 1 | Load images + captions |
+| 2 | VAE encode → latent space |
+| 3 | Add noise @ timestep (flow or VP) |
+| 4 | DiT predicts noise / velocity |
+| 5 | Loss + backward (optional DPO / GRPO aux) |
+| 6 | Checkpoint + metadata |
 
-**Closed APIs** still win on zero-setup polish. **SDX** wins when you need your data, your layout control, and every line of the pipeline.
+### Sampling (`sample.py`)
+
+| Step | What happens |
+|------|----------------|
+| 1 | PromptStack cleans & expands prompt |
+| 2 | Optional box layout → regional masks |
+| 3 | T5 / CLIP encode conditioning |
+| 4 | Denoise loop (Holy Grail CFG, regional blend) |
+| 5 | VAE decode → image |
+
+### Video (`pipelines/video/`)
+
+| Step | What happens |
+|------|----------------|
+| 1 | `compile_scene_graph()` — studio + frontier layers |
+| 2 | Shot plan + per-segment overrides |
+| 3 | Retrieve reference clips |
+| 4 | Keyframe img2img edits |
+| 5 | Motion transfer, FLF2V, polish stack |
+| 6 | Stitch + provenance |
 
 ---
 
-## Project Structure
+## New in v12
+
+| Area | Highlights |
+|------|------------|
+| **Video** | Scene-graph TI2V, 60+ modules, CLI tools |
+| **Frontier** | 25 filmmaker modules + horizon expansion |
+| **Quality** | Continuity validators, thumbnail-first rehearsal |
+| **DX** | 802+ tests, ruff-clean CI, docs restructure |
+| **README** | GitHub-native layout (this file) |
+
+[Full v12 release notes →](docs/releases/v12.md)
+
+---
+
+## v1 vs v12
+
+| | v1 (foundation) | **v12 (now)** |
+|---|-----------------|---------------|
+| Scope | Train + sample images | Image + **video studio** + frontier |
+| Video | ✗ | Scene JSON director pipeline |
+| Layout | ✗ | Regional boxes + storyboard |
+| Tests | few | **802+** |
+| Research | scripts | `innovations/` + `frontier/` |
+
+[Full comparison →](docs/releases/VERSION_COMPARISON.md)
+
+---
+
+## How SDX compares (ecosystem)
+
+SDX is a **framework you train** — not a hosted model scoreboard.
+
+| Capability | SDXL | Flux | Ideogram | **SDX** |
+|---|:---:|:---:|:---:|:---:|
+| Full training pipeline | ◐ | ◐ | ✗ | **✓** |
+| Flow / DPO / GRPO | ✗ | ◐ | ✗ | **✓** |
+| Regional layout | ext | ext | ✓ | **✓** |
+| Open scene-graph video | ✗ | ✗ | ✗ | **✓** |
+| Self-host everything | ✓ | ◐ | ✗ | **✓** |
+
+---
+
+## Project structure
 
 ```
 sdx/
-├── train.py · sample.py          # Entry points
-├── models/                       # DiT architecture + conditioning
-├── diffusion/                    # Flow matching, schedulers, sampling/
-├── innovations/                  # Quality, semantics, control, agentic
-├── frontier/                     # Experimental layout + guidance research
-├── utils/generation/             # Regional box prompting, CFG helpers
-├── data/                         # Datasets, caption processing
-└── tests/                        # 648 tests
+├── train.py · sample.py · demo.py     # Image entry points
+├── models/ · diffusion/               # DiT, schedulers, sampling
+├── innovations/                       # Quality, agentic, control
+├── frontier/                          # Experimental research
+├── pipelines/video/                   # TI2V scene-graph studio (v12)
+├── utils/generation/                  # Layout, CFG, sample features
+└── tests/                             # 802+ tests
 ```
 
 ---
 
-## System Requirements
+## System requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
+| | Minimum | Recommended |
+|---|---------|-------------|
 | Python | 3.10 | 3.11+ |
-| PyTorch | 2.0 | 2.11+ |
+| PyTorch | 2.0 | 2.2+ |
 | GPU VRAM | 16 GB | 24 GB+ |
-| Training data | 50 images | 500+ |
-
----
-
-## Version History
-
-| Version | Focus | Notes |
-|---------|-------|-------|
-| **[v11](docs/releases/v11.md)** | Box layout, frontier, package restructure | **Current** |
-| [v10](docs/releases/v10.md) | Quality & explainability (ELIQ, artifacts) | |
-| [v9](docs/releases/v9.md) | GRPO, Superior Stack, Agentic | |
-| [v8](docs/releases/v8.md) | Style Genome, PromptStack v2 | |
-| [v7–v3](docs/releases/) | CI, acceleration, benchmarks, filtering | |
-| [v0.2 / v0.1](docs/releases/v0.2.0.md) | Flow, DPO, core framework | |
 
 ---
 
@@ -322,25 +210,43 @@ sdx/
 
 | Topic | Link |
 |-------|------|
-| Getting started | [GETTING_STARTED.md](docs/GETTING_STARTED.md) |
-| Codebase map | [CODEBASE_GUIDE.md](docs/CODEBASE_GUIDE.md) |
-| Holy Grail scheduling | [HOLY_GRAIL_OVERVIEW.md](docs/HOLY_GRAIL_OVERVIEW.md) |
-| Frontier research | [frontier/README.md](frontier/README.md) |
-| Innovations package | [innovations/README.md](innovations/README.md) |
-| v11 release | [docs/releases/v11.md](docs/releases/v11.md) |
+| Getting started | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
+| Codebase map | [docs/CODEBASE_GUIDE.md](docs/CODEBASE_GUIDE.md) |
+| Video pipeline | [pipelines/video/README.md](pipelines/video/README.md) |
+| Frontier | [frontier/README.md](frontier/README.md) |
+| v12 release | [docs/releases/v12.md](docs/releases/v12.md) |
+| v1 → v12 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
 
 ---
 
 ## Contributing
-
-See [CODEBASE.md](docs/CODEBASE.md). Before submitting:
 
 ```bash
 ruff check . --fix && ruff format .
 pytest tests/ -q
 ```
 
-Do not add `Co-authored-by` trailers for AI tools — use `scripts/tools/dev/prepare-commit-msg` as a git hook if needed.
+### Are Cursor / Claude permanent contributors?
+
+**No.** GitHub's contributor graph only counts **git commit author names**. AI assistants are not collaborators unless their name appears on commits.
+
+To keep the graph human-only:
+
+1. **Hook (recommended):** copy `scripts/tools/dev/prepare-commit-msg` to `.git/hooks/prepare-commit-msg` — strips `Co-authored-by: Cursor` / Claude trailers before each commit.
+2. **Rewrite history (once):** `scripts/tools/dev/cursorfix.sh` reattributes old Cursor-authored commits to you.
+3. **Policy:** do not add AI `Co-authored-by` lines (see README in dev scripts).
+
+---
+
+## Version history
+
+| Version | Focus |
+|---------|--------|
+| **[v12](docs/releases/v12.md)** | Video studio, frontier horizon, 802+ tests | **← current** |
+| [v11](docs/releases/v11.md) | Box layout, frontier, restructure |
+| [v10](docs/releases/v10.md) | ELIQ, explainability |
+| [v9](docs/releases/v9.md) | GRPO, agentic |
+| [v1](docs/releases/v0.1.0.md) | Foundation framework |
 
 ---
 
@@ -348,22 +254,16 @@ Do not add `Co-authored-by` trailers for AI tools — use `scripts/tools/dev/pre
 
 ```bibtex
 @software{sdx_2026,
-  title={SDX: Advanced Text-to-Image Generation Framework},
+  title={SDX: Advanced Text-to-Image and Video Generation Framework},
   author={Llunarstack},
   year={2026},
-  version={11.0.0},
+  version={12.0.0},
   url={https://github.com/Llunarstack/sdx}
 }
 ```
 
 ---
 
-<div align="center">
-
-<br/>
-
-**Apache 2.0** · [Issues](https://github.com/Llunarstack/sdx/issues) · [Discussions](https://github.com/Llunarstack/sdx/discussions) · [Releases](https://github.com/Llunarstack/sdx/releases)
-
-<br/>
-
-</div>
+<p align="center">
+  <sub>Apache 2.0 · <a href="https://github.com/Llunarstack/sdx/issues">Issues</a> · <a href="https://github.com/Llunarstack/sdx/releases">Releases</a></sub>
+</p>

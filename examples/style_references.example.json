@@ -1,0 +1,12 @@
+{
+  "references": [
+    {
+      "path": "path/to/style_a.png",
+      "strength": 0.6
+    },
+    {
+      "path": "path/to/style_b.png",
+      "strength": 0.4
+    }
+  ]
+}

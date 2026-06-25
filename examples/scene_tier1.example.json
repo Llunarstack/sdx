@@ -1,0 +1,70 @@
+{
+  "version": 3,
+  "mode": "i2v",
+  "scene": {
+    "prompt": "Hero crosses the bridge at dusk",
+    "duration_sec": 8,
+    "fps": 24,
+    "style": "cinematic fantasy"
+  },
+  "elements": {
+    "hero": {
+      "images": ["path/to/hero.png"],
+      "reference_sheet": true,
+      "bind_subject": true,
+      "role": "character",
+      "text": "armored knight, red cape"
+    },
+    "bridge_location": {
+      "images": ["path/to/bridge.png"],
+      "role": "location",
+      "reference_strength": 0.55
+    }
+  },
+  "characters": {
+    "knight": {
+      "bind_element": "hero",
+      "control": "identity",
+      "auto_rig": true,
+      "text_role": "walking across stone bridge"
+    }
+  },
+  "storyboard": {
+    "cuts": [
+      {
+        "id": "wide",
+        "duration_sec": 3,
+        "prompt": "wide shot, knight on bridge",
+        "camera": "establishing",
+        "characters": ["knight"],
+        "elements": ["hero", "bridge_location"],
+        "motion_brush": {
+          "box": [0.15, 0.1, 0.85, 0.95],
+          "mode": "motion_only"
+        }
+      },
+      {
+        "id": "tracking",
+        "duration_sec": 3,
+        "prompt": "tracking shot following knight",
+        "camera": "tracking",
+        "characters": ["knight"],
+        "transition": "dissolve"
+      },
+      {
+        "id": "flf_close",
+        "duration_sec": 2,
+        "prompt": "close-up helm visor",
+        "camera": "push_in",
+        "flf2v": true,
+        "start_image": "path/to/helm_start.png",
+        "end_image": "path/to/helm_end.png"
+      }
+    ]
+  },
+  "edit": {
+    "region_motion": true,
+    "depth_interpolate": true,
+    "motion_beat_keyframes": true
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "mode": "t2v",
+  "user_prompt": "establishing wide city at dusk, then close-up portrait in neon alley",
+  "timeline": {
+    "fps": 24.0,
+    "width": 1280,
+    "height": 720,
+    "duration_sec": 6.0,
+    "aspect_ratio": "16:9"
+  },
+  "retrieval": {
+    "local_library": "data/video_refs",
+    "catalog": "data/video_catalog.json",
+    "use_pexels": false,
+    "allow_download": false
+  },
+  "edit": {
+    "keyframe_interval": 6,
+    "edit_strength": 0.55,
+    "use_motion_only": true
+  }
+}
