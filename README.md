@@ -240,13 +240,22 @@ To keep the graph human-only:
 
 ## Version history
 
-| Version | Focus |
-|---------|--------|
-| **[v12](docs/releases/v12.md)** | Video studio, frontier horizon, 802+ tests | **← current** |
-| [v11](docs/releases/v11.md) | Box layout, frontier, restructure |
-| [v10](docs/releases/v10.md) | ELIQ, explainability |
-| [v9](docs/releases/v9.md) | GRPO, agentic |
-| [v1](docs/releases/v0.1.0.md) | Foundation framework |
+| Version | Focus | Notes |
+|---------|--------|--------|
+| **[v12](docs/releases/v12.md)** | AI film studio video, frontier horizon | **Current** · tag `v12.0.0` |
+| [v11](docs/releases/v11.md) | Regional box layout, frontier research, package restructure | `v11.0.0` |
+| [v10](docs/releases/v10.md) | ELIQ, artifacts, explainable quality | `v10.0.0` |
+| [v9](docs/releases/v9.md) | GRPO family, Superior Stack, agentic training | `v9.0.0` |
+| [v8](docs/releases/v8.md) | Style Genome, unified PromptStack | `v8.0.0` |
+| [v7](docs/releases/v7.md) | CI, reproducibility, security, benchmarks | `v7.0.0` |
+| [v6](docs/releases/v6.md) | Native acceleration, book/comic pipeline | `v6.0.0` |
+| [v5](docs/releases/v5.md) | Inference scaling, beam search, data curation | `v5.0.0` |
+| [v4](docs/releases/v4.md) | Smart quality filtering, adaptive iteration | `v4` |
+| [v3](docs/releases/v3.md) | Hard-case detection, benchmark training loops | `v3` |
+| [v0.2](docs/releases/v0.2.0.md) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
+| [v0.1](docs/releases/v0.1.0.md) | Foundation train + sample framework | `v0.1.0` |
+
+[Full timeline & v1 → v12 comparison →](docs/releases/VERSION_COMPARISON.md)
 
 ---
 

@@ -97,6 +97,7 @@ Roadmaps and industry notes — not required for day-to-day use.
 | [recipes/fast_training.md](recipes/fast_training.md) | Fast training defaults |
 | [recipes/local_ci_mirror.md](recipes/local_ci_mirror.md) | Mirror CI locally |
 | [releases/v12.md](releases/v12.md) | Latest release notes |
+| [releases/VERSION_COMPARISON.md](releases/VERSION_COMPARISON.md) | Full version timeline (v0.1 → v12) |
 | [releases/v11.md](releases/v11.md) | v11 release notes |
 
 ---
