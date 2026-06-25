@@ -329,6 +329,7 @@ SDX is Apache 2.0 licensed. Yes, commercial use is permitted. See LICENSE file.
 ## Resources
 
 - [Documentation Index](README.md) - Complete reference
+- [Reproducibility](guides/REPRODUCIBILITY.md) - Same seed / deterministic runs
 - [Main README](../README.md) - Feature overview and architecture
 - [GitHub Repository](https://github.com/Llunarstack/sdx) - Source code and issues
 

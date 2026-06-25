@@ -7,6 +7,7 @@ We split **workflows and documentation** by **target use case**, not by duplicat
 |----------|---------|------------------------|------------|
 | **[image_gen/](image_gen/README.md)** | General text-to-image | Photos, art, broad domains; HF export, smoke runs | [README](image_gen/README.md) |
 | **[book_comic/](book_comic/README.md)** | Books, comics, manga, storyboards | Multi-page coherence, text-in-panel, line art, OCR loops | [README](book_comic/README.md) |
+| **[video/](video/)** | Text/image → video (retrieve, edit, stitch) | Reference clips, keyframe SDX edits, temporal harmonize | `python -m scripts.tools video_generate` |
 
 **Rule of thumb:** both pipelines use the **same** `train.py` / checkpoints; you may train **two separate checkpoints** (e.g. `results/general/` vs `results/book_comic/`) with different datasets and caption styles. The split here is **where to look** for scripts and conventions—not a second copy of DiT code.
 

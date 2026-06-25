@@ -1,0 +1,74 @@
+{
+  "version": 4,
+  "mode": "t2v",
+  "scene": {
+    "prompt": "A detective confronts a suspect in a rain-soaked alley",
+    "duration_sec": 8,
+    "fps": 24,
+    "style": "film noir"
+  },
+  "studio": {
+    "engine": "realistic",
+    "director_mode": "auto",
+    "director": "noir",
+    "thumbnail_first": true,
+    "thumbnail_size": 128,
+    "thumbnail_gate": "warn",
+    "rehearsal_stage": "keyframe"
+  },
+  "continuity": {
+    "validators": {
+      "eyeline": true,
+      "props": true,
+      "light_motivation": true,
+      "silhouette": true
+    },
+    "props_ledger": {
+      "briefcase": { "initial": "closed" },
+      "gun": { "initial": "holstered" }
+    }
+  },
+  "shots": [
+    {
+      "id": "establish",
+      "prompt": "wide establishing shot, neon reflections in wet alley, sun from left",
+      "duration_sec": 2,
+      "shot_type": "establishing",
+      "lighting": { "key": "neon sign", "motivated": true, "sun_direction": "left" },
+      "thumbnail_approved": true
+    },
+    {
+      "id": "det_ots",
+      "prompt": "over the shoulder, detective looks right at suspect",
+      "duration_sec": 3,
+      "camera": "ots",
+      "characters": ["detective"],
+      "gaze": "frame_right",
+      "objects": ["briefcase"],
+      "props_state": { "briefcase": "closed" },
+      "lighting": { "key": "streetlight", "motivated": true },
+      "thumbnail_approved": true
+    },
+    {
+      "id": "sus_reverse",
+      "prompt": "reverse shot, suspect looks left, nervous",
+      "duration_sec": 3,
+      "characters": ["suspect"],
+      "gaze": "frame_left",
+      "objects": ["briefcase"],
+      "props_state": { "briefcase": "open" },
+      "lighting": { "key": "neon", "motivated": true },
+      "thumbnail_approved": true
+    }
+  ],
+  "characters": {
+    "detective": { "description": "trench coat, fedora, hard eyes" },
+    "suspect": { "description": "soaked hoodie, hands visible" }
+  },
+  "objects": {
+    "briefcase": { "description": "metal briefcase" }
+  },
+  "edit": {
+    "semantic_drift_repair": true
+  }
+}

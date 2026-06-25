@@ -509,6 +509,40 @@ class PromptAdherenceController:
         return biased, gated_v
 
 
+def attribute_binding_heatmap(
+    attn_weights: "torch.Tensor",
+    parsed: "ParsedPrompt",
+    *,
+    spatial_h: int,
+    spatial_w: int,
+) -> "torch.Tensor":
+    """
+    Aggregate cross-attention into a 2D adherence map ``(H, W)``.
+
+    Uses mean attention over heads and subject-related tokens from ``parsed``.
+    """
+
+    w = attn_weights
+    if w.dim() == 4:
+        w = w[0]
+    if w.dim() != 3:
+        raise ValueError(f"expected attn (H,N,L) or (B,H,N,L), got {tuple(attn_weights.shape)}")
+    hw = int(spatial_h) * int(spatial_w)
+    if w.shape[1] != hw:
+        side = int(round(w.shape[1] ** 0.5))
+        spatial_h = spatial_w = side
+    heat = w.float().mean(dim=0)  # N, L
+    token_idx: list[int] = []
+    for subj in getattr(parsed, "subjects", []) or []:
+        for tok in getattr(subj, "token_indices", []) or []:
+            if 0 <= int(tok) < heat.shape[1]:
+                token_idx.append(int(tok))
+    if not token_idx:
+        token_idx = list(range(min(heat.shape[1], 16)))
+    sel = heat[:, token_idx].mean(dim=1)
+    return sel.reshape(spatial_h, spatial_w)
+
+
 __all__ = [
     "PromptParser",
     "ParsedPrompt",
@@ -518,4 +552,5 @@ __all__ = [
     "CountConstraint",
     "SemanticGroundingLoss",
     "PromptAdherenceController",
+    "attribute_binding_heatmap",
 ]

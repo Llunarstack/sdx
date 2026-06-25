@@ -494,6 +494,7 @@ class GaussianDiffusion:
         # PBFM (physics/perceptual guidance) - lightweight edge/high-pass drift.
         pbfm_edge_boost: float = 0.0,
         pbfm_edge_kernel: int = 3,
+        step_noise_scale: float = 1.0,
     ):
         """DDIM-style step using pre-computed model output (for CFG). pred_out = ε, v, or x0 per prediction_type."""
         x_0_pred, _ = self._predict_x0_and_noise(pred_out, x_t, t)
@@ -520,7 +521,10 @@ class GaussianDiffusion:
         )
         x_next = alpha_next.sqrt() * x_0_pred + dir_xt
         if eta > 0:
-            x_next = x_next + sigma * torch.randn_like(x_t, device=x_t.device, dtype=x_t.dtype)
+            noise = torch.randn_like(x_t, device=x_t.device, dtype=x_t.dtype)
+            if step_noise_scale is not None and float(step_noise_scale) != 1.0:
+                noise = noise * float(step_noise_scale)
+            x_next = x_next + sigma * noise
         return x_next, x_0_pred
 
     def _sample_loop_flow_matching(
@@ -1039,6 +1043,7 @@ class GaussianDiffusion:
         cfg_rejection_rerank: bool = False,
         dbc_separate_cfg: bool = True,
         regional_cfg_plan=None,
+        step_noise_scales=None,
     ):
         """
         Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
@@ -1276,6 +1281,11 @@ class GaussianDiffusion:
             )
         for i in range(len(timesteps)):
             t = timesteps[i].expand(shape[0])
+            _sns = 1.0
+            if step_noise_scales is not None:
+                _scales = list(step_noise_scales)
+                if _scales:
+                    _sns = float(_scales[min(i, len(_scales) - 1)])
             t_next = (
                 timesteps[i + 1].expand(shape[0])
                 if i + 1 < len(timesteps)
@@ -1494,6 +1504,7 @@ class GaussianDiffusion:
                         dynamic_threshold_value=dynamic_threshold_value,
                         pbfm_edge_boost=pbfm_edge_boost,
                         pbfm_edge_kernel=pbfm_edge_kernel,
+                        step_noise_scale=_sns,
                     )
                     out2 = _apply_sag(x_euler, t_next, _model_prediction(x_euler, t_next))
                     out = 0.5 * (out1 + out2)
@@ -1510,6 +1521,7 @@ class GaussianDiffusion:
                     dynamic_threshold_value=dynamic_threshold_value,
                     pbfm_edge_boost=pbfm_edge_boost,
                     pbfm_edge_kernel=pbfm_edge_kernel,
+                    step_noise_scale=_sns,
                 )
                 if v_boost > 0.0:
                     delta_lat_v = (x - x_prev).abs().mean()

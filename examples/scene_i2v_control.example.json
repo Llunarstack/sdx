@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "mode": "i2v",
+  "scene": {
+    "prompt": "Hero walks through forest as fog rolls in at dusk",
+    "duration_sec": 6,
+    "fps": 24,
+    "style": "cinematic fantasy"
+  },
+  "inputs": [
+    {
+      "id": "hero_sheet",
+      "image": "path/to/hero.png",
+      "provides": "face, armor, body proportions",
+      "text_changes": "walking forward, cape flowing",
+      "control": "identity",
+      "auto_rig": true
+    },
+    {
+      "id": "forest_plate",
+      "image": "path/to/forest.png",
+      "provides": "background trees and ground layout",
+      "text_changes": "add volumetric fog at dusk, warm rim light",
+      "control": "inpaint"
+    }
+  ],
+  "characters": {
+    "hero": {
+      "bind_input": "hero_sheet",
+      "image_role": "identity and costume",
+      "text_role": "walking stride, confident posture",
+      "control": "identity",
+      "auto_rig": true,
+      "text_by_part": {
+        "head": "preserve face and helm from reference",
+        "torso": "red cape flowing",
+        "legs": "mid-stride walk cycle"
+      },
+      "negative": "wrong face, duplicate head"
+    }
+  },
+  "objects": {
+    "forest": {
+      "bind_input": "forest_plate",
+      "control": "style",
+      "text_role": "fog rolls through trees at dusk"
+    }
+  },
+  "effects": {
+    "fog": {}
+  },
+  "shots": [
+    {
+      "id": "walk",
+      "prompt": "medium tracking shot, hero walking toward camera",
+      "duration_sec": 4,
+      "characters": ["hero"],
+      "objects": ["forest"],
+      "effects": ["fog"],
+      "bindings": {
+        "hero": {
+          "text": "strong walk cycle, cape physics",
+          "control": "identity"
+        },
+        "forest": {
+          "text": "dense fog between trees",
+          "control": "inpaint"
+        }
+      }
+    },
+    {
+      "id": "close",
+      "prompt": "close-up gauntlet and sword hilt",
+      "duration_sec": 2,
+      "characters": ["hero"],
+      "bindings": {
+        "hero": {
+          "text": "hand tight on sword",
+          "control": "lock",
+          "part": "left_arm"
+        }
+      }
+    }
+  ],
+    "edit": {
+    "keyframe_interval": 6,
+    "edit_strength": 0.58,
+    "motion_transfer": true,
+    "motion_transfer_retrieved": true,
+    "identity_lock": true,
+    "propagate_masks": true,
+    "identity_lock_strength": 0.85,
+    "depth_interpolate": true,
+    "camera_stabilize": false,
+    "deflicker": true,
+    "motion_beat_keyframes": true,
+    "region_motion": true,
+    "semantic_drift_repair": true,
+    "drift_threshold": 0.52,
+    "velocity_ease": true,
+    "parallel_segments": false,
+    "max_segment_workers": 2,
+    "flow_consistency": true,
+    "frame_enhance": true,
+    "quality_retry": true,
+    "max_retries": 2,
+    "temporal_alpha": 0.12,
+    "pose_control": true,
+    "post_grade": "cinematic",
+    "audio_from_source": false
+  }
+}

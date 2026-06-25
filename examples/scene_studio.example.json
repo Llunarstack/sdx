@@ -1,0 +1,71 @@
+{
+  "version": 4,
+  "mode": "t2v",
+  "scene": {
+    "prompt": "A knight rides a dragon through storm clouds at dusk",
+    "duration_sec": 10,
+    "fps": 24,
+    "style": "epic fantasy"
+  },
+  "studio": {
+    "engine": "auto",
+    "director_mode": "auto",
+    "director": "miyazaki",
+    "genre": "fantasy",
+    "rehearsal_stage": "keyframe",
+    "animation_preset": "ghibli",
+    "camera_rig": {
+      "preset": "drone",
+      "lens": "24",
+      "movement": "orbit"
+    },
+    "motion_packs": ["dragon_flight"]
+  },
+  "world": {
+    "name": "Kingdom of Ash",
+    "architecture": "gothic spires, volcanic stone",
+    "weather": "constant storm clouds, ash in air",
+    "palette": "red, black, ember orange",
+    "magic": {
+      "fire": "blue spiraling flame, cold heat"
+    },
+    "locations": {
+      "emberfall": "capital above lava rivers"
+    }
+  },
+  "character_bibles": {
+    "knight": {
+      "name": "Alex",
+      "hair": "black",
+      "eyes": "green",
+      "outfit": "silver armor, red cape",
+      "walk_style": "confident",
+      "voice": "deep calm"
+    }
+  },
+  "motion_library": {
+    "dragon_flight": {
+      "clip": "path/to/dragon_glide.mp4",
+      "category": "creature",
+      "camera": "tracking",
+      "tags": ["wing", "aerial"]
+    }
+  },
+  "elements": {
+    "knight": {
+      "images": ["path/to/knight.png"],
+      "reference_sheet": true,
+      "bind_subject": true
+    }
+  },
+  "characters": {
+    "hero": {
+      "bind_element": "knight",
+      "description": "Alex the knight"
+    }
+  },
+  "edit": {
+    "semantic_drift_repair": true,
+    "region_motion": true
+  }
+}
