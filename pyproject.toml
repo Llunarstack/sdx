@@ -5,8 +5,34 @@ version = "12.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 # Install runtime deps with: pip install -r requirements.txt
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["demo", "sample"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "config*",
+  "data*",
+  "diffusion*",
+  "frontier*",
+  "innovations*",
+  "models*",
+  "pipelines*",
+  "research*",
+  "toolkit*",
+  "training*",
+  "utils*",
+  "vit_quality*",
+  "native*",
+]
+exclude = ["setup*", "runpod*", "assets*", "datasets*", "tests*", "scripts*", "enhanced_dit*", "external*"]
 
 [project.scripts]
 sdx-demo = "demo:main"
