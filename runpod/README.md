@@ -48,7 +48,8 @@ SDX_TRAIN_MODE=control bash runpod/train.sh
 | `SDX_DATA` | `/workspace/data` |
 | `SDX_PRETRAINED` | `/workspace/pretrained` |
 | `SDX_PROMPT_RESEARCH` | `1` — VLM + RAG + Qwen captions (set `0` for fast booru-only) |
-| `SDX_ENRICH_WORKERS` | `1` when prompt research (GPU-serial) |
+| `SDX_MODEL_PROFILE` | `train` — `train` (~65GB), `enrich`, `inference`, or `full` (~199GB) |
+| `HF_TOKEN` | HuggingFace token for gated models (`huggingface-cli login`) |
 
 See `env.defaults` for full list. Internal install helpers live in `runpod/lib/` (not user-facing).
 
