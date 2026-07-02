@@ -10,6 +10,9 @@ xxhash>=3.4.0
 humanize>=4.9.0
 psutil>=5.9.0
 
+# Integration smoke (runpod/test.sh)
+pytest>=7.4.0
+
 # Native Rust Python bindings (optional build in setup.sh)
 maturin>=1.4,<2
 
