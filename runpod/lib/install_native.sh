@@ -3,7 +3,7 @@
 # Skipped when SDX_SKIP_NATIVE=1 or build tools are missing.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 if [ "${SDX_SKIP_NATIVE:-0}" = "1" ]; then

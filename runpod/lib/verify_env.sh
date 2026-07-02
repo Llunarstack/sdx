@@ -2,7 +2,7 @@
 # Post-install sanity checks for RunPod.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 echo "==> SDX environment health"
