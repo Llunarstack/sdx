@@ -1,6 +1,6 @@
 # SDX RunPod — five scripts
 
-Clone to `/workspace/sdx`, upload secrets to `/workspace/secret.txt` (see `secrets.example.txt`).
+Clone to `/workspace/sdx`, place credentials in `runpod/secret.txt` (gitignored; copy from `D:\Development\secret.txt` locally). `runpod/setup.sh` installs them to `/workspace/secret.txt` automatically.
 
 | Script | What it does |
 |--------|----------------|

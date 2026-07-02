@@ -24,6 +24,10 @@ build/
 .venv/
 venv/
 .env
+secret.txt
+runpod/secret.txt
+**/secret.txt
+!runpod/secrets.example.txt
 .idea/
 .vscode/*
 !.vscode/c_cpp_properties.json
