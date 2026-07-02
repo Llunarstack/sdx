@@ -100,10 +100,10 @@ def main():
     nw = args.num_workers
     if nw < 0:
         nw = min(8, (os.cpu_count() or 1))
-    from diffusers import AutoencoderKL, AutoencoderRAE
+    from utils.modeling.autoencoder_loading import get_autoencoder_class
 
     if args.autoencoder_type == "rae":
-        vae = AutoencoderRAE.from_pretrained(args.vae).to(device).eval()
+        vae = get_autoencoder_class("rae").from_pretrained(args.vae).to(device).eval()
         latent_scale = 1.0
         ae_cfg = getattr(vae, "config", None)
         latent_channels_rae = getattr(ae_cfg, "encoder_hidden_size", None) if ae_cfg is not None else None
@@ -114,7 +114,7 @@ def main():
                 file=sys.stderr,
             )
     else:
-        vae = AutoencoderKL.from_pretrained(args.vae).to(device).eval()
+        vae = get_autoencoder_class("kl").from_pretrained(args.vae).to(device).eval()
         latent_scale = args.scale
 
     dataset = ImagePaths(args.data_path, args.image_size)

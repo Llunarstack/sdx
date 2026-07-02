@@ -52,6 +52,8 @@
 
 ◐ = partial · ✗ = not available · ✓ = built in
 
+> **New to the jargon?** See [GLOSSARY.md](GLOSSARY.md) for plain-English definitions of DiT, DPO, GRPO, ELIQ, TI2V, Holy Grail, and every version listed above.
+
 ---
 
 ## Release notes index

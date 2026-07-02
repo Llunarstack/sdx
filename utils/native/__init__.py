@@ -1,7 +1,7 @@
 """
 Unified native bridge for backward-compatible imports.
 
-``native/python`` is placed on ``sys.path`` so ``sdx_native`` resolves. The legacy
+``native/_experimental/python`` is placed on ``sys.path`` so ``sdx_native`` resolves. The legacy
 ``import *`` merge (seven modules, **later** attributes overwrite earlier duplicates) is
 built on **first attribute access**, then cached.
 
@@ -17,7 +17,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-_NP = Path(__file__).resolve().parents[2] / "native" / "python"
+_NP = Path(__file__).resolve().parents[2] / "native" / "_experimental" / "python"
 if str(_NP) not in sys.path:
     sys.path.insert(0, str(_NP))
 

@@ -224,6 +224,15 @@ class TrainConfig:
     save_best: bool = True  # save checkpoint whenever train loss improves
 
     # -------------------------------------------------------------------------
+    # LoRA / DoRA adapter training (freeze base DiT, train adapters only)
+    # -------------------------------------------------------------------------
+    lora_train: bool = False
+    lora_rank: int = 16
+    lora_alpha: float = 16.0
+    lora_dora: bool = False
+    lora_target: str = ""  # comma-separated module-name substrings; "" = defaults
+
+    # -------------------------------------------------------------------------
     # Validation + early stopping
     # -------------------------------------------------------------------------
     val_split: float = 0.0  # fraction held out for validation (0 = off)

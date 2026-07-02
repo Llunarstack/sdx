@@ -26,7 +26,7 @@ src = [
   "frontier",
   "innovations",
   "models",
-  "native/python",
+  "native/_experimental/python",
   "pipelines",
   "research",
   "scripts",
@@ -53,7 +53,7 @@ ignore = [
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
 "sample.py" = ["E402"]  # repo-root sys.path bootstrap + early --help parser before heavy imports
 "vit_quality/**" = ["E402"]  # repo-root sys.path bootstrap before utils imports
-"native/python/sdx_native/__init__.py" = ["I001"]  # large explicit re-export surface; isort splits combined imports
+"native/_experimental/python/sdx_native/__init__.py" = ["I001"]  # large explicit re-export surface; isort splits combined imports
 "utils/latent_geometry.py" = ["E402", "F403"]
 "utils/native_tools.py" = ["E402", "F403"]
 "utils/native/__init__.py" = ["I001"]  # sys.path bootstrap then star imports
@@ -64,7 +64,7 @@ docstring-code-format = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "native/python"]
+pythonpath = [".", "native/_experimental/python"]
 addopts = "-v --tb=short"
 filterwarnings = [
   # SciPy vs NumPy pin mismatch in some envs - not actionable in this repo.
@@ -78,9 +78,9 @@ markers = [
     "slow: slow tests skipped by default (run with -m slow)",
 ]
 
-# Pyright / Pylance / basedpyright: ``sdx_native`` lives under ``native/python`` (also on ``sys.path`` at runtime).
+# Pyright / Pylance / basedpyright: ``sdx_native`` lives under ``native/_experimental/python`` (also on ``sys.path`` at runtime).
 [tool.pyright]
-extraPaths = ["native/python", "."]
+extraPaths = ["native/_experimental/python", "."]
 pythonVersion = "3.10"
 
 [tool.mypy]

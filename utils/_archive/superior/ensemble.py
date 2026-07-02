@@ -20,6 +20,7 @@ from PIL import Image
 from .composite_ranker import CompositeRanker
 from .inference_pipeline import SuperiorInferenceConfig, build_superior_sample_argv
 from .reward_scorer import UnifiedRewardScorer
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 @dataclass(slots=True)
@@ -73,7 +74,7 @@ def generate_ensemble(
     """
     Run all checkpoints, return ``(best_image_path, [(ckpt, path, score), ...])``.
     """
-    root = Path(repo_root or Path(__file__).resolve().parents[2])
+    root = Path(repo_root or _sdx_repo_root())
     if not cfg.checkpoints:
         raise ValueError("checkpoints must be non-empty")
 

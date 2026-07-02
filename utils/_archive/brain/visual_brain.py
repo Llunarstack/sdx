@@ -26,6 +26,7 @@ from PIL import Image
 from .image_search import download_search_hits, search_reference_images
 from .scene_brief import SceneBrief, prompt_coverage_score, synthesize_scene_brief
 from .understand import understand_images
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 @dataclass(slots=True)
@@ -69,7 +70,7 @@ class VisualBrain:
     ) -> None:
         self.config = config or VisualBrainConfig()
         self.defaults = defaults or AgenticStackDefaults()
-        self.repo_root = Path(repo_root or Path(__file__).resolve().parents[2])
+        self.repo_root = Path(repo_root or _sdx_repo_root())
 
     def run(
         self,

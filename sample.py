@@ -28,6 +28,14 @@ from typing import Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Windows: redirected stdout/stderr default to cp1252, which cannot encode the
+# typographic characters in help text and logs (argparse --help > file crashes).
+if sys.platform == "win32":
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfigure = getattr(_stream, "reconfigure", None)
+        if _reconfigure is not None:
+            _reconfigure(encoding="utf-8", errors="replace")
+
 
 def build_sample_parser() -> "argparse.ArgumentParser":
     """Build the sample.py CLI parser. Kept import-light so ``--help``
@@ -3321,8 +3329,8 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             f"stage_policy={stage_policy}, roles=[{role_mix}]"
         )
 
-    from diffusers import AutoencoderKL, AutoencoderRAE
     from transformers import AutoTokenizer, T5EncoderModel
+    from utils.modeling.autoencoder_loading import get_autoencoder_class
     from utils.modeling.text_encoder_bundle import attach_fusion_weights, load_text_encoder_bundle
 
     text_bundle = None
@@ -3354,11 +3362,10 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     except Exception:
         pass
     ae_type = getattr(cfg, "autoencoder_type", "kl")
+    vae = get_autoencoder_class(ae_type).from_pretrained(cfg.vae_model).to(device).eval()
     if ae_type == "rae":
-        vae = AutoencoderRAE.from_pretrained(cfg.vae_model).to(device).eval()
         latent_scale = 1.0  # RAE checkpoints handle latent normalization internally
     else:
-        vae = AutoencoderKL.from_pretrained(cfg.vae_model).to(device).eval()
         latent_scale = getattr(cfg, "latent_scale", 0.18215)
     image_size = getattr(cfg, "image_size", 256)
 
@@ -5231,7 +5238,8 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
 
     processed = []
     for i in range(num_gen):
-        img_np = image[i].permute(1, 2, 0).cpu().numpy()
+        # detach: the VAE decode path can leave requires_grad on the tensor.
+        img_np = image[i].detach().permute(1, 2, 0).cpu().numpy()
         img_np = (img_np * 255).round().astype("uint8")
         if (out_w != dec_w or out_h != dec_h) and str(
             getattr(args, "resize_mode", "stretch") or "stretch"

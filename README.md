@@ -16,7 +16,8 @@
   <a href="#what-you-get">Features</a> ·
   <a href="#pipelines">Pipelines</a> ·
   <a href="#new-in-v12">v12</a> ·
-  <a href="#v1-vs-v12">v1 → v12</a> ·
+  <a href="#version-history">History</a> ·
+  <a href="#glossary">Glossary</a> ·
   <a href="#docs">Docs</a>
 </p>
 
@@ -31,7 +32,7 @@
 | Fine-tune your data | ✗ | partial | **✓ end-to-end** |
 | See the full pipeline | ✗ | scattered | **✓ readable entry points** |
 | Layout + video control | vendor-locked | extensions | **✓ scene JSON + box layout** |
-| Reproducibility | ✗ | varies | **✓ 802+ tests + metadata** |
+| Reproducibility | ✗ | varies | **✓ 803+ tests + metadata** |
 
 ---
 
@@ -45,7 +46,7 @@ pip install -r requirements.txt
 python demo.py
 
 # Train on your folder
-python train.py --data-path images/ --flow-matching-training --num-epochs 20
+python train.py --data-path images/ --flow-matching-training --epochs 20
 
 # Sample
 python sample.py --ckpt outputs/best.pt --prompt "your prompt" --out result.png
@@ -146,7 +147,7 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 | **Video** | Scene-graph TI2V, 60+ modules, CLI tools |
 | **Frontier** | 25 filmmaker modules + horizon expansion |
 | **Quality** | Continuity validators, thumbnail-first rehearsal |
-| **DX** | 802+ tests, ruff-clean CI, docs restructure |
+| **DX** | 803+ tests, ruff-clean CI, docs restructure |
 | **README** | GitHub-native layout (this file) |
 
 [Full v12 release notes →](docs/releases/v12.md)
@@ -160,7 +161,7 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 | Scope | Train + sample images | Image + **video studio** + frontier |
 | Video | ✗ | Scene JSON director pipeline |
 | Layout | ✗ | Regional boxes + storyboard |
-| Tests | few | **802+** |
+| Tests | few | **803+** |
 | Research | scripts | `innovations/` + `frontier/` |
 
 [Full comparison →](docs/releases/VERSION_COMPARISON.md)
@@ -191,7 +192,7 @@ sdx/
 ├── frontier/                          # Experimental research
 ├── pipelines/video/                   # TI2V scene-graph studio (v12)
 ├── utils/generation/                  # Layout, CFG, sample features
-└── tests/                             # 802+ tests
+└── tests/                             # 803+ tests
 ```
 
 ---
@@ -216,6 +217,7 @@ sdx/
 | Frontier | [frontier/README.md](frontier/README.md) |
 | v12 release | [docs/releases/v12.md](docs/releases/v12.md) |
 | v1 → v12 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
+| **Jargon & acronyms** | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 
 ---
 
@@ -255,7 +257,53 @@ To keep the graph human-only:
 | [v0.2](docs/releases/v0.2.0.md) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
 | [v0.1](docs/releases/v0.1.0.md) | Foundation train + sample framework | `v0.1.0` |
 
-[Full timeline & v1 → v12 comparison →](docs/releases/VERSION_COMPARISON.md)
+[Full timeline & v1 → v12 comparison →](docs/releases/VERSION_COMPARISON.md) · **[What does this jargon mean? →](docs/GLOSSARY.md)**
+
+<details>
+<summary><strong>Version history in plain English</strong> (click to expand)</summary>
+
+| Version | What it actually means |
+|---------|------------------------|
+| **v0.1** | First SDX: train your own image model from your data, generate from text. |
+| **v0.2** | Faster training (flow matching), learn from preferences (DPO), compress models (distillation). |
+| **v3** | Auto-find weak prompts/images, benchmark, retrain in a loop to improve. |
+| **v4** | Detect bad generations mid-run, retry, filter low-quality outputs. |
+| **v5** | Generate many candidates, pick the best; tools to clean training data. |
+| **v6** | Faster native code; pipeline for illustrated books and comics. |
+| **v7** | Automated tests on every push, reproducible runs, security + eval benchmarks. |
+| **v8** | Invent new art styles; one prompt system for train + sample; smarter CFG schedule. |
+| **v9** | RL-style fine-tuning (GRPO); AI helpers that score and refine each other. |
+| **v10** | Label-free quality scoring, glitch detection, human-readable quality reports. |
+| **v11** | Draw boxes on the image for per-region prompts; reorganized code folders. |
+| **v12** | Full video pipeline from one JSON scene; 25+ director rules; 803+ tests. |
+
+</details>
+
+---
+
+## Glossary
+
+Short definitions for terms used above. [Full glossary with every acronym →](docs/GLOSSARY.md)
+
+| Term | Plain English |
+|------|----------------|
+| **DiT** | The transformer network that generates images by removing noise step by step. |
+| **VAE / latent** | Compresses images to a smaller grid for fast training; expands back to pixels at the end. |
+| **CFG** | How tightly the image follows your prompt (higher = more literal). |
+| **Flow matching** | A modern training method, often faster than classic diffusion. |
+| **DPO** | Train from “A is better than B” preference pairs. |
+| **GRPO** | Generate several outputs, rank them, train toward the winners (RL-style). |
+| **Holy Grail** | SDX’s adaptive CFG — strong guidance late, looser early. |
+| **TCIS** | Generate multiple images; scorers vote for the best match to your prompt. |
+| **Style Genome** | Recipe system for inventing new visual styles (not copying artists). |
+| **PromptStack** | Cleans and expands prompts the same way in training and sampling. |
+| **ELIQ** | Scores image quality without needing human ratings. |
+| **Regional box layout** | Put prompts in rectangles on the canvas (character here, sky there). |
+| **Frontier** | Experimental folder — new ideas live here before going production. |
+| **Agentic** | Several small AI tools (score, refine, validate) instead of one black box. |
+| **TI2V / scene graph** | Text or image in → video out, directed by one JSON scene file. |
+| **FLF2V** | You set the first and last frame; SDX fills in the motion between. |
+| **CI / ruff / pytest** | Auto tests and style checks that run when you push code. |
 
 ---
 

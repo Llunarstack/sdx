@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Tuple
 
 import torch
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 def _ensure_native_python_path() -> None:
     """So ``sdx_native.*`` resolves when only repo root is on ``sys.path`` (e.g. ``train.py``)."""
-    root = Path(__file__).resolve().parents[2]
+    root = _sdx_repo_root()
     np = root / "native" / "python"
     if np.is_dir() and str(np) not in sys.path:
         sys.path.insert(0, str(np))

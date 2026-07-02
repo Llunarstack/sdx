@@ -138,7 +138,7 @@ python train.py \
   --data-path my_dataset/ \
   --results-dir results/ \
   --flow-matching-training \
-  --num-epochs 20
+  --epochs 20
 ```
 
 Training process:
@@ -191,7 +191,7 @@ Key training flags (full list: `python train.py --help`):
 |-----------|---------|---------|
 | --data-path | Image dataset location | my_dataset/ |
 | --results-dir | Checkpoint output directory | results/ |
-| --num-epochs | Training passes through data | 20 |
+| --epochs | Training passes through data | 20 |
 | --batch-size | Images per training step | 4 |
 | --learning-rate | Training speed | 5e-5 |
 | --flow-matching-training | Use flow matching objective | (recommended) |
@@ -270,11 +270,11 @@ python -m scripts.tools hybrid_dit_vit_generate \
 **Training too slow**
 - Enable --flow-matching-training (faster)
 - Enable --use-bf16 (16-bit precision)
-- Reduce --num-epochs
+- Reduce --epochs
 - Use a larger batch size if VRAM allows
 
 **Generated images are low quality**
-- Train longer: increase --num-epochs (50+ recommended)
+- Train longer: increase --epochs (50+ recommended)
 - Use more data (minimum 100 images)
 - Write detailed captions
 
