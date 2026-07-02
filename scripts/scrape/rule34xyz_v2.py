@@ -8,6 +8,7 @@ from typing import Iterator, Optional
 import requests
 
 from .booru_client import Post, RateLimiter
+from .post_cap import post_cap_reached, posts_remaining
 from .secrets_config import SiteCredentials
 
 ROOT = "https://rule34.xyz"
@@ -162,11 +163,12 @@ class Rule34xyzV2Adapter:
         yielded = 0
         per_page = self.page_limit
 
-        while yielded < max_posts:
+        while not post_cap_reached(yielded, max_posts):
             limiter.wait()
+            take = per_page if max_posts <= 0 else min(per_page, posts_remaining(max_posts, yielded) or per_page)
             body: dict = {
                 "Skip": skip,
-                "take": min(per_page, max_posts - yielded),
+                "take": take,
                 "CountTotal": False,
                 "IncludeLinks": True,
                 "OrderBy": 0,
@@ -186,7 +188,7 @@ class Rule34xyzV2Adapter:
                 break
 
             for item in items:
-                if yielded >= max_posts:
+                if post_cap_reached(yielded, max_posts):
                     return
                 post_data = item
                 if not post_data.get("tags"):

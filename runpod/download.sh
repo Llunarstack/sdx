@@ -30,13 +30,25 @@ if [ "$MODELS" = 1 ]; then
 fi
 
 if [ "$DATA" = 1 ]; then
-  echo "==> Booru datasets -> $SDX_DATA"
-  python setup/download_datasets.py \
-    --out "$SDX_DATA" \
-    --ratings all \
-    --workers "${SDX_SCRAPE_WORKERS:-20}" \
-    --max-posts "${SDX_MAX_POSTS:-10000000}" \
+  echo "==> Booru datasets -> $SDX_DATA (all sites, all ratings, images + GIF/video frames)"
+  SCRAPE_ARGS=(
+    --out "$SDX_DATA"
+    --ratings all
+    --workers "${SDX_SCRAPE_WORKERS:-20}"
+    --max-posts "${SDX_MAX_POSTS:-0}"
     --secrets "$SDX_SECRETS_FILE"
+    --frame-fps "${SDX_FRAME_FPS:-2}"
+    --max-frames-per-post "${SDX_MAX_FRAMES_PER_POST:-0}"
+  )
+  if [ "${SDX_SPLIT_FRAMES:-1}" = "1" ]; then
+    SCRAPE_ARGS+=(--split-frames)
+  else
+    SCRAPE_ARGS+=(--no-split-frames)
+  fi
+  if [ "${SDX_KEEP_RAW_MEDIA:-0}" = "1" ]; then
+    SCRAPE_ARGS+=(--keep-raw-media)
+  fi
+  python setup/download_datasets.py "${SCRAPE_ARGS[@]}"
 
   python setup/merge_manifests.py \
     --data-root "$SDX_DATA" \

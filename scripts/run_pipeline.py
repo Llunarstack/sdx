@@ -262,7 +262,17 @@ def _step_datasets(args: argparse.Namespace, paths: dict[str, Path]) -> None:
         str(args.max_posts),
         "--secrets",
         str(paths["secrets"]),
+        "--frame-fps",
+        str(args.frame_fps),
+        "--max-frames-per-post",
+        str(args.max_frames_per_post),
     ]
+    if args.split_frames:
+        dl.append("--split-frames")
+    else:
+        dl.append("--no-split-frames")
+    if args.keep_raw_media:
+        dl.append("--keep-raw-media")
     if args.scrape_sites:
         dl.extend(["--sites", *args.scrape_sites])
     _py(dl, timeout=args.dataset_timeout or None)
@@ -556,7 +566,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     p.add_argument("--scrape-workers", type=int, default=int(os.environ.get("SDX_SCRAPE_WORKERS", "20")))
-    p.add_argument("--max-posts", type=int, default=int(os.environ.get("SDX_MAX_POSTS", "10000000")))
+    p.add_argument("--max-posts", type=int, default=int(os.environ.get("SDX_MAX_POSTS", "0")))
+    p.add_argument("--frame-fps", type=float, default=float(os.environ.get("SDX_FRAME_FPS", "2")))
+    p.add_argument("--max-frames-per-post", type=int, default=int(os.environ.get("SDX_MAX_FRAMES_PER_POST", "0")))
+    p.add_argument("--split-frames", action=argparse.BooleanOptionalAction, default=os.environ.get("SDX_SPLIT_FRAMES", "1") == "1")
+    p.add_argument("--keep-raw-media", action="store_true", default=os.environ.get("SDX_KEEP_RAW_MEDIA", "0") == "1")
     p.add_argument("--scrape-sites", nargs="*", default=None, choices=["danbooru", "e621", "rule34xxx", "rule34xyz"])
     p.add_argument("--dataset-timeout", type=int, default=0, help="0 = no timeout (full crawl).")
     p.add_argument("--pretrained-workers", type=int, default=int(os.environ.get("SDX_DL_WORKERS", "16")))

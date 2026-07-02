@@ -53,8 +53,9 @@ def _scrape_site(site: str, args) -> tuple[str, object]:
         ratings=_parse_ratings(args.ratings),
         max_workers=int(args.workers),
         split_frames=bool(getattr(args, "split_frames", True)),
-        frame_fps=float(getattr(args, "frame_fps", 1.0)),
-        max_frames_per_post=int(getattr(args, "max_frames_per_post", 120)),
+        frame_fps=float(getattr(args, "frame_fps", 2.0)),
+        max_frames_per_post=int(getattr(args, "max_frames_per_post", 0)),
+        delete_raw_after_split=not bool(getattr(args, "keep_raw_media", False)),
     )
     print(
         f"[{site}] start -> {out_dir} (ratings={args.ratings}, {rate}/s api, "
@@ -77,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sites", nargs="*", default=ALL_SITES, choices=ALL_SITES, help="Sites to crawl (default: all).")
     p.add_argument("--tags", default="", help="Tag query (default: empty = whole site).")
     p.add_argument("--ratings", default="all", help="s/q/e or 'all' (default all = SFW+NSFW). Blocklist always on.")
-    p.add_argument("--max-posts", type=int, default=10_000_000, help="Per-site cap (default: effectively unlimited).")
+    p.add_argument("--max-posts", type=int, default=0, help="Per-site cap (0 = unlimited full crawl).")
     p.add_argument("--workers", type=int, default=16, help="Image-download threads per site.")
     p.add_argument(
         "--split-frames",
@@ -85,8 +86,13 @@ def main(argv: list[str] | None = None) -> int:
         default=True,
         help="Split GIF/video posts into JPEG frames (default: on).",
     )
-    p.add_argument("--frame-fps", type=float, default=1.0, help="Video frame sample rate (default 1 fps).")
-    p.add_argument("--max-frames-per-post", type=int, default=120, help="Max frames per GIF/video post.")
+    p.add_argument("--frame-fps", type=float, default=2.0, help="Video frame sample rate (0 = native fps).")
+    p.add_argument("--max-frames-per-post", type=int, default=0, help="Max frames per GIF/video (0 = all frames).")
+    p.add_argument(
+        "--keep-raw-media",
+        action="store_true",
+        help="Keep original gif/mp4/webm after frame split (doubles disk use).",
+    )
     p.add_argument("--rate", type=float, default=None, help="API req/s per site (default: per-site polite value).")
     p.add_argument("--secrets", default=None, help="Secrets file (default $SDX_SECRETS_FILE or D:\\Development\\secret.txt).")
     p.add_argument("--dry-run", action="store_true", help="Fetch + filter only; download nothing.")

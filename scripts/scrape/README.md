@@ -58,6 +58,10 @@ python train.py --manifest-jsonl <out>/manifest.jsonl --data-path <out> \
 - **Captions** are the post's tags, comma-separated, underscores→spaces.
 - **Artist tags** from danbooru/e621 are stored in each manifest row and indexed
   into ``artist_index.json`` for ``@AnyArtist`` prompt resolution.
-- **GIFs & videos** are frame-split into JPEGs (see above).
+- **GIFs & videos** (mp4/webm/gif) are downloaded and **frame-split into JPEGs**
+  for training (one manifest row per frame). Production crawl:
+  `SDX_MAX_POSTS=0` (unlimited), `SDX_MAX_FRAMES_PER_POST=0` (all frames),
+  `SDX_FRAME_FPS=2` (or `0` for native video fps). Set `SDX_KEEP_RAW_MEDIA=1`
+  to keep the original gif/mp4 on disk after splitting.
 - Deduplicate across sites afterward by the `md5` field (rule34 mirrors a lot of
   danbooru).
