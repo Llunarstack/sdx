@@ -4,6 +4,16 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 if (-not $env:SDX_SECRETS_FILE) { $env:SDX_SECRETS_FILE = "D:\Development\secret.txt" }
+$BundledSecrets = Join-Path $PSScriptRoot "secret.txt"
+$DefaultLocalSecrets = "D:\Development\secret.txt"
+if (-not (Test-Path $BundledSecrets) -and (Test-Path $DefaultLocalSecrets)) {
+  Copy-Item $DefaultLocalSecrets $BundledSecrets -Force
+  Write-Host "Copied $DefaultLocalSecrets -> $BundledSecrets"
+}
+if (-not (Test-Path $env:SDX_SECRETS_FILE) -and (Test-Path $BundledSecrets)) {
+  Copy-Item $BundledSecrets $env:SDX_SECRETS_FILE -Force
+  Write-Host "Installed secrets -> $env:SDX_SECRETS_FILE"
+}
 if (-not $env:SDX_DATA) { $env:SDX_DATA = "D:\Development\sdx-data" }
 if (-not $env:SDX_PRETRAINED) { $env:SDX_PRETRAINED = Join-Path $Root "pretrained" }
 if (-not $env:SDX_RESULTS) { $env:SDX_RESULTS = Join-Path $Root "results" }

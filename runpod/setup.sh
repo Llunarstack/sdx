@@ -18,6 +18,12 @@ cd "$ROOT"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
 
+# Install secrets: bundled runpod/secret.txt -> /workspace/secret.txt (never committed)
+if [ ! -f "$SDX_SECRETS_FILE" ] && [ -f "$ROOT/runpod/secret.txt" ]; then
+  cp "$ROOT/runpod/secret.txt" "$SDX_SECRETS_FILE"
+  echo "Installed secrets: $ROOT/runpod/secret.txt -> $SDX_SECRETS_FILE"
+fi
+
 if [ -f "$SDX_SECRETS_FILE" ]; then
   echo "Secrets: $SDX_SECRETS_FILE"
 else
