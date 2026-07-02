@@ -1,4 +1,25 @@
 {
+  "profiles": {
+    "train": [
+      "T5-XXL",
+      "CLIP-ViT-L-14",
+      "CLIP-ViT-bigG-14",
+      "LongCLIP-L"
+    ],
+    "enrich": [
+      "moondream2",
+      "Qwen2.5-14B-Instruct"
+    ],
+    "inference": [
+      "T5-XXL",
+      "CLIP-ViT-L-14",
+      "CLIP-ViT-bigG-14",
+      "moondream2",
+      "Qwen2.5-14B-Instruct",
+      "ImageReward",
+      "PickScore_v1"
+    ]
+  },
   "models": [
     {
       "name": "T5-XXL",
@@ -60,6 +81,7 @@
       "name": "StableCascade-Prior",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Prior",
       "hf_fallback": "stabilityai/stable-cascade-prior",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Prior",
       "is_local": true,
       "size_gb": 17.094
@@ -68,6 +90,7 @@
       "name": "StableCascade-Decoder",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Decoder",
       "hf_fallback": "stabilityai/stable-cascade",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Decoder",
       "is_local": true,
       "size_gb": 7.279
@@ -76,6 +99,7 @@
       "name": "GenSearcher-8B",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GenSearcher-8B",
       "hf_fallback": "GenSearcher/Gen-Searcher-8B",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GenSearcher-8B",
       "is_local": true,
       "size_gb": 16.345,
@@ -126,6 +150,7 @@
       "name": "PerceptCLIP_IQA",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PerceptCLIP_IQA",
       "hf_fallback": "PerceptCLIP/PerceptCLIP_IQA",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PerceptCLIP_IQA",
       "is_local": true,
       "size_gb": 1.143
@@ -165,7 +190,9 @@
     {
       "name": "moondream2",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
-      "hf_fallback": "vikhyatoolkit/moondream2",
+      "hf_fallback": "vikhyatk/moondream2",
+      "hf_revision": "2025-06-21",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
       "is_local": true,
       "size_gb": 3.592
@@ -238,6 +265,7 @@
       "name": "AnyDoor-Ref",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
       "hf_fallback": "camenduru/AnyDoor",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
       "is_local": true,
       "size_gb": 10.34

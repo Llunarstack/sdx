@@ -155,7 +155,7 @@ def default_longclip_l_path() -> str:
 
 
 def default_moondream2_path() -> str:
-    return resolve_model_path("moondream2", "vikhyatoolkit/moondream2")
+    return resolve_model_path("moondream2", "vikhyatk/moondream2")
 
 
 def default_marigold_depth_path() -> str:

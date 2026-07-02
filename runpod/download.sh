@@ -26,7 +26,7 @@ done
 
 if [ "$MODELS" = 1 ]; then
   echo "==> Pretrained models -> $SDX_PRETRAINED"
-  python setup/download_pretrained.py --dest "$SDX_PRETRAINED" --workers "${SDX_DL_WORKERS:-16}"
+  python setup/download_pretrained.py --dest "$SDX_PRETRAINED" --workers "${SDX_DL_WORKERS:-16}" --profile "${SDX_MODEL_PROFILE:-full}"
 fi
 
 if [ "$DATA" = 1 ]; then

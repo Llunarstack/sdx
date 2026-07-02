@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Download every pretrained model SDX uses, into ``pretrained/``.
+"""Download pretrained models SDX uses into ``pretrained/``.
 
-Reads the model registry from ``pretrained_status.json`` (name + HF fallback id)
-and pulls each via ``huggingface_hub.snapshot_download``. Fast and robust:
+Reads ``pretrained_status.json`` (HF repo ids + optional profiles).
 
-  * Enables ``hf_transfer`` (Rust multi-connection downloader) if installed.
-  * Resumable — snapshot_download skips files already present.
-  * Retries each repo with backoff so a transient network blip doesn't abort the run.
+    python setup/download_pretrained.py --dest /workspace/pretrained
+    python setup/download_pretrained.py --profile train      # ~65 GB, enough to train
+    python setup/download_pretrained.py --profile enrich     # VLM + Qwen for captions
+    python setup/download_pretrained.py --profile inference  # train + caption + rewards
+    python setup/download_pretrained.py --only T5-XXL moondream2
 
-    python setup/download_pretrained.py                     # all models
-    python setup/download_pretrained.py --only T5-XXL CLIP-ViT-L-14
-    python setup/download_pretrained.py --dest /workspace/pretrained --workers 16
+Set ``HF_TOKEN`` (or ``huggingface-cli login``) for gated models.
 """
 
 from __future__ import annotations
@@ -25,13 +24,48 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATUS_JSON = REPO_ROOT / "pretrained_status.json"
 
+_PROFILE_ALIASES = {
+    "full": None,
+    "all": None,
+    "train": "train",
+    "enrich": "enrich",
+    "inference": "inference",
+    "minimal": "train",
+}
+
+
+def _load_status() -> dict:
+    return json.loads(STATUS_JSON.read_text(encoding="utf-8"))
+
 
 def _load_registry() -> list[dict]:
-    data = json.loads(STATUS_JSON.read_text(encoding="utf-8"))
-    return data.get("models", [])
+    return _load_status().get("models", [])
+
+
+def _profile_names(profile: str | None) -> set[str] | None:
+    if profile is None:
+        return None
+    key = _PROFILE_ALIASES.get(profile.lower())
+    if key is None and profile.lower() in ("full", "all"):
+        return None
+    if key is None:
+        raise ValueError(f"Unknown profile {profile!r} (use train|enrich|inference|full)")
+    names = _load_status().get("profiles", {}).get(key, [])
+    if not names:
+        raise ValueError(f"Profile {key!r} has no models in pretrained_status.json")
+    return {n.lower() for n in names}
+
+
+def _hf_token() -> str | None:
+    for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_HUB_TOKEN"):
+        val = os.environ.get(key, "").strip()
+        if val:
+            return val
+    return None
 
 
 def _enable_fast_transfer() -> bool:
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
     try:
         import hf_transfer  # noqa: F401
 
@@ -42,16 +76,40 @@ def _enable_fast_transfer() -> bool:
         return False
 
 
-def _download_one(repo_id: str, local_dir: Path, workers: int, retries: int) -> bool:
+def _dir_populated(local_dir: Path, *, min_bytes: int = 1_000_000) -> bool:
+    if not local_dir.is_dir():
+        return False
+    total = 0
+    for p in local_dir.rglob("*"):
+        if p.is_file():
+            total += p.stat().st_size
+            if total >= min_bytes:
+                return True
+    return False
+
+
+def _download_one(
+    repo_id: str,
+    local_dir: Path,
+    *,
+    workers: int,
+    retries: int,
+    revision: str | None,
+    token: str | None,
+) -> bool:
     from huggingface_hub import snapshot_download
 
     local_dir.mkdir(parents=True, exist_ok=True)
+    kwargs: dict = {"repo_id": repo_id, "local_dir": str(local_dir), "max_workers": workers}
+    if revision:
+        kwargs["revision"] = revision
+    if token:
+        kwargs["token"] = token
     for attempt in range(1, retries + 1):
         try:
-            # snapshot_download resumes by default and skips already-present files.
-            snapshot_download(repo_id=repo_id, local_dir=str(local_dir), max_workers=workers)
-            return True
-        except Exception as e:  # network/HTTP/filesystem — retry with backoff
+            snapshot_download(**kwargs)
+            return _dir_populated(local_dir)
+        except Exception as e:
             wait = min(60, 4 * attempt)
             print(f"  attempt {attempt}/{retries} failed ({type(e).__name__}: {e}); retrying in {wait}s", file=sys.stderr)
             time.sleep(wait)
@@ -59,11 +117,17 @@ def _download_one(repo_id: str, local_dir: Path, workers: int, retries: int) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Download all SDX pretrained models from pretrained_status.json.")
-    p.add_argument("--dest", default=str(REPO_ROOT / "pretrained"), help="Destination base dir (default: pretrained/).")
-    p.add_argument("--only", nargs="*", default=None, help="Download only these model names (default: all).")
+    p = argparse.ArgumentParser(description="Download SDX pretrained models from pretrained_status.json.")
+    p.add_argument("--dest", default=str(REPO_ROOT / "pretrained"), help="Destination base dir.")
+    p.add_argument("--only", nargs="*", default=None, help="Download only these model names.")
+    p.add_argument(
+        "--profile",
+        default=os.environ.get("SDX_MODEL_PROFILE", "full"),
+        help="train | enrich | inference | full (default: full or SDX_MODEL_PROFILE).",
+    )
     p.add_argument("--workers", type=int, default=8, help="Parallel file workers per repo.")
     p.add_argument("--retries", type=int, default=5, help="Retries per repo on network error.")
+    p.add_argument("--force", action="store_true", help="Re-download even when folder looks complete.")
     args = p.parse_args(argv)
 
     try:
@@ -73,38 +137,60 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     fast = _enable_fast_transfer()
+    token = _hf_token()
     print(f"hf_transfer fast download: {'ON' if fast else 'OFF (pip install hf_transfer for a big speedup)'}")
+    if token:
+        print("HF token: set (gated/private repos enabled)")
+    else:
+        print("HF token: not set — run `huggingface-cli login` if downloads 401")
 
     registry = _load_registry()
     if args.only:
         want = {n.lower() for n in args.only}
         registry = [m for m in registry if m.get("name", "").lower() in want]
-        if not registry:
-            print(f"No registry entries matched {args.only}", file=sys.stderr)
-            return 2
+    else:
+        prof = (args.profile or "full").lower()
+        if prof not in ("full", "all"):
+            want = _profile_names(prof)
+            registry = [m for m in registry if m.get("name", "").lower() in want]
+            print(f"Profile: {prof} ({len(registry)} models)")
+
+    if not registry:
+        print("No models matched.", file=sys.stderr)
+        return 2
 
     dest_base = Path(args.dest)
     total_gb = sum(float(m.get("size_gb", 0) or 0) for m in registry)
     print(f"Downloading {len(registry)} models (~{total_gb:.1f} GB) -> {dest_base}\n")
 
-    ok, failed = 0, []
+    ok, skipped, failed, optional_failed = 0, 0, [], []
     for i, m in enumerate(registry, 1):
         name = m.get("name", "?")
         repo_id = m.get("hf_fallback")
+        optional = bool(m.get("optional"))
+        revision = m.get("hf_revision") or None
         if not repo_id:
             print(f"[{i}/{len(registry)}] {name}: no hf_fallback id, skipping", file=sys.stderr)
             continue
         local_dir = dest_base / name
-        print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}  (~{m.get('size_gb', '?')} GB)")
-        if _download_one(repo_id, local_dir, args.workers, args.retries):
+        if not args.force and _dir_populated(local_dir):
+            print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}  (already present, skip)")
+            skipped += 1
+            ok += 1
+            continue
+        rev_note = f" @{revision}" if revision else ""
+        print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}{rev_note}  (~{m.get('size_gb', '?')} GB)")
+        if _download_one(repo_id, local_dir, workers=args.workers, retries=args.retries, revision=revision, token=token):
             ok += 1
         else:
-            failed.append(name)
+            (optional_failed if optional else failed).append(name)
             print(f"  FAILED after {args.retries} retries: {name}", file=sys.stderr)
 
-    print(f"\nDone: {ok}/{len(registry)} models. Dest: {dest_base}")
+    print(f"\nDone: {ok}/{len(registry)} ok ({skipped} skipped as present). Dest: {dest_base}")
+    if optional_failed:
+        print(f"Optional models failed (non-fatal): {', '.join(optional_failed)}", file=sys.stderr)
     if failed:
-        print(f"Failed: {', '.join(failed)} (rerun to resume — completed files are skipped).", file=sys.stderr)
+        print(f"Required models failed: {', '.join(failed)}", file=sys.stderr)
         return 1
     return 0
 
