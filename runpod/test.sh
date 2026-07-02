@@ -11,7 +11,7 @@ cd "$ROOT"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
 
-exec python "$ROOT/scripts/integration_smoke.py" \
+exec python3 "$ROOT/scripts/integration_smoke.py" \
   --data-root "${SDX_DATA:-/workspace/data}/integration_smoke" \
   --secrets "$SDX_SECRETS_FILE" \
   "$@"
