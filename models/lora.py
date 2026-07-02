@@ -158,12 +158,16 @@ class MultiLoRALinear(nn.Module):
         rank = int(down.shape[0]) if down.ndim == 2 else 0
         alpha_ratio = float(alpha) / max(1, rank) if alpha is not None else 1.0
         eff_scale = float(scale) * alpha_ratio
+        # Adapters loaded from a file are on CPU; match the base layer's device
+        # and dtype so forward() doesn't hit a device/dtype mismatch on GPU.
+        dev = self.linear.weight.device
+        dtype = self.linear.weight.dtype
         ad: Dict[str, nn.Parameter] = {
-            "down": nn.Parameter(down.clone(), requires_grad=False),
-            "up": nn.Parameter(up.clone(), requires_grad=False),
+            "down": nn.Parameter(down.to(device=dev, dtype=dtype), requires_grad=False),
+            "up": nn.Parameter(up.to(device=dev, dtype=dtype), requires_grad=False),
         }
         if dora_mag is not None:
-            ad["dora_mag"] = nn.Parameter(dora_mag.clone(), requires_grad=False)
+            ad["dora_mag"] = nn.Parameter(dora_mag.to(device=dev, dtype=dtype), requires_grad=False)
         self._adapter_params.append(nn.ParameterDict(ad))
         self._scales.append(eff_scale)
         self._roles.append(str(role or "style").strip().lower())

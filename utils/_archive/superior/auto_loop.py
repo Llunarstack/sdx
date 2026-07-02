@@ -9,6 +9,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 @dataclass(slots=True)
@@ -80,7 +81,7 @@ def run_auto_improve(
     repo_root: Optional[Path] = None,
     dry_run: bool = False,
 ) -> int:
-    root = Path(repo_root or Path(__file__).resolve().parents[2])
+    root = Path(repo_root or _sdx_repo_root())
     cmd = [sys.executable, "-m", "scripts.tools", "auto_improve_loop", *build_auto_improve_argv(cfg)]
     if dry_run:
         print(" ".join(cmd))

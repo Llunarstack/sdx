@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 from config.defaults.superior_stack import FlywheelPlan
 
 from .auto_loop import AutoImproveConfig, run_auto_improve
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 def curate_manifest(plan: FlywheelPlan, *, repo_root: Path, dry_run: bool = False) -> Optional[str]:
@@ -56,7 +57,7 @@ def run_flywheel(
     """
     Execute flywheel steps. Returns summary dict written to ``work_dir/flywheel_summary.json``.
     """
-    root = Path(repo_root or Path(__file__).resolve().parents[2])
+    root = Path(repo_root or _sdx_repo_root())
     work = Path(plan.work_dir)
     if not dry_run:
         work.mkdir(parents=True, exist_ok=True)

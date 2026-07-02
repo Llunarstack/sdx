@@ -407,9 +407,10 @@ class Text2ImageDataset(Dataset):
                             }
                         )
             return
-        for subdir in self.data_path.iterdir():
-            if not subdir.is_dir():
-                continue
+        # Accept both layouts: data_path/<subdir>/img+caption and a flat
+        # data_path/img+caption folder (README quick start uses the latter).
+        scan_dirs = [self.data_path] + [d for d in self.data_path.iterdir() if d.is_dir()]
+        for subdir in scan_dirs:
             for img_path in subdir.glob("*"):
                 if img_path.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
                     continue

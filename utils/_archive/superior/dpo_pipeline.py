@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 @dataclass(slots=True)
@@ -45,7 +46,7 @@ def mine_pairs_from_benchmark(cfg: MinePairsConfig) -> List[Dict[str, Any]]:
     """Load benchmark results JSON and mine win/lose pairs."""
     import importlib.util
 
-    mod_path = Path(__file__).resolve().parents[2] / "scripts" / "tools" / "training" / "mine_preference_pairs.py"
+    mod_path = _sdx_repo_root() / "scripts" / "tools" / "training" / "mine_preference_pairs.py"
     spec = importlib.util.spec_from_file_location("mine_preference_pairs", mod_path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -107,7 +108,7 @@ def run_dpo_training(
     dry_run: bool = False,
 ) -> int:
     """Run DPO trainer subprocess."""
-    root = Path(repo_root or Path(__file__).resolve().parents[2])
+    root = Path(repo_root or _sdx_repo_root())
     cmd = [sys.executable, "-m", "scripts.tools", "train_diffusion_dpo", *build_dpo_train_argv(cfg)]
     if dry_run:
         print(" ".join(cmd))

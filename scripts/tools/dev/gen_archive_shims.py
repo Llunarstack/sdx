@@ -15,11 +15,10 @@ def write_shims(archive_pkg: str) -> int:
     count = 0
     for py in sorted(archive.glob("*.py")):
         if py.name == "__init__.py":
-            text = (
-                f'"""Canonical import path; implementations in ``utils._archive.{archive_pkg}``."""\n\n'
-                f"from utils._archive.{archive_pkg} import *  # noqa: F403\n"
-            )
-            (public_dir / "__init__.py").write_text(text, encoding="utf-8")
+            # Copy verbatim: relative imports and lazy __getattr__ maps resolve
+            # against the shim submodules, preserving the package's laziness
+            # contract (tests/test_prompt_training_pkg_lazy.py) and __all__.
+            (public_dir / "__init__.py").write_text(py.read_text(encoding="utf-8"), encoding="utf-8")
             count += 1
             continue
         mod = f"utils._archive.{archive_pkg}.{py.stem}"
@@ -37,7 +36,18 @@ def write_shims(archive_pkg: str) -> int:
 
 
 def main() -> None:
-    for pkg in ("superior", "agentic", "brain"):
+    for pkg in (
+        "superior",
+        "agentic",
+        "brain",
+        "modeling",
+        "analysis",
+        "checkpoint",
+        "consistency",
+        "quantization",
+        "runtime",
+        "visual_design",
+    ):
         n = write_shims(pkg)
         print(f"{pkg}: {n} files")
 

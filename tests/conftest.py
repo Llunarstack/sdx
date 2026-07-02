@@ -29,57 +29,10 @@ TORCH_DEPENDENT_TEST_BASENAMES = {
     "test_hybrid_dit_vit_generate.py",
 }
 
-# Tests that depend on archived modules or unbuilt native extensions
-ARCHIVED_MODULE_TEST_BASENAMES = {
-    "test_agentic_stack.py",
-    "test_ar_masks_extended.py",
-    "test_book_helpers.py",
-    "test_book_model_readiness.py",
-    "test_book_training_helpers.py",
-    "test_book_train_preset.py",
-    "test_cfg_batched.py",
-    "test_checkpoint_analysis.py",
-    "test_ckpt_text_stack.py",
-    "test_eval_report.py",
-    "test_generation_pkg_exports.py",
-    "test_hf_control.py",
-    "test_hf_index.py",
-    "test_hf_loaders.py",
-    "test_hf_reward.py",
-    "test_hf_scaffold.py",
-    "test_hf_upscale.py",
-    "test_hybrid_dit_vit_generate.py",
-    "test_jsonl_caption_hygiene_native.py",
-    "test_jsonutil.py",
-    "test_manifest_gate_tool.py",
-    "test_model_forward.py",
-    "test_model_paths_gen_searcher.py",
-    "test_multi_encoder_encode.py",
-    "test_native_fast_paths.py",
-    "test_plain_dict_snapshot.py",
-    "test_prompt_ops_native.py",
-    "test_prompt_training_pkg_lazy.py",
-    "test_runtime_profiling.py",
-    "test_simple_latent_generate.py",
-    "test_style_native.py",
-    "test_superior_extended.py",
-    "test_superior_stack.py",
-    "test_superior_wave10.py",
-    "test_superior_wave11.py",
-    "test_superior_wave12.py",
-    "test_superior_wave3.py",
-    "test_superior_wave4.py",
-    "test_superior_wave5.py",
-    "test_superior_wave6.py",
-    "test_superior_wave7.py",
-    "test_superior_wave8.py",
-    "test_superior_wave9.py",
-    "test_text_encoder_penta.py",
-    "test_text_encoder_stack.py",
-    "test_visual_brain.py",
-    "test_visual_design.py",
-    "test_visual_design_full.py",
-}
+# Archived-utils and sdx_native tests are collected again: utils/<pkg> shims
+# re-export utils/_archive/<pkg> (scripts/tools/dev/gen_archive_shims.py) and
+# ``sdx_native`` resolves from native/_experimental/python via pythonpath.
+ARCHIVED_MODULE_TEST_BASENAMES: set[str] = set()
 
 
 def pytest_ignore_collect(collection_path, config) -> bool:  # type: ignore[no-untyped-def]

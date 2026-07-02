@@ -215,13 +215,15 @@ class SDXMaster:
                 self.text_encoder = T5EncoderModel.from_pretrained(t5_path).to(self.device).eval()
                 self.logger.info("Loaded T5 text encoder from %s", t5_path)
 
-            from diffusers import AutoencoderKL, AutoencoderRAE
+            from utils.modeling.autoencoder_loading import get_autoencoder_class
 
             ae_type = str(getattr(self.config, "ae_type", "kl") or "kl").lower()
             if ae_type == "rae":
-                self.vae = AutoencoderRAE.from_pretrained(getattr(self.config, "vae_model", ""))
+                self.vae = get_autoencoder_class("rae").from_pretrained(getattr(self.config, "vae_model", ""))
             else:
-                self.vae = AutoencoderKL.from_pretrained(getattr(self.config, "vae_model", "stabilityai/sd-vae-ft-mse"))
+                self.vae = get_autoencoder_class("kl").from_pretrained(
+                    getattr(self.config, "vae_model", "stabilityai/sd-vae-ft-mse")
+                )
             self.vae = self.vae.to(self.device).eval()
 
             # Create diffusion

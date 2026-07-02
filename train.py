@@ -20,6 +20,14 @@ from pathlib import Path
 from time import time
 from typing import Optional
 
+# Windows: redirected stdout/stderr default to cp1252, which cannot encode the
+# typographic characters in help text and logs (argparse --help > file crashes).
+if sys.platform == "win32":
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfigure = getattr(_stream, "reconfigure", None)
+        if _reconfigure is not None:
+            _reconfigure(encoding="utf-8", errors="replace")
+
 # Show CLI help without importing the heavy GPU stack: build the (torch-free)
 # argument parser early and exit before ``import torch`` runs. Keeps
 # ``python train.py --help`` fast and dependency-light (tests/test_cli_entrypoints.py).
@@ -285,12 +293,9 @@ def get_t5_and_vae(device, cfg: TrainConfig):
 
     # Autoencoder load (VAE=AutoencoderKL, or RAE=AutoencoderRAE).
     ae_type = getattr(cfg, "autoencoder_type", "kl")
-    from diffusers import AutoencoderKL, AutoencoderRAE
+    from utils.modeling.autoencoder_loading import get_autoencoder_class
 
-    if ae_type == "rae":
-        ae = AutoencoderRAE.from_pretrained(cfg.vae_model)
-    else:
-        ae = AutoencoderKL.from_pretrained(cfg.vae_model)
+    ae = get_autoencoder_class(ae_type).from_pretrained(cfg.vae_model)
 
     ae.eval()
     for p in ae.parameters():
@@ -1184,6 +1189,45 @@ def main(cfg: TrainConfig):
 
     if cfg.grad_checkpointing:
         model.enable_gradient_checkpointing()
+
+    # LoRA/DoRA adapter training: wrap target Linears with trainable adapters and
+    # freeze the base DiT. Only the adapters end up in the optimizer (below).
+    lora_training = bool(getattr(cfg, "lora_train", False))
+    if lora_training:
+        from models.lora_train import inject_trainable_lora
+
+        _targets = [t.strip() for t in str(getattr(cfg, "lora_target", "") or "").split(",") if t.strip()]
+        _trainable, _wrapped = inject_trainable_lora(
+            model,
+            rank=int(getattr(cfg, "lora_rank", 16)),
+            alpha=float(getattr(cfg, "lora_alpha", 16.0)),
+            use_dora=bool(getattr(cfg, "lora_dora", False)),
+            targets=_targets or None,
+        )
+        if rank == 0:
+            n_train = sum(p.numel() for p in _trainable)
+            kind = "DoRA" if getattr(cfg, "lora_dora", False) else "LoRA"
+            logger.info(
+                f"{kind} training: wrapped {_wrapped} Linear layers, "
+                f"rank={getattr(cfg, 'lora_rank', 16)} alpha={getattr(cfg, 'lora_alpha', 16.0)}, "
+                f"{n_train:,} trainable params (base frozen)."
+            )
+        if _wrapped == 0:
+            raise ValueError(
+                "--lora-train matched no Linear layers. Adjust --lora-target substrings "
+                "(default targets: attention qkv/proj + MLP fc)."
+            )
+
+    def _maybe_save_lora_adapter(raw_model, ckpt_path) -> None:
+        """Write an adapter-only file next to a full checkpoint (LoRA training)."""
+        if not lora_training:
+            return
+        from models.lora_train import lora_state_dict
+
+        adapter_path = Path(ckpt_path).with_name(Path(ckpt_path).stem + "_lora.pt")
+        torch.save(lora_state_dict(raw_model), adapter_path)
+        logger.info(f"LoRA adapter saved: {adapter_path}")
+
     ema = deepcopy(model)
     for p in ema.parameters():
         p.requires_grad = False
@@ -1201,7 +1245,9 @@ def main(cfg: TrainConfig):
         prediction_type=getattr(cfg, "prediction_type", "epsilon"),
     )
 
-    opt_params = list(model.parameters())
+    # Only optimize params that need grad (LoRA training freezes the base model;
+    # full training leaves everything trainable, so this is a no-op there).
+    opt_params = [p for p in model.parameters() if p.requires_grad]
     if rae_bridge is not None:
         opt_params += list(rae_bridge.parameters())
     if text_bundle is not None and text_bundle.fusion is not None:
@@ -1325,6 +1371,14 @@ def main(cfg: TrainConfig):
         foveated_crop_frac=float(getattr(cfg, "foveated_crop_frac", 0.55)),
         grounding_mask_soft=bool(getattr(cfg, "grounding_mask_soft", False)),
     )
+
+    if len(dataset) == 0:
+        raise ValueError(
+            f"No training samples found under --data-path {cfg.data_path!r}. "
+            "Expected a folder of images with matching .txt/.caption sidecars "
+            "(flat or one level of subfolders), or a manifest .jsonl with "
+            "{'image_path', 'caption'} rows."
+        )
 
     def _worker_init(worker_id):
         import numpy as np
@@ -2037,6 +2091,7 @@ def main(cfg: TrainConfig):
                         ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
+                    _maybe_save_lora_adapter(raw, path)
                     logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
                 if running_loss_t is not None:
                     running_loss_t.zero_()
@@ -2062,6 +2117,7 @@ def main(cfg: TrainConfig):
                     ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                 path = ckpt_dir / f"{steps:07d}.pt"
                 torch.save(ckpt, path)
+                _maybe_save_lora_adapter(raw, path)
                 logger.info(f"Checkpoint saved: {path}")
                 # IMPROVEMENTS 1.5: save Polyak average as polyak.pt
                 if polyak_buf is not None and getattr(cfg, "save_polyak", 0) > 0:
@@ -2109,6 +2165,7 @@ def main(cfg: TrainConfig):
                         ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
+                    _maybe_save_lora_adapter(raw, path)
                     logger.info(f"Best checkpoint saved: {path} (val loss={best_val_loss:.4f})")
                 else:
                     no_improvement_count += 1

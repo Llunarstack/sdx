@@ -7,8 +7,13 @@ from typing import Dict, List, Optional, Sequence
 
 
 def repo_root() -> Path:
-    # utils/modeling/model_paths.py -> repo root is parents[2]
-    return Path(__file__).resolve().parents[2]
+    # Walk up to the checkout root (marker: pyproject.toml). A fixed parents[N]
+    # breaks when this module moves (e.g. utils/modeling -> utils/_archive/modeling).
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return p.parents[2]
 
 
 def model_dir() -> Path:

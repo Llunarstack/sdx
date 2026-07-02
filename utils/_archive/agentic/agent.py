@@ -22,6 +22,7 @@ from .planner import default_stop_conditions, plan_from_prompt
 from .reflector import reflect_on_result, reflect_on_result_llm
 from .state import AgentContext, AgentTrace, TrajectoryRecord
 from .tools import AgentTool, ToolRegistry
+from utils._archive.modeling.model_paths import repo_root as _sdx_repo_root
 
 
 @dataclass(slots=True)
@@ -46,7 +47,7 @@ class ImageGenerationAgent:
         repo_root: Optional[Path] = None,
     ) -> None:
         self.defaults = defaults or AgenticStackDefaults()
-        self.repo_root = Path(repo_root or Path(__file__).resolve().parents[2])
+        self.repo_root = Path(repo_root or _sdx_repo_root())
 
     def run(self, ctx: AgentContext) -> AgentRunResult:
         d = self.defaults

@@ -20,8 +20,17 @@ from sdx_native.latent_geometry import latent_spatial_size as py_latent_spatial_
 from sdx_native.latent_geometry import num_patch_tokens as py_num_patch_tokens
 from sdx_native.latent_geometry import patch_grid_dim as py_patch_grid_dim
 
-# Repo root: native/python/sdx_native/native_tools.py -> parents[3]
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# Walk up to the checkout root (marker: pyproject.toml); a fixed parents[N]
+# breaks when this package moves (native/python -> native/_experimental/python).
+def _find_repo_root() -> Path:
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return p.parents[3]
+
+
+REPO_ROOT = _find_repo_root()
 
 
 def _release_dir(name: str) -> Path:
