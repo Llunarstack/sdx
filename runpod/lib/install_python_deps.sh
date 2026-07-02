@@ -32,7 +32,8 @@ fi
 # Editable install registers console scripts (sdx-demo, sdx-sample) without duplicating deps.
 if [ "${SDX_SKIP_EDITABLE_INSTALL:-0}" != "1" ]; then
   echo "==> pip install -e .[demo]"
-  python -m pip install -e ".[demo]"
+  python -m pip install -e ".[demo]" || \
+    echo "WARN: editable install failed (non-fatal; run python train.py from repo root)."
 fi
 
 echo "Python dependencies OK."
