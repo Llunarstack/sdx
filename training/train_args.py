@@ -79,6 +79,7 @@ def build_train_config_from_args(args) -> TrainConfig:
         lora_alpha=float(getattr(args, "lora_alpha", 16.0)),
         lora_dora=bool(getattr(args, "lora_dora", False)),
         lora_target=str(getattr(args, "lora_target", "") or ""),
+        live_dashboard=bool(getattr(args, "live_dashboard", False)),
         num_workers=args.num_workers,
         prefetch_factor=int(getattr(args, "prefetch_factor", 2)),
         cuda_stream_prefetch=not bool(getattr(args, "no_cuda_stream_prefetch", False)),

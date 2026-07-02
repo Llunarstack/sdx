@@ -138,3 +138,16 @@ def lora_state_dict(model: nn.Module) -> Dict[str, torch.Tensor]:
             # dotted path to this module and reads its adapter tensors.
             out.update(module.adapter_state(path))
     return out
+
+
+def unfreeze_control_encoder(model: nn.Module) -> int:
+    """Re-enable gradients on the in-DiT ControlNet encoder (for LoRA + control training)."""
+    raw = model.module if hasattr(model, "module") else model
+    enc = getattr(raw, "control_encoder", None)
+    if enc is None:
+        return 0
+    n = 0
+    for p in enc.parameters():
+        p.requires_grad = True
+        n += p.numel()
+    return n

@@ -67,7 +67,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma/space list of ratings to keep: s,q,e (or 'all'). Blocklist always enforced.",
     )
     p.add_argument("--secrets", default=None, help="Path to secrets file (default $SDX_SECRETS_FILE or D:\\Development\\secret.txt).")
-    p.add_argument("--rate", type=float, default=None, help="Requests/sec ceiling (default: per-site polite value).")
+    p.add_argument("--rate", type=float, default=None, help="API requests/sec ceiling (default: per-site polite value).")
+    p.add_argument("--workers", type=int, default=8, help="Parallel image-download threads (default 8).")
+    p.add_argument(
+        "--split-frames",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Split animated GIFs and videos (mp4/webm/…) into JPEG training frames (default: on).",
+    )
+    p.add_argument(
+        "--frame-fps",
+        type=float,
+        default=1.0,
+        help="Target fps when sampling video frames (default 1.0 = one frame per second).",
+    )
+    p.add_argument(
+        "--max-frames-per-post",
+        type=int,
+        default=120,
+        help="Cap frames extracted per GIF/video post (default 120).",
+    )
     p.add_argument(
         "--user-agent",
         default=None,
@@ -100,6 +119,10 @@ def main(argv: list[str] | None = None) -> int:
         user_agent=user_agent,
         rate_per_sec=rate,
         ratings=_parse_ratings(args.ratings),
+        max_workers=int(args.workers),
+        split_frames=bool(args.split_frames),
+        frame_fps=float(args.frame_fps),
+        max_frames_per_post=int(args.max_frames_per_post),
     )
 
     print(f"Scraping {args.site} tags={args.tags!r} -> {args.out} (max {args.max_posts}, {rate}/s, dry_run={args.dry_run})")
@@ -107,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\n=== done ===")
     print(f"fetched={stats.fetched} downloaded={stats.downloaded} "
+          f"posts_split={stats.posts_split} frames_extracted={stats.frames_extracted} "
           f"skipped_existing={stats.skipped_existing} skipped_rating={stats.skipped_rating} "
           f"skipped_no_url={stats.skipped_no_url} errors={stats.errors}")
     print(f"BLOCKED (unsafe content): {stats.skipped_unsafe}")

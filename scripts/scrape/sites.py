@@ -4,6 +4,7 @@ APIs used (all official JSON endpoints):
   danbooru   https://danbooru.donmai.us/posts.json      (login + api_key)
   e621       https://e621.net/posts.json                (HTTP basic: login + api_key)
   rule34xxx  https://api.rule34.xxx/index.php?...&json=1 (api_key + user_id)
+  rule34xyz  https://rule34.xyz/api/v2/post/search/root   (JWT from email/password)
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 from typing import Iterator, Optional
 
 from .booru_client import Post
+from .rule34xyz_v2 import Rule34xyzV2Adapter
 from .safety import blocked_query_tags
 from .secrets_config import SiteCredentials
 
@@ -22,13 +24,16 @@ class DanbooruAdapter:
     # danbooru limits anonymous/basic accounts to 2 search tags, so we cannot
     # inject the blocklist here; the per-post gate in BooruClient is authoritative.
     page_limit = 200
+    # Numeric paging caps at ~page 1000; id-cursor (page=b<id>) crawls the whole site.
+    cursor_supported = True
 
     def __init__(self, creds: SiteCredentials) -> None:
         self.creds = creds
         self.auth: Optional[tuple[str, str]] = None
 
-    def build_params(self, tags: str, page: int) -> dict:
-        params = {"tags": tags, "page": page, "limit": self.page_limit}
+    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
+        params = {"tags": tags, "limit": self.page_limit}
+        params["page"] = f"b{before_id}" if before_id else page
         if self.creds.username and self.creds.api_key:
             params["login"] = self.creds.username
             params["api_key"] = self.creds.api_key
@@ -49,6 +54,9 @@ class DanbooruAdapter:
                 rating=d.get("rating", ""),
                 width=int(d.get("image_width", 0) or 0),
                 height=int(d.get("image_height", 0) or 0),
+                artist_tags=_split_tag_field(d.get("tag_string_artist")),
+                character_tags=_split_tag_field(d.get("tag_string_character")),
+                copyright_tags=_split_tag_field(d.get("tag_string_copyright")),
             )
 
 
@@ -57,6 +65,7 @@ class E621Adapter:
     posts_url = "https://e621.net/posts.json"
     first_page = 1
     page_limit = 320  # e621 hard max
+    cursor_supported = True  # page=b<id> crawls past the deep-page cap
 
     def __init__(self, creds: SiteCredentials) -> None:
         self.creds = creds
@@ -65,10 +74,12 @@ class E621Adapter:
             (creds.username, creds.api_key) if creds.username and creds.api_key else None
         )
 
-    def build_params(self, tags: str, page: int) -> dict:
+    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
         # e621 allows up to 40 tags, so we can negate the blocklist in-query too.
         full_tags = " ".join([tags, *blocked_query_tags()]).strip()
-        return {"tags": full_tags, "page": page, "limit": self.page_limit}
+        params = {"tags": full_tags, "limit": self.page_limit}
+        params["page"] = f"b{before_id}" if before_id else page
+        return params
 
     def parse_posts(self, data) -> Iterator[Post]:
         posts = data.get("posts") if isinstance(data, dict) else None
@@ -91,20 +102,58 @@ class E621Adapter:
                 rating=d.get("rating", ""),
                 width=int(f.get("width", 0) or 0),
                 height=int(f.get("height", 0) or 0),
+                artist_tags=list(tag_groups.get("artist") or []),
+                character_tags=list(tag_groups.get("character") or []),
+                copyright_tags=list(tag_groups.get("copyright") or []),
             )
 
 
-class Rule34xxxAdapter:
-    site = "rule34xxx"
-    posts_url = "https://api.rule34.xxx/index.php"
-    first_page = 0  # rule34 pages are 0-indexed (pid)
-    page_limit = 1000
+def _iter_gelbooru_posts(data, *, site: str, cdn_base: str) -> Iterator[Post]:
+    """Parse Gelbooru / rule34 JSON (array or ``{"post": [...]}`` wrapper)."""
+    posts = None
+    if isinstance(data, list):
+        posts = data
+    elif isinstance(data, dict):
+        posts = data.get("post")
+        if isinstance(posts, dict):
+            posts = [posts]
+    if not posts:
+        return
+    for d in posts:
+        if not isinstance(d, dict):
+            continue
+        file_url = d.get("file_url") or ""
+        if not file_url and d.get("directory") is not None and d.get("image"):
+            file_url = f"{cdn_base.rstrip('/')}/images/{d['directory']}/{d['image']}"
+        yield Post(
+            site=site,
+            id=str(d.get("id", "")),
+            md5=d.get("hash", "") or d.get("md5", ""),
+            file_url=file_url,
+            ext=_ext_from_url(file_url),
+            tags=(d.get("tags", "") or "").split(),
+            rating=d.get("rating", ""),
+            width=int(d.get("width", 0) or 0),
+            height=int(d.get("height", 0) or 0),
+        )
 
-    def __init__(self, creds: SiteCredentials) -> None:
+
+class _GelbooruDapiAdapter:
+    """Shared Gelbooru ``page=dapi&s=post&q=index`` adapter."""
+
+    first_page = 0
+    page_limit = 1000
+    cursor_supported = False
+    cdn_base = ""
+
+    def __init__(self, creds: SiteCredentials, *, posts_url: str, site: str, cdn_base: str) -> None:
         self.creds = creds
+        self.posts_url = posts_url
+        self.site = site
+        self.cdn_base = cdn_base
         self.auth = None
 
-    def build_params(self, tags: str, page: int) -> dict:
+    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
         params = {
             "page": "dapi",
             "s": "post",
@@ -120,30 +169,30 @@ class Rule34xxxAdapter:
         return params
 
     def parse_posts(self, data) -> Iterator[Post]:
-        # rule34 returns a JSON array, or an empty string / None past the end.
-        if not isinstance(data, list):
-            return
-        for d in data:
-            file_url = d.get("file_url") or ""
-            if not file_url and d.get("directory") is not None and d.get("image"):
-                file_url = f"https://api-cdn.rule34.xxx/images/{d['directory']}/{d['image']}"
-            yield Post(
-                site=self.site,
-                id=str(d.get("id", "")),
-                md5=d.get("hash", ""),
-                file_url=file_url,
-                ext=_ext_from_url(file_url),
-                tags=(d.get("tags", "") or "").split(),
-                rating=d.get("rating", ""),
-                width=int(d.get("width", 0) or 0),
-                height=int(d.get("height", 0) or 0),
-            )
+        return _iter_gelbooru_posts(data, site=self.site, cdn_base=self.cdn_base)
+
+
+class Rule34xxxAdapter(_GelbooruDapiAdapter):
+    site = "rule34xxx"
+
+    def __init__(self, creds: SiteCredentials) -> None:
+        super().__init__(
+            creds,
+            posts_url="https://api.rule34.xxx/index.php",
+            site=self.site,
+            cdn_base="https://api-cdn.rule34.xxx",
+        )
+
+
+class Rule34xyzAdapter(Rule34xyzV2Adapter):
+    site = "rule34xyz"
 
 
 ADAPTERS = {
     "danbooru": DanbooruAdapter,
     "e621": E621Adapter,
     "rule34xxx": Rule34xxxAdapter,
+    "rule34xyz": Rule34xyzAdapter,
 }
 
 # Polite per-site request ceilings (requests/sec). e621 enforces <= 2/s hard.
@@ -151,6 +200,7 @@ RATE_LIMITS = {
     "danbooru": 4.0,
     "e621": 1.5,
     "rule34xxx": 2.0,
+    "rule34xyz": 2.0,
 }
 
 
@@ -158,6 +208,14 @@ def _ext_from_url(url: str) -> str:
     if "." in url.rsplit("/", 1)[-1]:
         return url.rsplit(".", 1)[-1].split("?")[0].lower()
     return ""
+
+
+def _split_tag_field(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(x).strip() for x in value if str(x).strip()]
+    return [t for t in str(value).split() if t.strip()]
 
 
 def build_adapter(site: str, creds: SiteCredentials):

@@ -232,6 +232,9 @@ class TrainConfig:
     lora_dora: bool = False
     lora_target: str = ""  # comma-separated module-name substrings; "" = defaults
 
+    # Real-time terminal training dashboard (rich live panel; rank-0 only).
+    live_dashboard: bool = False
+
     # -------------------------------------------------------------------------
     # Validation + early stopping
     # -------------------------------------------------------------------------

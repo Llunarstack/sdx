@@ -14,6 +14,7 @@ from utils.training.part_aware_training import (
     foveated_random_crop_box,
 )
 
+from .manifest_utils import negative_caption_from_row
 from .caption_truncate import truncate_caption_at_comma_boundary
 from .caption_utils import (
     add_anti_blending_and_count,
@@ -208,8 +209,10 @@ class Text2ImageDataset(Dataset):
         foveated_train_prob: float = 0.0,
         foveated_crop_frac: float = 0.55,
         grounding_mask_soft: bool = False,
+        data_root: Optional[str] = None,
     ):
         self.data_path = Path(data_path)
+        self.data_root = Path(data_root).resolve() if data_root else None
         self.extract_style_from_caption = extract_style_from_caption
         self.image_size = image_size
         self.latent_cache_dir = Path(latent_cache_dir) if latent_cache_dir else None
@@ -287,7 +290,8 @@ class Text2ImageDataset(Dataset):
             return self._crop_fn(pil, self.image_size)
         return _crop_to_hw(pil, H, W, self.crop_mode)
 
-    def _resolve_aux_path(self, rel: Optional[Union[str, Path]]) -> Optional[Path]:
+    def _resolve_media_path(self, rel: Optional[Union[str, Path]]) -> Optional[Path]:
+        """Resolve manifest-relative paths against ``data_root`` (e.g. SDX_DATA)."""
         if rel is None:
             return None
         s = str(rel).strip()
@@ -295,9 +299,23 @@ class Text2ImageDataset(Dataset):
             return None
         p = Path(s)
         if p.is_absolute():
-            return p
-        base = self.data_path.parent if self.data_path.suffix.lower() == ".jsonl" else self.data_path
-        return (base / p).resolve()
+            return p if p.is_file() else p
+        if p.is_file():
+            return p.resolve()
+        if self.data_root is not None:
+            cand = (self.data_root / p).resolve()
+            if cand.is_file():
+                return cand
+        if self.data_path.suffix.lower() == ".jsonl":
+            cand = (self.data_path.parent / p).resolve()
+            if cand.is_file():
+                return cand
+        if self.data_root is not None:
+            return (self.data_root / p).resolve()
+        return (self.data_path / p).resolve() if self.data_path.is_dir() else p.resolve()
+
+    def _resolve_aux_path(self, rel: Optional[Union[str, Path]]) -> Optional[Path]:
+        return self._resolve_media_path(rel)
 
     def _crop_mask_pil(self, pil_l: Image.Image, idx: int) -> Image.Image:
         return self._crop_image(pil_l.convert("RGB"), idx).split()[0]
@@ -371,7 +389,7 @@ class Text2ImageDataset(Dataset):
                     else:
                         regions = rc
                     if path and cap:
-                        neg = d.get("negative_caption") or d.get("negative_prompt") or ""
+                        neg = negative_caption_from_row(d)
                         style = d.get("style") or ""
                         ctrl = d.get("control_image") or d.get("control_path") or ""
                         ctrl_type = d.get("control_type") or d.get("control_kind") or d.get("controlnet_type") or ""
@@ -499,7 +517,8 @@ class Text2ImageDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         s = self.samples[idx]
-        path = s["path"]
+        resolved = self._resolve_media_path(s["path"])
+        path = str(resolved if resolved is not None else s["path"])
         raw_caption = s["caption"]
         if self._partaware_caption_cfg is not None:
             raw_caption = apply_part_aware_caption_pipeline(raw_caption, s, self._partaware_caption_cfg, rng=random)
@@ -548,9 +567,13 @@ class Text2ImageDataset(Dataset):
         ctrl_path = s.get("control_image", "")
         ctrl_type = s.get("control_type", "")
         if ctrl_path:
+            rp = self._resolve_media_path(ctrl_path)
+            ctrl_path = str(rp) if rp is not None else ctrl_path
             out["control_image_path"] = ctrl_path
         init_path = s.get("init_image", "")
         if init_path:
+            rp = self._resolve_media_path(init_path)
+            init_path = str(rp) if rp is not None else init_path
             out["init_image_path"] = init_path
         mask_rel = s.get("grounding_mask") or ""
         skip_fov = bool(ctrl_path) or bool(init_path)

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Train image model (full DiT, LoRA, or ControlNet).
+#
+#   bash runpod/train.sh
+#   SDX_TRAIN_MODE=lora SDX_INIT_CKPT=/path/to/base.pt bash runpod/train.sh
+#
+# Modes: full | lora | control | lora_control
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=/dev/null
+source "$ROOT/runpod/env.defaults"
+cd "$ROOT"
+
+MODE="${SDX_TRAIN_MODE:-full}"
+ENRICHED="${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}"
+MANIFEST="${SDX_MANIFEST:-$SDX_DATA/combined/manifest.jsonl}"
+EPOCHS="${SDX_EPOCHS:-20}"
+BATCH="${SDX_GLOBAL_BATCH_SIZE:-4}"
+IMAGE_SIZE="${SDX_IMAGE_SIZE:-512}"
+MAX_STEPS="${SDX_MAX_STEPS:-}"
+INIT="${SDX_INIT_CKPT:-}"
+
+EXTRA=()
+if [ -n "$MAX_STEPS" ]; then EXTRA+=(--max-steps "$MAX_STEPS"); fi
+if [ -n "$INIT" ]; then EXTRA+=(--init-from "$INIT"); fi
+
+case "$MODE" in
+  full|lora)
+    if [ -z "${SDX_MANIFEST:-}" ] && [ -f "$ENRICHED" ] && [ -s "$ENRICHED" ]; then
+      MANIFEST="$ENRICHED"
+    fi
+    if [ "$MODE" = "lora" ]; then
+      EXTRA+=(--lora-train --lora-rank "${SDX_LORA_RANK:-32}" --lora-alpha "${SDX_LORA_ALPHA:-32}")
+      if [ -z "$INIT" ]; then
+        echo "WARN: SDX_INIT_CKPT not set — LoRA trains from random init." >&2
+      fi
+    fi
+    ;;
+  control)
+    MANIFEST="${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
+    EXTRA+=(--control-cond-dim 1 --control-num-types 9 --control-scale "${SDX_CONTROL_SCALE:-0.85}")
+    ;;
+  lora_control)
+    MANIFEST="${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
+    EXTRA+=(
+      --lora-train --lora-rank "${SDX_LORA_RANK:-32}" --lora-alpha "${SDX_LORA_ALPHA:-32}"
+      --control-cond-dim 1 --control-num-types 9 --control-scale "${SDX_CONTROL_SCALE:-0.85}"
+    )
+  ;;
+  *)
+    echo "Unknown SDX_TRAIN_MODE=$MODE (use full|lora|control|lora_control)" >&2
+    exit 2
+    ;;
+esac
+
+if [ ! -f "$MANIFEST" ]; then
+  echo "Manifest not found: $MANIFEST — run bash runpod/download.sh first." >&2
+  exit 1
+fi
+
+echo "Training mode=$MODE manifest=$MANIFEST"
+
+python train.py \
+  --manifest-jsonl "$MANIFEST" \
+  --data-path "$SDX_DATA" \
+  --results-dir "$SDX_RESULTS" \
+  --flow-matching-training \
+  --live-dashboard \
+  --train-style-guidance-mode auto \
+  --region-caption-mode append \
+  --epochs "$EPOCHS" \
+  --global-batch-size "$BATCH" \
+  --image-size "$IMAGE_SIZE" \
+  "${EXTRA[@]}" \
+  "$@"
+
+echo
+echo "Sample: bash runpod/sample.sh"
