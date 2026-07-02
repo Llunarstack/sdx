@@ -383,6 +383,11 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         help="Comma-separated module-name substrings to wrap with adapters (default: attention + MLP linears).",
     )
     parser.add_argument(
+        "--live-dashboard",
+        action="store_true",
+        help="Show a real-time terminal dashboard (progress, loss trend, throughput, ETA, GPU) during training.",
+    )
+    parser.add_argument(
         "--beta-schedule",
         type=str,
         default="linear",

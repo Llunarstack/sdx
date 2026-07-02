@@ -1,6 +1,6 @@
 # Booru dataset scrapers
 
-Scrape **danbooru**, **e621**, and **rule34.xxx** into SDX training manifests.
+Scrape **danbooru**, **e621**, **rule34.xxx**, and **rule34.xyz** into SDX training manifests.
 Each downloaded post becomes an image file plus a JSONL row that `train.py`
 consumes directly.
 
@@ -18,8 +18,8 @@ Read from a secrets file, never committed. Default path
 Keep this file outside the repo.
 
 Supported logins (auto-parsed): danbooru (`login`+`api_key`), e621
-(`login`+`api_key`, HTTP basic), rule34.xxx (`api_key`+`user_id`).
-rule34.**xyz** has no standard API and is not supported.
+(`login`+`api_key`, HTTP basic), rule34.xxx (`api_key`+`user_id`), rule34.xyz
+(email/password → JWT via `/api/v2/auth/signin`, or paste a Bearer token as `api:`).
 
 ## Usage
 
@@ -55,7 +55,9 @@ python train.py --manifest-jsonl <out>/manifest.jsonl --data-path <out> \
   can stop/restart or grow a dataset incrementally.
 - **Polite rate limits**: per-site defaults (e621 capped at 1.5/s — they enforce
   ≤2/s hard). Override with `--rate`, but don't raise e621.
-- **Captions** are the post's tags, comma-separated, underscores→spaces
-  (matches the danbooru caption convention the SDX dataloader expects).
+- **Captions** are the post's tags, comma-separated, underscores→spaces.
+- **Artist tags** from danbooru/e621 are stored in each manifest row and indexed
+  into ``artist_index.json`` for ``@AnyArtist`` prompt resolution.
+- **GIFs & videos** are frame-split into JPEGs (see above).
 - Deduplicate across sites afterward by the `md5` field (rule34 mirrors a lot of
   danbooru).

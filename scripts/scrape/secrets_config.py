@@ -23,6 +23,8 @@ _SITE_ALIASES = {
     "rule34xxx": "rule34xxx",
     "rule34.xxx": "rule34xxx",
     "rule34.xyz": "rule34xyz",
+    "saucenao": "saucenao",
+    "tineye": "tineye",
 }
 
 _USER_KEYS = ("user", "username", "login")
@@ -48,9 +50,14 @@ def _extract_rule34_apikey_userid(value: str) -> tuple[Optional[str], Optional[s
     return (api.group(1) if api else None, uid.group(1) if uid else None)
 
 
+def get_secrets_path(path: str | os.PathLike[str] | None = None) -> Path:
+    """Resolve secrets file — always ``D:\\Development\\secret.txt`` unless overridden."""
+    return Path(path or os.environ.get("SDX_SECRETS_FILE") or DEFAULT_SECRETS_PATH)
+
+
 def parse_secrets_file(path: str | os.PathLike[str] | None = None) -> dict[str, SiteCredentials]:
     """Return ``{canonical_site: SiteCredentials}`` parsed from the secrets file."""
-    p = Path(path or os.environ.get("SDX_SECRETS_FILE") or DEFAULT_SECRETS_PATH)
+    p = get_secrets_path(path)
     if not p.is_file():
         raise FileNotFoundError(
             f"Secrets file not found: {p}. Pass --secrets PATH or set SDX_SECRETS_FILE."

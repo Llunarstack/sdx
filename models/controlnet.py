@@ -43,6 +43,10 @@ _CONTROL_TYPE_ALIASES = {
     "normal": "normal",
     "normalmap": "normal",
     "hed": "hed",
+    "softedge": "hed",
+    "soft_edge": "hed",
+    "normals": "normal",
+    "normals_map": "normal",
 }
 _CONTROL_TYPE_TO_ID = {n: i for i, n in enumerate(CONTROL_TYPE_NAMES)}
 

@@ -37,6 +37,9 @@ data/danbooru/tags/raw/*.txt
 data/danbooru/tags/buckets/*.txt
 data/danbooru/tags/all_tags_categorized.txt
 
+# Local integration smoke output (regenerate: scripts/integration_smoke.py)
+data/integration_smoke/
+
 # Outputs
 *.pt
 *.png

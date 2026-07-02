@@ -336,7 +336,7 @@ def encode_text(
         return encode_t5_segment_concat(
             segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
         )
-    with torch.inference_mode():
+    with torch.no_grad():
         tok = tokenizer(
             captions,
             padding="max_length",
@@ -351,7 +351,7 @@ def encode_text(
         return hidden.to(dtype)
 
 
-@torch.inference_mode()
+@torch.no_grad()
 def encode_images_vae(images: torch.Tensor, ae: torch.nn.Module, scale: float = 0.18215) -> torch.Tensor:
     """Encode images to latents.
 
@@ -1217,6 +1217,14 @@ def main(cfg: TrainConfig):
                 "--lora-train matched no Linear layers. Adjust --lora-target substrings "
                 "(default targets: attention qkv/proj + MLP fc)."
             )
+        if int(getattr(cfg, "control_cond_dim", 0) or 0) > 0:
+            from models.lora_train import unfreeze_control_encoder
+
+            _ctrl_n = unfreeze_control_encoder(model)
+            if rank == 0 and _ctrl_n:
+                logger.info(
+                    f"LoRA + control: unfroze control_encoder ({_ctrl_n:,} params trainable alongside adapters)."
+                )
 
     def _maybe_save_lora_adapter(raw_model, ckpt_path) -> None:
         """Write an adapter-only file next to a full checkpoint (LoRA training)."""
@@ -1313,9 +1321,11 @@ def main(cfg: TrainConfig):
         _apply_train_checkpoint(ckpt, load_optimizer=False)
         logger.info(f"Initialized weights from {init_path} (step=0, fresh optimizer)")
 
-    # Data
-    data_path = cfg.manifest_jsonl or cfg.data_path
-    if not data_path:
+    # Data — manifest JSONL + optional data root for relative image_path rows
+    manifest_path = cfg.manifest_jsonl
+    data_root = cfg.data_path
+    dataset_path = manifest_path or data_root
+    if not dataset_path:
         raise ValueError("Set --data-path or --manifest-jsonl")
 
     if getattr(cfg, "dry_run", False):
@@ -1345,7 +1355,8 @@ def main(cfg: TrainConfig):
     bucket_fixed_assign = max_steps_early > 0 or passes_early > 0
 
     dataset = Text2ImageDataset(
-        data_path,
+        dataset_path,
+        data_root=data_root if manifest_path else None,
         image_size=cfg.image_size,
         latent_cache_dir=latent_dir,
         crop_mode=getattr(cfg, "crop_mode", "center"),
@@ -1374,10 +1385,10 @@ def main(cfg: TrainConfig):
 
     if len(dataset) == 0:
         raise ValueError(
-            f"No training samples found under --data-path {cfg.data_path!r}. "
+            f"No training samples found. manifest={manifest_path!r} data_root={data_root!r}. "
             "Expected a folder of images with matching .txt/.caption sidecars "
             "(flat or one level of subfolders), or a manifest .jsonl with "
-            "{'image_path', 'caption'} rows."
+            "{'image_path', 'caption'} rows resolved against --data-path."
         )
 
     def _worker_init(worker_id):
@@ -1487,6 +1498,15 @@ def main(cfg: TrainConfig):
         logger.info(f"Step-based training: max_steps={max_steps}, cosine LR to min_lr={getattr(cfg, 'min_lr', 1e-6)}")
     else:
         logger.info(f"Epoch-based training: epochs={cfg.epochs}")
+
+    # Real-time terminal dashboard (rank 0 only). Total steps for the progress
+    # bar/ETA: max_steps if step-based, else epochs x steps/epoch.
+    dashboard = None
+    if rank == 0 and bool(getattr(cfg, "live_dashboard", False)):
+        from utils.training.live_dashboard import LiveDashboard
+
+        _dash_total = max_steps if use_step_based else int(cfg.epochs) * max(1, len(train_dataset) // max(1, cfg.global_batch_size))
+        dashboard = LiveDashboard(_dash_total, model_name=cfg.model_name)
 
     # Dynamic AR schedules can mutate attention masks/orders during training.
     ar_curriculum_mode = str(getattr(cfg, "ar_curriculum_mode", "none") or "none").strip().lower()
@@ -1651,7 +1671,7 @@ def main(cfg: TrainConfig):
             )
 
             with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
-                with torch.inference_mode():
+                with torch.no_grad():
                     if "latent_values" in batch:
                         latents = to_train_device(batch["latent_values"], device, dtype=torch.bfloat16)
                     else:
@@ -2027,6 +2047,20 @@ def main(cfg: TrainConfig):
                 logger.info(
                     f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}{ag_extra}{cov_extra}"
                 )
+                if dashboard is not None:
+                    _aux_bits = []
+                    if avg_ag is not None:
+                        _aux_bits.append(f"attn_grnd={avg_ag:.4f}")
+                    if avg_cov is not None:
+                        _aux_bits.append(f"attn_cov={avg_cov:.4f}")
+                    dashboard.update(
+                        steps,
+                        avg_loss,
+                        steps_per_sec,
+                        lr_val,
+                        img_per_sec=steps_per_sec * cfg.global_batch_size,
+                        aux="  ".join(_aux_bits),
+                    )
                 # IMPROVEMENTS 5.1: TensorBoard / WandB
                 if rank == 0:
                     if tb_writer is not None:
@@ -2185,6 +2219,8 @@ def main(cfg: TrainConfig):
         if use_step_based and steps >= max_steps:
             break
 
+    if dashboard is not None:
+        dashboard.close()
     if use_ddp:
         dist.destroy_process_group()
     logger.info("Training done.")

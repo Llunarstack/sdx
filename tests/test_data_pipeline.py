@@ -145,6 +145,25 @@ class TestText2ImageDatasetJSONL:
         ds = Text2ImageDataset(str(manifest), image_size=32)
         assert "weight" in ds[0]
 
+    def test_relative_paths_with_data_root(self, tmp_path):
+        from data.t2i_dataset import Text2ImageDataset
+
+        data_root = tmp_path / "sdx_data"
+        site_dir = data_root / "danbooru" / "images"
+        site_dir.mkdir(parents=True)
+        img = site_dir / "abc.png"
+        _make_image(img)
+        manifest = data_root / "combined" / "manifest.jsonl"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            json.dumps({"image_path": "danbooru/images/abc.png", "caption": "1girl, solo"}) + "\n",
+            encoding="utf-8",
+        )
+        ds = Text2ImageDataset(str(manifest), image_size=32, data_root=str(data_root))
+        assert len(ds) == 1
+        item = ds[0]
+        assert item["pixel_values"].shape == (3, 32, 32)
+
     def test_train_shortcomings_mitigation_auto(self, tmp_path):
         from data.t2i_dataset import Text2ImageDataset
 

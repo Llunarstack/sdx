@@ -2123,6 +2123,32 @@ def build_sample_parser() -> "argparse.ArgumentParser":
         help="Heuristic gender swap: girl<->boy, woman<->man, she<->he in the prompt",
     )
     parser.add_argument(
+        "--no-artist-style",
+        dest="artist_style",
+        action="store_false",
+        help="Disable @artist expansion (e.g. '@Kantoku' -> the trained artist tag).",
+    )
+    parser.set_defaults(artist_style=True)
+    parser.add_argument(
+        "--artist-strength",
+        type=float,
+        default=1.0,
+        help="Style emphasis for @artist tags; >1.0 wraps as (tag:strength) to push adherence (try 1.1-1.4).",
+    )
+    parser.add_argument(
+        "--artist-index",
+        type=str,
+        default="",
+        help="Path to artist_index.json from scraped data (default: $SDX_ARTIST_INDEX or data/artist_index.json).",
+    )
+    parser.set_defaults(prompt_compose=True)
+    parser.add_argument(
+        "--no-prompt-compose",
+        dest="prompt_compose",
+        action="store_false",
+        help="Disable +category / @artist prompt composer (use raw prompt only).",
+    )
+    parser.add_argument(
         "--anatomy-scale", type=str, default="", help="Comma-separated: longer,bigger,wider (anatomy proportions)"
     )
     parser.add_argument(
@@ -3089,6 +3115,32 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             prompt_for_encoding = prompt_from_tags(parts)
     if prompt_for_encoding:
         args.prompt = prompt_for_encoding
+
+    # Compose @artist + +category prompts (characters, buildings, vehicles, …).
+    if getattr(args, "prompt", "") and getattr(args, "prompt_compose", True):
+        _raw = str(args.prompt)
+        if "@" in _raw or "+" in _raw:
+            from utils.prompt.prompt_composer import compose_prompt
+
+            _idx = str(getattr(args, "artist_index", "") or "").strip() or None
+            _cp = compose_prompt(
+                _raw,
+                artist_strength=float(getattr(args, "artist_strength", 1.0) or 1.0),
+                artist_index=_idx,
+            )
+            args.prompt = _cp.positive
+            if _cp.artists:
+                print(f"Artist style: {', '.join(_cp.artists)}")
+            if _cp.blocks:
+                print(f"Prompt blocks: {', '.join(sorted(_cp.blocks))}")
+    elif getattr(args, "artist_style", True) and getattr(args, "prompt", "") and "@" in args.prompt:
+        from utils.prompt.artist_tag import expand_artist_mentions
+
+        args.prompt, _artists = expand_artist_mentions(
+            args.prompt, strength=float(getattr(args, "artist_strength", 1.0) or 1.0)
+        )
+        if _artists:
+            print(f"Artist style: {', '.join(_artists)}")
 
     anatomy_scales = _parse_scale_csv(getattr(args, "anatomy_scale", ""))
     object_scales = _parse_scale_csv(getattr(args, "object_scale", ""))
