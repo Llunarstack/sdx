@@ -17,6 +17,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .frame_split import extract_training_frames, is_splittable_ext, needs_frame_split
+from .post_cap import post_cap_reached
 from .safety import blocking_tags
 
 
@@ -346,7 +347,7 @@ class BooruClient:
         page = self.adapter.first_page
         before_id: Optional[int] = None
         use_cursor = bool(getattr(self.adapter, "cursor_supported", False))
-        while yielded < max_posts:
+        while not post_cap_reached(yielded, max_posts):
             params = self.adapter.build_params(tags, page, before_id) if use_cursor else self.adapter.build_params(tags, page)
             data = self._request_json(self.adapter.posts_url, params, auth=self.adapter.auth)
             posts = list(self.adapter.parse_posts(data))
@@ -354,7 +355,7 @@ class BooruClient:
                 break
             min_id = None
             for post in posts:
-                if yielded >= max_posts:
+                if post_cap_reached(yielded, max_posts):
                     break
                 yield post
                 yielded += 1
