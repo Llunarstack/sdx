@@ -9,7 +9,7 @@ sdx_ensure_repo() {
   export SDX_REPO_URL="${SDX_REPO_URL:-https://github.com/Llunarstack/sdx.git}"
   export SDX_REPO_REF="${SDX_REPO_REF:-feat/runpod-readiness-scraper-lora}"
 
-  if [ -f "$SDX_ROOT/runpod/ultimate.sh" ]; then
+  if [ -f "$SDX_ROOT/runpod/sdx.sh" ]; then
     cd "$SDX_ROOT" || return 1
     if [ -d .git ]; then
       git fetch origin 2>/dev/null || true
