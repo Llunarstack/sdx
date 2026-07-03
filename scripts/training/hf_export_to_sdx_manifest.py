@@ -199,6 +199,7 @@ def main() -> int:
             if pil is None:
                 continue
 
+            pil = _prepare_for_save(pil, img_ext)
             stem = f"{n_written:08d}"
             ipath = img_dir / f"{stem}.{img_ext}"
             pil.save(ipath, **save_kw)
