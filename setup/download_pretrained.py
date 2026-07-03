@@ -39,6 +39,14 @@ _PROFILE_ALIASES = {
 }
 
 
+def _load_status() -> dict:
+    return json.loads(STATUS_JSON.read_text(encoding="utf-8"))
+
+
+def _load_registry() -> list[dict]:
+    return _load_status().get("models", [])
+
+
 def _profile_names(profile: str | None) -> set[str] | None:
     if profile is None:
         return None
