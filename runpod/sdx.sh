@@ -36,7 +36,7 @@ SDX — full pipeline (Hugging Face datasets only, no live booru API):
 
   (no args) / run     Full pipeline:
                         1. Pretrained models (T5, CLIP, VLM, WD tagger, …)
-                        2. HF datasets: danbooru, rule34, e621, gelbooru
+                        2. HF datasets: danbooru + rule34 only
                         3. WD EVA02 tagger
                         4. VLM + RAG captions
                         5. Train base DiT
@@ -53,8 +53,8 @@ Auth: hf auth login  (required for some HF dataset packs)
 HF packs (see setup/hf_dataset_packs.json):
   danbooru   -> ShinoharaHare/Danbooru-2024-Filtered-1M
   rule34xxx  -> deepghs/rule34_full
-  e621       -> hearmeneigh/e621-rising-v3-curated
-  rule34xyz  -> deepghs/gelbooru_full
+  e621       -> (disabled by default; set SDX_HF_SITES to include e621)
+  rule34xyz  -> (disabled by default; set SDX_HF_SITES to include rule34xyz)
 
 Cap download size:  export SDX_HF_MAX_SAMPLES=100000
 Re-download pack:   export SDX_HF_FORCE=1
