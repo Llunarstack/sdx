@@ -54,9 +54,14 @@ done
 
 export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
 export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
+export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
 export SDX_USE_WD_TAGGER="${SDX_USE_WD_TAGGER:-1}"
 export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
 export SDX_TRAIN_LORA_BANK="${SDX_TRAIN_LORA_BANK:-1}"
+export SDX_FULL_TRAIN_FEATURES="${SDX_FULL_TRAIN_FEATURES:-1}"
+export SDX_EPOCHS="${SDX_EPOCHS:-20}"
+export SDX_NPROC_PER_NODE="${SDX_NPROC_PER_NODE:-3}"
+export SDX_GLOBAL_BATCH_SIZE="${SDX_GLOBAL_BATCH_SIZE:-36}"
 
 echo "=============================================="
 echo " SDX Ultimate Pipeline"
@@ -129,6 +134,12 @@ fi
 echo
 echo "Ultimate pipeline done."
 echo "  data:      $SDX_DATA"
+echo "  tagged:    ${SDX_TAGGED_MANIFEST:-$SDX_DATA/tagged/manifest.jsonl}"
 echo "  enriched:  ${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}"
-echo "  lora bank: ${SDX_LORA_BANK:-$SDX_DATA/lora_bank}"
-echo "  sample:    SDX_PROMPT='@wlop @style:anime 1girl' bash runpod/sample.sh"
+echo "  base ckpt: ${SDX_INIT_CKPT:-find $SDX_RESULTS -name best.pt}"
+echo "  lora bank: ${SDX_LORA_BANK:-$SDX_DATA/lora_bank}/index.json"
+echo
+echo "Generate with modular LoRA weights:"
+echo "  SDX_PROMPT='@wlop @style:anime 1girl, cherry blossoms' bash runpod/sdx.sh sample"
+echo "  @artist loads artist LoRA; --artist-strength 0.8-1.5 controls weight"
+echo "  @style:anime loads style LoRA; add explicit --lora path:scale:role anytime"

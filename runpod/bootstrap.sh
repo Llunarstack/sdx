@@ -16,4 +16,4 @@ if [ ! -f "$SDX_ROOT/runpod/sdx.sh" ]; then
   }
 fi
 
-exec bash "$SDX_ROOT/runpod/sdx.sh" "${@:-train}"
+exec bash "$SDX_ROOT/runpod/sdx.sh" "${@:-run}"
