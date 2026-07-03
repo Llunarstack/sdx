@@ -59,6 +59,7 @@ sdx_build_train_feature_args() {
 
   # --- Caption / dataset training packs (not separate VLMs — prompt shaping) ---
   _out+=(
+    --train-prompt-emphasis
     --train-style-guidance-mode "${SDX_TRAIN_STYLE_GUIDANCE:-auto}"
     --region-caption-mode "${SDX_REGION_CAPTION_MODE:-append}"
     --train-art-guidance-mode "${SDX_TRAIN_ART_GUIDANCE:-auto}"
@@ -69,6 +70,9 @@ sdx_build_train_feature_args() {
     --foveated-train-prob "${SDX_FOVEATED_TRAIN_PROB:-0.15}"
     --train-originality-prob "${SDX_TRAIN_ORIGINALITY_PROB:-0.1}"
   )
+  if [ "${SDX_TRAIN_SHORTCOMINGS_2D:-1}" = "1" ]; then
+    _out+=(--train-shortcomings-2d)
+  fi
 
   if [ "${SDX_USE_HIERARCHICAL_CAPTIONS:-1}" = "1" ]; then
     _out+=(--use-hierarchical-captions)

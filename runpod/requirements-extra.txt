@@ -2,3 +2,5 @@
 requests>=2.31.0
 rich>=13.0.0
 hf_transfer>=0.1.6
+onnxruntime-gpu>=1.17.0; platform_system != "Darwin"
+onnxruntime>=1.17.0; platform_system == "Darwin"

@@ -5,6 +5,7 @@
 #   bash runpod/download.sh --models-only    # HF weights only (~100+ GB)
 #   bash runpod/download.sh --data-only      # scrape + merge (no models, no preprocess)
 #   bash runpod/download.sh --skip-preprocess
+#   bash runpod/download.sh --skip-wd-tag     # skip WD tagger pass
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,14 +14,18 @@ source "$ROOT/runpod/env.defaults"
 cd "$ROOT"
 
 MODELS=1
-DATA=1
+SCRAPE=1
+DATA_PREP=1
 PREPROCESS=1
+WD_TAG=1
 for arg in "$@"; do
   case "$arg" in
-    --models-only) DATA=0; PREPROCESS=0 ;;
+    --models-only) SCRAPE=0; DATA_PREP=0; PREPROCESS=0; WD_TAG=0 ;;
     --data-only) MODELS=0 ;;
     --skip-preprocess) PREPROCESS=0 ;;
-    *) echo "Unknown flag: $arg (use --models-only | --data-only | --skip-preprocess)" >&2; exit 2 ;;
+    --skip-scrape) SCRAPE=0 ;;
+    --skip-wd-tag) WD_TAG=0 ;;
+    *) echo "Unknown flag: $arg (use --models-only | --data-only | --skip-preprocess | --skip-scrape | --skip-wd-tag)" >&2; exit 2 ;;
   esac
 done
 
@@ -29,7 +34,14 @@ if [ "$MODELS" = 1 ]; then
   python setup/download_pretrained.py --dest "$SDX_PRETRAINED" --workers "${SDX_DL_WORKERS:-16}" --profile "${SDX_MODEL_PROFILE:-full}"
 fi
 
-if [ "$DATA" = 1 ]; then
+if [ "$SCRAPE" = 1 ] || [ "$DATA_PREP" = 1 ]; then
+  SCRAPE_SITES=(danbooru rule34xxx)
+  if [ -n "${SDX_SCRAPE_SITES:-}" ]; then
+    read -r -a SCRAPE_SITES <<<"${SDX_SCRAPE_SITES//,/ }"
+  fi
+fi
+
+if [ "$SCRAPE" = 1 ]; then
   SCRAPE_LOCK="${SDX_SCRAPE_LOCK:-$SDX_DATA/.scrape.lock}"
   mkdir -p "$(dirname "$SCRAPE_LOCK")"
   exec 9>"$SCRAPE_LOCK"
@@ -40,11 +52,7 @@ if [ "$DATA" = 1 ]; then
     exit 1
   fi
 
-  echo "==> Booru datasets -> $SDX_DATA (${SDX_SCRAPE_SITES:-danbooru rule34xxx})"
-  SCRAPE_SITES=(danbooru rule34xxx)
-  if [ -n "${SDX_SCRAPE_SITES:-}" ]; then
-    read -r -a SCRAPE_SITES <<<"${SDX_SCRAPE_SITES//,/ }"
-  fi
+  echo "==> Booru datasets -> $SDX_DATA (${SCRAPE_SITES[*]})"
   SCRAPE_ARGS=(
     --out "$SDX_DATA"
     --sites "${SCRAPE_SITES[@]}"
@@ -64,7 +72,9 @@ if [ "$DATA" = 1 ]; then
     SCRAPE_ARGS+=(--keep-raw-media)
   fi
   python setup/download_datasets.py "${SCRAPE_ARGS[@]}"
+fi
 
+if [ "$DATA_PREP" = 1 ]; then
   python setup/merge_manifests.py \
     --data-root "$SDX_DATA" \
     --out "$SDX_DATA/combined/manifest.jsonl" \
@@ -88,8 +98,26 @@ if [ "$DATA" = 1 ]; then
     --out "$SDX_DATA/artist_index.json"
 fi
 
-if [ "$PREPROCESS" = 1 ] && [ "$DATA" = 1 ]; then
-  MANIFEST="${SDX_MANIFEST:-$SDX_DATA/combined/manifest.jsonl}"
+TAG_MANIFEST="${SDX_MANIFEST:-$SDX_DATA/combined/manifest.jsonl}"
+if [ "$WD_TAG" = 1 ] && [ "${SDX_USE_WD_TAGGER:-1}" = "1" ]; then
+  if [ -f "$TAG_MANIFEST" ]; then
+    echo "==> WD EVA02 tagger enrichment (supplementary tags; identity stays from booru API)"
+    TAGGED="${SDX_TAGGED_MANIFEST:-$SDX_DATA/tagged/manifest.jsonl}"
+    python setup/tag_manifest_wd.py \
+      --manifest "$TAG_MANIFEST" \
+      --data-root "$SDX_DATA" \
+      --out "$TAGGED" \
+      --threshold "${SDX_WD_TAG_THRESHOLD:-0.35}" \
+      || echo "WARN: WD tagging failed (install onnxruntime-gpu; non-fatal)."
+    if [ -f "$TAGGED" ] && [ -s "$TAGGED" ]; then
+      TAG_MANIFEST="$TAGGED"
+      export SDX_MANIFEST="$TAGGED"
+    fi
+  fi
+fi
+
+if [ "$PREPROCESS" = 1 ]; then
+  MANIFEST="${SDX_MANIFEST:-$TAG_MANIFEST}"
   if [ ! -f "$MANIFEST" ]; then
     echo "Manifest not found: $MANIFEST" >&2
     exit 1
