@@ -55,16 +55,19 @@ EOF
 }
 
 _sdx_run_full() {
-  export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
+  # Force pipeline defaults (env.defaults uses train/1-GPU — wrong for full run).
+  _NGPU="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
+  [ "${_NGPU:-0}" -lt 1 ] && _NGPU=1
+  export SDX_MODEL_PROFILE=ultimate
   export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
-  export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
-  export SDX_USE_WD_TAGGER="${SDX_USE_WD_TAGGER:-1}"
-  export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
-  export SDX_TRAIN_LORA_BANK="${SDX_TRAIN_LORA_BANK:-1}"
-  export SDX_FULL_TRAIN_FEATURES="${SDX_FULL_TRAIN_FEATURES:-1}"
-  export SDX_EPOCHS="${SDX_EPOCHS:-20}"
-  export SDX_NPROC_PER_NODE="${SDX_NPROC_PER_NODE:-3}"
-  export SDX_GLOBAL_BATCH_SIZE="${SDX_GLOBAL_BATCH_SIZE:-36}"
+  export SDX_MAX_POSTS=0
+  export SDX_USE_WD_TAGGER=1
+  export SDX_PROMPT_RESEARCH=1
+  export SDX_TRAIN_LORA_BANK=1
+  export SDX_FULL_TRAIN_FEATURES=1
+  export SDX_EPOCHS=20
+  export SDX_NPROC_PER_NODE="${SDX_NPROC_PER_NODE:-$_NGPU}"
+  export SDX_GLOBAL_BATCH_SIZE="${SDX_GLOBAL_BATCH_SIZE:-$(( SDX_NPROC_PER_NODE * 12 ))}"
 
   cat <<EOF
 ╔══════════════════════════════════════════════════════════════╗

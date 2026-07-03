@@ -47,7 +47,10 @@ def hf_token_from_secrets(path: str | os.PathLike[str] | None = None) -> str | N
 
 
 def get_hf_token() -> str | None:
-    return hf_token_from_env() or hf_token_from_secrets()
+    tok = hf_token_from_env() or hf_token_from_secrets()
+    if tok and ("YOUR_TOKEN" in tok.upper() or tok.endswith("_HERE")):
+        return None
+    return tok
 
 
 def apply_hf_token_to_env() -> bool:

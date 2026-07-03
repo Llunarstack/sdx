@@ -71,8 +71,13 @@ echo " train_base=${PHASE_TRAIN_BASE} lora_bank=${PHASE_TRAIN_LORAS}"
 echo "=============================================="
 
 if [ "$PHASE_SETUP" = 1 ]; then
-  echo "==> [1/8] Setup"
-  bash "$ROOT/runpod/setup.sh"
+  if [ -f "${SDX_SETUP_MARKER:-/workspace/.sdx_setup_ok}" ]; then
+    echo "==> [1/8] Setup (skipped — marker present; delete marker to re-run setup)"
+  else
+    echo "==> [1/8] Setup"
+    bash "$ROOT/runpod/setup.sh"
+    touch "${SDX_SETUP_MARKER:-/workspace/.sdx_setup_ok}"
+  fi
 fi
 
 if [ "$PHASE_MODELS" = 1 ]; then
@@ -84,8 +89,7 @@ if [ "$PHASE_MODELS" = 1 ]; then
 fi
 
 if [ "$PHASE_SCRAPE" = 1 ] || [ "$PHASE_TAG" = 1 ] || [ "$PHASE_ENRICH" = 1 ]; then
-  DL_ARGS=()
-  [ "$PHASE_MODELS" = 0 ] && DL_ARGS+=(--data-only)
+  DL_ARGS=(--data-only)
   [ "$PHASE_SCRAPE" = 0 ] && DL_ARGS+=(--skip-scrape)
   [ "$PHASE_TAG" = 0 ] && DL_ARGS+=(--skip-wd-tag)
   [ "$PHASE_ENRICH" = 0 ] && DL_ARGS+=(--skip-preprocess)
