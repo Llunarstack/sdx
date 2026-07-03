@@ -16,6 +16,7 @@ PACKAGES=(
   curl
   git
   wget
+  nano
   # OpenCV (cv2) runtime
   libgl1
   libglib2.0-0
