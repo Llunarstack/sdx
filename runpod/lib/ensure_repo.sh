@@ -9,13 +9,19 @@ sdx_ensure_repo() {
   export SDX_REPO_URL="${SDX_REPO_URL:-https://github.com/Llunarstack/sdx.git}"
   export SDX_REPO_REF="${SDX_REPO_REF:-feat/runpod-readiness-scraper-lora}"
 
+  # shellcheck source=/dev/null
+  [ -f "$SDX_ROOT/runpod/lib/fix_shell.sh" ] && source "$SDX_ROOT/runpod/lib/fix_shell.sh"
+
   if [ -f "$SDX_ROOT/runpod/sdx.sh" ]; then
     cd "$SDX_ROOT" || return 1
     git fetch origin 2>/dev/null || true
     git checkout "$SDX_REPO_REF" 2>/dev/null || true
     if ! git pull --ff-only 2>/dev/null; then
-      echo "WARN: git pull failed — local edits may block updates." >&2
-      echo "  Fix: cd $SDX_ROOT && git stash -u && git pull --ff-only" >&2
+      echo "WARN: git pull failed — resetting to origin/$SDX_REPO_REF" >&2
+      git reset --hard "origin/$SDX_REPO_REF" 2>/dev/null || true
+    fi
+    if declare -F sdx_fix_shell_scripts >/dev/null 2>&1; then
+      sdx_fix_shell_scripts "$SDX_ROOT"
     fi
     return 0
   fi
@@ -49,6 +55,9 @@ sdx_ensure_repo() {
     git checkout "$SDX_REPO_REF" 2>/dev/null || true
   fi
   cd "$SDX_ROOT" || return 1
+  if declare -F sdx_fix_shell_scripts >/dev/null 2>&1; then
+    sdx_fix_shell_scripts "$SDX_ROOT"
+  fi
   echo "==> SDX ready at $SDX_ROOT"
   return 0
 }
