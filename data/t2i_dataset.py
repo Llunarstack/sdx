@@ -546,7 +546,8 @@ class Text2ImageDataset(Dataset):
         for off in range(min(32, n)):
             try:
                 return self._getitem_impl((idx + off) % n)
-            except _SKIP_IMAGE_LOAD_ERRORS as exc:
+            except Exception as exc:
+                # Scraped datasets include corrupt PNGs, zips, truncated files, etc.
                 last_err = exc
                 continue
         raise RuntimeError(f"could not load any image near dataset index {idx}") from last_err
