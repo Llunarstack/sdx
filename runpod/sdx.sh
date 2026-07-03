@@ -21,6 +21,8 @@ sdx_ensure_repo || exit 1
 source "$HERE/lib/load_secrets.sh"
 # shellcheck source=/dev/null
 source "$HERE/lib/install_scrape_secrets.sh"
+# shellcheck source=/dev/null
+source "$HERE/lib/turbo_scrape.sh"
 sdx_load_hf_token || echo "WARN: no HF auth — run: huggingface-cli login" >&2
 
 # shellcheck source=/dev/null
@@ -76,10 +78,13 @@ _sdx_check_scrape_secrets() {
   exit 1
 }
 
+  _sdx_apply_turbo_scrape() { sdx_apply_turbo_scrape; }
+
 _sdx_run_full() {
   # Force pipeline defaults (env.defaults uses train/1-GPU — wrong for full run).
   _NGPU="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
   [ "${_NGPU:-0}" -lt 1 ] && _NGPU=1
+  _sdx_apply_turbo_scrape
   export SDX_MODEL_PROFILE=ultimate
   export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
   export SDX_MAX_POSTS=0
@@ -95,7 +100,7 @@ _sdx_run_full() {
 ╔══════════════════════════════════════════════════════════════╗
 ║  SDX full pipeline                                           ║
 ║  1. Pretrained models (profile=$SDX_MODEL_PROFILE)             ║
-║  2. Scrape: $SDX_SCRAPE_SITES (max_posts=$SDX_MAX_POSTS=unlimited)  ║
+║  2. Scrape: $SDX_SCRAPE_SITES (${SDX_SCRAPE_WORKERS} dl thr, turbo=${SDX_SCRAPE_TURBO:-1})  ║
 ║  3. WD EVA02 tagger → richer per-image tags                   ║
 ║  4. VLM + RAG caption enrichment                             ║
 ║  5. Train base DiT (${SDX_EPOCHS} epochs, ${SDX_NPROC_PER_NODE}× GPU)       ║
@@ -127,6 +132,7 @@ case "$CMD" in
     exec bash "$SDX_ROOT/runpod/setup.sh" "$@"
     ;;
   data)
+    _sdx_apply_turbo_scrape
     export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
     export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
     export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
