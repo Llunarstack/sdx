@@ -84,6 +84,21 @@ def _caption_from_row(row: Dict[str, Any], caption_field: str, tag_join: str) ->
     return ""
 
 
+def _prepare_for_save(pil, img_ext: str):
+    """JPEG cannot store alpha; flatten RGBA/P/LA to RGB."""
+    if img_ext != "jpg":
+        return pil
+    if pil.mode in ("RGB", "L"):
+        return pil.convert("RGB") if pil.mode == "L" else pil
+    if pil.mode in ("RGBA", "LA"):
+        from PIL import Image
+
+        bg = Image.new("RGB", pil.size, (255, 255, 255))
+        bg.paste(pil, mask=pil.split()[-1])
+        return bg
+    return pil.convert("RGB")
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="HF Dataset -> SDX JSONL + image files.")
     p.add_argument("--dataset", type=str, required=True, help="HF dataset id, e.g. org/danbooru-export")
