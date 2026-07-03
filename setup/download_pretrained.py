@@ -31,30 +31,23 @@ STATUS_JSON = REPO_ROOT / "pretrained_status.json"
 _PROFILE_ALIASES = {
     "full": None,
     "all": None,
+    "ultimate": None,  # runpod full pipeline — entire pretrained_status.json catalog
     "train": "train",
     "enrich": "enrich",
     "inference": "inference",
-    "ultimate": "ultimate",
     "minimal": "train",
 }
-
-
-def _load_status() -> dict:
-    return json.loads(STATUS_JSON.read_text(encoding="utf-8"))
-
-
-def _load_registry() -> list[dict]:
-    return _load_status().get("models", [])
 
 
 def _profile_names(profile: str | None) -> set[str] | None:
     if profile is None:
         return None
-    key = _PROFILE_ALIASES.get(profile.lower())
-    if key is None and profile.lower() in ("full", "all"):
-        return None
+    pl = profile.lower()
+    if pl not in _PROFILE_ALIASES:
+        raise ValueError(f"Unknown profile {profile!r} (use train|enrich|inference|ultimate|full)")
+    key = _PROFILE_ALIASES[pl]
     if key is None:
-        raise ValueError(f"Unknown profile {profile!r} (use train|enrich|inference|full)")
+        return None
     names = _load_status().get("profiles", {}).get(key, [])
     if not names:
         raise ValueError(f"Profile {key!r} has no models in pretrained_status.json")
@@ -242,10 +235,12 @@ def main(argv: list[str] | None = None) -> int:
         registry = [m for m in registry if m.get("name", "").lower() in want]
     else:
         prof = (args.profile or "full").lower()
-        if prof not in ("full", "all"):
-            want = _profile_names(prof)
+        want = _profile_names(prof)
+        if want is not None:
             registry = [m for m in registry if m.get("name", "").lower() in want]
             print(f"Profile: {prof} ({len(registry)} models)")
+        else:
+            print(f"Profile: {prof} (full catalog — {len(registry)} models)")
 
     if not registry:
         print("No models matched.", file=sys.stderr)
