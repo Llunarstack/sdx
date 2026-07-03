@@ -61,6 +61,8 @@ fi
 
 echo "Training mode=$MODE manifest=$MANIFEST"
 
+python setup/ensure_t5_safetensors.py
+
 python train.py \
   --manifest-jsonl "$MANIFEST" \
   --data-path "$SDX_DATA" \

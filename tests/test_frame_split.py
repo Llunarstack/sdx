@@ -6,7 +6,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from scripts.scrape.frame_split import extract_training_frames, is_splittable_ext, needs_frame_split
+from scripts.scrape.frame_split import (
+    _looks_like_video_file,
+    extract_training_frames,
+    is_splittable_ext,
+    needs_frame_split,
+)
 
 
 def _write_animated_gif(path: Path, n: int = 4) -> None:
@@ -38,3 +43,11 @@ def test_gif_frame_split(tmp_path: Path):
         assert fr.abs_path.is_file()
         assert "deadbeef_f" in fr.rel_path
         assert "_f" in fr.rel_path
+
+
+def test_rejects_html_disguised_as_video(tmp_path: Path):
+    bad = tmp_path / "fake.mp4"
+    bad.write_text("<html><body>403 Forbidden</body></html>", encoding="utf-8")
+    assert not _looks_like_video_file(bad)
+    frames = extract_training_frames(bad, tmp_path / "images", "cafebabe", "mp4")
+    assert frames == []

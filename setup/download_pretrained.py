@@ -17,8 +17,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +89,42 @@ def _dir_populated(local_dir: Path, *, min_bytes: int = 1_000_000) -> bool:
             if total >= min_bytes:
                 return True
     return False
+
+
+def _download_url_files(
+    local_dir: Path,
+    files: dict[str, str],
+    *,
+    retries: int,
+) -> bool:
+    """Download explicit URL -> relative-path mappings (e.g. CodeFormer GitHub releases)."""
+    for rel, url in files.items():
+        dest = local_dir / rel
+        if dest.is_file() and dest.stat().st_size > 0:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(dest.suffix + ".part")
+        ok = False
+        for attempt in range(1, retries + 1):
+            try:
+                with urllib.request.urlopen(url, timeout=120) as resp:
+                    with tmp.open("wb") as fh:
+                        shutil.copyfileobj(resp, fh)
+                tmp.replace(dest)
+                ok = True
+                break
+            except (urllib.error.URLError, OSError, TimeoutError) as e:
+                wait = min(60, 4 * attempt)
+                print(
+                    f"  {rel}: attempt {attempt}/{retries} failed ({type(e).__name__}: {e}); retrying in {wait}s",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+            finally:
+                tmp.unlink(missing_ok=True)
+        if not ok:
+            return False
+    return all((local_dir / rel).is_file() for rel in files)
 
 
 def _download_one(
@@ -167,16 +206,31 @@ def main(argv: list[str] | None = None) -> int:
     for i, m in enumerate(registry, 1):
         name = m.get("name", "?")
         repo_id = m.get("hf_fallback")
+        download_files = m.get("download_files") or {}
         optional = bool(m.get("optional"))
         revision = m.get("hf_revision") or None
-        if not repo_id:
-            print(f"[{i}/{len(registry)}] {name}: no hf_fallback id, skipping", file=sys.stderr)
+        if not repo_id and not download_files:
+            print(f"[{i}/{len(registry)}] {name}: no hf_fallback or download_files, skipping", file=sys.stderr)
             continue
         local_dir = dest_base / name
-        if not args.force and _dir_populated(local_dir):
-            print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}  (already present, skip)")
-            skipped += 1
-            ok += 1
+        if not args.force:
+            if download_files and all((local_dir / rel).is_file() for rel in download_files):
+                print(f"[{i}/{len(registry)}] {name}  <-  github releases  (already present, skip)")
+                skipped += 1
+                ok += 1
+                continue
+            if repo_id and _dir_populated(local_dir):
+                print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}  (already present, skip)")
+                skipped += 1
+                ok += 1
+                continue
+        if download_files:
+            print(f"[{i}/{len(registry)}] {name}  <-  github releases  (~{m.get('size_gb', '?')} GB)")
+            if _download_url_files(local_dir, download_files, retries=args.retries):
+                ok += 1
+            else:
+                (optional_failed if optional else failed).append(name)
+                print(f"  FAILED after {args.retries} retries: {name}", file=sys.stderr)
             continue
         rev_note = f" @{revision}" if revision else ""
         print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}{rev_note}  (~{m.get('size_gb', '?')} GB)")
