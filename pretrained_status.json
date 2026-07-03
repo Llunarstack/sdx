@@ -232,7 +232,12 @@
     {
       "name": "CodeFormer",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CodeFormer",
-      "hf_fallback": "sczhou/CodeFormer",
+      "optional": true,
+      "download_files": {
+        "weights/CodeFormer/codeformer.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
+        "weights/facelib/detection_Resnet50_Final.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth",
+        "weights/facelib/parsing_parsenet.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth"
+      },
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CodeFormer",
       "is_local": true,
       "size_gb": 0.532

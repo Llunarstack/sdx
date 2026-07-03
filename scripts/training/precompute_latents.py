@@ -31,10 +31,12 @@ def center_crop(pil_image, image_size: int):
 
 
 class ImagePaths(Dataset):
-    def __init__(self, data_path, image_size=256):
+    def __init__(self, data_path, image_size=256, *, data_root: str | None = None, out_dir: Path | None = None):
         self.data_path = Path(data_path)
+        self.data_root = Path(data_root) if data_root else None
         self.image_size = image_size
-        self.paths = []
+        self.out_dir = out_dir
+        self.paths: list[str] = []
         if self.data_path.suffix.lower() == ".jsonl":
             import json
 
@@ -46,31 +48,66 @@ class ImagePaths(Dataset):
                     d = json.loads(line)
                     p = d.get("image_path") or d.get("path") or d.get("image")
                     if p:
-                        self.paths.append(p)
+                        self.paths.append(str(p))
         else:
             for subdir in self.data_path.iterdir():
                 if not subdir.is_dir():
                     continue
-                for p in subdir.glob("*"):
+                images_dir = subdir / "images"
+                scan = images_dir if images_dir.is_dir() else subdir
+                for p in scan.glob("*"):
                     if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
                         self.paths.append(str(p))
+
+    def _resolve(self, rel: str) -> Path:
+        p = Path(rel)
+        if p.is_file():
+            return p.resolve()
+        if self.data_root is not None:
+            cand = (self.data_root / p).resolve()
+            if cand.is_file():
+                return cand
+        if self.data_path.suffix.lower() == ".jsonl":
+            cand = (self.data_path.parent / p).resolve()
+            if cand.is_file():
+                return cand
+        return p.resolve()
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
-        p = self.paths[idx]
-        pil = Image.open(p).convert("RGB")
+        rel = self.paths[idx]
+        resolved = self._resolve(rel)
+        if self.out_dir is not None:
+            cache = self.out_dir / (resolved.stem + ".pt")
+            if cache.is_file():
+                return None, str(resolved)
+        pil = Image.open(resolved).convert("RGB")
         pil = center_crop(pil, self.image_size)
         img = np.array(pil).astype(np.float32) / 255.0
         img = (img - 0.5) / 0.5
-        img = torch.from_numpy(img).permute(2, 0, 1)  # CHW (DataLoader stacks to BCHW)
-        return img, p
+        img = torch.from_numpy(img).permute(2, 0, 1)
+        return img, str(resolved)
+
+
+def _collate_skip(batch):
+    imgs, paths = [], []
+    for item in batch:
+        if item[0] is None:
+            continue
+        imgs.append(item[0])
+        paths.append(item[1])
+    if not imgs:
+        return None, paths
+    return torch.stack(imgs), paths
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-path", type=str, required=True)
+    parser.add_argument("--data-path", type=str, default=None, help="Image folder or legacy alias.")
+    parser.add_argument("--manifest-jsonl", type=str, default=None, help="Training manifest (preferred).")
+    parser.add_argument("--data-root", type=str, default=None, help="Resolve manifest image_path (e.g. /workspace/data).")
     parser.add_argument("--out-dir", type=str, required=True, help="Latent cache directory (e.g. latent_cache)")
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument(
@@ -95,11 +132,14 @@ def main():
         help="DataLoader workers; -1 = min(8, CPU count). Use 0 on Windows if workers hang.",
     )
     args = parser.parse_args()
+    manifest = args.manifest_jsonl or args.data_path
+    if not manifest:
+        parser.error("Provide --manifest-jsonl or --data-path")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     nw = args.num_workers
     if nw < 0:
-        nw = min(8, (os.cpu_count() or 1))
+        nw = min(16, (os.cpu_count() or 1))
     from utils.modeling.autoencoder_loading import get_autoencoder_class
 
     if args.autoencoder_type == "rae":
@@ -117,9 +157,9 @@ def main():
         vae = get_autoencoder_class("kl").from_pretrained(args.vae).to(device).eval()
         latent_scale = args.scale
 
-    dataset = ImagePaths(args.data_path, args.image_size)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    dataset = ImagePaths(manifest, args.image_size, data_root=args.data_root, out_dir=out_dir)
 
     from torch.utils.data import DataLoader
 
@@ -131,9 +171,14 @@ def main():
         num_workers=nw,
         pin_memory=pin,
         persistent_workers=nw > 0,
+        collate_fn=_collate_skip,
     )
-    processed = 0
-    for i, (imgs, paths) in enumerate(loader):
+    processed = skipped = 0
+    for i, batch in enumerate(loader):
+        imgs, paths = batch
+        if imgs is None:
+            skipped += len(paths)
+            continue
         imgs = imgs.to(device, non_blocking=pin)
         with torch.no_grad():
             enc = vae.encode(imgs)
@@ -146,8 +191,8 @@ def main():
             torch.save(latents[j].cpu(), out_dir / name)
         processed += len(paths)
         if (i + 1) % 100 == 0:
-            print(f"Processed {processed} / {len(dataset)}")
-    print(f"Done. Latents saved to {out_dir}. Train with: --latent-cache-dir {out_dir}")
+            print(f"Encoded {processed} new, skipped {skipped} cached / {len(dataset)} total")
+    print(f"Done. Encoded {processed} new ({skipped} already cached). Train with: --latent-cache-dir {out_dir}")
 
 
 if __name__ == "__main__":

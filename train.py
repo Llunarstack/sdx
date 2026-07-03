@@ -285,7 +285,19 @@ def get_t5_and_vae(device, cfg: TrainConfig):
         _transformers = transformers
 
     tokenizer = _transformers.AutoTokenizer.from_pretrained(cfg.text_encoder)
-    text_encoder = _transformers.T5EncoderModel.from_pretrained(cfg.text_encoder)
+    # Prefer safetensors — transformers blocks torch.load on .bin when torch<2.6 (CVE-2025-32434).
+    try:
+        text_encoder = _transformers.T5EncoderModel.from_pretrained(
+            cfg.text_encoder, use_safetensors=True
+        )
+    except (ValueError, OSError) as exc:
+        if "safetensors" in str(exc).lower() or "torch.load" in str(exc).lower():
+            raise RuntimeError(
+                f"T5 load failed for {cfg.text_encoder!r}. Run:\n"
+                "  python setup/ensure_t5_safetensors.py\n"
+                "or upgrade torch: pip install 'torch>=2.6' --index-url https://download.pytorch.org/whl/cu124"
+            ) from exc
+        raise
     text_encoder.eval()
     for p in text_encoder.parameters():
         p.requires_grad = False

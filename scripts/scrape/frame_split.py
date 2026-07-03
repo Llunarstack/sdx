@@ -8,6 +8,7 @@ expects static RGB frames, so the scraper splits these into JPEGs under
 from __future__ import annotations
 
 import hashlib
+import logging
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from PIL import Image, ImageSequence
+
+_log = logging.getLogger(__name__)
 
 VIDEO_EXTS = frozenset({"webm", "mp4", "mov", "mkv", "avi", "m4v"})
 GIF_EXT = "gif"
@@ -35,6 +38,54 @@ class ExtractedFrame:
 
 def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
+
+
+def ffprobe_available() -> bool:
+    return shutil.which("ffprobe") is not None
+
+
+def _looks_like_video_file(path: Path, *, min_bytes: int = 512) -> bool:
+    """Reject empty downloads, HTML error pages, and other obvious non-video blobs."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    if size < min_bytes:
+        return False
+    try:
+        head = path.read_bytes()[:16]
+    except OSError:
+        return False
+    if head.startswith((b"<!DOCTYPE", b"<html", b"<?xml", b"{")):
+        return False
+    return True
+
+
+def _ffprobe_readable(path: Path) -> bool:
+    if not ffprobe_available():
+        return True
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and "video" in (proc.stdout or "").lower()
 
 
 def normalize_ext(ext: str) -> str:
@@ -143,8 +194,13 @@ def _extract_video_frames_ffmpeg(
     if max_frames > 0:
         cmd.extend(["-frames:v", str(int(max_frames))])
     cmd.extend(["-q:v", "2", pattern])
-    subprocess.run(cmd, check=True, capture_output=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(f"ffmpeg failed on {src.name}: {err[:500]}")
     paths = sorted(tmp_dir.glob("frame_*.jpg"))
+    if not paths:
+        raise RuntimeError(f"ffmpeg produced no frames for {src.name}")
     frames: List[ExtractedFrame] = []
     for i, tmp_path in enumerate(paths, start=1):
         fname = f"{parent_md5}_f{i:06d}.jpg"
@@ -178,9 +234,16 @@ def _extract_video_frames_cv2(
 ) -> List[ExtractedFrame]:
     import cv2
 
-    cap = cv2.VideoCapture(str(src))
+    # Force the FFMPEG backend; default backend order can mis-detect files as
+    # image sequences and spam VIDEOIO(CV_IMAGES) pattern errors.
+    try:
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+    except Exception:
+        pass
+    cap = cv2.VideoCapture(str(src), cv2.CAP_FFMPEG)
     if not cap.isOpened():
-        raise RuntimeError(f"cannot open video: {src}")
+        cap.release()
+        raise RuntimeError(f"cannot open video with cv2+ffmpeg backend: {src}")
     src_fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
     step = 1
     if fps > 0 and src_fps > 0:
@@ -267,15 +330,24 @@ def extract_training_frames(
     if ext == GIF_EXT:
         return _extract_gif_frames(src, images_dir, parent_md5, max_frames=max_frames, jpeg_quality=jpeg_quality)
 
+    if not _looks_like_video_file(src):
+        _log.warning("skip frame split (not a video file): %s", src.name)
+        return []
+
+    if not _ffprobe_readable(src):
+        _log.warning("skip frame split (ffprobe found no video stream): %s", src.name)
+        return []
+
     if ffmpeg_available():
         try:
             return _extract_video_frames_ffmpeg(
                 src, images_dir, parent_md5, fps=fps, max_frames=max_frames
             )
-        except (subprocess.CalledProcessError, OSError):
-            pass
+        except (RuntimeError, OSError) as exc:
+            _log.warning("ffmpeg frame split failed for %s: %s", src.name, exc)
 
     try:
         return _extract_video_frames_cv2(src, images_dir, parent_md5, fps=fps, max_frames=max_frames)
-    except Exception:
+    except Exception as exc:
+        _log.warning("opencv frame split failed for %s: %s", src.name, exc)
         return []

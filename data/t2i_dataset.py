@@ -32,6 +32,12 @@ try:
 except ImportError:  # pragma: no cover
     _normalize_caption_unicode = None  # type: ignore[misc, assignment]
 
+_TRAINABLE_IMAGE_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"})
+
+
+def _looks_like_trainable_image(path: str) -> bool:
+    return Path(path).suffix.lower() in _TRAINABLE_IMAGE_EXTS
+
 
 def _center_crop(pil_image, image_size: int):
     """Center crop to image_size (ADM-style)."""
@@ -516,9 +522,22 @@ class Text2ImageDataset(Dataset):
         return self.latent_cache_dir / name
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
+        last_err: Optional[BaseException] = None
+        n = len(self.samples)
+        for off in range(min(32, n)):
+            try:
+                return self._getitem_impl((idx + off) % n)
+            except (OSError, Image.UnidentifiedImageError) as exc:
+                last_err = exc
+                continue
+        raise RuntimeError(f"could not load any image near dataset index {idx}") from last_err
+
+    def _getitem_impl(self, idx: int) -> Dict[str, Any]:
         s = self.samples[idx]
         resolved = self._resolve_media_path(s["path"])
         path = str(resolved if resolved is not None else s["path"])
+        if not _looks_like_trainable_image(path):
+            raise Image.UnidentifiedImageError(f"not a trainable image: {path}")
         raw_caption = s["caption"]
         if self._partaware_caption_cfg is not None:
             raw_caption = apply_part_aware_caption_pipeline(raw_caption, s, self._partaware_caption_cfg, rng=random)

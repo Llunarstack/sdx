@@ -30,6 +30,16 @@ if [ "$MODELS" = 1 ]; then
 fi
 
 if [ "$DATA" = 1 ]; then
+  SCRAPE_LOCK="${SDX_SCRAPE_LOCK:-$SDX_DATA/.scrape.lock}"
+  mkdir -p "$(dirname "$SCRAPE_LOCK")"
+  exec 9>"$SCRAPE_LOCK"
+  if ! flock -n 9; then
+    echo "ERROR: scrape already running (lock: $SCRAPE_LOCK)" >&2
+    echo "  pgrep -af download_datasets" >&2
+    echo "  kill extras: pkill -f download_datasets" >&2
+    exit 1
+  fi
+
   echo "==> Booru datasets -> $SDX_DATA (all sites, all ratings, images + GIF/video frames)"
   SCRAPE_ARGS=(
     --out "$SDX_DATA"
