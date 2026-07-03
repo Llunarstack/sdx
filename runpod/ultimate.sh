@@ -11,7 +11,12 @@
 #   --artist-strength 1.2 scales the wlop LoRA; @style:anime loads anime adapter.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+source "$HERE/lib/ensure_repo.sh"
+sdx_ensure_repo || exit 1
+
+ROOT="$SDX_ROOT"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
 cd "$ROOT"
@@ -97,7 +102,13 @@ if [ "$PHASE_TRAIN_BASE" = 1 ]; then
   bash "$ROOT/runpod/train_h100.sh" "${EXTRA[@]}"
   # Auto-pick best base for LoRA bank unless user set SDX_INIT_CKPT
   if [ -z "${SDX_INIT_CKPT:-}" ]; then
-    BEST=$(find "$SDX_RESULTS" -name 'best.pt' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    BEST=""
+    if [ -d "$SDX_RESULTS" ]; then
+      BEST=$(find "$SDX_RESULTS" -name 'best.pt' 2>/dev/null | while read -r f; do
+        [ -f "$f" ] || continue
+        printf '%s %s\n' "$(stat -c %Y "$f" 2>/dev/null || echo 0)" "$f"
+      done | sort -rn | head -1 | cut -d' ' -f2-)
+    fi
     if [ -n "$BEST" ]; then
       export SDX_INIT_CKPT="$BEST"
       echo "Base checkpoint for LoRA bank: $SDX_INIT_CKPT"
