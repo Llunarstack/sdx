@@ -53,8 +53,8 @@ Auth: hf auth login  (required for some HF dataset packs)
 HF packs (see setup/hf_dataset_packs.json):
   danbooru   -> vikhyatoolkit/danbooru2023
   rule34xxx  -> deepghs/rule34_full
-  e621       -> NebulaeWis/e621-2024-webp-4Mpixel
-  rule34xyz  -> deepghs/gelbooru-webp-4Mpixel
+  e621       -> hearmeneigh/e621-rising-v3-curated
+  rule34xyz  -> deepghs/gelbooru_full (accept gated license on HF)
 
 Cap download size:  export SDX_HF_MAX_SAMPLES=100000
 Re-download pack:   export SDX_HF_FORCE=1

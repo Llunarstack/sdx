@@ -1,5 +1,5 @@
 {
-  "description": "Best Hugging Face mirrors for each booru site. Used by setup/download_hf_datasets.py.",
+  "description": "Hugging Face packs with image+tags parquet (works with datasets streaming). WebDataset/index-only repos are NOT listed here.",
   "packs": [
     {
       "name": "danbooru",
@@ -15,23 +15,27 @@
       "dataset": "deepghs/rule34_full",
       "split": "train",
       "image_field": "image",
-      "caption_field": "tags"
+      "caption_field": "tags",
+      "note": "Gated on HF — run hf auth login and accept the dataset license on the Hub."
     },
     {
       "name": "e621",
       "site": "e621",
-      "dataset": "NebulaeWis/e621-2024-webp-4Mpixel",
+      "dataset": "hearmeneigh/e621-rising-v3-curated",
       "split": "train",
       "image_field": "image",
-      "caption_field": "tags"
+      "caption_field": "tags",
+      "caption_tag_join": " ",
+      "note": "NSFW gated — ~279k images with e621-style space-separated tags."
     },
     {
       "name": "rule34xyz",
-      "site": "Gelbooru (HF mirror; no rule34.xyz bulk dump)",
-      "dataset": "deepghs/gelbooru-webp-4Mpixel",
+      "site": "Gelbooru (rule34.xyz family)",
+      "dataset": "deepghs/gelbooru_full",
       "split": "train",
       "image_field": "image",
-      "caption_field": "tags"
+      "caption_field": "tags",
+      "note": "Gated on HF — same deepghs parquet+tar layout as rule34_full."
     }
   ]
 }
