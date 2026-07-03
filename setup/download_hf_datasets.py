@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Export Hugging Face booru-style datasets to SDX layout.
-
-Reads ``setup/hf_dataset_packs.json``. Always exports all four site packs unless
-``--only`` is passed.
-
-    python setup/download_hf_datasets.py --dest /workspace/data
-    python setup/download_hf_datasets.py --only e621 --max-samples 100000
-"""
+"""Export Hugging Face booru-style datasets to SDX layout (turbo: parallel packs + threaded writes)."""
 
 from __future__ import annotations
 
@@ -15,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +45,7 @@ def _manifest_ok(site_dir: Path, *, min_rows: int = 1) -> bool:
 def _enable_hf_transfer() -> None:
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
     os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_NUM_THREADS", os.environ.get("HF_HUB_DOWNLOAD_NUM_THREADS", "32"))
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     try:
@@ -61,10 +56,53 @@ def _enable_hf_transfer() -> None:
         pass
 
 
+def _export_cmd(spec: dict, *, dest: Path, max_samples: int, image_format: str, turbo: bool) -> list[str]:
+    out_dir = dest / spec["name"]
+    cmd = [
+        sys.executable,
+        str(EXPORT_SCRIPT),
+        "--dataset",
+        spec["dataset"],
+        "--split",
+        str(spec.get("split") or "train"),
+        "--image-field",
+        str(spec.get("image_field") or "image"),
+        "--caption-field",
+        str(spec.get("caption_field") or "tag_string"),
+        "--out-dir",
+        str(out_dir),
+        "--streaming",
+        "--image-format",
+        image_format,
+    ]
+    if spec.get("config"):
+        cmd.extend(["--config", str(spec["config"])])
+    if spec.get("revision"):
+        cmd.extend(["--revision", str(spec["revision"])])
+    if spec.get("caption_tag_join"):
+        cmd.extend(["--caption-tag-join", str(spec["caption_tag_join"])])
+    if max_samples > 0:
+        cmd.extend(["--max-samples", str(max_samples)])
+    if turbo or os.environ.get("SDX_HF_TURBO", "").strip() in ("1", "true", "yes"):
+        cmd.append("--turbo")
+    return cmd
+
+
+def _run_pack(name: str, spec: dict, *, dest: Path, max_samples: int, image_format: str, force: bool, turbo: bool) -> tuple[str, int]:
+    out_dir = dest / name
+    if not force and _manifest_ok(out_dir):
+        print(f"[{name}] already exported — skip ({out_dir / 'manifest.jsonl'})")
+        return name, 0
+    cmd = _export_cmd(spec, dest=dest, max_samples=max_samples, image_format=image_format, turbo=turbo)
+    print(f"[{name}] <- {spec['dataset']}  ->  {out_dir}")
+    r = subprocess.run(cmd, cwd=str(REPO_ROOT))
+    return name, r.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="HF dataset packs -> SDX per-site folders + manifests.")
     p.add_argument("--dest", default=os.environ.get("SDX_DATA", "/workspace/data"), help="Data root.")
-    p.add_argument("--only", nargs="*", default=None, help="Subset of pack names (default: SDX_DATA_SITES).")
+    p.add_argument("--only", nargs="*", default=None, help="Subset of pack names.")
     p.add_argument(
         "--max-samples",
         type=int,
@@ -73,9 +111,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--force", action="store_true", help="Re-export even when manifest exists.")
     p.add_argument("--image-format", default=os.environ.get("SDX_HF_IMAGE_FORMAT", "jpg"), choices=("jpg", "png", "webp"))
+    p.add_argument("--parallel", type=int, default=0, help="Export N packs at once (0=SDX_HF_PARALLEL_PACKS).")
     args = p.parse_args(argv)
 
     _enable_hf_transfer()
+    turbo = os.environ.get("SDX_HF_TURBO", "1").strip() in ("1", "true", "yes")
+    parallel = args.parallel or int(os.environ.get("SDX_HF_PARALLEL_PACKS", "1") or 1)
+    force = args.force or os.environ.get("SDX_HF_FORCE", "").strip() in ("1", "true", "yes")
+
     packs = {x["name"]: x for x in _load_packs()}
     want = _site_list()
     if args.only:
@@ -90,56 +133,60 @@ def main(argv: list[str] | None = None) -> int:
 
     dest = Path(args.dest)
     dest.mkdir(parents=True, exist_ok=True)
+    workers = os.environ.get("SDX_HF_EXPORT_WORKERS", "?")
     print(f"Hugging Face datasets: {len(want)} packs -> {dest}")
     for name in want:
         spec = packs[name]
-        label = spec.get("site") or name
-        print(f"  {name:12} {label}  <-  {spec['dataset']}")
+        print(f"  {name:12} {spec.get('site') or name}  <-  {spec['dataset']}")
     print(f"  max_samples per pack: {args.max_samples or 'unlimited'}")
+    print(f"  turbo: {turbo}  parallel_packs: {parallel}  export_workers: {workers}")
     print(f"  hf_transfer: {os.environ.get('HF_HUB_ENABLE_HF_TRANSFER', '?')}\n")
 
-    ok, skipped = 0, 0
+    todo = []
+    skipped = 0
     for name in want:
-        spec = packs[name]
         out_dir = dest / name
-        if not args.force and _manifest_ok(out_dir):
+        if not force and _manifest_ok(out_dir):
             print(f"[{name}] already exported — skip ({out_dir / 'manifest.jsonl'})")
             skipped += 1
-            ok += 1
             continue
+        todo.append((name, packs[name]))
 
-        cmd = [
-            sys.executable,
-            str(EXPORT_SCRIPT),
-            "--dataset",
-            spec["dataset"],
-            "--split",
-            str(spec.get("split") or "train"),
-            "--image-field",
-            str(spec.get("image_field") or "image"),
-            "--caption-field",
-            str(spec.get("caption_field") or "tag_string"),
-            "--out-dir",
-            str(out_dir),
-            "--streaming",
-            "--image-format",
-            args.image_format,
-        ]
-        if spec.get("config"):
-            cmd.extend(["--config", str(spec["config"])])
-        if spec.get("revision"):
-            cmd.extend(["--revision", str(spec["revision"])])
-        if spec.get("caption_tag_join"):
-            cmd.extend(["--caption-tag-join", str(spec["caption_tag_join"])])
-        if args.max_samples > 0:
-            cmd.extend(["--max-samples", str(args.max_samples)])
+    if not todo:
+        print(f"\nDone: {len(want)}/{len(want)} packs ({skipped} skipped as present).")
+        return 0
 
-        print(f"[{name}] <- {spec['dataset']}  ->  {out_dir}")
-        r = subprocess.run(cmd, cwd=str(REPO_ROOT))
-        if r.returncode != 0:
-            print(f"  FAILED: {name}", file=sys.stderr)
-            continue
-        ok += 1
+    ok = skipped
+    if parallel > 1 and len(todo) > 1:
+        with ThreadPoolExecutor(max_workers=min(parallel, len(todo))) as pool:
+            futs = {
+                pool.submit(
+                    _run_pack,
+                    name,
+                    spec,
+                    dest=dest,
+                    max_samples=args.max_samples,
+                    image_format=args.image_format,
+                    force=True,
+                    turbo=turbo,
+                ): name
+                for name, spec in todo
+            }
+            for fut in as_completed(futs):
+                name, rc = fut.result()
+                if rc == 0:
+                    ok += 1
+                else:
+                    print(f"  FAILED: {name}", file=sys.stderr)
+    else:
+        for name, spec in todo:
+            _, rc = _run_pack(
+                name, spec, dest=dest, max_samples=args.max_samples, image_format=args.image_format, force=True, turbo=turbo
+            )
+            if rc == 0:
+                ok += 1
+            else:
+                print(f"  FAILED: {name}", file=sys.stderr)
 
     print(f"\nDone: {ok}/{len(want)} packs ({skipped} skipped as present).")
     return 0 if ok == len(want) else 1
