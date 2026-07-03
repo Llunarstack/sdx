@@ -68,8 +68,14 @@ sys.exit(0 if need.issubset(have) else 1)
 PY
   echo "ERROR: booru credentials missing in ${SDX_SECRETS_FILE:-/workspace/secret.txt}" >&2
   echo "  HF login does NOT cover danbooru/rule34 scraping." >&2
-  echo "  runpod/secret.txt is gitignored — paste your accounts into /workspace/secret.txt on the pod." >&2
-  echo "  Template: runpod/secrets.example.txt  |  nano /workspace/secret.txt" >&2
+  echo "  runpod/secret.txt is gitignored — create /workspace/secret.txt on the pod:" >&2
+  echo "    • RunPod web UI: open /workspace/secret.txt in the file browser and paste" >&2
+  echo "    • Or shell:  cat > /workspace/secret.txt <<'EOF'" >&2
+  echo "                 danbooru" >&2
+  echo "                 user: ..." >&2
+  echo "                 api: ..." >&2
+  echo "                 EOF" >&2
+  echo "  Template: runpod/secrets.example.txt" >&2
   exit 1
 }
 
