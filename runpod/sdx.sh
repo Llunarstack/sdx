@@ -89,10 +89,11 @@ _sdx_run_full() {
   _NGPU="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
   [ "${_NGPU:-0}" -lt 1 ] && _NGPU=1
   _sdx_apply_turbo_scrape
+  # Full pipeline always uses all four HF packs (ignore stale RunPod template env).
   export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
-  export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
+  export SDX_DATA_SITES="danbooru rule34xxx e621 rule34xyz"
+  export SDX_SCRAPE_SITES="$SDX_DATA_SITES"
   export SDX_MODEL_PROFILE=ultimate
-  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-$SDX_DATA_SITES}"
   export SDX_MAX_POSTS=0
   export SDX_USE_WD_TAGGER=1
   export SDX_PROMPT_RESEARCH=1
@@ -140,9 +141,9 @@ case "$CMD" in
   data)
     _sdx_apply_turbo_scrape
     export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
-    export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
+    export SDX_DATA_SITES="danbooru rule34xxx e621 rule34xyz"
+    export SDX_SCRAPE_SITES="$SDX_DATA_SITES"
     export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
-    export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
     export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
     export SDX_USE_WD_TAGGER=1
     export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
