@@ -11,12 +11,18 @@ sdx_ensure_repo() {
 
   if [ -f "$SDX_ROOT/runpod/sdx.sh" ]; then
     cd "$SDX_ROOT" || return 1
-    if [ -d .git ]; then
-      git fetch origin 2>/dev/null || true
-      git checkout "$SDX_REPO_REF" 2>/dev/null || true
-      git pull --ff-only 2>/dev/null || echo "WARN: git pull failed — using existing checkout" >&2
-    fi
+    git fetch origin 2>/dev/null || true
+    git checkout "$SDX_REPO_REF" 2>/dev/null || true
+    git pull --ff-only 2>/dev/null || echo "WARN: git pull failed — using existing checkout" >&2
     return 0
+  fi
+
+  # Legacy checkout without sdx.sh — force refresh
+  if [ -d "$SDX_ROOT/.git" ]; then
+    echo "WARN: old SDX checkout (no sdx.sh) — run: bash $SDX_ROOT/runpod/bootstrap.sh" >&2
+    cd "$SDX_ROOT" || return 1
+    git pull --ff-only 2>/dev/null || true
+    [ -f "$SDX_ROOT/runpod/sdx.sh" ] && return 0
   fi
 
   echo "SDX not found at $SDX_ROOT" >&2
