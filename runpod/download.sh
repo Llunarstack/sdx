@@ -42,75 +42,69 @@ if [ "$SCRAPE" = 1 ] || [ "$DATA_PREP" = 1 ]; then
 fi
 
 if [ "$SCRAPE" = 1 ]; then
-  SCRAPE_LOCK="${SDX_SCRAPE_LOCK:-$SDX_DATA/.scrape.lock}"
-  mkdir -p "$(dirname "$SCRAPE_LOCK")"
-  if ! pgrep -af "[d]ownload_datasets" >/dev/null 2>&1; then
-    rm -f "$SCRAPE_LOCK"
+  DATA_LOCK="${SDX_DATA_LOCK:-$SDX_DATA/.data_download.lock}"
+  mkdir -p "$(dirname "$DATA_LOCK")"
+  if ! pgrep -af "[d]ownload_(hf_datasets|datasets)" >/dev/null 2>&1; then
+    rm -f "$DATA_LOCK" "$SDX_DATA/.scrape.lock"
   fi
-  exec 9>"$SCRAPE_LOCK"
+  exec 9>"$DATA_LOCK"
   if ! flock -n 9; then
-    if pgrep -af "[d]ownload_datasets" >/dev/null 2>&1; then
-      echo "ERROR: scrape already running (lock: $SCRAPE_LOCK)" >&2
-      echo "  pgrep -af download_datasets" >&2
+    if pgrep -af "[d]ownload_(hf_datasets|datasets)" >/dev/null 2>&1; then
+      echo "ERROR: data download already running (lock: $DATA_LOCK)" >&2
       exit 1
     fi
-    echo "WARN: stale scrape lock removed ($SCRAPE_LOCK)" >&2
-    rm -f "$SCRAPE_LOCK"
-    exec 9>"$SCRAPE_LOCK"
-    flock -n 9 || { echo "ERROR: could not acquire scrape lock" >&2; exit 1; }
+    rm -f "$DATA_LOCK"
+    exec 9>"$DATA_LOCK"
+    flock -n 9 || { echo "ERROR: could not acquire data lock" >&2; exit 1; }
   fi
 
-  echo "==> Booru datasets -> $SDX_DATA (${SCRAPE_SITES[*]})"
-  export SDX_SCRAPE_SITES="${SCRAPE_SITES[*]}"
-  python3 - <<'PY' || exit 1
+  if [ "${SDX_DATA_SOURCE:-hf}" = "hf" ]; then
+    echo "==> HF datasets (turbo) -> $SDX_DATA (${SCRAPE_SITES[*]})"
+    export SDX_DATA_SITES="${SCRAPE_SITES[*]}"
+    HF_ARGS=(
+      --dest "$SDX_DATA"
+      --max-samples "${SDX_HF_MAX_SAMPLES:-0}"
+      --image-format "${SDX_HF_IMAGE_FORMAT:-jpg}"
+    )
+    [ -n "${SDX_HF_FORCE:-}" ] && HF_ARGS+=(--force)
+    python setup/download_hf_datasets.py "${HF_ARGS[@]}"
+  else
+    echo "==> Booru API scrape -> $SDX_DATA (${SCRAPE_SITES[*]})"
+    export SDX_SCRAPE_SITES="${SCRAPE_SITES[*]}"
+    python3 - <<'PY' || exit 1
 import os, sys
 sys.path.insert(0, os.environ["SDX_ROOT"])
 from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
 
-sites = os.environ.get("SDX_SCRAPE_SITES", os.environ.get("SCRAPE_SITES", "danbooru rule34xxx e621 rule34xyz")).replace(",", " ").split()
+sites = os.environ.get("SDX_SCRAPE_SITES", "").replace(",", " ").split()
 path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
 if not path.is_file():
     print(f"ERROR: secrets file missing: {path}", file=sys.stderr)
-    print("  Booru scraping needs danbooru + rule34xxx logins (NOT huggingface-cli login).", file=sys.stderr)
-    print("  Copy runpod/secrets.example.txt -> /workspace/secret.txt and fill in your accounts.", file=sys.stderr)
     sys.exit(1)
-try:
-    creds = parse_secrets_file(path)
-except Exception as e:
-    print(f"ERROR: could not read secrets {path}: {e}", file=sys.stderr)
-    sys.exit(1)
-missing = [s for s in sites if s not in creds]
+creds = parse_secrets_file(path)
+missing = [s for s in sites if s.strip() and s not in creds]
 if missing:
-    print(f"ERROR: missing booru credentials in {path} for: {', '.join(missing)}", file=sys.stderr)
-    print(f"  Found site sections: {sorted(creds) or '(none)'}", file=sys.stderr)
-    print("  HF login does not cover danbooru/rule34 — add sections like:", file=sys.stderr)
-    print("    danbooru", file=sys.stderr)
-    print("    user: YOUR_USER", file=sys.stderr)
-    print("    api: YOUR_DANBOORU_API_KEY", file=sys.stderr)
-    print("    rule34xxx", file=sys.stderr)
-    print("    api?: &api_key=...&user_id=...", file=sys.stderr)
-    print("  See runpod/secrets.example.txt", file=sys.stderr)
+    print(f"ERROR: missing booru credentials for: {', '.join(missing)}", file=sys.stderr)
     sys.exit(1)
 PY
-  SCRAPE_ARGS=(
-    --out "$SDX_DATA"
-    --sites "${SCRAPE_SITES[@]}"
-    --ratings all
-    --workers "${SDX_SCRAPE_WORKERS:-256}"
-    --max-posts "${SDX_MAX_POSTS:-0}"
-    --secrets "$SDX_SECRETS_FILE"
-    --frame-fps "${SDX_FRAME_FPS:-2}"
-    --max-frames-per-post "${SDX_MAX_FRAMES_PER_POST:-0}"
-  )
-  if [ "${SDX_SPLIT_FRAMES:-1}" = "1" ]; then
-    SCRAPE_ARGS+=(--split-frames)
-  else
-    SCRAPE_ARGS+=(--no-split-frames)
+    SCRAPE_ARGS=(
+      --out "$SDX_DATA"
+      --sites "${SCRAPE_SITES[@]}"
+      --ratings all
+      --workers "${SDX_SCRAPE_WORKERS:-256}"
+      --max-posts "${SDX_MAX_POSTS:-0}"
+      --secrets "$SDX_SECRETS_FILE"
+      --frame-fps "${SDX_FRAME_FPS:-1}"
+      --max-frames-per-post "${SDX_MAX_FRAMES_PER_POST:-48}"
+    )
+    if [ "${SDX_SPLIT_FRAMES:-0}" = "1" ]; then
+      SCRAPE_ARGS+=(--split-frames)
+    else
+      SCRAPE_ARGS+=(--no-split-frames)
+    fi
+    [ "${SDX_KEEP_RAW_MEDIA:-0}" = "1" ] && SCRAPE_ARGS+=(--keep-raw-media)
+    python setup/download_datasets.py "${SCRAPE_ARGS[@]}"
   fi
-  if [ "${SDX_KEEP_RAW_MEDIA:-0}" = "1" ]; then
-    SCRAPE_ARGS+=(--keep-raw-media)
-  fi
-  python setup/download_datasets.py "${SCRAPE_ARGS[@]}"
 fi
 
 if [ "$DATA_PREP" = 1 ]; then

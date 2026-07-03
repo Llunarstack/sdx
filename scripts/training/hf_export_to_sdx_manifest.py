@@ -102,7 +102,19 @@ def main() -> int:
     p.add_argument("--shuffle-seed", type=int, default=None, help="Shuffle seed when streaming (buffered shuffle).")
     p.add_argument("--start-index", type=int, default=0, help="Skip first N rows (non-streaming only).")
     p.add_argument("--list-columns", action="store_true", help="Print first row keys and exit.")
+    p.add_argument("--image-format", default="png", choices=("png", "jpg", "jpeg", "webp"), help="Saved image format.")
     args = p.parse_args()
+
+    img_ext = args.image_format.lower()
+    if img_ext == "jpeg":
+        img_ext = "jpg"
+    if img_ext == "jpg":
+        save_kw: Dict[str, Any] = {"format": "JPEG", "quality": 95, "optimize": True}
+    elif img_ext == "webp":
+        save_kw = {"format": "WEBP", "quality": 92}
+    else:
+        img_ext = "png"
+        save_kw = {"format": "PNG"}
 
     try:
         from datasets import load_dataset
@@ -183,11 +195,11 @@ def main() -> int:
                 continue
 
             stem = f"{n_written:08d}"
-            ipath = img_dir / f"{stem}.png"
-            pil.save(ipath)
+            ipath = img_dir / f"{stem}.{img_ext}"
+            pil.save(ipath, **save_kw)
 
             rec = {
-                "image_path": str(ipath.resolve()),
+                "image_path": f"images/{stem}.{img_ext}",
                 "caption": cap,
             }
             mf.write(json.dumps(rec, ensure_ascii=False) + "\n")
