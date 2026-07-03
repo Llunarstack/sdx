@@ -13,6 +13,9 @@ fi
 
 if command -v cmake >/dev/null 2>&1; then
   echo "==> Native C++/CUDA (build_native.sh)"
+  if [ "$(uname -s 2>/dev/null || echo unknown)" = "Linux" ]; then
+    sed -i 's/\r$//' scripts/tools/native/build_native.sh 2>/dev/null || true
+  fi
   bash scripts/tools/native/build_native.sh || echo "WARN: native C++/CUDA build failed (non-fatal)."
 else
   echo "(skip) cmake not found — native C++ build skipped."

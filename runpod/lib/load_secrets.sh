@@ -23,10 +23,16 @@ except Exception:
 PY
 )
   if [ -n "$tok" ]; then
+    case "$tok" in
+      *YOUR_TOKEN*|*your_token*|*_HERE) tok="" ;;
+    esac
+  fi
+  if [ -n "$tok" ]; then
     export HF_TOKEN="$tok"
     export HUGGING_FACE_HUB_TOKEN="$tok"
     echo "HF token: loaded from $f"
     return 0
   fi
+  echo "WARN: no valid HF token in $f — add: huggingface / token: hf_..." >&2
   return 1
 }

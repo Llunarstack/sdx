@@ -44,12 +44,20 @@ fi
 if [ "$SCRAPE" = 1 ]; then
   SCRAPE_LOCK="${SDX_SCRAPE_LOCK:-$SDX_DATA/.scrape.lock}"
   mkdir -p "$(dirname "$SCRAPE_LOCK")"
+  if ! pgrep -af "[d]ownload_datasets" >/dev/null 2>&1; then
+    rm -f "$SCRAPE_LOCK"
+  fi
   exec 9>"$SCRAPE_LOCK"
   if ! flock -n 9; then
-    echo "ERROR: scrape already running (lock: $SCRAPE_LOCK)" >&2
-    echo "  pgrep -af download_datasets" >&2
-    echo "  kill extras: pkill -f download_datasets" >&2
-    exit 1
+    if pgrep -af "[d]ownload_datasets" >/dev/null 2>&1; then
+      echo "ERROR: scrape already running (lock: $SCRAPE_LOCK)" >&2
+      echo "  pgrep -af download_datasets" >&2
+      exit 1
+    fi
+    echo "WARN: stale scrape lock removed ($SCRAPE_LOCK)" >&2
+    rm -f "$SCRAPE_LOCK"
+    exec 9>"$SCRAPE_LOCK"
+    flock -n 9 || { echo "ERROR: could not acquire scrape lock" >&2; exit 1; }
   fi
 
   echo "==> Booru datasets -> $SDX_DATA (${SCRAPE_SITES[*]})"
