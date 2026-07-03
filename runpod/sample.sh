@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate an image from a trained checkpoint (RAG, @artist, box layout).
+# Generate an image from a trained checkpoint (RAG, @artist, box layout, prompt stack).
 #
 #   bash runpod/sample.sh
 #   SDX_PROMPT="@wlop 1girl" bash runpod/sample.sh
@@ -16,7 +16,20 @@ RAG="${SDX_RAG_CORPUS:-$SDX_DATA/rag_corpus.jsonl}"
 BOX="${SDX_BOX_LAYOUT:-}"
 LORA="${SDX_LORA:-}"
 
-ARGS=(--ckpt "$CKPT" --prompt "$PROMPT")
+ARGS=(
+  --ckpt "$CKPT"
+  --prompt "$PROMPT"
+  --lora-bank
+  --lora-bank-index "${SDX_LORA_BANK_INDEX:-$SDX_DATA/lora_bank/index.json}"
+  --shortcomings-mitigation "${SDX_SHORTCOMINGS_MITIGATION:-auto}"
+  --art-guidance-mode "${SDX_ART_GUIDANCE_MODE:-auto}"
+  --anatomy-guidance "${SDX_ANATOMY_GUIDANCE:-auto}"
+  --style-guidance-mode "${SDX_STYLE_GUIDANCE_MODE:-auto}"
+)
+
+if [ "${SDX_SHORTCOMINGS_2D:-1}" = "1" ]; then
+  ARGS+=(--shortcomings-2d)
+fi
 
 if [ -f "$RAG" ]; then
   ARGS+=(--local-rag-jsonl "$RAG" --local-rag-top-k "${SDX_RAG_TOP_K:-8}")

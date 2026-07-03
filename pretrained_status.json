@@ -19,6 +19,16 @@
       "Qwen2.5-14B-Instruct",
       "ImageReward",
       "PickScore_v1"
+    ],
+    "ultimate": [
+      "T5-XXL",
+      "CLIP-ViT-L-14",
+      "CLIP-ViT-bigG-14",
+      "LongCLIP-L",
+      "DINOv2-Base",
+      "moondream2",
+      "Qwen2.5-14B-Instruct",
+      "WD-EVA02-Large-Tagger"
     ]
   },
   "models": [
@@ -283,6 +293,12 @@
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
       "is_local": true,
       "size_gb": 10.34
+    },
+    {
+      "name": "WD-EVA02-Large-Tagger",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\WD-EVA02-Large-Tagger",
+      "hf_fallback": "SmilingWolf/wd-eva02-large-tagger-v3",
+      "size_gb": 1.2
     }
   ]
 }

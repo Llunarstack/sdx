@@ -261,6 +261,28 @@ def build_sample_parser() -> "argparse.ArgumentParser":
         help="Trigger word(s) to prepend to prompt when using LoRAs (e.g. style or character trigger)",
     )
     parser.add_argument(
+        "--lora-bank",
+        action="store_true",
+        help="Resolve @artist / @style:name mentions to LoRA adapters from lora_bank/index.json (default when index exists).",
+    )
+    parser.add_argument(
+        "--no-lora-bank",
+        action="store_true",
+        help="Disable automatic LoRA loading from the LoRA bank index.",
+    )
+    parser.add_argument(
+        "--lora-bank-index",
+        type=str,
+        default="",
+        help="Path to lora_bank/index.json (default: $SDX_DATA/lora_bank/index.json).",
+    )
+    parser.add_argument(
+        "--style-lora-strength",
+        type=float,
+        default=1.0,
+        help="Multiplier for @style:anime / @lora:style adapter scales from the LoRA bank.",
+    )
+    parser.add_argument(
         "--tags",
         type=str,
         default="",
@@ -3037,7 +3059,7 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             print(f"Warning: --prompt-file is empty: {pf_path}", file=sys.stderr)
     else:
         prompt_for_encoding = (args.prompt or "").strip()
-    tags_list = []
+    args._raw_prompt_before_compose = prompt_for_encoding
     if getattr(args, "tags", "").strip():
         tags_list = [t.strip() for t in args.tags.split(",") if t.strip()]
     if getattr(args, "tags_file", "").strip():
@@ -3348,7 +3370,21 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         except Exception as comp_ex:
             print(f"Inference: torch.compile skipped ({comp_ex}).", file=sys.stderr)
 
-    # Apply LoRAs
+    use_lora_bank = not getattr(args, "no_lora_bank", False)
+    if use_lora_bank:
+        try:
+            from utils.lora.lora_bank import augment_sample_lora_args, default_bank_index_path
+
+            if getattr(args, "lora_bank", False) or default_bank_index_path().is_file():
+                resolved = augment_sample_lora_args(args)
+                if resolved:
+                    print(
+                        f"LoRA bank: auto adapters for {', '.join(resolved)}",
+                        file=sys.stderr,
+                    )
+        except Exception as bank_ex:
+            print(f"Warning: LoRA bank resolve failed: {bank_ex}", file=sys.stderr)
+
     if args.lora:
         from models.lora import apply_loras
 

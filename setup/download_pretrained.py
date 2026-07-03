@@ -33,6 +33,7 @@ _PROFILE_ALIASES = {
     "train": "train",
     "enrich": "enrich",
     "inference": "inference",
+    "ultimate": "ultimate",
     "minimal": "train",
 }
 
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--profile",
         default=os.environ.get("SDX_MODEL_PROFILE", "full"),
-        help="train | enrich | inference | full (default: full or SDX_MODEL_PROFILE).",
+        help="train | enrich | inference | ultimate | full (default: full or SDX_MODEL_PROFILE).",
     )
     p.add_argument("--workers", type=int, default=8, help="Parallel file workers per repo.")
     p.add_argument("--retries", type=int, default=5, help="Retries per repo on network error.")
