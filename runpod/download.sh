@@ -1,56 +1,55 @@
 #!/usr/bin/env bash
-# Download HF models + booru datasets + training prep (enrich, RAG, control maps).
+# Download pretrained models + Hugging Face training datasets + prep (WD tags, enrich).
 #
-#   bash runpod/download.sh                  # models + scrape + preprocess
-#   bash runpod/download.sh --models-only    # HF weights only (~100+ GB)
-#   bash runpod/download.sh --data-only      # scrape + merge (no models, no preprocess)
+#   bash runpod/download.sh                  # models + HF datasets + preprocess
+#   bash runpod/download.sh --models-only    # HF weights only
+#   bash runpod/download.sh --data-only      # HF datasets + merge + tag + enrich
 #   bash runpod/download.sh --skip-preprocess
-#   bash runpod/download.sh --skip-wd-tag     # skip WD tagger pass
+#   bash runpod/download.sh --skip-datasets    # skip HF export (merge/tag only)
+#   bash runpod/download.sh --skip-wd-tag
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
+# shellcheck source=/dev/null
+source "$ROOT/runpod/lib/hf_sites.sh"
 cd "$ROOT"
 
 MODELS=1
-SCRAPE=1
+DATASETS=1
 DATA_PREP=1
 PREPROCESS=1
 WD_TAG=1
 for arg in "$@"; do
   case "$arg" in
-    --models-only) SCRAPE=0; DATA_PREP=0; PREPROCESS=0; WD_TAG=0 ;;
+    --models-only) DATASETS=0; DATA_PREP=0; PREPROCESS=0; WD_TAG=0 ;;
     --data-only) MODELS=0 ;;
     --skip-preprocess) PREPROCESS=0 ;;
-    --skip-scrape) SCRAPE=0 ;;
+    --skip-datasets|--skip-scrape) DATASETS=0 ;;
     --skip-wd-tag) WD_TAG=0 ;;
-    *) echo "Unknown flag: $arg (use --models-only | --data-only | --skip-preprocess | --skip-scrape | --skip-wd-tag)" >&2; exit 2 ;;
+    *) echo "Unknown flag: $arg" >&2; exit 2 ;;
   esac
 done
+
+sdx_export_hf_sites
+read -r -a HF_SITES <<<"$SDX_HF_SITES"
 
 if [ "$MODELS" = 1 ]; then
   echo "==> Pretrained models -> $SDX_PRETRAINED"
   python setup/download_pretrained.py --dest "$SDX_PRETRAINED" --workers "${SDX_DL_WORKERS:-16}" --profile "${SDX_MODEL_PROFILE:-full}"
 fi
 
-if [ "$SCRAPE" = 1 ] || [ "$DATA_PREP" = 1 ]; then
-  SCRAPE_SITES=(danbooru rule34xxx e621 rule34xyz)
-  if [ -n "${SDX_SCRAPE_SITES:-}" ]; then
-    read -r -a SCRAPE_SITES <<<"${SDX_SCRAPE_SITES//,/ }"
-  fi
-fi
-
-if [ "$SCRAPE" = 1 ]; then
+if [ "$DATASETS" = 1 ]; then
   DATA_LOCK="${SDX_DATA_LOCK:-$SDX_DATA/.data_download.lock}"
   mkdir -p "$(dirname "$DATA_LOCK")"
-  if ! pgrep -af "[d]ownload_(hf_datasets|datasets)" >/dev/null 2>&1; then
+  if ! pgrep -af "[d]ownload_hf_datasets" >/dev/null 2>&1; then
     rm -f "$DATA_LOCK" "$SDX_DATA/.scrape.lock"
   fi
   exec 9>"$DATA_LOCK"
   if ! flock -n 9; then
-    if pgrep -af "[d]ownload_(hf_datasets|datasets)" >/dev/null 2>&1; then
-      echo "ERROR: data download already running (lock: $DATA_LOCK)" >&2
+    if pgrep -af "[d]ownload_hf_datasets" >/dev/null 2>&1; then
+      echo "ERROR: dataset download already running (lock: $DATA_LOCK)" >&2
       exit 1
     fi
     rm -f "$DATA_LOCK"
@@ -58,10 +57,8 @@ if [ "$SCRAPE" = 1 ]; then
     flock -n 9 || { echo "ERROR: could not acquire data lock" >&2; exit 1; }
   fi
 
-  if [ "${SDX_DATA_SOURCE:-hf}" = "hf" ]; then
-    echo "==> HF datasets (turbo) -> $SDX_DATA"
-    echo "    sites: ${SCRAPE_SITES[*]} (${#SCRAPE_SITES[@]} packs)"
-    export SDX_DATA_SITES="${SCRAPE_SITES[*]}"
+  echo "==> Hugging Face datasets -> $SDX_DATA"
+  echo "    packs (${#HF_SITES[@]}): ${HF_SITES[*]}"
     HF_ARGS=(
       --dest "$SDX_DATA"
       --max-samples "${SDX_HF_MAX_SAMPLES:-0}"
@@ -69,54 +66,17 @@ if [ "$SCRAPE" = 1 ]; then
     )
     [ -n "${SDX_HF_FORCE:-}" ] && HF_ARGS+=(--force)
     python setup/download_hf_datasets.py "${HF_ARGS[@]}"
-  else
-    echo "==> Booru API scrape -> $SDX_DATA (${SCRAPE_SITES[*]})"
-    export SDX_SCRAPE_SITES="${SCRAPE_SITES[*]}"
-    python3 - <<'PY' || exit 1
-import os, sys
-sys.path.insert(0, os.environ["SDX_ROOT"])
-from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
-
-sites = os.environ.get("SDX_SCRAPE_SITES", "").replace(",", " ").split()
-path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
-if not path.is_file():
-    print(f"ERROR: secrets file missing: {path}", file=sys.stderr)
-    sys.exit(1)
-creds = parse_secrets_file(path)
-missing = [s for s in sites if s.strip() and s not in creds]
-if missing:
-    print(f"ERROR: missing booru credentials for: {', '.join(missing)}", file=sys.stderr)
-    sys.exit(1)
-PY
-    SCRAPE_ARGS=(
-      --out "$SDX_DATA"
-      --sites "${SCRAPE_SITES[@]}"
-      --ratings all
-      --workers "${SDX_SCRAPE_WORKERS:-256}"
-      --max-posts "${SDX_MAX_POSTS:-0}"
-      --secrets "$SDX_SECRETS_FILE"
-      --frame-fps "${SDX_FRAME_FPS:-1}"
-      --max-frames-per-post "${SDX_MAX_FRAMES_PER_POST:-48}"
-    )
-    if [ "${SDX_SPLIT_FRAMES:-0}" = "1" ]; then
-      SCRAPE_ARGS+=(--split-frames)
-    else
-      SCRAPE_ARGS+=(--no-split-frames)
-    fi
-    [ "${SDX_KEEP_RAW_MEDIA:-0}" = "1" ] && SCRAPE_ARGS+=(--keep-raw-media)
-    python setup/download_datasets.py "${SCRAPE_ARGS[@]}"
-  fi
 fi
 
 if [ "$DATA_PREP" = 1 ]; then
   python setup/merge_manifests.py \
     --data-root "$SDX_DATA" \
     --out "$SDX_DATA/combined/manifest.jsonl" \
-    --sites "${SCRAPE_SITES[@]}"
+    --sites "${HF_SITES[@]}"
 
   python setup/cleanup_scrape_media.py \
     --data-root "$SDX_DATA" \
-    --sites "${SCRAPE_SITES[@]}" \
+    --sites "${HF_SITES[@]}" \
     --rewrite-manifests \
     --backup \
     --drop-raw-media || true
@@ -135,14 +95,14 @@ fi
 TAG_MANIFEST="${SDX_MANIFEST:-$SDX_DATA/combined/manifest.jsonl}"
 if [ "$WD_TAG" = 1 ] && [ "${SDX_USE_WD_TAGGER:-1}" = "1" ]; then
   if [ -f "$TAG_MANIFEST" ]; then
-    echo "==> WD EVA02 tagger enrichment (supplementary tags; identity stays from booru API)"
+    echo "==> WD EVA02 tagger enrichment"
     TAGGED="${SDX_TAGGED_MANIFEST:-$SDX_DATA/tagged/manifest.jsonl}"
     python setup/tag_manifest_wd.py \
       --manifest "$TAG_MANIFEST" \
       --data-root "$SDX_DATA" \
       --out "$TAGGED" \
       --threshold "${SDX_WD_TAG_THRESHOLD:-0.35}" \
-      || echo "WARN: WD tagging failed (install onnxruntime-gpu; non-fatal)."
+      || echo "WARN: WD tagging failed (non-fatal)."
     if [ -f "$TAGGED" ] && [ -s "$TAGGED" ]; then
       TAG_MANIFEST="$TAGGED"
       export SDX_MANIFEST="$TAGGED"
@@ -157,11 +117,11 @@ if [ "$PREPROCESS" = 1 ]; then
     exit 1
   fi
 
-  echo "==> Seed RAG corpus (booru tags for retrieval)"
+  echo "==> Seed RAG corpus"
   RAG="${SDX_RAG_CORPUS:-$SDX_DATA/rag_corpus.jsonl}"
   python setup/build_rag_corpus.py --manifest "$MANIFEST" --out "$RAG"
 
-  echo "==> Caption enrichment (VLM + RAG + LLM when SDX_PROMPT_RESEARCH=1)"
+  echo "==> Caption enrichment (VLM + RAG)"
   ENRICH_OUT="${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}"
   ENRICH_ARGS=(--manifest "$MANIFEST" --data-root "$SDX_DATA" --out "$ENRICH_OUT" --workers "${SDX_ENRICH_WORKERS:-1}")
   if [ "${SDX_PROMPT_RESEARCH:-1}" = "1" ]; then
@@ -173,7 +133,7 @@ if [ "$PREPROCESS" = 1 ]; then
   fi
   python setup/enrich_manifest_captions.py "${ENRICH_ARGS[@]}" || echo "WARN: enrichment failed (non-fatal)."
 
-  echo "==> Final RAG corpus (researched captions)"
+  echo "==> Final RAG corpus"
   RAG_MANIFEST="$MANIFEST"
   if [ -f "$ENRICH_OUT" ] && [ -s "$ENRICH_OUT" ]; then RAG_MANIFEST="$ENRICH_OUT"; fi
   python setup/build_rag_corpus.py --manifest "$RAG_MANIFEST" --out "$RAG"
@@ -193,4 +153,3 @@ echo
 echo "Download done."
 echo "  data:     $SDX_DATA"
 echo "  manifest: ${SDX_MANIFEST:-$SDX_DATA/combined/manifest.jsonl}"
-echo "  train:    bash runpod/train.sh"

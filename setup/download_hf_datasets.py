@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Export Hugging Face booru-style datasets to SDX layout (fast vs live API scrape).
+"""Export Hugging Face booru-style datasets to SDX layout.
 
-Reads ``setup/hf_dataset_packs.json``. Uses streaming + hf_transfer (via env).
+Reads ``setup/hf_dataset_packs.json``. Always exports all four site packs unless
+``--only`` is passed.
 
     python setup/download_hf_datasets.py --dest /workspace/data
-    python setup/download_hf_datasets.py --only danbooru rule34xxx --max-samples 100000
+    python setup/download_hf_datasets.py --only e621 --max-samples 100000
 """
 
 from __future__ import annotations
@@ -27,9 +28,8 @@ def _load_packs() -> list[dict]:
 
 
 def _site_list() -> list[str]:
-    env = os.environ.get("SDX_DATA_SITES", "") or os.environ.get("SDX_SCRAPE_SITES", "")
-    if env.strip():
-        return [s.strip() for s in env.replace(",", " ").split() if s.strip()]
+    if os.environ.get("SDX_HF_SITES", "").strip():
+        return [s.strip() for s in os.environ["SDX_HF_SITES"].replace(",", " ").split() if s.strip()]
     return [p["name"] for p in _load_packs()]
 
 
@@ -90,7 +90,11 @@ def main(argv: list[str] | None = None) -> int:
 
     dest = Path(args.dest)
     dest.mkdir(parents=True, exist_ok=True)
-    print(f"HF turbo export: {len(want)} packs -> {dest}")
+    print(f"Hugging Face datasets: {len(want)} packs -> {dest}")
+    for name in want:
+        spec = packs[name]
+        label = spec.get("site") or name
+        print(f"  {name:12} {label}  <-  {spec['dataset']}")
     print(f"  max_samples per pack: {args.max_samples or 'unlimited'}")
     print(f"  hf_transfer: {os.environ.get('HF_HUB_ENABLE_HF_TRANSFER', '?')}\n")
 
