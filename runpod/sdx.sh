@@ -49,6 +49,7 @@ SDX — full pipeline (Hugging Face datasets only, no live booru API):
   models              Pretrained weights only
   train               Train only (data must already exist)
   sample              Generate images
+  status              Live monitor (images, training, GPU)
   setup               Install deps
 
 Auth: hf auth login  (required for some HF dataset packs)
@@ -138,6 +139,9 @@ case "$CMD" in
     ;;
   sample)
     exec bash "$SDX_ROOT/runpod/sample.sh" "$@"
+    ;;
+  status|monitor|stats)
+    exec bash "$SDX_ROOT/runpod/status.sh" "$@"
     ;;
   secrets|scrape)
     echo "This pipeline uses Hugging Face datasets only — no booru API credentials needed." >&2
