@@ -4,7 +4,8 @@
       "T5-XXL",
       "CLIP-ViT-L-14",
       "CLIP-ViT-bigG-14",
-      "LongCLIP-L"
+      "LongCLIP-L",
+      "DINOv2-Base"
     ],
     "enrich": [
       "moondream2",
@@ -44,6 +45,14 @@
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CLIP-ViT-bigG-14",
       "is_local": true,
       "size_gb": 18.925
+    },
+    {
+      "name": "DINOv2-Base",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Base",
+      "hf_fallback": "facebook/dinov2-base",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Base",
+      "is_local": false,
+      "size_gb": 0.35
     },
     {
       "name": "DINOv2-Large",
