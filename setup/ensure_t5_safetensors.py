@@ -40,17 +40,38 @@ def main() -> int:
         return 2
 
     dest.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo,
-        local_dir=str(dest),
-        allow_patterns=[
-            "model.safetensors",
-            "config.json",
-            "spiece.model",
-            "tokenizer_config.json",
-            "special_tokens_map.json",
-        ],
-    )
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from utils.hf_secrets import apply_hf_token_to_env, get_hf_token
+
+    apply_hf_token_to_env()
+    hf_tok = get_hf_token()
+    for attempt in range(1, 6):
+        try:
+            snapshot_download(
+                repo,
+                local_dir=str(dest),
+                token=hf_tok,
+                max_workers=2 if hf_tok else 1,
+                allow_patterns=[
+                    "model.safetensors",
+                    "config.json",
+                    "spiece.model",
+                    "tokenizer_config.json",
+                    "special_tokens_map.json",
+                ],
+            )
+            break
+        except Exception as e:
+            import re
+            import time
+
+            m = re.search(r"Retry after (\d+)", str(e), re.I)
+            wait = int(m.group(1)) + 5 if m else min(120, 15 * attempt)
+            print(f"  attempt {attempt}/5 failed; retry in {wait}s (set HF_TOKEN in secret.txt)", file=sys.stderr)
+            time.sleep(wait)
+    else:
+        return 1
     if safetensors.is_file():
         print(f"Downloaded: {safetensors}")
         return 0

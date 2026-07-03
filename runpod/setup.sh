@@ -17,6 +17,9 @@ cd "$ROOT"
 
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
+# shellcheck source=/dev/null
+source "$ROOT/runpod/lib/load_secrets.sh"
+sdx_load_hf_token || true
 
 # Install secrets: bundled runpod/secret.txt -> /workspace/secret.txt (never committed)
 if [ ! -f "$SDX_SECRETS_FILE" ] && [ -f "$ROOT/runpod/secret.txt" ]; then

@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -61,11 +62,30 @@ def _profile_names(profile: str | None) -> set[str] | None:
 
 
 def _hf_token() -> str | None:
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    try:
+        from utils.hf_secrets import apply_hf_token_to_env, get_hf_token
+
+        apply_hf_token_to_env()
+        return get_hf_token()
+    except ImportError:
+        pass
     for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_HUB_TOKEN"):
         val = os.environ.get(key, "").strip()
         if val:
             return val
     return None
+
+
+def _retry_wait(exc: BaseException, attempt: int) -> int:
+    msg = str(exc)
+    m = re.search(r"Retry after (\d+)", msg, re.IGNORECASE)
+    if m:
+        return int(m.group(1)) + 5
+    if "429" in msg or "rate limit" in msg.lower():
+        return min(180, 30 * attempt)
+    return min(60, 4 * attempt)
 
 
 def _enable_fast_transfer() -> bool:
@@ -136,22 +156,34 @@ def _download_one(
     retries: int,
     revision: str | None,
     token: str | None,
+    allow_patterns: list[str] | None = None,
 ) -> bool:
     from huggingface_hub import snapshot_download
 
     local_dir.mkdir(parents=True, exist_ok=True)
-    kwargs: dict = {"repo_id": repo_id, "local_dir": str(local_dir), "max_workers": workers}
+    workers = max(1, min(int(workers), 4 if token else 2))
+    kwargs: dict = {
+        "repo_id": repo_id,
+        "local_dir": str(local_dir),
+        "max_workers": workers,
+    }
     if revision:
         kwargs["revision"] = revision
     if token:
         kwargs["token"] = token
+    if allow_patterns:
+        kwargs["allow_patterns"] = allow_patterns
     for attempt in range(1, retries + 1):
         try:
             snapshot_download(**kwargs)
             return _dir_populated(local_dir)
         except Exception as e:
-            wait = min(60, 4 * attempt)
-            print(f"  attempt {attempt}/{retries} failed ({type(e).__name__}: {e}); retrying in {wait}s", file=sys.stderr)
+            wait = _retry_wait(e, attempt)
+            print(
+                f"  attempt {attempt}/{retries} failed ({type(e).__name__}); "
+                f"retrying in {wait}s — set HF_TOKEN in /workspace/secret.txt to avoid 429",
+                file=sys.stderr,
+            )
             time.sleep(wait)
     return False
 
@@ -165,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("SDX_MODEL_PROFILE", "full"),
         help="train | enrich | inference | ultimate | full (default: full or SDX_MODEL_PROFILE).",
     )
-    p.add_argument("--workers", type=int, default=8, help="Parallel file workers per repo.")
+    p.add_argument("--workers", type=int, default=0, help="Parallel file workers per repo (default 4 with HF_TOKEN else 2).")
     p.add_argument("--retries", type=int, default=5, help="Retries per repo on network error.")
     p.add_argument("--force", action="store_true", help="Re-download even when folder looks complete.")
     args = p.parse_args(argv)
@@ -180,9 +212,18 @@ def main(argv: list[str] | None = None) -> int:
     token = _hf_token()
     print(f"hf_transfer fast download: {'ON' if fast else 'OFF (pip install hf_transfer for a big speedup)'}")
     if token:
-        print("HF token: set (gated/private repos enabled)")
+        print("HF token: set (higher rate limits, gated models OK)")
     else:
-        print("HF token: not set — run `huggingface-cli login` if downloads 401")
+        print(
+            "HF token: NOT SET — you will hit 429 rate limits.\n"
+            "  Add to /workspace/secret.txt:\n"
+            "    huggingface\n"
+            "    token: hf_your_token_here\n"
+            "  Or: export HF_TOKEN=hf_...",
+            file=sys.stderr,
+        )
+
+    workers = args.workers if args.workers > 0 else (4 if token else 2)
 
     registry = _load_registry()
     if args.only:
@@ -234,12 +275,23 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  FAILED after {args.retries} retries: {name}", file=sys.stderr)
             continue
         rev_note = f" @{revision}" if revision else ""
+        allow = m.get("allow_patterns") or None
         print(f"[{i}/{len(registry)}] {name}  <-  {repo_id}{rev_note}  (~{m.get('size_gb', '?')} GB)")
-        if _download_one(repo_id, local_dir, workers=args.workers, retries=args.retries, revision=revision, token=token):
+        if _download_one(
+            repo_id,
+            local_dir,
+            workers=workers,
+            retries=args.retries,
+            revision=revision,
+            token=token,
+            allow_patterns=allow,
+        ):
             ok += 1
         else:
             (optional_failed if optional else failed).append(name)
             print(f"  FAILED after {args.retries} retries: {name}", file=sys.stderr)
+        if not token and i < len(registry):
+            time.sleep(10)
 
     print(f"\nDone: {ok}/{len(registry)} ok ({skipped} skipped as present). Dest: {dest_base}")
     if optional_failed:

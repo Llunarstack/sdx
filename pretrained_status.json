@@ -34,11 +34,18 @@
   "models": [
     {
       "name": "T5-XXL",
-      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL",
-      "hf_fallback": "google/t5-v1_1-xxl",
-      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL",
+      "local_folder": "T5-XXL-safetensors",
+      "hf_fallback": "mcmonkey/google_t5-v1_1-xxl_encoderonly",
+      "allow_patterns": [
+        "model.safetensors",
+        "config.json",
+        "spiece.model",
+        "tokenizer_config.json",
+        "special_tokens_map.json"
+      ],
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL-safetensors",
       "is_local": true,
-      "size_gb": 41.483
+      "size_gb": 9.0
     },
     {
       "name": "CLIP-ViT-L-14",
