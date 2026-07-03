@@ -19,7 +19,7 @@ sdx_ensure_repo || exit 1
 
 # shellcheck source=/dev/null
 source "$HERE/lib/load_secrets.sh"
-sdx_load_hf_token || echo "WARN: no HF_TOKEN — HuggingFace downloads may hit 429 rate limits" >&2
+sdx_load_hf_token || echo "WARN: no HF auth — run: huggingface-cli login" >&2
 
 # shellcheck source=/dev/null
 source "$SDX_ROOT/runpod/env.defaults"

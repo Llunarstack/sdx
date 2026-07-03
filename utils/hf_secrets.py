@@ -46,11 +46,41 @@ def hf_token_from_secrets(path: str | os.PathLike[str] | None = None) -> str | N
     return None
 
 
-def get_hf_token() -> str | None:
-    tok = hf_token_from_env() or hf_token_from_secrets()
-    if tok and ("YOUR_TOKEN" in tok.upper() or tok.endswith("_HERE")):
+def _reject_placeholder(tok: str | None) -> str | None:
+    if not tok:
+        return None
+    if "YOUR_TOKEN" in tok.upper() or tok.endswith("_HERE"):
         return None
     return tok
+
+
+def hf_token_from_hub() -> str | None:
+    """Token from ``huggingface-cli login`` (~/.cache/huggingface/token)."""
+    try:
+        from huggingface_hub import get_token
+
+        return _reject_placeholder(get_token())
+    except Exception:
+        return None
+
+
+def get_hf_token() -> str | None:
+    return (
+        _reject_placeholder(hf_token_from_env())
+        or _reject_placeholder(hf_token_from_secrets())
+        or hf_token_from_hub()
+    )
+
+
+def hf_auth_source() -> str:
+    """Where auth came from: env | secret | cli | none."""
+    if _reject_placeholder(hf_token_from_env()):
+        return "env"
+    if _reject_placeholder(hf_token_from_secrets()):
+        return "secret"
+    if hf_token_from_hub():
+        return "cli"
+    return "none"
 
 
 def apply_hf_token_to_env() -> bool:

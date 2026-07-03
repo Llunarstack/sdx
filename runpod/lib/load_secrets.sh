@@ -17,25 +17,27 @@ sdx_load_hf_token() {
 import os, sys
 sys.path.insert(0, os.environ.get("SDX_ROOT", "/workspace/sdx"))
 try:
-    from utils.hf_secrets import get_hf_token
+    from utils.hf_secrets import get_hf_token, hf_auth_source
     t = get_hf_token()
     if t:
-        print(t)
+        print(f"{hf_auth_source()}\t{t}")
 except Exception:
     pass
 PY
 )
   if [ -n "$tok" ]; then
-    case "$tok" in
-      *YOUR_TOKEN*|*your_token*|*_HERE) tok="" ;;
-    esac
-  fi
-  if [ -n "$tok" ]; then
+    local src="${tok%%$'\t'*}"
+    tok="${tok#*$'\t'}"
     export HF_TOKEN="$tok"
     export HUGGING_FACE_HUB_TOKEN="$tok"
-    echo "HF token: loaded from $f"
+    case "$src" in
+      env) echo "HF auth: token from environment" ;;
+      secret) echo "HF auth: token from $f" ;;
+      cli) echo "HF auth: huggingface-cli login (cached)" ;;
+      *) echo "HF auth: OK" ;;
+    esac
     return 0
   fi
-  echo "WARN: no valid HF token in $f — add: huggingface / token: hf_..." >&2
+  echo "WARN: no HF auth — run: huggingface-cli login  (or add token to $f)" >&2
   return 1
 }
