@@ -54,6 +54,25 @@ Fresh pod:
 EOF
 }
 
+_sdx_check_scrape_secrets() {
+  python3 - <<'PY' 2>/dev/null || return 0
+import os, sys
+sys.path.insert(0, os.environ.get("SDX_ROOT", "/workspace/sdx"))
+from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
+path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
+if not path.is_file():
+    sys.exit(1)
+need = {"danbooru", "rule34xxx"}
+have = set(parse_secrets_file(path).keys())
+sys.exit(0 if need.issubset(have) else 1)
+PY
+  echo "ERROR: booru credentials missing in ${SDX_SECRETS_FILE:-/workspace/secret.txt}" >&2
+  echo "  HF login does NOT cover danbooru/rule34 scraping." >&2
+  echo "  runpod/secret.txt is gitignored — paste your accounts into /workspace/secret.txt on the pod." >&2
+  echo "  Template: runpod/secrets.example.txt  |  nano /workspace/secret.txt" >&2
+  exit 1
+}
+
 _sdx_run_full() {
   # Force pipeline defaults (env.defaults uses train/1-GPU — wrong for full run).
   _NGPU="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
@@ -81,6 +100,7 @@ _sdx_run_full() {
 ╚══════════════════════════════════════════════════════════════╝
 EOF
 
+  _sdx_check_scrape_secrets
   exec bash "$SDX_ROOT/runpod/ultimate.sh" "$@"
 }
 
