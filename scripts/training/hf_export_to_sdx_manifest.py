@@ -30,11 +30,13 @@ import argparse
 import io
 import json
 import os
+import shutil
 import sys
 import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
-from typing import Any, Dict, Optional
+from queue import Queue
+from typing import Any, Dict, Iterator, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -71,6 +73,66 @@ def _to_pil(image_val: Any):
     except Exception:
         pass
     return None
+
+
+def _raw_image_bytes(image_val: Any) -> tuple[Optional[bytes], Optional[str]]:
+    if isinstance(image_val, dict):
+        b = image_val.get("bytes")
+        if isinstance(b, (bytes, bytearray)) and len(b) > 16:
+            b = bytes(b)
+            if b[:2] == b"\xff\xd8":
+                return b, "jpg"
+            if b[:8] == b"\x89PNG\r\n\x1a\n":
+                return b, "png"
+            if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+                return b, "webp"
+        p = image_val.get("path")
+        if p:
+            ext = Path(str(p)).suffix.lower().lstrip(".")
+            if ext in ("jpg", "jpeg", "png", "webp"):
+                return None, "jpg" if ext == "jpeg" else ext
+    return None, None
+
+
+def _write_image_fast(image_val: Any, ipath: Path, img_ext: str, *, skip_reencode: bool) -> bool:
+    if not skip_reencode:
+        return False
+    raw, fmt = _raw_image_bytes(image_val)
+    if raw is not None and fmt == img_ext:
+        ipath.write_bytes(raw)
+        return True
+    if isinstance(image_val, dict):
+        p = image_val.get("path")
+        if p:
+            ext = Path(str(p)).suffix.lower().lstrip(".")
+            if ext == "jpeg":
+                ext = "jpg"
+            if ext == img_ext:
+                try:
+                    shutil.copyfile(str(p), ipath)
+                    return True
+                except OSError:
+                    pass
+    return False
+
+
+def _prefetch_rows(row_iter: Iterator[Any], bufsize: int) -> Iterator[Any]:
+    q: Queue[Any] = Queue(maxsize=max(32, bufsize))
+    stop = object()
+
+    def _reader() -> None:
+        try:
+            for row in row_iter:
+                q.put(row)
+        finally:
+            q.put(stop)
+
+    threading.Thread(target=_reader, daemon=True).start()
+    while True:
+        item = q.get()
+        if item is stop:
+            break
+        yield item
 
 
 def _caption_from_row(row: Dict[str, Any], caption_field: str, tag_join: str) -> str:
@@ -112,16 +174,19 @@ def _save_sample(
     caption_field: str,
     image_field: str,
     tag_join: str,
+    skip_reencode: bool = False,
 ) -> Optional[str]:
     cap = _caption_from_row(row, caption_field, tag_join)
     if not cap:
         return None
-    pil = _to_pil(row.get(image_field))
-    if pil is None:
-        return None
-    pil = _prepare_for_save(pil, img_ext)
+    image_val = row.get(image_field)
     ipath = img_dir / f"{stem}.{img_ext}"
-    pil.save(ipath, **save_kw)
+    if not _write_image_fast(image_val, ipath, img_ext, skip_reencode=skip_reencode):
+        pil = _to_pil(image_val)
+        if pil is None:
+            return None
+        pil = _prepare_for_save(pil, img_ext)
+        pil.save(ipath, **save_kw)
     rec = {"image_path": f"images/{stem}.{img_ext}", "caption": cap}
     return json.dumps(rec, ensure_ascii=False) + "\n"
 
@@ -158,8 +223,12 @@ def main() -> int:
     turbo = args.turbo or os.environ.get("SDX_HF_TURBO", "").strip() in ("1", "true", "yes")
     workers = args.workers or int(os.environ.get("SDX_HF_EXPORT_WORKERS", "0") or 0)
     if workers < 1:
-        workers = 8 if turbo else 1
-    jpg_q = args.jpeg_quality or int(os.environ.get("SDX_HF_JPEG_QUALITY", "0") or 0) or (82 if turbo else 95)
+        workers = 48 if turbo else 1
+    jpg_q = args.jpeg_quality or int(os.environ.get("SDX_HF_JPEG_QUALITY", "0") or 0) or (78 if turbo else 95)
+    skip_reencode = os.environ.get("SDX_HF_SKIP_REENCODE", "1" if turbo else "0").strip() in ("1", "true", "yes")
+    prefetch = int(os.environ.get("SDX_HF_PREFETCH", "0") or 0)
+    if prefetch < 1 and turbo:
+        prefetch = max(workers * 12, 384)
 
     img_ext = args.image_format.lower()
     if img_ext == "jpeg":
@@ -242,13 +311,20 @@ def main() -> int:
             _counter += 1
             return stem
 
-    def rows():
+    def _iter_rows():
         if args.streaming:
             for row in iterator:
                 yield row
         else:
             for i in range(len(iterator)):
                 yield iterator[i]
+
+    def rows():
+        base = _iter_rows()
+        if workers > 1 and prefetch > 0:
+            yield from _prefetch_rows(base, prefetch)
+        else:
+            yield from base
 
     def _run_serial(mf) -> int:
         nonlocal n_written
@@ -266,6 +342,7 @@ def main() -> int:
                 caption_field=args.caption_field,
                 image_field=args.image_field,
                 tag_join=args.caption_tag_join,
+                skip_reencode=skip_reencode,
             )
             if not line:
                 continue
@@ -278,8 +355,7 @@ def main() -> int:
 
     def _run_parallel(mf) -> int:
         nonlocal n_written
-        max_in_flight = max(workers * 4, workers)
-        pending: dict = {}
+        max_in_flight = max(workers * 8, workers)
 
         def _submit(row: Dict[str, Any], ex: ThreadPoolExecutor):
             stem = _next_stem()
@@ -293,10 +369,12 @@ def main() -> int:
                 caption_field=args.caption_field,
                 image_field=args.image_field,
                 tag_join=args.caption_tag_join,
+                skip_reencode=skip_reencode,
             )
 
         with ThreadPoolExecutor(max_workers=workers) as ex:
             submitted = 0
+            pending: dict = {}
             for row in rows():
                 if args.max_samples and submitted >= int(args.max_samples):
                     break
@@ -328,7 +406,11 @@ def main() -> int:
 
     with manifest_path.open("w", encoding="utf-8") as mf:
         if workers > 1:
-            print(f"  turbo export: {workers} workers, jpeg_q={save_kw.get('quality', '?')}", flush=True)
+            print(
+                f"  turbo export: {workers} workers, prefetch={prefetch}, "
+                f"jpeg_q={save_kw.get('quality', '?')}, skip_reencode={skip_reencode}",
+                flush=True,
+            )
             _run_parallel(mf)
         else:
             _run_serial(mf)
