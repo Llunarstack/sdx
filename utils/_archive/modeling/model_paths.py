@@ -1024,7 +1024,7 @@ def pretrained_catalog() -> List[Dict[str, str]]:
         ("CodeFormer", "sczhou/CodeFormer", default_codeformer_path()),
         ("Consistency-Decoder", "openai/consistency-decoder", default_consistency_decoder_path()),
         ("ConvNeXtV2-Large", "facebook/convnextv2-large-22k-384", default_convnextv2_large_path()),
-        ("LAION-Aesthetic-v2", "christophschuhmann/improved-aesthetic-predictor", default_laion_aesthetic_v2_path()),
+        ("LAION-Aesthetic-v2", "camenduru/improved-aesthetic-predictor", default_laion_aesthetic_v2_path()),
         ("AnyDoor-Ref", "camenduru/AnyDoor", default_anydoor_ref_path()),
         # Boost models (critics / VLM / detectors)
         ("HPSv2-hf", "adams-story/HPSv2-hf", default_hpsv2_path()),
