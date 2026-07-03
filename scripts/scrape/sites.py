@@ -205,9 +205,9 @@ DEFAULT_SCRAPE_SITES = ("danbooru", "rule34xxx")
 #   e621: hard 2/s — never exceed 1.5
 #   rule34xyz: JWT v2 API — keep conservative
 RATE_LIMITS = {
-    "danbooru": 8.0,
+    "danbooru": 9.5,
     "e621": 1.5,
-    "rule34xxx": 8.0,
+    "rule34xxx": 9.5,
     "rule34xyz": 2.0,
 }
 

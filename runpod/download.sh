@@ -96,7 +96,7 @@ PY
     --out "$SDX_DATA"
     --sites "${SCRAPE_SITES[@]}"
     --ratings all
-    --workers "${SDX_SCRAPE_WORKERS:-20}"
+    --workers "${SDX_SCRAPE_WORKERS:-256}"
     --max-posts "${SDX_MAX_POSTS:-0}"
     --secrets "$SDX_SECRETS_FILE"
     --frame-fps "${SDX_FRAME_FPS:-2}"

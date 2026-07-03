@@ -5,6 +5,7 @@ SDX JSONL manifest writing. Site specifics live in :mod:`scripts.scrape.sites`.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -97,7 +98,7 @@ class BooruClient:
         timeout_s: float = 60.0,
         max_retries: int = 6,
         max_workers: int = 8,
-        dl_chunk_bytes: int = 1 << 18,
+        dl_chunk_bytes: int | None = None,
         split_frames: bool = True,
         frame_fps: float = 1.0,
         max_frames_per_post: int = 120,
@@ -111,7 +112,8 @@ class BooruClient:
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.max_workers = max(1, int(max_workers))
-        self.dl_chunk_bytes = max(1 << 14, int(dl_chunk_bytes))
+        chunk = dl_chunk_bytes if dl_chunk_bytes is not None else int(os.environ.get("SDX_DL_CHUNK_BYTES", str(1 << 20)))
+        self.dl_chunk_bytes = max(1 << 14, int(chunk))
         self.split_frames = bool(split_frames)
         self.frame_fps = max(0.1, float(frame_fps))
         self.max_frames_per_post = max(1, int(max_frames_per_post))
@@ -119,26 +121,43 @@ class BooruClient:
         # API pagination only — image downloads use the thread pool without this throttle.
         self.api_limiter = RateLimiter(1.0 / max(rate_per_sec, 0.01))
         self.stats = ScrapeStats()
+        self._user_agent = user_agent
 
-        self.session = requests.Session()
+        self.session = self._build_session(self.max_workers)
         self.session.headers.update({"User-Agent": user_agent})
-        retry = Retry(
-            total=max_retries,
-            connect=max_retries,
-            read=max_retries,
-            backoff_factor=1.0,
-            status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods=frozenset({"GET", "HEAD"}),
-            raise_on_status=False,
-        )
-        pool = max_workers + 4
-        adapter_http = HTTPAdapter(max_retries=retry, pool_connections=pool, pool_maxsize=pool)
-        self.session.mount("https://", adapter_http)
-        self.session.mount("http://", adapter_http)
+        self._tls = threading.local()
 
         self._seen_md5: set[str] = set()
         self._lock = threading.Lock()
         self._manifest_fh = None
+        self._manifest_pending = 0
+        self._manifest_flush_every = max(1, int(os.environ.get("SDX_MANIFEST_FLUSH_EVERY", "64")))
+
+    def _build_session(self, pool_size: int) -> requests.Session:
+        session = requests.Session()
+        retry = Retry(
+            total=self.max_retries,
+            connect=self.max_retries,
+            read=self.max_retries,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET", "HEAD"}),
+            raise_on_status=False,
+        )
+        pool = max(pool_size + 8, 32)
+        adapter_http = HTTPAdapter(max_retries=retry, pool_connections=pool, pool_maxsize=pool)
+        session.mount("https://", adapter_http)
+        session.mount("http://", adapter_http)
+        return session
+
+    def _dl_session(self) -> requests.Session:
+        """Per-thread session — requests.Session is not safe for concurrent GETs."""
+        s = getattr(self._tls, "session", None)
+        if s is None:
+            s = self._build_session(self.max_workers)
+            s.headers.update(self.session.headers)
+            self._tls.session = s
+        return s
 
     # -- helpers ----------------------------------------------------------
     def _load_resume_state(self) -> None:
@@ -188,7 +207,7 @@ class BooruClient:
         tmp = dest.with_suffix(dest.suffix + ".part")
         for attempt in range(self.max_retries):
             try:
-                with self.session.get(post.file_url, timeout=self.timeout_s, stream=True) as r:
+                with self._dl_session().get(post.file_url, timeout=self.timeout_s, stream=True) as r:
                     if r.status_code == 429 or r.status_code >= 500:
                         time.sleep(min(60.0, 2.0 * (attempt + 1)))
                         continue
@@ -253,7 +272,10 @@ class BooruClient:
         with self._lock:
             if self._manifest_fh is not None:
                 self._manifest_fh.write(line)
-                self._manifest_fh.flush()
+                self._manifest_pending += 1
+                if self._manifest_pending >= self._manifest_flush_every:
+                    self._manifest_fh.flush()
+                    self._manifest_pending = 0
             self.stats.downloaded += 1
 
     def _fetch_one(self, post: Post) -> None:
@@ -393,6 +415,9 @@ class BooruClient:
             if pool is not None:
                 pool.shutdown(wait=True)  # drain in-flight downloads
             if self._manifest_fh is not None:
+                if self._manifest_pending:
+                    self._manifest_fh.flush()
+                    self._manifest_pending = 0
                 self._manifest_fh.close()
                 self._manifest_fh = None
         return self.stats
