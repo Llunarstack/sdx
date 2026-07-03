@@ -1,5 +1,6 @@
 # Text-to-image dataset: tag-board style prompts + ReVe-style long/complex captions.
 import random
+import struct
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -34,9 +35,27 @@ except ImportError:  # pragma: no cover
 
 _TRAINABLE_IMAGE_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"})
 
+_SKIP_IMAGE_LOAD_ERRORS: tuple[type[BaseException], ...] = (
+    OSError,
+    ValueError,
+    struct.error,
+    Image.UnidentifiedImageError,
+)
+_decompression_bomb_error = getattr(Image, "DecompressionBombError", None)
+if _decompression_bomb_error is not None:
+    _SKIP_IMAGE_LOAD_ERRORS = _SKIP_IMAGE_LOAD_ERRORS + (_decompression_bomb_error,)
+
 
 def _looks_like_trainable_image(path: str) -> bool:
     return Path(path).suffix.lower() in _TRAINABLE_IMAGE_EXTS
+
+
+def _open_train_image(path: str) -> Image.Image:
+    try:
+        with Image.open(path) as img:
+            return img.convert("RGB")
+    except _SKIP_IMAGE_LOAD_ERRORS as exc:
+        raise Image.UnidentifiedImageError(f"failed to load image: {path}") from exc
 
 
 def _center_crop(pil_image, image_size: int):
@@ -527,7 +546,7 @@ class Text2ImageDataset(Dataset):
         for off in range(min(32, n)):
             try:
                 return self._getitem_impl((idx + off) % n)
-            except (OSError, Image.UnidentifiedImageError) as exc:
+            except _SKIP_IMAGE_LOAD_ERRORS as exc:
                 last_err = exc
                 continue
         raise RuntimeError(f"could not load any image near dataset index {idx}") from last_err
@@ -630,8 +649,7 @@ class Text2ImageDataset(Dataset):
                 return out
             except Exception:
                 pass
-        with Image.open(path) as _img:
-            pil = _img.convert("RGB")
+        pil = _open_train_image(path)
         mask_l: Optional[Image.Image] = None
         if mask_rel:
             rp = self._resolve_aux_path(mask_rel)
