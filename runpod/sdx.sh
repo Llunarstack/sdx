@@ -58,6 +58,11 @@ HF packs (see setup/hf_dataset_packs.json):
 
 Cap download size:  export SDX_HF_MAX_SAMPLES=100000
 Re-download pack:   export SDX_HF_FORCE=1
+
+Pod stuck on old code / pipefail error:
+  cd /workspace/sdx && git fetch origin && git reset --hard origin/feat/runpod-readiness-scraper-lora
+  sed -i 's/\r$//' runpod/sdx.sh runpod/lib/*.sh
+  bash runpod/sdx.sh datasets --fg
 EOF
 }
 
