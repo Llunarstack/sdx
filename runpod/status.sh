@@ -185,13 +185,11 @@ _render() {
   printf '\n'
 
   printf '── Pipeline manifests ────────────────────────────────────────────────\n'
-  for label path in \
-    "combined" "$SDX_DATA/combined/manifest.jsonl" \
-    "tagged" "${SDX_TAGGED_MANIFEST:-$SDX_DATA/tagged/manifest.jsonl}" \
-    "enriched" "${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}" \
-    "control" "${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"; do
-    printf '  %-10s %s rows\n' "$label:" "$(_lines "$path")"
-  done
+  _manifest_line() { printf '  %-10s %s rows\n' "$1:" "$(_lines "$2")"; }
+  _manifest_line "combined" "$SDX_DATA/combined/manifest.jsonl"
+  _manifest_line "tagged" "${SDX_TAGGED_MANIFEST:-$SDX_DATA/tagged/manifest.jsonl}"
+  _manifest_line "enriched" "${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}"
+  _manifest_line "control" "${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
   printf '\n'
 
   local latents cached
