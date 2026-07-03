@@ -25,6 +25,23 @@ sdx_load_hf_token || true
 if [ ! -f "$SDX_SECRETS_FILE" ] && [ -f "$ROOT/runpod/secret.txt" ]; then
   cp "$ROOT/runpod/secret.txt" "$SDX_SECRETS_FILE"
   echo "Installed secrets: $ROOT/runpod/secret.txt -> $SDX_SECRETS_FILE"
+elif [ -f "$SDX_SECRETS_FILE" ] && [ -f "$ROOT/runpod/secret.txt" ]; then
+  python3 - <<'PY' 2>/dev/null || true
+import os, shutil, sys
+sys.path.insert(0, os.environ["SDX_ROOT"])
+from scripts.scrape.secrets_config import parse_secrets_file
+from pathlib import Path
+dest = Path(os.environ["SDX_SECRETS_FILE"])
+bundled = Path(os.environ["SDX_ROOT"]) / "runpod" / "secret.txt"
+need = {"danbooru", "rule34xxx"}
+try:
+    have = set(parse_secrets_file(dest).keys())
+except Exception:
+    have = set()
+if bundled.is_file() and not need.intersection(have):
+    shutil.copy(bundled, dest)
+    print(f"Installed scrape credentials (workspace file had no booru sites): {bundled} -> {dest}")
+PY
 fi
 
 if [ -f "$SDX_SECRETS_FILE" ]; then

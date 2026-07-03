@@ -61,6 +61,37 @@ if [ "$SCRAPE" = 1 ]; then
   fi
 
   echo "==> Booru datasets -> $SDX_DATA (${SCRAPE_SITES[*]})"
+  export SDX_SCRAPE_SITES="${SCRAPE_SITES[*]}"
+  python3 - <<'PY' || exit 1
+import os, sys
+sys.path.insert(0, os.environ["SDX_ROOT"])
+from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
+
+sites = os.environ.get("SCRAPE_SITES", "danbooru rule34xxx").replace(",", " ").split()
+path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
+if not path.is_file():
+    print(f"ERROR: secrets file missing: {path}", file=sys.stderr)
+    print("  Booru scraping needs danbooru + rule34xxx logins (NOT huggingface-cli login).", file=sys.stderr)
+    print("  Copy runpod/secrets.example.txt -> /workspace/secret.txt and fill in your accounts.", file=sys.stderr)
+    sys.exit(1)
+try:
+    creds = parse_secrets_file(path)
+except Exception as e:
+    print(f"ERROR: could not read secrets {path}: {e}", file=sys.stderr)
+    sys.exit(1)
+missing = [s for s in sites if s not in creds]
+if missing:
+    print(f"ERROR: missing booru credentials in {path} for: {', '.join(missing)}", file=sys.stderr)
+    print(f"  Found site sections: {sorted(creds) or '(none)'}", file=sys.stderr)
+    print("  HF login does not cover danbooru/rule34 — add sections like:", file=sys.stderr)
+    print("    danbooru", file=sys.stderr)
+    print("    user: YOUR_USER", file=sys.stderr)
+    print("    api: YOUR_DANBOORU_API_KEY", file=sys.stderr)
+    print("    rule34xxx", file=sys.stderr)
+    print("    api?: &api_key=...&user_id=...", file=sys.stderr)
+    print("  See runpod/secrets.example.txt", file=sys.stderr)
+    sys.exit(1)
+PY
   SCRAPE_ARGS=(
     --out "$SDX_DATA"
     --sites "${SCRAPE_SITES[@]}"
