@@ -17,6 +17,12 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .frame_split import extract_training_frames, is_splittable_ext, needs_frame_split
+from .media_validate import (
+    is_blocked_download_ext,
+    save_still_as_jpeg,
+    sniff_media_kind,
+    validate_trainable_image,
+)
 from .post_cap import post_cap_reached
 from .safety import blocking_tags
 
@@ -69,6 +75,8 @@ class ScrapeStats:
     skipped_unsafe: int = 0
     skipped_rating: int = 0
     skipped_no_url: int = 0
+    skipped_blocked_ext: int = 0
+    skipped_invalid_media: int = 0
     errors: int = 0
     posts_split: int = 0
     frames_extracted: int = 0
@@ -167,7 +175,17 @@ class BooruClient:
             raise last_exc
         return None
 
+    def _cleanup_part_files(self) -> None:
+        if not self.images_dir.is_dir():
+            return
+        for part in self.images_dir.glob("*.part"):
+            try:
+                part.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     def _download_image(self, post: Post, dest: Path) -> bool:
+        tmp = dest.with_suffix(dest.suffix + ".part")
         for attempt in range(self.max_retries):
             try:
                 with self.session.get(post.file_url, timeout=self.timeout_s, stream=True) as r:
@@ -175,7 +193,6 @@ class BooruClient:
                         time.sleep(min(60.0, 2.0 * (attempt + 1)))
                         continue
                     r.raise_for_status()
-                    tmp = dest.with_suffix(dest.suffix + ".part")
                     with open(tmp, "wb") as f:
                         for chunk in r.iter_content(chunk_size=self.dl_chunk_bytes):
                             if chunk:
@@ -184,7 +201,23 @@ class BooruClient:
                 return True
             except requests.RequestException:
                 time.sleep(min(45.0, 1.5 * (attempt + 1)))
+            finally:
+                if tmp.is_file() and not dest.is_file():
+                    try:
+                        tmp.unlink(missing_ok=True)
+                    except OSError:
+                        pass
         return False
+
+    def _delete_raw_media(self, dest: Path) -> None:
+        try:
+            dest.unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            dest.with_suffix(dest.suffix + ".part").unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def _passes_rating(self, post: Post) -> bool:
         if self.ratings is None:
@@ -226,6 +259,12 @@ class BooruClient:
     def _fetch_one(self, post: Post) -> None:
         """Worker: download, optionally split GIF/video frames, append manifest rows."""
         ext = post.ext.lstrip(".") or "jpg"
+        if is_blocked_download_ext(ext):
+            with self._lock:
+                self.stats.skipped_blocked_ext += 1
+                self._seen_md5.discard(post.md5)
+            return
+
         fname = f"{post.md5}.{ext}"
         dest = self.images_dir / fname
 
@@ -235,6 +274,14 @@ class BooruClient:
                     self.stats.errors += 1
                     self._seen_md5.discard(post.md5)
                 return
+
+        kind = sniff_media_kind(dest)
+        if kind in {"html", "zip", "swf", "empty", "missing"}:
+            self._delete_raw_media(dest)
+            with self._lock:
+                self.stats.skipped_invalid_media += 1
+                self._seen_md5.discard(post.md5)
+            return
 
         split = self.split_frames and is_splittable_ext(ext)
         frames = []
@@ -273,22 +320,39 @@ class BooruClient:
                         **({"copyright_tags": list(post.copyright_tags)} if post.copyright_tags else {}),
                     },
                 )
-            if self.delete_raw_after_split and needs_frame_split(dest, ext):
-                try:
-                    dest.unlink(missing_ok=True)
-                except OSError:
-                    pass
+            if self.delete_raw_after_split:
+                self._delete_raw_media(dest)
             return
 
         if split and needs_frame_split(dest, ext):
+            self._delete_raw_media(dest)
             with self._lock:
                 self.stats.errors += 1
                 self._seen_md5.discard(post.md5)
             return
 
-        # Still image (or single-frame gif).
+        # Still image — normalize GIF to JPEG; reject unreadable rasters.
+        out_fname = fname
+        if ext.lower() == "gif":
+            jpg = self.images_dir / f"{post.md5}.jpg"
+            if save_still_as_jpeg(dest, jpg):
+                self._delete_raw_media(dest)
+                out_fname = jpg.name
+            elif not validate_trainable_image(dest):
+                self._delete_raw_media(dest)
+                with self._lock:
+                    self.stats.skipped_invalid_media += 1
+                    self._seen_md5.discard(post.md5)
+                return
+        elif not validate_trainable_image(dest):
+            self._delete_raw_media(dest)
+            with self._lock:
+                self.stats.skipped_invalid_media += 1
+                self._seen_md5.discard(post.md5)
+            return
+
         row = {
-            "image_path": str(Path("images") / fname),
+            "image_path": str(Path("images") / out_fname),
             "caption": post.caption,
             "rating": post.rating,
             "md5": post.md5,
@@ -307,6 +371,7 @@ class BooruClient:
     # -- main loop --------------------------------------------------------
     def run(self, tags: str, *, max_posts: int, dry_run: bool = False) -> ScrapeStats:
         self.images_dir.mkdir(parents=True, exist_ok=True)
+        self._cleanup_part_files()
         self._load_resume_state()
 
         self._manifest_fh = None if dry_run else open(self.manifest_path, "a", encoding="utf-8")
