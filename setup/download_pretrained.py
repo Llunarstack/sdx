@@ -65,7 +65,7 @@ def _hf_token() -> str | None:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     try:
-        from utils.hf_secrets import apply_hf_token_to_env, get_hf_token
+        from utils.hf_secrets import apply_hf_token_to_env, get_hf_token, hf_auth_source
 
         apply_hf_token_to_env()
         return get_hf_token()
@@ -212,14 +212,25 @@ def main(argv: list[str] | None = None) -> int:
     token = _hf_token()
     print(f"hf_transfer fast download: {'ON' if fast else 'OFF (pip install hf_transfer for a big speedup)'}")
     if token:
-        print("HF token: set (higher rate limits, gated models OK)")
+        try:
+            from utils.hf_secrets import hf_auth_source
+
+            src = hf_auth_source()
+            if src == "cli":
+                print("HF auth: huggingface-cli login (higher rate limits, gated models OK)")
+            elif src == "secret":
+                print("HF auth: secret.txt (higher rate limits, gated models OK)")
+            else:
+                print("HF auth: OK (higher rate limits, gated models OK)")
+        except ImportError:
+            print("HF auth: OK (higher rate limits, gated models OK)")
     else:
         print(
-            "HF token: NOT SET — you will hit 429 rate limits.\n"
-            "  Add to /workspace/secret.txt:\n"
+            "HF auth: NOT SET — you will hit 429 rate limits.\n"
+            "  Run: huggingface-cli login\n"
+            "  Or add to /workspace/secret.txt:\n"
             "    huggingface\n"
-            "    token: hf_your_token_here\n"
-            "  Or: export HF_TOKEN=hf_...",
+            "    token: hf_your_token_here",
             file=sys.stderr,
         )
 
