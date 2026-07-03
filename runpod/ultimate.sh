@@ -53,7 +53,9 @@ for arg in "$@"; do
 done
 
 export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
-export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
+export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
+export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
+export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-$SDX_DATA_SITES}"
 export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
 export SDX_USE_WD_TAGGER="${SDX_USE_WD_TAGGER:-1}"
 export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
@@ -65,7 +67,7 @@ export SDX_GLOBAL_BATCH_SIZE="${SDX_GLOBAL_BATCH_SIZE:-36}"
 
 echo "=============================================="
 echo " SDX Ultimate Pipeline"
-echo " sites=${SDX_SCRAPE_SITES}"
+echo " data_source=${SDX_DATA_SOURCE:-hf} sites=${SDX_DATA_SITES}"
 echo " wd_tagger=${SDX_USE_WD_TAGGER} enrich=${SDX_PROMPT_RESEARCH}"
 echo " train_base=${PHASE_TRAIN_BASE} lora_bank=${PHASE_TRAIN_LORAS}"
 echo "=============================================="
@@ -93,7 +95,7 @@ if [ "$PHASE_SCRAPE" = 1 ] || [ "$PHASE_TAG" = 1 ] || [ "$PHASE_ENRICH" = 1 ]; t
   [ "$PHASE_SCRAPE" = 0 ] && DL_ARGS+=(--skip-scrape)
   [ "$PHASE_TAG" = 0 ] && DL_ARGS+=(--skip-wd-tag)
   [ "$PHASE_ENRICH" = 0 ] && DL_ARGS+=(--skip-preprocess)
-  echo "==> [3-5/8] Scrape + WD tag + enrich"
+  echo "==> [3-5/8] HF datasets + WD tag + enrich"
   bash "$ROOT/runpod/download.sh" "${DL_ARGS[@]}"
 fi
 

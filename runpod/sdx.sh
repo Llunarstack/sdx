@@ -38,7 +38,7 @@ SDX — one command runs the whole pipeline:
 
   (no args) / run     Full pipeline (what you want):
                         1. Download pretrained models (T5, CLIP, VLM, WD tagger, …)
-                        2. Scrape ALL danbooru + rule34xxx + e621 + rule34.xyz
+                        2. HF datasets (turbo): danbooru + rule34 + e621 + gelbooru packs
                         3. WD EVA02 tagger enriches every image's tags
                         4. VLM + RAG rewrites captions for training quality
                         5. Train base DiT checkpoint
@@ -50,8 +50,8 @@ SDX — one command runs the whole pipeline:
   models              Download pretrained weights only (no scrape/train)
   secrets             Install /workspace/secret.txt from runpod/secret.txt
 
-Booru scrape needs credentials in /workspace/secret.txt for each site in
-SDX_SCRAPE_SITES (default: danbooru rule34xxx e621 rule34xyz). NOT hf auth.
+Booru API scrape (slow): set SDX_DATA_SOURCE=booru + secret.txt.
+Default is HF bulk datasets — needs hf auth login only.
 Upload your local runpod/secret.txt to /workspace/sdx/runpod/secret.txt via RunPod
 file browser, then:  bash runpod/sdx.sh secrets
 
@@ -62,6 +62,9 @@ EOF
 }
 
 _sdx_check_scrape_secrets() {
+  if [ "${SDX_DATA_SOURCE:-hf}" = "hf" ]; then
+    return 0
+  fi
   if sdx_ensure_scrape_secrets 2>/dev/null; then
     return 0
   fi
@@ -79,15 +82,17 @@ _sdx_check_scrape_secrets() {
   exit 1
 }
 
-  _sdx_apply_turbo_scrape() { sdx_apply_turbo_scrape; }
+_sdx_apply_turbo_scrape() { sdx_apply_turbo_scrape; }
 
 _sdx_run_full() {
   # Force pipeline defaults (env.defaults uses train/1-GPU — wrong for full run).
   _NGPU="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
   [ "${_NGPU:-0}" -lt 1 ] && _NGPU=1
   _sdx_apply_turbo_scrape
+  export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
+  export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
   export SDX_MODEL_PROFILE=ultimate
-  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
+  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-$SDX_DATA_SITES}"
   export SDX_MAX_POSTS=0
   export SDX_USE_WD_TAGGER=1
   export SDX_PROMPT_RESEARCH=1
@@ -101,7 +106,7 @@ _sdx_run_full() {
 ╔══════════════════════════════════════════════════════════════╗
 ║  SDX full pipeline                                           ║
 ║  1. Pretrained models (profile=$SDX_MODEL_PROFILE)             ║
-║  2. Scrape: $SDX_SCRAPE_SITES (${SDX_SCRAPE_WORKERS} dl thr, turbo=${SDX_SCRAPE_TURBO:-1})  ║
+║  2. Data: ${SDX_DATA_SOURCE:-hf} (${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz})     ║
 ║  3. WD EVA02 tagger → richer per-image tags                   ║
 ║  4. VLM + RAG caption enrichment                             ║
 ║  5. Train base DiT (${SDX_EPOCHS} epochs, ${SDX_NPROC_PER_NODE}× GPU)       ║
@@ -134,6 +139,8 @@ case "$CMD" in
     ;;
   data)
     _sdx_apply_turbo_scrape
+    export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
+    export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
     export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
     export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
     export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"

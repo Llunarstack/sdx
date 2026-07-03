@@ -1,0 +1,32 @@
+{
+  "packs": [
+    {
+      "name": "danbooru",
+      "dataset": "vikhyatoolkit/danbooru2023",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tag_string"
+    },
+    {
+      "name": "rule34xxx",
+      "dataset": "deepghs/rule34_full",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags"
+    },
+    {
+      "name": "e621",
+      "dataset": "NebulaeWis/e621-2024-webp-4Mpixel",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags"
+    },
+    {
+      "name": "rule34xyz",
+      "dataset": "deepghs/gelbooru-webp-4Mpixel",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags"
+    }
+  ]
+}
