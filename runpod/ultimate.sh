@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ultimate SDX pipeline: pretrained → scrape → WD tags → enrich → train base → LoRA bank.
+# Ultimate SDX pipeline: pretrained → HF datasets → WD tags → enrich → train base → LoRA bank.
 #
 #   bash runpod/ultimate.sh                    # full pipeline (days on H100)
 #   bash runpod/ultimate.sh --data-only        # models + scrape + tag + enrich
@@ -19,11 +19,13 @@ sdx_ensure_repo || exit 1
 ROOT="$SDX_ROOT"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
+# shellcheck source=/dev/null
+source "$ROOT/runpod/lib/hf_sites.sh"
 cd "$ROOT"
 
 PHASE_SETUP=1
 PHASE_MODELS=1
-PHASE_SCRAPE=1
+PHASE_DATASETS=1
 PHASE_TAG=1
 PHASE_ENRICH=1
 PHASE_TRAIN_BASE=1
@@ -34,10 +36,10 @@ EXTRA=()
 for arg in "$@"; do
   case "$arg" in
     --data-only) PHASE_TRAIN_BASE=0; PHASE_TRAIN_LORAS=0; PHASE_SAMPLE=0 ;;
-    --train-only) PHASE_SETUP=0; PHASE_MODELS=0; PHASE_SCRAPE=0; PHASE_TAG=0; PHASE_ENRICH=0 ;;
+    --train-only) PHASE_SETUP=0; PHASE_MODELS=0; PHASE_DATASETS=0; PHASE_TAG=0; PHASE_ENRICH=0 ;;
     --skip-setup) PHASE_SETUP=0 ;;
     --skip-models) PHASE_MODELS=0 ;;
-    --skip-scrape) PHASE_SCRAPE=0 ;;
+    --skip-datasets|--skip-scrape) PHASE_DATASETS=0 ;;
     --skip-tag) PHASE_TAG=0 ;;
     --skip-enrich) PHASE_ENRICH=0 ;;
     --skip-train) PHASE_TRAIN_BASE=0; PHASE_TRAIN_LORAS=0 ;;
@@ -52,17 +54,8 @@ for arg in "$@"; do
   esac
 done
 
+sdx_export_hf_sites
 export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
-export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
-# Unless train-only, use all four sites (pod templates often leave SDX_SCRAPE_SITES at 2).
-if [ "$PHASE_SCRAPE" = 1 ]; then
-  export SDX_DATA_SITES="danbooru rule34xxx e621 rule34xyz"
-  export SDX_SCRAPE_SITES="$SDX_DATA_SITES"
-else
-  export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
-  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-$SDX_DATA_SITES}"
-fi
-export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
 export SDX_USE_WD_TAGGER="${SDX_USE_WD_TAGGER:-1}"
 export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
 export SDX_TRAIN_LORA_BANK="${SDX_TRAIN_LORA_BANK:-1}"
@@ -73,7 +66,7 @@ export SDX_GLOBAL_BATCH_SIZE="${SDX_GLOBAL_BATCH_SIZE:-36}"
 
 echo "=============================================="
 echo " SDX Ultimate Pipeline"
-echo " data_source=${SDX_DATA_SOURCE:-hf} sites=${SDX_DATA_SITES}"
+echo " HF datasets: $SDX_HF_SITES"
 echo " wd_tagger=${SDX_USE_WD_TAGGER} enrich=${SDX_PROMPT_RESEARCH}"
 echo " train_base=${PHASE_TRAIN_BASE} lora_bank=${PHASE_TRAIN_LORAS}"
 echo "=============================================="
@@ -96,9 +89,9 @@ if [ "$PHASE_MODELS" = 1 ]; then
     --workers "${SDX_DL_WORKERS:-16}"
 fi
 
-if [ "$PHASE_SCRAPE" = 1 ] || [ "$PHASE_TAG" = 1 ] || [ "$PHASE_ENRICH" = 1 ]; then
+if [ "$PHASE_DATASETS" = 1 ] || [ "$PHASE_TAG" = 1 ] || [ "$PHASE_ENRICH" = 1 ]; then
   DL_ARGS=(--data-only)
-  [ "$PHASE_SCRAPE" = 0 ] && DL_ARGS+=(--skip-scrape)
+  [ "$PHASE_DATASETS" = 0 ] && DL_ARGS+=(--skip-datasets)
   [ "$PHASE_TAG" = 0 ] && DL_ARGS+=(--skip-wd-tag)
   [ "$PHASE_ENRICH" = 0 ] && DL_ARGS+=(--skip-preprocess)
   echo "==> [3-5/8] HF datasets + WD tag + enrich"

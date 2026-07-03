@@ -1,7 +1,9 @@
 {
+  "description": "Best Hugging Face mirrors for each booru site. Used by setup/download_hf_datasets.py.",
   "packs": [
     {
       "name": "danbooru",
+      "site": "Danbooru",
       "dataset": "vikhyatoolkit/danbooru2023",
       "split": "train",
       "image_field": "image",
@@ -9,6 +11,7 @@
     },
     {
       "name": "rule34xxx",
+      "site": "Rule34 (rule34.xxx)",
       "dataset": "deepghs/rule34_full",
       "split": "train",
       "image_field": "image",
@@ -16,6 +19,7 @@
     },
     {
       "name": "e621",
+      "site": "e621",
       "dataset": "NebulaeWis/e621-2024-webp-4Mpixel",
       "split": "train",
       "image_field": "image",
@@ -23,6 +27,7 @@
     },
     {
       "name": "rule34xyz",
+      "site": "Gelbooru (HF mirror; no rule34.xyz bulk dump)",
       "dataset": "deepghs/gelbooru-webp-4Mpixel",
       "split": "train",
       "image_field": "image",

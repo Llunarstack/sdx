@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# SDX on RunPod — one script does everything:
-#   models → scrape danbooru+rule34 → WD tagger → VLM captions → train base → LoRA bank
+# SDX on RunPod — one script:
+#   models → HF datasets (danbooru, rule34, e621, gelbooru) → WD tags → enrich → train
 #
-#   bash /workspace/sdx/runpod/sdx.sh          # runs the full pipeline
-#   bash /workspace/sdx/runpod/sdx.sh sample     # generate after training
+#   bash /workspace/sdx/runpod/sdx.sh
 #
-# Fresh pod (paste once):
+# Fresh pod:
 #   apt-get update -qq && apt-get install -y -qq git && \
 #   git clone --depth 1 -b feat/runpod-readiness-scraper-lora \
 #     https://github.com/Llunarstack/sdx.git /workspace/sdx && \
+#   hf auth login && \
 #   bash /workspace/sdx/runpod/sdx.sh
 set -euo pipefail
 
@@ -20,10 +20,8 @@ sdx_ensure_repo || exit 1
 # shellcheck source=/dev/null
 source "$HERE/lib/load_secrets.sh"
 # shellcheck source=/dev/null
-source "$HERE/lib/install_scrape_secrets.sh"
-# shellcheck source=/dev/null
-source "$HERE/lib/turbo_scrape.sh"
-sdx_load_hf_token || echo "WARN: no HF auth — run: huggingface-cli login" >&2
+source "$HERE/lib/hf_sites.sh"
+sdx_load_hf_token || echo "WARN: run hf auth login for gated HF datasets" >&2
 
 # shellcheck source=/dev/null
 source "$SDX_ROOT/runpod/env.defaults"
@@ -34,67 +32,40 @@ shift || true
 
 _sdx_help() {
   cat <<'EOF'
-SDX — one command runs the whole pipeline:
+SDX — full pipeline (Hugging Face datasets only, no live booru API):
 
-  (no args) / run     Full pipeline (what you want):
-                        1. Download pretrained models (T5, CLIP, VLM, WD tagger, …)
-                        2. HF datasets (turbo): danbooru + rule34 + e621 + gelbooru packs
-                        3. WD EVA02 tagger enriches every image's tags
-                        4. VLM + RAG rewrites captions for training quality
-                        5. Train base DiT checkpoint
-                        6. Train artist/style LoRA bank (mix weights at sample time)
-  sample              Generate: @artist and @style:anime control LoRA weights
-  setup               Install deps only (first pod boot)
-  train               Re-train only (skip scrape/download; for retries)
-  data                Steps 1-4 only (no training)
-  models              Download pretrained weights only (no scrape/train)
-  secrets             Install /workspace/secret.txt from runpod/secret.txt
+  (no args) / run     Full pipeline:
+                        1. Pretrained models (T5, CLIP, VLM, WD tagger, …)
+                        2. HF datasets: danbooru, rule34, e621, gelbooru
+                        3. WD EVA02 tagger
+                        4. VLM + RAG captions
+                        5. Train base DiT
+                        6. Train LoRA bank (@artist / @style at sample)
+  datasets            Download HF datasets only (same 4 packs)
+  data                Models + datasets + tag + enrich (no training)
+  models              Pretrained weights only
+  train               Train only (data must already exist)
+  sample              Generate images
+  setup               Install deps
 
-Booru API scrape (slow): set SDX_DATA_SOURCE=booru + secret.txt.
-Default is HF bulk datasets — needs hf auth login only.
-Upload your local runpod/secret.txt to /workspace/sdx/runpod/secret.txt via RunPod
-file browser, then:  bash runpod/sdx.sh secrets
+Auth: hf auth login  (required for some HF dataset packs)
 
-Fresh pod:
-  git clone --depth 1 -b feat/runpod-readiness-scraper-lora \
-    https://github.com/Llunarstack/sdx.git /workspace/sdx
+HF packs (see setup/hf_dataset_packs.json):
+  danbooru   -> vikhyatoolkit/danbooru2023
+  rule34xxx  -> deepghs/rule34_full
+  e621       -> NebulaeWis/e621-2024-webp-4Mpixel
+  rule34xyz  -> deepghs/gelbooru-webp-4Mpixel
+
+Cap download size:  export SDX_HF_MAX_SAMPLES=100000
+Re-download pack:   export SDX_HF_FORCE=1
 EOF
 }
 
-_sdx_check_scrape_secrets() {
-  if [ "${SDX_DATA_SOURCE:-hf}" = "hf" ]; then
-    return 0
-  fi
-  if sdx_ensure_scrape_secrets 2>/dev/null; then
-    return 0
-  fi
-  echo "ERROR: booru credentials missing in ${SDX_SECRETS_FILE:-/workspace/secret.txt}" >&2
-  echo "  HF / hf auth login does NOT cover danbooru or rule34 scraping." >&2
-  echo "" >&2
-  echo "  Fix (pick one):" >&2
-  echo "    1. RunPod file browser → upload your secret.txt to:" >&2
-  echo "         /workspace/sdx/runpod/secret.txt" >&2
-  echo "       then run:  bash runpod/sdx.sh secrets" >&2
-  echo "    2. Or paste directly into /workspace/secret.txt (file browser)" >&2
-  echo "    3. Or:  cat > /workspace/secret.txt <<'EOF'  (paste, then EOF on its own line)" >&2
-  echo "" >&2
-  echo "  Template: runpod/secrets.example.txt" >&2
-  exit 1
-}
-
-_sdx_apply_turbo_scrape() { sdx_apply_turbo_scrape; }
-
 _sdx_run_full() {
-  # Force pipeline defaults (env.defaults uses train/1-GPU — wrong for full run).
   _NGPU="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
   [ "${_NGPU:-0}" -lt 1 ] && _NGPU=1
-  _sdx_apply_turbo_scrape
-  # Full pipeline always uses all four HF packs (ignore stale RunPod template env).
-  export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
-  export SDX_DATA_SITES="danbooru rule34xxx e621 rule34xyz"
-  export SDX_SCRAPE_SITES="$SDX_DATA_SITES"
+  sdx_export_hf_sites
   export SDX_MODEL_PROFILE=ultimate
-  export SDX_MAX_POSTS=0
   export SDX_USE_WD_TAGGER=1
   export SDX_PROMPT_RESEARCH=1
   export SDX_TRAIN_LORA_BANK=1
@@ -105,17 +76,15 @@ _sdx_run_full() {
 
   cat <<EOF
 ╔══════════════════════════════════════════════════════════════╗
-║  SDX full pipeline                                           ║
+║  SDX full pipeline (Hugging Face datasets)                   ║
 ║  1. Pretrained models (profile=$SDX_MODEL_PROFILE)             ║
-║  2. Data: ${SDX_DATA_SOURCE:-hf} (${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz})     ║
-║  3. WD EVA02 tagger → richer per-image tags                   ║
-║  4. VLM + RAG caption enrichment                             ║
+║  2. HF datasets: $SDX_HF_SITES
+║  3. WD EVA02 tagger                                            ║
+║  4. VLM + RAG captions                                         ║
 ║  5. Train base DiT (${SDX_EPOCHS} epochs, ${SDX_NPROC_PER_NODE}× GPU)       ║
-║  6. Train LoRA bank → @artist / @style weights at sample     ║
+║  6. LoRA bank (@artist / @style)                               ║
 ╚══════════════════════════════════════════════════════════════╝
 EOF
-
-  _sdx_check_scrape_secrets
   exec bash "$SDX_ROOT/runpod/ultimate.sh" "$@"
 }
 
@@ -138,35 +107,18 @@ case "$CMD" in
   setup)
     exec bash "$SDX_ROOT/runpod/setup.sh" "$@"
     ;;
+  datasets)
+    exec bash "$SDX_ROOT/runpod/datasets.sh" "$@"
+    ;;
   data)
-    _sdx_apply_turbo_scrape
-    export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
-    export SDX_DATA_SITES="danbooru rule34xxx e621 rule34xyz"
-    export SDX_SCRAPE_SITES="$SDX_DATA_SITES"
+    sdx_export_hf_sites
     export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
-    export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
     export SDX_USE_WD_TAGGER=1
     export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
-    _sdx_check_scrape_secrets
     exec bash "$SDX_ROOT/runpod/ultimate.sh" --data-only "$@"
     ;;
   models)
     _sdx_run_models "$@"
-    ;;
-  secrets)
-    if sdx_ensure_scrape_secrets; then
-      echo "Scrape secrets OK: ${SDX_SECRETS_FILE:-/workspace/secret.txt}"
-      python3 - <<'PY'
-import os, sys
-sys.path.insert(0, os.environ.get("SDX_ROOT", "/workspace/sdx"))
-from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
-print("Sites:", sorted(parse_secrets_file(get_secrets_path()).keys()))
-PY
-    else
-      echo "No valid scrape secrets yet." >&2
-      echo "Upload secret.txt to $SDX_ROOT/runpod/secret.txt via RunPod file browser, then re-run." >&2
-      exit 1
-    fi
     ;;
   train)
     export SDX_NPROC_PER_NODE="${SDX_NPROC_PER_NODE:-3}"
@@ -178,6 +130,12 @@ PY
     ;;
   sample)
     exec bash "$SDX_ROOT/runpod/sample.sh" "$@"
+    ;;
+  secrets|scrape)
+    echo "This pipeline uses Hugging Face datasets only — no booru API credentials needed." >&2
+    echo "Run: hf auth login" >&2
+    echo "Then: bash runpod/sdx.sh datasets   (or bash runpod/sdx.sh for full pipeline)" >&2
+    exit 0
     ;;
   *)
     echo "Unknown command: $CMD" >&2
