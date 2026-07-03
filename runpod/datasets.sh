@@ -14,10 +14,13 @@ sdx_ensure_repo || exit 1
 source "$HERE/lib/load_secrets.sh"
 # shellcheck source=/dev/null
 source "$HERE/lib/hf_sites.sh"
+# shellcheck source=/dev/null
+source "$HERE/lib/turbo_hf.sh"
 sdx_load_hf_token || echo "WARN: run hf auth login for gated datasets" >&2
 # shellcheck source=/dev/null
 source "$SDX_ROOT/runpod/env.defaults"
 sdx_export_hf_sites
+sdx_apply_turbo_hf
 cd "$SDX_ROOT"
 
 LOCK="${SDX_DATA_LOCK:-$SDX_DATA/.data_download.lock}"
@@ -37,7 +40,8 @@ if ! flock -n 9; then
   exit 1
 fi
 
-echo "HF datasets: $SDX_HF_SITES"
+echo "HF datasets (turbo): $SDX_HF_SITES"
+echo "  workers=$SDX_HF_EXPORT_WORKERS parallel_packs=$SDX_HF_PARALLEL_PACKS"
 echo "  dest: $SDX_DATA"
 echo "  log:  $LOG"
 

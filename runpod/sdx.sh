@@ -21,6 +21,9 @@ sdx_ensure_repo || exit 1
 source "$HERE/lib/load_secrets.sh"
 # shellcheck source=/dev/null
 source "$HERE/lib/hf_sites.sh"
+# shellcheck source=/dev/null
+source "$HERE/lib/turbo_hf.sh"
+sdx_apply_turbo_hf
 sdx_load_hf_token || echo "WARN: run hf auth login for gated HF datasets" >&2
 
 # shellcheck source=/dev/null
