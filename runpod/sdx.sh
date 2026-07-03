@@ -51,10 +51,10 @@ SDX — full pipeline (Hugging Face datasets only, no live booru API):
 Auth: hf auth login  (required for some HF dataset packs)
 
 HF packs (see setup/hf_dataset_packs.json):
-  danbooru   -> vikhyatoolkit/danbooru2023
+  danbooru   -> ShinoharaHare/Danbooru-2024-Filtered-1M
   rule34xxx  -> deepghs/rule34_full
   e621       -> hearmeneigh/e621-rising-v3-curated
-  rule34xyz  -> deepghs/gelbooru_full (accept gated license on HF)
+  rule34xyz  -> deepghs/gelbooru_full
 
 Cap download size:  export SDX_HF_MAX_SAMPLES=100000
 Re-download pack:   export SDX_HF_FORCE=1

@@ -1,13 +1,14 @@
 {
-  "description": "Hugging Face packs with image+tags parquet (works with datasets streaming). WebDataset/index-only repos are NOT listed here.",
+  "description": "Best HF booru packs that stream image+tags via datasets (no cheesechaser). DeepGHS *-webp-4Mpixel and metadata-only dumps are intentionally excluded.",
   "packs": [
     {
       "name": "danbooru",
       "site": "Danbooru",
-      "dataset": "vikhyatoolkit/danbooru2023",
+      "dataset": "ShinoharaHare/Danbooru-2024-Filtered-1M",
       "split": "train",
       "image_field": "image",
-      "caption_field": "tag_string"
+      "caption_field": "tags",
+      "note": "1M quality-filtered danbooru2024 slice. deepghs/danbooru2024 (8M) needs cheesechaser (metadata+tars only)."
     },
     {
       "name": "rule34xxx",
@@ -16,7 +17,7 @@
       "split": "train",
       "image_field": "image",
       "caption_field": "tags",
-      "note": "Gated on HF — run hf auth login and accept the dataset license on the Hub."
+      "note": "Gated — hf auth login + accept license on Hub."
     },
     {
       "name": "e621",
@@ -26,16 +27,16 @@
       "image_field": "image",
       "caption_field": "tags",
       "caption_tag_join": " ",
-      "note": "NSFW gated — ~279k images with e621-style space-separated tags."
+      "note": "~279k e621-tagged images. boxingscorpionbagel/e621-2024 is metadata+tars (needs cheesechaser)."
     },
     {
       "name": "rule34xyz",
-      "site": "Gelbooru (rule34.xyz family)",
+      "site": "Gelbooru",
       "dataset": "deepghs/gelbooru_full",
       "split": "train",
       "image_field": "image",
       "caption_field": "tags",
-      "note": "Gated on HF — same deepghs parquet+tar layout as rule34_full."
+      "note": "Gated deepghs full mirror. Do NOT use gelbooru-webp-4Mpixel (index-only, breaks export)."
     }
   ]
 }
