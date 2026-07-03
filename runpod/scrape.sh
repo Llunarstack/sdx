@@ -24,10 +24,11 @@ done
 
 if [ "$TURBO" = 1 ]; then
   export SDX_SCRAPE_WORKERS="${SDX_SCRAPE_WORKERS:-96}"
-  export SDX_FRAME_FPS="${SDX_FRAME_FPS:-3}"
-  export SDX_MAX_FRAMES_PER_POST="${SDX_MAX_FRAMES_PER_POST:-0}"
+  export SDX_FRAME_FPS="${SDX_FRAME_FPS:-2}"
+  export SDX_MAX_FRAMES_PER_POST="${SDX_MAX_FRAMES_PER_POST:-120}"
   export SDX_SPLIT_FRAMES="${SDX_SPLIT_FRAMES:-1}"
   export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
+  # API limits unchanged — only download parallelism goes up.
 fi
 
 mkdir -p "$(dirname "$SCRAPE_LOCK")" "$(dirname "$LOG")"

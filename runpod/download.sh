@@ -40,9 +40,14 @@ if [ "$DATA" = 1 ]; then
     exit 1
   fi
 
-  echo "==> Booru datasets -> $SDX_DATA (all sites, all ratings, images + GIF/video frames)"
+  echo "==> Booru datasets -> $SDX_DATA (${SDX_SCRAPE_SITES:-danbooru rule34xxx})"
+  SCRAPE_SITES=(danbooru rule34xxx)
+  if [ -n "${SDX_SCRAPE_SITES:-}" ]; then
+    read -r -a SCRAPE_SITES <<<"${SDX_SCRAPE_SITES//,/ }"
+  fi
   SCRAPE_ARGS=(
     --out "$SDX_DATA"
+    --sites "${SCRAPE_SITES[@]}"
     --ratings all
     --workers "${SDX_SCRAPE_WORKERS:-20}"
     --max-posts "${SDX_MAX_POSTS:-0}"
@@ -62,7 +67,21 @@ if [ "$DATA" = 1 ]; then
 
   python setup/merge_manifests.py \
     --data-root "$SDX_DATA" \
-    --out "$SDX_DATA/combined/manifest.jsonl"
+    --out "$SDX_DATA/combined/manifest.jsonl" \
+    --sites "${SCRAPE_SITES[@]}"
+
+  python setup/cleanup_scrape_media.py \
+    --data-root "$SDX_DATA" \
+    --sites "${SCRAPE_SITES[@]}" \
+    --rewrite-manifests \
+    --backup \
+    --drop-raw-media || true
+
+  python setup/sanitize_manifest.py \
+    --manifest "$SDX_DATA/combined/manifest.jsonl" \
+    --data-root "$SDX_DATA" \
+    --backup \
+    --verify-images
 
   python setup/build_artist_index.py \
     --data-root "$SDX_DATA" \

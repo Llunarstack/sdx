@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.scrape.sites import ADAPTERS  # noqa: E402
+from scripts.scrape.sites import ADAPTERS, DEFAULT_SCRAPE_SITES  # noqa: E402
 
 
 def merge_manifests(data_root: Path, out_path: Path, sites: list[str]) -> int:
@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Merge booru site manifests (dedupe by md5).")
     p.add_argument("--data-root", required=True, help="Base dir containing per-site folders.")
     p.add_argument("--out", required=True, help="Output combined manifest.jsonl path.")
-    p.add_argument("--sites", nargs="*", default=sorted(ADAPTERS), help="Sites to include.")
+    p.add_argument("--sites", nargs="*", default=list(DEFAULT_SCRAPE_SITES), help="Sites to include.")
     args = p.parse_args(argv)
     n = merge_manifests(Path(args.data_root), Path(args.out), list(args.sites))
     print(f"Wrote {n:,} rows -> {args.out}")

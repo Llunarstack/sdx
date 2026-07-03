@@ -6,9 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 
-TRAINABLE = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"})
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.scrape.media_validate import TRAINABLE_IMAGE_EXTS, validate_trainable_image  # noqa: E402
 
 
 def main() -> int:
@@ -16,6 +21,11 @@ def main() -> int:
     p.add_argument("--manifest", required=True)
     p.add_argument("--data-root", required=True)
     p.add_argument("--backup", action="store_true", help="Write manifest.bak before editing.")
+    p.add_argument(
+        "--verify-images",
+        action="store_true",
+        help="PIL-verify each image (slower; drops corrupt PNG/JPEG).",
+    )
     args = p.parse_args()
 
     manifest = Path(args.manifest)
@@ -33,7 +43,10 @@ def main() -> int:
             d = json.loads(line)
             rel = d.get("image_path") or d.get("path") or d.get("image") or ""
             fp = root / str(rel)
-            if fp.is_file() and fp.suffix.lower() in TRAINABLE:
+            ok = fp.is_file() and fp.suffix.lower() in TRAINABLE_IMAGE_EXTS
+            if ok and args.verify_images:
+                ok = validate_trainable_image(fp)
+            if ok:
                 kept.append(line + "\n")
             else:
                 removed += 1

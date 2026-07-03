@@ -195,11 +195,19 @@ ADAPTERS = {
     "rule34xyz": Rule34xyzAdapter,
 }
 
-# Polite per-site request ceilings (requests/sec). e621 enforces <= 2/s hard.
+# Default scrape set for RunPod image training (not e621 / rule34.xyz).
+DEFAULT_SCRAPE_SITES = ("danbooru", "rule34xxx")
+
+# API pagination rate limits (req/s). Image CDN downloads use a separate thread
+# pool and do NOT consume this budget.
+#   danbooru: 10 reads/s global cap (donmai.us wiki) — stay at 8 for headroom
+#   rule34xxx: api.rule34.xxx DAPI; Gelbooru-family accounts ~10/s with creds
+#   e621: hard 2/s — never exceed 1.5
+#   rule34xyz: JWT v2 API — keep conservative
 RATE_LIMITS = {
-    "danbooru": 4.0,
+    "danbooru": 8.0,
     "e621": 1.5,
-    "rule34xxx": 2.0,
+    "rule34xxx": 8.0,
     "rule34xyz": 2.0,
 }
 

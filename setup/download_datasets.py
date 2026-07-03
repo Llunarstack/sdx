@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Download the booru datasets (danbooru, e621, rule34.xxx, rule34.xyz) into SDX manifests.
+"""Download booru datasets into SDX manifests.
 
-Full-site crawl by default (no tag filter, all ratings), which is what "download
-everything" means. Runs the three sites concurrently, each with the threaded,
-resumable, cursor-paginating engine in ``scripts/scrape``.
+Default sites: danbooru + rule34.xxx (api.rule34.xxx). Use --sites to override.
 
-    python setup/download_datasets.py --out /workspace/data              # everything
-    python setup/download_datasets.py --sites danbooru e621 --tags "landscape"
+    python setup/download_datasets.py --out /workspace/data
+    python setup/download_datasets.py --sites danbooru rule34xxx --tags ""
     python setup/download_datasets.py --max-posts 100000 --workers 16
 
 Ratings default to ``all`` (SFW + NSFW). The mandatory CSAM-safety gate in
@@ -20,6 +18,7 @@ days — point --out at your network volume and just let it resume across runs.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -31,10 +30,26 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.scrape.booru_client import BooruClient  # noqa: E402
 from scripts.scrape.scrape_cli import _parse_ratings  # noqa: E402
 from scripts.scrape.secrets_config import get_credentials  # noqa: E402
-from scripts.scrape.sites import ADAPTERS, RATE_LIMITS, build_adapter  # noqa: E402
+from scripts.scrape.sites import ADAPTERS, DEFAULT_SCRAPE_SITES, RATE_LIMITS, build_adapter  # noqa: E402
 from utils.prompt.artist_registry import build_from_manifests  # noqa: E402
 
-ALL_SITES = sorted(ADAPTERS)  # danbooru, e621, rule34xxx, rule34xyz
+ALL_SITES = sorted(ADAPTERS)
+
+
+def _default_sites() -> list[str]:
+    env = os.environ.get("SDX_SCRAPE_SITES", "").strip()
+    if env:
+        return [s.strip() for s in env.replace(",", " ").split() if s.strip()]
+    return list(DEFAULT_SCRAPE_SITES)
+
+
+def _site_rate(site: str, args) -> float:
+    if args.rate is not None:
+        return float(args.rate)
+    env_key = f"SDX_API_RATE_{site.upper()}"
+    if os.environ.get(env_key):
+        return float(os.environ[env_key])
+    return float(RATE_LIMITS.get(site, 2.0))
 
 
 def _scrape_site(site: str, args) -> tuple[str, object]:
@@ -42,7 +57,7 @@ def _scrape_site(site: str, args) -> tuple[str, object]:
     adapter = build_adapter(site, creds)
     contact = creds.username or creds.email or "anonymous"
     user_agent = f"sdx-dataset-scraper/1.0 (by {contact})"
-    rate = args.rate if args.rate is not None else RATE_LIMITS.get(site, 2.0)
+    rate = _site_rate(site, args)
     out_dir = Path(args.out) / site
 
     client = BooruClient(
@@ -66,16 +81,23 @@ def _scrape_site(site: str, args) -> tuple[str, object]:
     print(
         f"[{site}] done: downloaded={stats.downloaded} fetched={stats.fetched} "
         f"posts_split={stats.posts_split} frames={stats.frames_extracted} "
-        f"blocked_unsafe={stats.skipped_unsafe} errors={stats.errors}",
+        f"blocked_unsafe={stats.skipped_unsafe} blocked_ext={stats.skipped_blocked_ext} "
+        f"invalid_media={stats.skipped_invalid_media} errors={stats.errors}",
         flush=True,
     )
     return site, stats
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Full booru dataset downloader (danbooru, e621, rule34.xxx, rule34.xyz).")
+    p = argparse.ArgumentParser(description="Booru dataset downloader (default: danbooru + rule34.xxx).")
     p.add_argument("--out", required=True, help="Base output dir (per-site subfolders created).")
-    p.add_argument("--sites", nargs="*", default=ALL_SITES, choices=ALL_SITES, help="Sites to crawl (default: all).")
+    p.add_argument(
+        "--sites",
+        nargs="*",
+        default=None,
+        choices=ALL_SITES,
+        help=f"Sites to crawl (default: {list(DEFAULT_SCRAPE_SITES)} or $SDX_SCRAPE_SITES).",
+    )
     p.add_argument("--tags", default="", help="Tag query (default: empty = whole site).")
     p.add_argument("--ratings", default="all", help="s/q/e or 'all' (default all = SFW+NSFW). Blocklist always on.")
     p.add_argument("--max-posts", type=int, default=0, help="Per-site cap (0 = unlimited full crawl).")
@@ -102,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 
         args.secrets = str(get_secrets_path())
 
-    sites = list(dict.fromkeys(args.sites))
+    sites = list(dict.fromkeys(args.sites if args.sites is not None else _default_sites()))
     print(f"Crawling {sites} -> {args.out}\n")
 
     results = {}
