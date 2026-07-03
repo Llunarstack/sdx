@@ -35,7 +35,7 @@ if [ "$MODELS" = 1 ]; then
 fi
 
 if [ "$SCRAPE" = 1 ] || [ "$DATA_PREP" = 1 ]; then
-  SCRAPE_SITES=(danbooru rule34xxx)
+  SCRAPE_SITES=(danbooru rule34xxx e621 rule34xyz)
   if [ -n "${SDX_SCRAPE_SITES:-}" ]; then
     read -r -a SCRAPE_SITES <<<"${SDX_SCRAPE_SITES//,/ }"
   fi
@@ -67,7 +67,7 @@ import os, sys
 sys.path.insert(0, os.environ["SDX_ROOT"])
 from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
 
-sites = os.environ.get("SCRAPE_SITES", "danbooru rule34xxx").replace(",", " ").split()
+sites = os.environ.get("SDX_SCRAPE_SITES", os.environ.get("SCRAPE_SITES", "danbooru rule34xxx e621 rule34xyz")).replace(",", " ").split()
 path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
 if not path.is_file():
     print(f"ERROR: secrets file missing: {path}", file=sys.stderr)

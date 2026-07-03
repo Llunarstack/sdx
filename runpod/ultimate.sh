@@ -53,7 +53,7 @@ for arg in "$@"; do
 done
 
 export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
-export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
+export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
 export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
 export SDX_USE_WD_TAGGER="${SDX_USE_WD_TAGGER:-1}"
 export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"

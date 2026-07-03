@@ -38,7 +38,7 @@ SDX — one command runs the whole pipeline:
 
   (no args) / run     Full pipeline (what you want):
                         1. Download pretrained models (T5, CLIP, VLM, WD tagger, …)
-                        2. Scrape ALL danbooru + rule34xxx
+                        2. Scrape ALL danbooru + rule34xxx + e621 + rule34.xyz
                         3. WD EVA02 tagger enriches every image's tags
                         4. VLM + RAG rewrites captions for training quality
                         5. Train base DiT checkpoint
@@ -50,7 +50,8 @@ SDX — one command runs the whole pipeline:
   models              Download pretrained weights only (no scrape/train)
   secrets             Install /workspace/secret.txt from runpod/secret.txt
 
-Booru scrape needs danbooru + rule34xxx in /workspace/secret.txt (NOT hf auth).
+Booru scrape needs credentials in /workspace/secret.txt for each site in
+SDX_SCRAPE_SITES (default: danbooru rule34xxx e621 rule34xyz). NOT hf auth.
 Upload your local runpod/secret.txt to /workspace/sdx/runpod/secret.txt via RunPod
 file browser, then:  bash runpod/sdx.sh secrets
 
@@ -86,7 +87,7 @@ _sdx_run_full() {
   [ "${_NGPU:-0}" -lt 1 ] && _NGPU=1
   _sdx_apply_turbo_scrape
   export SDX_MODEL_PROFILE=ultimate
-  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
+  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
   export SDX_MAX_POSTS=0
   export SDX_USE_WD_TAGGER=1
   export SDX_PROMPT_RESEARCH=1
@@ -134,7 +135,7 @@ case "$CMD" in
   data)
     _sdx_apply_turbo_scrape
     export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
-    export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx}"
+    export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-danbooru rule34xxx e621 rule34xyz}"
     export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
     export SDX_USE_WD_TAGGER=1
     export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
