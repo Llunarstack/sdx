@@ -19,32 +19,13 @@ cd "$ROOT"
 source "$ROOT/runpod/env.defaults"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/lib/load_secrets.sh"
+# shellcheck source=/dev/null
+source "$ROOT/runpod/lib/install_scrape_secrets.sh"
 sdx_load_hf_token || true
 
 # Install secrets: bundled runpod/secret.txt -> /workspace/secret.txt (never committed)
-if [ ! -f "$SDX_SECRETS_FILE" ] && [ -f "$ROOT/runpod/secret.txt" ]; then
-  cp "$ROOT/runpod/secret.txt" "$SDX_SECRETS_FILE"
-  echo "Installed secrets: $ROOT/runpod/secret.txt -> $SDX_SECRETS_FILE"
-elif [ -f "$SDX_SECRETS_FILE" ] && [ -f "$ROOT/runpod/secret.txt" ]; then
-  python3 - <<'PY' 2>/dev/null || true
-import os, shutil, sys
-sys.path.insert(0, os.environ["SDX_ROOT"])
-from scripts.scrape.secrets_config import parse_secrets_file
-from pathlib import Path
-dest = Path(os.environ["SDX_SECRETS_FILE"])
-bundled = Path(os.environ["SDX_ROOT"]) / "runpod" / "secret.txt"
-need = {"danbooru", "rule34xxx"}
-try:
-    have = set(parse_secrets_file(dest).keys())
-except Exception:
-    have = set()
-if bundled.is_file() and not need.intersection(have):
-    shutil.copy(bundled, dest)
-    print(f"Installed scrape credentials (workspace file had no booru sites): {bundled} -> {dest}")
-PY
-fi
-
-if [ -f "$SDX_SECRETS_FILE" ]; then
+sdx_install_scrape_secrets || true
+if ! sdx_scrape_secrets_ok 2>/dev/null; then
   echo "Secrets: $SDX_SECRETS_FILE"
 else
   echo "WARN: secrets not found at $SDX_SECRETS_FILE — upload secret.txt before downloading datasets."

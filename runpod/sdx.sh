@@ -19,6 +19,8 @@ sdx_ensure_repo || exit 1
 
 # shellcheck source=/dev/null
 source "$HERE/lib/load_secrets.sh"
+# shellcheck source=/dev/null
+source "$HERE/lib/install_scrape_secrets.sh"
 sdx_load_hf_token || echo "WARN: no HF auth — run: huggingface-cli login" >&2
 
 # shellcheck source=/dev/null
@@ -43,10 +45,12 @@ SDX — one command runs the whole pipeline:
   setup               Install deps only (first pod boot)
   train               Re-train only (skip scrape/download; for retries)
   data                Steps 1-4 only (no training)
+  models              Download pretrained weights only (no scrape/train)
+  secrets             Install /workspace/secret.txt from runpod/secret.txt
 
-Inference after training:
-  SDX_PROMPT="@wlop @style:anime 1girl, cherry blossoms" bash /workspace/sdx/runpod/sdx.sh sample
-  --artist-strength 1.2  scales the artist LoRA
+Booru scrape needs danbooru + rule34xxx in /workspace/secret.txt (NOT hf auth).
+Upload your local runpod/secret.txt to /workspace/sdx/runpod/secret.txt via RunPod
+file browser, then:  bash runpod/sdx.sh secrets
 
 Fresh pod:
   git clone --depth 1 -b feat/runpod-readiness-scraper-lora \
@@ -55,26 +59,19 @@ EOF
 }
 
 _sdx_check_scrape_secrets() {
-  python3 - <<'PY' 2>/dev/null || return 0
-import os, sys
-sys.path.insert(0, os.environ.get("SDX_ROOT", "/workspace/sdx"))
-from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
-path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
-if not path.is_file():
-    sys.exit(1)
-need = {"danbooru", "rule34xxx"}
-have = set(parse_secrets_file(path).keys())
-sys.exit(0 if need.issubset(have) else 1)
-PY
+  if sdx_ensure_scrape_secrets 2>/dev/null; then
+    return 0
+  fi
   echo "ERROR: booru credentials missing in ${SDX_SECRETS_FILE:-/workspace/secret.txt}" >&2
-  echo "  HF login does NOT cover danbooru/rule34 scraping." >&2
-  echo "  runpod/secret.txt is gitignored — create /workspace/secret.txt on the pod:" >&2
-  echo "    • RunPod web UI: open /workspace/secret.txt in the file browser and paste" >&2
-  echo "    • Or shell:  cat > /workspace/secret.txt <<'EOF'" >&2
-  echo "                 danbooru" >&2
-  echo "                 user: ..." >&2
-  echo "                 api: ..." >&2
-  echo "                 EOF" >&2
+  echo "  HF / hf auth login does NOT cover danbooru or rule34 scraping." >&2
+  echo "" >&2
+  echo "  Fix (pick one):" >&2
+  echo "    1. RunPod file browser → upload your secret.txt to:" >&2
+  echo "         /workspace/sdx/runpod/secret.txt" >&2
+  echo "       then run:  bash runpod/sdx.sh secrets" >&2
+  echo "    2. Or paste directly into /workspace/secret.txt (file browser)" >&2
+  echo "    3. Or:  cat > /workspace/secret.txt <<'EOF'  (paste, then EOF on its own line)" >&2
+  echo "" >&2
   echo "  Template: runpod/secrets.example.txt" >&2
   exit 1
 }
@@ -110,6 +107,15 @@ EOF
   exec bash "$SDX_ROOT/runpod/ultimate.sh" "$@"
 }
 
+_sdx_run_models() {
+  export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
+  echo "==> Pretrained models only (profile=$SDX_MODEL_PROFILE)"
+  python setup/download_pretrained.py \
+    --dest "${SDX_PRETRAINED:-/workspace/pretrained}" \
+    --profile "$SDX_MODEL_PROFILE" \
+    --workers "${SDX_DL_WORKERS:-4}"
+}
+
 case "$CMD" in
   help|-h|--help)
     _sdx_help
@@ -126,7 +132,26 @@ case "$CMD" in
     export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
     export SDX_USE_WD_TAGGER=1
     export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"
+    _sdx_check_scrape_secrets
     exec bash "$SDX_ROOT/runpod/ultimate.sh" --data-only "$@"
+    ;;
+  models)
+    _sdx_run_models "$@"
+    ;;
+  secrets)
+    if sdx_ensure_scrape_secrets; then
+      echo "Scrape secrets OK: ${SDX_SECRETS_FILE:-/workspace/secret.txt}"
+      python3 - <<'PY'
+import os, sys
+sys.path.insert(0, os.environ.get("SDX_ROOT", "/workspace/sdx"))
+from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
+print("Sites:", sorted(parse_secrets_file(get_secrets_path()).keys()))
+PY
+    else
+      echo "No valid scrape secrets yet." >&2
+      echo "Upload secret.txt to $SDX_ROOT/runpod/secret.txt via RunPod file browser, then re-run." >&2
+      exit 1
+    fi
     ;;
   train)
     export SDX_NPROC_PER_NODE="${SDX_NPROC_PER_NODE:-3}"
