@@ -71,12 +71,17 @@ def _to_pil(image_val: Any):
 
 
 def _caption_from_row(row: Dict[str, Any], caption_field: str, tag_join: str) -> str:
-    v = row.get(caption_field)
-    if v is None:
-        return ""
-    if isinstance(v, (list, tuple)):
-        return tag_join.join(str(x).strip() for x in v if str(x).strip())
-    return str(v).strip()
+    for field in (caption_field, "text", "tag_string", "tags"):
+        v = row.get(field)
+        if v is None:
+            continue
+        if isinstance(v, (list, tuple)):
+            cap = tag_join.join(str(x).strip() for x in v if str(x).strip())
+        else:
+            cap = str(v).strip()
+        if cap:
+            return cap
+    return ""
 
 
 def main() -> int:

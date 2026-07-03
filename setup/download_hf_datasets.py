@@ -129,6 +129,8 @@ def main(argv: list[str] | None = None) -> int:
             cmd.extend(["--config", str(spec["config"])])
         if spec.get("revision"):
             cmd.extend(["--revision", str(spec["revision"])])
+        if spec.get("caption_tag_join"):
+            cmd.extend(["--caption-tag-join", str(spec["caption_tag_join"])])
         if args.max_samples > 0:
             cmd.extend(["--max-samples", str(args.max_samples)])
 

@@ -13,7 +13,10 @@ sdx_ensure_repo() {
     cd "$SDX_ROOT" || return 1
     git fetch origin 2>/dev/null || true
     git checkout "$SDX_REPO_REF" 2>/dev/null || true
-    git pull --ff-only 2>/dev/null || echo "WARN: git pull failed — using existing checkout" >&2
+    if ! git pull --ff-only 2>/dev/null; then
+      echo "WARN: git pull failed — local edits may block updates." >&2
+      echo "  Fix: cd $SDX_ROOT && git stash -u && git pull --ff-only" >&2
+    fi
     return 0
   fi
 
