@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 _ENV_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_HUB_TOKEN")
+_BARE_HF_TOKEN = re.compile(r"^hf_[A-Za-z0-9]{20,}$")
 _TOKEN_LINE = re.compile(
     r"^(?:hf[_-]?token|huggingface[_-]?token|token)\s*[:=]\s*(\S+)",
     re.IGNORECASE,
@@ -39,6 +40,8 @@ def hf_token_from_secrets(path: str | os.PathLike[str] | None = None) -> str | N
         m = _TOKEN_LINE.match(line)
         if m:
             return m.group(1).strip()
+        if _BARE_HF_TOKEN.match(line):
+            return line
         if in_hf_section and ":" in line:
             k, _, v = line.partition(":")
             if k.strip().lower() in ("token", "api", "key") and v.strip():

@@ -182,7 +182,7 @@ def _download_one(
             wait = _retry_wait(e, attempt)
             print(
                 f"  attempt {attempt}/{retries} failed ({type(e).__name__}); "
-                f"retrying in {wait}s — set HF_TOKEN in /workspace/secret.txt to avoid 429",
+                f"retrying in {wait}s — run: hf auth login (or set token in secret.txt)",
                 file=sys.stderr,
             )
             time.sleep(wait)

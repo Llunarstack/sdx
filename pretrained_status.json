@@ -311,7 +311,8 @@
     {
       "name": "LAION-Aesthetic-v2",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LAION-Aesthetic-v2",
-      "hf_fallback": "christophschuhmann/improved-aesthetic-predictor",
+      "hf_fallback": "camenduru/improved-aesthetic-predictor",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LAION-Aesthetic-v2",
       "is_local": true,
       "size_gb": 0.01
