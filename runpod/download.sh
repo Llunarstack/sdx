@@ -14,6 +14,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/runpod/env.defaults"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/lib/hf_sites.sh"
+# shellcheck source=/dev/null
+source "$ROOT/runpod/lib/turbo_hf.sh"
 cd "$ROOT"
 
 MODELS=1
@@ -33,6 +35,7 @@ for arg in "$@"; do
 done
 
 sdx_export_hf_sites
+sdx_apply_turbo_hf
 read -r -a HF_SITES <<<"$SDX_HF_SITES"
 
 if [ "$MODELS" = 1 ]; then
