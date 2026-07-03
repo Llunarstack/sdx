@@ -24,12 +24,15 @@ sdx_scrape_secrets_ok() {
 import os, sys
 sys.path.insert(0, os.environ.get("SDX_ROOT", "/workspace/sdx"))
 from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
+
+sites = os.environ.get("SDX_SCRAPE_SITES", "danbooru rule34xxx e621 rule34xyz").replace(",", " ").split()
+sites = [s.strip() for s in sites if s.strip()]
 path = get_secrets_path(os.environ.get("SDX_SECRETS_FILE"))
-need = {"danbooru", "rule34xxx"}
 if not path.is_file():
     sys.exit(1)
 have = set(parse_secrets_file(path).keys())
-sys.exit(0 if need.issubset(have) else 1)
+missing = [s for s in sites if s not in have]
+sys.exit(0 if not missing else 1)
 PY
 }
 

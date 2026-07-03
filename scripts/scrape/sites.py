@@ -195,8 +195,8 @@ ADAPTERS = {
     "rule34xyz": Rule34xyzAdapter,
 }
 
-# Default scrape set for RunPod image training (not e621 / rule34.xyz).
-DEFAULT_SCRAPE_SITES = ("danbooru", "rule34xxx")
+# Default scrape set for RunPod (all booru sites in runpod/secrets.example.txt).
+DEFAULT_SCRAPE_SITES = ("danbooru", "rule34xxx", "e621", "rule34xyz")
 
 # API pagination rate limits (req/s). Image CDN downloads use a separate thread
 # pool and do NOT consume this budget.
