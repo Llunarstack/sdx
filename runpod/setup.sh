@@ -25,10 +25,11 @@ sdx_load_hf_token || true
 
 # Install secrets: bundled runpod/secret.txt -> /workspace/secret.txt (never committed)
 sdx_install_scrape_secrets || true
-if ! sdx_scrape_secrets_ok 2>/dev/null; then
-  echo "Secrets: $SDX_SECRETS_FILE"
+if sdx_scrape_secrets_ok 2>/dev/null; then
+  echo "Scrape secrets OK: ${SDX_SECRETS_FILE:-/workspace/secret.txt}"
 else
-  echo "WARN: secrets not found at $SDX_SECRETS_FILE — upload secret.txt before downloading datasets."
+  echo "WARN: danbooru/rule34xxx credentials missing — upload to $ROOT/runpod/secret.txt"
+  echo "      then: bash runpod/sdx.sh secrets"
 fi
 
 bash "$ROOT/runpod/lib/install_system_deps.sh"
