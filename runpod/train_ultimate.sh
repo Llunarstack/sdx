@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec bash "$(dirname "$0")/sdx.sh" full "$@"
+exec bash "$(dirname "$0")/sdx.sh" run "$@"
