@@ -2,7 +2,10 @@
 # Load HF_TOKEN from SDX_SECRETS_FILE into the environment (if not already set).
 sdx_load_hf_token() {
   if [ -n "${HF_TOKEN:-}" ]; then
-    return 0
+    case "$HF_TOKEN" in
+      *YOUR_TOKEN*|*your_token*|*_HERE) unset HF_TOKEN HUGGING_FACE_HUB_TOKEN ;;
+      *) return 0 ;;
+    esac
   fi
   export SDX_ROOT="${SDX_ROOT:-/workspace/sdx}"
   local f="${SDX_SECRETS_FILE:-/workspace/secret.txt}"
