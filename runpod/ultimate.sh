@@ -54,8 +54,14 @@ done
 
 export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
 export SDX_DATA_SOURCE="${SDX_DATA_SOURCE:-hf}"
-export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
-export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-$SDX_DATA_SITES}"
+# Unless train-only, use all four sites (pod templates often leave SDX_SCRAPE_SITES at 2).
+if [ "$PHASE_SCRAPE" = 1 ]; then
+  export SDX_DATA_SITES="danbooru rule34xxx e621 rule34xyz"
+  export SDX_SCRAPE_SITES="$SDX_DATA_SITES"
+else
+  export SDX_DATA_SITES="${SDX_DATA_SITES:-danbooru rule34xxx e621 rule34xyz}"
+  export SDX_SCRAPE_SITES="${SDX_SCRAPE_SITES:-$SDX_DATA_SITES}"
+fi
 export SDX_MAX_POSTS="${SDX_MAX_POSTS:-0}"
 export SDX_USE_WD_TAGGER="${SDX_USE_WD_TAGGER:-1}"
 export SDX_PROMPT_RESEARCH="${SDX_PROMPT_RESEARCH:-1}"

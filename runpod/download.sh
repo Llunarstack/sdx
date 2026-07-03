@@ -59,7 +59,8 @@ if [ "$SCRAPE" = 1 ]; then
   fi
 
   if [ "${SDX_DATA_SOURCE:-hf}" = "hf" ]; then
-    echo "==> HF datasets (turbo) -> $SDX_DATA (${SCRAPE_SITES[*]})"
+    echo "==> HF datasets (turbo) -> $SDX_DATA"
+    echo "    sites: ${SCRAPE_SITES[*]} (${#SCRAPE_SITES[@]} packs)"
     export SDX_DATA_SITES="${SCRAPE_SITES[*]}"
     HF_ARGS=(
       --dest "$SDX_DATA"
