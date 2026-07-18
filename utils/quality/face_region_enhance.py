@@ -8,12 +8,10 @@ Requires ``opencv-python`` for detection; if import or cascade fails, callers sh
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import numpy as np
 
 
-def _detect_face_rects_bgr(bgr: np.ndarray, *, min_side: int = 48) -> List[Tuple[int, int, int, int]]:
+def _detect_face_rects_bgr(bgr: np.ndarray, *, min_side: int = 48) -> list[tuple[int, int, int, int]]:
     try:
         import cv2
     except ImportError:

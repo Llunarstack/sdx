@@ -5,7 +5,7 @@ Frontier engine: compose logic, narrative, chaos, and memory into one plan.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .chaos.entropy_budget import EntropyBudget, EntropyBudgetAllocator
 from .chaos.serendipity import SerendipityCurve, SerendipityInjector
@@ -21,12 +21,12 @@ class FrontierPlan:
     """Full outside-the-box analysis for one prompt."""
 
     prompt: str
-    contradictions: List[Contradiction] = field(default_factory=list)
-    absence: List[AbsenceConstraint] = field(default_factory=list)
-    witness: Optional[WitnessFrame] = None
-    moment: Optional[MomentCue] = None
-    serendipity: Optional[SerendipityCurve] = None
-    entropy: Optional[EntropyBudget] = None
+    contradictions: list[Contradiction] = field(default_factory=list)
+    absence: list[AbsenceConstraint] = field(default_factory=list)
+    witness: WitnessFrame | None = None
+    moment: MomentCue | None = None
+    serendipity: SerendipityCurve | None = None
+    entropy: EntropyBudget | None = None
     echo_negative: str = ""
     augmented_prompt: str = ""
     risk_score: float = 0.0
@@ -38,7 +38,7 @@ def analyze_prompt(
     num_steps: int = 28,
     serendipity_dial: float = 0.25,
     entropy_total: float = 1.0,
-    echo_memory: Optional[GenerationEchoMemory] = None,
+    echo_memory: GenerationEchoMemory | None = None,
     auto_resolve_contradictions: bool = False,
 ) -> FrontierPlan:
     """Run all frontier analyzers and return a unified plan."""
@@ -61,7 +61,7 @@ def analyze_prompt(
         working_prompt = scanner.suggest_rewrite(prompt)
 
     augmented = working_prompt
-    frags: List[str] = []
+    frags: list[str] = []
     frags.extend(witness.prompt_fragments)
     frags.extend(moment.prompt_fragments)
     if frags:
@@ -98,7 +98,7 @@ class FrontierEngine:
         self,
         num_steps: int = 28,
         serendipity_dial: float = 0.25,
-        echo_memory: Optional[GenerationEchoMemory] = None,
+        echo_memory: GenerationEchoMemory | None = None,
     ) -> None:
         self.num_steps = num_steps
         self.serendipity_dial = serendipity_dial
@@ -119,7 +119,7 @@ class FrontierEngine:
         plan: FrontierPlan,
         *,
         base_negative: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Map a plan to kwargs compatible with ``sample.py`` / diffusion hooks."""
         neg = self._absence.merge_negative_prompt(base_negative, plan.absence)
         if plan.echo_negative:
@@ -143,7 +143,7 @@ class FrontierEngine:
             ],
         }
 
-    def record_failure(self, prompt: str, tags: List[str], **kwargs: Any) -> None:
+    def record_failure(self, prompt: str, tags: list[str], **kwargs: Any) -> None:
         self.echo_memory.record_failure(prompt, tags, **kwargs)
 
 

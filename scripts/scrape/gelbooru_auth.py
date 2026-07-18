@@ -8,14 +8,13 @@ the standard ``page=dapi`` JSON API.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 import requests
 
 from .secrets_config import SiteCredentials
 
 
-def _parse_options_page(html: str) -> tuple[Optional[str], Optional[str]]:
+def _parse_options_page(html: str) -> tuple[str | None, str | None]:
     api_key = None
     user_id = None
     m = re.search(r'name=["\']api_key["\'][^>]*value=["\']([^"\']+)["\']', html, re.I)
@@ -39,7 +38,7 @@ def bootstrap_gelbooru_credentials(
     base_url: str,
     creds: SiteCredentials,
     *,
-    session: Optional[requests.Session] = None,
+    session: requests.Session | None = None,
     timeout_s: float = 45.0,
 ) -> SiteCredentials:
     """Return creds with api_key/user_id filled in (login if needed)."""

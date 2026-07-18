@@ -10,7 +10,6 @@ Falls back to pure NumPy when the native library is not built.
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -19,7 +18,7 @@ from sdx_native.native_tools import cuda_percentile_clamp_shared_library_path
 
 class CudaPercentileClampLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_percentile_clamp_shared_library_path()
         if p is None:
             return
@@ -66,7 +65,7 @@ class CudaPercentileClampLib:
         return x
 
 
-_LIB: Optional[CudaPercentileClampLib] = None
+_LIB: CudaPercentileClampLib | None = None
 
 
 def _get_lib() -> CudaPercentileClampLib:
@@ -99,7 +98,7 @@ def maybe_percentile_clamp_cuda(
     x: np.ndarray,
     quantile: float,
     floor_val: float,
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     """Return clamped array via CUDA kernel, or None if not available."""
     lib = _get_lib()
     if not lib.available:

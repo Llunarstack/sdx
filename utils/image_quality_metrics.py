@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 import numpy as np
 from PIL import Image
 
@@ -37,7 +35,7 @@ def grayscale_contrast(image: Image.Image) -> float:
     return float(np.std(g))
 
 
-def analyze_image_quality(image: Image.Image) -> Dict[str, float]:
+def analyze_image_quality(image: Image.Image) -> dict[str, float]:
     """Return a small dict of image quality metrics."""
     return {
         "sharpness": laplacian_sharpness(image),

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "KineticState",
@@ -14,7 +15,7 @@ __all__ = [
     "track_kinetic_ledger",
 ]
 
-_ENERGY_VERBS: Dict[str, float] = {
+_ENERGY_VERBS: dict[str, float] = {
     "sprint": 0.95,
     "run": 0.85,
     "runs": 0.85,
@@ -58,12 +59,12 @@ class KineticIssue:
 
 @dataclass(slots=True)
 class KineticLedger:
-    states: List[KineticState] = field(default_factory=list)
-    issues: List[KineticIssue] = field(default_factory=list)
-    shot_prompt_patches: Dict[str, str] = field(default_factory=dict)
+    states: list[KineticState] = field(default_factory=list)
+    issues: list[KineticIssue] = field(default_factory=list)
+    shot_prompt_patches: dict[str, str] = field(default_factory=dict)
 
 
-def parse_kinetic_config(raw: Any) -> Dict[str, Any]:
+def parse_kinetic_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -75,7 +76,7 @@ def parse_kinetic_config(raw: Any) -> Dict[str, Any]:
     return {"enabled": bool(raw)}
 
 
-def _infer_kinetic(prompt: str, explicit: Optional[Mapping[str, Any]] = None) -> KineticState:
+def _infer_kinetic(prompt: str, explicit: Mapping[str, Any] | None = None) -> KineticState:
     if isinstance(explicit, Mapping):
         return KineticState(
             energy=float(explicit.get("energy") or 0.5),
@@ -113,11 +114,11 @@ def track_kinetic_ledger(
     strict = bool(config.get("strict"))
     level = "error" if strict else "warn"
 
-    states: List[KineticState] = []
-    issues: List[KineticIssue] = []
-    patches: Dict[str, str] = {}
+    states: list[KineticState] = []
+    issues: list[KineticIssue] = []
+    patches: dict[str, str] = {}
 
-    prev: Optional[KineticState] = None
+    prev: KineticState | None = None
     prev_id = ""
     for i, sh in enumerate(shots):
         sid = str(getattr(sh, "id", f"shot_{i}"))

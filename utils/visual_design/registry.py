@@ -1,9 +1,15 @@
-"""Shim → ``utils._archive.visual_design.registry``."""
+"""
+Merged registry: core + extended design domains.
 
-import utils._archive.visual_design.registry as _src
+Tier keys per domain: lite, standard, strong.
+"""
 
-for _name in dir(_src):
-    if not _name.startswith('__'):
-        globals()[_name] = getattr(_src, _name)
+from __future__ import annotations
 
-del _name, _src
+from .registry_core import DOMAIN_NEGATIVES_CORE, DOMAIN_POSITIVES_CORE
+from .registry_extra import DOMAIN_NEGATIVES_EXTRA, DOMAIN_POSITIVES_EXTRA
+
+DOMAIN_POSITIVES: dict[str, dict[str, str]] = {**DOMAIN_POSITIVES_CORE, **DOMAIN_POSITIVES_EXTRA}
+DOMAIN_NEGATIVES: dict[str, dict[str, str]] = {**DOMAIN_NEGATIVES_CORE, **DOMAIN_NEGATIVES_EXTRA}
+
+__all__ = ["DOMAIN_POSITIVES", "DOMAIN_NEGATIVES"]

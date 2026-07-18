@@ -1,5 +1,5 @@
 # Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, ε/v/x0-pred, DDIM, CFG).
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -15,6 +15,9 @@ from .spectral_sfp import spectral_sfp_per_sample_loss
 # Canonical VP update backends inside ``sample_loop`` (extended via aliases below).
 _SOLVER_DDIM = "ddim"
 _SOLVER_HEUN = "heun"
+_SOLVER_DPMPP_2M = "dpmpp_2m"
+_SOLVER_DPMPP_3M = "dpmpp_3m"
+_SOLVER_UNIPC = "unipc"
 
 
 def _build_block_cache(
@@ -52,18 +55,38 @@ def _build_block_cache(
     )
 
 
-INFERENCE_SOLVERS = (_SOLVER_DDIM, _SOLVER_HEUN)
-FLOW_INFERENCE_SOLVERS = ("euler", "heun")
+INFERENCE_SOLVERS = (
+    _SOLVER_DDIM,
+    _SOLVER_HEUN,
+    _SOLVER_DPMPP_2M,
+    _SOLVER_DPMPP_3M,
+    _SOLVER_UNIPC,
+)
+FLOW_INFERENCE_SOLVERS = ("euler", "heun", "midpoint", "dpmpp_2m")
 
-INFERENCE_SOLVER_ALIASES: Dict[str, str] = {
+# Canonical backends — ``dpmsolver_pp_1`` now maps to real DPM++ 2M (was a fake→DDIM alias).
+INFERENCE_SOLVER_ALIASES: dict[str, str] = {
     "ddim": _SOLVER_DDIM,
+    # Legacy name: historically aliased to DDIM (not EDM Euler). Kept for CLI compat.
     "euler": _SOLVER_DDIM,
     "euler_explicit": _SOLVER_DDIM,
     "euler_explicit_1": _SOLVER_DDIM,
     "edm_euler": _SOLVER_DDIM,
     "edm-euler": _SOLVER_DDIM,
     "edm_euler_a": _SOLVER_DDIM,
-    "dpmsolver_pp_1": _SOLVER_DDIM,
+    "dpmpp_2m": _SOLVER_DPMPP_2M,
+    "dpm++_2m": _SOLVER_DPMPP_2M,
+    "dpm++2m": _SOLVER_DPMPP_2M,
+    "dpmsolver++_2m": _SOLVER_DPMPP_2M,
+    "dpmsolver_pp_2m": _SOLVER_DPMPP_2M,
+    "dpmsolver_pp_1": _SOLVER_DPMPP_2M,
+    "dpmpp_3m": _SOLVER_DPMPP_3M,
+    "dpm++_3m": _SOLVER_DPMPP_3M,
+    "dpm++3m": _SOLVER_DPMPP_3M,
+    "dpmsolver++_3m": _SOLVER_DPMPP_3M,
+    "unipc": _SOLVER_UNIPC,
+    "uni_pc": _SOLVER_UNIPC,
+    "uni-pc": _SOLVER_UNIPC,
     "heun": _SOLVER_HEUN,
     "heun_2": _SOLVER_HEUN,
     "edm_heun": _SOLVER_HEUN,
@@ -84,7 +107,11 @@ FLOW_SOLVER_ALIASES = {
     "rk2": "heun",
     "predictor_corrector": "heun",
     "predictor-corrector": "heun",
-    "midpoint_pc": "heun",
+    "midpoint": "midpoint",
+    "midpoint_pc": "midpoint",
+    "dpmpp_2m": "dpmpp_2m",
+    "dpm++_2m": "dpmpp_2m",
+    "dpmsolver++_2m": "dpmpp_2m",
 }
 
 
@@ -408,7 +435,7 @@ class GaussianDiffusion:
         num_inference_steps: int,
         timestep_schedule: str = "ddim",
         *,
-        scheduler: Optional[str] = None,
+        scheduler: str | None = None,
         karras_rho: float = 7.0,
     ):
         """
@@ -538,6 +565,8 @@ class GaussianDiffusion:
         cfg_rescale: float = 0.0,
         num_inference_steps: int = 50,
         flow_solver: str = "euler",
+        flow_schedule: str = "linear",
+        flow_karras_rho: float = 7.0,
         device="cuda",
         dtype=torch.float32,
         x_init=None,
@@ -548,7 +577,7 @@ class GaussianDiffusion:
         dynamic_threshold_percentile: float = 0.0,
         dynamic_threshold_type: str = "percentile",
         dynamic_threshold_value: float = 0.0,
-        flow_init_noise: Optional[torch.Tensor] = None,
+        flow_init_noise: torch.Tensor | None = None,
         control_guidance_start: float = 0.0,
         control_guidance_end: float = 1.0,
         control_guidance_decay: float = 1.0,
@@ -566,7 +595,7 @@ class GaussianDiffusion:
         holy_grail_unsharp_amount: float = 0.0,
         holy_grail_clamp_quantile: float = 0.0,
         holy_grail_clamp_floor: float = 1.0,
-        cfg_guidance_schedule: Optional[str] = None,
+        cfg_guidance_schedule: str | None = None,
         cfg_guidance_linear_start_multiplier: float = 0.7,
         cfg_guidance_linear_end_multiplier: float = 1.0,
         cfg_guidance_cosine_min_multiplier: float = 0.65,
@@ -619,6 +648,7 @@ class GaussianDiffusion:
         B = int(shape[0])
         cg_gs_fm = str(cfg_guidance_schedule).strip() if cfg_guidance_schedule else ""
         fs = canonicalize_flow_solver(flow_solver)
+        from diffusion.solvers import SolverState, build_flow_s_grid, flow_dpmpp_2m_update, flow_midpoint_update
 
         if x_init is not None and start_timestep is not None:
             t0 = int(start_timestep)
@@ -629,7 +659,13 @@ class GaussianDiffusion:
             if x0_hint.shape != z.shape:
                 raise ValueError("flow_matching_sample: x_init must match sample shape for img2img-style start.")
             x = (1.0 - s0) * x0_hint + s0 * z
-            s_vals = torch.linspace(s0, 0.0, n + 1, device=device, dtype=torch.float64)
+            s_vals_np = build_flow_s_grid(
+                flow_schedule,
+                n,
+                s_start=s0,
+                s_end=0.0,
+                karras_rho=float(flow_karras_rho),
+            )
         else:
             if flow_init_noise is not None:
                 x = flow_init_noise.to(device=device, dtype=dtype)
@@ -637,7 +673,15 @@ class GaussianDiffusion:
                     raise ValueError(f"flow_init_noise shape {tuple(x.shape)} != sample shape {tuple(shape)}")
             else:
                 x = torch.randn(shape, device=device, dtype=dtype)
-            s_vals = torch.linspace(1.0, 0.0, n + 1, device=device, dtype=torch.float64)
+            s_vals_np = build_flow_s_grid(
+                flow_schedule,
+                n,
+                s_start=1.0,
+                s_end=0.0,
+                karras_rho=float(flow_karras_rho),
+            )
+        s_vals = torch.as_tensor(s_vals_np, device=device, dtype=torch.float64)
+        flow_state = SolverState(max_order=3)
 
         cfg_box = [float(cfg_scale)]
         feat_cache = None
@@ -901,6 +945,29 @@ class GaussianDiffusion:
                 t_b2 = _t_batch_from_s(s_next)
                 v2 = _model_prediction(x_pred, t_b2, min(i + 1, n - 1))
                 x = x + 0.5 * (v1 + v2) * ds
+            elif fs == "midpoint":
+                t_b2 = _t_batch_from_s(0.5 * (s_cur + s_next))
+
+                def _mf(xin, tb, si):
+                    return _model_prediction(xin, tb, si)
+
+                x = flow_midpoint_update(
+                    x=x,
+                    velocity=v1,
+                    s_cur=s_cur,
+                    s_next=s_next,
+                    model_fn=_mf,
+                    t_next_batch=t_b2,
+                    step_idx=min(i + 1, n - 1),
+                )
+            elif fs == "dpmpp_2m":
+                x, flow_state = flow_dpmpp_2m_update(
+                    x=x,
+                    velocity=v1,
+                    s_cur=s_cur,
+                    s_next=s_next,
+                    state=flow_state,
+                )
             else:
                 x = x + v1 * ds
 
@@ -955,7 +1022,7 @@ class GaussianDiffusion:
         timestep_schedule=None,
         solver="ddim",
         karras_rho: float = 7.0,
-        cfg_guidance_schedule: Optional[str] = None,
+        cfg_guidance_schedule: str | None = None,
         cfg_guidance_linear_start_multiplier: float = 0.7,
         cfg_guidance_linear_end_multiplier: float = 1.0,
         cfg_guidance_cosine_min_multiplier: float = 0.65,
@@ -985,7 +1052,7 @@ class GaussianDiffusion:
         periodic_alignment_interval: int = 0,
         periodic_alignment_threshold: float = 0.0,
         periodic_alignment_cfg_boost: float = 0.0,
-        periodic_alignment_fn: Optional[Callable[[int, torch.Tensor], float]] = None,
+        periodic_alignment_fn: Callable[[int, torch.Tensor], float] | None = None,
         periodic_alignment_rewind_strength: float = 0.0,
         # Speculative CFG: second forward at draft_cfg_scale; blend if |full-draft| mean < close_thresh.
         speculative_draft_cfg_scale: float = 0.0,
@@ -1011,7 +1078,9 @@ class GaussianDiffusion:
         # Rectified-flow path (matches diffusion.flow_matching training); mutually exclusive with VP DDIM updates below.
         flow_matching_sample: bool = False,
         flow_solver: str = "euler",
-        flow_init_noise: Optional[torch.Tensor] = None,
+        flow_schedule: str = "linear",
+        flow_karras_rho: float = 7.0,
+        flow_init_noise: torch.Tensor | None = None,
         return_intermediate_state: bool = False,
         fdg_cfg_strength: float = 0.0,
         fdg_cutoff_frac: float = 0.15,
@@ -1122,6 +1191,8 @@ class GaussianDiffusion:
                 cfg_rescale=float(cfg_rescale),
                 num_inference_steps=int(num_inference_steps),
                 flow_solver=fs_flow,
+                flow_schedule=str(flow_schedule or "linear"),
+                flow_karras_rho=float(flow_karras_rho),
                 device=device,
                 dtype=dtype,
                 x_init=x_init,
@@ -1208,6 +1279,11 @@ class GaussianDiffusion:
         early_exit_patience = int(ada_early_exit_patience)
         early_exit_min_steps = int(ada_early_exit_min_steps)
         early_exit_counter = 0
+        from diffusion.solvers import SolverState, vp_dpmpp_update, vp_unipc_update
+
+        multistep_state = SolverState(max_order=3)
+        use_multistep = sol_backend in (_SOLVER_DPMPP_2M, _SOLVER_DPMPP_3M, _SOLVER_UNIPC)
+        dpm_order = 3 if sol_backend == _SOLVER_DPMPP_3M else 2
         feat_cache = None
         if float(feature_cache_delta_threshold) > 0.0:
             from utils.superior.feature_cache import FeatureCacheConfig, FeatureCachePolicy
@@ -1492,7 +1568,62 @@ class GaussianDiffusion:
 
             out1 = _apply_sag(x, t, _model_prediction(x, t))
             if i + 1 < len(timesteps):
-                if sol_backend == _SOLVER_HEUN:
+                if use_multistep:
+                    x0_pred, _noise = self._predict_x0_and_noise(out1, x, t)
+                    if dynamic_threshold_percentile > 0 or (
+                        dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
+                    ):
+                        x0_pred = self._dynamic_threshold(
+                            x0_pred,
+                            percentile=dynamic_threshold_percentile,
+                            threshold_type=dynamic_threshold_type,
+                            threshold_value=dynamic_threshold_value,
+                        )
+                    self._to_device(device)
+                    ab_cur = self.alpha_cumprod.to(device)[t]
+                    ab_next = self.alpha_cumprod.to(device)[t_next]
+                    if sol_backend == _SOLVER_UNIPC:
+                        x_pred, multistep_state, need_corr = vp_unipc_update(
+                            x=x,
+                            x0_pred=x0_pred,
+                            alpha_bar_cur=ab_cur,
+                            alpha_bar_next=ab_next,
+                            state=multistep_state,
+                            corrector_x0=None,
+                        )
+                        if need_corr:
+                            out_corr = _apply_sag(x_pred, t_next, _model_prediction(x_pred, t_next))
+                            x0_corr, _ = self._predict_x0_and_noise(out_corr, x_pred, t_next)
+                            if dynamic_threshold_percentile > 0 or (
+                                dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
+                            ):
+                                x0_corr = self._dynamic_threshold(
+                                    x0_corr,
+                                    percentile=dynamic_threshold_percentile,
+                                    threshold_type=dynamic_threshold_type,
+                                    threshold_value=dynamic_threshold_value,
+                                )
+                            x, multistep_state, _ = vp_unipc_update(
+                                x=x,
+                                x0_pred=x0_pred,
+                                alpha_bar_cur=ab_cur,
+                                alpha_bar_next=ab_next,
+                                state=multistep_state,
+                                corrector_x0=x0_corr,
+                            )
+                        else:
+                            x = x_pred
+                    else:
+                        x, multistep_state = vp_dpmpp_update(
+                            x=x,
+                            x0_pred=x0_pred,
+                            alpha_bar_cur=ab_cur,
+                            alpha_bar_next=ab_next,
+                            state=multistep_state,
+                            order=dpm_order,
+                        )
+                    x_0_pred = x0_pred
+                elif sol_backend == _SOLVER_HEUN:
                     x_euler, _ = self.step_with_pred(
                         x,
                         t,
@@ -1508,21 +1639,34 @@ class GaussianDiffusion:
                     )
                     out2 = _apply_sag(x_euler, t_next, _model_prediction(x_euler, t_next))
                     out = 0.5 * (out1 + out2)
+                    x, x_0_pred = self.step_with_pred(
+                        x,
+                        t,
+                        t_next,
+                        out,
+                        eta=eta,
+                        dynamic_threshold_percentile=dynamic_threshold_percentile,
+                        dynamic_threshold_type=dynamic_threshold_type,
+                        dynamic_threshold_value=dynamic_threshold_value,
+                        pbfm_edge_boost=pbfm_edge_boost,
+                        pbfm_edge_kernel=pbfm_edge_kernel,
+                        step_noise_scale=_sns,
+                    )
                 else:
                     out = out1
-                x, x_0_pred = self.step_with_pred(
-                    x,
-                    t,
-                    t_next,
-                    out,
-                    eta=eta,
-                    dynamic_threshold_percentile=dynamic_threshold_percentile,
-                    dynamic_threshold_type=dynamic_threshold_type,
-                    dynamic_threshold_value=dynamic_threshold_value,
-                    pbfm_edge_boost=pbfm_edge_boost,
-                    pbfm_edge_kernel=pbfm_edge_kernel,
-                    step_noise_scale=_sns,
-                )
+                    x, x_0_pred = self.step_with_pred(
+                        x,
+                        t,
+                        t_next,
+                        out,
+                        eta=eta,
+                        dynamic_threshold_percentile=dynamic_threshold_percentile,
+                        dynamic_threshold_type=dynamic_threshold_type,
+                        dynamic_threshold_value=dynamic_threshold_value,
+                        pbfm_edge_boost=pbfm_edge_boost,
+                        pbfm_edge_kernel=pbfm_edge_kernel,
+                        step_noise_scale=_sns,
+                    )
                 if v_boost > 0.0:
                     delta_lat_v = (x - x_prev).abs().mean()
                     try:

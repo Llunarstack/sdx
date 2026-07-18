@@ -7,8 +7,8 @@ Unlike tag negation lists, this scores *pairs* of claims (lighting, time, quanti
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ class Contradiction:
 
 
 # (pattern_a, pattern_b, category, resolution hint)
-_CONFLICT_RULES: Tuple[Tuple[str, str, str, str], ...] = (
+_CONFLICT_RULES: tuple[tuple[str, str, str, str], ...] = (
     (r"\bnoon\b|\bmidday\b", r"\bsunset\b|\bsunrise\b|\bdusk\b|\bdawn\b", "time", "pick one time of day"),
     (r"\bnight\b|\bmidnight\b", r"\bbright\s+day\b|\bnoon\b", "time", "pick day or night"),
     (
@@ -63,15 +63,15 @@ def _find_match(text: str, pattern: str) -> str | None:
 class ContradictionScanner:
     """Scan prompt text for high-confidence logical conflicts."""
 
-    def __init__(self, extra_rules: Sequence[Tuple[str, str, str, str]] = ()) -> None:
+    def __init__(self, extra_rules: Sequence[tuple[str, str, str, str]] = ()) -> None:
         self._rules = tuple(_CONFLICT_RULES) + tuple(extra_rules)
 
-    def scan(self, prompt: str) -> List[Contradiction]:
+    def scan(self, prompt: str) -> list[Contradiction]:
         text = (prompt or "").strip()
         if not text:
             return []
 
-        found: List[Contradiction] = []
+        found: list[Contradiction] = []
         for pat_a, pat_b, category, resolution in self._rules:
             a = _find_match(text, pat_a)
             b = _find_match(text, pat_b)

@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.scrape.sites import ADAPTERS, DEFAULT_SCRAPE_SITES  # noqa: E402
+from scripts.scrape.sites import DEFAULT_SCRAPE_SITES  # noqa: E402
 
 
 def merge_manifests(data_root: Path, out_path: Path, sites: list[str]) -> int:

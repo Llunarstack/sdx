@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -12,7 +11,7 @@ ALT_FILE_NAME = "sdx_model_architecture.png"
 SCALE = 2
 
 
-Color = Tuple[int, int, int]
+Color = tuple[int, int, int]
 
 
 class Theme:
@@ -51,7 +50,7 @@ class ProRenderer:
 
     def card(
         self,
-        box: Tuple[int, int, int, int],
+        box: tuple[int, int, int, int],
         fill: Color,
         outline: Color,
         *,
@@ -71,7 +70,7 @@ class ProRenderer:
 
     def text(
         self,
-        xy: Tuple[float, float],
+        xy: tuple[float, float],
         text: str,
         *,
         size: int = 18,
@@ -86,8 +85,8 @@ class ProRenderer:
 
     def arrow(
         self,
-        start: Tuple[float, float],
-        end: Tuple[float, float],
+        start: tuple[float, float],
+        end: tuple[float, float],
         *,
         color: Color = Theme.FLOW,
         width: int = 2,

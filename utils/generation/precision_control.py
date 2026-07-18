@@ -5,7 +5,7 @@ Implements scene composition, object placement validation, and multi-stage gener
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -16,11 +16,11 @@ class SceneObject:
     """Represents an object in a scene with precise positioning."""
 
     name: str
-    position: Tuple[float, float]  # Normalized coordinates (0-1)
-    size: Tuple[float, float]  # Normalized width, height
+    position: tuple[float, float]  # Normalized coordinates (0-1)
+    size: tuple[float, float]  # Normalized width, height
     rotation: float = 0.0
     z_order: int = 0  # Depth ordering
-    properties: Dict[str, Any] = None
+    properties: dict[str, Any] = None
 
     def __post_init__(self):
         if self.properties is None:
@@ -66,8 +66,8 @@ class SceneComposer:
         return not (x1 + w1 < x2 or x2 + w2 < x1 or y1 + h1 < y2 or y2 + h2 < y1)
 
     def create_scene_layout(
-        self, objects: List[str], layout_type: str = "balanced", constraints: List[str] = None
-    ) -> List[SceneObject]:
+        self, objects: list[str], layout_type: str = "balanced", constraints: list[str] = None
+    ) -> list[SceneObject]:
         """Create a scene layout with precise object positioning."""
         scene_objects = []
 
@@ -91,7 +91,7 @@ class SceneComposer:
 
         return scene_objects
 
-    def _create_grid_layout(self, num_objects: int) -> List[Tuple[float, float]]:
+    def _create_grid_layout(self, num_objects: int) -> list[tuple[float, float]]:
         """Create grid layout positions."""
         cols = math.ceil(math.sqrt(num_objects))
         rows = math.ceil(num_objects / cols)
@@ -107,7 +107,7 @@ class SceneComposer:
 
         return positions
 
-    def _create_circle_layout(self, num_objects: int) -> List[Tuple[float, float]]:
+    def _create_circle_layout(self, num_objects: int) -> list[tuple[float, float]]:
         """Create circular layout positions."""
         positions = []
         center_x, center_y = 0.5, 0.5
@@ -121,7 +121,7 @@ class SceneComposer:
 
         return positions
 
-    def _create_line_layout(self, num_objects: int) -> List[Tuple[float, float]]:
+    def _create_line_layout(self, num_objects: int) -> list[tuple[float, float]]:
         """Create horizontal line layout."""
         positions = []
         for i in range(num_objects):
@@ -131,7 +131,7 @@ class SceneComposer:
 
         return positions
 
-    def _create_pyramid_layout(self, num_objects: int) -> List[Tuple[float, float]]:
+    def _create_pyramid_layout(self, num_objects: int) -> list[tuple[float, float]]:
         """Create pyramid layout positions."""
         positions = []
         rows = math.ceil((-1 + math.sqrt(1 + 8 * num_objects)) / 2)
@@ -151,7 +151,7 @@ class SceneComposer:
 
         return positions
 
-    def _create_balanced_layout(self, num_objects: int) -> List[Tuple[float, float]]:
+    def _create_balanced_layout(self, num_objects: int) -> list[tuple[float, float]]:
         """Create balanced layout avoiding overlaps."""
         positions = []
 
@@ -173,7 +173,7 @@ class SceneComposer:
 
         return positions
 
-    def _create_random_layout(self, num_objects: int) -> List[Tuple[float, float]]:
+    def _create_random_layout(self, num_objects: int) -> list[tuple[float, float]]:
         """Create random non-overlapping layout."""
         positions = []
         attempts = 0
@@ -203,7 +203,7 @@ class SceneComposer:
 
         return positions[:num_objects]
 
-    def _apply_constraints(self, objects: List[SceneObject], constraints: List[str]) -> List[SceneObject]:
+    def _apply_constraints(self, objects: list[SceneObject], constraints: list[str]) -> list[SceneObject]:
         """Apply spatial constraints to scene objects."""
         # Parse and apply constraints like "A left_of B", "C above D"
         for constraint in constraints:
@@ -240,7 +240,7 @@ class SceneComposer:
                 factor = 0.15 / dist
                 obj1.position = (obj2.position[0] - dx * factor, obj2.position[1] - dy * factor)
 
-    def generate_composition_prompt(self, scene_objects: List[SceneObject], base_description: str = "") -> str:
+    def generate_composition_prompt(self, scene_objects: list[SceneObject], base_description: str = "") -> str:
         """Generate detailed prompt for precise scene composition."""
         # Sort by z-order for proper layering description
         sorted_objects = sorted(scene_objects, key=lambda x: x.z_order)
@@ -292,7 +292,7 @@ class SceneComposer:
         return ", ".join(prompt_parts)
 
     def create_layout_guide(
-        self, scene_objects: List[SceneObject], image_size: Tuple[int, int] = (512, 512)
+        self, scene_objects: list[SceneObject], image_size: tuple[int, int] = (512, 512)
     ) -> Image.Image:
         """Create a visual layout guide for the scene."""
         guide = Image.new("RGB", image_size, (240, 240, 240))
@@ -354,7 +354,7 @@ class CountingValidator:
             "10": 10,
         }
 
-    def extract_counting_requirements(self, prompt: str) -> Dict[str, int]:
+    def extract_counting_requirements(self, prompt: str) -> dict[str, int]:
         """Extract counting requirements from prompt."""
         requirements = {}
 
@@ -420,7 +420,7 @@ class CountingValidator:
 
         return ", ".join(prompt_parts)
 
-    def validate_count_in_image(self, image: Image.Image, object_name: str, expected_count: int) -> Dict[str, Any]:
+    def validate_count_in_image(self, image: Image.Image, object_name: str, expected_count: int) -> dict[str, Any]:
         """Validate object count in generated image (placeholder for object detection)."""
         # This would integrate with object detection models
         # For now, return a placeholder validation
@@ -445,7 +445,7 @@ class MultiStageGenerator:
             "validation": "Validate and correct any issues",
         }
 
-    def plan_generation_stages(self, prompt: str, complexity_score: float = None) -> List[Dict[str, Any]]:
+    def plan_generation_stages(self, prompt: str, complexity_score: float = None) -> list[dict[str, Any]]:
         """Plan multi-stage generation based on prompt complexity."""
         stages = []
 

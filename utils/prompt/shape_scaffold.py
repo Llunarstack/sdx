@@ -8,7 +8,7 @@ into existing prompt controls by synthesizing a scene blueprint dict.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from .scene_blueprint import compile_scene_blueprint_dict
 
@@ -54,14 +54,14 @@ _RELATION_PATTERNS = (
 )
 
 
-def _extract_phrases(prompt: str) -> List[str]:
+def _extract_phrases(prompt: str) -> list[str]:
     parts = [p.strip() for p in str(prompt).split(",")]
     return [p for p in parts if p]
 
 
-def _extract_actors(prompt: str, max_actors: int = 4) -> List[Dict[str, Any]]:
+def _extract_actors(prompt: str, max_actors: int = 4) -> list[dict[str, Any]]:
     phrases = _extract_phrases(prompt)
-    actors: List[Dict[str, Any]] = []
+    actors: list[dict[str, Any]] = []
     for ph in phrases:
         low = ph.lower()
         if any(h in low for h in _ACTOR_HINTS):
@@ -87,16 +87,16 @@ def _extract_actors(prompt: str, max_actors: int = 4) -> List[Dict[str, Any]]:
     return actors
 
 
-def _extract_relations(prompt: str) -> List[Dict[str, Any]]:
+def _extract_relations(prompt: str) -> list[dict[str, Any]]:
     low = str(prompt).lower()
-    rels: List[Dict[str, Any]] = []
+    rels: list[dict[str, Any]] = []
     for rx, tag in _RELATION_PATTERNS:
         if rx.search(low):
             rels.append({"a": "actor_1", "kind": tag, "b": "actor_2" if "actor_2" in low else "subject_2"})
     return rels
 
 
-def infer_shape_blueprint(prompt: str, max_actors: int = 4) -> Dict[str, Any]:
+def infer_shape_blueprint(prompt: str, max_actors: int = 4) -> dict[str, Any]:
     low = str(prompt).lower()
     phrases = _extract_phrases(prompt)
     camera = [p for p in phrases if any(h in p.lower() for h in _CAMERA_HINTS)]
@@ -122,7 +122,7 @@ def infer_shape_blueprint(prompt: str, max_actors: int = 4) -> Dict[str, Any]:
     }
 
 
-def compile_shape_scaffold(prompt: str, strength: float = 1.0, max_actors: int = 4) -> Tuple[str, str, Dict[str, Any]]:
+def compile_shape_scaffold(prompt: str, strength: float = 1.0, max_actors: int = 4) -> tuple[str, str, dict[str, Any]]:
     blueprint = infer_shape_blueprint(prompt, max_actors=max_actors)
     pos, neg = compile_scene_blueprint_dict(blueprint, strength=strength)
     return pos, neg, blueprint

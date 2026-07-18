@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Tuple
+from typing import Literal
 
 import numpy as np
 from PIL import Image
@@ -16,7 +16,7 @@ def _resize_np(img: np.ndarray, out_h: int, out_w: int) -> np.ndarray:
     return np.asarray(pil, dtype=np.uint8)
 
 
-def _center_crop_box(h: int, w: int, out_h: int, out_w: int) -> Tuple[int, int, int, int]:
+def _center_crop_box(h: int, w: int, out_h: int, out_w: int) -> tuple[int, int, int, int]:
     target_ar = float(out_w) / max(1.0, float(out_h))
     src_ar = float(w) / max(1.0, float(h))
     if src_ar > target_ar:
@@ -72,7 +72,7 @@ def _saliency_map(img: np.ndarray, face_bias: float = 0.0) -> np.ndarray:
 
 def _best_saliency_crop_box(
     img: np.ndarray, out_h: int, out_w: int, face_bias: float = 0.0
-) -> Tuple[int, int, int, int]:
+) -> tuple[int, int, int, int]:
     h, w = img.shape[:2]
     y0, x0, ch, cw = _center_crop_box(h, w, out_h, out_w)
     sal = _saliency_map(img, face_bias=face_bias)

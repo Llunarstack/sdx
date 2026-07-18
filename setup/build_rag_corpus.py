@@ -64,7 +64,10 @@ def _build_corpus_impl(manifest_paths: list[Path], out_path: Path, *, max_entrie
                 if cap:
                     parts.append(f"tags: {cap}")
                 text = ". ".join(parts) if parts else cap
-                out_f.write(json.dumps({"text": text, "caption": cap, "source": row.get("source", "")}, ensure_ascii=False) + "\n")
+                out_f.write(
+                    json.dumps({"text": text, "caption": cap, "source": row.get("source", "")}, ensure_ascii=False)
+                    + "\n"
+                )
                 written += 1
     return written
 
@@ -93,7 +96,11 @@ def main(argv: list[str] | None = None) -> int:
         print("No manifests found.", file=sys.stderr)
         return 2
 
-    out = Path(args.out) if args.out else (data_root / "rag_corpus.jsonl" if data_root else REPO_ROOT / "data" / "rag_corpus.jsonl")
+    out = (
+        Path(args.out)
+        if args.out
+        else (data_root / "rag_corpus.jsonl" if data_root else REPO_ROOT / "data" / "rag_corpus.jsonl")
+    )
     n = _build_corpus_impl(manifests, out, max_entries=int(args.max_entries))
     print(f"Wrote {n:,} RAG entries -> {out}")
     print(f"Use at inference: python sample.py --local-rag-jsonl {out} --prompt '...'")

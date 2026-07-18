@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class SurrealMode(str, Enum):
@@ -30,7 +29,7 @@ class DreamLogicPlan:
     serendipity_boost: float  # add to base dial
 
 
-_RULES: Tuple[Tuple[re.Pattern, SurrealMode, str, str, float], ...] = (
+_RULES: tuple[tuple[re.Pattern, SurrealMode, str, str, float], ...] = (
     (
         re.compile(r"\b(surreal|surrealism|dreamlike|dreamscape|oneiric)\b", re.I),
         SurrealMode.DREAM,
@@ -84,7 +83,7 @@ class DreamLogicPlanner:
                 return DreamLogicPlan(mode, pos, neg, boost)
         return DreamLogicPlan(SurrealMode.NONE, "", "", 0.0)
 
-    def fragments(self, prompt: str) -> Tuple[str, str, float]:
+    def fragments(self, prompt: str) -> tuple[str, str, float]:
         p = self.plan(prompt)
         return p.positive, p.negative, p.serendipity_boost
 

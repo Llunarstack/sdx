@@ -12,7 +12,7 @@ See ``blueprint.py`` for what these knobs actually do during sampling.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +36,7 @@ class HolyGrailPreset:
     clamp_floor: float = 1.0
 
 
-HOLY_GRAIL_PRESETS: Dict[str, HolyGrailPreset] = {
+HOLY_GRAIL_PRESETS: dict[str, HolyGrailPreset] = {
     "balanced": HolyGrailPreset(
         name="balanced",
         description="General quality/adherence balance for mixed prompts.",
@@ -125,7 +125,7 @@ HOLY_GRAIL_PRESETS: Dict[str, HolyGrailPreset] = {
 }
 
 
-def list_holy_grail_presets() -> List[str]:
+def list_holy_grail_presets() -> list[str]:
     return sorted(HOLY_GRAIL_PRESETS.keys())
 
 
@@ -153,7 +153,7 @@ def apply_holy_grail_preset_to_args(args: Any, preset_name: str) -> None:
             setattr(args, name, value)
 
     if hasattr(args, "holy_grail") and not bool(getattr(args, "holy_grail", False)):
-        setattr(args, "holy_grail", True)
+        args.holy_grail = True
     maybe_set("holy_grail_cfg_early_ratio", p.cfg_early_ratio, (0.72, None))
     maybe_set("holy_grail_cfg_late_ratio", p.cfg_late_ratio, (1.0, None))
     maybe_set("holy_grail_control_mult", p.control_mult, (1.0, None))
@@ -171,4 +171,4 @@ def apply_holy_grail_preset_to_args(args: Any, preset_name: str) -> None:
     if hasattr(args, "holy_grail_no_frontload_control"):
         no_frontload = bool(getattr(args, "holy_grail_no_frontload_control", False))
         if not no_frontload and not p.frontload_control:
-            setattr(args, "holy_grail_no_frontload_control", True)
+            args.holy_grail_no_frontload_control = True

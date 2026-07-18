@@ -33,6 +33,7 @@ SKIP_DIRS: set[str] = {
     "node_modules",
     "htmlcov",
     ".eggs",
+    "integration_smoke",  # gitignored scraped-data smoke fixtures (thousands of images)
 }
 
 # Skip by default (large / generated / optional parallel trees)
@@ -191,7 +192,7 @@ def main() -> int:
 ## See also
 
 - [docs/CODEBASE.md](docs/CODEBASE.md) — navigate the tree, `scripts/` layout, contribution rules
-- [docs/FILES.md](docs/FILES.md) — full file map
+- [docs/reference/FILES.md](docs/reference/FILES.md) — full file map
 
 """
     out: Path = args.out

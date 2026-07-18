@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
 
 import numpy as np
 
@@ -38,7 +37,7 @@ def _require_cv2():
         raise RuntimeError("opencv-python required for motion helpers") from exc
 
 
-def compute_flow_magnitude(frame_a: np.ndarray, frame_b: np.ndarray) -> Tuple[np.ndarray, float]:
+def compute_flow_magnitude(frame_a: np.ndarray, frame_b: np.ndarray) -> tuple[np.ndarray, float]:
     """Dense optical flow magnitude between consecutive RGB frames."""
     cv2 = _require_cv2()
     g0 = cv2.cvtColor(frame_a, cv2.COLOR_RGB2GRAY)
@@ -48,12 +47,12 @@ def compute_flow_magnitude(frame_a: np.ndarray, frame_b: np.ndarray) -> Tuple[np
     return flow, float(np.mean(mag))
 
 
-def estimate_motion_score(frame_paths: List[Path], *, sample_pairs: int = 8) -> float:
+def estimate_motion_score(frame_paths: list[Path], *, sample_pairs: int = 8) -> float:
     """0–1 motion intensity proxy from sampled frame pairs."""
     if len(frame_paths) < 2:
         return 0.0
     step = max(1, len(frame_paths) // max(1, sample_pairs))
-    mags: List[float] = []
+    mags: list[float] = []
     for i in range(0, len(frame_paths) - 1, step):
         a = read_frame_rgb(frame_paths[i])
         b = read_frame_rgb(frame_paths[min(len(frame_paths) - 1, i + step)])
@@ -64,13 +63,13 @@ def estimate_motion_score(frame_paths: List[Path], *, sample_pairs: int = 8) -> 
     return float(min(1.0, np.mean(mags) / 8.0))
 
 
-def extract_motion_profile(frame_paths: List[Path], *, max_pairs: int = 12) -> MotionProfile:
+def extract_motion_profile(frame_paths: list[Path], *, max_pairs: int = 12) -> MotionProfile:
     if len(frame_paths) < 2:
         return MotionProfile(0.0, 0.0, 0.0, 0.0, 0.0, len(frame_paths))
     step = max(1, len(frame_paths) // max(1, max_pairs))
-    mags: List[float] = []
-    pan_x: List[float] = []
-    pan_y: List[float] = []
+    mags: list[float] = []
+    pan_x: list[float] = []
+    pan_y: list[float] = []
     for i in range(0, len(frame_paths) - 1, step):
         a = read_frame_rgb(frame_paths[i])
         b = read_frame_rgb(frame_paths[min(len(frame_paths) - 1, i + step)])

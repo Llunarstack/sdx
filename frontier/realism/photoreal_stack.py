@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Tuple
 
 from .anti_slop import AntiSlopScanner, RealismTier
 
@@ -54,7 +53,7 @@ class PhotorealStack:
         neg = slop.negative
         return PhotorealPlan(slop.tier, pos, neg, lens, sensor)
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

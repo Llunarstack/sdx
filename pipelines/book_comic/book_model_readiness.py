@@ -8,7 +8,7 @@ Does not run inference; safe to call from CLI preflight.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from utils.architecture.ar_block_conditioning import normalize_num_ar_blocks
 
@@ -29,11 +29,11 @@ def _first_path_from_control_spec(spec: str) -> str:
     return s.split(":", 1)[0].strip()
 
 
-def collect_missing_path_errors(args: Any) -> List[str]:
+def collect_missing_path_errors(args: Any) -> list[str]:
     """
     Return fatal path issues (missing files). Intended for ``--book-preflight strict``.
     """
-    errors: List[str] = []
+    errors: list[str] = []
     ckpt = Path(str(getattr(args, "ckpt", "") or ""))
     if not ckpt.is_file():
         errors.append(f"--ckpt is not a file: {ckpt}")
@@ -83,7 +83,7 @@ def collect_missing_path_errors(args: Any) -> List[str]:
     return errors
 
 
-def collect_missing_path_warnings(args: Any) -> List[str]:
+def collect_missing_path_warnings(args: Any) -> list[str]:
     """Same as errors but phrased as warnings (``--book-preflight warn`` does not exit)."""
     return [f"{e}" for e in collect_missing_path_errors(args)]
 
@@ -92,13 +92,13 @@ def collect_dual_model_alignment_warnings(
     args: Any,
     *,
     dit_ar_blocks: int = -1,
-    vit_cfg: Dict[str, Any] | None = None,
+    vit_cfg: dict[str, Any] | None = None,
     resolved_pick_best: str = "",
-) -> List[str]:
+) -> list[str]:
     """
     Warn when ViT scorer config and DiT / CLI flags disagree (AR regime, missing ViT path, etc.).
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
     pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
 
     if not pv:
@@ -141,7 +141,7 @@ def collect_dual_model_alignment_warnings(
     return warnings
 
 
-def peek_vit_config_for_args(args: Any) -> Dict[str, Any]:
+def peek_vit_config_for_args(args: Any) -> dict[str, Any]:
     """Load ViT config dict when ``--pick-vit-ckpt`` points at a file."""
     pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
     if not pv or not Path(pv).is_file():
@@ -158,8 +158,8 @@ def book_model_stack_snapshot(
     args: Any,
     *,
     dit_ar_blocks: int = -1,
-    vit_cfg: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    vit_cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Compact manifest-friendly summary of generator + ViT readiness."""
     cfg = vit_cfg if isinstance(vit_cfg, dict) else {}
     pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
@@ -183,7 +183,7 @@ def run_book_preflight(
     dit_ar_blocks: int = -1,
     mode: str = "warn",
     resolved_pick_best: str = "",
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Run path checks + dual-model alignment. *mode* is ``off`` | ``warn`` | ``strict``.
 

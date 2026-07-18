@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from utils.caption.prompt_research import PromptResearchResult
 from setup.enrich_manifest_captions import _merge_research_row, _row_needs_enrich
+from utils.caption.prompt_research import PromptResearchResult
 
 
 def test_row_needs_enrich_prompt_research():

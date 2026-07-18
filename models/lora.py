@@ -13,7 +13,6 @@ style blowout when users stack many LoRAs at high strengths.
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -27,7 +26,7 @@ _LAYER_INDEX_RE = re.compile(
 )
 
 
-def _get_lora_state_dict(path_or_state: Union[str, Path, Dict]) -> Dict[str, torch.Tensor]:
+def _get_lora_state_dict(path_or_state: str | Path | dict) -> dict[str, torch.Tensor]:
     if isinstance(path_or_state, dict):
         return path_or_state
     path = Path(path_or_state) if not isinstance(path_or_state, str) else Path(path_or_state)
@@ -60,7 +59,7 @@ def _set_attr(obj, name, value):
         setattr(obj, name, value)
 
 
-def _resolve_module(model: nn.Module, base_key: str) -> Tuple[Optional[nn.Module], Optional[str], Optional[nn.Module]]:
+def _resolve_module(model: nn.Module, base_key: str) -> tuple[nn.Module | None, str | None, nn.Module | None]:
     parts = base_key.split(".")
     parent = model
     for p in parts[:-1]:
@@ -76,7 +75,7 @@ def _resolve_module(model: nn.Module, base_key: str) -> Tuple[Optional[nn.Module
     return parent, leaf, mod
 
 
-def _extract_layer_index(base_key: str) -> Optional[int]:
+def _extract_layer_index(base_key: str) -> int | None:
     m = _LAYER_INDEX_RE.search(base_key)
     if not m:
         return None
@@ -86,7 +85,7 @@ def _extract_layer_index(base_key: str) -> Optional[int]:
         return None
 
 
-def _stage_bucket(idx: Optional[int], min_idx: int, max_idx: int) -> int:
+def _stage_bucket(idx: int | None, min_idx: int, max_idx: int) -> int:
     # 0=early, 1=mid, 2=late
     if idx is None or min_idx >= max_idx:
         return 1
@@ -98,7 +97,7 @@ def _stage_bucket(idx: Optional[int], min_idx: int, max_idx: int) -> int:
     return 2
 
 
-def _policy_stage_weights(policy: str) -> Dict[str, Tuple[float, float, float]]:
+def _policy_stage_weights(policy: str) -> dict[str, tuple[float, float, float]]:
     p = str(policy or "off").strip().lower()
     if p == "character_focus":
         return {
@@ -129,10 +128,10 @@ def _policy_stage_weights(policy: str) -> Dict[str, Tuple[float, float, float]]:
 
 @dataclass(slots=True)
 class _AdapterTensors:
-    down: Optional[torch.Tensor] = None
-    up: Optional[torch.Tensor] = None
-    alpha: Optional[float] = None
-    dora_mag: Optional[torch.Tensor] = None
+    down: torch.Tensor | None = None
+    up: torch.Tensor | None = None
+    alpha: float | None = None
+    dora_mag: torch.Tensor | None = None
 
 
 class MultiLoRALinear(nn.Module):
@@ -142,8 +141,8 @@ class MultiLoRALinear(nn.Module):
         super().__init__()
         self.linear = linear
         self._adapter_params: nn.ModuleList = nn.ModuleList()  # list of nn.ParameterDict
-        self._scales: List[float] = []
-        self._roles: List[str] = []
+        self._scales: list[float] = []
+        self._roles: list[str] = []
 
     def add_adapter(
         self,
@@ -151,8 +150,8 @@ class MultiLoRALinear(nn.Module):
         up: torch.Tensor,
         *,
         scale: float,
-        alpha: Optional[float] = None,
-        dora_mag: Optional[torch.Tensor] = None,
+        alpha: float | None = None,
+        dora_mag: torch.Tensor | None = None,
         role: str = "style",
     ) -> None:
         rank = int(down.shape[0]) if down.ndim == 2 else 0
@@ -162,7 +161,7 @@ class MultiLoRALinear(nn.Module):
         # and dtype so forward() doesn't hit a device/dtype mismatch on GPU.
         dev = self.linear.weight.device
         dtype = self.linear.weight.dtype
-        ad: Dict[str, nn.Parameter] = {
+        ad: dict[str, nn.Parameter] = {
             "down": nn.Parameter(down.to(device=dev, dtype=dtype), requires_grad=False),
             "up": nn.Parameter(up.to(device=dev, dtype=dtype), requires_grad=False),
         }
@@ -176,11 +175,11 @@ class MultiLoRALinear(nn.Module):
         self,
         *,
         max_total_scale: float = 1.5,
-        role_budgets: Optional[Dict[str, float]] = None,
+        role_budgets: dict[str, float] | None = None,
     ) -> None:
         # Optional per-role caps (e.g. character > style > detail) for multi-style coherence.
         if role_budgets:
-            role_to_idx: Dict[str, List[int]] = {}
+            role_to_idx: dict[str, list[int]] = {}
             for i, r in enumerate(self._roles):
                 role_to_idx.setdefault(r, []).append(i)
             for role, idxs in role_to_idx.items():
@@ -222,8 +221,8 @@ class MultiLoRALinear(nn.Module):
         return out + delta
 
 
-def _extract_adapters(state: Dict[str, torch.Tensor], prefix: str = "") -> Dict[str, _AdapterTensors]:
-    out: Dict[str, _AdapterTensors] = {}
+def _extract_adapters(state: dict[str, torch.Tensor], prefix: str = "") -> dict[str, _AdapterTensors]:
+    out: dict[str, _AdapterTensors] = {}
     for k, v in state.items():
         k = _strip_prefix_if_present(k, prefix)
         base = None
@@ -270,10 +269,10 @@ def _extract_adapters(state: Dict[str, torch.Tensor], prefix: str = "") -> Dict[
 
 def apply_lora(
     model: nn.Module,
-    lora_path_or_state: Union[str, Path, Dict],
+    lora_path_or_state: str | Path | dict,
     scale: float = 1.0,
     prefix: str = "",
-) -> Tuple[nn.Module, int]:
+) -> tuple[nn.Module, int]:
     """Apply one adapter file; supports LoRA/DoRA/LyCORIS-style key variants on Linear layers."""
     return apply_loras(
         model,
@@ -285,16 +284,16 @@ def apply_lora(
 
 def apply_loras(
     model: nn.Module,
-    lora_specs: List[Union[Tuple[Union[str, Path, Dict], float], Tuple[Union[str, Path, Dict], float, str]]],
+    lora_specs: list[tuple[str | Path | dict, float] | tuple[str | Path | dict, float, str]],
     prefix: str = "",
     *,
     normalize_scales: bool = True,
     max_total_scale: float = 1.5,
-    role_budgets: Optional[Dict[str, float]] = None,
+    role_budgets: dict[str, float] | None = None,
     stage_policy: str = "auto",
-    role_stage_weights: Optional[Dict[str, Tuple[float, float, float]]] = None,
+    role_stage_weights: dict[str, tuple[float, float, float]] | None = None,
     layer_group: str = "all",
-) -> Tuple[nn.Module, int]:
+) -> tuple[nn.Module, int]:
     """
     Apply multiple adapter files with per-adapter scales.
 
@@ -307,7 +306,7 @@ def apply_loras(
     This maps to the research finding that early DiT layers handle structure,
     middle layers add detail, and late layers handle aesthetics.
     """
-    by_layer: Dict[str, List[Tuple[_AdapterTensors, float, str]]] = {}
+    by_layer: dict[str, list[tuple[_AdapterTensors, float, str]]] = {}
     for spec in lora_specs:
         if len(spec) >= 3:
             path_or_state, scale, role = spec[0], spec[1], spec[2]

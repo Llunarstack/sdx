@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import numpy as np
 
@@ -25,7 +24,7 @@ def enhance_frame(rgb: np.ndarray, *, amount: float = 0.35) -> np.ndarray:
         return rgb
 
 
-def enhance_sequence(frame_paths: List[Path], *, amount: float = 0.35) -> List[Path]:
+def enhance_sequence(frame_paths: list[Path], *, amount: float = 0.35) -> list[Path]:
     for p in frame_paths:
         save_frame_rgb(p, enhance_frame(read_frame_rgb(p), amount=amount))
     return frame_paths

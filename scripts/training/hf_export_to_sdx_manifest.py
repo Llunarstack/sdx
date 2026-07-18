@@ -33,10 +33,11 @@ import os
 import shutil
 import sys
 import threading
+from collections.abc import Iterator
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from queue import Queue
-from typing import Any, Dict, Iterator, Optional
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -75,7 +76,7 @@ def _to_pil(image_val: Any):
     return None
 
 
-def _raw_image_bytes(image_val: Any) -> tuple[Optional[bytes], Optional[str]]:
+def _raw_image_bytes(image_val: Any) -> tuple[bytes | None, str | None]:
     if isinstance(image_val, dict):
         b = image_val.get("bytes")
         if isinstance(b, (bytes, bytearray)) and len(b) > 16:
@@ -135,7 +136,7 @@ def _prefetch_rows(row_iter: Iterator[Any], bufsize: int) -> Iterator[Any]:
         yield item
 
 
-def _caption_from_row(row: Dict[str, Any], caption_field: str, tag_join: str) -> str:
+def _caption_from_row(row: dict[str, Any], caption_field: str, tag_join: str) -> str:
     for field in (caption_field, "text", "tag_string", "tags"):
         v = row.get(field)
         if v is None:
@@ -165,17 +166,17 @@ def _prepare_for_save(pil, img_ext: str):
 
 
 def _save_sample(
-    row: Dict[str, Any],
+    row: dict[str, Any],
     *,
     stem: str,
     img_dir: Path,
     img_ext: str,
-    save_kw: Dict[str, Any],
+    save_kw: dict[str, Any],
     caption_field: str,
     image_field: str,
     tag_join: str,
     skip_reencode: bool = False,
-) -> Optional[str]:
+) -> str | None:
     cap = _caption_from_row(row, caption_field, tag_join)
     if not cap:
         return None
@@ -257,7 +258,7 @@ def main() -> int:
     img_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = out_dir / args.manifest_name
 
-    ld_kw: Dict[str, Any] = {}
+    ld_kw: dict[str, Any] = {}
     if args.revision:
         ld_kw["revision"] = args.revision
     ds_id = args.dataset
@@ -313,8 +314,7 @@ def main() -> int:
 
     def _iter_rows():
         if args.streaming:
-            for row in iterator:
-                yield row
+            yield from iterator
         else:
             for i in range(len(iterator)):
                 yield iterator[i]
@@ -357,7 +357,7 @@ def main() -> int:
         nonlocal n_written
         max_in_flight = max(workers * 8, workers)
 
-        def _submit(row: Dict[str, Any], ex: ThreadPoolExecutor):
+        def _submit(row: dict[str, Any], ex: ThreadPoolExecutor):
             stem = _next_stem()
             return ex.submit(
                 _save_sample,

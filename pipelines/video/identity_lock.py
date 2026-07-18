@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 
@@ -35,13 +34,13 @@ def composite_with_mask(
 
 
 def apply_identity_lock_to_sequence(
-    frame_paths: List[Path],
+    frame_paths: list[Path],
     anchor_path: str | Path,
-    mask_path: Optional[str | Path] = None,
+    mask_path: str | Path | None = None,
     *,
-    box: Optional[tuple[float, float, float, float]] = None,
+    box: tuple[float, float, float, float] | None = None,
     strength: float = 0.85,
-) -> List[Path]:
+) -> list[Path]:
     """Re-apply anchor pixels inside mask/box on every frame."""
     from .mask_propagate import load_mask_binary, rasterize_box_mask
 
@@ -64,14 +63,14 @@ def apply_identity_lock_to_sequence(
 
 
 def apply_propagated_identity_lock(
-    frame_paths: List[Path],
+    frame_paths: list[Path],
     anchor_path: str | Path,
     *,
-    mask_path: Optional[str | Path] = None,
-    box: Optional[tuple[float, float, float, float]] = None,
+    mask_path: str | Path | None = None,
+    box: tuple[float, float, float, float] | None = None,
     strength: float = 0.85,
-    work_dir: Optional[Path] = None,
-) -> List[Path]:
+    work_dir: Path | None = None,
+) -> list[Path]:
     """Per-frame mask propagation then anchor composite (tracks moving subjects)."""
     from .mask_propagate import load_mask_binary, propagate_mask_sequence, rasterize_box_mask
 

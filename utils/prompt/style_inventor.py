@@ -1,5 +1,5 @@
 """
-Invent novel StyleGenome objects from a user prompt (Qwen2.5 or deterministic fallback).
+Invent novel StyleGenome objects from a user prompt (Qwen3 / legacy Qwen2.5 or deterministic fallback).
 """
 
 from __future__ import annotations
@@ -11,13 +11,15 @@ import re
 import textwrap
 import uuid
 from pathlib import Path
-from typing import List
+
+from utils.modeling.model_paths import default_qwen_path, repo_root
 
 from .style_genome import StyleGenome, is_genome_novel_enough
 from .style_genome_chaos import InventionMode, apply_chaos_level, invent_insane_batch
 
-_PRETRAINED_ROOT = Path(__file__).resolve().parents[2] / "pretrained"
-_QWEN_PATH = _PRETRAINED_ROOT / "Qwen2.5-14B-Instruct"
+_PRETRAINED_ROOT = repo_root() / "pretrained"
+# Resolved at import time so local Qwen3-14B (or legacy Qwen2.5) folders win.
+_QWEN_PATH = Path(default_qwen_path())
 
 _FALLBACK_PALETTES = (
     "volcanic glass highlights on desaturated umber base",
@@ -60,7 +62,7 @@ _ANTI_CLONE = (
 )
 
 
-def _extract_json_array(text: str) -> List[dict]:
+def _extract_json_array(text: str) -> list[dict]:
     text = (text or "").strip()
     if not text:
         return []
@@ -91,7 +93,7 @@ def _qwen_invent_genomes(
     device: str = "cpu",
     max_new_tokens: int = 1024,
     invention_mode: InventionMode = "normal",
-) -> List[StyleGenome]:
+) -> list[StyleGenome]:
     if not _QWEN_PATH.exists() or n < 1:
         return []
     try:
@@ -173,7 +175,7 @@ def _qwen_invent_genomes(
 
         response = tok.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True).strip()
         raw_items = _extract_json_array(response)
-        genomes: List[StyleGenome] = []
+        genomes: list[StyleGenome] = []
         for i, item in enumerate(raw_items[:n]):
             item = dict(item)
             item.setdefault("id", f"qwen_{uuid.uuid4().hex[:8]}")
@@ -192,10 +194,10 @@ def _fallback_invent_genomes(
     *,
     seed: int = 42,
     creativity_level: float = 0.7,
-) -> List[StyleGenome]:
+) -> list[StyleGenome]:
     h = hashlib.sha256(f"{prompt}|{seed}|{creativity_level:.2f}".encode()).hexdigest()
     rng = random.Random(int(h[:8], 16))
-    genomes: List[StyleGenome] = []
+    genomes: list[StyleGenome] = []
     used_sigs: set[str] = set()
 
     for i in range(n):
@@ -262,7 +264,7 @@ class StyleInventor:
         bank_boost: bool = True,
         invention_mode: InventionMode = "normal",
         chaos_level: float = 0.0,
-    ) -> List[StyleGenome]:
+    ) -> list[StyleGenome]:
         prompt = (prompt or "").strip()
         if not prompt or n < 1:
             return []
@@ -273,7 +275,7 @@ class StyleInventor:
         if mode in insane_modes:
             max_catalog_overlap = max(max_catalog_overlap, 0.92)
 
-        genomes: List[StyleGenome] = []
+        genomes: list[StyleGenome] = []
         if mode in insane_modes:
             genomes = invent_insane_batch(
                 prompt,
@@ -332,7 +334,7 @@ class StyleInventor:
                 pass
 
         # Filter near-duplicate catalog styles; dedupe by signature
-        filtered: List[StyleGenome] = []
+        filtered: list[StyleGenome] = []
         seen: set[str] = set()
         for g in genomes:
             sig = g.signature.lower()[:80]

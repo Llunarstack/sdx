@@ -8,9 +8,10 @@ Optional heavy path uses image dissection when models are available.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 __all__ = [
     "CharacterRig",
@@ -24,7 +25,7 @@ __all__ = [
 @dataclass(slots=True)
 class RigPart:
     name: str
-    box: Tuple[float, float, float, float]
+    box: tuple[float, float, float, float]
     prompt: str = ""
     negative: str = ""
     lock: bool = False
@@ -36,13 +37,13 @@ class RigPart:
 class CharacterRig:
     character_id: str
     source_image: str
-    parts: List[RigPart] = field(default_factory=list)
+    parts: list[RigPart] = field(default_factory=list)
     global_prompt: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 # Default humanoid rig (normalized 0–1 boxes)
-_HUMANOID_PARTS: Tuple[Tuple[str, Tuple[float, float, float, float], bool], ...] = (
+_HUMANOID_PARTS: tuple[tuple[str, tuple[float, float, float, float], bool], ...] = (
     ("head", (0.32, 0.02, 0.68, 0.22), True),
     ("torso", (0.28, 0.20, 0.72, 0.55), True),
     ("left_arm", (0.08, 0.22, 0.32, 0.52), False),
@@ -51,7 +52,7 @@ _HUMANOID_PARTS: Tuple[Tuple[str, Tuple[float, float, float, float], bool], ...]
 )
 
 
-def _center_of_mass_box(image_path: Path) -> Optional[Tuple[float, float, float, float]]:
+def _center_of_mass_box(image_path: Path) -> tuple[float, float, float, float] | None:
     """Rough subject box from luminance center (fallback when no ML)."""
     try:
         import cv2
@@ -81,12 +82,12 @@ def _center_of_mass_box(image_path: Path) -> Optional[Tuple[float, float, float,
 
 
 def _shift_parts_to_subject(
-    parts: Sequence[Tuple[str, Tuple[float, float, float, float], bool]],
-    subject: Tuple[float, float, float, float],
-) -> List[RigPart]:
+    parts: Sequence[tuple[str, tuple[float, float, float, float], bool]],
+    subject: tuple[float, float, float, float],
+) -> list[RigPart]:
     sx0, sy0, sx1, sy1 = subject
     sw, sh = sx1 - sx0, sy1 - sy0
-    out: List[RigPart] = []
+    out: list[RigPart] = []
     for name, box, lock in parts:
         x0, y0, x1, y1 = box
         out.append(
@@ -103,8 +104,8 @@ def auto_rig_character(
     character_id: str,
     image_path: str | Path,
     *,
-    text_by_part: Optional[Dict[str, str]] = None,
-    lock_parts: Optional[Sequence[str]] = None,
+    text_by_part: dict[str, str] | None = None,
+    lock_parts: Sequence[str] | None = None,
     use_dissection: bool = False,
 ) -> CharacterRig:
     """
@@ -163,10 +164,10 @@ def rig_to_box_layout(
     *,
     global_prompt: str = "",
     global_negative: str = "",
-) -> Dict[str, Any]:
-    regions: List[Dict[str, Any]] = []
+) -> dict[str, Any]:
+    regions: list[dict[str, Any]] = []
     for i, pt in enumerate(rig.parts):
-        reg: Dict[str, Any] = {
+        reg: dict[str, Any] = {
             "name": pt.name,
             "box": list(pt.box),
             "priority": 20 if pt.lock else 10 - i,

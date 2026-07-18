@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 from .retrieval import (
     download_remote_clip,
@@ -45,9 +45,9 @@ def gather_retrieval_candidates(
     local_library: str = "",
     catalog_path: str = "",
     use_pexels: bool = False,
-    download_dir: Optional[Path] = None,
-) -> List[ClipCandidate]:
-    candidates: List[ClipCandidate] = []
+    download_dir: Path | None = None,
+) -> list[ClipCandidate]:
+    candidates: list[ClipCandidate] = []
     if local_library:
         candidates.extend(load_local_clip_library(local_library))
     candidates.extend(search_web_catalog(query, catalog_path=catalog_path))
@@ -86,12 +86,12 @@ def assign_clips_to_plan(
     *,
     keyframe_interval: int = 6,
     use_motion_only: bool = True,
-) -> List[SegmentAssignment]:
-    assignments: List[SegmentAssignment] = []
+) -> list[SegmentAssignment]:
+    assignments: list[SegmentAssignment] = []
     used: set[str] = set()
     for shot in plan.shots:
         ranked = rank_clips_for_shot(shot, candidates)
-        pick: Optional[ClipCandidate] = None
+        pick: ClipCandidate | None = None
         for c in ranked:
             if c.path not in used:
                 pick = c

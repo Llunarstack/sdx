@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -17,12 +16,12 @@ __all__ = ["ReferenceSheet", "build_reference_sheet", "write_reference_sheet_man
 @dataclass(slots=True)
 class ReferenceSheet:
     source: str
-    views: List[str]
-    boxes: List[Tuple[str, Tuple[float, float, float, float]]]
+    views: list[str]
+    boxes: list[tuple[str, tuple[float, float, float, float]]]
     manifest_path: str = ""
 
 
-def _subject_box(rgb: np.ndarray) -> Tuple[float, float, float, float]:
+def _subject_box(rgb: np.ndarray) -> tuple[float, float, float, float]:
     from .auto_rig import _center_of_mass_box
 
     tmp = Path("_tmp_rig_probe.png")
@@ -36,7 +35,7 @@ def _subject_box(rgb: np.ndarray) -> Tuple[float, float, float, float]:
     return (0.2, 0.05, 0.8, 0.95)
 
 
-def _crop_norm(rgb: np.ndarray, box: Tuple[float, float, float, float]) -> np.ndarray:
+def _crop_norm(rgb: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
     h, w = rgb.shape[:2]
     x0, y0, x1, y1 = box
     ix0 = int(max(0, min(w - 1, x0 * w)))
@@ -56,7 +55,7 @@ def build_reference_sheet(
     image_path: str | Path,
     out_dir: str | Path,
     *,
-    target_size: Optional[tuple[int, int]] = None,
+    target_size: tuple[int, int] | None = None,
 ) -> ReferenceSheet:
     """
     Heuristic multi-view sheet from a single image.
@@ -98,8 +97,8 @@ def build_reference_sheet(
             ),
         ),
     ]
-    paths: List[str] = []
-    boxes: List[Tuple[str, Tuple[float, float, float, float]]] = []
+    paths: list[str] = []
+    boxes: list[tuple[str, tuple[float, float, float, float]]] = []
     for name, box in views_spec:
         view = _crop_norm(rgb, box)
         fp = out / f"{name}.png"

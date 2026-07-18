@@ -4,7 +4,7 @@ Implements pose validation, hand correction, and multi-person interaction handli
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -12,9 +12,9 @@ class BodyPart:
     """Represents a body part with anatomical constraints."""
 
     name: str
-    position: Tuple[float, float]
-    joints: List[Tuple[float, float]]
-    constraints: Dict[str, Any]
+    position: tuple[float, float]
+    joints: list[tuple[float, float]]
+    constraints: dict[str, Any]
     confidence: float = 1.0
 
 
@@ -22,10 +22,10 @@ class BodyPart:
 class Pose:
     """Represents a complete human pose."""
 
-    body_parts: Dict[str, BodyPart]
+    body_parts: dict[str, BodyPart]
     pose_type: str = "standing"
     difficulty: float = 0.5
-    issues: List[str] = None
+    issues: list[str] = None
 
     def __post_init__(self):
         if self.issues is None:
@@ -139,7 +139,7 @@ class AnatomyValidator:
 
         return min(total_complexity, 1.0)
 
-    def generate_anatomy_aware_prompt(self, base_prompt: str, focus_areas: List[str] = None) -> str:
+    def generate_anatomy_aware_prompt(self, base_prompt: str, focus_areas: list[str] = None) -> str:
         """Generate prompt with anatomy-specific enhancements."""
         if focus_areas is None:
             focus_areas = ["hands", "face", "posture"]
@@ -223,7 +223,7 @@ class AnatomyValidator:
 
         return ", ".join(prompt_parts)
 
-    def suggest_pose_corrections(self, pose_description: str) -> List[str]:
+    def suggest_pose_corrections(self, pose_description: str) -> list[str]:
         """Suggest corrections for problematic pose descriptions."""
         suggestions = []
         description_lower = pose_description.lower()
@@ -325,7 +325,7 @@ class HandCorrector:
 
         return ", ".join(prompt_parts)
 
-    def create_hand_validation_checklist(self) -> Dict[str, List[str]]:
+    def create_hand_validation_checklist(self) -> dict[str, list[str]]:
         """Create checklist for validating hand generation."""
         return {
             "finger_count": [
@@ -383,7 +383,7 @@ class MultiPersonComposer:
             },
         }
 
-    def decompose_multi_person_scene(self, scene_description: str) -> List[Dict[str, Any]]:
+    def decompose_multi_person_scene(self, scene_description: str) -> list[dict[str, Any]]:
         """Break down multi-person scene into manageable components."""
         components = []
 
@@ -440,7 +440,7 @@ class MultiPersonComposer:
 
         return 1  # Default to single person
 
-    def _identify_interaction(self, description: str) -> Optional[str]:
+    def _identify_interaction(self, description: str) -> str | None:
         """Identify the type of interaction between people."""
         description_lower = description.lower()
 
@@ -494,7 +494,7 @@ class MultiPersonComposer:
 
         return interaction_poses.get(interaction, "standing")
 
-    def _calculate_person_position(self, interaction: str, person_index: int, total_people: int) -> Tuple[float, float]:
+    def _calculate_person_position(self, interaction: str, person_index: int, total_people: int) -> tuple[float, float]:
         """Calculate position for person in multi-person scene."""
         if total_people == 1:
             return (0.5, 0.5)  # Center
@@ -518,7 +518,7 @@ class MultiPersonComposer:
 
         return f"{interaction} interaction, natural body language"
 
-    def generate_multi_person_prompt(self, components: List[Dict[str, Any]]) -> str:
+    def generate_multi_person_prompt(self, components: list[dict[str, Any]]) -> str:
         """Generate optimized prompt for multi-person scene."""
         prompt_parts = []
 

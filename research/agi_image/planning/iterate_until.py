@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -18,9 +18,9 @@ class VerificationSnapshot:
     """One scoring pass artefact."""
 
     iteration: int
-    metrics: Dict[str, float]
-    notes: Optional[str] = None
-    raw: Dict[str, Any] | None = None
+    metrics: dict[str, float]
+    notes: str | None = None
+    raw: dict[str, Any] | None = None
 
 
 __all__ = ["IterationBudget", "VerificationSnapshot"]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -13,8 +13,8 @@ class InterpretationHypothesis:
 
     name: str
     reading: str
-    evidence_phrases: List[str] = field(default_factory=list)
-    latent_sketch: Dict[str, Any] = field(default_factory=dict)
+    evidence_phrases: list[str] = field(default_factory=list)
+    latent_sketch: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = ["InterpretationHypothesis"]

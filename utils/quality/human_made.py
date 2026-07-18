@@ -9,7 +9,7 @@ perfect symmetry, haloed edges, and sterile digital color. Complements ``--natur
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -82,7 +82,7 @@ def human_made_preset(name: str) -> HumanMadeConfig:
     return HumanMadeConfig()
 
 
-def human_made_prompt_fragments(preset: str = "standard") -> Tuple[str, str]:
+def human_made_prompt_fragments(preset: str = "standard") -> tuple[str, str]:
     """Return (positive_addon, negative_addon)."""
     n = str(preset or "standard").lower().strip()
     if n in ("none", "off", "0"):
@@ -116,7 +116,7 @@ def apply_human_made_prompt_flags(args: Any) -> None:
         args.less_ai = True
 
 
-def append_human_made_prompt_fragments(prompt: str, negative: str, preset: str) -> Tuple[str, str]:
+def append_human_made_prompt_fragments(prompt: str, negative: str, preset: str) -> tuple[str, str]:
     """Append human-made pos/neg fragments (call after base prompt is assembled)."""
     pos, neg = human_made_prompt_fragments(preset)
     p = f"{pos}, {prompt}".strip(", ") if pos and prompt else (pos or prompt)

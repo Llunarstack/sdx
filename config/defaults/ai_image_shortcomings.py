@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Sequence, Tuple
+from typing import Literal
 
 __all__ = [
     "MitigationMode",
@@ -25,7 +26,7 @@ MitigationMode = Literal["none", "auto", "all"]
 @dataclass(frozen=True, slots=True)
 class ShortcomingSpec:
     id: str
-    keywords: Tuple[str, ...]
+    keywords: tuple[str, ...]
     positive_hints: str
     negative_hints: str
     is_2d_style: bool = False
@@ -39,12 +40,12 @@ def _matches(prompt_lower: str, patterns: Sequence[re.Pattern]) -> bool:
     return any(p.search(prompt_lower) for p in patterns)
 
 
-def _compile_keywords(keywords: Tuple[str, ...]) -> Tuple[re.Pattern, ...]:
+def _compile_keywords(keywords: tuple[str, ...]) -> tuple[re.Pattern, ...]:
     return tuple(_word_re(k) for k in keywords)
 
 
 # Order matters for stable merge of hints (photoreal + digital + CG, then stylized 2D-specific).
-SHORTCOMING_SPECS: Tuple[ShortcomingSpec, ...] = (
+SHORTCOMING_SPECS: tuple[ShortcomingSpec, ...] = (
     ShortcomingSpec(
         id="skin_detail_tangents",
         keywords=(
@@ -361,11 +362,11 @@ SHORTCOMING_SPECS: Tuple[ShortcomingSpec, ...] = (
     ),
 )
 
-_SHORTCOMING_PATTERNS: Dict[str, Tuple[re.Pattern, ...]] = {
+_SHORTCOMING_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
     s.id: _compile_keywords(s.keywords) for s in SHORTCOMING_SPECS
 }
 
-SHORTCOMING_IDS: Tuple[str, ...] = tuple(s.id for s in SHORTCOMING_SPECS)
+SHORTCOMING_IDS: tuple[str, ...] = tuple(s.id for s in SHORTCOMING_SPECS)
 
 
 def spec_by_id(sid: str) -> ShortcomingSpec:
@@ -378,7 +379,7 @@ def spec_by_id(sid: str) -> ShortcomingSpec:
 def merge_csv_unique(*chunks: str) -> str:
     """Join comma-separated hint strings with de-duplication (order preserved)."""
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for chunk in chunks:
         if not chunk or not str(chunk).strip():
             continue
@@ -394,12 +395,12 @@ def merge_csv_unique(*chunks: str) -> str:
     return ", ".join(out)
 
 
-def detect_shortcoming_ids(prompt: str, *, include_2d: bool) -> Tuple[str, ...]:
+def detect_shortcoming_ids(prompt: str, *, include_2d: bool) -> tuple[str, ...]:
     """Return ids whose keywords match ``prompt`` (word-boundary)."""
     if not prompt or not prompt.strip():
         return ()
     pl = prompt  # patterns use IGNORECASE
-    matched: List[str] = []
+    matched: list[str] = []
     for spec in SHORTCOMING_SPECS:
         if spec.is_2d_style and not include_2d:
             continue
@@ -413,7 +414,7 @@ def _specs_for_mode(
     mode: MitigationMode,
     *,
     include_2d_pack: bool,
-) -> List[ShortcomingSpec]:
+) -> list[ShortcomingSpec]:
     if mode == "none":
         return []
     if mode == "all":
@@ -429,7 +430,7 @@ def mitigation_fragments(
     mode: MitigationMode,
     *,
     include_2d_pack: bool,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Build extra positive and negative prompt fragments.
 

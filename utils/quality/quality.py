@@ -1,11 +1,10 @@
 # Quality and post-processing utilities for better-looking images.
 # Inspired by ComfyUI, A1111, and common diffusion workflows.
-from typing import Optional
 
 import numpy as np
 
 
-def add_film_grain(image: np.ndarray, amount: float = 0.02, seed: Optional[int] = None) -> np.ndarray:
+def add_film_grain(image: np.ndarray, amount: float = 0.02, seed: int | None = None) -> np.ndarray:
     """
     Add subtle luminance grain to reduce the plastic/AI look. amount in [0.01, 0.04] is typical.
     image: (H, W, C) uint8 or float [0,255]. Returns same dtype.
@@ -33,7 +32,7 @@ def naturalize(
     image: np.ndarray,
     grain_amount: float = 0.015,
     micro_contrast: float = 1.02,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> np.ndarray:
     """
     Light post-process to make the image look less AI-generated: subtle film grain + slight contrast.
@@ -204,7 +203,7 @@ def add_motion_blur(
     image: np.ndarray,
     amount: float = 0.12,
     angle_deg: float = 0.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> np.ndarray:
     """
     Subtle directional blur (LANDSCAPE: authenticity / lens-like motion).
@@ -306,7 +305,7 @@ def luminance_clarity(image: np.ndarray, amount: float = 0.0, radius: float = 1.
     return out
 
 
-def polish_pass(image: np.ndarray, amount: float = 0.0, seed: Optional[int] = None) -> np.ndarray:
+def polish_pass(image: np.ndarray, amount: float = 0.0, seed: int | None = None) -> np.ndarray:
     """
     One-knob cross-style finish: mild S-curve + chroma smooth + luminance clarity + tiny grain.
     amount in [0, 1]; try 0.35–0.7. Stacks on top of other passes if you also set --clarity etc.
@@ -337,7 +336,7 @@ FINISHING_PRESET_BASELINES = {
 def add_lens_glare(
     image: np.ndarray,
     strength: float = 0.1,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> np.ndarray:
     """
     Soft additive bloom toward one corner (cheap lens-flare stand-in; LANDSCAPE §1).
@@ -422,7 +421,7 @@ def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: f
 
 
 def apply_photo_filter(
-    image: np.ndarray, filter_name: str = "none", strength: float = 0.5, seed: Optional[int] = None
+    image: np.ndarray, filter_name: str = "none", strength: float = 0.5, seed: int | None = None
 ) -> np.ndarray:
     """
     Lightweight photography filter simulation.

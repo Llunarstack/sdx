@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from PIL import Image
-
 from scripts.scrape.frame_split import (
     _looks_like_video_file,
     extract_training_frames,

@@ -1,9 +1,14 @@
-"""Shim → ``utils._archive.visual_design.negatives``."""
+from __future__ import annotations
 
-import utils._archive.visual_design.negatives as _src
 
-for _name in dir(_src):
-    if not _name.startswith('__'):
-        globals()[_name] = getattr(_src, _name)
-
-del _name, _src
+def merge_negative_addon(base: str, addon: str) -> str:
+    """Append *addon* to *base* negative prompt with comma separation; drops empties."""
+    b = (base or "").strip().strip(",")
+    a = (addon or "").strip().strip(",")
+    if not a:
+        return b
+    if not b:
+        return a
+    if a.lower() in b.lower():
+        return b
+    return f"{b}, {a}"

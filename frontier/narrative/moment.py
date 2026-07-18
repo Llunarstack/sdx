@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
 
 
 class MomentPhase(str, Enum):
@@ -24,10 +23,10 @@ class MomentCue:
     phase: MomentPhase
     confidence: float
     verb: str
-    prompt_fragments: List[str]
+    prompt_fragments: list[str]
     """Per-step emphasis weights (length = num_steps), higher = more structure early."""
 
-    step_emphasis: Tuple[float, ...]
+    step_emphasis: tuple[float, ...]
 
 
 _ANTICIPATION = (
@@ -86,7 +85,7 @@ class TemporalMomentAnalyzer:
                     confidence = 0.75
                     break
 
-        frags: List[str] = []
+        frags: list[str] = []
         if phase == MomentPhase.ANTICIPATION:
             frags = ["tension in muscles", "frozen instant", "implied motion blur minimal"]
         elif phase == MomentPhase.CLIMAX:
@@ -102,7 +101,7 @@ class TemporalMomentAnalyzer:
             step_emphasis=self._emphasis_curve(phase),
         )
 
-    def _emphasis_curve(self, phase: MomentPhase) -> Tuple[float, ...]:
+    def _emphasis_curve(self, phase: MomentPhase) -> tuple[float, ...]:
         n = self.num_steps
         if phase == MomentPhase.STATIC:
             return tuple(1.0 for _ in range(n))

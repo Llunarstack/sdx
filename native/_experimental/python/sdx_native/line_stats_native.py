@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import ctypes
 from pathlib import Path
-from typing import Optional, Tuple
 
 from sdx_native.native_tools import line_stats_shared_library_path
 
 
 class LineStatsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = line_stats_shared_library_path()
         if p is None:
             return
@@ -34,7 +33,7 @@ class LineStatsLib:
     def available(self) -> bool:
         return self._lib is not None
 
-    def count_bytes_newlines(self, path: Path) -> Tuple[int, int]:
+    def count_bytes_newlines(self, path: Path) -> tuple[int, int]:
         if not self._lib:
             raise RuntimeError("sdx_line_stats not built")
         b = ctypes.c_ulonglong(0)
@@ -45,7 +44,7 @@ class LineStatsLib:
         return int(b.value), int(n.value)
 
 
-_LIB: Optional[LineStatsLib] = None
+_LIB: LineStatsLib | None = None
 
 
 def get_line_stats_lib() -> LineStatsLib:
@@ -55,7 +54,7 @@ def get_line_stats_lib() -> LineStatsLib:
     return _LIB
 
 
-def count_file_bytes_newlines(path: Path) -> Optional[Tuple[int, int]]:
+def count_file_bytes_newlines(path: Path) -> tuple[int, int] | None:
     """Return ``(bytes, newline_count)`` if the shared library is built; else ``None``."""
     lib = get_line_stats_lib()
     if not lib.available:

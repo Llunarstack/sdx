@@ -66,7 +66,7 @@ def test_creativity_mode_raw_skips_expansion():
     args = SimpleNamespace(prompt="sunset", creativity_mode="raw")
     mode = apply_creativity_mode_to_prompt(args)
     assert mode == CreativityMode.RAW
-    assert getattr(args, "_skip_prompt_expansion") is True
+    assert args._skip_prompt_expansion is True
     assert args.prompt == "sunset"
 
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Mapping
 
 __all__ = ["PreflightIssue", "PreflightReport", "run_preflight"]
 
@@ -20,16 +20,16 @@ class PreflightIssue:
 @dataclass(slots=True)
 class PreflightReport:
     ok: bool
-    issues: List[PreflightIssue] = field(default_factory=list)
+    issues: list[PreflightIssue] = field(default_factory=list)
 
-    def errors(self) -> List[PreflightIssue]:
+    def errors(self) -> list[PreflightIssue]:
         return [i for i in self.issues if i.level == "error"]
 
-    def warnings(self) -> List[PreflightIssue]:
+    def warnings(self) -> list[PreflightIssue]:
         return [i for i in self.issues if i.level == "warn"]
 
 
-def _check_path(issues: List[PreflightIssue], p: str, *, label: str, required: bool = False) -> None:
+def _check_path(issues: list[PreflightIssue], p: str, *, label: str, required: bool = False) -> None:
     if not p or p.startswith("http"):
         return
     path = Path(p)
@@ -54,7 +54,7 @@ def run_preflight(
 ) -> PreflightReport:
     from .scene_graph import load_scene_graph
 
-    issues: List[PreflightIssue] = []
+    issues: list[PreflightIssue] = []
     try:
         graph = load_scene_graph(scene_path)
     except Exception as exc:

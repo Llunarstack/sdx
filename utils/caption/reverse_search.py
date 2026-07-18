@@ -12,9 +12,9 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Optional
 
 from utils.caption.api_keys import get_api_key
 
@@ -44,7 +44,7 @@ class ReverseHit:
     engine: str = "saucenao"
     author: str = ""
     material: str = ""  # copyright / series hint
-    characters: List[str] = field(default_factory=list)
+    characters: list[str] = field(default_factory=list)
     external_url: str = ""
     raw: dict = field(default_factory=dict)
 
@@ -83,8 +83,8 @@ def _iter_urls_from_tineye_match(match: dict) -> Iterable[str]:
             yield str(backlink["backlink"])
 
 
-def _hits_from_saucenao_json(payload: dict) -> List[ReverseHit]:
-    hits: List[ReverseHit] = []
+def _hits_from_saucenao_json(payload: dict) -> list[ReverseHit]:
+    hits: list[ReverseHit] = []
     for result in payload.get("results") or []:
         header = result.get("header") or {}
         data = result.get("data") or {}
@@ -95,7 +95,7 @@ def _hits_from_saucenao_json(payload: dict) -> List[ReverseHit]:
         site_id = ""
         author = str(data.get("member_name") or data.get("author_name") or "")
         material = str(data.get("material") or data.get("source") or "")
-        chars: List[str] = []
+        chars: list[str] = []
         if "danbooru_id" in data:
             site = "danbooru"
             site_id = str(data["danbooru_id"])
@@ -128,9 +128,9 @@ def _hits_from_saucenao_json(payload: dict) -> List[ReverseHit]:
     return hits
 
 
-def _hits_from_saucenao_html(html: str) -> List[ReverseHit]:
+def _hits_from_saucenao_html(html: str) -> list[ReverseHit]:
     """Parse SauceNAO HTML results page when JSON is unavailable."""
-    hits: List[ReverseHit] = []
+    hits: list[ReverseHit] = []
     blocks = re.split(r'class="resultadosub"', html, flags=re.I)
     for block in blocks[1:6]:
         sim_m = re.search(r"(\d+(?:\.\d+)?)\s*%", block)
@@ -151,7 +151,7 @@ def _hits_from_saucenao_html(html: str) -> List[ReverseHit]:
         mat_m = re.search(r"Material:\s*([^<\n]+)", block, re.I)
         if mat_m:
             material = mat_m.group(1).strip()
-        chars: List[str] = []
+        chars: list[str] = []
         char_m = re.search(r"Characters?:\s*([^<\n]+)", block, re.I)
         if char_m:
             chars = [c.strip() for c in char_m.group(1).split(",") if c.strip()]
@@ -192,10 +192,14 @@ def _hits_from_saucenao_html(html: str) -> List[ReverseHit]:
 def _multipart_post(url: str, field_name: str, filename: str, data: bytes, *, timeout_s: float) -> bytes:
     boundary = "----sdxboundary"
     body = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"\r\n'
-        f"Content-Type: application/octet-stream\r\n\r\n"
-    ).encode() + data + f"\r\n--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        + data
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
     req = urllib.request.Request(
         url,
         data=body,
@@ -209,7 +213,7 @@ def _multipart_post(url: str, field_name: str, filename: str, data: bytes, *, ti
         return resp.read()
 
 
-def saucenao_search_web(image_path: str | Path, *, timeout_s: float = 45.0) -> List[ReverseHit]:
+def saucenao_search_web(image_path: str | Path, *, timeout_s: float = 45.0) -> list[ReverseHit]:
     """Upload image to SauceNAO web form — same as the browser, no API key."""
     p = Path(image_path)
     if not p.is_file():
@@ -241,10 +245,10 @@ def saucenao_search_web(image_path: str | Path, *, timeout_s: float = 45.0) -> L
 def saucenao_search_file(
     image_path: str | Path,
     *,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     timeout_s: float = 30.0,
     prefer_web: bool = True,
-) -> List[ReverseHit]:
+) -> list[ReverseHit]:
     """Query SauceNAO — web upload by default; API key optional for higher limits."""
     key = (api_key or get_api_key("saucenao")).strip()
     if prefer_web or not key:
@@ -267,8 +271,8 @@ def saucenao_search_file(
         return saucenao_search_web(image_path, timeout_s=timeout_s)
 
 
-def _hits_from_tineye_json(payload: dict) -> List[ReverseHit]:
-    hits: List[ReverseHit] = []
+def _hits_from_tineye_json(payload: dict) -> list[ReverseHit]:
+    hits: list[ReverseHit] = []
     matches = (payload.get("results") or {}).get("matches")
     if matches is None and isinstance(payload.get("matches"), list):
         matches = payload["matches"]
@@ -308,7 +312,7 @@ def _hits_from_tineye_json(payload: dict) -> List[ReverseHit]:
     return hits
 
 
-def tineye_search_web(image_path: str | Path, *, timeout_s: float = 60.0, limit: int = 10) -> List[ReverseHit]:
+def tineye_search_web(image_path: str | Path, *, timeout_s: float = 60.0, limit: int = 10) -> list[ReverseHit]:
     """Upload image to TinEye website (same as browser) — no API key."""
     p = Path(image_path)
     if not p.is_file():
@@ -347,7 +351,7 @@ def tineye_search_web(image_path: str | Path, *, timeout_s: float = 60.0, limit:
             timeout=timeout_s,
         )
         if resp.status_code == 200 and resp.text:
-            hits: List[ReverseHit] = []
+            hits: list[ReverseHit] = []
             for url in re.findall(r'href="(https?://[^"]+)"', resp.text)[:20]:
                 site, site_id = parse_source_url(url)
                 if site:
@@ -371,11 +375,11 @@ def tineye_search_web(image_path: str | Path, *, timeout_s: float = 60.0, limit:
 def tineye_search_file(
     image_path: str | Path,
     *,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     timeout_s: float = 60.0,
     limit: int = 10,
     prefer_web: bool = True,
-) -> List[ReverseHit]:
+) -> list[ReverseHit]:
     """Query TinEye — web upload by default; paid API key optional."""
     key = (api_key or get_api_key("tineye")).strip()
     if prefer_web or not key:
@@ -415,11 +419,11 @@ def reverse_search_file(
     *,
     use_saucenao: bool = True,
     use_tineye: bool = True,
-    saucenao_api_key: Optional[str] = None,
-    tineye_api_key: Optional[str] = None,
-) -> List[ReverseHit]:
+    saucenao_api_key: str | None = None,
+    tineye_api_key: str | None = None,
+) -> list[ReverseHit]:
     """Run SauceNAO and/or TinEye via web upload; merge hits by similarity."""
-    hits: List[ReverseHit] = []
+    hits: list[ReverseHit] = []
     if use_saucenao:
         hits.extend(saucenao_search_file(image_path, api_key=saucenao_api_key))
     if use_tineye:

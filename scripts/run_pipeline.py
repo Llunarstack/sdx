@@ -40,9 +40,9 @@ import shlex
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -151,7 +151,7 @@ def _run_cmd(
     cmd: list[str],
     *,
     cwd: Path = ROOT,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     shell: bool = False,
 ) -> str:
     print(f"  $ {' '.join(shlex.quote(c) for c in cmd) if not shell else cmd}", flush=True)
@@ -161,14 +161,14 @@ def _run_cmd(
     return ""
 
 
-def _py(args: list[str], *, timeout: Optional[int] = None) -> str:
+def _py(args: list[str], *, timeout: int | None = None) -> str:
     return _run_cmd([sys.executable, *args], timeout=timeout)
 
 
 def _run_step(
     report: PipelineReport,
     name: str,
-    fn: Callable[[], Optional[str]],
+    fn: Callable[[], str | None],
     *,
     skip: bool = False,
     detail: str = "",
@@ -554,7 +554,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skip-smoke-train", action="store_true", help="Pass --skip-train to integration_smoke.")
     p.add_argument("--skip-smoke-scrape", action="store_true", help="Pass --skip-scrape to integration_smoke.")
     p.add_argument("--skip-smoke-reverse", action="store_true", help="Pass --skip-reverse to integration_smoke.")
-    p.add_argument("--smoke-data-root", default=None, help="Integration smoke data dir (default: SDX_DATA/integration_smoke).")
+    p.add_argument(
+        "--smoke-data-root", default=None, help="Integration smoke data dir (default: SDX_DATA/integration_smoke)."
+    )
     p.add_argument("--smoke-timeout", type=int, default=3600)
     p.add_argument(
         "--smoke-arg",
@@ -569,7 +571,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-posts", type=int, default=int(os.environ.get("SDX_MAX_POSTS", "0")))
     p.add_argument("--frame-fps", type=float, default=float(os.environ.get("SDX_FRAME_FPS", "2")))
     p.add_argument("--max-frames-per-post", type=int, default=int(os.environ.get("SDX_MAX_FRAMES_PER_POST", "0")))
-    p.add_argument("--split-frames", action=argparse.BooleanOptionalAction, default=os.environ.get("SDX_SPLIT_FRAMES", "1") == "1")
+    p.add_argument(
+        "--split-frames", action=argparse.BooleanOptionalAction, default=os.environ.get("SDX_SPLIT_FRAMES", "1") == "1"
+    )
     p.add_argument("--keep-raw-media", action="store_true", default=os.environ.get("SDX_KEEP_RAW_MEDIA", "0") == "1")
     p.add_argument("--scrape-sites", nargs="*", default=None, choices=["danbooru", "e621", "rule34xxx", "rule34xyz"])
     p.add_argument("--dataset-timeout", type=int, default=0, help="0 = no timeout (full crawl).")
@@ -600,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     report = PipelineReport()
-    handlers: dict[str, Callable[[], Optional[str]]] = {
+    handlers: dict[str, Callable[[], str | None]] = {
         "setup": lambda: (_step_setup(), "")[1],
         "verify": lambda: (_step_verify(), "")[1],
         "smoke": lambda: (_step_smoke(args, paths), str(paths["smoke_data"]))[1],
@@ -621,7 +625,9 @@ def main(argv: list[str] | None = None) -> int:
     report_path = paths["data"] / "pipeline_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
-        json.dumps({"ok": report.ok(), "summary": report.summary(), "steps": [asdict(s) for s in report.steps]}, indent=2),
+        json.dumps(
+            {"ok": report.ok(), "summary": report.summary(), "steps": [asdict(s) for s in report.steps]}, indent=2
+        ),
         encoding="utf-8",
     )
     print(f"Report: {report_path}")

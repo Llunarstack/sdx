@@ -15,8 +15,9 @@ sizes so decode/resize pipelines avoid half-pixel drift and crisp edges for line
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Mapping, Optional, Tuple, Union
+from typing import Any, Literal
 
 LATENT_TO_PIXEL: int = 8  # RGB pixels per latent cell (this repo's VAE convention)
 
@@ -63,7 +64,7 @@ def dit_rgb_stride_px(model: Any) -> int:
 def pixel_stride_for_pipeline(
     *,
     model: Any = None,
-    override_stride_px: Optional[int] = None,
+    override_stride_px: int | None = None,
 ) -> int:
     """
     Conservative stride for snapping **width/height**: at least VAE alignment (8), and DiT patch
@@ -80,14 +81,14 @@ def pixel_stride_for_pipeline(
     return s
 
 
-def latent_hw_from_pixels(height_px: int, width_px: int) -> Tuple[int, int]:
+def latent_hw_from_pixels(height_px: int, width_px: int) -> tuple[int, int]:
     """``(latent_h, latent_w)`` for SD-style ``// 8`` latent."""
     h = max(1, int(height_px) // LATENT_TO_PIXEL)
     w = max(1, int(width_px) // LATENT_TO_PIXEL)
     return h, w
 
 
-def pixels_from_latent_hw(latent_h: int, latent_w: int) -> Tuple[int, int]:
+def pixels_from_latent_hw(latent_h: int, latent_w: int) -> tuple[int, int]:
     """Exact RGB size for a full latent grid."""
     return int(latent_h) * LATENT_TO_PIXEL, int(latent_w) * LATENT_TO_PIXEL
 
@@ -104,7 +105,7 @@ class PixelPerfectCanvas:
     snap_mode: str
     aligned_to_dit_patch: bool
 
-    def as_dict(self) -> Dict[str, Union[int, str, bool]]:
+    def as_dict(self) -> dict[str, int | str | bool]:
         return {
             "height_px": self.height_px,
             "width_px": self.width_px,
@@ -121,12 +122,12 @@ def resolve_pixel_perfect_hw(
     width_px: int,
     *,
     model: Any = None,
-    stride_px: Optional[int] = None,
+    stride_px: int | None = None,
     mode: SnapMode = "nearest",
     square: bool = False,
     min_side: int = LATENT_TO_PIXEL,
     max_side: int = 16384,
-) -> Tuple[int, int, PixelPerfectCanvas]:
+) -> tuple[int, int, PixelPerfectCanvas]:
     """
     Snap ``height_px`` × ``width_px`` to a pipeline-aligned grid.
 
@@ -193,7 +194,7 @@ def validate_pixels_against_dit(
         )
 
 
-def ar_block_grid_side(num_patches: int) -> Optional[int]:
+def ar_block_grid_side(num_patches: int) -> int | None:
     """Return ``P`` with ``P*P == num_patches`` if square; else ``None``."""
     np_ = int(num_patches)
     if np_ <= 0:
@@ -213,10 +214,10 @@ def validate_latent_matches_ar_grid(latent_h: int, latent_w: int, num_patches: i
 
 def tag_manifest_pixel_perfect(
     row: Mapping[str, Any],
-    spec: Union[PixelPerfectCanvas, Mapping[str, Any]],
+    spec: PixelPerfectCanvas | Mapping[str, Any],
     *,
     overwrite: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Merge pixel-perfect fields into a manifest / JSONL row for ViT QA and book tooling.
 

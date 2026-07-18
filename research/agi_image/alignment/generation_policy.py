@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import FrozenSet
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,8 +15,8 @@ class PolicyGate:
 @dataclass(slots=True)
 class GenerationPolicy:
     gates: PolicyGate = field(default_factory=PolicyGate)
-    allowed_topics: FrozenSet[str] | None = None
-    banned_terms: FrozenSet[str] | None = None
+    allowed_topics: frozenset[str] | None = None
+    banned_terms: frozenset[str] | None = None
 
 
 __all__ = ["GenerationPolicy", "PolicyGate"]

@@ -41,8 +41,9 @@ import os
 import queue
 import threading
 import time
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -180,13 +181,13 @@ def build_fast_dataloader(
     batch_size: int,
     device: torch.device,
     *,
-    num_workers: Optional[int] = None,
+    num_workers: int | None = None,
     prefetch_factor: int = 2,
     persistent_workers: bool = True,
     pin_memory: bool = True,
     shuffle: bool = True,
     drop_last: bool = True,
-    collate_fn: Optional[Callable] = None,
+    collate_fn: Callable | None = None,
     sampler: Any = None,
     seed: int = 42,
 ) -> PrefetchDataLoader:
@@ -316,7 +317,7 @@ class LatentCacheBuilder:
         show_progress: bool = True,
         skip_existing: bool = True,
         num_workers: int = 4,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Build the latent cache for all samples in the dataset.
 
@@ -423,14 +424,14 @@ class AsyncCaptionPrefetcher:
 
     def __init__(
         self,
-        encode_fn: Callable[[List[str]], torch.Tensor],
+        encode_fn: Callable[[list[str]], torch.Tensor],
         queue_size: int = 4,
     ) -> None:
         self.encode_fn = encode_fn
         self._input_queue: queue.Queue = queue.Queue(maxsize=queue_size)
-        self._output_cache: Dict[int, torch.Tensor] = {}
+        self._output_cache: dict[int, torch.Tensor] = {}
         self._lock = threading.Lock()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._running = False
 
     def start(self) -> None:
@@ -449,11 +450,11 @@ class AsyncCaptionPrefetcher:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
 
-    def submit(self, captions: List[str], batch_id: int) -> None:
+    def submit(self, captions: list[str], batch_id: int) -> None:
         """Submit a list of captions for background encoding."""
         self._input_queue.put((batch_id, captions))
 
-    def get(self, batch_id: int, timeout: float = 30.0) -> Optional[torch.Tensor]:
+    def get(self, batch_id: int, timeout: float = 30.0) -> torch.Tensor | None:
         """
         Get the encoded tensor for batch_id.
         Blocks until encoding is complete or timeout is reached.
@@ -514,7 +515,7 @@ class DataLoaderProfiler:
         self,
         num_batches: int = 50,
         warmup_batches: int = 5,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Profile the loader for num_batches batches.
 
@@ -524,7 +525,7 @@ class DataLoaderProfiler:
         - gpu_idle_pct: estimated % of time GPU was waiting for data
         - total_samples: total samples processed
         """
-        load_times: List[float] = []
+        load_times: list[float] = []
         total_samples = 0
         batch_size = None
 
@@ -590,7 +591,7 @@ class DataLoaderProfiler:
             "batch_size": float(batch_size or 0),
         }
 
-    def suggest_config(self, stats: Dict[str, float]) -> str:
+    def suggest_config(self, stats: dict[str, float]) -> str:
         """Return a human-readable suggestion based on profiling results."""
         lines = [
             f"Throughput: {stats['samples_per_sec']:.1f} samples/sec",
@@ -612,8 +613,8 @@ def dataloader_perf_kwargs(
     prefetch_factor: int = 2,
     pin_memory: bool = True,
     persistent_workers: bool = True,
-    worker_init_fn: Optional[Callable] = None,
-) -> Dict[str, Any]:
+    worker_init_fn: Callable | None = None,
+) -> dict[str, Any]:
     """
     Shared DataLoader kwargs for train.py (pin_memory, prefetch, persistent workers).
 
@@ -621,7 +622,7 @@ def dataloader_perf_kwargs(
     """
     use_pin = pin_memory and torch.cuda.is_available()
     use_persistent = persistent_workers and num_workers > 0
-    kw: Dict[str, Any] = {
+    kw: dict[str, Any] = {
         "num_workers": num_workers,
         "pin_memory": use_pin,
         "persistent_workers": use_persistent,

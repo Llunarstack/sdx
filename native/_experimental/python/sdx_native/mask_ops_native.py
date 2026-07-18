@@ -14,7 +14,6 @@ Falls back to NumPy when the native library is not built.
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -23,7 +22,7 @@ from sdx_native.native_tools import mask_ops_shared_library_path
 
 class MaskOpsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = mask_ops_shared_library_path()
         if p is None:
             return
@@ -81,7 +80,7 @@ class MaskOpsLib:
         return out
 
 
-_LIB: Optional[MaskOpsLib] = None
+_LIB: MaskOpsLib | None = None
 
 
 def _get_lib() -> MaskOpsLib:
@@ -110,7 +109,7 @@ def maybe_mask_to_patch_weights_native(
     mask: np.ndarray,
     ph: int,
     pw: int,
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     """Return patch weights via C++ kernel, or None if not available."""
     lib = _get_lib()
     if not lib.available:

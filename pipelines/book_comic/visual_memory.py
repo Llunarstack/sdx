@@ -28,16 +28,17 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any
 
 from pipelines.book_comic.book_challenging_content import visual_memory_challenge_clause
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
 MEMORY_VERSION = 1
 
-BOOK_STYLE_HINTS: Dict[str, str] = {
+BOOK_STYLE_HINTS: dict[str, str] = {
     "manga": (
         "Japanese manga readability: clear silhouette reads, screentone-friendly values, "
         "consistent line weight hierarchy face vs costume"
@@ -70,8 +71,8 @@ ENTITY_KIND_LABEL = {
 }
 
 
-def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = dict(base)
+def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = dict(base)
     for k, v in patch.items():
         if k in out and isinstance(out[k], dict) and isinstance(v, dict):
             out[k] = _deep_merge(out[k], v)
@@ -80,12 +81,12 @@ def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> Dict[str, 
     return out
 
 
-def _normalize_entities(root: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _normalize_entities(root: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     raw = root.get("entities")
     if isinstance(raw, dict):
         return {str(k): dict(v) if isinstance(v, dict) else {} for k, v in raw.items()}
     if isinstance(raw, list):
-        out: Dict[str, Dict[str, Any]] = {}
+        out: dict[str, dict[str, Any]] = {}
         for item in raw:
             if not isinstance(item, dict):
                 continue
@@ -101,7 +102,7 @@ def _normalize_entities(root: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
 def _structure_clause(structure: Mapping[str, Any]) -> str:
     if not structure:
         return ""
-    parts: List[str] = []
+    parts: list[str] = []
     mapping = {
         "proportions": "body proportions",
         "head_to_body_ratio": "head-to-body ratio",
@@ -129,7 +130,7 @@ def _entity_prompt(eid: str, data: Mapping[str, Any]) -> str:
     head = ENTITY_KIND_LABEL.get(kind, ENTITY_KIND_LABEL["character"])
     name = str(data.get("display_name", "") or eid).strip()
     label = f'{head} "{name}" (id {eid})'
-    bits: List[str] = [label]
+    bits: list[str] = [label]
 
     look = str(data.get("canonical_look", "")).strip()
     if look:
@@ -160,7 +161,7 @@ def _entity_prompt(eid: str, data: Mapping[str, Any]) -> str:
     return merge_prompt_fragments(*bits)
 
 
-def _page_window(ov: Mapping[str, Any]) -> Optional[Tuple[int, int]]:
+def _page_window(ov: Mapping[str, Any]) -> tuple[int, int] | None:
     try:
         lo = int(ov.get("from_page", 0))
     except (TypeError, ValueError):
@@ -179,7 +180,7 @@ def _applies(page_index: int, lo: int, hi: int) -> bool:
     return lo <= page_index <= hi
 
 
-def _merge_entity_for_page(base_entity: Mapping[str, Any], page_index: int) -> Dict[str, Any]:
+def _merge_entity_for_page(base_entity: Mapping[str, Any], page_index: int) -> dict[str, Any]:
     ent = copy.deepcopy(dict(base_entity))
     overrides = ent.get("page_overrides")
     if not isinstance(overrides, list):
@@ -202,7 +203,7 @@ def _merge_entity_for_page(base_entity: Mapping[str, Any], page_index: int) -> D
     return ent
 
 
-def _merge_entity_for_cover(base_entity: Mapping[str, Any]) -> Dict[str, Any]:
+def _merge_entity_for_cover(base_entity: Mapping[str, Any]) -> dict[str, Any]:
     """Cover: canonical design only (no page_overrides)."""
     ent = copy.deepcopy(dict(base_entity))
     ent.pop("page_overrides", None)
@@ -213,11 +214,11 @@ def _merge_entity_for_cover(base_entity: Mapping[str, Any]) -> Dict[str, Any]:
 class BookVisualMemory:
     """Loaded visual-memory document with helpers for prompts and updates."""
 
-    root: Dict[str, Any]
-    entities: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    root: dict[str, Any]
+    entities: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> BookVisualMemory:
+    def load(cls, path: str | Path) -> BookVisualMemory:
         p = Path(path)
         raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
@@ -230,15 +231,15 @@ class BookVisualMemory:
         root["entities"] = ent
         return cls(root=root, entities=ent)
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(self.root, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    def entity_ids(self) -> List[str]:
+    def entity_ids(self) -> list[str]:
         return sorted(self.entities.keys())
 
-    def effective_entity(self, entity_id: str, page_index: int) -> Dict[str, Any]:
+    def effective_entity(self, entity_id: str, page_index: int) -> dict[str, Any]:
         if entity_id not in self.entities:
             raise KeyError(f"unknown entity {entity_id!r}")
         return _merge_entity_for_page(self.entities[entity_id], page_index)
@@ -248,8 +249,8 @@ class BookVisualMemory:
         entity_id: str,
         *,
         from_page: int,
-        to_page: Optional[int] = None,
-        patch: Optional[Mapping[str, Any]] = None,
+        to_page: int | None = None,
+        patch: Mapping[str, Any] | None = None,
     ) -> None:
         """
         Append a page-range patch (user \"remember this change from page N\").
@@ -277,7 +278,7 @@ class BookVisualMemory:
         self,
         *,
         from_page: int,
-        to_page: Optional[int] = None,
+        to_page: int | None = None,
         extra_prompt: str = "",
     ) -> None:
         s = (extra_prompt or "").strip()
@@ -293,7 +294,7 @@ class BookVisualMemory:
     def _global_fragment(self) -> str:
         style = str(self.root.get("book_style", "manga") or "manga").lower().strip()
         hint = BOOK_STYLE_HINTS.get(style, "")
-        bits: List[str] = []
+        bits: list[str] = []
         if hint:
             bits.append(f"book visual language ({style}): {hint}")
         for key in (
@@ -333,7 +334,7 @@ class BookVisualMemory:
         patches = self.root.get("page_patches")
         if not isinstance(patches, list):
             return ""
-        frags: List[str] = []
+        frags: list[str] = []
         for p in patches:
             if not isinstance(p, dict):
                 continue
@@ -351,7 +352,7 @@ class BookVisualMemory:
     def _entities_fragment_for_page(self, page_index: int, *, for_cover: bool) -> str:
         if not self.entities:
             return ""
-        parts: List[str] = []
+        parts: list[str] = []
         for eid in sorted(self.entities.keys()):
             base = self.entities[eid]
             merged = _merge_entity_for_cover(base) if for_cover else _merge_entity_for_page(base, page_index)
@@ -359,7 +360,7 @@ class BookVisualMemory:
         return merge_prompt_fragments(*parts)
 
     def prompt_fragment_for_cover(self) -> str:
-        bits: List[str] = []
+        bits: list[str] = []
         cov = self.root.get("cover")
         if isinstance(cov, dict):
             ex = str(cov.get("extra_prompt", "")).strip()
@@ -400,6 +401,6 @@ class BookVisualMemory:
         )
 
 
-def load_visual_memory(path: Union[str, Path]) -> BookVisualMemory:
+def load_visual_memory(path: str | Path) -> BookVisualMemory:
     """Load from JSON path (see module docstring)."""
     return BookVisualMemory.load(path)

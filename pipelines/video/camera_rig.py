@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping
+from typing import Any
 
 __all__ = ["CameraRig", "parse_camera_rig", "rig_to_prompt"]
 
@@ -20,7 +21,7 @@ class CameraRig:
     operator_style: str = ""
 
 
-_PRESETS: Dict[str, CameraRig] = {
+_PRESETS: dict[str, CameraRig] = {
     "arri_alexa": CameraRig(body="ARRI Alexa look", lens_mm="50", movement="steadicam", fps=24.0),
     "imax": CameraRig(body="IMAX large format", lens_mm="24", movement="slow crane", fps=24.0),
     "handheld_doc": CameraRig(

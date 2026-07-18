@@ -9,16 +9,15 @@ schedules           VP beta schedules (linear, cosine, squaredcos_cap_v2, sigmoi
 snr_utils           SNR computation helpers.
 sampling_utils      Blur, thresholding, and norm helpers for sampling.
 cfg_schedulers      Classifier-free guidance scale schedules.
-consistency_utils   Consistency model utilities (EMA target, one-step refine).
 timestep_sampling   Training timestep samplers (uniform, logit-normal, high-noise).
-self_conditioning   Self-conditioning helpers.
 spectral_sfp        Frequency-weighted spectral loss.
 pixel_perfect       Pixel-perfect canvas and AR grid utilities.
 bridge_training     Latent bridge / Schrödinger-bridge auxiliary losses.
 latent_bridge       Linear latent interpolation utilities.
-attention_steering  Attention steering (AST) for inference-time control.
 inference_timesteps Inference timestep schedule builders.
 respace             Legacy DDIM respacing utilities.
+sampling/           Holy Grail presets and advanced sampling helpers.
+losses/             Timestep loss weights (canonical).
 """
 
 import warnings as _warnings
@@ -66,20 +65,11 @@ __all__ = [
 ]
 
 if _TORCH_AVAILABLE:
-    # -----------------------------------------------------------------------
-    # Torch-dependent exports.
-    # -----------------------------------------------------------------------
-    from .attention_steering import ASTConfig, AttentionSteerer, steer_attention  # noqa: E402, F401
     from .cfg_schedulers import (  # noqa: E402, F401
         cfg_scale_cosine_ramp,
         cfg_scale_linear,
         cfg_scale_piecewise,
         cfg_scale_snr_aware,
-    )
-    from .consistency_utils import (  # noqa: E402, F401
-        consistency_delta_loss,
-        one_step_consistency_refine,
-        temporal_ema_target,
     )
     from .gaussian_diffusion import (  # noqa: E402, F401
         INFERENCE_SOLVERS,
@@ -93,7 +83,6 @@ if _TORCH_AVAILABLE:
     from .losses import get_loss_weight, get_timestep_loss_weight  # noqa: E402, F401
     from .respace import space_timesteps  # noqa: E402, F401
     from .sampling_utils import norm_thresholding, spatial_norm_thresholding  # noqa: E402, F401
-    from .self_conditioning import blend_self_cond, maybe_detached_self_cond  # noqa: E402, F401
     from .timestep_sampling import sample_training_timesteps  # noqa: E402, F401
 
     try:
@@ -136,20 +125,12 @@ if _TORCH_AVAILABLE:
             "cfg_scale_cosine_ramp",
             "cfg_scale_piecewise",
             "cfg_scale_snr_aware",
-            "maybe_detached_self_cond",
-            "blend_self_cond",
-            "temporal_ema_target",
-            "consistency_delta_loss",
-            "one_step_consistency_refine",
             "get_loss_weight",
             "get_timestep_loss_weight",
             "space_timesteps",
             "norm_thresholding",
             "spatial_norm_thresholding",
             "sample_training_timesteps",
-            "ASTConfig",
-            "AttentionSteerer",
-            "steer_attention",
             "bridge_aux_vp_loss",
             "shuffle_pair_latents",
             "flow_matching_per_sample_losses",

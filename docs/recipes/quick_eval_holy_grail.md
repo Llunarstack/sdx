@@ -30,7 +30,7 @@ python sample.py --ckpt results/your_run/best.pt \
   --out out.png
 ```
 
-Adjust steps, resolution, and CFG flags per `README.md` and `docs/QUALITY_AND_ISSUES.md`.
+Adjust steps, resolution, and CFG flags per `README.md` and `docs/QUALITY.md`.
 
 ## 4. Training run artifacts
 
@@ -44,12 +44,13 @@ Disable with `--no-save-run-manifest` if you truly do not want these files.
 ## 5. Deeper reading
 
 - [HOLY_GRAIL_OVERVIEW.md](../HOLY_GRAIL_OVERVIEW.md)
-- [TCIS_OVERVIEW.md](../TCIS_OVERVIEW.md)
-- [QUALITY_AND_ISSUES.md](../QUALITY_AND_ISSUES.md)
+- [TCIS_OVERVIEW.md](../TCIS.md)
+- [QUALITY.md](../QUALITY.md)
 
 ## See also
 
-- [eval_baseline_prompts.md](eval_baseline_prompts.md) — structured prompt pack + un_baseline_eval.py.
+- [eval_baseline_prompts.md](eval_baseline_prompts.md) — structured prompt pack + 
+un_baseline_eval.py.
 ## See also
 
 - [local_ci_mirror.md](local_ci_mirror.md) — run the same checks as CI before you push.

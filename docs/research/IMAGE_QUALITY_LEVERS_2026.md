@@ -8,13 +8,13 @@ There is no single trick for a “perfect” image model. Quality is a **stack**
 
 | Idea | Why it matters | Pointers | SDX today |
 |------|----------------|----------|-----------|
-| **CFG rescale / dynamic CFG** | High CFG improves prompt adherence but causes saturation, contrast blow-ups, and texture collapse. | Oversaturation analysis [arXiv:2410.02416](https://arxiv.org/abs/2410.02416); dynamic CFG with feedback [arXiv:2509.16131](https://arxiv.org/abs/2509.16131) | `--cfg-rescale` on `sample.py`; Holy Grail schedules per-step CFG in `diffusion/holy_grail` / `sampling_extras`. |
+| **CFG rescale / dynamic CFG** | High CFG improves prompt adherence but causes saturation, contrast blow-ups, and texture collapse. | Oversaturation analysis [arXiv:2410.02416](https://arxiv.org/abs/2410.02416); dynamic CFG with feedback [arXiv:2509.16131](https://arxiv.org/abs/2509.16131) | `--cfg-rescale` on `sample.py`; Holy Grail schedules per-step CFG in `diffusion/sampling`. |
 | **Geometry-aware CFG for flows** | Standard CFG on rectified-flow velocities can push states **off the data manifold** → artifacts. | Rectified-CFG++ [project site](https://rectified-cfgpp.github.io/) | If you train with flow matching, pair **`flow_matching_sample`** paths in `diffusion/gaussian_diffusion.py` with conservative CFG + rescale; **native Rectified-CFG++** would be new implementation work. |
 | **Fast schedules that preserve geometry** | Step count interacts with trajectory curvature; “obvious” schedules waste budget early/late. | TORS / fast sampling analysis [arXiv:2603.00763](https://arxiv.org/abs/2603.00763) | Experiment with `--steps`, solver choice (`ddim` / `heun`), and flow solver (`euler` / `heun`). Automating **learned or TORS-like** schedules → research feature. |
 | **Frequency-decoupled guidance (FDG)** | Apply different guidance strength to low vs high frequency components to reduce CFG side effects. | [arXiv:2506.19713](https://arxiv.org/abs/2506.19713) | Not bundled as FDG; would need spectral decomposition in the denoise update. |
 | **Adaptive projected guidance (APG)** | Decompose CFG into parallel vs orthogonal components; down-weight the part that drives oversaturation. | [arXiv:2410.02416](https://arxiv.org/abs/2410.02416) related line (APG cited in community summaries) | Would be **new** sampler math; Holy Grail is the right hook point for per-step blending. |
 
-**Practical inference checklist (no new code):** sweep `--cfg-scale` **down** before chasing architecture; add **`--cfg-rescale 0.6–0.85`**; increase steps if mid-frequency detail is mushy; use `docs/QUALITY_AND_ISSUES.md` for Civitai-style failure modes.
+**Practical inference checklist (no new code):** sweep `--cfg-scale` **down** before chasing architecture; add **`--cfg-rescale 0.6–0.85`**; increase steps if mid-frequency detail is mushy; use `docs/QUALITY.md` for Civitai-style failure modes.
 
 ---
 
@@ -51,7 +51,7 @@ There is no single trick for a “perfect” image model. Quality is a **stack**
 Ordered roughly by **impact if executed well** vs **engineering cost**:
 
 1. **Manifold-safe CFG for flow models** (Rectified-CFG++-class) in the flow sampler loop.  
-2. **APG / FDG** as optional guidance modes in `sampling_extras` / Holy Grail.  
+2. **APG / FDG** as optional guidance modes in `diffusion/sampling` / Holy Grail.  
 3. **Learned or optimized timestep schedules** (TORS-class) exposed as presets.  
 4. **Safeguarded preference training** (SDPO-class) on top of your base DiT.  
 5. **Quality-conditioned training** (LACON-class) with explicit metadata channels.  
@@ -69,9 +69,9 @@ Ordered roughly by **impact if executed well** vs **engineering cost**:
 
 - [Sampling experiment grids](SAMPLING_EXPERIMENTS_BACKLOG.md)
 
-- [`docs/QUALITY_AND_ISSUES.md`](../QUALITY_AND_ISSUES.md) — operational fixes (blur, saturation, hands, text).  
+- [`docs/QUALITY.md`](../QUALITY.md) — operational fixes (blur, saturation, hands, text).  
 - [`docs/HOLY_GRAIL_OVERVIEW.md`](../HOLY_GRAIL_OVERVIEW.md) — adaptive sampling.  
-- [`docs/TCIS_OVERVIEW.md`](../TCIS_OVERVIEW.md) — multi-candidate + ViT critique loop.  
+- [`docs/TCIS_OVERVIEW.md`](../TCIS.md) — multi-candidate + ViT critique loop.  
 - [`docs/recipes/quick_eval_holy_grail.md`](../recipes/quick_eval_holy_grail.md) — minimal eval recipe.
 
 ---

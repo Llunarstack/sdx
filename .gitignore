@@ -4,6 +4,18 @@ external/
 # Optional parallel package tree (local experiments; main code: models/, train.py)
 enhanced_dit/
 
+# Local design / marketing prototypes (not part of the package)
+design/
+site/
+
+# ComfyUI local workflows, moodboards, and batch outputs (not published with the core package)
+workflows/
+
+# Local IDE / agent config (do not publish)
+.claude/
+.cursor/
+.cursorignore
+
 # Python
 __pycache__/
 *.py[cod]
@@ -31,10 +43,6 @@ runpod/secret.txt
 .idea/
 .vscode/*
 !.vscode/c_cpp_properties.json
-
-# Local IDE / agent config (do not publish)
-.cursor/
-.cursorignore
 
 # Danbooru full tag dumps (regenerate: scripts/tools/fetch_danbooru_tags.py)
 data/danbooru/tags/raw/*.txt
@@ -65,7 +73,6 @@ native/rust/**/target/
 native/zig/**/.zig-cache/
 native/zig/**/zig-out/
 native/cpp/build/
-native/cpp/build-compile-db/
 native/cpp/cmake-build-*/
 # Go build output next to source (keep native/go/sdx-manifest/*.go tracked)
 native/go/sdx-manifest/sdx-manifest

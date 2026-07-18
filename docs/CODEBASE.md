@@ -2,7 +2,7 @@
 
 How the SDX repo is organized: **layers**, **repo tree**, **`scripts/` layout**, **contribution rules**, **conventions** (ruff), and **where to change what**.
 
-Canonical folder classification and migration map: [CANONICAL_STRUCTURE.md](CANONICAL_STRUCTURE.md).
+Canonical folder classification: this document (`CODEBASE.md`).
 
 ---
 
@@ -10,7 +10,7 @@ Canonical folder classification and migration map: [CANONICAL_STRUCTURE.md](CANO
 
 | Layer | Directory | Responsibility |
 |:------|:----------|:---------------|
-| **Entry points** | `train.py`, `sample.py`, `inference.py`, `scripts/cli.py` | CLI and orchestration |
+| **Entry points** | `train.py`, `sample.py`, `inference.py`, `python -m scripts.tools` | CLI and orchestration |
 | **Config** | `config/` | `TrainConfig`, model presets, domain/style tag tables |
 | **Data** | `data/` | `Text2ImageDataset`, caption parsing, JSONL → tensors |
 | **Diffusion** | `diffusion/` | Noise schedules, `GaussianDiffusion`, sampling utilities |
@@ -21,7 +21,7 @@ Canonical folder classification and migration map: [CANONICAL_STRUCTURE.md](CANO
 | **Scripts** | `scripts/` | Downloads, training helpers, and `python -m scripts.tools` utilities (not imported by `train.py` at import time) |
 | **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
 | **Toolkit** | `toolkit/` | QoL: env report, seeds, manifest digest, timing, optional-lib hints — [toolkit/README.md](../toolkit/README.md) |
-End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](FILES.md).
+End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](reference/FILES.md).
 
 ---
 
@@ -55,7 +55,7 @@ Weights and HF cache live under `pretrained/` (gitignored); paths resolve via `u
 | Goal | Start here |
 |:-----|:-----------|
 | Training hyperparameters / DiT flags | `config/train_config.py`, `train.py` argparse |
-| Caption & JSONL behavior | `data/t2i_dataset.py`, `data/caption_utils.py`; Unicode hygiene [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py), CLI [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py), `train.py --caption-unicode-normalize` |
+| Caption & JSONL behavior | `data/t2i_dataset.py`, `data/caption_utils.py`; Unicode hygiene [`native/_experimental/python/sdx_native/text_hygiene.py`](../native/_experimental/python/sdx_native/text_hygiene.py), CLI [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py), `train.py --caption-unicode-normalize` |
 | Diffusion / schedulers | `diffusion/gaussian_diffusion.py`, `diffusion/respace.py` |
 | DiT architecture | `models/dit_text.py`, `models/dit_text_variants.py` |
 | Sampling CLI | `sample.py` |
@@ -127,7 +127,7 @@ See **[scripts/README.md](../scripts/README.md)** and **[scripts/enhanced/README
 
 ### Full file index
 
-Per-path descriptions: **[FILES.md](FILES.md)**. Machine-generated tree: **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** (`python -m scripts.tools update_project_structure`).
+Per-path descriptions: **[FILES.md](reference/FILES.md)**. Machine-generated tree: **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** (`python -m scripts.tools update_project_structure`).
 
 ---
 
@@ -138,7 +138,7 @@ Keep new work in predictable places so imports and docs stay stable.
 ### Principles
 
 1. **Core library stays importable from repo root** — `train.py`, `sample.py`, and packages `config`, `data`, `diffusion`, `models`, `utils` are the stable API.
-2. **One optional script layer** — `scripts/` holds downloads, training helpers, tools, enhanced DiT, and **`scripts/cli.py`**. Nothing in `scripts/` is imported by `train.py` at import time for the default path.
+2. **One optional script layer** — `scripts/` holds downloads, training helpers, tools, and enhanced DiT. Prefer **`python -m scripts.tools`**. Nothing in `scripts/` is imported by `train.py` at import time for the default path.
 3. **Product lines are documented, not duplicated** — `pipelines/image_gen` vs `pipelines/book_comic` share the same `train.py` / checkpoints; only docs and orchestration differ.
 4. **ViT-style QA vs DiT** — it_quality/ is **scoring / QA**, not the diffusion generator. See [MODEL_STACK.md](MODEL_STACK.md).
 
@@ -185,9 +185,8 @@ Keep new work in predictable places so imports and docs stay stable.
 
 ## See also
 
-- [CODEBASE_GUIDE.md](CODEBASE_GUIDE.md) — narrative guide: files, relationships, train/sample flows  
-- [FILES.md](FILES.md) — per-file map  
-- [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — diagram + config ↔ checkpoint ↔ sample (§13)  
+- [FILES.md](reference/FILES.md) — per-file map  
+- [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — diagram + config ↔ checkpoint ↔ sample  
 - [PROMPT_STACK.md](PROMPT_STACK.md) — inference prompt pipeline before T5  
 - [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) — native tools + C/Rust ecosystem for data quality & training adjacency  
 - [MODEL_STACK.md](MODEL_STACK.md) — local weights + RMSNorm, FiLM, cross-attn fusion, cascade blend, RAE scales  

@@ -39,10 +39,7 @@ for pack in MEDIUM_SPECS:
 
 
 def _caption_text(row: dict) -> str:
-    return " ".join(
-        str(row.get(k) or "")
-        for k in ("caption", "tags", "booru_caption", "scene_summary")
-    ).lower()
+    return " ".join(str(row.get(k) or "") for k in ("caption", "tags", "booru_caption", "scene_summary")).lower()
 
 
 def _classify_style(row: dict) -> str | None:

@@ -7,7 +7,8 @@ via ``set_epoch`` before each training epoch.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Iterator, List, Optional
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import torch
 from torch.utils.data import Sampler
@@ -16,19 +17,19 @@ if TYPE_CHECKING:
     from .t2i_dataset import Text2ImageDataset
 
 
-class ResolutionBucketBatchSampler(Sampler[List[int]]):
+class ResolutionBucketBatchSampler(Sampler[list[int]]):
     """
     Yields batches of indices that share the same bucket id so ``collate_t2i`` stacks tensors.
     """
 
     def __init__(
         self,
-        dataset: "Text2ImageDataset",
+        dataset: Text2ImageDataset,
         batch_size: int,
         *,
         drop_last: bool = True,
         shuffle_batches: bool = True,
-        generator: Optional[torch.Generator] = None,
+        generator: torch.Generator | None = None,
     ) -> None:
         if not getattr(dataset, "resolution_buckets", None):
             raise ValueError("ResolutionBucketBatchSampler requires dataset.resolution_buckets")
@@ -37,14 +38,14 @@ class ResolutionBucketBatchSampler(Sampler[List[int]]):
         self.drop_last = drop_last
         self.shuffle_batches = shuffle_batches
         self.generator = generator
-        self._cached_epoch: Optional[int] = None
-        self._cached_groups: Optional[dict[int, List[int]]] = None
+        self._cached_epoch: int | None = None
+        self._cached_groups: dict[int, list[int]] | None = None
 
-    def _bucket_groups(self) -> dict[int, List[int]]:
+    def _bucket_groups(self) -> dict[int, list[int]]:
         epoch = int(getattr(self.dataset, "_epoch", 0))
         if self._cached_groups is not None and self._cached_epoch == epoch:
             return self._cached_groups
-        groups: defaultdict[int, List[int]] = defaultdict(list)
+        groups: defaultdict[int, list[int]] = defaultdict(list)
         for i in range(len(self.dataset)):
             groups[self.dataset._bucket_assign[i]].append(i)
         self._cached_groups = dict(groups)
@@ -62,10 +63,10 @@ class ResolutionBucketBatchSampler(Sampler[List[int]]):
                 total += (c + self.batch_size - 1) // self.batch_size
         return total
 
-    def __iter__(self) -> Iterator[List[int]]:
+    def __iter__(self) -> Iterator[list[int]]:
         rng = self.generator
         groups = self._bucket_groups()
-        batches: List[List[int]] = []
+        batches: list[list[int]] = []
         for idxs in groups.values():
             if rng is not None:
                 perm = torch.randperm(len(idxs), generator=rng).tolist()

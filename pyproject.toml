@@ -22,7 +22,6 @@ include = [
   "data*",
   "diffusion*",
   "frontier*",
-  "innovations*",
   "models*",
   "pipelines*",
   "research*",
@@ -32,7 +31,7 @@ include = [
   "vit_quality*",
   "native*",
 ]
-exclude = ["setup*", "runpod*", "assets*", "datasets*", "tests*", "scripts*", "enhanced_dit*", "external*"]
+exclude = ["setup*", "runpod*", "assets*", "datasets*", "tests*", "scripts*", "enhanced_dit*", "external*", "workflows*"]
 
 [project.scripts]
 sdx-demo = "demo:main"
@@ -42,7 +41,7 @@ sdx-sample = "sample:main"
 demo = ["huggingface_hub>=0.20"]
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py310"
 line-length = 120
 src = [
   "config",
@@ -50,7 +49,6 @@ src = [
   "diffusion",
   "examples",
   "frontier",
-  "innovations",
   "models",
   "native/_experimental/python",
   "pipelines",
@@ -61,28 +59,61 @@ src = [
   "utils",
   "vit_quality",
 ]
-# Optional parallel tree / vendored experiments - not part of default CI; keeps `ruff check .` green.
-exclude = ["enhanced_dit", "external", "model", ".git"]
+# Optional / local-only trees — not part of default CI; keeps `ruff check .` green.
+exclude = [
+  "enhanced_dit",
+  "external",
+  "model",
+  "workflows",
+  "design",
+  "site",
+  ".git",
+  "native/mojo",
+]
 
 [tool.ruff.lint]
-# Keep this set small so `ruff check` stays green on the full tree; tighten over time.
+# Expand gradually; B (bugbear) and UP (pyupgrade) catch real footguns on py310+.
 select = [
   "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
   "F",   # pyflakes
   "I",   # isort (auto-fix with `ruff check --fix`)
+  "B",   # flake8-bugbear
+  "UP",  # pyupgrade
 ]
 ignore = [
   "E501",  # line length
+  "B008",  # function calls in argument defaults (argparse/common patterns)
+  "B904",  # raise from (noisy on existing broad except paths; tighten later)
+  "B905",  # zip(..., strict=) — mass behavior change; tighten package-by-package
+  "B023",  # loop-var in closure — needs careful per-site review
+  "B007",  # unused loop control var — prefer `_` renames in follow-ups
+  "E741",  # ambiguous names like `l` in legacy setup scripts
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
 "sample.py" = ["E402"]  # repo-root sys.path bootstrap + early --help parser before heavy imports
+"train.py" = ["E402"]  # stdio configure before heavy imports; early --help path
+"utils/generation/sample_main.py" = ["E402"]  # stdio configure before helper imports
 "vit_quality/**" = ["E402"]  # repo-root sys.path bootstrap before utils imports
+"setup/**" = ["E402"]  # sys.path bootstrap in setup scripts
+"examples/**" = ["E402"]
+"demo.py" = ["E402"]
+"inference.py" = ["E402"]
 "native/_experimental/python/sdx_native/__init__.py" = ["I001"]  # large explicit re-export surface; isort splits combined imports
-"utils/latent_geometry.py" = ["E402", "F403"]
-"utils/native_tools.py" = ["E402", "F403"]
 "utils/native/__init__.py" = ["I001"]  # sys.path bootstrap then star imports
+"research/**" = ["E402"]
+"pipelines/**" = ["E402"]
+"toolkit/**" = ["E402"]
+"frontier/**" = ["E402"]
+"data/**" = ["E402"]
+"models/**" = ["E402"]
+"training/**" = ["E402"]
+"utils/**" = ["E402"]  # occasional bootstrap / deferred imports after lightweight setup
+"tests/**" = ["E402"]
+"runpod/**" = ["E402"]
+"native/**" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -123,4 +154,7 @@ files = [
   "training/train_args.py",
   "training/train_cli_parser.py",
   "utils/training/part_aware_training.py",
+  "utils/terminal.py",
+  "utils/generation/sample_cli_parser.py",
+  "utils/generation/sample_helpers.py",
 ]

@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -26,12 +26,12 @@ def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 
 
-def probe_video(path: str | Path) -> Dict[str, Any]:
+def probe_video(path: str | Path) -> dict[str, Any]:
     """Return fps, width, height, duration_sec, frame_count (best effort)."""
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(p)
-    info: Dict[str, Any] = {"path": str(p), "fps": 24.0, "width": 0, "height": 0, "duration_sec": 0.0, "frame_count": 0}
+    info: dict[str, Any] = {"path": str(p), "fps": 24.0, "width": 0, "height": 0, "duration_sec": 0.0, "frame_count": 0}
     if ffmpeg_available():
         cmd = [
             "ffprobe",
@@ -69,10 +69,10 @@ def extract_frames(
     video_path: str | Path,
     out_dir: str | Path,
     *,
-    max_frames: Optional[int] = None,
-    fps: Optional[float] = None,
+    max_frames: int | None = None,
+    fps: float | None = None,
     prefix: str = "frame",
-) -> List[Path]:
+) -> list[Path]:
     """Extract frames to ``out_dir/frame_000001.png`` via ffmpeg or OpenCV fallback."""
     p = Path(video_path)
     out = Path(out_dir)
@@ -99,7 +99,7 @@ def extract_frames(
     step = 1
     if fps is not None and fps > 0 and src_fps > 0:
         step = max(1, int(round(src_fps / fps)))
-    paths: List[Path] = []
+    paths: list[Path] = []
     i = 0
     saved = 0
     while True:
@@ -127,16 +127,16 @@ def save_frame_rgb(path: str | Path, rgb: np.ndarray) -> None:
     Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8)).save(path)
 
 
-def load_frame_paths(dir_path: str | Path, *, pattern: str = "*.png") -> List[Path]:
+def load_frame_paths(dir_path: str | Path, *, pattern: str = "*.png") -> list[Path]:
     return sorted(Path(dir_path).glob(pattern))
 
 
 def write_video_from_frames(
-    frame_paths: List[str | Path],
+    frame_paths: list[str | Path],
     out_path: str | Path,
     *,
     fps: float = 24.0,
-    audio_path: Optional[str] = None,
+    audio_path: str | None = None,
 ) -> Path:
     """Encode PNG sequence to mp4."""
     out = Path(out_path)

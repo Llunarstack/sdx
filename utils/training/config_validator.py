@@ -3,7 +3,6 @@ Configuration validation utilities for SDX training and inference.
 """
 
 from pathlib import Path
-from typing import List, Optional
 
 import torch
 from config.train_config import TrainConfig
@@ -15,7 +14,7 @@ class ConfigValidationError(Exception):
     pass
 
 
-def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> List[str]:
+def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> list[str]:
     """
     Validate training configuration and return list of warnings/errors.
 
@@ -306,7 +305,7 @@ def estimate_memory_usage(cfg: TrainConfig) -> dict:
     }
 
 
-def suggest_optimizations(cfg: TrainConfig, available_vram_gb: Optional[float] = None) -> List[str]:
+def suggest_optimizations(cfg: TrainConfig, available_vram_gb: float | None = None) -> list[str]:
     """Suggest configuration optimizations based on available resources."""
     suggestions = []
 
@@ -338,7 +337,7 @@ def suggest_optimizations(cfg: TrainConfig, available_vram_gb: Optional[float] =
     return suggestions
 
 
-def validate_inference_args(args) -> List[str]:
+def validate_inference_args(args) -> list[str]:
     """
     Validate inference-style arguments (e.g. ``sample.py`` namespace).
 

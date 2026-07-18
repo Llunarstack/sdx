@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
 
 
 class UncertaintySignal(str, Enum):
@@ -42,8 +41,8 @@ class ConfidenceGate:
 
     def analyze(self, prompt: str, *, contradiction_count: int = 0) -> UncertaintyReport:
         text = (prompt or "").strip()
-        signals: List[UncertaintySignal] = []
-        questions: List[str] = []
+        signals: list[UncertaintySignal] = []
+        questions: list[str] = []
 
         if self._VAGUE.search(text):
             signals.append(UncertaintySignal.VAGUE_QUANTITY)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "TensionPoint",
@@ -23,7 +24,7 @@ class TensionPoint:
 
 @dataclass(slots=True)
 class TensionCurve:
-    points: List[TensionPoint] = field(default_factory=list)
+    points: list[TensionPoint] = field(default_factory=list)
     genre_bias: str = ""
 
     def sample(self, u: float) -> float:
@@ -50,10 +51,10 @@ class ShotTensionProfile:
     tension: float
     prompt_suffix: str
     negative_suffix: str
-    edit_overrides: Dict[str, Any] = field(default_factory=dict)
+    edit_overrides: dict[str, Any] = field(default_factory=dict)
 
 
-_GENRE_CURVES: Dict[str, List[tuple[float, float]]] = {
+_GENRE_CURVES: dict[str, list[tuple[float, float]]] = {
     "horror": [(0.0, 0.25), (0.5, 0.55), (0.85, 0.95), (1.0, 0.4)],
     "action": [(0.0, 0.5), (0.3, 0.85), (0.7, 0.95), (1.0, 0.35)],
     "romance": [(0.0, 0.2), (0.5, 0.45), (0.8, 0.7), (1.0, 0.5)],
@@ -62,7 +63,7 @@ _GENRE_CURVES: Dict[str, List[tuple[float, float]]] = {
 }
 
 
-def parse_tension_curve(raw: Any, *, genre: str = "") -> Optional[TensionCurve]:
+def parse_tension_curve(raw: Any, *, genre: str = "") -> TensionCurve | None:
     if raw is None:
         genre_key = (genre or "").lower()
         if genre_key in _GENRE_CURVES:
@@ -72,7 +73,7 @@ def parse_tension_curve(raw: Any, *, genre: str = "") -> Optional[TensionCurve]:
             )
         return None
     if isinstance(raw, list):
-        pts: List[TensionPoint] = []
+        pts: list[TensionPoint] = []
         for i, v in enumerate(raw):
             if isinstance(v, (int, float)):
                 at = i / max(1, len(raw) - 1)
@@ -107,13 +108,13 @@ def sample_tension_for_shots(
     shots: Sequence[Any],
     *,
     total_duration: float,
-) -> List[ShotTensionProfile]:
+) -> list[ShotTensionProfile]:
     if not shots:
         return []
     dur_sum = sum(float(getattr(s, "duration_sec", 0) or 0) for s in shots)
     total = dur_sum if dur_sum > 0 else total_duration
     elapsed = 0.0
-    out: List[ShotTensionProfile] = []
+    out: list[ShotTensionProfile] = []
     for i, sh in enumerate(shots):
         d = float(getattr(sh, "duration_sec", 0) or (total / max(1, len(shots))))
         mid = (elapsed + d * 0.5) / max(1e-6, total)
@@ -133,7 +134,7 @@ def sample_tension_for_shots(
     return out
 
 
-def tension_shot_overrides(t: float) -> tuple[str, str, Dict[str, Any]]:
+def tension_shot_overrides(t: float) -> tuple[str, str, dict[str, Any]]:
     """High tension → handheld, fast cuts feel, contrast; low → still, soft."""
     t = max(0.0, min(1.0, t))
     if t >= 0.75:

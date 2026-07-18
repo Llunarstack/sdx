@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
 
 from .tokens import split_tags, token_set
 
@@ -15,16 +14,16 @@ class PromptAnalysis:
     token_count: int = 0
     char_count: int = 0
     comma_rich: bool = False
-    domains: List[str] = field(default_factory=list)
+    domains: list[str] = field(default_factory=list)
     complexity: str = "simple"  # simple | moderate | complex | extreme
     missing_quality: bool = False
     photographic: bool = False
     has_text_intent: bool = False
     solo_subject: bool = False
     multi_subject: bool = False
-    suggested_controls: Dict[str, str] = field(default_factory=dict)
-    suggested_positive: List[str] = field(default_factory=list)
-    notes: List[str] = field(default_factory=list)
+    suggested_controls: dict[str, str] = field(default_factory=dict)
+    suggested_positive: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 _QUALITY_MARKERS = frozenset(
@@ -63,8 +62,8 @@ _TEXT_MARKERS = (
 )
 
 
-def _detect_domains(p_lower: str, tags: set[str]) -> List[str]:
-    domains: List[str] = []
+def _detect_domains(p_lower: str, tags: set[str]) -> list[str]:
+    domains: list[str] = []
     if any(x in p_lower for x in ("anime", "manga", "cel shading", "1girl", "1boy")) or tags & {
         "1girl",
         "1boy",
@@ -116,7 +115,7 @@ def analyze_prompt(prompt: str) -> PromptAnalysis:
         x in p_lower for x in ("crowd", "group", "2girls", "couple", "duo")
     )
 
-    suggested: Dict[str, str] = {}
+    suggested: dict[str, str] = {}
     if analysis.complexity in ("complex", "extreme"):
         suggested["adherence_pack"] = "standard"
     if analysis.complexity == "extreme":
@@ -140,10 +139,10 @@ def apply_intelligence(
     *,
     auto_quality: bool = True,
     auto_controls: bool = True,
-) -> Tuple[str, Dict[str, str]]:
+) -> tuple[str, dict[str, str]]:
     """Optionally prepend light quality tags and return control hints."""
     out = positive
-    controls: Dict[str, str] = dict(analysis.suggested_controls) if auto_controls else {}
+    controls: dict[str, str] = dict(analysis.suggested_controls) if auto_controls else {}
     if auto_quality and analysis.missing_quality and analysis.complexity in ("simple", "moderate"):
         if "detailed" in analysis.suggested_positive:
             from .tokens import append_unique

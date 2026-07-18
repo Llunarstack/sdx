@@ -12,10 +12,10 @@ Training data should mirror the same structure (see ``TRAINING_CAPTION_GUIDE``).
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 # Extra negatives when multiple distinct identities/outfits must not bleed together.
-MULTI_SUBJECT_NEGATIVE_EXTRAS: Tuple[str, ...] = (
+MULTI_SUBJECT_NEGATIVE_EXTRAS: tuple[str, ...] = (
     "same outfit on both",
     "outfit swap",
     "clothes mixed between characters",
@@ -30,7 +30,7 @@ MULTI_SUBJECT_NEGATIVE_EXTRAS: Tuple[str, ...] = (
 )
 
 # Positives that encourage separability (used with composition_mode ``multi_character``).
-MULTI_SUBJECT_POSITIVE_EXTRAS: Tuple[str, ...] = (
+MULTI_SUBJECT_POSITIVE_EXTRAS: tuple[str, ...] = (
     "each person has distinct clothing",
     "each figure has own pose",
     "readable silhouettes",
@@ -38,7 +38,7 @@ MULTI_SUBJECT_POSITIVE_EXTRAS: Tuple[str, ...] = (
 )
 
 
-def default_subject_labels(n: int) -> List[str]:
+def default_subject_labels(n: int) -> list[str]:
     if n <= 0:
         return []
     if n == 1:
@@ -49,13 +49,13 @@ def default_subject_labels(n: int) -> List[str]:
 def merge_character_sheet_positives(
     blocks: Sequence[str],
     *,
-    labels: Optional[Sequence[str]] = None,
+    labels: Sequence[str] | None = None,
 ) -> str:
     """
     Join multiple character-sheet positive strings with **labeled** segments so the
     text encoder sees separate subjects (not one blended description).
     """
-    parts: List[str] = []
+    parts: list[str] = []
     raw = [b.strip() for b in blocks if b and str(b).strip()]
     if not raw:
         return ""
@@ -73,7 +73,7 @@ def merge_character_sheet_positives(
 def merge_character_sheet_negatives(blocks: Sequence[str]) -> str:
     """Deduped merge of negative strings from several sheets."""
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for b in blocks:
         if not b or not str(b).strip():
             continue

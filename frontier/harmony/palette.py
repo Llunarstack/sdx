@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class HarmonyMode(str, Enum):
@@ -25,7 +24,7 @@ class PaletteHarmony:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, HarmonyMode, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, HarmonyMode, str, str], ...] = (
     (
         re.compile(r"\b(complementary|orange and teal|blue and orange)\b", re.I),
         HarmonyMode.COMPLEMENTARY,
@@ -79,7 +78,7 @@ class PalettePlanner:
             )
         return PaletteHarmony(HarmonyMode.NEUTRAL, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

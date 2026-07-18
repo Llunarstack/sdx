@@ -5,14 +5,14 @@ Rust ``sdx_prompt_ops`` style helpers: Jaccard overlap, FNV fingerprint, multi-a
 from __future__ import annotations
 
 import ctypes
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from sdx_native.native_tools import rust_prompt_ops_shared_library_path
 
 
 class StyleOpsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         self._has_jaccard = False
         self._has_fnv = False
         self._has_merge_axes = False
@@ -53,7 +53,7 @@ class StyleOpsLib:
         return self._lib is not None and (self._has_jaccard or self._has_fnv or self._has_merge_axes)
 
 
-_LIB: Optional[StyleOpsLib] = None
+_LIB: StyleOpsLib | None = None
 
 
 def get_style_ops_lib() -> StyleOpsLib:
@@ -63,7 +63,7 @@ def get_style_ops_lib() -> StyleOpsLib:
     return _LIB
 
 
-def maybe_token_jaccard(a: str, b: str) -> Optional[float]:
+def maybe_token_jaccard(a: str, b: str) -> float | None:
     """Jaccard 0–1 on comma/whitespace tokens; ``None`` if Rust not built."""
     lib = get_style_ops_lib()
     if not lib.available or not lib._has_jaccard:
@@ -76,7 +76,7 @@ def maybe_token_jaccard(a: str, b: str) -> Optional[float]:
     return float(bp) / 10000.0
 
 
-def maybe_fnv1a64(text: str) -> Optional[int]:
+def maybe_fnv1a64(text: str) -> int | None:
     lib = get_style_ops_lib()
     if not lib.available or not lib._has_fnv:
         return None
@@ -84,7 +84,7 @@ def maybe_fnv1a64(text: str) -> Optional[int]:
     return int(lib._lib.sdx_fnv1a64_utf8(b, len(b)))
 
 
-def maybe_merge_style_axes(parts: Sequence[str]) -> Optional[str]:
+def maybe_merge_style_axes(parts: Sequence[str]) -> str | None:
     lib = get_style_ops_lib()
     if not lib.available or not lib._has_merge_axes or not parts:
         return None

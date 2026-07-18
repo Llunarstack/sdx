@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from .types import ClipCandidate, RetrievalSource, ShotSpec
 from .video_io import probe_video
@@ -20,7 +21,7 @@ __all__ = [
 ]
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return [t for t in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(t) > 2]
 
 
@@ -29,7 +30,7 @@ def build_clip_candidate_from_path(
     *,
     source: RetrievalSource = RetrievalSource.LOCAL,
     title: str = "",
-    tags: Optional[List[str]] = None,
+    tags: list[str] | None = None,
     license: str = "user",
     url: str = "",
 ) -> ClipCandidate:
@@ -53,15 +54,15 @@ def load_local_clip_library(
     root: str | Path,
     *,
     extensions: Sequence[str] = (".mp4", ".mov", ".webm", ".mkv"),
-) -> List[ClipCandidate]:
+) -> list[ClipCandidate]:
     root = Path(root)
     if not root.is_dir():
         return []
-    out: List[ClipCandidate] = []
+    out: list[ClipCandidate] = []
     for ext in extensions:
         for p in root.rglob(f"*{ext}"):
             sidecar = p.with_suffix(p.suffix + ".json")
-            meta: Dict[str, Any] = {}
+            meta: dict[str, Any] = {}
             if sidecar.is_file():
                 try:
                     meta = json.loads(sidecar.read_text(encoding="utf-8"))
@@ -87,12 +88,12 @@ def rank_clips_for_shot(
     shot: ShotSpec,
     candidates: Sequence[ClipCandidate],
     *,
-    motion_scores: Optional[Dict[str, float]] = None,
-) -> List[ClipCandidate]:
+    motion_scores: dict[str, float] | None = None,
+) -> list[ClipCandidate]:
     """Score clips by tag/token overlap + duration fit + optional motion score."""
     motion_scores = motion_scores or {}
     q = set(_tokenize(shot.prompt)) | set(_tokenize(shot.motion_hint)) | set(_tokenize(shot.shot_type))
-    ranked: List[ClipCandidate] = []
+    ranked: list[ClipCandidate] = []
     for c in candidates:
         hay = set(_tokenize(c.title)) | set(_tokenize(" ".join(c.tags)))
         overlap = len(q & hay) / max(1, len(q))
@@ -124,7 +125,7 @@ def rank_clips_for_shot(
     return ranked
 
 
-def search_pexels_videos(query: str, *, max_results: int = 5) -> List[ClipCandidate]:
+def search_pexels_videos(query: str, *, max_results: int = 5) -> list[ClipCandidate]:
     """
     Search Pexels video API when ``PEXELS_API_KEY`` is set.
 
@@ -145,7 +146,7 @@ def search_pexels_videos(query: str, *, max_results: int = 5) -> List[ClipCandid
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:
         return []
-    out: List[ClipCandidate] = []
+    out: list[ClipCandidate] = []
     for vid in data.get("videos") or []:
         files = vid.get("video_files") or []
         best = None
@@ -188,7 +189,7 @@ def search_web_catalog(
     *,
     catalog_path: str | Path = "",
     max_results: int = 5,
-) -> List[ClipCandidate]:
+) -> list[ClipCandidate]:
     """
     Search a local JSON catalog of licensed web clips (metadata only).
 
@@ -203,7 +204,7 @@ def search_web_catalog(
         return []
     rows = data.get("clips") or data.get("videos") or []
     q = set(_tokenize(query))
-    scored: List[ClipCandidate] = []
+    scored: list[ClipCandidate] = []
     for row in rows:
         if not isinstance(row, dict):
             continue

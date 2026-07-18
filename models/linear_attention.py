@@ -19,7 +19,6 @@ Both are drop-in replacements for ``nn.MultiheadAttention`` in DiT blocks.
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -76,7 +75,7 @@ class LinearCompressedAttention(nn.Module):
         # would produce all-zero outputs and zero gradients on the first pass.
         nn.init.xavier_uniform_(self.out_proj.weight)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         x: (B, N, D)
         Returns: (B, N, D)
@@ -150,7 +149,7 @@ class LocalWindowAttention(nn.Module):
 
     # Bug 3 fix: return type was annotated as torch.Tensor but the method
     # actually returns a 3-tuple (tensor, padded_h, padded_w).
-    def _window_partition(self, x: torch.Tensor, h: int, w: int) -> Tuple[torch.Tensor, int, int]:
+    def _window_partition(self, x: torch.Tensor, h: int, w: int) -> tuple[torch.Tensor, int, int]:
         """(B, N, D) -> (B*nW, W^2, D), padded_h, padded_w."""
         B, N, D = x.shape
         ws = self.window_size

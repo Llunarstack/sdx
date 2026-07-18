@@ -20,7 +20,7 @@ What each release actually added, without the buzzwords.
 | **v8** | Invent **new art styles** from rules (not copy artists). One shared **prompt pipeline** for training and generation. Better default sampling (**Holy Grail**). |
 | **v9** | Advanced **RL-style training (GRPO)** — six variants. **Agentic** helpers (models that score, refine, and validate each other). **Superior Stack** = bundled best inference tricks. |
 | **v10** | Deep **quality tools**: score images without human labels (**ELIQ**), catch AI glitches (**artifacts**), explain *why* an image scored low, stop “fixing” that breaks the prompt (**drift**). |
-| **v11** | Put objects in **boxes on the canvas** (like Ideogram). Experimental code moved to **`frontier/`**; stable code to **`innovations/`**. |
+| **v11** | Put objects in **boxes on the canvas** (like Ideogram). Experimental code lives under **`frontier/`**; production helpers under **`utils/`**. |
 | **v12** | **Video from text/images**: one JSON scene file → shots, camera, continuity checks, 25+ “filmmaker” rules. **`frontier/`** grew to 80+ experiments. **803+ automated tests**. |
 
 ---
@@ -91,7 +91,7 @@ What each release actually added, without the buzzwords.
 
 | Term | Stands for / means | What it does in SDX |
 |------|--------------------|---------------------|
-| **`innovations/`** | — | Production-quality features: agentic stack, photorealism, semantics, control. |
+| **`utils/agentic/`**, **`utils/quality/`**, **`utils/superior/`** | — | Production quality, agentic orchestration, and inference tool stacks. |
 | **`frontier/`** | — | Experimental ideas — try here first; promote to production when stable. |
 | **Agentic** | — | Multiple specialized “agents” (scorers, refiners, validators) working together, not one monolithic model. |
 | **Superior Stack** | Marketing name in v9 | Bundle of best inference optimizations (caching, CFG tricks, ensembles, etc.). |
@@ -120,6 +120,6 @@ What each release actually added, without the buzzwords.
 ## Still confused?
 
 - [GETTING_STARTED.md](GETTING_STARTED.md) — install and first run  
-- [CODEBASE_GUIDE.md](CODEBASE_GUIDE.md) — where code lives  
+- [CODEBASE.md](CODEBASE.md) — where code lives  
 - [releases/VERSION_COMPARISON.md](releases/VERSION_COMPARISON.md) — feature matrix across versions  
 - [pipelines/video/README.md](../pipelines/video/README.md) — video pipeline details  

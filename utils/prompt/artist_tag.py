@@ -11,7 +11,6 @@ spellings resolve to the exact caption form the model learned.
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
 
 # Unicode letters/digits for international artist names (pixiv, etc.).
 _ARTIST_BODY = r"[\w\-.()]+"
@@ -42,7 +41,7 @@ def expand_artist_mentions(
     *,
     strength: float = 1.0,
     registry=None,
-) -> Tuple[str, List[str]]:
+) -> tuple[str, list[str]]:
     """Replace ``@artist`` mentions with trained artist tags.
 
     Returns ``(expanded_prompt, artists)``. Pass an :class:`ArtistRegistry` (or
@@ -59,7 +58,7 @@ def expand_artist_mentions(
         except Exception:
             registry = None
 
-    artists: List[str] = []
+    artists: list[str] = []
 
     def _wrap(tag: str) -> str:
         artists.append(tag)

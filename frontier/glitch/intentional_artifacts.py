@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class GlitchAesthetic(str, Enum):
@@ -25,7 +24,7 @@ class GlitchPlan:
     serendipity_boost: float
 
 
-_RULES: Tuple[Tuple[re.Pattern, GlitchAesthetic, str, str, float], ...] = (
+_RULES: tuple[tuple[re.Pattern, GlitchAesthetic, str, str, float], ...] = (
     (
         re.compile(r"\b(VHS|tape warp|tracking error|analog video)\b", re.I),
         GlitchAesthetic.VHS,
@@ -72,7 +71,7 @@ class GlitchPlanner:
                 return GlitchPlan(aes, pos, neg, boost)
         return GlitchPlan(GlitchAesthetic.NONE, "", "", 0.0)
 
-    def fragments(self, prompt: str) -> Tuple[str, str, float]:
+    def fragments(self, prompt: str) -> tuple[str, str, float]:
         p = self.plan(prompt)
         return p.positive, p.negative, p.serendipity_boost
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Deque, Optional
 
 try:
     import torch
@@ -49,9 +48,9 @@ class LiveDashboard:
         self.total_steps = int(total_steps) if total_steps and total_steps > 0 else 0
         self.model_name = model_name
         self.start_time = time.time()
-        self.loss_hist: Deque[float] = deque(maxlen=history)
+        self.loss_hist: deque[float] = deque(maxlen=history)
         self.best_loss = float("inf")
-        self.ema_loss: Optional[float] = None
+        self.ema_loss: float | None = None
         self.enabled = enabled
 
         self._live = None
@@ -112,11 +111,15 @@ class LiveDashboard:
         pct = f"{frac * 100:5.1f}%" if self.total_steps else "  n/a"
         step_str = f"{step:,}/{self.total_steps:,}" if self.total_steps else f"{step:,}"
         table.add_row("progress", f"{bar} {pct}   step {step_str}")
-        table.add_row("loss", f"{loss:.4f}   best {self.best_loss:.4f}   ema {self.ema_loss or loss:.4f}   [{self._trend()}]")
+        table.add_row(
+            "loss", f"{loss:.4f}   best {self.best_loss:.4f}   ema {self.ema_loss or loss:.4f}   [{self._trend()}]"
+        )
         table.add_row("health", self._health())
         table.add_row("trend", _sparkline(list(self.loss_hist)))
         gpu = extra.get("gpu_mem", "")
-        table.add_row("throughput", f"{steps_per_sec:.2f} steps/s   {extra.get('img_per_sec', 0.0):.1f} img/s   lr {lr:.2e}")
+        table.add_row(
+            "throughput", f"{steps_per_sec:.2f} steps/s   {extra.get('img_per_sec', 0.0):.1f} img/s   lr {lr:.2e}"
+        )
         table.add_row("time", f"elapsed {_fmt_eta(elapsed)}   eta {_fmt_eta(eta)}" + (f"   gpu {gpu}" if gpu else ""))
         aux = extra.get("aux", "")
         if aux:

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from config.defaults.art_mediums import guidance_fragments, merge_csv_unique
 
@@ -18,7 +17,7 @@ GuidanceMode = str  # re-use literals from art_mediums at call site
 @dataclass(frozen=True, slots=True)
 class ExtendedMediumSpec:
     id: str
-    keywords: Tuple[str, ...]
+    keywords: tuple[str, ...]
     positive_hints: str
     negative_hints: str
 
@@ -27,7 +26,7 @@ def _word(term: str) -> re.Pattern:
     return re.compile(rf"\b{re.escape(term)}\b", re.I)
 
 
-EXTENDED_MEDIUM_SPECS: Tuple[ExtendedMediumSpec, ...] = (
+EXTENDED_MEDIUM_SPECS: tuple[ExtendedMediumSpec, ...] = (
     ExtendedMediumSpec(
         "spray_paint_street",
         ("spray paint", "graffiti", "street art", "aerosol mural", "stencil art"),
@@ -138,16 +137,16 @@ EXTENDED_MEDIUM_SPECS: Tuple[ExtendedMediumSpec, ...] = (
     ),
 )
 
-_PATTERNS: dict[str, Tuple[re.Pattern, ...]] = {
+_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
     s.id: tuple(_word(k) for k in s.keywords) for s in EXTENDED_MEDIUM_SPECS
 }
 
 
-def detect_extended_medium_ids(prompt: str) -> Tuple[str, ...]:
+def detect_extended_medium_ids(prompt: str) -> tuple[str, ...]:
     text = (prompt or "").strip()
     if not text:
         return ()
-    out: List[str] = []
+    out: list[str] = []
     for spec in EXTENDED_MEDIUM_SPECS:
         if any(p.search(text) for p in _PATTERNS[spec.id]):
             out.append(spec.id)
@@ -160,7 +159,7 @@ def extended_guidance_fragments(
     include_photography: bool = True,
     anatomy_mode: str = "none",
     base_mode: str = "auto",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Merge core ``art_mediums`` guidance with extended packs + detected extended ids.
     """

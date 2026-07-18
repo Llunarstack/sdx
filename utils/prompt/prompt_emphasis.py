@@ -11,7 +11,6 @@ weights for those are set to **1.0**.
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
 
 try:
     import torch
@@ -27,7 +26,7 @@ __all__ = [
 ]
 
 
-def parse_prompt_emphasis(prompt: str) -> Tuple[str, list]:
+def parse_prompt_emphasis(prompt: str) -> tuple[str, list]:
     """
     Parse ``(word)`` → weight 1.2, ``[word]`` → 0.8.
 
@@ -62,9 +61,9 @@ def token_weights_from_cleaned_segments(
     tokenizer,
     max_length: int,
     *,
-    device: Optional["torch.device"] = None,
-    dtype: Optional["torch.dtype"] = None,
-) -> Optional["torch.Tensor"]:
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor | None:
     """
     Return ``(max_length,)`` per-token weights using tokenizer ``offset_mapping``, or ``None``
     if the tokenizer does not support it.
@@ -88,7 +87,7 @@ def token_weights_from_cleaned_segments(
     if offset_mapping is None:
         return None
     offset_mapping = offset_mapping[0]
-    weights: List[float] = []
+    weights: list[float] = []
     for s, e in offset_mapping:
         if s == 0 and e == 0:  # padding
             weights.append(1.0)
@@ -106,14 +105,14 @@ def token_weights_from_cleaned_segments(
 
 
 def batch_encoder_token_weights(
-    captions: List[str],
+    captions: list[str],
     tokenizer,
     max_length: int,
     *,
     device: torch.device,
     dtype: torch.dtype,
     text_bundle=None,
-) -> Tuple[List[str], Optional[torch.Tensor]]:
+) -> tuple[list[str], torch.Tensor | None]:
     """
     For each caption, strip emphasis brackets for T5 text and build aligned weights.
 
@@ -127,14 +126,14 @@ def batch_encoder_token_weights(
     """
     if torch is None:  # pragma: no cover (torch required for tensor ops)
         raise ModuleNotFoundError("torch is required for token-weight tensor operations.")
-    cleaned_caps: List[str] = []
-    segment_lists: List[Tuple[str, list]] = []
+    cleaned_caps: list[str] = []
+    segment_lists: list[tuple[str, list]] = []
     for c in captions:
         cl, segs = parse_prompt_emphasis(c or "")
         cleaned_caps.append(cl)
         segment_lists.append((cl, segs))
 
-    rows: List[torch.Tensor] = []
+    rows: list[torch.Tensor] = []
     for cl, segs in segment_lists:
         w = token_weights_from_cleaned_segments(cl, segs, tokenizer, max_length, device=None, dtype=torch.float32)
         if w is None:

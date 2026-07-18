@@ -2,9 +2,9 @@
 
 Composable modules that raise **inference and data-prep quality** on top of your trained DiT checkpoint. This is not a separate model — it is orchestration, retrieval, ranking, and correction around `sample.py`.
 
-## Modules (`utils/superior/` → `utils/_archive/superior/`)
+## Modules (`utils/superior/`)
 
-Implementations live in the archive; import via `utils.superior` shims.
+Import via `utils.superior`.
 
 | Module | Role |
 |--------|------|
@@ -170,6 +170,6 @@ Frontier labs have proprietary data scale, eval harnesses, and foundation pretra
 
 ## See also
 
-- [IMPROVEMENTS.md](IMPROVEMENTS.md) — training/inference roadmap
-- [LANDSCAPE_2026.md](LANDSCAPE_2026.md) — industry patterns (Designer / Verifier / Reasoner)
+- [IMPROVEMENTS.md](research/IMPROVEMENTS.md) — training/inference roadmap
+- [LANDSCAPE_2026.md](research/LANDSCAPE_2026.md) — industry patterns (Designer / Verifier / Reasoner)
 - [recipes/fast_training.md](recipes/fast_training.md) — throughput defaults

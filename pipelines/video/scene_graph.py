@@ -14,9 +14,10 @@ Mental model (3 layers only):
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 from .types import MasterTimeline, ShotSpec, TransitionType, VideoMode, VideoPlan
 
@@ -31,7 +32,7 @@ __all__ = [
 ]
 
 # Built-in effect tags → (positive, negative) fragments
-_EFFECT_PRESETS: Dict[str, tuple[str, str]] = {
+_EFFECT_PRESETS: dict[str, tuple[str, str]] = {
     "fog": ("atmospheric fog, volumetric haze", "clear crisp air"),
     "rain": ("rain streaks, wet surfaces, overcast", "dry weather"),
     "snow": ("falling snow, cold breath, soft diffusion", "summer heat"),
@@ -62,7 +63,7 @@ class EntityDef:
     bind_element: str = ""
     auto_rig: bool = False
     part: str = ""
-    text_by_part: Dict[str, str] = field(default_factory=dict)
+    text_by_part: dict[str, str] = field(default_factory=dict)
     mask_path: str = ""
 
 
@@ -72,36 +73,36 @@ class ShotNode:
     prompt: str
     duration_sec: float = 0.0
     shot_type: str = "medium"
-    characters: List[str] = field(default_factory=list)
-    objects: List[str] = field(default_factory=list)
-    effects: List[str] = field(default_factory=list)
-    transforms: List[str] = field(default_factory=list)
+    characters: list[str] = field(default_factory=list)
+    objects: list[str] = field(default_factory=list)
+    effects: list[str] = field(default_factory=list)
+    transforms: list[str] = field(default_factory=list)
     motion_hint: str = ""
     transition: str = "cut"
     reference_clip: str = ""
     keyframe_interval: int = 0
     edit_strength: float = 0.0
-    bindings: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    bindings: dict[str, dict[str, Any]] = field(default_factory=dict)
     start_image: str = ""
     end_image: str = ""
     flf2v: bool = False
-    motion_brush: Dict[str, Any] = field(default_factory=dict)
+    motion_brush: dict[str, Any] = field(default_factory=dict)
     camera: str = ""
-    bind_elements: List[str] = field(default_factory=list)
+    bind_elements: list[str] = field(default_factory=list)
     gaze: str = ""
-    props_state: Dict[str, str] = field(default_factory=dict)
-    lighting: Dict[str, Any] = field(default_factory=dict)
+    props_state: dict[str, str] = field(default_factory=dict)
+    lighting: dict[str, Any] = field(default_factory=dict)
     thumbnail_approved: bool = False
-    kinetic: Dict[str, Any] = field(default_factory=dict)
+    kinetic: dict[str, Any] = field(default_factory=dict)
     screen_direction: str = ""
     emotion: str = ""
     weather: str = ""
-    weather_spec: Dict[str, Any] = field(default_factory=dict)
+    weather_spec: dict[str, Any] = field(default_factory=dict)
     witness: str = ""
-    material_state: Dict[str, str] = field(default_factory=dict)
-    offscreen: List[str] = field(default_factory=list)
-    injuries: Dict[str, Any] = field(default_factory=dict)
-    threads: List[str] = field(default_factory=list)
+    material_state: dict[str, str] = field(default_factory=dict)
+    offscreen: list[str] = field(default_factory=list)
+    injuries: dict[str, Any] = field(default_factory=dict)
+    threads: list[str] = field(default_factory=list)
     silence: bool = False
     stinger: bool = False
 
@@ -121,18 +122,18 @@ class SceneGraph:
     style_notes: str = ""
     anchor_image: str = ""
     motion_clip: str = ""
-    inputs: List[Any] = field(default_factory=list)
-    cast: Dict[str, EntityDef] = field(default_factory=dict)
-    props: Dict[str, EntityDef] = field(default_factory=dict)
-    transforms: Dict[str, str] = field(default_factory=dict)
-    effects: Dict[str, tuple[str, str]] = field(default_factory=dict)
-    shots: List[ShotNode] = field(default_factory=list)
-    elements: Dict[str, Any] = field(default_factory=dict)
-    storyboard: Dict[str, Any] = field(default_factory=dict)
-    retrieval: Dict[str, Any] = field(default_factory=dict)
-    edit: Dict[str, Any] = field(default_factory=dict)
-    continuity: Dict[str, Any] = field(default_factory=dict)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    inputs: list[Any] = field(default_factory=list)
+    cast: dict[str, EntityDef] = field(default_factory=dict)
+    props: dict[str, EntityDef] = field(default_factory=dict)
+    transforms: dict[str, str] = field(default_factory=dict)
+    effects: dict[str, tuple[str, str]] = field(default_factory=dict)
+    shots: list[ShotNode] = field(default_factory=list)
+    elements: dict[str, Any] = field(default_factory=dict)
+    storyboard: dict[str, Any] = field(default_factory=dict)
+    retrieval: dict[str, Any] = field(default_factory=dict)
+    edit: dict[str, Any] = field(default_factory=dict)
+    continuity: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -141,8 +142,8 @@ class CompiledScene:
 
     graph: SceneGraph
     plan: VideoPlan
-    segment_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    control_plans: List[Any] = field(default_factory=list)
+    segment_overrides: list[dict[str, Any]] = field(default_factory=list)
+    control_plans: list[Any] = field(default_factory=list)
 
 
 def load_scene_graph(path: str | Path) -> SceneGraph:
@@ -170,7 +171,7 @@ def parse_scene_dict(data: Mapping[str, Any]) -> SceneGraph:
             effects[str(k)] = (v, "")
 
     shots_raw = data.get("shots") or []
-    shots: List[ShotNode] = []
+    shots: list[ShotNode] = []
     for i, row in enumerate(shots_raw):
         if isinstance(row, str):
             shots.append(ShotNode(id=f"shot_{i}", prompt=row))
@@ -257,10 +258,10 @@ def parse_scene_dict(data: Mapping[str, Any]) -> SceneGraph:
     )
 
 
-def _parse_inputs(raw: Any) -> List[Any]:
+def _parse_inputs(raw: Any) -> list[Any]:
     from .controls import ControlMode, MediaInput
 
-    out: List[MediaInput] = []
+    out: list[MediaInput] = []
     if not isinstance(raw, list):
         return out
     for i, row in enumerate(raw):
@@ -312,8 +313,8 @@ def _parse_entity_mapping(row: Mapping[str, Any], eid: str) -> EntityDef:
     )
 
 
-def _parse_entities(raw: Any, *, prefix: str = "char") -> Dict[str, EntityDef]:
-    out: Dict[str, EntityDef] = {}
+def _parse_entities(raw: Any, *, prefix: str = "char") -> dict[str, EntityDef]:
+    out: dict[str, EntityDef] = {}
     if isinstance(raw, list):
         for i, row in enumerate(raw):
             if isinstance(row, str):
@@ -332,7 +333,7 @@ def _parse_entities(raw: Any, *, prefix: str = "char") -> Dict[str, EntityDef]:
     return out
 
 
-def _as_str_list(v: Any) -> List[str]:
+def _as_str_list(v: Any) -> list[str]:
     if v is None:
         return []
     if isinstance(v, str):
@@ -340,9 +341,9 @@ def _as_str_list(v: Any) -> List[str]:
     return [str(x) for x in v if str(x).strip()]
 
 
-def validate_scene_graph(graph: SceneGraph) -> List[str]:
+def validate_scene_graph(graph: SceneGraph) -> list[str]:
     """Return human-readable issues (empty = OK)."""
-    issues: List[str] = []
+    issues: list[str] = []
     if not graph.scene_prompt and not graph.shots:
         issues.append("Need scene.prompt or at least one shot")
     if graph.mode == VideoMode.I2V and not graph.anchor_image and not graph.inputs:
@@ -403,10 +404,10 @@ def _merge_csv(*parts: str) -> str:
     return ", ".join(p.strip() for p in parts if p and p.strip())
 
 
-def _compile_shot_prompt(graph: SceneGraph, shot: ShotNode) -> tuple[str, str, List[str]]:
-    pos_parts: List[str] = []
-    neg_parts: List[str] = []
-    preserve: List[str] = []
+def _compile_shot_prompt(graph: SceneGraph, shot: ShotNode) -> tuple[str, str, list[str]]:
+    pos_parts: list[str] = []
+    neg_parts: list[str] = []
+    preserve: list[str] = []
 
     if shot.prompt:
         pos_parts.append(shot.prompt)
@@ -450,7 +451,7 @@ def _compile_shot_prompt(graph: SceneGraph, shot: ShotNode) -> tuple[str, str, L
     return _merge_csv(*pos_parts), _merge_csv(*neg_parts), preserve
 
 
-def _auto_shots_from_scene(graph: SceneGraph) -> List[ShotNode]:
+def _auto_shots_from_scene(graph: SceneGraph) -> list[ShotNode]:
     """One scene prompt → beat-split shots (simple mode)."""
     from .shot_planner import split_prompt_into_beats
 
@@ -460,7 +461,7 @@ def _auto_shots_from_scene(graph: SceneGraph) -> List[ShotNode]:
     return [ShotNode(id=f"shot_{i}", prompt=b, duration_sec=dur) for i, b in enumerate(beats)]
 
 
-def _shots_from_storyboard(graph: SceneGraph) -> List[ShotNode]:
+def _shots_from_storyboard(graph: SceneGraph) -> list[ShotNode]:
     from .storyboard import _infer_shot_type, camera_prompt_fragment, parse_storyboard
 
     cuts = parse_storyboard(graph.storyboard)
@@ -468,7 +469,7 @@ def _shots_from_storyboard(graph: SceneGraph) -> List[ShotNode]:
         return []
     total = sum(c.duration_sec for c in cuts if c.duration_sec > 0)
     per = graph.duration_sec / max(1, len(cuts)) if total <= 0 else None
-    shots: List[ShotNode] = []
+    shots: list[ShotNode] = []
     for i, c in enumerate(cuts):
         cam_frag = camera_prompt_fragment(c.camera)
         prompt = c.prompt or graph.scene_prompt
@@ -499,10 +500,10 @@ def _shots_from_storyboard(graph: SceneGraph) -> List[ShotNode]:
     return shots
 
 
-def _shots_from_director_cuts(graph: SceneGraph, cuts: Sequence[Any]) -> List[ShotNode]:
+def _shots_from_director_cuts(graph: SceneGraph, cuts: Sequence[Any]) -> list[ShotNode]:
     from .storyboard import StoryboardCut
 
-    out: List[ShotNode] = []
+    out: list[ShotNode] = []
     for i, c in enumerate(cuts):
         if not isinstance(c, StoryboardCut):
             continue
@@ -627,8 +628,8 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
     default_kf = int(graph.edit.get("keyframe_interval") or 6)
     default_strength = float(graph.edit.get("edit_strength") or 0.55)
 
-    shot_specs: List[ShotSpec] = []
-    overrides: List[Dict[str, Any]] = []
+    shot_specs: list[ShotSpec] = []
+    overrides: list[dict[str, Any]] = []
 
     for i, sh in enumerate(shots):
         if sh.camera and not sh.motion_hint:
@@ -769,7 +770,7 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
     )
 
 
-def _input_by_id(graph: SceneGraph) -> Dict[str, Any]:
+def _input_by_id(graph: SceneGraph) -> dict[str, Any]:
     return {getattr(x, "id", ""): x for x in graph.inputs}
 
 
@@ -777,14 +778,14 @@ def _resolve_bindings_for_shot(
     graph: SceneGraph,
     shot: ShotNode,
     shot_spec: ShotSpec,
-) -> List[Any]:
+) -> list[Any]:
     from .controls import ControlMode, InputBinding
 
-    bindings: List[InputBinding] = []
+    bindings: list[InputBinding] = []
     inputs = _input_by_id(graph)
     seen: set[str] = set()
 
-    def _add(entity_id: str, ent: EntityDef, shot_bind: Optional[Dict[str, Any]] = None) -> None:
+    def _add(entity_id: str, ent: EntityDef, shot_bind: dict[str, Any] | None = None) -> None:
         if entity_id in seen:
             return
         seen.add(entity_id)
@@ -913,10 +914,10 @@ def _resolve_bindings_for_shot(
 
 def _compile_all_control_plans(
     graph: SceneGraph,
-    shots: List[ShotNode],
-    shot_specs: List[ShotSpec],
+    shots: list[ShotNode],
+    shot_specs: list[ShotSpec],
     global_neg: str,
-) -> List[Any]:
+) -> list[Any]:
     from .controls import compile_shot_control_plan
 
     plans = []
@@ -945,7 +946,7 @@ def _apply_element_refs_to_plan(graph: SceneGraph, shot: ShotNode, cp: Any) -> N
 
     work = graph.raw.get("_work_dir") or "runs/video"
     lib = ElementsLibrary(elements=dict(graph.elements))
-    ids: List[str] = list(shot.bind_elements)
+    ids: list[str] = list(shot.bind_elements)
     for cid in shot.characters:
         ent = graph.cast.get(cid)
         if ent and ent.bind_element:

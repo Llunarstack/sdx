@@ -36,7 +36,7 @@ These are **optional**; Python paths work without them. They help **data quality
 | `sdx-manifest` | Go | **JSONL merge** + dedupe by image key |
 | `sdx_native.jsonl_manifest_pure` | Python | Zero-build manifest **stats** + **prompt-lint** (replaces former Node `*.mjs`) |
 
-**Python bridge:** `native/python/sdx_native/` → shims under `utils/native/` ([native/python/README.md](../native/python/README.md)).
+**Python bridge:** `native/_experimental/python/sdx_native/` → shims under `utils/native/` ([native/_experimental/python/README.md](../native/_experimental/python/README.md)).
 
 **Wiring:** `scripts/tools/data/data_quality.py` (MD5 dedup tries `sdx_native.native_tools.maybe_rust_file_md5_hex` first; `--no-native-md5` forces Python-only), `manifest_paths.py`, `jsonl_merge.py`, `op_preflight.py`, etc. ([native/README.md § Python integration](../native/README.md#python-integration-repo-root-on-pythonpath)).
 
@@ -77,8 +77,8 @@ These are **optional**; Python paths work without them. They help **data quality
 
 | Module / tool | Role |
 |----------------|------|
-| [`native/python/sdx_native/text_hygiene.py`](../native/python/sdx_native/text_hygiene.py) | **NFKC** normalization, zero-width strip, comma-segment trim, **SHA256** or **xxhash** caption fingerprints, pos/neg token overlap helper |
-| [`native/python/sdx_native/caption_csv_fast.py`](../native/python/sdx_native/caption_csv_fast.py) | Fast comma-caption split/merge/dedupe (Python; used by `utils.prompt.fast_paths`) |
+| [`native/_experimental/python/sdx_native/text_hygiene.py`](../native/_experimental/python/sdx_native/text_hygiene.py) | **NFKC** normalization, zero-width strip, comma-segment trim, **SHA256** or **xxhash** caption fingerprints, pos/neg token overlap helper |
+| [`native/_experimental/python/sdx_native/caption_csv_fast.py`](../native/_experimental/python/sdx_native/caption_csv_fast.py) | Fast comma-caption split/merge/dedupe (Python; used by `utils.prompt.fast_paths`) |
 | [`native/rust/sdx-prompt-ops`](../native/rust/sdx-prompt-ops/) | Rust cdylib: caption merge + pos/neg filter (`sdx_native.prompt_ops_native`) |
 | [`utils/prompt/fast_paths.py`](../utils/prompt/fast_paths.py) | Single import for prompt hot paths (Rust when built, else optimized Python) |
 | [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py) | JSONL CLI: `--report-dups`, `--report-overlap`, `--normalize-samples` |
@@ -131,5 +131,5 @@ Keep **conv / attention / diffusion steps** in PyTorch (and vendor kernels it al
 - [native/README.md](../native/README.md) — build commands and examples  
 - [PROMPT_STACK.md](PROMPT_STACK.md) — inference text pipeline  
 - [CODEBASE.md](CODEBASE.md) — `data/`, `utils/prompt/`, training entrypoints  
-- [MODEL_WEAKNESSES.md](MODEL_WEAKNESSES.md) — what quality problems look like at the model level  
-- [HARDWARE.md](HARDWARE.md) — when I/O and CPU preprocessing matter  
+- [MODEL_WEAKNESSES.md](QUALITY.md) — what quality problems look like at the model level  
+- [HARDWARE.md](guides/HARDWARE.md) — when I/O and CPU preprocessing matter  

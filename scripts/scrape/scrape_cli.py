@@ -66,8 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Comma/space list of ratings to keep: s,q,e (or 'all'). Blocklist always enforced.",
     )
-    p.add_argument("--secrets", default=None, help="Path to secrets file (default $SDX_SECRETS_FILE or D:\\Development\\secret.txt).")
-    p.add_argument("--rate", type=float, default=None, help="API requests/sec ceiling (default: per-site polite value).")
+    p.add_argument(
+        "--secrets",
+        default=None,
+        help="Path to secrets file (default $SDX_SECRETS_FILE or D:\\Development\\secret.txt).",
+    )
+    p.add_argument(
+        "--rate", type=float, default=None, help="API requests/sec ceiling (default: per-site polite value)."
+    )
     p.add_argument("--workers", type=int, default=8, help="Parallel image-download threads (default 8).")
     p.add_argument(
         "--split-frames",
@@ -92,7 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="HTTP User-Agent. e621/danbooru require a descriptive one; a default with your login is built if omitted.",
     )
-    p.add_argument("--dry-run", action="store_true", help="Fetch + filter, but do not download images or write manifest.")
+    p.add_argument(
+        "--dry-run", action="store_true", help="Fetch + filter, but do not download images or write manifest."
+    )
     return p
 
 
@@ -107,7 +115,10 @@ def main(argv: list[str] | None = None) -> int:
 
     adapter = build_adapter(args.site, creds)
     if adapter.auth is None and not getattr(adapter, "creds", creds).api_key:
-        print(f"WARNING: no API credentials resolved for {args.site}; requests will be anonymous (rate-limited).", file=sys.stderr)
+        print(
+            f"WARNING: no API credentials resolved for {args.site}; requests will be anonymous (rate-limited).",
+            file=sys.stderr,
+        )
 
     contact = creds.username or creds.email or "anonymous"
     user_agent = args.user_agent or f"sdx-dataset-scraper/1.0 (by {contact})"
@@ -125,14 +136,18 @@ def main(argv: list[str] | None = None) -> int:
         max_frames_per_post=int(args.max_frames_per_post),
     )
 
-    print(f"Scraping {args.site} tags={args.tags!r} -> {args.out} (max {args.max_posts}, {rate}/s, dry_run={args.dry_run})")
+    print(
+        f"Scraping {args.site} tags={args.tags!r} -> {args.out} (max {args.max_posts}, {rate}/s, dry_run={args.dry_run})"
+    )
     stats = client.run(args.tags, max_posts=args.max_posts, dry_run=args.dry_run)
 
     print("\n=== done ===")
-    print(f"fetched={stats.fetched} downloaded={stats.downloaded} "
-          f"posts_split={stats.posts_split} frames_extracted={stats.frames_extracted} "
-          f"skipped_existing={stats.skipped_existing} skipped_rating={stats.skipped_rating} "
-          f"skipped_no_url={stats.skipped_no_url} errors={stats.errors}")
+    print(
+        f"fetched={stats.fetched} downloaded={stats.downloaded} "
+        f"posts_split={stats.posts_split} frames_extracted={stats.frames_extracted} "
+        f"skipped_existing={stats.skipped_existing} skipped_rating={stats.skipped_rating} "
+        f"skipped_no_url={stats.skipped_no_url} errors={stats.errors}"
+    )
     print(f"BLOCKED (unsafe content): {stats.skipped_unsafe}")
     if stats.unsafe_tags:
         top = sorted(stats.unsafe_tags.items(), key=lambda kv: -kv[1])[:10]

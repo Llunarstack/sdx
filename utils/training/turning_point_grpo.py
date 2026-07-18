@@ -10,8 +10,8 @@ Tong et al., arXiv:2602.06422 (2026).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence
 
 import torch
 
@@ -27,10 +27,10 @@ class TurningPointGRPOConfig:
     """If True, skip turning-point bonus (ablation)."""
 
 
-def incremental_rewards_from_trajectory(step_rewards: Sequence[float]) -> List[float]:
+def incremental_rewards_from_trajectory(step_rewards: Sequence[float]) -> list[float]:
     """``ΔR_t`` from absolute per-step rewards ``R_t``."""
     prev = 0.0
-    out: List[float] = []
+    out: list[float] = []
     for r in step_rewards:
         rv = float(r)
         out.append(rv - prev)
@@ -38,14 +38,14 @@ def incremental_rewards_from_trajectory(step_rewards: Sequence[float]) -> List[f
     return out
 
 
-def detect_turning_point_indices(incremental: Sequence[float]) -> List[int]:
+def detect_turning_point_indices(incremental: Sequence[float]) -> list[int]:
     """
     Turning point at step ``t`` when ``sign(ΔR_t) != sign(ΔR_{t+1})`` (non-zero signs).
     """
     inc = [float(x) for x in incremental]
     if len(inc) < 2:
         return []
-    tps: List[int] = []
+    tps: list[int] = []
     for t in range(len(inc) - 1):
         a, b = inc[t], inc[t + 1]
         if a == 0.0 or b == 0.0:
@@ -71,7 +71,7 @@ def tp_grpo_step_weights(
     terminal_reward: float,
     *,
     config: TurningPointGRPOConfig | None = None,
-) -> List[float]:
+) -> list[float]:
     """
     Per-step training weights combining incremental + turning-point long-term bonus.
 
@@ -102,7 +102,7 @@ def tp_grpo_advantages_from_trajectories(
     ``trajectories[g]`` = list of step-wise absolute rewards for sample g.
     """
     cfg = config or TurningPointGRPOConfig()
-    flat: List[float] = []
+    flat: list[float] = []
     for traj, term in zip(trajectories, terminal_rewards):
         w = tp_grpo_step_weights(traj, float(term), config=cfg)
         flat.extend(w)
@@ -121,10 +121,10 @@ def tp_grpo_from_dense_gains(
     gains = dense_reward_gains(list(terminal_rewards), list(step_rewards))
     trajectories = [[float(r) for r in row] for row in gains]
     # Reconstruct pseudo absolute rewards from gains for TP detection
-    abs_trajs: List[List[float]] = []
+    abs_trajs: list[list[float]] = []
     for row in trajectories:
         acc = 0.0
-        abs_row: List[float] = []
+        abs_row: list[float] = []
         for g in row:
             acc += float(g)
             abs_row.append(acc)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -35,7 +34,7 @@ class CascadedMultimodalDiffusion(nn.Module):
         base_model: nn.Module,
         refine_model: nn.Module,
         *,
-        bridge: Optional[RAELatentBridge] = None,
+        bridge: RAELatentBridge | None = None,
         blend_base_refine: float = 1.0,
     ):
         super().__init__()
@@ -70,11 +69,11 @@ class CascadedMultimodalDiffusion(nn.Module):
         t_base: torch.Tensor,
         t_refine: torch.Tensor,
         *,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        model_kwargs: dict[str, torch.Tensor] | None = None,
         output_rae_latents: bool = False,
         detach_base_for_refine: bool = False,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Args:
             detach_base_for_refine: if True, ``refine_model`` sees ``base_out`` detached (no grad to base).

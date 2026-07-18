@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import torch
 
@@ -14,12 +14,12 @@ def encode_neg_and_style_embeddings(
     style_embed_dim: int,
     encode_fn,
     batch_text_encode: bool = True,
-) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
     """Encode negative and style caption lists; batched T5 when both are needed."""
     need_neg = any(n and str(n).strip() for n in neg_caps)
     need_style = bool(style_embed_dim) and any(s and str(s).strip() for s in styles)
-    encoder_hidden_neg: Optional[torch.Tensor] = None
-    style_embedding: Optional[torch.Tensor] = None
+    encoder_hidden_neg: torch.Tensor | None = None
+    style_embedding: torch.Tensor | None = None
     if not need_neg and not need_style:
         return None, None
 
@@ -51,7 +51,7 @@ def to_train_device(
     x: torch.Tensor,
     device: torch.device,
     *,
-    dtype: Optional[torch.dtype] = None,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """Move only when needed (skips work when CUDA prefetch already placed tensors)."""
     if x.device != device:
@@ -66,7 +66,7 @@ def create_adamw_optimizer(
     *,
     lr: float,
     weight_decay: float,
-    betas: Tuple[float, float] = (0.9, 0.999),
+    betas: tuple[float, float] = (0.9, 0.999),
     fused: bool = True,
 ) -> torch.optim.AdamW:
     """AdamW with fused CUDA kernel when supported (same numerics, faster step)."""
@@ -81,16 +81,16 @@ def create_adamw_optimizer(
 
 
 def encode_text_multi_group(
-    groups: Sequence[Optional[Sequence[str]]],
+    groups: Sequence[Sequence[str] | None],
     encode_fn,
-) -> List[Optional[torch.Tensor]]:
+) -> list[torch.Tensor | None]:
     """
     One ``encode_fn(captions)`` call for all non-empty caption groups.
 
     *encode_fn* must accept a list of strings and return ``(N, L, D)`` embeddings.
     Groups that are ``None`` or empty stay ``None`` in the output.
     """
-    indexed: List[Tuple[int, List[str]]] = []
+    indexed: list[tuple[int, list[str]]] = []
     for i, g in enumerate(groups):
         if not g:
             continue
@@ -98,12 +98,12 @@ def encode_text_multi_group(
         if caps:
             indexed.append((i, caps))
 
-    out: List[Optional[torch.Tensor]] = [None] * len(groups)
+    out: list[torch.Tensor | None] = [None] * len(groups)
     if not indexed:
         return out
 
-    flat: List[str] = []
-    spans: List[Tuple[int, int, int]] = []
+    flat: list[str] = []
+    spans: list[tuple[int, int, int]] = []
     for i, caps in indexed:
         start = len(flat)
         flat.extend(caps)

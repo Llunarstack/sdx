@@ -201,65 +201,13 @@ hard_samples = [s for s, m in metadata.items() if m['difficulty'] > 0.7]
 
 ---
 
-## 4. Batch Effect Optimization
+## 4. Batch / quality tooling (current)
 
-**Purpose:** Improve generation quality by optimizing across batches
+Batch-effect prototype APIs under `utils.inference` were removed. For multi-sample quality:
 
-### Usage:
-
-```python
-from utils.inference.batch_optimization import BatchEffectOptimizer
-
-optimizer = BatchEffectOptimizer(batch_size=4, consistency_weight=0.1)
-
-# During inference
-latents = model.encode(images)
-text_embeds = [encoder(cap) for cap in captions]
-
-# Optimize batch
-optimized_latents, metrics = optimizer.optimize_latent_batch(
-    latents=latents,
-    text_embeddings=text_embeds,
-    model=model,
-    num_optimization_steps=3
-)
-
-print(f"Consistency improvement: {metrics.consistency_improvement:.2f}")
-
-# Use optimized latents for generation
-generated = model.decode(optimized_latents)
-
-# Get batch quality score
-quality = optimizer.compute_batch_quality_score(optimized_latents)
-print(f"Batch quality score: {quality:.2f}")
-
-# Get suggestions for batch composition
-suggestions = optimizer.suggest_batch_composition(captions)
-print(f"Suggested batches: {suggestions['num_batches']}")
-```
-
-### Integration with Sampling:
-
-```python
-# In sample.py or inference script
-from utils.inference.batch_optimization import BatchEffectOptimizer
-
-optimizer = BatchEffectOptimizer(batch_size=args.batch_size)
-
-# Before generation loop
-prompts_batched = suggest_batch_composition(prompts)
-
-for batch_prompts in prompts_batched:
-    latents = torch.randn(...)
-    
-    # Optimize before diffusion
-    latents, metrics = optimizer.optimize_latent_batch(latents, ...)
-    
-    # Generate with optimized latents
-    images = sample_loop(latents, batch_prompts)
-```
-
----
+- `python -m scripts.tools superior_generate` / pick-best via Superior Stack
+- `python -m scripts.tools image_quality_qc`
+- See [SUPERIOR_STACK.md](../SUPERIOR_STACK.md) and [QUALITY.md](../QUALITY.md)
 
 ## 5. Spatial Layout DSL
 

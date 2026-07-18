@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 
 import torch
 
@@ -11,7 +11,7 @@ from .perceptual_proxies import combined_quality_proxy
 Tensor = torch.Tensor
 
 
-def rank_samples_by_proxy(rgb01: Tensor) -> List[Tuple[int, float]]:
+def rank_samples_by_proxy(rgb01: Tensor) -> list[tuple[int, float]]:
     """
     Return ``(batch_index, score)`` sorted by descending ``combined_quality_proxy``.
 

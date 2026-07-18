@@ -11,9 +11,9 @@ from __future__ import annotations
 import csv
 import os
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 try:
     import numpy as np
@@ -60,17 +60,17 @@ def merge_wd_tags_into_caption(
     caption: str,
     wd_tags: Sequence[str],
     *,
-    identity_tags: Optional[Iterable[str]] = None,
+    identity_tags: Iterable[str] | None = None,
     max_add: int = 32,
 ) -> str:
     """Append WD tags not already present; never override booru identity tags."""
     cap = (caption or "").strip()
-    seen: Set[str] = {t.strip().lower().replace("_", " ") for t in cap.split(",") if t.strip()}
+    seen: set[str] = {t.strip().lower().replace("_", " ") for t in cap.split(",") if t.strip()}
     for t in identity_tags or ():
         t = str(t).strip().replace("_", " ")
         if t:
             seen.add(t.lower())
-    added: List[str] = []
+    added: list[str] = []
     for raw in wd_tags:
         tag = str(raw).strip().replace("_", " ")
         if not tag:
@@ -90,7 +90,7 @@ def merge_wd_tags_into_caption(
 def merge_wd_tags_into_row(row: dict, wd_tag_names: Sequence[str]) -> dict:
     """Patch a manifest row with merged caption + ``wd_tags`` metadata."""
     merged = dict(row)
-    identity: List[str] = []
+    identity: list[str] = []
     for key in ("artist_tags", "character_tags", "copyright_tags"):
         for t in row.get(key) or []:
             identity.append(str(t))
@@ -120,8 +120,8 @@ class WDTagger:
         self.threshold = float(threshold)
         self.max_tags = int(max_tags)
         self._session = None
-        self._tag_names: List[str] = []
-        self._tag_categories: List[str] = []
+        self._tag_names: list[str] = []
+        self._tag_categories: list[str] = []
 
     def _ensure_loaded(self) -> None:
         if self._session is not None:
@@ -159,7 +159,7 @@ class WDTagger:
         self._input_name = self._session.get_inputs()[0].name
 
     @staticmethod
-    def _preprocess(image: "Image.Image", size: int) -> "np.ndarray":
+    def _preprocess(image: Image.Image, size: int) -> np.ndarray:
         image = image.convert("RGB")
         w, h = image.size
         if w == 0 or h == 0:
@@ -174,14 +174,14 @@ class WDTagger:
         arr = arr.transpose(2, 0, 1)
         return np.expand_dims(arr, axis=0)
 
-    def predict(self, image_path: str | os.PathLike[str]) -> List[WDTag]:
+    def predict(self, image_path: str | os.PathLike[str]) -> list[WDTag]:
         self._ensure_loaded()
         assert np is not None and Image is not None
         img = Image.open(image_path)
         batch = self._preprocess(img, _MODEL_INPUT_SIZE)
         out = self._session.run(None, {self._input_name: batch})[0]
         probs = 1.0 / (1.0 + np.exp(-out[0]))
-        tags: List[WDTag] = []
+        tags: list[WDTag] = []
         for i, score in enumerate(probs):
             if score < self.threshold:
                 continue
@@ -193,5 +193,5 @@ class WDTagger:
         tags.sort(key=lambda t: t.score, reverse=True)
         return tags[: self.max_tags]
 
-    def predict_names(self, image_path: str | os.PathLike[str]) -> List[str]:
+    def predict_names(self, image_path: str | os.PathLike[str]) -> list[str]:
         return [t.name for t in self.predict(image_path)]

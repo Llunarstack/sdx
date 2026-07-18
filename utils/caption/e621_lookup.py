@@ -3,24 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 import requests
-
 from scripts.scrape.secrets_config import get_credentials, get_secrets_path
 
 
 @dataclass
 class E621PostTags:
     post_id: str
-    character_tags: List[str]
-    copyright_tags: List[str]
-    artist_tags: List[str]
-    general_tags: List[str]
+    character_tags: list[str]
+    copyright_tags: list[str]
+    artist_tags: list[str]
+    general_tags: list[str]
     tag_string: str = ""
 
 
-def _auth() -> Optional[tuple[str, str]]:
+def _auth() -> tuple[str, str] | None:
     try:
         c = get_credentials("e621", get_secrets_path())
         if c.username and c.api_key:
@@ -30,7 +28,7 @@ def _auth() -> Optional[tuple[str, str]]:
     return None
 
 
-def fetch_e621_post(post_id: str, *, timeout_s: float = 30.0) -> Optional[E621PostTags]:
+def fetch_e621_post(post_id: str, *, timeout_s: float = 30.0) -> E621PostTags | None:
     pid = str(post_id).strip()
     if not pid.isdigit():
         return None
@@ -46,7 +44,7 @@ def fetch_e621_post(post_id: str, *, timeout_s: float = 30.0) -> Optional[E621Po
 
     tags = d.get("tags") or {}
 
-    def _lst(key: str) -> List[str]:
+    def _lst(key: str) -> list[str]:
         val = tags.get(key) or []
         return [str(x) for x in val if str(x).strip()]
 

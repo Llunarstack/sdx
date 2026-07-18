@@ -9,7 +9,7 @@ APIs used (all official JSON endpoints):
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 from .booru_client import Post
 from .rule34xyz_v2 import Rule34xyzV2Adapter
@@ -29,9 +29,9 @@ class DanbooruAdapter:
 
     def __init__(self, creds: SiteCredentials) -> None:
         self.creds = creds
-        self.auth: Optional[tuple[str, str]] = None
+        self.auth: tuple[str, str] | None = None
 
-    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
+    def build_params(self, tags: str, page: int, before_id: int | None = None) -> dict:
         params = {"tags": tags, "limit": self.page_limit}
         params["page"] = f"b{before_id}" if before_id else page
         if self.creds.username and self.creds.api_key:
@@ -70,11 +70,11 @@ class E621Adapter:
     def __init__(self, creds: SiteCredentials) -> None:
         self.creds = creds
         # e621 accepts credentials via HTTP basic auth.
-        self.auth: Optional[tuple[str, str]] = (
+        self.auth: tuple[str, str] | None = (
             (creds.username, creds.api_key) if creds.username and creds.api_key else None
         )
 
-    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
+    def build_params(self, tags: str, page: int, before_id: int | None = None) -> dict:
         # e621 allows up to 40 tags, so we can negate the blocklist in-query too.
         full_tags = " ".join([tags, *blocked_query_tags()]).strip()
         params = {"tags": full_tags, "limit": self.page_limit}
@@ -153,7 +153,7 @@ class _GelbooruDapiAdapter:
         self.cdn_base = cdn_base
         self.auth = None
 
-    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
+    def build_params(self, tags: str, page: int, before_id: int | None = None) -> dict:
         params = {
             "page": "dapi",
             "s": "post",

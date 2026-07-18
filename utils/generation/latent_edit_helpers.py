@@ -13,14 +13,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 
-PathLike = Union[str, Path]
+PathLike = str | Path
 
 
 def maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge: Any) -> torch.Tensor:
@@ -54,7 +54,7 @@ def resize_square(pil: Image.Image, size_px: int, *, resample: int = Image.Resam
 
 
 def pil_rgb_to_tensor_m11(
-    pil: Image.Image, *, device: Optional[torch.device] = None, dtype: torch.dtype = torch.float32
+    pil: Image.Image, *, device: torch.device | None = None, dtype: torch.dtype = torch.float32
 ) -> torch.Tensor:
     """``(1, 3, H, W)`` in roughly ``[-1, 1]`` (SD VAE convention)."""
     arr = np.array(pil).astype(np.float32) / 255.0
@@ -120,7 +120,7 @@ def load_mask_for_inpaint(
     path: PathLike,
     image_size_px: int,
     *,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     dtype: torch.dtype = torch.float32,
     threshold: float = 0.5,
 ) -> torch.Tensor:
@@ -168,7 +168,7 @@ def build_img2img_initial_latent(
     num_timesteps: int,
     strength: float,
     use_flow_sample: bool = False,
-) -> Tuple[torch.Tensor, int]:
+) -> tuple[torch.Tensor, int]:
     """
     Build ``x_init`` and ``start_timestep`` for plain img2img (no mask).
 
@@ -190,16 +190,16 @@ class LatentEditInit:
 
     x_init: torch.Tensor
     start_timestep: int
-    inpaint_mask: Optional[torch.Tensor] = None
-    inpaint_x0: Optional[torch.Tensor] = None
-    inpaint_noise: Optional[torch.Tensor] = None
+    inpaint_mask: torch.Tensor | None = None
+    inpaint_x0: torch.Tensor | None = None
+    inpaint_noise: torch.Tensor | None = None
 
     @property
     def inpaint_freeze_known(self) -> bool:
         """True when MDM-style freeze tensors are all set (see ``sample.py`` ``--inpaint-mode mdm``)."""
         return self.inpaint_mask is not None and self.inpaint_x0 is not None and self.inpaint_noise is not None
 
-    def sample_loop_kwargs(self) -> Dict[str, Any]:
+    def sample_loop_kwargs(self) -> dict[str, Any]:
         """Keyword subset to merge into ``diffusion.sample_loop``."""
         return {
             "x_init": self.x_init,
@@ -259,7 +259,7 @@ def build_init_latent_from_tensor(
     num_timesteps: int,
     strength: float,
     use_flow_sample: bool = False,
-) -> Tuple[torch.Tensor, int]:
+) -> tuple[torch.Tensor, int]:
     """Same as img2img but ``z`` is already a DiT latent (``--init-latent`` path)."""
     t_start = strength_to_start_timestep(strength, num_timesteps)
     b = int(z.shape[0])
@@ -277,8 +277,8 @@ def compose_outpaint_canvas(
     target_h: int,
     *,
     anchor: str = "center",
-    fill_rgb: Tuple[int, int, int] = (128, 128, 128),
-) -> Tuple[Image.Image, Image.Image]:
+    fill_rgb: tuple[int, int, int] = (128, 128, 128),
+) -> tuple[Image.Image, Image.Image]:
     """
     Place ``base_rgb`` on a larger canvas; return ``(canvas_rgb, mask_L)``.
 
@@ -323,10 +323,10 @@ def prepare_latent_edit_from_paths(
     latent_scale: float,
     ae_type: str = "kl",
     rae_bridge: Any = None,
-    mask_path: Optional[PathLike] = None,
+    mask_path: PathLike | None = None,
     inpaint_mode: str = "legacy",
     use_flow_sample: bool = False,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     dit_model: Any = None,
 ) -> LatentEditInit:
     """
@@ -385,7 +385,7 @@ def load_aux_rgb_tensor(
     path: PathLike,
     image_size_px: int,
     *,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """

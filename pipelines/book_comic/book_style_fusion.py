@@ -8,12 +8,10 @@ Use ``--style-fusion-preset`` on ``generate_book.py`` or set ``style_mix`` in vi
 
 from __future__ import annotations
 
-from typing import Dict
-
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
 # Short idiom anchors (avoid importing visual_memory to prevent cycles)
-_IDIOM: Dict[str, str] = {
+_IDIOM: dict[str, str] = {
     "manga": (
         "manga-native pacing: expressive eyes, screentone-friendly values, speed-line grammar, "
         "right-to-left flow where appropriate"
@@ -36,7 +34,7 @@ _HARMONIZE = (
 
 
 # Preset name -> (primary_key, secondary_key, extra_tail)
-_FUSION_KEYS: Dict[str, tuple[str, str, str]] = {
+_FUSION_KEYS: dict[str, tuple[str, str, str]] = {
     "manga_comic": (
         "manga",
         "comic_us",

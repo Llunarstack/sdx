@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping
+from typing import Any
 
 __all__ = ["WorldBible", "parse_world", "world_to_prompt", "world_negative"]
 
@@ -20,7 +21,7 @@ class WorldBible:
     geography: str = ""
     magic_rules: str = ""
     era: str = ""
-    locations: Dict[str, str] = field(default_factory=dict)
+    locations: dict[str, str] = field(default_factory=dict)
     notes: str = ""
 
 
@@ -58,7 +59,7 @@ def parse_world(raw: Any) -> WorldBible | None:
 
 
 def world_to_prompt(w: WorldBible, *, location: str = "") -> str:
-    parts: List[str] = [f"world {w.name}" if w.name else "consistent world"]
+    parts: list[str] = [f"world {w.name}" if w.name else "consistent world"]
     for label, val in (
         ("architecture", w.architecture),
         ("technology", w.technology),

@@ -73,8 +73,18 @@ def test_danbooru_parse_and_auth():
     assert params["login"] == "u" and params["api_key"] == "k" and params["tags"] == "scenery"
     posts = list(
         a.parse_posts(
-            [{"id": 5, "md5": "abc", "file_url": "https://x/y.png", "file_ext": "png",
-              "tag_string": "landscape sky", "rating": "s", "image_width": 512, "image_height": 512}]
+            [
+                {
+                    "id": 5,
+                    "md5": "abc",
+                    "file_url": "https://x/y.png",
+                    "file_ext": "png",
+                    "tag_string": "landscape sky",
+                    "rating": "s",
+                    "image_width": 512,
+                    "image_height": 512,
+                }
+            ]
         )
     )
     assert len(posts) == 1
@@ -88,8 +98,16 @@ def test_e621_basic_auth_and_nested_tags():
 
     a = E621Adapter(SiteCredentials(site="e621", username="u", api_key="k"))
     assert a.auth == ("u", "k")
-    data = {"posts": [{"id": 9, "file": {"url": "https://e/z.jpg", "ext": "jpg", "md5": "m", "width": 100, "height": 80},
-                       "tags": {"general": ["forest", "tree"], "species": ["wolf"]}, "rating": "s"}]}
+    data = {
+        "posts": [
+            {
+                "id": 9,
+                "file": {"url": "https://e/z.jpg", "ext": "jpg", "md5": "m", "width": 100, "height": 80},
+                "tags": {"general": ["forest", "tree"], "species": ["wolf"]},
+                "rating": "s",
+            }
+        ]
+    }
     posts = list(a.parse_posts(data))
     assert posts[0].tags == ["forest", "tree", "wolf"]
     assert posts[0].md5 == "m" and posts[0].width == 100
@@ -100,7 +118,9 @@ def test_rule34_url_reconstruction():
 
     a = Rule34xxxAdapter(SiteCredentials(site="rule34xxx", api_key="k", user_id="1"))
     assert a.first_page == 0
-    posts = list(a.parse_posts([{"id": 1, "hash": "h", "directory": "12", "image": "pic.jpg", "tags": "a b", "rating": "e"}]))
+    posts = list(
+        a.parse_posts([{"id": 1, "hash": "h", "directory": "12", "image": "pic.jpg", "tags": "a b", "rating": "e"}])
+    )
     assert posts[0].file_url.endswith("/images/12/pic.jpg")
     assert posts[0].ext == "jpg"
 
@@ -115,6 +135,6 @@ def test_build_adapter_rejects_unknown_site():
 
     try:
         build_adapter("pixiv", SiteCredentials(site="pixiv"))
-        assert False, "expected ValueError"
+        raise AssertionError("expected ValueError")
     except ValueError:
         pass
