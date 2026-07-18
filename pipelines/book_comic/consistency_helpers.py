@@ -17,8 +17,9 @@ see ``book_challenging_content.challenging_content_from_mapping``.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional
+from typing import Any
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
@@ -57,7 +58,7 @@ def character_appearance_clause(
     extra: str = "",
 ) -> str:
     """Stable visual tokens for one recurring cast member."""
-    bits: List[str] = []
+    bits: list[str] = []
     if (label or "").strip():
         bits.append(f"recurring character {label.strip()}")
     else:
@@ -124,7 +125,7 @@ def setting_continuity_clause(
 
 def palette_lighting_clause(*, palette: str = "", lighting: str = "") -> str:
     """Color script + light direction (reduces drift when inpaint chain is weak)."""
-    bits: List[str] = []
+    bits: list[str] = []
     p = (palette or "").strip()
     lighting_s = (lighting or "").strip()
     if p:
@@ -188,7 +189,7 @@ def consistency_negative_addon(level: str) -> str:
 _CHAR_KEYS = frozenset({"label", "hair", "eyes", "skin", "build", "face", "signature_items", "age_vibe", "extra"})
 
 
-def load_consistency_json(path: Path) -> Dict[str, Any]:
+def load_consistency_json(path: Path) -> dict[str, Any]:
     raw = path.read_text(encoding="utf-8")
     data = json.loads(raw)
     if not isinstance(data, dict):
@@ -201,8 +202,8 @@ def _character_from_mapping(d: Mapping[str, Any]) -> str:
     return character_appearance_clause(**kw)  # type: ignore[arg-type]
 
 
-def _props_from_spec_value(props: Any) -> List[str]:
-    out: List[str] = []
+def _props_from_spec_value(props: Any) -> list[str]:
+    out: list[str] = []
     if isinstance(props, list):
         for p in props:
             if isinstance(p, str) and p.strip():
@@ -221,7 +222,7 @@ def _props_from_spec_value(props: Any) -> List[str]:
 
 def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
     """Build one positive consistency block from a dict (JSON file or merged CLI)."""
-    fragments: List[str] = []
+    fragments: list[str] = []
 
     ch = spec.get("character")
     if isinstance(ch, dict):
@@ -314,7 +315,7 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
     return merge_prompt_fragments(*fragments)
 
 
-def negative_level_from_spec(spec: Mapping[str, Any], cli_level: Optional[str]) -> str:
+def negative_level_from_spec(spec: Mapping[str, Any], cli_level: str | None) -> str:
     """Resolve negative tier: explicit CLI beats spec when CLI is not None."""
     if cli_level is not None:
         return (cli_level or "none").lower().strip()

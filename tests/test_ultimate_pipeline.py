@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from utils.caption.wd_tagger import merge_wd_tags_into_caption, merge_wd_tags_into_row

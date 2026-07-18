@@ -10,7 +10,7 @@
 | **Layout control** | None | Regional box prompting, Omost canvas, LAMIC |
 | **Video** | None | Scene-graph TI2V, 60+ modules, 25 frontier filmmakers |
 | **Quality stack** | Basic loss | ELIQ, artifacts, drift, explainability, TCIS |
-| **Research layer** | Monolithic scripts | `innovations/` + `frontier/` (80+ modules) |
+| **Research layer** | Monolithic scripts | `frontier/` + `research/` + `utils/agentic` |
 | **Tests** | Handful | **803+** (CI: ruff, pytest, smoke, doc links) |
 | **Docs** | Scattered READMEs | Structured `docs/` + release notes per version |
 | **Transparency** | Readable ~500 LOC entry | Full metadata, provenance, reproducibility guides |
@@ -52,7 +52,7 @@
 
 ◐ = partial · ✗ = not available · ✓ = built in
 
-> **New to the jargon?** See [GLOSSARY.md](GLOSSARY.md) for plain-English definitions of DiT, DPO, GRPO, ELIQ, TI2V, Holy Grail, and every version listed above.
+> **New to the jargon?** See [GLOSSARY.md](../GLOSSARY.md) for plain-English definitions of DiT, DPO, GRPO, ELIQ, TI2V, Holy Grail, and every version listed above.
 
 ---
 

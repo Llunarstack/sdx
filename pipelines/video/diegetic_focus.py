@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "FocusBudget",
@@ -15,22 +16,22 @@ __all__ = [
 
 @dataclass(slots=True)
 class FocusBudget:
-    hero_entities: List[str]
+    hero_entities: list[str]
     periphery_mode: str  # soft | bokeh | abstract | pixel_melt
     periphery_strength: float
-    background_entities: List[str] = field(default_factory=list)
+    background_entities: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class ShotFocusPlan:
     shot_id: str
-    in_focus: List[str]
-    out_of_focus: List[str]
+    in_focus: list[str]
+    out_of_focus: list[str]
     prompt_suffix: str
-    edit_overrides: Dict[str, Any] = field(default_factory=dict)
+    edit_overrides: dict[str, Any] = field(default_factory=dict)
 
 
-_PERIPHERY_PROMPTS: Dict[str, str] = {
+_PERIPHERY_PROMPTS: dict[str, str] = {
     "soft": "shallow depth of field, soft background blur",
     "bokeh": "creamy bokeh, subject razor sharp",
     "abstract": "peripheral elements impressionistic, center narrative sharp",
@@ -39,7 +40,7 @@ _PERIPHERY_PROMPTS: Dict[str, str] = {
 }
 
 
-def parse_focus_config(raw: Any) -> Dict[str, Any]:
+def parse_focus_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -53,7 +54,7 @@ def parse_focus_config(raw: Any) -> Dict[str, Any]:
     return {"enabled": bool(raw)}
 
 
-def _entities_in_shot(shot: Any) -> List[str]:
+def _entities_in_shot(shot: Any) -> list[str]:
     chars = list(getattr(shot, "characters", []) or [])
     objs = list(getattr(shot, "objects", []) or [])
     return [str(x) for x in chars + objs]
@@ -63,7 +64,7 @@ def plan_diegetic_focus(
     shots: Sequence[Any],
     config: Mapping[str, Any],
     cast: Mapping[str, Any],
-) -> List[ShotFocusPlan]:
+) -> list[ShotFocusPlan]:
     if not config.get("enabled"):
         return []
     mode = str(config.get("default_mode") or "fog_of_narrative")
@@ -71,7 +72,7 @@ def plan_diegetic_focus(
     global_heroes = [str(x) for x in (config.get("heroes") or [])]
     global_bg = [str(x) for x in (config.get("background") or [])]
 
-    plans: List[ShotFocusPlan] = []
+    plans: list[ShotFocusPlan] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         ents = _entities_in_shot(sh)

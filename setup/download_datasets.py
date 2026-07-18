@@ -116,7 +116,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Keep original gif/mp4/webm after frame split (doubles disk use).",
     )
     p.add_argument("--rate", type=float, default=None, help="API req/s per site (default: per-site polite value).")
-    p.add_argument("--secrets", default=None, help="Secrets file (default $SDX_SECRETS_FILE or D:\\Development\\secret.txt).")
+    p.add_argument(
+        "--secrets", default=None, help="Secrets file (default $SDX_SECRETS_FILE or D:\\Development\\secret.txt)."
+    )
     p.add_argument("--dry-run", action="store_true", help="Fetch + filter only; download nothing.")
     args = p.parse_args(argv)
     if args.secrets is None:
@@ -159,15 +161,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAILED sites: {', '.join(failed_sites)}", file=sys.stderr)
         return 1
     if not args.dry_run:
-        manifests = [Path(args.out) / s / "manifest.jsonl" for s in sites if (Path(args.out) / s / "manifest.jsonl").is_file()]
+        manifests = [
+            Path(args.out) / s / "manifest.jsonl" for s in sites if (Path(args.out) / s / "manifest.jsonl").is_file()
+        ]
         if manifests:
             reg = build_from_manifests(manifests)
             index_out = Path(args.out) / "artist_index.json"
             reg.save(index_out)
             print(f"artist index: {len(reg):,} names -> {index_out}")
-    print(f"\nTrain on the combined set with, e.g.:")
+    print("\nTrain on the combined set with, e.g.:")
     for site in sites:
-        print(f"  python train.py --manifest-jsonl {Path(args.out) / site / 'manifest.jsonl'} --data-path {Path(args.out) / site} ...")
+        print(
+            f"  python train.py --manifest-jsonl {Path(args.out) / site / 'manifest.jsonl'} --data-path {Path(args.out) / site} ..."
+        )
     return 0
 
 

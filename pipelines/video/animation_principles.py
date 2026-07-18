@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping
+from typing import Any
 
 __all__ = [
     "AnimationPrinciples",
@@ -29,7 +30,7 @@ class AnimationPrinciples:
     solid_drawing: float = 0.5
 
 
-_PRESETS: Dict[str, AnimationPrinciples] = {
+_PRESETS: dict[str, AnimationPrinciples] = {
     "pixar": AnimationPrinciples(
         squash_stretch=0.75, anticipation=0.7, follow_through=0.85, appeal=0.9, exaggeration=0.6
     ),

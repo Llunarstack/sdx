@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "BreathCadence",
@@ -20,7 +21,7 @@ class BreathCadence:
     prompt_suffix: str
 
 
-def parse_breath_config(raw: Any) -> Dict[str, Any]:
+def parse_breath_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -35,13 +36,13 @@ def plan_breath_cadence(
     shots: Sequence[Any],
     *,
     config: Mapping[str, Any],
-    tension_by_shot: Optional[Mapping[str, float]] = None,
-) -> List[BreathCadence]:
+    tension_by_shot: Mapping[str, float] | None = None,
+) -> list[BreathCadence]:
     if not config.get("enabled"):
         return []
     base_bpm = float(config.get("base_bpm") or 14.0)
     tension_by_shot = tension_by_shot or {}
-    out: List[BreathCadence] = []
+    out: list[BreathCadence] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         t = float(tension_by_shot.get(sid, 0.4))

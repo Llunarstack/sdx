@@ -7,7 +7,6 @@ Not applied automatically by ``train.py``; used by ``utils/superior/flywheel.py`
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass(slots=True)
@@ -56,15 +55,15 @@ class FlywheelPlan:
 
     base_ckpt: str
     work_dir: str = "flywheel_run"
-    manifest_in: Optional[str] = None
-    manifest_out: Optional[str] = None
-    local_rag_jsonl: Optional[str] = None
-    vit_ckpt: Optional[str] = None
+    manifest_in: str | None = None
+    manifest_out: str | None = None
+    local_rag_jsonl: str | None = None
+    vit_ckpt: str | None = None
     promote_path: str = "flywheel_run/best.pt"
     skip_curate: bool = False
     skip_align: bool = False
     defaults: SuperiorStackDefaults = field(default_factory=SuperiorStackDefaults)
-    extra_auto_loop_args: List[str] = field(default_factory=list)
+    extra_auto_loop_args: list[str] = field(default_factory=list)
 
 
 DEFAULTS = SuperiorStackDefaults()

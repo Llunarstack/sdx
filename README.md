@@ -162,7 +162,7 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 | Video | ✗ | Scene JSON director pipeline |
 | Layout | ✗ | Regional boxes + storyboard |
 | Tests | few | **803+** |
-| Research | scripts | `innovations/` + `frontier/` |
+| Research | packages | `frontier/` + `research/` |
 
 [Full comparison →](docs/releases/VERSION_COMPARISON.md)
 
@@ -188,7 +188,6 @@ SDX is a **framework you train** — not a hosted model scoreboard.
 sdx/
 ├── train.py · sample.py · demo.py     # Image entry points
 ├── models/ · diffusion/               # DiT, schedulers, sampling
-├── innovations/                       # Quality, agentic, control
 ├── frontier/                          # Experimental research
 ├── pipelines/video/                   # TI2V scene-graph studio (v12)
 ├── utils/generation/                  # Layout, CFG, sample features
@@ -212,7 +211,7 @@ sdx/
 | Topic | Link |
 |-------|------|
 | Getting started | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
-| Codebase map | [docs/CODEBASE_GUIDE.md](docs/CODEBASE_GUIDE.md) |
+| Codebase map | [docs/CODEBASE.md](docs/CODEBASE.md) |
 | Video pipeline | [pipelines/video/README.md](pipelines/video/README.md) |
 | Frontier | [frontier/README.md](frontier/README.md) |
 | v12 release | [docs/releases/v12.md](docs/releases/v12.md) |

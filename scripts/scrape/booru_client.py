@@ -8,10 +8,10 @@ import json
 import os
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -94,7 +94,7 @@ class BooruClient:
         *,
         user_agent: str,
         rate_per_sec: float,
-        ratings: Optional[set[str]] = None,
+        ratings: set[str] | None = None,
         timeout_s: float = 60.0,
         max_retries: int = 6,
         max_workers: int = 8,
@@ -112,7 +112,9 @@ class BooruClient:
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.max_workers = max(1, int(max_workers))
-        chunk = dl_chunk_bytes if dl_chunk_bytes is not None else int(os.environ.get("SDX_DL_CHUNK_BYTES", str(1 << 20)))
+        chunk = (
+            dl_chunk_bytes if dl_chunk_bytes is not None else int(os.environ.get("SDX_DL_CHUNK_BYTES", str(1 << 20)))
+        )
         self.dl_chunk_bytes = max(1 << 14, int(chunk))
         self.split_frames = bool(split_frames)
         self.frame_fps = max(0.1, float(frame_fps))
@@ -177,7 +179,7 @@ class BooruClient:
                 continue
 
     def _request_json(self, url: str, params: dict, *, auth=None):
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(self.max_retries):
             self.api_limiter.wait()
             try:
@@ -435,10 +437,14 @@ class BooruClient:
             return
         yielded = 0
         page = self.adapter.first_page
-        before_id: Optional[int] = None
+        before_id: int | None = None
         use_cursor = bool(getattr(self.adapter, "cursor_supported", False))
         while not post_cap_reached(yielded, max_posts):
-            params = self.adapter.build_params(tags, page, before_id) if use_cursor else self.adapter.build_params(tags, page)
+            params = (
+                self.adapter.build_params(tags, page, before_id)
+                if use_cursor
+                else self.adapter.build_params(tags, page)
+            )
             data = self._request_json(self.adapter.posts_url, params, auth=self.adapter.auth)
             posts = list(self.adapter.parse_posts(data))
             if not posts:

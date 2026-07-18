@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -63,13 +63,13 @@ def apply_transition(
     frames_b: Sequence[np.ndarray],
     transition: TransitionType,
     overlap: int,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     if overlap <= 0 or not frames_a or not frames_b:
         return list(frames_a) + list(frames_b)
     overlap = min(overlap, len(frames_a), len(frames_b))
     head = list(frames_a[:-overlap])
     tail = list(frames_b[overlap:])
-    blend: List[np.ndarray] = []
+    blend: list[np.ndarray] = []
     tname = transition.value if hasattr(transition, "value") else str(transition)
     for i in range(overlap):
         t = (i + 1) / (overlap + 1)

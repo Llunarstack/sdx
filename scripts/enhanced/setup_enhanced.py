@@ -114,20 +114,20 @@ cfg = TrainConfig(
     data_path="./datasets/your_dataset",
     image_size=512,
     global_batch_size=32,
-    
+
     # Model
     model_name="DiT-XL/2-Text",
-    
+
     # Training
     passes=3,
     lr=1e-4,
     use_bf16=True,
     grad_checkpointing=True,
-    
+
     # Validation
     val_split=0.05,
     save_best=True,
-    
+
     # Enhanced features
     refinement_prob=0.25,
     use_xformers=True,
@@ -229,10 +229,10 @@ def print_next_steps():
     print("\n📋 Next steps:")
     print("1. Prepare your dataset in a folder with images + .txt caption files")
     print("2. Analyze your dataset:")
-    print("   python scripts/cli.py analyze-dataset --data-path ./your_dataset")
+    print("   python -m scripts.tools analyze-dataset --data-path ./your_dataset")
     print("3. Create and validate your config:")
     print("   cp example_config.py my_config.py")
-    print("   python scripts/cli.py validate-config my_config.py --estimate-memory")
+    print("   python -m scripts.tools validate-config my_config.py --estimate-memory")
     print("4. Start training:")
     print("   python train.py --config my_config.py")
     print("5. Generate images:")
@@ -248,8 +248,8 @@ def print_next_steps():
     print("- Image quality enhancement")
 
     print("\n📚 Documentation:")
-    print("- Enhanced features: docs/ENHANCED_FEATURES.md")
-    print("- CLI help: python scripts/cli.py --help")
+    print("- Enhanced features: scripts/enhanced/README.md")
+    print("- CLI help: python -m scripts.tools --help")
     print("- Original docs: docs/README.md")
 
 

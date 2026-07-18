@@ -15,7 +15,6 @@ import logging
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 __all__ = [
     "DevicePerfHints",
@@ -44,7 +43,7 @@ def parallel_train_torchrun_example(n_gpu: int = 2, extra: str = "YOUR_TRAIN_ARG
     return f"python -m torch.distributed.run --standalone --nproc_per_node={n} train.py {extra}".strip()
 
 
-def configure_pytorch_attention_backends(*, logger: Optional[logging.Logger] = None) -> None:
+def configure_pytorch_attention_backends(*, logger: logging.Logger | None = None) -> None:
     """Enable fast SDPA kernels (Flash / memory-efficient) when PyTorch supports them."""
     import torch
 
@@ -73,7 +72,7 @@ def configure_inference_cuda(
     *,
     cudnn_benchmark: bool = True,
     enable_tf32: bool = True,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> None:
     """Fast defaults for sample.py / inference (TF32 + cuDNN benchmark + SDPA)."""
     configure_training_cuda_and_cpu(
@@ -94,7 +93,7 @@ def configure_training_cuda_and_cpu(
     enable_tf32: bool = True,
     cpu_num_threads: int = 0,
     cpu_num_interop_threads: int = 0,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> None:
     """Apply cudnn / TF32 flags and optional CPU thread caps (called after CUDA device binding)."""
     import torch

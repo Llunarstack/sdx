@@ -55,7 +55,7 @@ The value is stored in the checkpoint config. **You must use the same `num_ar_bl
 In `config/train_config.py`:
 
 - **`num_ar_blocks: int = 0`** — 0 = off, 2 = 2×2 blocks, 4 = 4×4 blocks. Other values (e.g. 3 for 3×3) are supported by the mask code but are less common.
-- **`ar_block_order: str = "raster"`** — macro-block sequence: **`raster`** (row-major), **`zorder`** (Morton), **`snake`** (boustrophedon), or **`spiral`** (outside-in). See [AR_EXTENSIONS.md](AR_EXTENSIONS.md).
+- **`ar_block_order: str = "raster"`** — macro-block sequence: **`raster`** (row-major), **`zorder`** (Morton), **`snake`** (boustrophedon), or **`spiral`** (outside-in). See [AR_EXTENSIONS.md](AR.md).
 
 ### Code
 
@@ -79,7 +79,7 @@ Optional alternatives:
 - **`snake`**: alternating row direction traversal
 - **`spiral`**: outside-in traversal over macro blocks
 
-Training flag: `--ar-block-order ...`. Details and extra helpers: **[AR_EXTENSIONS.md](AR_EXTENSIONS.md)**.
+Training flag: `--ar-block-order ...`. Details and extra helpers: **[AR_EXTENSIONS.md](AR.md)**.
 
 ### Runtime curriculum and order-mix
 

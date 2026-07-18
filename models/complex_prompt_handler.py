@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 try:
     import torch
@@ -70,9 +69,9 @@ class PromptComplexityProfile:
     is_multi_concept: bool = False
     concept_count: int = 1
     dominant_mode: str = "standard"  # standard, nsfw, surreal, creature, physics, ...
-    physics_tags: List[str] = field(default_factory=list)
-    creature_tags: List[str] = field(default_factory=list)
-    concept_groups: List[List[str]] = field(default_factory=list)
+    physics_tags: list[str] = field(default_factory=list)
+    creature_tags: list[str] = field(default_factory=list)
+    concept_groups: list[list[str]] = field(default_factory=list)
 
 
 class PromptComplexityAnalyzer:
@@ -179,7 +178,7 @@ class PromptComplexityAnalyzer:
             if re.search(rf"\b{tag}\b", prompt, re.IGNORECASE):
                 physics_tags.append(tag)
 
-        creature_tags: List[str] = []
+        creature_tags: list[str] = []
         for tag in (
             "anthro",
             "furry",
@@ -267,7 +266,7 @@ class ConceptFusionModule(nn.Module):
         self,
         x: torch.Tensor,
         text_emb: torch.Tensor,
-        profile: Optional[PromptComplexityProfile] = None,
+        profile: PromptComplexityProfile | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -370,7 +369,7 @@ class PhysicsAwareTokenTagger(nn.Module):
 
         self._type_to_id = {t: i for i, t in enumerate(self.PHYSICS_TYPES)}
 
-    def get_physics_tags(self, physics_tags: List[str], device: torch.device) -> torch.Tensor:
+    def get_physics_tags(self, physics_tags: list[str], device: torch.device) -> torch.Tensor:
         """Convert physics tag strings to embedding sum. Returns (D,)."""
         if not physics_tags:
             return torch.zeros(self.physics_embed.embedding_dim, device=device)
@@ -381,7 +380,7 @@ class PhysicsAwareTokenTagger(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        physics_tags: Optional[List[str]] = None,
+        physics_tags: list[str] | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -553,7 +552,7 @@ class ComplexPromptConditioner(nn.Module):
         self,
         x: torch.Tensor,
         text_emb: torch.Tensor,
-        profile: Optional[PromptComplexityProfile] = None,
+        profile: PromptComplexityProfile | None = None,
     ) -> torch.Tensor:
         """
         Args:

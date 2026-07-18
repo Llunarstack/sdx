@@ -284,10 +284,10 @@ python -m scripts.tools hybrid_dit_vit_generate \
 
 For deeper exploration:
 
-- [Training Techniques](TRAINING_TEXT_TO_PIXELS.md) - Flow matching, DPO, distillation
+- [Training Techniques](guides/TRAINING_TEXT_TO_PIXELS.md) - Flow matching, DPO, distillation
 - [Sampling Guide](HOLY_GRAIL_OVERVIEW.md) - Holy Grail scheduling, TCIS
 - [Style Genome](../README.md#style-genome-invent-original-looks) - Custom aesthetic creation
-- [Codebase Architecture](CODEBASE_GUIDE.md) - How SDX is structured
+- [Codebase Architecture](CODEBASE.md) - How SDX is structured
 
 Advanced sampling options:
 - --style-inventor-mode insane for style variation

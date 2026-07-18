@@ -69,9 +69,7 @@ def hf_token_from_hub() -> str | None:
 
 def get_hf_token() -> str | None:
     return (
-        _reject_placeholder(hf_token_from_env())
-        or _reject_placeholder(hf_token_from_secrets())
-        or hf_token_from_hub()
+        _reject_placeholder(hf_token_from_env()) or _reject_placeholder(hf_token_from_secrets()) or hf_token_from_hub()
     )
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Literal
+from typing import Any, Literal
 
 
 class ConstraintKind(str, Enum):
@@ -34,15 +34,15 @@ class GoalSpec:
 
     title: str
     narrative: str
-    constraints: List[tuple[ConstraintKind, str]] = field(default_factory=list)
-    must_depict: List[str] = field(default_factory=list)
-    must_avoid: List[str] = field(default_factory=list)
-    reference_roles: Dict[str, str] = field(default_factory=dict)
+    constraints: list[tuple[ConstraintKind, str]] = field(default_factory=list)
+    must_depict: list[str] = field(default_factory=list)
+    must_avoid: list[str] = field(default_factory=list)
+    reference_roles: dict[str, str] = field(default_factory=dict)
     ambiguity: IntentUncertainty = field(default_factory=IntentUncertainty)
-    style_tokens: List[str] = field(default_factory=list)
-    modality_hints: Dict[str, Any] = field(default_factory=dict)
+    style_tokens: list[str] = field(default_factory=list)
+    modality_hints: dict[str, Any] = field(default_factory=dict)
 
-    def to_manifest_dict(self) -> Dict[str, Any]:
+    def to_manifest_dict(self) -> dict[str, Any]:
         """JSON-serialisable snapshot for logs / agent traces."""
         return {
             "title": self.title,

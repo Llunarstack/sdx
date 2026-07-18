@@ -12,7 +12,6 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_SECRETS_PATH = r"D:\Development\secret.txt"
 
@@ -36,14 +35,14 @@ _EMAIL_KEYS = ("e", "em", "email")
 @dataclass
 class SiteCredentials:
     site: str
-    username: Optional[str] = None
-    password: Optional[str] = None
-    api_key: Optional[str] = None
-    user_id: Optional[str] = None
-    email: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
+    api_key: str | None = None
+    user_id: str | None = None
+    email: str | None = None
 
 
-def _extract_rule34_apikey_userid(value: str) -> tuple[Optional[str], Optional[str]]:
+def _extract_rule34_apikey_userid(value: str) -> tuple[str | None, str | None]:
     """Pull api_key/user_id out of a raw ``&api_key=...&user_id=...`` blob."""
     api = re.search(r"api_key=([0-9a-fA-F]+)", value)
     uid = re.search(r"user_id=(\d+)", value)
@@ -59,12 +58,10 @@ def parse_secrets_file(path: str | os.PathLike[str] | None = None) -> dict[str, 
     """Return ``{canonical_site: SiteCredentials}`` parsed from the secrets file."""
     p = get_secrets_path(path)
     if not p.is_file():
-        raise FileNotFoundError(
-            f"Secrets file not found: {p}. Pass --secrets PATH or set SDX_SECRETS_FILE."
-        )
+        raise FileNotFoundError(f"Secrets file not found: {p}. Pass --secrets PATH or set SDX_SECRETS_FILE.")
 
     out: dict[str, SiteCredentials] = {}
-    current: Optional[SiteCredentials] = None
+    current: SiteCredentials | None = None
 
     for raw_line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
         line = raw_line.strip()

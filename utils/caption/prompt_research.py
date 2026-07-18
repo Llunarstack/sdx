@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 # Explicit prompt for caption models — reduces refusals on NSFW training data.
 _UNCENSORED_VLM_PROMPT = (
@@ -33,9 +32,9 @@ class PromptResearchResult:
     negative_prompt: str = ""
     image_description: str = ""
     scene_summary: str = ""
-    retrieved_facts: List[str] = field(default_factory=list)
+    retrieved_facts: list[str] = field(default_factory=list)
     reasoning: str = ""
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
     fallback_used: bool = False
 
     def to_manifest_patch(self) -> dict:
@@ -94,7 +93,7 @@ def retrieve_rag_facts(
     corpus_path: str | Path,
     *,
     top_k: int = 8,
-) -> List[str]:
+) -> list[str]:
     if not query.strip():
         return []
     try:
@@ -108,7 +107,7 @@ def retrieve_rag_facts(
 def research_prompt_for_image(
     image_path: str | Path,
     *,
-    rag_corpus: Optional[str | Path] = None,
+    rag_corpus: str | Path | None = None,
     seed_prompt: str = "",
     creativity_level: float = 0.45,
     top_k: int = 8,
@@ -118,13 +117,13 @@ def research_prompt_for_image(
 ) -> PromptResearchResult:
     """Image → researched diffusion prompt using VLM + local RAG + Creative RAG."""
     p = Path(image_path)
-    sources: List[str] = []
+    sources: list[str] = []
     image_description = describe_image_uncensored(p, device=device) if p.is_file() else ""
     if image_description:
         sources.append("vlm_uncensored")
 
     query = " ".join(x for x in (seed_prompt, image_description) if x).strip()
-    facts: List[str] = []
+    facts: list[str] = []
     if use_rag and rag_corpus and query:
         facts = retrieve_rag_facts(query, rag_corpus, top_k=top_k)
         if facts:

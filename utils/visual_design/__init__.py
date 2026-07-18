@@ -2,10 +2,9 @@
 
 Visual-design helpers: STEM/textbook/UI/brand/architecture and extensions (editorial, decks,
 
-CAD-style flats, fashion flats). Wired from ``sample.py``, book pipeline, multimodal GenerationRequest,
+CAD-style flats, fashion flats). Wired from ``sample.py``, book pipeline, and multimodal
 
-and ``scripts.cli`` generate.
-
+GenerationRequest.
 
 
 Public names load on first access (submodules and re-exports from sibling modules).

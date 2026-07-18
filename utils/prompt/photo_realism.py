@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Set, Tuple
-
-PHOTO_REALISM_PACKS: Dict[str, Tuple[str, str]] = {
+PHOTO_REALISM_PACKS: dict[str, tuple[str, str]] = {
     "none": ("", ""),
     "documentary": (
         "photoreal documentary capture, natural lens perspective, candid realism, controlled dynamic range",
@@ -36,7 +34,7 @@ PHOTO_REALISM_PACKS: Dict[str, Tuple[str, str]] = {
     ),
 }
 
-PHOTO_COLOR_GRADE_HINTS: Dict[str, str] = {
+PHOTO_COLOR_GRADE_HINTS: dict[str, str] = {
     "none": "",
     "natural": "natural color grade, restrained saturation, realistic white balance continuity",
     "teal_orange": "cinematic teal-orange split-tone with controlled skin-tone preservation",
@@ -46,7 +44,7 @@ PHOTO_COLOR_GRADE_HINTS: Dict[str, str] = {
     "fujifilm_eterna": "fujifilm eterna inspired subtle cinematic palette, restrained contrast and organic color separation",
 }
 
-PHOTO_LIGHTING_TECHNIQUES: Dict[str, str] = {
+PHOTO_LIGHTING_TECHNIQUES: dict[str, str] = {
     "none": "",
     "three_point": "three-point lighting discipline with balanced key-fill-backlight ratio",
     "golden_hour": "golden-hour lighting technique with warm directional key and soft atmospheric fill",
@@ -57,7 +55,7 @@ PHOTO_LIGHTING_TECHNIQUES: Dict[str, str] = {
     "rembrandt": "rembrandt portrait lighting technique with controlled triangle-light facial modeling",
 }
 
-PHOTO_FILTER_HINTS: Dict[str, str] = {
+PHOTO_FILTER_HINTS: dict[str, str] = {
     "none": "",
     "pro_mist": "pro-mist diffusion filter feel, softened highlight halation without detail collapse",
     "polarizer": "polarizer filter behavior, controlled reflections, cleaner sky and surface contrast",
@@ -66,7 +64,7 @@ PHOTO_FILTER_HINTS: Dict[str, str] = {
     "clean_digital": "clean modern digital filter profile with neutral contrast and minimal color cast",
 }
 
-PHOTO_GRAIN_HINTS: Dict[str, str] = {
+PHOTO_GRAIN_HINTS: dict[str, str] = {
     "none": "",
     "fine_35mm": "fine 35mm-like grain structure with subtle luminance texture",
     "medium_35mm": "medium 35mm-like grain cadence, visible but balanced texture presence",
@@ -74,7 +72,7 @@ PHOTO_GRAIN_HINTS: Dict[str, str] = {
     "clean_digital": "clean digital noise floor with minimal grain impression",
 }
 
-_PHOTO_INTENT_TERMS: Set[str] = {
+_PHOTO_INTENT_TERMS: set[str] = {
     "photo",
     "photograph",
     "photoreal",
@@ -98,9 +96,9 @@ _PHOTO_INTENT_TERMS: Set[str] = {
 }
 
 
-def infer_photo_realism_controls(prompt: str) -> Dict[str, str]:
+def infer_photo_realism_controls(prompt: str) -> dict[str, str]:
     p = str(prompt or "").lower()
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     if any(k in p for k in ("documentary", "photojournal", "street photo", "candid")):
         out["photo_realism_pack"] = "documentary"
     elif any(k in p for k in ("studio portrait", "headshot", "beauty photo")):
@@ -155,7 +153,7 @@ def recommend_photo_post_profile(
     photo_color_grade: str,
     photo_filter: str,
     photo_grain_style: str,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Recommend stronger realism defaults for postprocess and ranking.
     """
@@ -197,7 +195,7 @@ def photo_realism_fragments(
     photo_filter: str = "none",
     photo_grain_style: str = "none",
     strength: float = 1.0,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Build positive/negative prompt fragments for photoreal/photography realism.
     """

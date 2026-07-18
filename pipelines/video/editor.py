@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 from .types import KeyframeEditJob
 
@@ -16,13 +17,13 @@ def build_sample_cmd_for_keyframe(
     job: KeyframeEditJob,
     *,
     ckpt: str,
-    repo_root: Optional[Path] = None,
+    repo_root: Path | None = None,
     image_size: int = 512,
     steps: int = 20,
     cfg_scale: float = 6.5,
     seed: int = 42,
-    extra_args: Optional[Sequence[str]] = None,
-) -> List[str]:
+    extra_args: Sequence[str] | None = None,
+) -> list[str]:
     root = repo_root or Path(__file__).resolve().parents[3]
     cmd = [
         sys.executable,
@@ -82,8 +83,8 @@ def run_keyframe_batch(
     ckpt: str,
     dry_run: bool = False,
     **kwargs: Any,
-) -> List[Path]:
-    outs: List[Path] = []
+) -> list[Path]:
+    outs: list[Path] = []
     for job in jobs:
         outs.append(run_keyframe_edit(job, ckpt=ckpt, dry_run=dry_run, **kwargs))
     return outs

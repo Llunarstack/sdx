@@ -7,8 +7,8 @@ Prompts like "empty bench", "no text", "clear sky" become explicit absence zones
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence
 
 
 @dataclass(frozen=True)
@@ -35,12 +35,12 @@ _ABSENCE_PATTERNS: Sequence[tuple[str, str, float]] = (
 class AbsenceExtractor:
     """Pull absence constraints from natural-language prompts."""
 
-    def extract(self, prompt: str) -> List[AbsenceConstraint]:
+    def extract(self, prompt: str) -> list[AbsenceConstraint]:
         text = (prompt or "").strip()
         if not text:
             return []
 
-        out: List[AbsenceConstraint] = []
+        out: list[AbsenceConstraint] = []
         seen: set[str] = set()
         for pattern, subject_tpl, strength in _ABSENCE_PATTERNS:
             for m in re.finditer(pattern, text, flags=re.IGNORECASE):
@@ -70,7 +70,7 @@ class AbsenceExtractor:
                 parts.append(c.negative_prompt_fragment)
         # dedupe preserving order
         seen: set[str] = set()
-        merged: List[str] = []
+        merged: list[str] = []
         for p in parts:
             key = p.lower()
             if key not in seen:

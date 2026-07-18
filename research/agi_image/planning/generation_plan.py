@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 
@@ -26,8 +26,8 @@ class GenerationStep:
     id: str = field(default_factory=lambda: uuid4().hex[:12])
     kind: GenerationStepKind = GenerationStepKind.diffusion_sample
     description: str = ""
-    deps: List[str] = field(default_factory=list)
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    deps: list[str] = field(default_factory=list)
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -35,13 +35,13 @@ class GenerationPlan:
     """DAG-shaped plan (deps on steps); executor walks topsort."""
 
     goal_id: str
-    steps: List[GenerationStep] = field(default_factory=list)
+    steps: list[GenerationStep] = field(default_factory=list)
 
     def add(self, step: GenerationStep) -> GenerationStep:
         self.steps.append(step)
         return step
 
-    def to_manifest_dict(self) -> Dict[str, Any]:
+    def to_manifest_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal_id,
             "steps": [
@@ -62,8 +62,8 @@ class StopConditions:
     """Budget + quality guards for iterative systems."""
 
     max_outer_loops: int = 4
-    min_clip_alignment: Optional[float] = None
-    min_edge_coherence: Optional[float] = None
+    min_clip_alignment: float | None = None
+    min_edge_coherence: float | None = None
     patience_no_gain: int = 2
 
 

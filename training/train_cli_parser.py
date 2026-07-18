@@ -283,11 +283,14 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repa-encoder-model",
         type=str,
-        default="facebook/dinov2-base",
-        help="Frozen vision encoder: dinov2* or clip* (HF id)",
+        default="facebook/dinov3-vitl16-pretrain-lvd1689m",
+        help="Frozen vision encoder: dinov3* / dinov2* / clip* (HF id)",
     )
     parser.add_argument(
-        "--repa-out-dim", type=int, default=768, help="Projection output dim; must match encoder embedding dim"
+        "--repa-out-dim",
+        type=int,
+        default=1024,
+        help="Projection output dim; must match encoder embedding dim (DINOv3-L=1024)",
     )
     parser.add_argument(
         "--repa-projector-hidden-dim", type=int, default=0, help="REPA projector hidden dim (0=linear head)"

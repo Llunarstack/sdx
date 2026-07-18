@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 from .video_io import ffmpeg_available
 
@@ -14,7 +14,7 @@ __all__ = ["extract_audio", "mux_audio_onto_video", "collect_segment_audio"]
 
 def extract_audio(
     video_path: str | Path, out_path: str | Path, *, start_sec: float = 0.0, duration_sec: float = 0.0
-) -> Optional[Path]:
+) -> Path | None:
     if not ffmpeg_available():
         return None
     src = Path(video_path)
@@ -36,7 +36,7 @@ def extract_audio(
         return None
 
 
-def mux_audio_onto_video(video_path: str | Path, audio_path: str | Path, out_path: Optional[str | Path] = None) -> Path:
+def mux_audio_onto_video(video_path: str | Path, audio_path: str | Path, out_path: str | Path | None = None) -> Path:
     vid = Path(video_path)
     aud = Path(audio_path)
     out = Path(out_path) if out_path else vid
@@ -69,14 +69,14 @@ def collect_segment_audio(
     clip_paths: Sequence[str],
     work_dir: str | Path,
     *,
-    durations: Optional[Sequence[float]] = None,
-) -> Optional[Path]:
+    durations: Sequence[float] | None = None,
+) -> Path | None:
     """Concatenate per-segment audio beds into one track."""
     if not ffmpeg_available():
         return None
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
-    parts: List[Path] = []
+    parts: list[Path] = []
     for i, cp in enumerate(clip_paths):
         if not cp or not Path(cp).is_file():
             continue

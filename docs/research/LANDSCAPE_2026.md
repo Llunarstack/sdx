@@ -60,7 +60,7 @@ The field has shifted from “single text-to-image box” toward **integrated cr
 
 **SDX today**
 
-- Training/inference knobs that reduce **CFG blowout** and oversaturation: CFG rescale, dynamic threshold, Min-SNR, noise offset ([QUALITY_AND_ISSUES.md](../QUALITY.md)).
+- Training/inference knobs that reduce **CFG blowout** and oversaturation: CFG rescale, dynamic threshold, Min-SNR, noise offset ([QUALITY.md](../QUALITY.md)).
 - **Refinement** and post-process (`utils/quality/quality.py` naturalize/sharpen).
 - **Domain / style** tooling ([STYLE_ARTIST_TAGS.md](../reference/STYLE_ARTIST_TAGS.md), [DOMAINS.md](../reference/DOMAINS.md)).
 

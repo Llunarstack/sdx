@@ -11,7 +11,6 @@ Falls back to pure PyTorch when the native library is not built.
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -20,7 +19,7 @@ from sdx_native.native_tools import cuda_gaussian_blur_shared_library_path
 
 class CudaGaussianBlurLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_gaussian_blur_shared_library_path()
         if p is None:
             return
@@ -67,7 +66,7 @@ class CudaGaussianBlurLib:
         return dst
 
 
-_LIB: Optional[CudaGaussianBlurLib] = None
+_LIB: CudaGaussianBlurLib | None = None
 
 
 def _get_lib() -> CudaGaussianBlurLib:
@@ -77,7 +76,7 @@ def _get_lib() -> CudaGaussianBlurLib:
     return _LIB
 
 
-def maybe_gaussian_blur_cuda(x: np.ndarray, sigma: float) -> Optional[np.ndarray]:
+def maybe_gaussian_blur_cuda(x: np.ndarray, sigma: float) -> np.ndarray | None:
     """Return blurred array via CUDA kernel, or None if not available."""
     lib = _get_lib()
     if not lib.available:

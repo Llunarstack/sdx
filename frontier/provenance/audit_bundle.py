@@ -10,9 +10,10 @@ import hashlib
 import json
 import platform
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any
 
 
 @dataclass
@@ -23,13 +24,13 @@ class GenerationAudit:
     negative_prompt: str
     seed: int
     ckpt_path: str
-    args: Dict[str, Any] = field(default_factory=dict)
-    frontier_plan: Optional[Dict[str, Any]] = None
+    args: dict[str, Any] = field(default_factory=dict)
+    frontier_plan: dict[str, Any] | None = None
     git_commit: str = ""
     python_version: str = ""
     platform: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -43,12 +44,12 @@ def build_audit_bundle(
     negative_prompt: str = "",
     seed: int = 0,
     ckpt_path: str = "",
-    args: Optional[Mapping[str, Any]] = None,
-    frontier_plan: Optional[Any] = None,
+    args: Mapping[str, Any] | None = None,
+    frontier_plan: Any | None = None,
     git_commit: str = "",
 ) -> GenerationAudit:
     fp = _short_hash(f"{prompt}|{seed}|{ckpt_path}|{time.time()}")
-    plan_dict: Optional[Dict[str, Any]] = None
+    plan_dict: dict[str, Any] | None = None
     if frontier_plan is not None:
         if hasattr(frontier_plan, "__dataclass_fields__"):
             from dataclasses import asdict as dc_asdict
@@ -57,7 +58,7 @@ def build_audit_bundle(
         elif isinstance(frontier_plan, dict):
             plan_dict = dict(frontier_plan)
 
-    safe_args: Dict[str, Any] = {}
+    safe_args: dict[str, Any] = {}
     if args:
         for k, v in args.items():
             if k.startswith("_"):

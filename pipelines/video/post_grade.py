@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import numpy as np
 
@@ -38,7 +37,7 @@ def grade_frame(rgb: np.ndarray, preset: str = "cinematic") -> np.ndarray:
     return np.clip(x, 0, 255).astype(np.uint8)
 
 
-def apply_grade_to_sequence(frame_paths: List[Path], preset: str) -> List[Path]:
+def apply_grade_to_sequence(frame_paths: list[Path], preset: str) -> list[Path]:
     if not preset or preset.lower() in ("none", "off"):
         return frame_paths
     for fp in frame_paths:

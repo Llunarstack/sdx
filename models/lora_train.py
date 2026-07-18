@@ -15,7 +15,7 @@ the same rank.
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,7 @@ import torch.nn as nn
 # Default injection targets: attention projections and MLP layers, matched by
 # substring against each Linear's dotted module path. Covers the DiT blocks
 # without touching embedders/heads.
-DEFAULT_TARGETS: Tuple[str, ...] = ("qkv", "q_proj", "k_proj", "v_proj", "proj", "fc1", "fc2", "mlp")
+DEFAULT_TARGETS: tuple[str, ...] = ("qkv", "q_proj", "k_proj", "v_proj", "proj", "fc1", "fc2", "mlp")
 
 
 class TrainableLoRALinear(nn.Module):
@@ -72,7 +72,7 @@ class TrainableLoRALinear(nn.Module):
         eff_w = self.dora_magnitude.unsqueeze(1) * directional
         return nn.functional.linear(x, eff_w, self.linear.bias)
 
-    def adapter_state(self, base_key: str) -> Dict[str, torch.Tensor]:
+    def adapter_state(self, base_key: str) -> dict[str, torch.Tensor]:
         """Adapter tensors keyed for the inference loader in models/lora.py."""
         out = {
             f"{base_key}.lora_down.weight": self.lora_down.detach().cpu(),
@@ -84,11 +84,9 @@ class TrainableLoRALinear(nn.Module):
         return out
 
 
-def _iter_target_linears(
-    model: nn.Module, targets: Sequence[str]
-) -> List[Tuple[nn.Module, str, str, nn.Linear]]:
+def _iter_target_linears(model: nn.Module, targets: Sequence[str]) -> list[tuple[nn.Module, str, str, nn.Linear]]:
     """Yield (parent_module, attr_name, dotted_path, linear) for matching Linears."""
-    found: List[Tuple[nn.Module, str, str, nn.Linear]] = []
+    found: list[tuple[nn.Module, str, str, nn.Linear]] = []
     module_by_path = dict(model.named_modules())
     for path, module in module_by_path.items():
         if not isinstance(module, nn.Linear):
@@ -107,8 +105,8 @@ def inject_trainable_lora(
     rank: int = 16,
     alpha: float = 16.0,
     use_dora: bool = False,
-    targets: Optional[Sequence[str]] = None,
-) -> Tuple[List[nn.Parameter], int]:
+    targets: Sequence[str] | None = None,
+) -> tuple[list[nn.Parameter], int]:
     """Freeze ``model`` and wrap target Linear layers with trainable adapters.
 
     Returns ``(trainable_params, num_layers_wrapped)``.
@@ -129,9 +127,9 @@ def inject_trainable_lora(
     return trainable, wrapped
 
 
-def lora_state_dict(model: nn.Module) -> Dict[str, torch.Tensor]:
+def lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
     """Collect adapter-only tensors from all injected layers, keyed for inference."""
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     for path, module in model.named_modules():
         if isinstance(module, TrainableLoRALinear):
             # ``path`` ends at the wrapper; the inference loader resolves the same

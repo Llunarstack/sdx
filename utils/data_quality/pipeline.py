@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -36,11 +36,11 @@ class FilterConfig:
     dedup: str = ""  # "", "phash", "md5"
     min_caption_len: int = 0
     max_caption_len: int = 0
-    bad_words: Tuple[str, ...] = ()
+    bad_words: tuple[str, ...] = ()
     min_weight: float = 0.0
     min_clip_sim: float = 0.0
     min_aesthetic_proxy: float = 0.0
-    image_root: Optional[Path] = None
+    image_root: Path | None = None
 
 
 def _perceptual_hash(path: Path, size: int = 8) -> str:
@@ -67,7 +67,7 @@ def _file_md5(path: Path) -> str:
     return h.hexdigest()
 
 
-def _resolve_image(path_str: str, *, jsonl_dir: Path, image_root: Optional[Path]) -> Path:
+def _resolve_image(path_str: str, *, jsonl_dir: Path, image_root: Path | None) -> Path:
     p = Path(path_str)
     if p.is_absolute():
         return p
@@ -77,12 +77,12 @@ def _resolve_image(path_str: str, *, jsonl_dir: Path, image_root: Optional[Path]
 
 
 def filter_jsonl_row(
-    row: Dict[str, Any],
+    row: dict[str, Any],
     cfg: FilterConfig,
     *,
-    seen_hashes: Set[str],
+    seen_hashes: set[str],
     jsonl_dir: Path,
-) -> Tuple[Optional[Dict[str, Any]], str]:
+) -> tuple[dict[str, Any] | None, str]:
     """Return (row, reason) or (None, drop_reason)."""
     path = row.get("image_path") or row.get("path") or row.get("image") or ""
     cap = (row.get("caption") or row.get("text") or "").strip()
@@ -122,18 +122,18 @@ def filter_jsonl_row(
 
 
 def filter_jsonl_file(
-    input_path: Union[str, Path],
+    input_path: str | Path,
     *,
-    config: Optional[FilterConfig] = None,
-    output_path: Optional[Union[str, Path]] = None,
-) -> Tuple[List[Dict[str, Any]], FilterStats]:
+    config: FilterConfig | None = None,
+    output_path: str | Path | None = None,
+) -> tuple[list[dict[str, Any]], FilterStats]:
     """Filter a JSONL manifest; optionally write output."""
     cfg = config or FilterConfig()
     inp = Path(input_path)
     jsonl_dir = inp.parent
-    seen: Set[str] = set()
+    seen: set[str] = set()
     stats = FilterStats()
-    out_rows: List[Dict[str, Any]] = []
+    out_rows: list[dict[str, Any]] = []
     with inp.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()

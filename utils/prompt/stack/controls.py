@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Dict, Mapping
+from typing import Any
 
 from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
 
@@ -60,7 +61,7 @@ class ContentControlState:
     allow_text_in_image: bool = False
     one_shot_boost: bool = True
 
-    def to_apply_kwargs(self) -> Dict[str, Any]:
+    def to_apply_kwargs(self) -> dict[str, Any]:
         return asdict(self)
 
 

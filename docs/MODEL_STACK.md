@@ -1,18 +1,29 @@
 # Local model stack (`pretrained/`)
 
-When folders exist under `pretrained/`, paths resolve automatically (see `utils/modeling/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](FILES.md)**.
+When folders exist under `pretrained/`, paths resolve automatically (see `utils/modeling/model_paths.py`). For the full runtime picture (repo folders, `ViT/` vs DiT, diagrams), see the **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** and **[FILES.md](reference/FILES.md)**.
+
+**2026 recommended hub ids (no auto-download):** see **[PRETRAINED_RECOMMENDED.md](reference/PRETRAINED_RECOMMENDED.md)**. Defaults prefer **Qwen3-8B** (T2I text encoder), **Qwen3-14B** (LLM), **Qwen3-VL-8B** (VLM), **DINOv3-L**, **SigLIP2**, **HPSv3**, **moondream3** — while still honoring legacy local folders (`Qwen2.5-14B-Instruct`, `DINOv2-Large`, …).
 
 | Role | Folder / default |
 |------|------------------|
-| T5-XXL | `pretrained/T5-XXL` or `google/t5-v1_1-xxl` |
+| **Qwen3-8B (T2I text encoder)** | `pretrained/Qwen3-8B` or `Qwen/Qwen3-8B` |
+| **Qwen3-14B (prompt LLM)** | `pretrained/Qwen3-14B` or `Qwen/Qwen3-14B` |
+| **Qwen3-VL-8B (VLM)** | `pretrained/Qwen3-VL-8B-Instruct` or `Qwen/Qwen3-VL-8B-Instruct` |
+| T5-XXL (classic DiT TE) | `pretrained/T5-XXL` or `google/t5-v1_1-xxl` |
 | CLIP ViT-L/14 | `pretrained/CLIP-ViT-L-14` or `openai/clip-vit-large-patch14` |
 | CLIP ViT-bigG/14 | `pretrained/CLIP-ViT-bigG-14` or LAION hub id |
-| DINOv2 (REPA / ViT) | `pretrained/DINOv2-Large` or `facebook/dinov2-large` |
-| SigLIP | `pretrained/SigLIP-SO400M` |
-| Qwen LLM | `pretrained/Qwen2.5-14B-Instruct` |
+| **DINOv3-L (REPA / critics)** | `pretrained/DINOv3-ViT-L16` or `facebook/dinov3-vitl16-pretrain-lvd1689m` |
+| Depth (DA3) | `pretrained/Depth-Anything-V3-Large` or `depth-anything/DA3-LARGE-1.1` |
+| FLUX.2 Klein (external) | `pretrained/FLUX.2-klein-9B` or `black-forest-labs/FLUX.2-klein-9B` |
+| DC-AE (modern VAE) | `pretrained/DC-AE-f32c32` or `mit-han-lab/dc-ae-f32c32-mix-1.0` |
+| DINOv2 (legacy) | `pretrained/DINOv2-Large` or `facebook/dinov2-large` |
+| **SigLIP2** | `pretrained/SigLIP2-SO400M` or `google/siglip2-so400m-patch16-384` |
+| SigLIP (legacy) | `pretrained/SigLIP-SO400M` |
+| Qwen LLM (legacy) | `pretrained/Qwen2.5-14B-Instruct` |
 | Stable Cascade | `pretrained/StableCascade-Prior`, `pretrained/StableCascade-Decoder` |
 | LongCLIP-L (long prompts) | `pretrained/LongCLIP-L` or `creative-graphic-design/LongCLIP-L` |
-| moondream2 (caption/VQA helper) | `pretrained/moondream2` or `vikhyatoolkit/moondream2` |
+| **moondream3** | `pretrained/moondream3-preview` or `moondream/moondream3-preview` |
+| moondream2 (legacy) | `pretrained/moondream2` |
 | Marigold depth/normals | `pretrained/Marigold-Depth-v1-1`, `pretrained/Marigold-Normals-v1-1` |
 | TAESD / TAESDXL (fast preview VAE) | `pretrained/TAESD`, `pretrained/TAESDXL` |
 | Consistency Decoder | `pretrained/Consistency-Decoder` or `openai/consistency-decoder` |
@@ -20,7 +31,8 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | LAION Aesthetic v2 | `pretrained/LAION-Aesthetic-v2` |
 | CodeFormer (face restore helper) | `pretrained/CodeFormer` |
 | AnyDoor reference weights | `pretrained/AnyDoor-Ref` |
-| HPSv2 (preference scorer) | `pretrained/HPSv2-hf` or `adams-story/HPSv2-hf` |
+| **HPSv3** | `pretrained/HPSv3` or `MizzenAI/HPSv3` |
+| HPSv2 (legacy) | `pretrained/HPSv2-hf` |
 | BLIP captioning (base) | `pretrained/BLIP-image-captioning-base` or `Salesforce/blip-image-captioning-base` |
 | Kosmos-2 VLM | `pretrained/Kosmos-2-patch14-224` or `microsoft/kosmos-2-patch14-224` |
 | CRAFT text detector | `pretrained/CRAFT-text-detector` or `boomb0om/CRAFT-text-detector` |
@@ -57,8 +69,11 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | LayoutLMv3 / Donut-docvqa | document layout OCR |
 | NSFW-Detector | safety gate scaffold |
 | sd-vae-ft-mse / sdxl-vae-fp16-fix | VAE decode scaffolds |
-| LLaVA-v1.6 / Qwen2.5-VL-7B / PaliGemma2 / InternVL2-1B | latest VLM wave |
-| DINOv3 / MobileCLIP-S2 / UMT5-XXL | next-gen encoders |
+| LLaVA-v1.6 / Qwen2.5-VL-7B / PaliGemma2 / InternVL2-1B | previous VLM wave |
+| InternVL3 / Gemma-3 / Qwen3-VL | current VLM wave |
+| DINOv3 / MobileCLIP-S2 / UMT5-XXL | modern encoders |
+| Qwen-Image / FLUX.2 Klein / FLUX.2-dev | external MMDiT foundations (Diffusers) |
+| DC-AE / Depth Anything 3 | modern VAE + depth scaffolds |
 | ControlNet Union/OpenPose SDXL | SDXL control scaffolds |
 | SAM2 Base/Small + GroundingDINO-1.5 | mid-tier seg/detect |
 | Pix2Struct / DePlot / vit-gpt2-coco | doc/chart/caption helpers |
@@ -81,9 +96,9 @@ Runtime uses `resolve_model_path_require_weights()` so config-only local folders
 
 ## How this maps to the SDX pipeline
 
-- **DiT generation** uses **text** encoders (T5, optionally + CLIP fusion) and **image latents** from VAE/RAE — see the main **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** for full diagrams (DiT vs `ViT/` QA tools vs REPA).
+- **DiT generation** uses **text** encoders (T5 by default, optionally + CLIP fusion) and **image latents** from VAE/RAE — see the main **[README § Architecture and pipeline](../README.md#architecture-and-pipeline)** for full diagrams (DiT vs `ViT/` QA tools vs REPA). Qwen3-8B is the recommended TE for external FLUX.2 Klein / Qwen-Image stacks (sibling Diffusers), registered under `pretrained/Qwen3-8B`.
 - **`ViT/`** in this repo is a **separate** scoring/ranking stack (timm ViT on manifests), not the same module as the DiT generator.
-- **REPA** uses a **frozen vision** model (often DINOv2) to align DiT **internal** features during training.
+- **REPA** uses a **frozen vision** model (default **DINOv3-L**, legacy DINOv2 / CLIP) to align DiT **internal** features during training.
 
 ## Training
 
@@ -113,11 +128,15 @@ When set, CLIP encoders receive labeled section captions; LongCLIP (penta) recei
 
 `sample.py` reads `text_encoder_mode` from the checkpoint config and loads the same stack.
 
+**Solvers / schedules (2026):** defaults are `--scheduler ays_dit --solver dpmpp_2m` (VP) and
+`--flow-solver dpmpp_2m --flow-schedule ays` (flow). See **[guides/SAMPLING.md](guides/SAMPLING.md)**.
+Real backends live in `diffusion/solvers/` (DPM-Solver++ 2M/3M, UniPC, flow midpoint/AB2).
+
 ## Other
 
 - **Qwen prompt expansion:** `utils/analysis/llm_client.py` (`load_qwen_causal_lm`, `expand_prompt_qwen`).
 - **Stable Cascade (Diffusers):** `python scripts/cascade_generate.py --prompt "..."` — separate from DiT; does not share the DiT forward pass.
-- **Advanced optional downloads:** `python scripts/download/download_models.py --advanced` to fetch LongCLIP/moondream2/Marigold/TAESD/CodeFormer/Consistency-Decoder/ConvNeXtV2/LAION Aesthetic v2/AnyDoor reference.
+- **Advanced optional downloads:** `python scripts/download/download_models.py --advanced` to fetch LongCLIP / moondream3 / HPSv3 / DINOv3 / SigLIP2 / Qwen3-8B / Marigold / TAESD / Consistency-Decoder / ConvNeXtV2 / LAION Aesthetic v2 / AnyDoor reference.
 
 ---
 

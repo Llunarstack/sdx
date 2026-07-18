@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from data.manifest_utils import negative_caption_from_row, pick_training_manifest, read_manifest_rows
+from data.manifest_utils import negative_caption_from_row, pick_training_manifest
 
 
 def test_pick_training_manifest_prefers_enriched(tmp_path: Path):
@@ -41,9 +39,8 @@ def test_negative_caption_from_research_fields():
 
 
 def test_dataset_reads_negative_prompt_hint(tmp_path: Path):
-    from data.t2i_dataset import Text2ImageDataset
-
     import numpy as np
+    from data.t2i_dataset import Text2ImageDataset
     from PIL import Image
 
     root = tmp_path / "data"
@@ -74,8 +71,8 @@ def test_control_manifest_row_shape(tmp_path: Path):
     data_root = tmp_path / "sdx"
     img_dir = data_root / "danbooru" / "images"
     img_dir.mkdir(parents=True)
-    from PIL import Image
     import numpy as np
+    from PIL import Image
 
     img = img_dir / "abc.png"
     Image.fromarray(np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)).save(img)

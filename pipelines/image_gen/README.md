@@ -15,12 +15,12 @@
 
 | Goal | Doc / script |
 |------|----------------|
-| Minimal sanity check | [docs/SMOKE_TRAINING.md](../../docs/SMOKE_TRAINING.md), `scripts/tools/make_smoke_dataset.py` |
-| Hugging Face → JSONL | [docs/DANBOORU_HF.md](../../docs/DANBOORU_HF.md), `scripts/training/hf_export_to_sdx_manifest.py`, `scripts/training/hf_download_and_train.py` |
-| Hardware / VRAM | [docs/HARDWARE.md](../../docs/HARDWARE.md) |
+| Minimal sanity check | [docs/SMOKE_TRAINING.md](../../docs/guides/SMOKE_TRAINING.md), `scripts/tools/make_smoke_dataset.py` |
+| Hugging Face → JSONL | [docs/DANBOORU_HF.md](../../docs/guides/DANBOORU_HF.md), `scripts/training/hf_export_to_sdx_manifest.py`, `scripts/training/hf_download_and_train.py` |
+| Hardware / VRAM | [docs/HARDWARE.md](../../docs/guides/HARDWARE.md) |
 
 ## Conventions
 
 - Put checkpoints under something like `results/<your_run>/` (e.g. `results/general_baseline/`).
 - Use JSONL + `data_path` as in the main [README](../../README.md#data-format).
-- For **regional / layout** captions without switching pipelines, see [docs/REGION_CAPTIONS.md](../../docs/REGION_CAPTIONS.md).
+- For **regional / layout** captions without switching pipelines, see [docs/REGION_CAPTIONS.md](../../docs/reference/REGION_CAPTIONS.md).

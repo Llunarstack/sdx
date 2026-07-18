@@ -58,4 +58,4 @@ T5 embeddings are cached for repeated prompts (`_t5_cache` in `sample.py`). Cond
 ## See also
 
 - [local_ci_mirror.md](local_ci_mirror.md) — verify changes locally
-- [CODEBASE_GUIDE.md](../CODEBASE_GUIDE.md) — module map
+- [CODEBASE.md](../CODEBASE.md) — module map

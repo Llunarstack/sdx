@@ -8,7 +8,6 @@ low-tension prompts lock composition early and texture late.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 __all__ = ["TensionField", "TensionFieldPlan", "build_tension_field"]
 
@@ -16,8 +15,8 @@ __all__ = ["TensionField", "TensionFieldPlan", "build_tension_field"]
 @dataclass(frozen=True)
 class TensionFieldPlan:
     tension: float
-    prompt_fragments: Tuple[str, ...]
-    step_emphasis: Tuple[float, ...]
+    prompt_fragments: tuple[str, ...]
+    step_emphasis: tuple[float, ...]
     cfg_boost: float
 
 

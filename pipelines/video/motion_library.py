@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = ["MotionPack", "MotionLibrary", "parse_motion_library", "resolve_motion_clip"]
 
@@ -13,7 +14,7 @@ __all__ = ["MotionPack", "MotionLibrary", "parse_motion_library", "resolve_motio
 class MotionPack:
     id: str
     clip: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     category: str = "general"
     camera: str = ""
     description: str = ""
@@ -22,9 +23,9 @@ class MotionPack:
 
 @dataclass(slots=True)
 class MotionLibrary:
-    packs: Dict[str, MotionPack] = field(default_factory=dict)
+    packs: dict[str, MotionPack] = field(default_factory=dict)
 
-    def get(self, pack_id: str) -> Optional[MotionPack]:
+    def get(self, pack_id: str) -> MotionPack | None:
         return self.packs.get(pack_id)
 
 

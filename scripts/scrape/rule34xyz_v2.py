@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 import requests
 
@@ -106,7 +106,7 @@ def tags_from_post(post: dict) -> tuple[list[str], list[str], list[str], list[st
     return all_tags, artists, characters, copyrights
 
 
-def post_from_api(post: dict, *, site: str = "rule34xyz") -> Optional[Post]:
+def post_from_api(post: dict, *, site: str = "rule34xyz") -> Post | None:
     file_url, ext = file_url_from_post(post)
     if not file_url:
         return None
@@ -141,7 +141,7 @@ class Rule34xyzV2Adapter:
     def __init__(self, creds: SiteCredentials) -> None:
         self.creds = creds
 
-    def build_params(self, tags: str, page: int, before_id: Optional[int] = None) -> dict:
+    def build_params(self, tags: str, page: int, before_id: int | None = None) -> dict:
         raise NotImplementedError("rule34xyz uses iter_posts()")
 
     def parse_posts(self, data) -> Iterator[Post]:
@@ -159,7 +159,7 @@ class Rule34xyzV2Adapter:
         login(session, self.creds, timeout_s=timeout_s)
         include_tags = [t for t in tags.split() if t.strip()] if tags else []
         skip = 0
-        cursor: Optional[str] = None
+        cursor: str | None = None
         yielded = 0
         per_page = self.page_limit
 

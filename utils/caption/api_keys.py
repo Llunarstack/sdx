@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import Optional
 
 
 @lru_cache(maxsize=8)
-def get_api_key(service: str, secrets_path: Optional[str] = None) -> str:
+def get_api_key(service: str, secrets_path: str | None = None) -> str:
     """Optional API key for SauceNAO/TinEye (faster limits). Web upload works without one."""
     svc = service.strip().lower()
     env_name = f"{svc.upper()}_API_KEY"

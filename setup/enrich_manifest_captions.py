@@ -36,8 +36,7 @@ def _row_needs_enrich(row: dict, *, use_prompt_research: bool) -> bool:
     if use_prompt_research:
         sources = [str(s) for s in (row.get("tag_sources") or [])]
         return not any(
-            x in sources or any(x in s for s in sources)
-            for x in ("creative_rag", "vlm_uncensored", "rag_fallback")
+            x in sources or any(x in s for s in sources) for x in ("creative_rag", "vlm_uncensored", "rag_fallback")
         )
     return not row.get("scene_summary")
 

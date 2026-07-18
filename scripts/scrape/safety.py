@@ -14,7 +14,7 @@ Defense in depth:
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 # Exact-match tokens (boorus tokenize tags precisely, so exact match avoids
 # substring false positives like "cuba"/"incubator" while staying unbypassable

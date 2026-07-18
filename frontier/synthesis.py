@@ -7,7 +7,7 @@ Use from ``sample.py`` with ``--frontier deep`` (when wired) or directly in tool
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .adherence.token_emphasis import TokenEmphasisMap, TokenEmphasisPlanner
 from .causality.physical_plausibility import PhysicalPlausibilityScanner, PlausibilityFlag
@@ -20,11 +20,11 @@ from .uncertainty.confidence_gate import ConfidenceGate, UncertaintyReport
 @dataclass
 class DeepFrontierPlan:
     base: FrontierPlan
-    plausibility: List[PlausibilityFlag] = field(default_factory=list)
-    uncertainty: Optional[UncertaintyReport] = None
-    relations: Optional[SceneRelationGraph] = None
-    token_emphasis: Optional[TokenEmphasisMap] = None
-    compute: Optional[ComputeBudget] = None
+    plausibility: list[PlausibilityFlag] = field(default_factory=list)
+    uncertainty: UncertaintyReport | None = None
+    relations: SceneRelationGraph | None = None
+    token_emphasis: TokenEmphasisMap | None = None
+    compute: ComputeBudget | None = None
     deep_augmented_prompt: str = ""
 
 
@@ -74,7 +74,7 @@ def analyze_deep(
     )
 
 
-def deep_sample_kwargs(plan: DeepFrontierPlan, *, base_negative: str = "") -> Dict[str, Any]:
+def deep_sample_kwargs(plan: DeepFrontierPlan, *, base_negative: str = "") -> dict[str, Any]:
     from .engine import FrontierEngine
 
     eng = FrontierEngine()

@@ -11,9 +11,8 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from typing import FrozenSet, List, Set, Tuple
 
-_ZWSP_CHARS: FrozenSet[str] = frozenset(("\u200b", "\u200c", "\u200d", "\ufeff"))
+_ZWSP_CHARS: frozenset[str] = frozenset(("\u200b", "\u200c", "\u200d", "\ufeff"))
 _C0_REMOVE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
@@ -49,7 +48,7 @@ def normalize_caption_for_training(
     if form not in ("NFC", "NFD", "NFKC", "NFKD"):
         form = "NFKC"
 
-    parts: List[str] = []
+    parts: list[str] = []
     for segment in caption.split(","):
         s = segment
         if strip_controls:
@@ -85,11 +84,11 @@ def caption_fingerprint(
     return hashlib.sha256(data).hexdigest()
 
 
-def _token_set(text: str) -> Set[str]:
+def _token_set(text: str) -> set[str]:
     return {t.strip().lower() for t in (text or "").split(",") if t.strip()}
 
 
-def pos_neg_token_overlap(positive: str, negative: str) -> Tuple[int, int, float]:
+def pos_neg_token_overlap(positive: str, negative: str) -> tuple[int, int, float]:
     """
     Tokens in both positive and negative (case-insensitive).
     Returns ``(overlap_count, union_count, jaccard)``.
@@ -104,7 +103,7 @@ def pos_neg_token_overlap(positive: str, negative: str) -> Tuple[int, int, float
     return len(inter), len(union), j
 
 
-def jsonl_row_caption_keys() -> Tuple[str, ...]:
+def jsonl_row_caption_keys() -> tuple[str, ...]:
     """Field names for caption text in a manifest dict."""
     return ("caption", "text", "prompt")
 

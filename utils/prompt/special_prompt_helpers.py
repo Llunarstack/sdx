@@ -32,7 +32,6 @@ Design notes
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Tuple
 
 __all__ = [
     # Category constants
@@ -94,7 +93,7 @@ CATEGORY_MINIMALIST: str = "minimalist"
 CATEGORY_NSFW_PRECISION: str = "nsfw_precision"
 CATEGORY_STANDARD: str = "standard"
 
-_ALL_CATEGORIES: Tuple[str, ...] = (
+_ALL_CATEGORIES: tuple[str, ...] = (
     CATEGORY_WEIRD,
     CATEGORY_HORROR,
     CATEGORY_NARRATIVE,
@@ -120,7 +119,7 @@ def merge_csv_unique(*chunks: str) -> str:
     ``style_guidance.py`` so callers can use either interchangeably.
     """
     seen: set = set()
-    out: List[str] = []
+    out: list[str] = []
     for chunk in chunks:
         if not chunk or not str(chunk).strip():
             continue
@@ -148,7 +147,7 @@ def merge_csv_unique(*chunks: str) -> str:
 # Strategy: anchor the unreality with concrete impossible specifics, suppress
 #   the model's tendency to resolve contradictions into coherent scenes.
 
-WEIRD_POSITIVE_TOKENS: List[str] = [
+WEIRD_POSITIVE_TOKENS: list[str] = [
     # Anchor the surreal register — these tokens activate the right latent region
     "surreal",
     "dreamlike logic",
@@ -185,7 +184,7 @@ WEIRD_POSITIVE_TOKENS: List[str] = [
     "abstract but readable",
 ]
 
-WEIRD_NEGATIVE_TOKENS: List[str] = [
+WEIRD_NEGATIVE_TOKENS: list[str] = [
     # Suppress the "colorful psychedelic" default
     "psychedelic colors",
     "rainbow swirls",
@@ -217,7 +216,7 @@ WEIRD_NEGATIVE_TOKENS: List[str] = [
 ]
 
 
-def weird_helpers(prompt: str) -> Tuple[str, str]:
+def weird_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for weird/surreal/abstract prompts.
 
@@ -240,8 +239,8 @@ def weird_helpers(prompt: str) -> Tuple[str, str]:
     is_liminal = any(w in p for w in ("liminal", "backrooms", "empty corridor", "abandoned", "void"))
     is_body_horror_adjacent = any(w in p for w in ("melting", "morphing", "transforming", "fusing"))
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     if is_abstract:
         # Abstract needs composition anchors more than surreal narrative anchors
@@ -304,7 +303,7 @@ def weird_helpers(prompt: str) -> Tuple[str, str]:
 # Strategy: separate atmospheric dread from visceral horror; use specific
 #   cinematographic and literary horror references to activate the right register.
 
-HORROR_POSITIVE_TOKENS: List[str] = [
+HORROR_POSITIVE_TOKENS: list[str] = [
     # Atmospheric dread anchors
     "atmospheric horror",
     "dread atmosphere",
@@ -346,7 +345,7 @@ HORROR_POSITIVE_TOKENS: List[str] = [
     "high quality horror illustration",
 ]
 
-HORROR_NEGATIVE_TOKENS: List[str] = [
+HORROR_NEGATIVE_TOKENS: list[str] = [
     # Suppress Halloween-default
     "halloween",
     "jack-o-lantern",
@@ -385,7 +384,7 @@ HORROR_NEGATIVE_TOKENS: List[str] = [
 ]
 
 
-def horror_helpers(prompt: str) -> Tuple[str, str]:
+def horror_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for horror/dark/disturbing prompts.
 
@@ -409,8 +408,8 @@ def horror_helpers(prompt: str) -> Tuple[str, str]:
     is_folk_horror = any(w in p for w in ("folk horror", "cult", "ritual", "pagan", "rural horror", "wicker"))
     is_ghost = any(w in p for w in ("ghost", "spirit", "apparition", "haunted", "specter", "wraith"))
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     if is_cosmic:
         pos_extras += [
@@ -483,7 +482,7 @@ def horror_helpers(prompt: str) -> Tuple[str, str]:
 # Strategy: use cinematographic storytelling tokens, environmental narrative
 #   anchors, and temporal cue tokens to preserve the story in the image.
 
-NARRATIVE_POSITIVE_TOKENS: List[str] = [
+NARRATIVE_POSITIVE_TOKENS: list[str] = [
     # Temporal narrative anchors
     "narrative moment",
     "story-driven composition",
@@ -525,7 +524,7 @@ NARRATIVE_POSITIVE_TOKENS: List[str] = [
     "sharp focus on story elements",
 ]
 
-NARRATIVE_NEGATIVE_TOKENS: List[str] = [
+NARRATIVE_NEGATIVE_TOKENS: list[str] = [
     # Suppress static portrait default
     "static portrait",
     "posed",
@@ -556,7 +555,7 @@ NARRATIVE_NEGATIVE_TOKENS: List[str] = [
 ]
 
 
-def narrative_helpers(prompt: str) -> Tuple[str, str]:
+def narrative_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for narrative/story-driven prompts.
 
@@ -605,8 +604,8 @@ def narrative_helpers(prompt: str) -> Tuple[str, str]:
         phrase in p for phrase in ("discovers", "finding", "stumbles upon", "comes across", "first sight of")
     )
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     if is_moment_before:
         pos_extras += [
@@ -673,7 +672,7 @@ def narrative_helpers(prompt: str) -> Tuple[str, str]:
 # Strategy: translate emotion into its visual language (color, light, texture,
 #   composition) and anchor the mood register before subject tokens.
 
-EMOTION_POSITIVE_TOKENS: List[str] = [
+EMOTION_POSITIVE_TOKENS: list[str] = [
     # Mood-first framing anchors
     "mood-driven composition",
     "emotion as atmosphere",
@@ -716,7 +715,7 @@ EMOTION_POSITIVE_TOKENS: List[str] = [
     "evocative atmosphere",
 ]
 
-EMOTION_NEGATIVE_TOKENS: List[str] = [
+EMOTION_NEGATIVE_TOKENS: list[str] = [
     # Suppress emotion-override by subject tags
     "neutral expression",
     "blank face",
@@ -747,7 +746,7 @@ EMOTION_NEGATIVE_TOKENS: List[str] = [
 ]
 
 # Emotion-to-visual-language lookup for specific emotion tokens
-_EMOTION_VISUAL_MAP: Dict[str, Tuple[List[str], List[str]]] = {
+_EMOTION_VISUAL_MAP: dict[str, tuple[list[str], list[str]]] = {
     "melancholy": (
         ["desaturated palette", "cool blue-grey light", "rain or mist", "downward gaze", "slumped posture"],
         ["bright colors", "warm light", "upbeat", "energetic"],
@@ -791,7 +790,7 @@ _EMOTION_VISUAL_MAP: Dict[str, Tuple[List[str], List[str]]] = {
 }
 
 
-def emotion_helpers(prompt: str) -> Tuple[str, str]:
+def emotion_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for emotion/mood-first prompts.
 
@@ -809,8 +808,8 @@ def emotion_helpers(prompt: str) -> Tuple[str, str]:
     """
     p = prompt.lower()
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     for emotion, (visual_pos, visual_neg) in _EMOTION_VISUAL_MAP.items():
         if emotion in p:
@@ -854,7 +853,7 @@ def emotion_helpers(prompt: str) -> Tuple[str, str]:
 # Strategy: use explicit perspective grammar tokens, reinforce with negative
 #   tokens that suppress the model's "correct to normal" prior.
 
-TECHNICAL_POSITIVE_TOKENS: List[str] = [
+TECHNICAL_POSITIVE_TOKENS: list[str] = [
     # Perspective anchors
     "correct perspective",
     "coherent perspective throughout",
@@ -897,7 +896,7 @@ TECHNICAL_POSITIVE_TOKENS: List[str] = [
     "high quality complex scene",
 ]
 
-TECHNICAL_NEGATIVE_TOKENS: List[str] = [
+TECHNICAL_NEGATIVE_TOKENS: list[str] = [
     # Suppress anatomy correction of intentional foreshortening
     "corrected anatomy",
     "normal proportions",
@@ -932,7 +931,7 @@ TECHNICAL_NEGATIVE_TOKENS: List[str] = [
 ]
 
 
-def technical_helpers(prompt: str) -> Tuple[str, str]:
+def technical_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for hard technical prompts.
 
@@ -963,8 +962,8 @@ def technical_helpers(prompt: str) -> Tuple[str, str]:
     is_isometric = any(w in p for w in ("isometric", "axonometric", "isometric view", "iso perspective"))
     is_pov = any(w in p for w in ("pov", "point of view", "first person", "from my perspective", "viewer's hands"))
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     if is_foreshortening:
         pos_extras += [
@@ -1067,7 +1066,7 @@ def technical_helpers(prompt: str) -> Tuple[str, str]:
 # Note: this complements STYLE_MIX_TIPS in prompt_domains.py but goes deeper
 #   into the token-level mechanics of making fusions work.
 
-STYLE_FUSION_POSITIVE_TOKENS: List[str] = [
+STYLE_FUSION_POSITIVE_TOKENS: list[str] = [
     # Fusion grammar anchors
     "style fusion intentional",
     "hybrid style",
@@ -1099,7 +1098,7 @@ STYLE_FUSION_POSITIVE_TOKENS: List[str] = [
     "sharp focus on fusion elements",
 ]
 
-STYLE_FUSION_NEGATIVE_TOKENS: List[str] = [
+STYLE_FUSION_NEGATIVE_TOKENS: list[str] = [
     # Suppress style collapse to dominant
     "pure anime",
     "pure photorealistic",
@@ -1124,7 +1123,7 @@ STYLE_FUSION_NEGATIVE_TOKENS: List[str] = [
 ]
 
 # Known fusion pairs and their recommended grammar tokens
-_FUSION_PAIR_TOKENS: Dict[str, Tuple[List[str], List[str]]] = {
+_FUSION_PAIR_TOKENS: dict[str, tuple[list[str], list[str]]] = {
     "photorealistic_anime": (
         [
             "photorealistic anime",
@@ -1182,7 +1181,7 @@ _FUSION_PAIR_TOKENS: Dict[str, Tuple[List[str], List[str]]] = {
 }
 
 
-def style_fusion_helpers(prompt: str) -> Tuple[str, str]:
+def style_fusion_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for style fusion prompts.
 
@@ -1199,8 +1198,8 @@ def style_fusion_helpers(prompt: str) -> Tuple[str, str]:
     """
     p = prompt.lower()
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     # Detect fusion pairs
     has_photo = any(w in p for w in ("photorealistic", "realistic", "photo", "photograph"))
@@ -1264,7 +1263,7 @@ def style_fusion_helpers(prompt: str) -> Tuple[str, str]:
 # Strategy: explicitly frame emptiness as intentional, use design/art
 #   vocabulary for minimalism, and aggressively suppress the fill-in prior.
 
-MINIMALIST_POSITIVE_TOKENS: List[str] = [
+MINIMALIST_POSITIVE_TOKENS: list[str] = [
     # Minimalism framing anchors
     "minimalist",
     "intentional minimalism",
@@ -1303,7 +1302,7 @@ MINIMALIST_POSITIVE_TOKENS: List[str] = [
     "intentional composition",
 ]
 
-MINIMALIST_NEGATIVE_TOKENS: List[str] = [
+MINIMALIST_NEGATIVE_TOKENS: list[str] = [
     # Suppress horror vacui (filling empty space)
     "busy background",
     "detailed background",
@@ -1338,7 +1337,7 @@ MINIMALIST_NEGATIVE_TOKENS: List[str] = [
 ]
 
 
-def minimalist_helpers(prompt: str) -> Tuple[str, str]:
+def minimalist_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for minimalist/negative-space prompts.
 
@@ -1361,8 +1360,8 @@ def minimalist_helpers(prompt: str) -> Tuple[str, str]:
     is_graphic = any(w in p for w in ("graphic design", "poster", "logo", "icon", "flat design"))
     is_single_subject = any(w in p for w in ("single", "one subject", "solo", "isolated", "alone", "just the"))
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     if is_white_bg:
         pos_extras += [
@@ -1425,7 +1424,7 @@ def minimalist_helpers(prompt: str) -> Tuple[str, str]:
 # Note: these tokens are for legitimate adult content generation.
 #   No censorship — the model learns what you show it.
 
-NSFW_PRECISION_POSITIVE_TOKENS: List[str] = [
+NSFW_PRECISION_POSITIVE_TOKENS: list[str] = [
     # Global anatomy anchors
     "correct anatomy",
     "anatomically accurate",
@@ -1458,7 +1457,7 @@ NSFW_PRECISION_POSITIVE_TOKENS: List[str] = [
     "sharp focus on anatomy",
 ]
 
-NSFW_PRECISION_NEGATIVE_TOKENS: List[str] = [
+NSFW_PRECISION_NEGATIVE_TOKENS: list[str] = [
     # Global anatomy suppressors
     "bad anatomy",
     "wrong anatomy",
@@ -1494,7 +1493,7 @@ NSFW_PRECISION_NEGATIVE_TOKENS: List[str] = [
 # WHY: generic anatomy tags don't target specific regions; per-part tokens
 #   activate the model's region-specific knowledge and suppress region-specific
 #   failure modes.
-NSFW_BODY_PART_PRECISION: Dict[str, Tuple[List[str], List[str]]] = {
+NSFW_BODY_PART_PRECISION: dict[str, tuple[list[str], list[str]]] = {
     "breasts": (
         [
             # Shape and form
@@ -1729,7 +1728,7 @@ NSFW_BODY_PART_PRECISION: Dict[str, Tuple[List[str], List[str]]] = {
 }
 
 
-def nsfw_precision_helpers(prompt: str) -> Tuple[str, str]:
+def nsfw_precision_helpers(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_addon, negative_addon)`` for NSFW anatomy precision prompts.
 
@@ -1749,11 +1748,11 @@ def nsfw_precision_helpers(prompt: str) -> Tuple[str, str]:
     """
     p = prompt.lower()
 
-    pos_extras: List[str] = []
-    neg_extras: List[str] = []
+    pos_extras: list[str] = []
+    neg_extras: list[str] = []
 
     # Body part detection keywords
-    _part_keywords: Dict[str, List[str]] = {
+    _part_keywords: dict[str, list[str]] = {
         "breasts": ["breast", "boob", "tit", "nipple", "areola", "chest", "cleavage", "topless", "nude upper"],
         "buttocks": ["butt", "ass", "buttock", "glute", "rear", "behind", "bottom", "booty"],
         "genitals_female": [
@@ -1806,10 +1805,10 @@ def nsfw_precision_helpers(prompt: str) -> Tuple[str, str]:
 #   - Minimalist requires explicit minimalism vocabulary (not just "simple").
 
 # Detection keyword sets per category
-_DETECT_PATTERNS: Dict[str, List[re.Pattern]] = {}
+_DETECT_PATTERNS: dict[str, list[re.Pattern]] = {}
 
 
-def _compile_detect(terms: List[str]) -> List[re.Pattern]:
+def _compile_detect(terms: list[str]) -> list[re.Pattern]:
     return [re.compile(rf"\b{re.escape(t)}\b", re.IGNORECASE) for t in terms]
 
 
@@ -2024,7 +2023,7 @@ _DETECT_PATTERNS[CATEGORY_NSFW_PRECISION] = _compile_detect(
 )
 
 # Style fusion requires two style keywords — handled separately in classify
-_STYLE_KEYWORDS: List[str] = [
+_STYLE_KEYWORDS: list[str] = [
     "photorealistic",
     "realistic",
     "anime",
@@ -2069,7 +2068,7 @@ def classify_prompt_category(prompt: str) -> str:
     p = prompt.lower()
 
     # Score each category
-    scores: Dict[str, int] = {}
+    scores: dict[str, int] = {}
     for category, patterns in _DETECT_PATTERNS.items():
         score = sum(1 for pat in patterns if pat.search(p))
         if score > 0:
@@ -2115,7 +2114,7 @@ def classify_prompt_category(prompt: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Map category names to their helper functions
-_CATEGORY_HELPERS: Dict[str, object] = {
+_CATEGORY_HELPERS: dict[str, object] = {
     CATEGORY_WEIRD: weird_helpers,
     CATEGORY_HORROR: horror_helpers,
     CATEGORY_NARRATIVE: narrative_helpers,
@@ -2131,7 +2130,7 @@ def apply_special_helpers(
     prompt: str,
     negative: str,
     category: str = "auto",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Apply special prompt helpers for the given category and return enriched
     ``(positive_prompt, negative_prompt)`` strings.
@@ -2209,8 +2208,8 @@ def apply_special_helpers(
 def apply_multiple_helpers(
     prompt: str,
     negative: str,
-    categories: List[str],
-) -> Tuple[str, str]:
+    categories: list[str],
+) -> tuple[str, str]:
     """
     Apply multiple category helpers in sequence and merge all additions.
 
@@ -2248,7 +2247,7 @@ def apply_multiple_helpers(
 # ---------------------------------------------------------------------------
 
 
-def suggest_categories(prompt: str, *, top_n: int = 3) -> List[str]:
+def suggest_categories(prompt: str, *, top_n: int = 3) -> list[str]:
     """
     Return the top-N most likely categories for a prompt, ranked by score.
 
@@ -2268,7 +2267,7 @@ def suggest_categories(prompt: str, *, top_n: int = 3) -> List[str]:
         return []
 
     p = prompt.lower()
-    scores: Dict[str, int] = {}
+    scores: dict[str, int] = {}
 
     for category, patterns in _DETECT_PATTERNS.items():
         score = sum(1 for pat in patterns if pat.search(p))
@@ -2289,7 +2288,7 @@ def suggest_categories(prompt: str, *, top_n: int = 3) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def get_category_tokens(category: str) -> Tuple[List[str], List[str]]:
+def get_category_tokens(category: str) -> tuple[list[str], list[str]]:
     """
     Return the base positive and negative token lists for a category.
 
@@ -2303,7 +2302,7 @@ def get_category_tokens(category: str) -> Tuple[List[str], List[str]]:
         ``(positive_tokens, negative_tokens)`` — lists of token strings.
         Returns ``([], [])`` for ``"standard"`` or unknown categories.
     """
-    _token_map: Dict[str, Tuple[List[str], List[str]]] = {
+    _token_map: dict[str, tuple[list[str], list[str]]] = {
         CATEGORY_WEIRD: (WEIRD_POSITIVE_TOKENS, WEIRD_NEGATIVE_TOKENS),
         CATEGORY_HORROR: (HORROR_POSITIVE_TOKENS, HORROR_NEGATIVE_TOKENS),
         CATEGORY_NARRATIVE: (NARRATIVE_POSITIVE_TOKENS, NARRATIVE_NEGATIVE_TOKENS),

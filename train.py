@@ -18,15 +18,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from time import time
-from typing import Optional
 
-# Windows: redirected stdout/stderr default to cp1252, which cannot encode the
-# typographic characters in help text and logs (argparse --help > file crashes).
-if sys.platform == "win32":
-    for _stream in (sys.stdout, sys.stderr):
-        _reconfigure = getattr(_stream, "reconfigure", None)
-        if _reconfigure is not None:
-            _reconfigure(encoding="utf-8", errors="replace")
+from utils.terminal import configure_stdio_for_console
+
+configure_stdio_for_console()
 
 # Show CLI help without importing the heavy GPU stack: build the (torch-free)
 # argument parser early and exit before ``import torch`` runs. Keeps
@@ -83,7 +78,7 @@ from utils.training.throughput import (
 from utils.training.timestep_curriculum import resolve_timestep_kwargs_for_step
 
 
-def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
+def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> torch.Tensor | None:
     """Sample Gaussian noise and optionally OT-couple it to batch latents (train only)."""
     reg = float(getattr(cfg, "ot_noise_pair_reg", 0.0) or 0.0)
     if reg <= 0.0 or latents.shape[0] < 2:
@@ -174,21 +169,21 @@ def _apply_runtime_ar(raw_model, *, num_ar_blocks: int, ar_block_order: str) -> 
     """Update DiT AR regime on a live model (used by curriculum/order-mix training)."""
     b = int(num_ar_blocks)
     order = str(ar_block_order or "raster").strip().lower()
-    setattr(raw_model, "num_ar_blocks", b)
-    setattr(raw_model, "ar_block_order", order)
+    raw_model.num_ar_blocks = b
+    raw_model.ar_block_order = order
     if b <= 0:
-        setattr(raw_model, "_ar_mask", None)
+        raw_model._ar_mask = None
         return
     n_patches = int(getattr(raw_model, "num_patches", 0) or 0)
     if n_patches <= 0:
-        setattr(raw_model, "_ar_mask", None)
+        raw_model._ar_mask = None
         return
     p = int(round(n_patches**0.5))
     mask = create_block_causal_mask_2d(p, p, b, block_order=order)
     ref = getattr(raw_model, "pos_embed", None)
     if ref is not None and hasattr(ref, "device"):
         mask = mask.to(device=ref.device)
-    setattr(raw_model, "_ar_mask", mask)
+    raw_model._ar_mask = mask
 
 
 def _safe_git_info(repo_root: Path) -> dict:
@@ -287,9 +282,7 @@ def get_t5_and_vae(device, cfg: TrainConfig):
     tokenizer = _transformers.AutoTokenizer.from_pretrained(cfg.text_encoder)
     # Prefer safetensors — transformers blocks torch.load on .bin when torch<2.6 (CVE-2025-32434).
     try:
-        text_encoder = _transformers.T5EncoderModel.from_pretrained(
-            cfg.text_encoder, use_safetensors=True
-        )
+        text_encoder = _transformers.T5EncoderModel.from_pretrained(cfg.text_encoder, use_safetensors=True)
     except (ValueError, OSError) as exc:
         if "safetensors" in str(exc).lower() or "torch.load" in str(exc).lower():
             raise RuntimeError(
@@ -404,20 +397,27 @@ def _get_repa_vision(device, cfg):
         return _repa_vision_model
 
     # Lazy import: keep startup fast.
-    from transformers import AutoImageProcessor
+    from transformers import AutoImageProcessor, AutoModel
 
-    if "dinov2" in str(encoder_id).lower():
-        from transformers import Dinov2Model
+    enc_lower = str(encoder_id).lower()
+    if "dinov3" in enc_lower or "dinov2" in enc_lower:
+        # DINOv3 / DINOv2: CLS token from last_hidden_state.
+        try:
+            if "dinov2" in enc_lower and "dinov3" not in enc_lower:
+                from transformers import Dinov2Model
 
-        vision_model = Dinov2Model.from_pretrained(encoder_id)
-        # DINOv2 returns last_hidden_state; we will use CLS token.
-    elif "clip" in str(encoder_id).lower():
+                vision_model = Dinov2Model.from_pretrained(encoder_id)
+            else:
+                vision_model = AutoModel.from_pretrained(encoder_id)
+        except Exception:
+            vision_model = AutoModel.from_pretrained(encoder_id)
+    elif "clip" in enc_lower:
         from transformers import CLIPVisionModelWithProjection
 
         vision_model = CLIPVisionModelWithProjection.from_pretrained(encoder_id)
         # CLIP returns pooled image embedding in image_embeds.
     else:
-        raise ValueError(f"Unsupported REPA encoder_model: {encoder_id}. Use dinov2 or clip checkpoints.")
+        raise ValueError(f"Unsupported REPA encoder_model: {encoder_id}. Use dinov3*, dinov2*, or clip* checkpoints.")
 
     processor = AutoImageProcessor.from_pretrained(encoder_id)
     mean = getattr(processor, "image_mean", [0.485, 0.456, 0.406])
@@ -459,9 +459,9 @@ def _repa_features(pixel_values: torch.Tensor, device, cfg) -> torch.Tensor:
     x = (x.to(torch.float32) - _repa_mean) / _repa_std
 
     enc_id = str(getattr(cfg, "repa_encoder_model", "")).lower()
-    if "dinov2" in enc_id:
+    if "dino" in enc_id:
         out = vision_model(pixel_values=x)
-        feat = out.last_hidden_state[:, 0, :]  # CLS token
+        feat = out.last_hidden_state[:, 0, :]  # CLS token (DINOv2 / DINOv3)
     else:
         out = vision_model(pixel_values=x)
         feat = out.image_embeds if hasattr(out, "image_embeds") else out.pooler_output
@@ -487,8 +487,8 @@ def compute_mdm_training_loss(
     mdm_patch_size: int,
     mdm_loss_only_masked: bool,
     mdm_min_mask_patches: int,
-    spectral_kwargs: Optional[dict] = None,
-    prefetched_noise: Optional[torch.Tensor] = None,
+    spectral_kwargs: dict | None = None,
+    prefetched_noise: torch.Tensor | None = None,
 ):
     """
     Masked Diffusion Models (MDM) style training.
@@ -1517,7 +1517,11 @@ def main(cfg: TrainConfig):
     if rank == 0 and bool(getattr(cfg, "live_dashboard", False)):
         from utils.training.live_dashboard import LiveDashboard
 
-        _dash_total = max_steps if use_step_based else int(cfg.epochs) * max(1, len(train_dataset) // max(1, cfg.global_batch_size))
+        _dash_total = (
+            max_steps
+            if use_step_based
+            else int(cfg.epochs) * max(1, len(train_dataset) // max(1, cfg.global_batch_size))
+        )
         dashboard = LiveDashboard(_dash_total, model_name=cfg.model_name)
 
     # Dynamic AR schedules can mutate attention masks/orders during training.
@@ -1526,7 +1530,7 @@ def main(cfg: TrainConfig):
     ar_order_mix_list = parse_ar_order_mix(ar_order_mix_spec)
     dynamic_ar_runtime = (ar_curriculum_mode != "none") or bool(ar_order_mix_list)
     raw_model_for_ar = model.module if use_ddp else model
-    last_runtime_ar: Optional[tuple[int, str]] = None
+    last_runtime_ar: tuple[int, str] | None = None
     if dynamic_ar_runtime:
         b0, o0 = resolve_ar_for_step(
             start_step,
@@ -1568,10 +1572,10 @@ def main(cfg: TrainConfig):
 
     steps = start_step
     log_steps = 0
-    running_loss_t: Optional[torch.Tensor] = None
-    running_ag_sum_t: Optional[torch.Tensor] = None
+    running_loss_t: torch.Tensor | None = None
+    running_ag_sum_t: torch.Tensor | None = None
     running_ag_count = 0
-    running_cov_sum_t: Optional[torch.Tensor] = None
+    running_cov_sum_t: torch.Tensor | None = None
     running_cov_count = 0
     start_time = time()
     refinement_prob = getattr(cfg, "refinement_prob", 0.0)
@@ -1617,8 +1621,8 @@ def main(cfg: TrainConfig):
         batch_iter = loader
 
         for batch in batch_iter:
-            last_attn_grounding_t: Optional[torch.Tensor] = None
-            last_attn_cov_t: Optional[torch.Tensor] = None
+            last_attn_grounding_t: torch.Tensor | None = None
+            last_attn_cov_t: torch.Tensor | None = None
             if dynamic_ar_runtime:
                 b_now, o_now = resolve_ar_for_step(
                     steps,
@@ -2245,9 +2249,6 @@ if __name__ == "__main__":
     sys.argv = _argv
 
     def _train_entry() -> None:
-        from utils.terminal import configure_stdio_for_console
-
-        configure_stdio_for_console()
         parser = build_train_arg_parser()
         args = parser.parse_args()
         from training.book_train_preset import apply_book_train_preset_to_args

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["StingerSpec", "parse_stinger_config", "plan_stinger_frames"]
 
@@ -16,10 +17,10 @@ class StingerSpec:
     frame_count: int
     style: str
     prompt_suffix: str
-    edit_overrides: Dict[str, Any]
+    edit_overrides: dict[str, Any]
 
 
-def parse_stinger_config(raw: Any) -> Dict[str, Any]:
+def parse_stinger_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -40,12 +41,12 @@ def plan_stinger_frames(
     shots: Sequence[Any],
     *,
     config: Mapping[str, Any],
-) -> List[StingerSpec]:
+) -> list[StingerSpec]:
     if not config.get("enabled"):
         return []
     n = max(1, min(8, int(config.get("frames") or 3)))
     style = str(config.get("style") or "impact")
-    specs: List[StingerSpec] = []
+    specs: list[StingerSpec] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         prompt = str(getattr(sh, "prompt", ""))

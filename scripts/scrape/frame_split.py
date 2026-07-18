@@ -13,9 +13,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
-from PIL import Image, ImageSequence
+from PIL import Image
 
 _log = logging.getLogger(__name__)
 
@@ -129,7 +128,7 @@ def _save_rgb_jpeg(img: Image.Image, dest: Path, *, quality: int = 92) -> tuple[
     return rgb.size
 
 
-def _subsample_indices(total: int, max_frames: int) -> List[int]:
+def _subsample_indices(total: int, max_frames: int) -> list[int]:
     if total <= 0:
         return []
     if max_frames <= 0 or total <= max_frames:
@@ -145,8 +144,8 @@ def _extract_gif_frames(
     *,
     max_frames: int,
     jpeg_quality: int,
-) -> List[ExtractedFrame]:
-    frames: List[ExtractedFrame] = []
+) -> list[ExtractedFrame]:
+    frames: list[ExtractedFrame] = []
     with Image.open(src) as im:
         total = int(getattr(im, "n_frames", 1) or 1)
         pick = _subsample_indices(total, max_frames)
@@ -179,7 +178,7 @@ def _extract_video_frames_ffmpeg(
     *,
     fps: float,
     max_frames: int,
-) -> List[ExtractedFrame]:
+) -> list[ExtractedFrame]:
     tmp_dir = out_dir / f".split_{parent_md5}"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -201,7 +200,7 @@ def _extract_video_frames_ffmpeg(
     paths = sorted(tmp_dir.glob("frame_*.jpg"))
     if not paths:
         raise RuntimeError(f"ffmpeg produced no frames for {src.name}")
-    frames: List[ExtractedFrame] = []
+    frames: list[ExtractedFrame] = []
     for i, tmp_path in enumerate(paths, start=1):
         fname = f"{parent_md5}_f{i:06d}.jpg"
         dest = out_dir / fname
@@ -231,7 +230,7 @@ def _extract_video_frames_cv2(
     *,
     fps: float,
     max_frames: int,
-) -> List[ExtractedFrame]:
+) -> list[ExtractedFrame]:
     import cv2
 
     # Force the FFMPEG backend; default backend order can mis-detect files as
@@ -248,7 +247,7 @@ def _extract_video_frames_cv2(
     step = 1
     if fps > 0 and src_fps > 0:
         step = max(1, int(round(src_fps / fps)))
-    frames: List[ExtractedFrame] = []
+    frames: list[ExtractedFrame] = []
     i = saved = 0
     while True:
         ok, bgr = cap.read()
@@ -279,10 +278,10 @@ def _extract_video_frames_cv2(
     return frames
 
 
-def existing_frames(out_dir: Path, parent_md5: str) -> List[ExtractedFrame]:
+def existing_frames(out_dir: Path, parent_md5: str) -> list[ExtractedFrame]:
     """Return already-extracted frames for a parent post (resume)."""
     paths = sorted(out_dir.glob(f"{parent_md5}_f*.jpg"))
-    frames: List[ExtractedFrame] = []
+    frames: list[ExtractedFrame] = []
     for p in paths:
         try:
             with Image.open(p) as im:
@@ -317,7 +316,7 @@ def extract_training_frames(
     fps: float = 1.0,
     max_frames: int = 120,
     jpeg_quality: int = 92,
-) -> List[ExtractedFrame]:
+) -> list[ExtractedFrame]:
     """Split ``src`` into JPEG frames, or return a single-frame list for stills."""
     ext = normalize_ext(ext)
     existing = existing_frames(images_dir, parent_md5)
@@ -340,9 +339,7 @@ def extract_training_frames(
 
     if ffmpeg_available():
         try:
-            return _extract_video_frames_ffmpeg(
-                src, images_dir, parent_md5, fps=fps, max_frames=max_frames
-            )
+            return _extract_video_frames_ffmpeg(src, images_dir, parent_md5, fps=fps, max_frames=max_frames)
         except (RuntimeError, OSError) as exc:
             _log.warning("ffmpeg frame split failed for %s: %s", src.name, exc)
 

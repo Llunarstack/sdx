@@ -7,8 +7,8 @@ Training-free guardrail: augment negative prompt or warn before wasting steps.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,7 @@ class EffectImplication:
 
 
 # cause regex, expected effect regex, category, hint
-_IMPLICATIONS: Tuple[EffectImplication, ...] = (
+_IMPLICATIONS: tuple[EffectImplication, ...] = (
     EffectImplication(
         r"\brain\b|\bstorm\b|\bdownpour\b",
         r"\bwet\b|\bpuddle\b|\breflect(?:ion|ive)\b|\bglisten",
@@ -83,11 +83,11 @@ class PhysicalPlausibilityScanner:
     def __init__(self, rules: Sequence[EffectImplication] | None = None) -> None:
         self.rules = tuple(rules or _IMPLICATIONS)
 
-    def scan(self, prompt: str) -> List[PlausibilityFlag]:
+    def scan(self, prompt: str) -> list[PlausibilityFlag]:
         text = (prompt or "").strip()
         if not text:
             return []
-        flags: List[PlausibilityFlag] = []
+        flags: list[PlausibilityFlag] = []
         for rule in self.rules:
             cause = _first_match(text, rule.cause_pattern)
             if cause is None:

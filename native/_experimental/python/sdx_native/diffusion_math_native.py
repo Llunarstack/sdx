@@ -14,7 +14,6 @@ Falls back to NumPy when the library is not built.
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -23,7 +22,7 @@ from sdx_native.native_tools import rust_diffusion_math_shared_library_path
 
 class DiffusionMathLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = rust_diffusion_math_shared_library_path()
         if p is None:
             return
@@ -107,7 +106,7 @@ class DiffusionMathLib:
         return out
 
 
-_LIB: Optional[DiffusionMathLib] = None
+_LIB: DiffusionMathLib | None = None
 
 
 def _get_lib() -> DiffusionMathLib:
@@ -117,26 +116,26 @@ def _get_lib() -> DiffusionMathLib:
     return _LIB
 
 
-def maybe_alpha_cumprod_rust(betas: np.ndarray) -> Optional[np.ndarray]:
+def maybe_alpha_cumprod_rust(betas: np.ndarray) -> np.ndarray | None:
     lib = _get_lib()
     return lib.alpha_cumprod(betas) if lib.available else None
 
 
-def maybe_snr_from_alpha_cumprod_rust(alpha_cumprod: np.ndarray) -> Optional[np.ndarray]:
+def maybe_snr_from_alpha_cumprod_rust(alpha_cumprod: np.ndarray) -> np.ndarray | None:
     lib = _get_lib()
     return lib.snr_from_alpha_cumprod(alpha_cumprod) if lib.available else None
 
 
-def maybe_linear_beta_schedule_rust(n: int, beta_start: float = 1e-4, beta_end: float = 2e-2) -> Optional[np.ndarray]:
+def maybe_linear_beta_schedule_rust(n: int, beta_start: float = 1e-4, beta_end: float = 2e-2) -> np.ndarray | None:
     lib = _get_lib()
     return lib.linear_beta_schedule(n, beta_start, beta_end) if lib.available else None
 
 
-def maybe_squaredcos_beta_schedule_v2_rust(n: int, max_beta: float = 0.999) -> Optional[np.ndarray]:
+def maybe_squaredcos_beta_schedule_v2_rust(n: int, max_beta: float = 0.999) -> np.ndarray | None:
     lib = _get_lib()
     return lib.squaredcos_beta_schedule_v2(n, max_beta) if lib.available else None
 
 
-def maybe_cosine_beta_schedule_rust(n: int) -> Optional[np.ndarray]:
+def maybe_cosine_beta_schedule_rust(n: int) -> np.ndarray | None:
     lib = _get_lib()
     return lib.cosine_beta_schedule(n) if lib.available else None

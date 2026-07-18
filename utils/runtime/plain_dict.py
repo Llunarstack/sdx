@@ -1,9 +1,29 @@
-"""Shim → ``utils._archive.runtime.plain_dict``."""
+"""Snapshot dataclass (incl. slots), dict, or ordinary objects to a plain ``dict``."""
 
-import utils._archive.runtime.plain_dict as _src
+from __future__ import annotations
 
-for _name in dir(_src):
-    if not _name.startswith('__'):
-        globals()[_name] = getattr(_src, _name)
+from dataclasses import asdict, is_dataclass
+from typing import Any
 
-del _name, _src
+
+def to_plain_dict(obj: Any) -> dict[str, Any]:
+    """
+    Build a JSON-serialisation-friendly mapping.
+
+    Order: ``dict`` shallow copy → dataclass ``asdict`` → ``__dict__`` copy → ``vars``;
+    on total failure returns ``{}`` (manifest / checkpoint writers must not crash).
+    """
+    if isinstance(obj, dict):
+        return dict(obj)
+    if is_dataclass(obj):
+        return asdict(obj)
+    od = getattr(obj, "__dict__", None)
+    if isinstance(od, dict):
+        return dict(od)
+    try:
+        return dict(vars(obj))
+    except TypeError:
+        return {}
+
+
+__all__ = ["to_plain_dict"]

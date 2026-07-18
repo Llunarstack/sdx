@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class LensPersonality(str, Enum):
@@ -25,7 +24,7 @@ class LensCharacter:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, LensPersonality, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, LensPersonality, str, str], ...] = (
     (
         re.compile(r"\b(anamorphic|cinemascope|oval bokeh|lens flare streak)\b", re.I),
         LensPersonality.ANAMORPHIC,
@@ -73,7 +72,7 @@ class LensCharacterPlanner:
                 return LensCharacter(pers, pos, neg)
         return LensCharacter(LensPersonality.STANDARD, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         c = self.plan(prompt)
         return c.positive, c.negative
 

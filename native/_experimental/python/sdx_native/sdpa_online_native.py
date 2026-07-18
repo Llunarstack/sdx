@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -12,7 +11,7 @@ from sdx_native.native_tools import cuda_sdpa_online_shared_library_path
 
 class CudaSdpaOnlineLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_sdpa_online_shared_library_path()
         if p is None:
             return
@@ -59,7 +58,7 @@ class CudaSdpaOnlineLib:
         return out
 
 
-_LIB: Optional[CudaSdpaOnlineLib] = None
+_LIB: CudaSdpaOnlineLib | None = None
 
 
 def get_cuda_sdpa_lib() -> CudaSdpaOnlineLib:
@@ -69,7 +68,7 @@ def get_cuda_sdpa_lib() -> CudaSdpaOnlineLib:
     return _LIB
 
 
-def maybe_sdpa_online_cuda(q: np.ndarray, k: np.ndarray, v: np.ndarray, *, scale: float) -> Optional[np.ndarray]:
+def maybe_sdpa_online_cuda(q: np.ndarray, k: np.ndarray, v: np.ndarray, *, scale: float) -> np.ndarray | None:
     lib = get_cuda_sdpa_lib()
     if not lib.available:
         return None

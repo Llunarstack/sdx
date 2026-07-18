@@ -6,7 +6,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODEL_DIR_DEFAULT = os.path.join(ROOT, "model")
+MODEL_DIR_DEFAULT = os.path.join(ROOT, "pretrained")
 
 
 def _has_model_weights(local_dir: str) -> bool:
@@ -153,10 +153,10 @@ def main() -> int:
                 "special_tokens_map.json",
             ],
         ),
-        # Best LLM
+        # Best LLM (prompt expansion / RAG) — Qwen3-14B
         (
-            "Qwen/Qwen2.5-14B-Instruct",
-            "Qwen2.5-14B-Instruct",
+            "Qwen/Qwen3-14B",
+            "Qwen3-14B",
             [
                 "config.json",
                 "generation_config.json",
@@ -169,10 +169,43 @@ def main() -> int:
                 "merges.txt",
             ],
         ),
-        # ViT/DiT support encoders
+        # Best practical Qwen T2I text encoder (FLUX.2 Klein / modern stacks)
         (
-            "facebook/dinov2-large",
-            "DINOv2-Large",
+            "Qwen/Qwen3-8B",
+            "Qwen3-8B",
+            [
+                "config.json",
+                "generation_config.json",
+                "*.safetensors",
+                "model.safetensors.index.json",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json",
+                "vocab.json",
+                "merges.txt",
+            ],
+        ),
+        # Best VLM
+        (
+            "Qwen/Qwen3-VL-8B-Instruct",
+            "Qwen3-VL-8B-Instruct",
+            [
+                "config.json",
+                "generation_config.json",
+                "preprocessor_config.json",
+                "*.safetensors",
+                "model.safetensors.index.json",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json",
+                "vocab.json",
+                "merges.txt",
+            ],
+        ),
+        # ViT/DiT support encoders — DINOv3-L preferred for REPA
+        (
+            "facebook/dinov3-vitl16-pretrain-lvd1689m",
+            "DINOv3-ViT-L16",
             [
                 "config.json",
                 "preprocessor_config.json",
@@ -181,8 +214,8 @@ def main() -> int:
             ],
         ),
         (
-            "google/siglip-so400m-patch14-384",
-            "SigLIP-SO400M",
+            "google/siglip2-so400m-patch16-384",
+            "SigLIP2-SO400M",
             [
                 "config.json",
                 "preprocessor_config.json",
@@ -193,6 +226,34 @@ def main() -> int:
                 "special_tokens_map.json",
                 "vocab.json",
                 "merges.txt",
+            ],
+        ),
+        # Preference reward + light VLM (quality flywheel)
+        (
+            "MizzenAI/HPSv3",
+            "HPSv3",
+            [
+                "config.json",
+                "preprocessor_config.json",
+                "*.safetensors",
+                "pytorch_model.bin",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json",
+            ],
+        ),
+        (
+            "moondream/moondream3-preview",
+            "moondream3-preview",
+            [
+                "config.json",
+                "generation_config.json",
+                "preprocessor_config.json",
+                "*.safetensors",
+                "model.safetensors.index.json",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json",
             ],
         ),
         # Cascaded diffusion stage models
@@ -221,17 +282,6 @@ def main() -> int:
                 "*.json",
                 "*.safetensors",
                 "*.bin",
-            ],
-        ),
-        # RAE-oriented representation backbone (for latent bridge experiments)
-        (
-            "facebook/dinov2-giant",
-            "DINOv2-Giant",
-            [
-                "config.json",
-                "preprocessor_config.json",
-                "*.safetensors",
-                "pytorch_model.bin",
             ],
         ),
     ]

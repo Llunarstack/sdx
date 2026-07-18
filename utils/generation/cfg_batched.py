@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import torch
 
@@ -11,11 +11,11 @@ from utils.generation.guidance_stack import SpectralGuidanceEMA, combine_guided_
 
 
 def merge_cfg_model_kwargs(
-    model_kwargs_cond: Dict[str, Any],
-    model_kwargs_uncond: Dict[str, Any],
-) -> Dict[str, Any]:
+    model_kwargs_cond: dict[str, Any],
+    model_kwargs_uncond: dict[str, Any],
+) -> dict[str, Any]:
     """Stack cond/uncond tensor kwargs along batch dim (2×B)."""
-    merged: Dict[str, Any] = {}
+    merged: dict[str, Any] = {}
     for k, v_cond in model_kwargs_cond.items():
         v_uncond = model_kwargs_uncond.get(k, v_cond)
         if isinstance(v_cond, torch.Tensor) and isinstance(v_uncond, torch.Tensor):
@@ -45,8 +45,8 @@ def combine_cfg_outputs(
     sample_step: int = 0,
     total_steps: int = 1,
     cfg_zero_init_frac: float = 0.04,
-    spectral_ema: Optional[SpectralGuidanceEMA] = None,
-    guidance_session: Optional[GuidanceSession] = None,
+    spectral_ema: SpectralGuidanceEMA | None = None,
+    guidance_session: GuidanceSession | None = None,
 ) -> torch.Tensor:
     """Apply guidance stack to cond/uncond predictions."""
     return combine_guided_prediction(
@@ -78,8 +78,8 @@ def batched_cfg_forward(
     x: torch.Tensor,
     t_batch: torch.Tensor,
     *,
-    model_kwargs_cond: Dict[str, Any],
-    model_kwargs_uncond: Dict[str, Any],
+    model_kwargs_cond: dict[str, Any],
+    model_kwargs_uncond: dict[str, Any],
     cfg_scale: float,
     cfg_rescale: float = 0.0,
     zeresfdg_strength: float = 0.0,
@@ -96,10 +96,10 @@ def batched_cfg_forward(
     sample_step: int = 0,
     total_steps: int = 1,
     cfg_zero_init_frac: float = 0.04,
-    spectral_ema: Optional[SpectralGuidanceEMA] = None,
-    guidance_session: Optional[GuidanceSession] = None,
+    spectral_ema: SpectralGuidanceEMA | None = None,
+    guidance_session: GuidanceSession | None = None,
     slg_scale: float = 0.0,
-    slg_skip_blocks: Tuple[int, ...] = (),
+    slg_skip_blocks: tuple[int, ...] = (),
     slg_active: bool = True,
     guidance_probe: Any = None,
     dbc_separate_cfg: bool = True,

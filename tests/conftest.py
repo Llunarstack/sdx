@@ -29,8 +29,8 @@ TORCH_DEPENDENT_TEST_BASENAMES = {
     "test_hybrid_dit_vit_generate.py",
 }
 
-# Archived-utils and sdx_native tests are collected again: utils/<pkg> shims
-# re-export utils/_archive/<pkg> (scripts/tools/dev/gen_archive_shims.py) and
+# Kept as an escape hatch: list test basenames here to skip them before
+# import (e.g. while a module is being archived or replatformed).
 # ``sdx_native`` resolves from native/_experimental/python via pythonpath.
 ARCHIVED_MODULE_TEST_BASENAMES: set[str] = set()
 
@@ -40,7 +40,7 @@ def pytest_ignore_collect(collection_path, config) -> bool:  # type: ignore[no-u
 
     Skips:
     1. Torch-dependent tests (when torch unavailable)
-    2. Tests depending on archived modules (utils._archive/*, sdx_native)
+    2. Tests listed in ARCHIVED_MODULE_TEST_BASENAMES
     """
     p = Path(str(collection_path))
     if p.suffix != ".py":

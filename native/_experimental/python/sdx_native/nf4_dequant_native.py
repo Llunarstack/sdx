@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -12,7 +11,7 @@ from sdx_native.native_tools import cuda_nf4_shared_library_path
 
 class CudaNf4Lib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_nf4_shared_library_path()
         if p is None:
             return
@@ -54,7 +53,7 @@ class CudaNf4Lib:
         return out
 
 
-_LIB: Optional[CudaNf4Lib] = None
+_LIB: CudaNf4Lib | None = None
 
 
 def get_cuda_nf4_lib() -> CudaNf4Lib:
@@ -66,7 +65,7 @@ def get_cuda_nf4_lib() -> CudaNf4Lib:
 
 def maybe_nf4_dequant_cuda(
     packed: np.ndarray, absmax: np.ndarray, *, block_size: int, n_weights: int
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     lib = get_cuda_nf4_lib()
     if not lib.available:
         return None

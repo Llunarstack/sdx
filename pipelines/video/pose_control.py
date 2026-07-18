@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence, Tuple
 
 import numpy as np
 
@@ -13,7 +13,7 @@ __all__ = ["pose_from_rig_boxes", "write_pose_control_image", "pose_control_args
 def pose_from_rig_boxes(
     width: int,
     height: int,
-    parts: Sequence[Tuple[str, Tuple[float, float, float, float]]],
+    parts: Sequence[tuple[str, tuple[float, float, float, float]]],
 ) -> np.ndarray:
     """Draw stick-figure style pose map from normalized rig boxes."""
     canvas = np.zeros((height, width, 3), dtype=np.uint8)
@@ -46,7 +46,7 @@ def pose_from_rig_boxes(
 
 
 def write_pose_control_image(
-    parts: Sequence[Tuple[str, Tuple[float, float, float, float]]],
+    parts: Sequence[tuple[str, tuple[float, float, float, float]]],
     out_path: str | Path,
     *,
     width: int = 512,
@@ -61,6 +61,6 @@ def write_pose_control_image(
     return op
 
 
-def pose_control_args(control_image_path: str | Path) -> List[str]:
+def pose_control_args(control_image_path: str | Path) -> list[str]:
     p = str(control_image_path)
     return ["--control-image", p, "--control-type", "pose", "--control-scale", "0.65"]

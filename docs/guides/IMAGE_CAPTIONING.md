@@ -52,7 +52,7 @@ you care about — including NSFW.
 
 2. TF-IDF retrieves top-k similar entries from `rag_corpus.jsonl`
 
-3. Creative RAG (moondream2 + Qwen2.5) merges image + facts into a diffusion prompt
+3. Creative RAG (moondream3 / moondream2 + Qwen3) merges image + facts into a diffusion prompt
 
 
 
@@ -67,7 +67,7 @@ SauceNAO/TinEye are optional fallbacks for images **not** represented in your co
 Production preprocess (`runpod/download.sh`, `scripts/run_pipeline.py`) **defaults to VLM + RAG + LLM** caption research (`SDX_PROMPT_RESEARCH=1`):
 
 1. Build seed `rag_corpus.jsonl` from combined booru tags
-2. Run `enrich_manifest_captions.py` with `--prompt-research` (moondream2 describes image → TF-IDF retrieval → Qwen synthesizes diffusion prompt)
+2. Run `enrich_manifest_captions.py` with `--prompt-research` (moondream describes image → TF-IDF retrieval → Qwen synthesizes diffusion prompt)
 3. Rebuild RAG from enriched captions for inference
 
 Booru `character_tags` / `copyright_tags` / `artist_tags` are merged into the final `caption` so identity is preserved.
@@ -151,9 +151,9 @@ Flag `original_character` when:
 
 |------|-------|------|
 
-| Image describe | moondream2 | `pretrained/moondream2` |
+| Image describe | moondream3 (legacy moondream2) | `pretrained/moondream3-preview` |
 
-| Prompt synthesis | Qwen2.5-14B-Instruct | `pretrained/Qwen2.5-14B-Instruct` |
+| Prompt synthesis | Qwen3-14B (legacy Qwen2.5-14B-Instruct) | `pretrained/Qwen3-14B` |
 
 | VLM fallback chain | moondream → Qwen-VL → Florence | `caption_image_chain` |
 
@@ -183,6 +183,6 @@ Train on `caption` from the enriched manifest — with prompt research this is a
 
 
 
-See also: [IMAGE_GEN_PIPELINE.md](../runpod/IMAGE_GEN_PIPELINE.md)
+See also: [IMAGE_GEN_PIPELINE.md](../../runpod/IMAGE_GEN_PIPELINE.md)
 
 

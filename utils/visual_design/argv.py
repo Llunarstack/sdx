@@ -1,9 +1,29 @@
-"""Shim → ``utils._archive.visual_design.argv``."""
+"""Argv fragments for subprocess / ``sample.py`` parity across tools."""
 
-import utils._archive.visual_design.argv as _src
+from __future__ import annotations
 
-for _name in dir(_src):
-    if not _name.startswith('__'):
-        globals()[_name] = getattr(_src, _name)
+from typing import Any
 
-del _name, _src
+from .sampling import normalize_intensity
+
+
+def extend_sample_argv_visual_design(cmd: list[str], args: Any) -> None:
+    """Append ``--visual-design-*`` flags when preset or domain is active."""
+    vp = str(getattr(args, "visual_design_preset", "") or "").strip()
+    if vp:
+        cmd.extend(["--visual-design-preset", vp])
+        if bool(getattr(args, "visual_design_negative_pack", False)):
+            cmd.append("--visual-design-negative-pack")
+        return
+
+    vdd = str(getattr(args, "visual_design_domain", "none") or "none").strip().lower()
+    if vdd == "none":
+        return
+    cmd.extend(["--visual-design-domain", vdd])
+    vdi = normalize_intensity(getattr(args, "visual_design_intensity", "standard"))
+    cmd.extend(["--visual-design-intensity", vdi])
+    if bool(getattr(args, "visual_design_negative_pack", False)):
+        cmd.append("--visual-design-negative-pack")
+
+
+__all__ = ["extend_sample_argv_visual_design"]

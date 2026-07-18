@@ -3,24 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 import requests
-
 from scripts.scrape.secrets_config import get_credentials, get_secrets_path
 
 
 @dataclass
 class DanbooruPostTags:
     post_id: str
-    character_tags: List[str]
-    copyright_tags: List[str]
-    artist_tags: List[str]
-    general_tags: List[str]
+    character_tags: list[str]
+    copyright_tags: list[str]
+    artist_tags: list[str]
+    general_tags: list[str]
     tag_string: str = ""
 
 
-def _load_creds() -> tuple[Optional[str], Optional[str]]:
+def _load_creds() -> tuple[str | None, str | None]:
     try:
         c = get_credentials("danbooru", get_secrets_path())
         return c.username, c.api_key
@@ -28,7 +26,7 @@ def _load_creds() -> tuple[Optional[str], Optional[str]]:
         return None, None
 
 
-def fetch_danbooru_post(post_id: str, *, timeout_s: float = 30.0) -> Optional[DanbooruPostTags]:
+def fetch_danbooru_post(post_id: str, *, timeout_s: float = 30.0) -> DanbooruPostTags | None:
     """Return structured tags for a Danbooru post ID (authenticated via secret.txt)."""
     pid = str(post_id).strip()
     if not pid.isdigit():
@@ -46,7 +44,7 @@ def fetch_danbooru_post(post_id: str, *, timeout_s: float = 30.0) -> Optional[Da
     except Exception:
         return None
 
-    def _split(field: str) -> List[str]:
+    def _split(field: str) -> list[str]:
         raw = d.get(field) or ""
         return [t for t in str(raw).split() if t]
 

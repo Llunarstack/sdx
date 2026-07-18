@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 from .artist_registry import ArtistRegistry, get_registry
 from .artist_tag import expand_artist_mentions
@@ -29,7 +28,7 @@ _BLOCK_RE = re.compile(
 )
 
 # Category → booru anchor tags prepended before the user's traits.
-_CATEGORY_ANCHORS: Dict[str, List[str]] = {
+_CATEGORY_ANCHORS: dict[str, list[str]] = {
     "character": [],
     "char": [],
     "person": [],
@@ -85,19 +84,19 @@ _CATEGORY_ANCHORS: Dict[str, List[str]] = {
 @dataclass
 class ComposedPrompt:
     positive: str
-    artists: List[str] = field(default_factory=list)
-    blocks: Dict[str, List[str]] = field(default_factory=dict)
+    artists: list[str] = field(default_factory=list)
+    blocks: dict[str, list[str]] = field(default_factory=dict)
     base_text: str = ""
 
 
-def _split_traits(text: str) -> List[str]:
+def _split_traits(text: str) -> list[str]:
     parts = [p.strip() for p in re.split(r"[,;]", text) if p.strip()]
     return parts
 
 
 def _merge_unique_csv(*chunks: str) -> str:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for chunk in chunks:
         for tok in [t.strip() for t in chunk.split(",") if t.strip()]:
             key = tok.lower()
@@ -108,9 +107,9 @@ def _merge_unique_csv(*chunks: str) -> str:
     return ", ".join(out)
 
 
-def parse_blocks(prompt: str) -> Tuple[str, Dict[str, List[str]]]:
+def parse_blocks(prompt: str) -> tuple[str, dict[str, list[str]]]:
     """Return ``(remainder, {category: [traits...]})``."""
-    blocks: Dict[str, List[str]] = {}
+    blocks: dict[str, list[str]] = {}
 
     def _collect(m: re.Match) -> str:
         cat = (m.group(1) or m.group(3) or "").strip().lower()
@@ -128,8 +127,8 @@ def compose_prompt(
     prompt: str,
     *,
     artist_strength: float = 1.0,
-    artist_registry: Optional[ArtistRegistry] = None,
-    artist_index: Optional[str] = None,
+    artist_registry: ArtistRegistry | None = None,
+    artist_index: str | None = None,
     prepend_quality: bool = False,
 ) -> ComposedPrompt:
     """Turn ``@artist`` / ``+category`` syntax into a training-style caption."""
@@ -142,7 +141,7 @@ def compose_prompt(
     base, blocks = parse_blocks(raw)
     expanded, artists = expand_artist_mentions(base, strength=artist_strength, registry=reg)
 
-    segments: List[str] = []
+    segments: list[str] = []
     if prepend_quality:
         segments.append("masterpiece, best quality")
 
@@ -165,9 +164,7 @@ def compose_prompt_text(
     prompt: str,
     *,
     artist_strength: float = 1.0,
-    artist_index: Optional[str] = None,
+    artist_index: str | None = None,
 ) -> str:
     """Convenience: return only the composed positive prompt string."""
-    return compose_prompt(
-        prompt, artist_strength=artist_strength, artist_index=artist_index
-    ).positive
+    return compose_prompt(prompt, artist_strength=artist_strength, artist_index=artist_index).positive

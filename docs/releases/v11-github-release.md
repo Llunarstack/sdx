@@ -1,5 +1,7 @@
 # SDX v11.0.0 — Layout Control & Research Expansion
 
+> **Historical note:** Snapshot of the v11 release. Paths like `innovations/` were later removed; see [DEPRECATIONS.md](../../DEPRECATIONS.md).
+
 **Release date:** June 2026  
 **Tag:** [`v11.0.0`](https://github.com/Llunarstack/sdx/releases/tag/v11.0.0)
 
@@ -79,7 +81,7 @@ sdx/
 
 - [Full release notes](v11.md)
 - [Frontier README](../../frontier/README.md)
-- [Innovations README](../../innovations/README.md)
+- [Innovations README](../../DEPRECATIONS.md)
 
 ---
 

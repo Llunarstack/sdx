@@ -6,8 +6,6 @@ Enhanced DiT Architecture with Built-in Advanced Features
 - Consistency embedding systems
 """
 
-from typing import Optional
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -44,7 +42,7 @@ class SpatialControlModule(nn.Module):
         # Spatial attention for layout control
         self.spatial_attention = nn.MultiheadAttention(hidden_size, num_heads=8, batch_first=True)
 
-    def forward(self, x: torch.Tensor, spatial_layout: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, spatial_layout: torch.Tensor | None = None) -> torch.Tensor:
         """
         Args:
             x: Input features [B, N, D]
@@ -105,7 +103,7 @@ class AnatomyAwareAttention(nn.Module):
             torch.randn(5, hidden_size) * 0.02  # 5 fingers
         )
 
-    def forward(self, x: torch.Tensor, anatomy_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, anatomy_mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         Args:
             x: Input features [B, N, D]
@@ -189,9 +187,9 @@ class TextRenderingLayer(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        text_tokens: Optional[torch.Tensor] = None,
-        text_positions: Optional[torch.Tensor] = None,
-        typography_style: Optional[torch.Tensor] = None,
+        text_tokens: torch.Tensor | None = None,
+        text_positions: torch.Tensor | None = None,
+        typography_style: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -261,7 +259,7 @@ class ConsistencyEmbedder(nn.Module):
         self.style_memory = nn.Parameter(torch.randn(max_styles, hidden_size) * 0.02)
 
     def forward(
-        self, x: torch.Tensor, character_id: Optional[torch.Tensor] = None, style_id: Optional[torch.Tensor] = None
+        self, x: torch.Tensor, character_id: torch.Tensor | None = None, style_id: torch.Tensor | None = None
     ) -> torch.Tensor:
         """
         Args:
@@ -325,13 +323,13 @@ class EnhancedDiTBlock(DiTBlock):
         self,
         x: torch.Tensor,
         c: torch.Tensor,
-        spatial_layout: Optional[torch.Tensor] = None,
-        anatomy_mask: Optional[torch.Tensor] = None,
-        text_tokens: Optional[torch.Tensor] = None,
-        text_positions: Optional[torch.Tensor] = None,
-        typography_style: Optional[torch.Tensor] = None,
-        character_id: Optional[torch.Tensor] = None,
-        style_id: Optional[torch.Tensor] = None,
+        spatial_layout: torch.Tensor | None = None,
+        anatomy_mask: torch.Tensor | None = None,
+        text_tokens: torch.Tensor | None = None,
+        text_positions: torch.Tensor | None = None,
+        typography_style: torch.Tensor | None = None,
+        character_id: torch.Tensor | None = None,
+        style_id: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Standard DiT processing
         x = super().forward(x, c)
@@ -475,13 +473,13 @@ class EnhancedDiT(nn.Module):
         t: torch.Tensor,
         y: torch.Tensor,
         # Enhanced feature inputs
-        spatial_layout: Optional[torch.Tensor] = None,
-        anatomy_mask: Optional[torch.Tensor] = None,
-        text_tokens: Optional[torch.Tensor] = None,
-        text_positions: Optional[torch.Tensor] = None,
-        typography_style: Optional[torch.Tensor] = None,
-        character_id: Optional[torch.Tensor] = None,
-        style_id: Optional[torch.Tensor] = None,
+        spatial_layout: torch.Tensor | None = None,
+        anatomy_mask: torch.Tensor | None = None,
+        text_tokens: torch.Tensor | None = None,
+        text_positions: torch.Tensor | None = None,
+        typography_style: torch.Tensor | None = None,
+        character_id: torch.Tensor | None = None,
+        style_id: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass with enhanced features.

@@ -21,7 +21,7 @@ to ``TrainConfig.timestep_logit_mean`` / ``timestep_logit_std``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 _CACHE: dict[str, list[TimestepCurriculumPhase]] = {}
 
@@ -30,8 +30,8 @@ _CACHE: dict[str, list[TimestepCurriculumPhase]] = {}
 class TimestepCurriculumPhase:
     start_step: int
     mode: str
-    logit_mean: Optional[float] = None
-    logit_std: Optional[float] = None
+    logit_mean: float | None = None
+    logit_std: float | None = None
 
 
 def parse_timestep_curriculum_schedule(schedule: str) -> list[TimestepCurriculumPhase]:
@@ -52,8 +52,8 @@ def parse_timestep_curriculum_schedule(schedule: str) -> list[TimestepCurriculum
             raise ValueError(f"curriculum segment must be start:mode[:mean:std], got {seg!r}")
         start_step = int(parts[0])
         mode = parts[1].strip().lower().replace("-", "_")
-        lm: Optional[float] = None
-        ls: Optional[float] = None
+        lm: float | None = None
+        ls: float | None = None
         if len(parts) >= 4:
             lm = float(parts[2])
             ls = float(parts[3])

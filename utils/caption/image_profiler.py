@@ -3,15 +3,36 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 _VLM_SAFE_EXTRA = frozenset(
     {
-        "solo", "1girl", "1boy", "2girls", "2boys", "outdoors", "indoors", "sky", "night", "day",
-        "rain", "snow", "sunset", "forest", "city", "beach", "school uniform", "long hair",
-        "short hair", "looking at viewer", "smile", "standing", "sitting", "lying",
+        "solo",
+        "1girl",
+        "1boy",
+        "2girls",
+        "2boys",
+        "outdoors",
+        "indoors",
+        "sky",
+        "night",
+        "day",
+        "rain",
+        "snow",
+        "sunset",
+        "forest",
+        "city",
+        "beach",
+        "school uniform",
+        "long hair",
+        "short hair",
+        "looking at viewer",
+        "smile",
+        "standing",
+        "sitting",
+        "lying",
     }
 )
 
@@ -20,13 +41,13 @@ _VLM_SAFE_EXTRA = frozenset(
 class ImageProfile:
     caption: str
     scene_summary: str = ""
-    character_tags: List[str] = field(default_factory=list)
-    copyright_tags: List[str] = field(default_factory=list)
-    artist_tags: List[str] = field(default_factory=list)
-    extra_tags: List[str] = field(default_factory=list)
+    character_tags: list[str] = field(default_factory=list)
+    copyright_tags: list[str] = field(default_factory=list)
+    artist_tags: list[str] = field(default_factory=list)
+    extra_tags: list[str] = field(default_factory=list)
     is_original_character: bool = False
     confidence: float = 0.0
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
     def to_manifest_patch(self) -> dict:
         out = {
@@ -50,9 +71,9 @@ def _norm_tag(t: str) -> str:
     return re.sub(r"\s+", " ", t.strip().lower().replace("_", " "))
 
 
-def _merge_tags(*groups: Sequence[str]) -> List[str]:
+def _merge_tags(*groups: Sequence[str]) -> list[str]:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for g in groups:
         for t in g:
             n = _norm_tag(t)
@@ -81,7 +102,7 @@ def _summary_from_tags(
     artists: Sequence[str],
     caption: str,
 ) -> str:
-    bits: List[str] = []
+    bits: list[str] = []
     if characters:
         bits.append(f"Characters: {', '.join(_merge_tags(characters))}.")
     if copyrights:
@@ -93,7 +114,7 @@ def _summary_from_tags(
     return " ".join(bits).strip()
 
 
-def _parse_row_lists(row: dict, key: str) -> List[str]:
+def _parse_row_lists(row: dict, key: str) -> list[str]:
     val = row.get(key)
     if not val:
         return []
@@ -102,7 +123,7 @@ def _parse_row_lists(row: dict, key: str) -> List[str]:
     return [t.strip() for t in str(val).split(",") if t.strip()]
 
 
-def _vlm_scene_summary(image_path: Path, *, device: str = "cuda") -> tuple[str, List[str]]:
+def _vlm_scene_summary(image_path: Path, *, device: str = "cuda") -> tuple[str, list[str]]:
     prompt = (
         "Describe this image in detail: who is present, what are they doing, "
         "where is the scene, clothing, expression, composition, lighting, and mood. "
@@ -118,7 +139,7 @@ def _vlm_scene_summary(image_path: Path, *, device: str = "cuda") -> tuple[str, 
     if not summary:
         return "", []
 
-    extras: List[str] = []
+    extras: list[str] = []
     low = summary.lower()
     for tag in _VLM_SAFE_EXTRA:
         if tag in low:
@@ -172,7 +193,7 @@ def _apply_reverse_hit(hit, *, characters, copyrights, artists, sources, confide
 def profile_image(
     image_path: str | Path,
     *,
-    booru_row: Optional[dict] = None,
+    booru_row: dict | None = None,
     use_reverse_search: bool = True,
     use_saucenao: bool = True,
     use_tineye: bool = True,
@@ -185,11 +206,11 @@ def profile_image(
     has_file = p.is_file()
     row = booru_row or {}
 
-    sources: List[str] = []
+    sources: list[str] = []
     characters = _parse_row_lists(row, "character_tags")
     copyrights = _parse_row_lists(row, "copyright_tags")
     artists = _parse_row_lists(row, "artist_tags")
-    general: List[str] = []
+    general: list[str] = []
     scene_summary = str(row.get("scene_summary") or "").strip()
     confidence = float(row.get("tag_confidence") or 0.0)
 
@@ -227,7 +248,7 @@ def profile_image(
             if characters or copyrights:
                 break
 
-    vlm_extras: List[str] = []
+    vlm_extras: list[str] = []
     if use_vlm and has_file:
         vlm_summary, vlm_extras = _vlm_scene_summary(p, device=device)
         if vlm_summary:

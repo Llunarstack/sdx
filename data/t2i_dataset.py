@@ -2,7 +2,7 @@
 import random
 import struct
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -15,7 +15,6 @@ from utils.training.part_aware_training import (
     foveated_random_crop_box,
 )
 
-from .manifest_utils import negative_caption_from_row
 from .caption_truncate import truncate_caption_at_comma_boundary
 from .caption_utils import (
     add_anti_blending_and_count,
@@ -27,6 +26,7 @@ from .caption_utils import (
     normalize_tag_order,
     prepend_adherence_boost,
 )
+from .manifest_utils import negative_caption_from_row
 
 try:
     from sdx_native.text_hygiene import normalize_caption_for_training as _normalize_caption_unicode
@@ -172,14 +172,14 @@ def normalize_to_latent_range(x: torch.Tensor, scale: float = 0.18215) -> torch.
 
 
 # --- Tag-board prompts (comma-separated, optional parenthesis emphasis) ---
-def format_as_tags(tokens: List[str], emphasis: bool = False) -> str:
+def format_as_tags(tokens: list[str], emphasis: bool = False) -> str:
     """Format list of tokens as comma-separated tags. Optionally wrap in () for emphasis."""
     if emphasis and random.random() < 0.3:
         return ", ".join(f"({t})" if random.random() < 0.4 else t for t in tokens)
     return ", ".join(tokens)
 
 
-def structured_caption(parts: Dict[str, str], order: Optional[List[str]] = None) -> str:
+def structured_caption(parts: dict[str, str], order: list[str] | None = None) -> str:
     """ReVe/DetailMaster-style: structured caption for better adherence.
     order e.g. ['subject', 'setting', 'style', 'camera'].
     """
@@ -203,7 +203,7 @@ class Text2ImageDataset(Dataset):
         caption_ext: str = ".txt",
         use_struct: bool = False,
         tag_style_prob: float = 0.5,
-        max_caption_length: Optional[int] = None,
+        max_caption_length: int | None = None,
         shuffle_caption_parts: bool = False,
         use_tag_emphasis: bool = True,
         use_tag_order: bool = True,
@@ -218,12 +218,12 @@ class Text2ImageDataset(Dataset):
         train_style_guidance_artists: bool = True,
         caption_unicode_normalize: bool = False,
         use_anti_blending: bool = True,
-        latent_cache_dir: Optional[str] = None,
+        latent_cache_dir: str | None = None,
         crop_mode: str = "center",  # "center" | "random" | "largest_center" (IMPROVEMENTS 1.2)
         extract_style_from_caption: bool = True,  # Auto-fill style from artist/style tags (e.g. Danbooru)
         region_caption_mode: str = "append",  # "append" | "prefix" | "off" — merge JSONL regions/parts into T5 caption
         region_layout_tag: str = "[layout]",
-        resolution_buckets: Optional[List[Tuple[int, int]]] = None,
+        resolution_buckets: list[tuple[int, int]] | None = None,
         bucket_seed: int = 42,
         bucket_fixed_assign: bool = False,
         # Part-aware / grounding (JSONL: grounding_mask, caption_global, caption_local, entity_captions)
@@ -234,7 +234,7 @@ class Text2ImageDataset(Dataset):
         foveated_train_prob: float = 0.0,
         foveated_crop_frac: float = 0.55,
         grounding_mask_soft: bool = False,
-        data_root: Optional[str] = None,
+        data_root: str | None = None,
     ):
         self.data_path = Path(data_path)
         self.data_root = Path(data_root).resolve() if data_root else None
@@ -286,9 +286,9 @@ class Text2ImageDataset(Dataset):
             if self.use_hierarchical_captions
             else None
         )
-        self.samples: List[Dict[str, Any]] = []
+        self.samples: list[dict[str, Any]] = []
         self._scan()
-        self._bucket_assign: List[int] = [0] * len(self.samples)
+        self._bucket_assign: list[int] = [0] * len(self.samples)
         self.set_epoch(0)
 
     def set_epoch(self, epoch: int = 0) -> None:
@@ -303,7 +303,7 @@ class Text2ImageDataset(Dataset):
             else:
                 self._bucket_assign[i] = (i * 100003 + e * 10007 + self.bucket_seed) % nb
 
-    def _hw_for_index(self, idx: int) -> Tuple[int, int]:
+    def _hw_for_index(self, idx: int) -> tuple[int, int]:
         if self.resolution_buckets:
             b = self._bucket_assign[idx]
             return self.resolution_buckets[b]
@@ -315,7 +315,7 @@ class Text2ImageDataset(Dataset):
             return self._crop_fn(pil, self.image_size)
         return _crop_to_hw(pil, H, W, self.crop_mode)
 
-    def _resolve_media_path(self, rel: Optional[Union[str, Path]]) -> Optional[Path]:
+    def _resolve_media_path(self, rel: str | Path | None) -> Path | None:
         """Resolve manifest-relative paths against ``data_root`` (e.g. SDX_DATA)."""
         if rel is None:
             return None
@@ -339,7 +339,7 @@ class Text2ImageDataset(Dataset):
             return (self.data_root / p).resolve()
         return (self.data_path / p).resolve() if self.data_path.is_dir() else p.resolve()
 
-    def _resolve_aux_path(self, rel: Optional[Union[str, Path]]) -> Optional[Path]:
+    def _resolve_aux_path(self, rel: str | Path | None) -> Path | None:
         return self._resolve_media_path(rel)
 
     def _crop_mask_pil(self, pil_l: Image.Image, idx: int) -> Image.Image:
@@ -348,11 +348,11 @@ class Text2ImageDataset(Dataset):
     def _maybe_foveate(
         self,
         pil: Image.Image,
-        mask_l: Optional[Image.Image],
+        mask_l: Image.Image | None,
         idx: int,
         *,
         skip_foveate: bool = False,
-    ) -> Tuple[Image.Image, Optional[Image.Image]]:
+    ) -> tuple[Image.Image, Image.Image | None]:
         H, W = self._hw_for_index(idx)
         if skip_foveate or self.foveated_train_prob <= 0 or random.random() >= self.foveated_train_prob:
             return self._crop_image(pil, idx), (self._crop_mask_pil(mask_l, idx) if mask_l is not None else None)
@@ -361,7 +361,7 @@ class Text2ImageDataset(Dataset):
         y0, x0, y1, x1 = foveated_random_crop_box(ih, iw, crop_frac=self.foveated_crop_frac)
         crop = arr[y0:y1, x0:x1]
         pil_out = Image.fromarray(crop).resize((W, H), Image.BICUBIC)
-        mask_out: Optional[Image.Image] = None
+        mask_out: Image.Image | None = None
         if mask_l is not None:
             ma = np.array(mask_l.convert("L")).astype(np.float32) / 255.0
             mc = ma[y0:y1, x0:x1]
@@ -379,7 +379,7 @@ class Text2ImageDataset(Dataset):
 
     def _load_grounding_mask_tensor(
         self, idx: int, image_path: str, mask_rel: str, *, skip_foveate: bool = False
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         rp = self._resolve_aux_path(mask_rel)
         if rp is None or not rp.exists():
             return None
@@ -396,7 +396,7 @@ class Text2ImageDataset(Dataset):
         if self.data_path.suffix.lower() == ".jsonl":
             import json
 
-            with open(self.data_path, "r", encoding="utf-8") as f:
+            with open(self.data_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -489,7 +489,7 @@ class Text2ImageDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
-    def _process_caption(self, caption: str, negative_caption: str = "") -> Tuple[str, str]:
+    def _process_caption(self, caption: str, negative_caption: str = "") -> tuple[str, str]:
         if self.caption_unicode_normalize and _normalize_caption_unicode is not None:
             caption = _normalize_caption_unicode(caption)
             if (negative_caption or "").strip():
@@ -533,15 +533,15 @@ class Text2ImageDataset(Dataset):
             caption = truncate_caption_at_comma_boundary(caption, self.max_caption_length)
         return caption.strip(), (negative_caption or "").strip()
 
-    def _latent_path(self, path: str) -> Optional[Path]:
+    def _latent_path(self, path: str) -> Path | None:
         """Cache key: same name as image but .pt in latent_cache_dir."""
         if not self.latent_cache_dir:
             return None
         name = Path(path).stem + ".pt"
         return self.latent_cache_dir / name
 
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        last_err: Optional[BaseException] = None
+    def __getitem__(self, idx: int) -> dict[str, Any]:
+        last_err: BaseException | None = None
         n = len(self.samples)
         for off in range(min(32, n)):
             try:
@@ -552,7 +552,7 @@ class Text2ImageDataset(Dataset):
                 continue
         raise RuntimeError(f"could not load any image near dataset index {idx}") from last_err
 
-    def _getitem_impl(self, idx: int) -> Dict[str, Any]:
+    def _getitem_impl(self, idx: int) -> dict[str, Any]:
         s = self.samples[idx]
         resolved = self._resolve_media_path(s["path"])
         path = str(resolved if resolved is not None else s["path"])
@@ -651,7 +651,7 @@ class Text2ImageDataset(Dataset):
             except Exception:
                 pass
         pil = _open_train_image(path)
-        mask_l: Optional[Image.Image] = None
+        mask_l: Image.Image | None = None
         if mask_rel:
             rp = self._resolve_aux_path(mask_rel)
             if rp is not None and rp.exists():
@@ -689,7 +689,7 @@ class Text2ImageDataset(Dataset):
         return out
 
 
-def collate_t2i(batch: List[Dict]) -> Dict[str, Any]:
+def collate_t2i(batch: list[dict]) -> dict[str, Any]:
     """Stack pixel_values and/or latent_values; leave captions as lists; include style, control_image when present."""
     pixel_values = torch.stack([b["pixel_values"] for b in batch])
     captions = [b["caption"] for b in batch]
@@ -714,8 +714,8 @@ def collate_t2i(batch: List[Dict]) -> Dict[str, Any]:
         out["init_pixel_values"] = torch.stack([b["init_pixel_values"] for b in batch])
     if any("grounding_mask" in b for b in batch):
         _, h, w = batch[0]["pixel_values"].shape
-        masks: List[torch.Tensor] = []
-        valid: List[bool] = []
+        masks: list[torch.Tensor] = []
+        valid: list[bool] = []
         for b in batch:
             if "grounding_mask" in b:
                 masks.append(b["grounding_mask"])

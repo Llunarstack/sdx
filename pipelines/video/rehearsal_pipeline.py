@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 __all__ = ["RehearsalStage", "stage_edit_overrides"]
 
@@ -15,7 +15,7 @@ class RehearsalStage(str, Enum):
     FULL = "full"
 
 
-def stage_edit_overrides(stage: str) -> Dict[str, Any]:
+def stage_edit_overrides(stage: str) -> dict[str, Any]:
     s = (stage or "full").lower()
     if s == RehearsalStage.ANIMATIC.value:
         return {

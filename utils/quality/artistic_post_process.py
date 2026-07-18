@@ -20,7 +20,6 @@ Usage in sample.py:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import numpy as np
 
@@ -45,16 +44,16 @@ class ArtisticPostConfig:
 
     # Intentional asymmetry (anti-uncanny-valley)
     asymmetry_strength: float = 0.0  # 0-1: how much to break perfect symmetry
-    asymmetry_seed: Optional[int] = None
+    asymmetry_seed: int | None = None
 
     # Lost-and-found edges (vary edge sharpness)
     lost_found_strength: float = 0.0  # 0-1: how much to soften some edges
-    lost_found_seed: Optional[int] = None
+    lost_found_seed: int | None = None
 
     # Subsurface scattering simulation (skin/wax/translucent materials)
     sss_strength: float = 0.0  # 0-1: SSS simulation strength
     sss_radius: float = 3.0  # blur radius for SSS approximation
-    sss_color: Tuple[float, float, float] = (1.0, 0.6, 0.4)  # warm skin scatter color
+    sss_color: tuple[float, float, float] = (1.0, 0.6, 0.4)  # warm skin scatter color
 
     # Vignette (compositional framing)
     vignette_strength: float = 0.0  # 0-1
@@ -239,7 +238,7 @@ def apply_compositional_director(
 def apply_intentional_asymmetry(
     image: np.ndarray,
     strength: float = 0.3,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> np.ndarray:
     """
     Introduce subtle, natural asymmetry to break the AI's tendency toward
@@ -333,7 +332,7 @@ def apply_intentional_asymmetry(
 def apply_lost_and_found_edges(
     image: np.ndarray,
     strength: float = 0.3,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> np.ndarray:
     """
     Vary edge sharpness across the image to mimic human artistic mark-making.
@@ -412,7 +411,7 @@ def apply_sss_simulation(
     image: np.ndarray,
     strength: float = 0.3,
     radius: float = 3.0,
-    scatter_color: Tuple[float, float, float] = (1.0, 0.6, 0.4),
+    scatter_color: tuple[float, float, float] = (1.0, 0.6, 0.4),
 ) -> np.ndarray:
     """
     Simulate subsurface scattering for skin/wax/translucent materials.

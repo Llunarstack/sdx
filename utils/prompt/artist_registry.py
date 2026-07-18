@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
 
 from .artist_tag import normalize_artist_tag
 
@@ -22,7 +22,7 @@ _ALIAS_SEP = re.compile(r"[\s_]+")
 @dataclass
 class ArtistEntry:
     canonical: str
-    aliases: Set[str] = field(default_factory=set)
+    aliases: set[str] = field(default_factory=set)
     count: int = 0
 
     def to_dict(self) -> dict:
@@ -33,7 +33,7 @@ class ArtistEntry:
         }
 
 
-def _alias_keys(name: str) -> Set[str]:
+def _alias_keys(name: str) -> set[str]:
     """Generate lookup keys for an artist name (case/underscore/space variants)."""
     raw = name.strip()
     if not raw:
@@ -54,8 +54,8 @@ class ArtistRegistry:
     """In-memory artist alias map with fuzzy resolution."""
 
     def __init__(self) -> None:
-        self._by_key: Dict[str, str] = {}  # alias key -> canonical caption tag
-        self._entries: Dict[str, ArtistEntry] = {}  # canonical -> entry
+        self._by_key: dict[str, str] = {}  # alias key -> canonical caption tag
+        self._entries: dict[str, ArtistEntry] = {}  # canonical -> entry
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -114,11 +114,11 @@ class ArtistRegistry:
         return reg
 
 
-_GLOBAL: Optional[ArtistRegistry] = None
+_GLOBAL: ArtistRegistry | None = None
 
 
-def default_index_paths() -> List[Path]:
-    paths: List[Path] = []
+def default_index_paths() -> list[Path]:
+    paths: list[Path] = []
     env = os.environ.get("SDX_ARTIST_INDEX", "").strip()
     if env:
         paths.append(Path(env))

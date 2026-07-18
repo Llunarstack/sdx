@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 __all__ = ["DirectorPersonality", "director_by_id", "list_directors"]
 
@@ -18,7 +17,7 @@ class DirectorPersonality:
     default_camera: str
 
 
-_DIRECTORS: Dict[str, DirectorPersonality] = {
+_DIRECTORS: dict[str, DirectorPersonality] = {
     "spielberg": DirectorPersonality(
         "spielberg",
         "Spielberg",
@@ -74,5 +73,5 @@ def list_directors() -> list[DirectorPersonality]:
     return list(_DIRECTORS.values())
 
 
-def director_by_id(name: str) -> Optional[DirectorPersonality]:
+def director_by_id(name: str) -> DirectorPersonality | None:
     return _DIRECTORS.get((name or "").strip().lower().replace(" ", "_"))

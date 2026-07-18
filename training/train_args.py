@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from config.train_config import TrainConfig
 from utils.modeling.model_paths import default_t5_path
 
 
-def parse_caption_dropout_schedule(s: Optional[str]):
+def parse_caption_dropout_schedule(s: str | None):
     """Parse '0,0.2,10000,0.05' -> [(0, 0.2), (10000, 0.05)]. Returns None if s is None/empty."""
     if not s or not str(s).strip():
         return None
@@ -21,7 +19,7 @@ def parse_caption_dropout_schedule(s: Optional[str]):
     return schedule if schedule else None
 
 
-def parse_resolution_buckets(s: Optional[str]):
+def parse_resolution_buckets(s: str | None):
     """Parse ``256,384`` or ``512x768,256x512`` into list[(H, W)] or None."""
     if not s or not str(s).strip():
         return None
@@ -39,7 +37,7 @@ def parse_resolution_buckets(s: Optional[str]):
     return buckets or None
 
 
-def parse_mdm_mask_schedule(s: Optional[str]):
+def parse_mdm_mask_schedule(s: str | None):
     """Parse '0,0.05,500,0.25' -> [(0,0.05),(500,0.25)] or None."""
     if not s or not str(s).strip():
         return None

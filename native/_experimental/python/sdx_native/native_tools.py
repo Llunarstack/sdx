@@ -13,12 +13,13 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from sdx_native.latent_geometry import latent_numel as py_latent_numel
 from sdx_native.latent_geometry import latent_spatial_size as py_latent_spatial_size
 from sdx_native.latent_geometry import num_patch_tokens as py_num_patch_tokens
 from sdx_native.latent_geometry import patch_grid_dim as py_patch_grid_dim
+
 
 # Walk up to the checkout root (marker: pyproject.toml); a fixed parents[N]
 # breaks when this package moves (native/python -> native/_experimental/python).
@@ -37,7 +38,7 @@ def _release_dir(name: str) -> Path:
     return REPO_ROOT / "native" / name
 
 
-def rust_jsonl_tools_exe() -> Optional[Path]:
+def rust_jsonl_tools_exe() -> Path | None:
     """``sdx-jsonl-tools`` release binary if ``cargo build --release`` was run."""
     base = _release_dir("rust/sdx-jsonl-tools/target/release")
     for n in ("sdx-jsonl-tools.exe", "sdx-jsonl-tools"):
@@ -47,7 +48,7 @@ def rust_jsonl_tools_exe() -> Optional[Path]:
     return None
 
 
-def rust_noise_schedule_exe() -> Optional[Path]:
+def rust_noise_schedule_exe() -> Path | None:
     """``sdx-noise-schedule`` release binary if ``cargo build --release`` was run."""
     base = _release_dir("rust/sdx-noise-schedule/target/release")
     for n in ("sdx-noise-schedule.exe", "sdx-noise-schedule"):
@@ -57,7 +58,7 @@ def rust_noise_schedule_exe() -> Optional[Path]:
     return None
 
 
-def rust_image_metrics_exe() -> Optional[Path]:
+def rust_image_metrics_exe() -> Path | None:
     """``sdx-image-metrics`` release binary if ``cargo build --release`` was run."""
     base = _release_dir("rust/sdx-image-metrics/target/release")
     for n in ("sdx-image-metrics.exe", "sdx-image-metrics"):
@@ -67,7 +68,7 @@ def rust_image_metrics_exe() -> Optional[Path]:
     return None
 
 
-def run_rust_noise_schedule(args: List[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
+def run_rust_noise_schedule(args: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
     """Run ``sdx-noise-schedule`` (e.g. ``[\"linear\", \"--steps\", \"1000\"]``)."""
     exe = rust_noise_schedule_exe()
     if not exe:
@@ -82,7 +83,7 @@ def run_rust_noise_schedule(args: List[str], *, timeout: float = 120) -> subproc
     )
 
 
-def zig_linecrc_exe() -> Optional[Path]:
+def zig_linecrc_exe() -> Path | None:
     """Zig ``sdx-linecrc`` if ``zig build`` was run."""
     base = _release_dir("zig/sdx-linecrc/zig-out/bin")
     for n in ("sdx-linecrc.exe", "sdx-linecrc"):
@@ -92,7 +93,7 @@ def zig_linecrc_exe() -> Optional[Path]:
     return None
 
 
-def zig_pathstat_exe() -> Optional[Path]:
+def zig_pathstat_exe() -> Path | None:
     """Zig ``sdx-pathstat`` — file sizes for a path list (one per line)."""
     base = _release_dir("zig/sdx-pathstat/zig-out/bin")
     for n in ("sdx-pathstat.exe", "sdx-pathstat"):
@@ -102,7 +103,7 @@ def zig_pathstat_exe() -> Optional[Path]:
     return None
 
 
-def go_sdx_manifest_exe() -> Optional[Path]:
+def go_sdx_manifest_exe() -> Path | None:
     """Go merge helper if built next to source."""
     d = _release_dir("go/sdx-manifest")
     for n in ("sdx-manifest.exe", "sdx-manifest"):
@@ -112,7 +113,7 @@ def go_sdx_manifest_exe() -> Optional[Path]:
     return None
 
 
-def latent_shared_library_path() -> Optional[Path]:
+def latent_shared_library_path() -> Path | None:
     """First matching ``libsdx_latent`` build artifact."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -127,7 +128,7 @@ def latent_shared_library_path() -> Optional[Path]:
     return None
 
 
-def inference_timesteps_shared_library_path() -> Optional[Path]:
+def inference_timesteps_shared_library_path() -> Path | None:
     """First matching ``sdx_inference_timesteps`` build artifact (inference path finalization)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -142,7 +143,7 @@ def inference_timesteps_shared_library_path() -> Optional[Path]:
     return None
 
 
-def beta_schedules_shared_library_path() -> Optional[Path]:
+def beta_schedules_shared_library_path() -> Path | None:
     """First matching ``sdx_beta_schedules`` build artifact (squared-cosine betas)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -157,7 +158,7 @@ def beta_schedules_shared_library_path() -> Optional[Path]:
     return None
 
 
-def line_stats_shared_library_path() -> Optional[Path]:
+def line_stats_shared_library_path() -> Path | None:
     """``sdx_line_stats`` — fast manifest byte + newline count."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -172,7 +173,7 @@ def line_stats_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_hwc_to_chw_shared_library_path() -> Optional[Path]:
+def cuda_hwc_to_chw_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_hwc_to_chw`` (``-DSDX_BUILD_CUDA=ON``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -187,7 +188,7 @@ def cuda_hwc_to_chw_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_ml_shared_library_path() -> Optional[Path]:
+def cuda_ml_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_ml`` (L2 row normalize; ``-DSDX_BUILD_CUDA=ON``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -202,7 +203,7 @@ def cuda_ml_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_flow_matching_shared_library_path() -> Optional[Path]:
+def cuda_flow_matching_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_flow_matching`` (velocity residual ``eps - x0``; ``-DSDX_BUILD_CUDA=ON``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -217,7 +218,7 @@ def cuda_flow_matching_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_nf4_shared_library_path() -> Optional[Path]:
+def cuda_nf4_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_nf4`` (NF4 dequant; ``-DSDX_BUILD_CUDA=ON``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -232,7 +233,7 @@ def cuda_nf4_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_sdpa_online_shared_library_path() -> Optional[Path]:
+def cuda_sdpa_online_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_sdpa_online`` (online-softmax SDPA, head_dim=64; ``-DSDX_BUILD_CUDA=ON``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -247,7 +248,7 @@ def cuda_sdpa_online_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_rmsnorm_shared_library_path() -> Optional[Path]:
+def cuda_rmsnorm_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_rmsnorm`` (row-wise RMSNorm; ``-DSDX_BUILD_CUDA=ON``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -262,7 +263,7 @@ def cuda_rmsnorm_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_rope_shared_library_path() -> Optional[Path]:
+def cuda_rope_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_rope`` (interleaved RoPE on host buffers)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -277,7 +278,7 @@ def cuda_rope_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_silu_gate_shared_library_path() -> Optional[Path]:
+def cuda_silu_gate_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_silu_gate`` (fused SiLU * gate)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -292,7 +293,7 @@ def cuda_silu_gate_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_gaussian_blur_shared_library_path() -> Optional[Path]:
+def cuda_gaussian_blur_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_gaussian_blur`` (depthwise Gaussian blur on latents)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -307,7 +308,7 @@ def cuda_gaussian_blur_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_percentile_clamp_shared_library_path() -> Optional[Path]:
+def cuda_percentile_clamp_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_percentile_clamp`` (per-sample percentile clamp)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -322,7 +323,7 @@ def cuda_percentile_clamp_shared_library_path() -> Optional[Path]:
     return None
 
 
-def mask_ops_shared_library_path() -> Optional[Path]:
+def mask_ops_shared_library_path() -> Path | None:
     """CPU ``sdx_mask_ops`` (mask → patch weights for part-aware training)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -337,7 +338,7 @@ def mask_ops_shared_library_path() -> Optional[Path]:
     return None
 
 
-def rust_prompt_ops_shared_library_path() -> Optional[Path]:
+def rust_prompt_ops_shared_library_path() -> Path | None:
     """Rust ``sdx_prompt_ops`` cdylib (caption merge, pos/neg filter)."""
     base = REPO_ROOT / "native" / "rust" / "sdx-prompt-ops" / "target"
     candidates = [
@@ -353,7 +354,7 @@ def rust_prompt_ops_shared_library_path() -> Optional[Path]:
     return None
 
 
-def rust_diffusion_math_shared_library_path() -> Optional[Path]:
+def rust_diffusion_math_shared_library_path() -> Path | None:
     """Rust ``sdx_diffusion_math`` cdylib (alpha_cumprod, SNR, beta schedules)."""
     base = REPO_ROOT / "native" / "rust" / "sdx-diffusion-math" / "target"
     candidates = [
@@ -369,7 +370,7 @@ def rust_diffusion_math_shared_library_path() -> Optional[Path]:
     return None
 
 
-def fnv64_file_shared_library_path() -> Optional[Path]:
+def fnv64_file_shared_library_path() -> Path | None:
     """``sdx_fnv64_file`` — streaming FNV-1a 64 + newlines (matches Python ``fnv1a64_file``)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -384,7 +385,7 @@ def fnv64_file_shared_library_path() -> Optional[Path]:
     return None
 
 
-def rmsnorm_rows_cpu_shared_library_path() -> Optional[Path]:
+def rmsnorm_rows_cpu_shared_library_path() -> Path | None:
     """CPU ``sdx_rmsnorm_rows_cpu`` shared library path, if built."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -399,7 +400,7 @@ def rmsnorm_rows_cpu_shared_library_path() -> Optional[Path]:
     return None
 
 
-def image_metrics_shared_library_path() -> Optional[Path]:
+def image_metrics_shared_library_path() -> Path | None:
     """CPU ``sdx_image_metrics`` shared library path, if built."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -414,7 +415,7 @@ def image_metrics_shared_library_path() -> Optional[Path]:
     return None
 
 
-def score_ops_shared_library_path() -> Optional[Path]:
+def score_ops_shared_library_path() -> Path | None:
     """CPU ``sdx_score_ops`` shared library path, if built."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -429,7 +430,7 @@ def score_ops_shared_library_path() -> Optional[Path]:
     return None
 
 
-def c_buffer_stats_shared_library_path() -> Optional[Path]:
+def c_buffer_stats_shared_library_path() -> Path | None:
     """Optional C ``sdx_c_buffer_stats`` (newline count + byte sum over buffers)."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -444,7 +445,7 @@ def c_buffer_stats_shared_library_path() -> Optional[Path]:
     return None
 
 
-def cuda_image_metrics_shared_library_path() -> Optional[Path]:
+def cuda_image_metrics_shared_library_path() -> Path | None:
     """Optional CUDA ``sdx_cuda_image_metrics`` shared library path, if built."""
     cpp = REPO_ROOT / "native" / "cpp" / "build"
     candidates = [
@@ -536,7 +537,7 @@ def run_rust_file_md5(path: Path, *, timeout: float = 3600) -> subprocess.Comple
     )
 
 
-def maybe_rust_file_md5_hex(path: Path, *, timeout: float = 3600) -> Optional[str]:
+def maybe_rust_file_md5_hex(path: Path, *, timeout: float = 3600) -> str | None:
     """
     Return 32-char lowercase hex MD5 if the Rust tool is built and the path is readable.
 
@@ -647,7 +648,7 @@ def fnv1a64_bytes(data: bytes) -> int:
     return h
 
 
-def fnv1a64_file(path: Path, chunk: int = 65536) -> Tuple[int, int, int]:
+def fnv1a64_file(path: Path, chunk: int = 65536) -> tuple[int, int, int]:
     """
     Same fingerprint as ``sdx-linecrc --file`` (streaming over file bytes).
 
@@ -736,7 +737,7 @@ class LatentLib:
         return py_latent_numel(channels, latent_h, latent_w)
 
 
-_LATENT_SINGLETON: Optional[LatentLib] = None
+_LATENT_SINGLETON: LatentLib | None = None
 
 
 def get_latent_lib() -> LatentLib:
@@ -747,7 +748,7 @@ def get_latent_lib() -> LatentLib:
 
 
 def merge_jsonl_files(
-    inputs: List[Path],
+    inputs: list[Path],
     output: Path,
     *,
     dedupe_key: str = "image_path",
@@ -801,7 +802,7 @@ def _xxhash_available() -> bool:
     return importlib.util.find_spec("xxhash") is not None
 
 
-def native_stack_status() -> Dict[str, Any]:
+def native_stack_status() -> dict[str, Any]:
     """Summary for diagnostics (e.g. ``quick_test --show-native``)."""
     try:
         from sdx_native.native_fast_stack_status import fast_numpy_stack_status

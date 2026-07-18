@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["WeatherState", "WeatherIssue", "WeatherInertiaReport", "parse_weather_config", "track_weather_inertia"]
 
@@ -27,12 +28,12 @@ class WeatherIssue:
 
 @dataclass(slots=True)
 class WeatherInertiaReport:
-    timeline: List[Dict[str, Any]]
-    issues: List[WeatherIssue]
-    prompt_injections: Dict[str, str]
+    timeline: list[dict[str, Any]]
+    issues: list[WeatherIssue]
+    prompt_injections: dict[str, str]
 
 
-def parse_weather_config(raw: Any) -> Dict[str, Any]:
+def parse_weather_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -72,7 +73,7 @@ def _shot_weather(shot: Any) -> WeatherState:
     return _infer_weather(str(getattr(shot, "prompt", "")))
 
 
-_WEATHER_FRAG: Dict[str, str] = {
+_WEATHER_FRAG: dict[str, str] = {
     "rain": "continued rain, wet atmosphere",
     "storm": "ongoing storm, wind and rain persistence",
     "snow": "continuing snowfall, cold air",
@@ -92,9 +93,9 @@ def track_weather_inertia(
     max_jump = int(config.get("max_jump") or 2)
     init = str(config.get("initial") or "")
     prev = WeatherState(init, 0.5) if init else WeatherState("", 0.0)
-    timeline: List[Dict[str, Any]] = []
-    issues: List[WeatherIssue] = []
-    injections: Dict[str, str] = {}
+    timeline: list[dict[str, Any]] = []
+    issues: list[WeatherIssue] = []
+    injections: dict[str, str] = {}
 
     for sh in shots:
         sid = str(getattr(sh, "id", ""))

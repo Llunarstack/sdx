@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from utils.caption.reverse_search import hit_meets_threshold, parse_source_url, ReverseHit
+from utils.caption.reverse_search import ReverseHit, hit_meets_threshold, parse_source_url
 
 
 def test_parse_danbooru_url():
@@ -29,11 +29,11 @@ def test_tineye_booru_hit_lower_threshold():
 
 
 def test_saucenao_html_parser():
-    html = '''
+    html = """
     <div class="resultadosub"><div class="resulttable"><div>87.3%</div>
     <a href="https://danbooru.donmai.us/posts/12345">danbooru</a>
     Characters: hatsune_miku</div></div>
-    '''
+    """
     from utils.caption.reverse_search import _hits_from_saucenao_html
 
     hits = _hits_from_saucenao_html(html)

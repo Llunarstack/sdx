@@ -26,8 +26,8 @@ Usage::
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 
 def _iter_lines(path: Path) -> Iterable[str]:
@@ -46,7 +46,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("data/danbooru/tags/all_tags_categorized.txt"))
     args = ap.parse_args()
 
-    raw_files: List[tuple[str, Path]] = [
+    raw_files: list[tuple[str, Path]] = [
         ("artist", args.raw_dir / "artist.txt"),
         ("copyright", args.raw_dir / "copyright.txt"),
         ("character", args.raw_dir / "character.txt"),

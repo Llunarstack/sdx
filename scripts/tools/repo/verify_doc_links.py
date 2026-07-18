@@ -21,23 +21,17 @@ SCAN_GLOBS = [
     "docs/**/*.md",
     "pipelines/**/*.md",
     "scripts/**/*.md",
+    "native/**/*.md",
+    "CONTRIBUTING.md",
 ]
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
-# Patterns for links to archived/optional modules that are expected to be broken
+# Only skip links that are intentionally optional / not required in CI.
+# Live packages under utils/ must not be skipped — fix docs or code instead.
 SKIP_LINK_PATTERNS = (
-    "utils/architecture/",  # archived modules
-    "utils/modeling/",  # archived modules
-    "utils/analysis/",  # archived modules
-    "utils/checkpoint/",  # archived modules
-    "utils/consistency/",  # archived modules
-    "utils/runtime/",  # archived modules
-    "utils/superior/",  # archived modules
-    "utils/brain/",  # archived modules
-    "utils/agentic/",  # archived modules (also in innovations)
-    "native/python/README.md",  # native extension readme
-    "native/python/sdx_native/",  # native compiled modules
+    # Optional vendor trees referenced from docs but not cloned in CI.
+    # (external/ is also skipped via path parts below; keep pattern for relative refs)
 )
 
 
@@ -75,7 +69,6 @@ def main() -> int:
                     # Optional vendor trees (clone_repos.*); not present in CI — do not require files.
                     if rel_target.parts and rel_target.parts[0] == "external":
                         continue
-                    # Archived modules and optional features (not part of core distribution)
                     if any(pattern in rel for pattern in SKIP_LINK_PATTERNS):
                         continue
                     if not target.exists():

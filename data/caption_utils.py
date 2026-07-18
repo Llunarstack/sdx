@@ -1,7 +1,7 @@
 # Parenthesis/tag emphasis and ReVe-style caption normalization for strong prompt adherence.
 # Quality tags (10x boost), anti-blending, count-aware.
 import re
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 # Quality tags that should strongly improve output when present (repeat/boost in caption)
 QUALITY_TAGS = [
@@ -446,7 +446,7 @@ def _person_descriptor_bucket(tag: str) -> int:
     return 6
 
 
-def prompt_from_tags(tags: List[str], subject_first: bool = True) -> str:
+def prompt_from_tags(tags: list[str], subject_first: bool = True) -> str:
     """
     Build a prompt string from a list of tags (e.g. from --tags or a tag file).
     When subject_first=True, orders tags: subject → age → height → build/size → anatomy/framing → body parts → rest.
@@ -498,7 +498,7 @@ def apply_tag_emphasis(caption: str, expand_emphasis: bool = True, expand_deemph
     return caption
 
 
-def structured_to_tags(parts: dict, order: Optional[List[str]] = None) -> str:
+def structured_to_tags(parts: dict, order: list[str] | None = None) -> str:
     """ReVe-style: build caption from structured parts (subject, setting, style, etc.)."""
     if order is None:
         order = ["subject", "setting", "style", "aesthetics", "camera", "extra"]
@@ -534,7 +534,7 @@ def boost_hard_style_tags(caption: str, repeat_factor: int = 3) -> str:
 
 
 # Prepended during training when ``use_adherence_boost`` is on — nudges T5 toward literal caption following.
-ADHERENCE_TAGS: Tuple[str, ...] = (
+ADHERENCE_TAGS: tuple[str, ...] = (
     "faithful to caption",
     "accurate to description",
     "all specified details",
@@ -564,7 +564,7 @@ def apply_training_guidance_to_caption_pair(
     style_guidance_mode: str = "none",
     style_guidance_artists: bool = True,
     include_art_guidance_photography: bool = True,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Apply training guidance (shortcomings, art medium, style) via PromptStack.
 
@@ -591,7 +591,7 @@ def apply_shortcomings_to_caption_pair(
     *,
     mode: str,
     include_2d: bool,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Append positive/negative fragments from ``config.defaults.ai_image_shortcomings`` (same taxonomy as
     ``sample.py --shortcomings-mitigation``). ``mode`` is ``none``, ``auto``, or ``all``.
@@ -614,7 +614,7 @@ def apply_art_guidance_to_caption_pair(
     mode: str,
     include_photography: bool,
     anatomy_mode: str,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Append medium-specific positive/negative fragments from ``config.defaults.art_mediums``.
     Mirrors ``sample.py --art-guidance-mode`` and ``--anatomy-guidance`` behavior.
@@ -636,7 +636,7 @@ def apply_style_guidance_to_caption_pair(
     *,
     mode: str,
     include_artist_refs: bool,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Append style-domain fragments from ``config.defaults.style_guidance`` plus
     ``style_artists`` bucket/facet hints (merged inside ``style_guidance_fragments``).
@@ -685,7 +685,7 @@ def boost_domain_tags(caption: str, repeat_factor: int = 2) -> str:
 
 # --- Regional / layout captions (JSONL: segment + label → richer T5 conditioning) ---
 # Order hints for dict-style "parts" so subject/clothing/background stay consistent.
-REGION_PART_ORDER: Tuple[str, ...] = (
+REGION_PART_ORDER: tuple[str, ...] = (
     "subject",
     "person",
     "character",
@@ -704,7 +704,7 @@ REGION_PART_ORDER: Tuple[str, ...] = (
 )
 
 
-def _region_sort_key(key: str) -> Tuple[int, str]:
+def _region_sort_key(key: str) -> tuple[int, str]:
     kl = key.lower().strip()
     try:
         idx = next(i for i, x in enumerate(REGION_PART_ORDER) if x == kl)
@@ -713,7 +713,7 @@ def _region_sort_key(key: str) -> Tuple[int, str]:
     return (idx, key)
 
 
-def format_parts_dict(parts: dict, order: Optional[List[str]] = None) -> str:
+def format_parts_dict(parts: dict, order: list[str] | None = None) -> str:
     """Turn {'subject': '...', 'background': '...'} into one line for T5."""
     if not parts:
         return ""
@@ -721,7 +721,7 @@ def format_parts_dict(parts: dict, order: Optional[List[str]] = None) -> str:
         keys = [k for k in order if k in parts and str(parts[k]).strip()]
     else:
         keys = sorted(parts.keys(), key=_region_sort_key)
-    bits: List[str] = []
+    bits: list[str] = []
     for k in keys:
         v = str(parts[k]).strip()
         if v:
@@ -812,7 +812,7 @@ def prepend_quality_if_short(caption: str, min_tag_count: int = 4) -> str:
     return f"{QUALITY_PREFIX}{caption}".strip()
 
 
-def add_anti_blending_and_count(caption: str, negative_prompt: str) -> Tuple[str, str]:
+def add_anti_blending_and_count(caption: str, negative_prompt: str) -> tuple[str, str]:
     """
     For multi-person prompts: add anti-blending to positive and blending to negative
     so the model learns to avoid character bleed and respect "room full of people" etc.

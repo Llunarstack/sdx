@@ -40,7 +40,7 @@ class ImagePaths(Dataset):
         if self.data_path.suffix.lower() == ".jsonl":
             import json
 
-            with open(self.data_path, "r", encoding="utf-8") as f:
+            with open(self.data_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -107,7 +107,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, default=None, help="Image folder or legacy alias.")
     parser.add_argument("--manifest-jsonl", type=str, default=None, help="Training manifest (preferred).")
-    parser.add_argument("--data-root", type=str, default=None, help="Resolve manifest image_path (e.g. /workspace/data).")
+    parser.add_argument(
+        "--data-root", type=str, default=None, help="Resolve manifest image_path (e.g. /workspace/data)."
+    )
     parser.add_argument("--out-dir", type=str, required=True, help="Latent cache directory (e.g. latent_cache)")
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument(

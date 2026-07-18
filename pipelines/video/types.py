@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 
 class VideoMode(str, Enum):
@@ -51,7 +51,7 @@ class ShotSpec:
     lens_hint: str = ""
     negative: str = ""
     motion_hint: str = ""
-    must_preserve: List[str] = field(default_factory=list)
+    must_preserve: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -61,10 +61,10 @@ class VideoPlan:
     mode: VideoMode
     user_prompt: str
     timeline: MasterTimeline
-    shots: List[ShotSpec]
+    shots: list[ShotSpec]
     global_negative: str = ""
     style_notes: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -74,7 +74,7 @@ class ClipCandidate:
     source: RetrievalSource
     path: str
     title: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     duration_sec: float = 0.0
     fps: float = 24.0
     width: int = 0
@@ -90,7 +90,7 @@ class SegmentAssignment:
     """Maps a shot to a retrieved clip (or synthetic)."""
 
     shot: ShotSpec
-    clip: Optional[ClipCandidate]
+    clip: ClipCandidate | None
     in_sec: float = 0.0
     out_sec: float = 0.0
     use_motion_only: bool = True
@@ -100,7 +100,7 @@ class SegmentAssignment:
     start_image: str = ""
     end_image: str = ""
     flf2v: bool = False
-    motion_brush: Dict[str, Any] = field(default_factory=dict)
+    motion_brush: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -112,7 +112,7 @@ class ProvenanceRecord:
     source_path: str
     license: str
     url: str
-    operations: List[str] = field(default_factory=list)
+    operations: list[str] = field(default_factory=list)
     retrieved_at: str = ""
 
 
@@ -128,7 +128,7 @@ class KeyframeEditJob:
     negative: str = ""
     init_strength: float = 0.65
     mask_path: str = ""
-    sample_extra_args: List[str] = field(default_factory=list)
+    sample_extra_args: list[str] = field(default_factory=list)
     init_image_override: str = ""
 
 
@@ -138,17 +138,17 @@ class SegmentQualityReport:
     temporal_score: float
     sharpness_score: float
     passed: bool
-    notes: List[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class VideoPipelineResult:
     output_path: str
     plan: VideoPlan
-    provenance: List[ProvenanceRecord]
-    quality: List[SegmentQualityReport]
-    segment_paths: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    provenance: list[ProvenanceRecord]
+    quality: list[SegmentQualityReport]
+    segment_paths: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 EditStrategy = Literal["keyframes", "full_frame", "motion_transfer"]

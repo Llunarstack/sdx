@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
 
 
 class WitnessPerspective(str, Enum):
@@ -26,11 +25,11 @@ class WitnessPerspective(str, Enum):
 class WitnessFrame:
     perspective: WitnessPerspective
     confidence: float
-    prompt_fragments: List[str]
+    prompt_fragments: list[str]
     cfg_bias: float  # multiply base CFG slightly
 
 
-_WITNESS_TRIGGERS: Dict[WitnessPerspective, tuple[str, ...]] = {
+_WITNESS_TRIGGERS: dict[WitnessPerspective, tuple[str, ...]] = {
     WitnessPerspective.CHILD: (
         r"\bchild'?s?\s+(?:view|eyes|perspective)\b",
         r"\bthrough\s+a\s+child\b",
@@ -64,7 +63,7 @@ _WITNESS_TRIGGERS: Dict[WitnessPerspective, tuple[str, ...]] = {
     ),
 }
 
-_FRAGMENT_HINTS: Dict[WitnessPerspective, tuple[str, ...]] = {
+_FRAGMENT_HINTS: dict[WitnessPerspective, tuple[str, ...]] = {
     WitnessPerspective.CHILD: ("low angle", "wide eyes in foreground optional", "soft natural light"),
     WitnessPerspective.GUARD: ("fisheye lens", "timestamp overlay", "high angle", "flat fluorescent"),
     WitnessPerspective.LOVER: ("shallow depth of field", "warm skin tones", "close framing"),
@@ -73,7 +72,7 @@ _FRAGMENT_HINTS: Dict[WitnessPerspective, tuple[str, ...]] = {
     WitnessPerspective.ARCHIVIST: ("neutral color grade", "even lighting", "medium format"),
 }
 
-_CFG_BIAS: Dict[WitnessPerspective, float] = {
+_CFG_BIAS: dict[WitnessPerspective, float] = {
     WitnessPerspective.NEUTRAL: 1.0,
     WitnessPerspective.CHILD: 1.05,
     WitnessPerspective.GUARD: 0.92,

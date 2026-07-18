@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "WindupSpec",
@@ -57,11 +58,11 @@ class WindupSpec:
 @dataclass(slots=True)
 class AnticipationPlan:
     enabled: bool
-    windups: List[WindupSpec] = field(default_factory=list)
+    windups: list[WindupSpec] = field(default_factory=list)
     total_borrowed_sec: float = 0.0
 
 
-def parse_anticipation_config(raw: Any) -> Dict[str, Any]:
+def parse_anticipation_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, bool):
@@ -84,7 +85,7 @@ def _first_action_verb(prompt: str) -> str:
     return ""
 
 
-_WINDUP_FRAGMENTS: Dict[str, str] = {
+_WINDUP_FRAGMENTS: dict[str, str] = {
     "jump": "anticipation crouch, coiled legs, wind-up before jump",
     "leap": "coiled stance, gathering energy before leap",
     "punch": "shoulder wind-up, fist pulled back, anticipation before punch",
@@ -113,7 +114,7 @@ def plan_anticipation_windups(
     max_borrow = float(config.get("max_borrow_sec") or 0.45)
     min_shot = float(config.get("min_shot_sec") or 1.0)
 
-    windups: List[WindupSpec] = []
+    windups: list[WindupSpec] = []
     total = 0.0
     for sh in shots:
         prompt = str(getattr(sh, "prompt", "") or "")

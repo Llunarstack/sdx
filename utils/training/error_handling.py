@@ -6,8 +6,9 @@ import functools
 import logging
 import pickle
 import traceback
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import torch
 
@@ -38,7 +39,7 @@ class InferenceError(SDXError):
     pass
 
 
-def setup_logging(log_dir: Optional[str] = None, level: int = logging.INFO) -> logging.Logger:
+def setup_logging(log_dir: str | None = None, level: int = logging.INFO) -> logging.Logger:
     """Setup enhanced logging with file and console handlers."""
     logger = logging.getLogger("sdx")
     logger.setLevel(level)
@@ -74,7 +75,7 @@ def log_gpu_memory(logger: logging.Logger, prefix: str = ""):
         logger.info(f"{prefix}GPU Memory - Allocated: {memory_allocated:.2f}GB, Reserved: {memory_reserved:.2f}GB")
 
 
-def safe_execute(func: Callable, *args, logger: Optional[logging.Logger] = None, **kwargs) -> Any:
+def safe_execute(func: Callable, *args, logger: logging.Logger | None = None, **kwargs) -> Any:
     """Safely execute a function with error logging."""
     try:
         return func(*args, **kwargs)

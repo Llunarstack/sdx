@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import math
 import re
-from typing import List
 
 from .types import MasterTimeline, ShotSpec, VideoMode, VideoPlan
 
 __all__ = ["plan_video_from_prompt", "split_prompt_into_beats"]
 
 
-def split_prompt_into_beats(prompt: str) -> List[str]:
+def split_prompt_into_beats(prompt: str) -> list[str]:
     """Split on sentence/clause boundaries for multi-shot planning."""
     p = (prompt or "").strip()
     if not p:
@@ -59,7 +58,7 @@ def plan_video_from_prompt(
     beats = beats[: max(1, int(max_shots))]
     n = len(beats)
     base = max(0.8, float(duration_sec) / n)
-    shots: List[ShotSpec] = []
+    shots: list[ShotSpec] = []
     for i, beat in enumerate(beats):
         st, pos, neg = _infer_shot_type(beat)
         seg_prompt = beat

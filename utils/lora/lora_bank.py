@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from utils.prompt.artist_tag import normalize_artist_tag
 
@@ -68,7 +69,7 @@ class LoRAEntry:
         }
 
     @classmethod
-    def from_dict(cls, raw: dict, *, bank_root: Path) -> Optional["LoRAEntry"]:
+    def from_dict(cls, raw: dict, *, bank_root: Path) -> LoRAEntry | None:
         path = str(raw.get("lora") or raw.get("path") or "").strip()
         if not path:
             return None
@@ -88,11 +89,11 @@ class LoRAEntry:
 @dataclass
 class LoRABank:
     root: Path
-    artists: Dict[str, LoRAEntry] = field(default_factory=dict)
-    styles: Dict[str, LoRAEntry] = field(default_factory=dict)
-    extras: Dict[str, LoRAEntry] = field(default_factory=dict)
+    artists: dict[str, LoRAEntry] = field(default_factory=dict)
+    styles: dict[str, LoRAEntry] = field(default_factory=dict)
+    extras: dict[str, LoRAEntry] = field(default_factory=dict)
 
-    def lookup_artist(self, query: str) -> Optional[LoRAEntry]:
+    def lookup_artist(self, query: str) -> LoRAEntry | None:
         key = slugify_lora_key(query)
         for bucket in (self.artists, self.extras):
             if key in bucket:
@@ -103,7 +104,7 @@ class LoRABank:
                     return ent
         return None
 
-    def lookup_style(self, query: str) -> Optional[LoRAEntry]:
+    def lookup_style(self, query: str) -> LoRAEntry | None:
         key = slugify_lora_key(query)
         return self.styles.get(key) or self.styles.get(query.strip().lower())
 
@@ -119,7 +120,7 @@ class LoRABank:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | os.PathLike[str]) -> "LoRABank":
+    def load(cls, path: str | os.PathLike[str]) -> LoRABank:
         p = Path(path)
         if not p.is_file():
             return cls(root=default_bank_root())
@@ -127,7 +128,7 @@ class LoRABank:
         root = Path(str(raw.get("root") or default_bank_root()))
         bank = cls(root=root)
 
-        def _load_bucket(key: str, dest: Dict[str, LoRAEntry]) -> None:
+        def _load_bucket(key: str, dest: dict[str, LoRAEntry]) -> None:
             for k, val in (raw.get(key) or {}).items():
                 if isinstance(val, dict):
                     ent = LoRAEntry.from_dict(val, bank_root=root)
@@ -140,9 +141,9 @@ class LoRABank:
         return bank
 
 
-def _parse_at_mentions(prompt: str) -> List[str]:
+def _parse_at_mentions(prompt: str) -> list[str]:
     """Extract raw @artist handles from a prompt (before expansion)."""
-    names: List[str] = []
+    names: list[str] = []
     for m in re.finditer(r"@(?:artist:)?(?P<q>'[^']+'|\"[^\"]+\"|[^\s,+|]+)", prompt):
         raw = m.group("q").strip("'\"")
         if raw:
@@ -150,9 +151,9 @@ def _parse_at_mentions(prompt: str) -> List[str]:
     return names
 
 
-def _parse_style_lora_mentions(prompt: str) -> List[Tuple[str, float]]:
+def _parse_style_lora_mentions(prompt: str) -> list[tuple[str, float]]:
     """``@style:anime`` or ``@lora:anime:0.6`` → (style_key, scale_mult)."""
-    out: List[Tuple[str, float]] = []
+    out: list[tuple[str, float]] = []
     for m in re.finditer(r"@(?:style|lora):(?P<name>[a-z0-9_-]+)(?::(?P<scale>[0-9.]+))?", prompt, re.I):
         name = m.group("name").strip().lower()
         scale = float(m.group("scale")) if m.group("scale") else 1.0
@@ -166,15 +167,15 @@ def resolve_lora_specs_from_prompt(
     *,
     artist_strength: float = 1.0,
     style_strength: float = 1.0,
-    existing_specs: Optional[Sequence[str]] = None,
-) -> List[str]:
+    existing_specs: Sequence[str] | None = None,
+) -> list[str]:
     """
     Build ``path:scale:role`` specs from ``@artist`` / ``@style:name`` mentions.
 
     *artist_strength* scales artist LoRAs; *style_strength* scales style LoRAs.
     Explicit ``--lora`` specs in *existing_specs* are preserved (prepended).
     """
-    specs: List[str] = list(existing_specs or [])
+    specs: list[str] = list(existing_specs or [])
     seen_paths: set[str] = set()
     for spec in specs:
         path = spec.split(":")[0].strip()
@@ -204,7 +205,7 @@ def resolve_lora_specs_from_prompt(
     return specs
 
 
-def augment_sample_lora_args(args: Any) -> List[str]:
+def augment_sample_lora_args(args: Any) -> list[str]:
     """
     Mutate ``args.lora`` from bank + prompt. Returns resolved artist names for logging.
 

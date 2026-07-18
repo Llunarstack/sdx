@@ -66,7 +66,7 @@ def _hf_token() -> str | None:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     try:
-        from utils.hf_secrets import apply_hf_token_to_env, get_hf_token, hf_auth_source
+        from utils.hf_secrets import apply_hf_token_to_env, get_hf_token
 
         apply_hf_token_to_env()
         return get_hf_token()
@@ -198,7 +198,9 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("SDX_MODEL_PROFILE", "full"),
         help="train | enrich | inference | ultimate | full (default: full or SDX_MODEL_PROFILE).",
     )
-    p.add_argument("--workers", type=int, default=0, help="Parallel file workers per repo (default 4 with HF_TOKEN else 2).")
+    p.add_argument(
+        "--workers", type=int, default=0, help="Parallel file workers per repo (default 4 with HF_TOKEN else 2)."
+    )
     p.add_argument("--retries", type=int, default=5, help="Retries per repo on network error.")
     p.add_argument("--force", action="store_true", help="Re-download even when folder looks complete.")
     args = p.parse_args(argv)

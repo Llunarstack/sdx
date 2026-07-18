@@ -7,14 +7,13 @@ Falls back to Python byte scans when the DLL is absent.
 from __future__ import annotations
 
 import ctypes
-from typing import Optional, Tuple
 
 from sdx_native.native_tools import c_buffer_stats_shared_library_path
 
 
 class BufferStatsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = c_buffer_stats_shared_library_path()
         if p is None:
             return
@@ -51,7 +50,7 @@ class BufferStatsLib:
         return int(self._lib.sdx_c_sum_bytes_u8(void_p, len(buf)))
 
 
-_LIB: Optional[BufferStatsLib] = None
+_LIB: BufferStatsLib | None = None
 
 
 def get_buffer_stats_lib() -> BufferStatsLib:
@@ -61,7 +60,7 @@ def get_buffer_stats_lib() -> BufferStatsLib:
     return _LIB
 
 
-def maybe_count_newlines_native(buf: bytes) -> Optional[int]:
+def maybe_count_newlines_native(buf: bytes) -> int | None:
     lib = get_buffer_stats_lib()
     if not lib.available:
         return None
@@ -71,7 +70,7 @@ def maybe_count_newlines_native(buf: bytes) -> Optional[int]:
         return None
 
 
-def maybe_sum_bytes_native(buf: bytes) -> Optional[int]:
+def maybe_sum_bytes_native(buf: bytes) -> int | None:
     lib = get_buffer_stats_lib()
     if not lib.available:
         return None
@@ -89,7 +88,7 @@ def sum_bytes_py(buf: bytes) -> int:
     return int(sum(buf))
 
 
-def newline_and_sum(buf: bytes) -> Tuple[int, int]:
+def newline_and_sum(buf: bytes) -> tuple[int, int]:
     """Prefer C when built; else Python."""
     n = maybe_count_newlines_native(buf)
     s = maybe_sum_bytes_native(buf)

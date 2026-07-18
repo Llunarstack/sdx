@@ -12,7 +12,6 @@ denoising predictions. Hook your DiT / UNet ``forward(x, t, **kw)`` here.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -89,7 +88,7 @@ def ladd_discriminator_step(
     latents_fake: torch.Tensor,
     *,
     cfg: LADDConfig,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     One discriminator update. Pass **detached** fake latents (e.g. student-predicted clean latent or x0_hat).
     """
@@ -123,9 +122,9 @@ def ladd_generator_step(
     teacher: nn.Module,
     *,
     cfg: LADDConfig,
-    latent_for_d: Optional[torch.Tensor] = None,
+    latent_for_d: torch.Tensor | None = None,
     **model_kw,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     One student (generator) step: MSE to teacher + optional adversarial signal on ``latent_for_d``.
 
@@ -134,7 +133,7 @@ def ladd_generator_step(
     """
     opt_g.zero_grad(set_to_none=True)
     loss = cfg.mse_teacher * teacher_student_mse(teacher, student, x_t, t, **model_kw)
-    stats: Dict[str, float] = {"g_mse": float((loss / max(cfg.mse_teacher, 1e-8)).detach().cpu())}
+    stats: dict[str, float] = {"g_mse": float((loss / max(cfg.mse_teacher, 1e-8)).detach().cpu())}
     if cfg.adversarial > 0.0 and latent_for_d is not None:
         logit_fake = D(latent_for_d)
         adv = softplus_loss_gen(logit_fake)

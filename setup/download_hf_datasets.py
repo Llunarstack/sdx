@@ -88,7 +88,9 @@ def _export_cmd(spec: dict, *, dest: Path, max_samples: int, image_format: str, 
     return cmd
 
 
-def _run_pack(name: str, spec: dict, *, dest: Path, max_samples: int, image_format: str, force: bool, turbo: bool) -> tuple[str, int]:
+def _run_pack(
+    name: str, spec: dict, *, dest: Path, max_samples: int, image_format: str, force: bool, turbo: bool
+) -> tuple[str, int]:
     out_dir = dest / name
     if not force and _manifest_ok(out_dir):
         print(f"[{name}] already exported — skip ({out_dir / 'manifest.jsonl'})")
@@ -110,7 +112,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Per-pack row cap (0 = full stream).",
     )
     p.add_argument("--force", action="store_true", help="Re-export even when manifest exists.")
-    p.add_argument("--image-format", default=os.environ.get("SDX_HF_IMAGE_FORMAT", "jpg"), choices=("jpg", "png", "webp"))
+    p.add_argument(
+        "--image-format", default=os.environ.get("SDX_HF_IMAGE_FORMAT", "jpg"), choices=("jpg", "png", "webp")
+    )
     p.add_argument("--parallel", type=int, default=0, help="Export N packs at once (0=SDX_HF_PARALLEL_PACKS).")
     args = p.parse_args(argv)
 
@@ -181,7 +185,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         for name, spec in todo:
             _, rc = _run_pack(
-                name, spec, dest=dest, max_samples=args.max_samples, image_format=args.image_format, force=True, turbo=turbo
+                name,
+                spec,
+                dest=dest,
+                max_samples=args.max_samples,
+                image_format=args.image_format,
+                force=True,
+                turbo=turbo,
             )
             if rc == 0:
                 ok += 1

@@ -1,6 +1,5 @@
 # Memory-efficient attention: xformers with fallback to PyTorch SDPA or manual.
 # Supports causal/block-causal masks for AR.
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -35,10 +34,10 @@ def memory_efficient_attention(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    scale: Optional[float] = None,
+    attn_mask: torch.Tensor | None = None,
+    scale: float | None = None,
     use_xformers: bool = True,
-    linear_attn_frac: Optional[float] = None,
+    linear_attn_frac: float | None = None,
 ) -> torch.Tensor:
     """
     q, k, v: (B, N, H, D) or (B, H, N, D). Returns (B, N, H, D).
@@ -115,7 +114,7 @@ def _apply_rope_1d(x: torch.Tensor, positions: torch.Tensor, base: float = 10000
     return out
 
 
-def create_block_causal_mask(num_patches_per_side: int, num_ar_blocks: int) -> Optional[torch.Tensor]:
+def create_block_causal_mask(num_patches_per_side: int, num_ar_blocks: int) -> torch.Tensor | None:
     """
     Create block-causal mask for AR: patch grid is divided into num_ar_blocks x num_ar_blocks
     blocks; block i can only attend to blocks 0..i (causal within and across blocks).
@@ -199,12 +198,12 @@ class SelfAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
         use_xformers: bool = True,
-        routing_context: Optional[torch.Tensor] = None,
+        routing_context: torch.Tensor | None = None,
         router_override=None,
         report_aux_loss: bool = False,
-        num_patch_tokens: Optional[int] = None,
+        num_patch_tokens: int | None = None,
     ) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
@@ -303,12 +302,12 @@ class SSMTokenMixer(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
         use_xformers: bool = True,
-        routing_context: Optional[torch.Tensor] = None,
+        routing_context: torch.Tensor | None = None,
         router_override=None,
         report_aux_loss: bool = False,
-        num_patch_tokens: Optional[int] = None,
+        num_patch_tokens: int | None = None,
     ) -> torch.Tensor:
         # x: (B, N, C)
         y = self.in_proj(x)

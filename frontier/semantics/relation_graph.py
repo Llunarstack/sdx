@@ -1,7 +1,7 @@
 """
 Subject–relation–object graph from prompts for layout + regional prompting.
 
-Complements ``innovations/semantics`` (production) with a lightweight research parser.
+Complements production prompt/layout helpers with a lightweight research parser.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Tuple
 
 
 class RelationKind(str, Enum):
@@ -33,12 +32,12 @@ class RelationEdge:
 
 @dataclass
 class SceneRelationGraph:
-    entities: List[str] = field(default_factory=list)
-    edges: List[RelationEdge] = field(default_factory=list)
+    entities: list[str] = field(default_factory=list)
+    edges: list[RelationEdge] = field(default_factory=list)
 
-    def to_regional_hints(self) -> List[Tuple[str, str]]:
+    def to_regional_hints(self) -> list[tuple[str, str]]:
         """Map spatial relations to (entity, anchor) for Omost-style layout."""
-        hints: List[Tuple[str, str]] = []
+        hints: list[tuple[str, str]] = []
         for e in self.edges:
             if e.kind == RelationKind.LEFT_OF:
                 hints.append((e.subject, "left"))
@@ -53,7 +52,7 @@ class SceneRelationGraph:
         return hints
 
 
-_REL_PATTERNS: Tuple[Tuple[str, RelationKind, str], ...] = (
+_REL_PATTERNS: tuple[tuple[str, RelationKind, str], ...] = (
     (r"(\w+(?:\s+\w+)?)\s+on the left of\s+(\w+(?:\s+\w+)?)", RelationKind.LEFT_OF, "left_of"),
     (r"(\w+(?:\s+\w+)?)\s+to the left of\s+(\w+(?:\s+\w+)?)", RelationKind.LEFT_OF, "left_of"),
     (r"(\w+(?:\s+\w+)?)\s+on the right of\s+(\w+(?:\s+\w+)?)", RelationKind.RIGHT_OF, "right_of"),

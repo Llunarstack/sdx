@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class StrokeStyle(str, Enum):
@@ -32,7 +31,7 @@ class BrushPlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, StrokeStyle, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, StrokeStyle, str, str], ...] = (
     (
         re.compile(r"\b(impasto|thick paint|palette knife|alla prima)\b", re.I),
         StrokeStyle.IMPASTO,
@@ -104,7 +103,7 @@ class BrushPlanner:
             )
         return None
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         if p is None:
             return "", ""

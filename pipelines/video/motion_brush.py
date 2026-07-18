@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -23,12 +24,12 @@ __all__ = [
 @dataclass(slots=True)
 class MotionBrushSpec:
     mask_path: str = ""
-    box: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    box: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     mode: str = "motion_only"  # motion_only | freeze_brush | background_only
     feather: int = 8
 
 
-def parse_motion_brush(raw: Any) -> Optional[MotionBrushSpec]:
+def parse_motion_brush(raw: Any) -> MotionBrushSpec | None:
     if not raw:
         return None
     if isinstance(raw, str):

@@ -7,22 +7,20 @@ batch caption prep, or optional prepend/append before encoding text.
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from config.defaults.physics_material_prompts import (
     PHYSICS_COMMON_NEGATIVE_ADDON,
     PHYSICS_MATERIAL_RECOMMENDED_PROMPTS_BY_DOMAIN,
 )
 
 
-def suggest_physics_prompt_addons(prompt: str) -> Tuple[str, str]:
+def suggest_physics_prompt_addons(prompt: str) -> tuple[str, str]:
     """
     Return ``(positive_snippet, negative_snippet)`` from light keyword matching.
 
     Empty strings if no physics-related keywords match (caller can skip).
     """
     lower = prompt.lower()
-    pos: List[str] = []
+    pos: list[str] = []
 
     fluid_kw = (
         "water",

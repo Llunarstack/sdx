@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "MaterialState",
@@ -33,12 +34,12 @@ class MaterialIssue:
 
 @dataclass(slots=True)
 class MaterialMemoryReport:
-    timeline: List[Dict[str, str]]
-    issues: List[MaterialIssue]
-    prompt_injections: Dict[str, str]
+    timeline: list[dict[str, str]]
+    issues: list[MaterialIssue]
+    prompt_injections: dict[str, str]
 
 
-def parse_material_config(raw: Any) -> Dict[str, Any]:
+def parse_material_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -46,14 +47,14 @@ def parse_material_config(raw: Any) -> Dict[str, Any]:
     return {"enabled": bool(raw)}
 
 
-def _entity_materials(shot: Any) -> Dict[str, str]:
+def _entity_materials(shot: Any) -> dict[str, str]:
     raw = getattr(shot, "material_state", None) or getattr(shot, "materials", None) or {}
     if isinstance(raw, Mapping):
         return {str(k): str(v).lower() for k, v in raw.items()}
     return {}
 
 
-_STATE_PROMPTS: Dict[str, str] = {
+_STATE_PROMPTS: dict[str, str] = {
     "wet": "clothes and hair still wet, water dripping",
     "muddy": "mud stains on boots and hem, dirty splatter",
     "bloody": "blood stains persist on fabric and skin",
@@ -69,16 +70,16 @@ def track_material_memory(
     shots: Sequence[Any],
     *,
     config: Mapping[str, Any],
-    initial: Optional[Mapping[str, str]] = None,
+    initial: Mapping[str, str] | None = None,
 ) -> MaterialMemoryReport:
     if not config.get("enabled"):
         return MaterialMemoryReport(timeline=[], issues=[], prompt_injections={})
     strict = bool(config.get("strict"))
     level = "error" if strict else "warn"
-    ledger: Dict[str, str] = {str(k): str(v).lower() for k, v in (initial or {}).items()}
-    timeline: List[Dict[str, str]] = []
-    issues: List[MaterialIssue] = []
-    injections: Dict[str, str] = {}
+    ledger: dict[str, str] = {str(k): str(v).lower() for k, v in (initial or {}).items()}
+    timeline: list[dict[str, str]] = []
+    issues: list[MaterialIssue] = []
+    injections: dict[str, str] = {}
 
     for sh in shots:
         sid = str(getattr(sh, "id", ""))

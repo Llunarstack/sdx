@@ -8,7 +8,7 @@ Programmatic text-to-image for loaded stacks (DiT + ``GaussianDiffusion`` + VAE)
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from PIL import Image
@@ -33,7 +33,7 @@ def sample_one_image_pil(
     tokenizer: Any,
     text_encoder: torch.nn.Module,
     vae: torch.nn.Module,
-    device: Union[str, torch.device],
+    device: str | torch.device,
     prompt: str,
     negative_prompt: str = "",
     image_size: int = 512,
@@ -44,7 +44,7 @@ def sample_one_image_pil(
     max_length: int = 300,
     dtype: torch.dtype = torch.float32,
     text_bundle: Any = None,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     rae_bridge: Any = None,
     size_embed_dim: int = 0,
     eval_mode: bool = True,

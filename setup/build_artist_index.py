@@ -19,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.scrape.sites import ADAPTERS  # noqa: E402
-from utils.prompt.artist_registry import ArtistRegistry, build_from_manifests  # noqa: E402
+from utils.prompt.artist_registry import build_from_manifests  # noqa: E402
 
 
 def _discover_manifests(data_root: Path, sites: list[str]) -> list[Path]:
@@ -52,7 +52,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     reg = build_from_manifests(manifests)
-    out = Path(args.out) if args.out else (data_root / "artist_index.json" if data_root else REPO_ROOT / "data" / "artist_index.json")
+    out = (
+        Path(args.out)
+        if args.out
+        else (data_root / "artist_index.json" if data_root else REPO_ROOT / "data" / "artist_index.json")
+    )
     reg.save(out)
     print(f"Indexed {len(reg):,} artists from {len(manifests)} manifest(s) -> {out}")
     return 0

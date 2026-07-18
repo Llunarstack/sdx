@@ -13,9 +13,9 @@ while the diffusion model regenerates the rest to match the prompt.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -31,14 +31,14 @@ class CompositeSpec:
     background_locked: bool
 
 
-def _load_rgb(path: Union[str, Path], *, size: Optional[Tuple[int, int]] = None) -> Image.Image:
+def _load_rgb(path: str | Path, *, size: tuple[int, int] | None = None) -> Image.Image:
     img = Image.open(path).convert("RGB")
     if size is not None and img.size != size:
         img = img.resize(size, Image.Resampling.LANCZOS)
     return img
 
 
-def _load_mask(path: Union[str, Path], *, size: Tuple[int, int]) -> Image.Image:
+def _load_mask(path: str | Path, *, size: tuple[int, int]) -> Image.Image:
     m = Image.open(path).convert("L")
     if m.size != size:
         m = m.resize(size, Image.Resampling.NEAREST)
@@ -47,10 +47,10 @@ def _load_mask(path: Union[str, Path], *, size: Tuple[int, int]) -> Image.Image:
 
 def build_init_and_inpaint_mask(
     *,
-    reference_images: Sequence[Union[str, Path]],
+    reference_images: Sequence[str | Path],
     parts: Sequence[DissectedPart],
-    output_dir: Union[str, Path],
-    target_size: Tuple[int, int],
+    output_dir: str | Path,
+    target_size: tuple[int, int],
     lock_background_if_requested: bool = True,
 ) -> CompositeSpec:
     """

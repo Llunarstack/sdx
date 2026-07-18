@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict
+from typing import Any
 
 
-def _parse(prompt: str) -> Dict[str, Any]:
+def _parse(prompt: str) -> dict[str, Any]:
     from models.prompt_adherence import PromptParser
 
     parsed = PromptParser().parse(prompt)
@@ -21,7 +21,7 @@ def _parse(prompt: str) -> Dict[str, Any]:
     }
 
 
-def diff_prompts(a: str, b: str) -> Dict[str, Any]:
+def diff_prompts(a: str, b: str) -> dict[str, Any]:
     pa, pb = _parse(a), _parse(b)
     sa, sb = set(pa["subjects"]), set(pb["subjects"])
     na, nb = set(pa["negations"]), set(pb["negations"])

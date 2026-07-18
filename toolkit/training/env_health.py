@@ -13,11 +13,11 @@ import argparse
 import json
 import platform
 import sys
-from typing import Any, Dict
+from typing import Any
 
 
-def collect_env() -> Dict[str, Any]:
-    out: Dict[str, Any] = {
+def collect_env() -> dict[str, Any]:
+    out: dict[str, Any] = {
         "platform": platform.platform(),
         "python": sys.version.split()[0],
         "executable": sys.executable,

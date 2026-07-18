@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 __all__ = [
     "EnginePreset",
@@ -45,12 +45,12 @@ class EnginePreset:
     temporal_alpha: float = 0.10
     physics_hint: str = ""
     pipeline_notes: str = ""
-    retrieval_tags: List[str] = field(default_factory=list)
+    retrieval_tags: list[str] = field(default_factory=list)
     animation_preset: str = ""
-    layers: List[str] = field(default_factory=list)
+    layers: list[str] = field(default_factory=list)
 
 
-_ENGINES: Dict[RenderEngine, EnginePreset] = {
+_ENGINES: dict[RenderEngine, EnginePreset] = {
     RenderEngine.REALISTIC: EnginePreset(
         id=RenderEngine.REALISTIC,
         title="Live-action cinematic",
@@ -162,11 +162,11 @@ _ENGINES: Dict[RenderEngine, EnginePreset] = {
 }
 
 
-def list_engines() -> List[EnginePreset]:
+def list_engines() -> list[EnginePreset]:
     return list(_ENGINES.values())
 
 
-def engine_by_id(name: str) -> Optional[EnginePreset]:
+def engine_by_id(name: str) -> EnginePreset | None:
     key = (name or "").strip().lower().replace(" ", "_").replace("-", "_")
     for eng in RenderEngine:
         if eng.value == key or key in eng.value:
@@ -187,7 +187,7 @@ def engine_by_id(name: str) -> Optional[EnginePreset]:
 
 def match_engine_from_prompt(prompt: str, *, style_hint: str = "") -> RenderEngine:
     text = f"{prompt} {style_hint}".lower()
-    rules: List[tuple[tuple[str, ...], RenderEngine]] = [
+    rules: list[tuple[tuple[str, ...], RenderEngine]] = [
         (("minecraft", "voxel", "blocky", "cube world"), RenderEngine.VOXEL),
         (("lego", "minifig", "brick"), RenderEngine.LEGO),
         (("claymation", "clay", "stop motion", "stop-motion", "wallace"), RenderEngine.CLAYMATION),
@@ -206,7 +206,7 @@ def match_engine_from_prompt(prompt: str, *, style_hint: str = "") -> RenderEngi
     return RenderEngine.REALISTIC
 
 
-def engine_edit_overrides(preset: EnginePreset) -> Dict[str, Any]:
+def engine_edit_overrides(preset: EnginePreset) -> dict[str, Any]:
     return {
         "post_grade": preset.post_grade,
         "keyframe_interval": preset.keyframe_interval,

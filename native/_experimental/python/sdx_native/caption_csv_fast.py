@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Sequence
+from collections.abc import Iterable, Sequence
 
 
-def split_caption_parts(text: str) -> List[str]:
+def split_caption_parts(text: str) -> list[str]:
     """Split on commas; strip whitespace; drop empties."""
     if not text or not text.strip():
         return []
     return [p.strip() for p in text.split(",") if p.strip()]
 
 
-def dedupe_caption_parts_preserve_order(parts: Sequence[str]) -> List[str]:
+def dedupe_caption_parts_preserve_order(parts: Sequence[str]) -> list[str]:
     """Case-insensitive dedupe while preserving first-seen casing."""
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for p in parts:
         k = p.lower()
         if k in seen:
@@ -33,7 +33,7 @@ def normalize_caption_csv(text: str) -> str:
 
 def merge_caption_csv(*chunks: str) -> str:
     """Merge multiple caption fragments with global dedupe."""
-    acc: List[str] = []
+    acc: list[str] = []
     for c in chunks:
         acc.extend(split_caption_parts(c or ""))
     return ", ".join(dedupe_caption_parts_preserve_order(acc))
@@ -52,5 +52,5 @@ def token_overlap_ratio(a: str, b: str) -> float:
     return inter / max(1, union)
 
 
-def batch_normalize_captions(captions: Iterable[str]) -> List[str]:
+def batch_normalize_captions(captions: Iterable[str]) -> list[str]:
     return [normalize_caption_csv(c) for c in captions]

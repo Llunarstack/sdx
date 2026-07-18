@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 
 @dataclass
@@ -28,7 +29,7 @@ class PerRegionCADSConfig:
         return 1.0 + early * self.region_strengths[region_index]
 
 
-def merge_cads_into_holy_grail(holy_kw: Mapping[str, Any], cfg: Optional[PerRegionCADSConfig]) -> dict:
+def merge_cads_into_holy_grail(holy_kw: Mapping[str, Any], cfg: PerRegionCADSConfig | None) -> dict:
     """Boost holy-grail CADS when per-region config is active."""
     out = dict(holy_kw)
     if cfg is None:

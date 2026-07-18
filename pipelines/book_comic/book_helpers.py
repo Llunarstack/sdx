@@ -25,9 +25,10 @@ Run from **repo root** so ``data``, ``utils``, ``vit_quality`` imports resolve.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
@@ -213,7 +214,7 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
     )
 
 
-def book_accuracy_tier_names() -> Tuple[str, ...]:
+def book_accuracy_tier_names() -> tuple[str, ...]:
     """Known ``--book-accuracy`` values (for docs, validators, and UIs)."""
     return ("none", "fast", "balanced", "maximum", "production", "production_vit", "production_fidelity")
 
@@ -252,14 +253,14 @@ def audit_book_run_flags(
     clip_monitor_every: int = 0,
     adherence_pack: str = "none",
     pick_vit_use_adherence: bool = False,
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Return ``(errors, warnings)`` for common book + ``sample.py`` flag mismatches.
 
     Errors are reserved for hard inconsistencies; today most issues are warnings so runs can proceed.
     """
-    errors: List[str] = []
-    warnings: List[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
     pb = str(pick_best or "").strip().lower()
     pv = str(pick_vit_ckpt or "").strip()
     sc = max(1, int(sample_candidates or 1))
@@ -418,7 +419,7 @@ def expected_text_for_pick(expected_texts: Sequence[str]) -> str:
 
 
 def append_sample_py_quality_flags(
-    cmd: List[str],
+    cmd: list[str],
     settings: BookAccuracyPreset,
     *,
     pick_expected_text: str,
@@ -494,7 +495,7 @@ def append_sample_py_quality_flags(
 
 
 def append_sample_py_beam_flags(
-    cmd: List[str],
+    cmd: list[str],
     *,
     beam_width: int = 0,
     beam_steps: int = 0,
@@ -536,7 +537,7 @@ def append_sample_py_beam_flags(
         cmd.extend(["--beam2-noise", str(bn)])
 
 
-def extend_sample_py_adapter_control_cmd(cmd: List[str], args: Any) -> None:
+def extend_sample_py_adapter_control_cmd(cmd: list[str], args: Any) -> None:
     """
     Append ``sample.py`` flags for style, ControlNet (single or stacked), LoRA/DoRA/LyCORIS,
     optional holy-grail guidance, tags, and reference / IP-Adapter conditioning.
@@ -646,7 +647,7 @@ def extend_sample_py_adapter_control_cmd(cmd: List[str], args: Any) -> None:
         cmd.extend(["--reference-adapter-pt", rap])
 
 
-def extend_sample_py_sdx_enhance_cmd(cmd: List[str], args: Any) -> None:
+def extend_sample_py_sdx_enhance_cmd(cmd: list[str], args: Any) -> None:
     """
     Forward ``sample.py`` quality / finish flags (hires, latent priors, post-process, refine, faces).
 
@@ -762,14 +763,14 @@ def extend_sample_py_sdx_enhance_cmd(cmd: List[str], args: Any) -> None:
         cmd.extend(["--refine-gate-threshold", str(float(getattr(args, "refine_gate_threshold", 0.62) or 0.62))])
 
 
-def sdx_enhance_argv_for_sample(args: Any) -> List[str]:
+def sdx_enhance_argv_for_sample(args: Any) -> list[str]:
     """Argv fragment (no program name) for OCR repair subprocess parity with main passes."""
-    out: List[str] = []
+    out: list[str] = []
     extend_sample_py_sdx_enhance_cmd(out, args)
     return out
 
 
-def extend_sample_py_adherence_quality_cmd(cmd: List[str], args: Any) -> None:
+def extend_sample_py_adherence_quality_cmd(cmd: list[str], args: Any) -> None:
     """
     Forward ``sample.py`` prompt packs, CLIP alignment hooks, layout stage, and related inference flags.
     """
@@ -849,22 +850,22 @@ def extend_sample_py_adherence_quality_cmd(cmd: List[str], args: Any) -> None:
     extend_sample_argv_visual_design(cmd, args)
 
 
-def adherence_quality_argv_for_sample(args: Any) -> List[str]:
+def adherence_quality_argv_for_sample(args: Any) -> list[str]:
     """Argv fragment for OCR repair parity with main passes (packs + CLIP + layout hooks)."""
-    out: List[str] = []
+    out: list[str] = []
     extend_sample_py_adherence_quality_cmd(out, args)
     return out
 
 
-def adapter_control_argv_for_sample(args: Any) -> List[str]:
+def adapter_control_argv_for_sample(args: Any) -> list[str]:
     """Build argv fragment (no program name) for OCR repair and other subprocess reuse."""
-    out: List[str] = []
+    out: list[str] = []
     extend_sample_py_adapter_control_cmd(out, args)
     return out
 
 
 def append_optional_sample_flags(
-    cmd: List[str],
+    cmd: list[str],
     *,
     vae_tiling: bool,
     pick_clip_model: str,
@@ -911,7 +912,7 @@ def apply_postprocess_to_image_file(
     naturalize: bool,
     grain: float,
     micro_contrast: float,
-    seed: Optional[int],
+    seed: int | None,
 ) -> None:
     """
     In-place RGB post-process using ``utils.quality`` (sharpen, naturalize).
@@ -942,9 +943,9 @@ def apply_postprocess_to_image_file(
     Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="RGB").save(path)
 
 
-def build_extra_ocr_sample_flags(settings: BookAccuracyPreset) -> List[str]:
+def build_extra_ocr_sample_flags(settings: BookAccuracyPreset) -> list[str]:
     """Extra ``sample.py`` args for OCR repair passes (single-image)."""
-    out: List[str] = []
+    out: list[str] = []
     if settings.boost_quality:
         out.append("--boost-quality")
     if settings.subject_first:
@@ -1009,7 +1010,7 @@ def expand_page_prompt_template(
     template: str,
     *,
     page_index: int,
-    total_pages: Optional[int] = None,
+    total_pages: int | None = None,
     **extra: Any,
 ) -> str:
     """
@@ -1022,7 +1023,7 @@ def expand_page_prompt_template(
     t = template or ""
     if not t:
         return ""
-    mapping: Dict[str, Any] = {
+    mapping: dict[str, Any] = {
         "page": int(page_index),
         "page0": int(page_index),
         "page1": int(page_index) + 1,

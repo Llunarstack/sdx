@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class VisualRhythm(str, Enum):
@@ -24,7 +23,7 @@ class RhythmPlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, VisualRhythm, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, VisualRhythm, str, str], ...] = (
     (
         re.compile(r"\b(repeating|pattern|rhythm|motif|series of)\b", re.I),
         VisualRhythm.REPETITION,
@@ -66,7 +65,7 @@ class RhythmPlanner:
                 return RhythmPlan(rhythm, pos, neg)
         return RhythmPlan(VisualRhythm.NONE, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

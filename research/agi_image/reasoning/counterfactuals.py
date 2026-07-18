@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass(slots=True)
@@ -18,9 +17,9 @@ class CounterfactualBranch:
 
     branch_id: str
     delta_prompt: str
-    parent_branch_id: Optional[str] = None
+    parent_branch_id: str | None = None
     expected_metric_shift: str = ""  # human-readable expectation
-    children: List["CounterfactualBranch"] = field(default_factory=list)
+    children: list[CounterfactualBranch] = field(default_factory=list)
 
 
 __all__ = ["BranchPoint", "CounterfactualBranch"]

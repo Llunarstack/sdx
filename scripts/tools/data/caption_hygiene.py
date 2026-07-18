@@ -5,7 +5,7 @@ JSONL caption QA: Unicode normalization preview, pos/neg overlap, duplicate fing
 Implements Python-side checks described in ``docs/NATIVE_AND_SYSTEM_LIBS.md`` (complements
 Rust ``sdx-jsonl-tools prompt-lint`` and Python ``sdx_native.jsonl_manifest_pure``).
 
-Usage (repo root on PYTHONPATH; ``native/python`` for ``sdx_native``)::
+Usage (repo root on PYTHONPATH; ``native/_experimental/python`` for ``sdx_native``)::
 
   python -m scripts.tools caption_hygiene data/manifest.jsonl --report-dups --max-overlap-show 15
   python -m scripts.tools caption_hygiene data/manifest.jsonl --normalize-samples 5
@@ -18,13 +18,13 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List, Tuple
+from typing import Any
 
 # Repo root
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-_np = ROOT / "native" / "python"
+_np = ROOT / "native" / "_experimental" / "python"
 if str(_np) not in sys.path:
     sys.path.insert(0, str(_np))
 
@@ -36,7 +36,7 @@ from sdx_native.text_hygiene import (  # noqa: E402
 )
 
 
-def _caption_from_row(row: Dict[str, Any]) -> str:
+def _caption_from_row(row: dict[str, Any]) -> str:
     for k in jsonl_row_caption_keys():
         v = row.get(k)
         if isinstance(v, str) and v.strip():
@@ -44,7 +44,7 @@ def _caption_from_row(row: Dict[str, Any]) -> str:
     return ""
 
 
-def _negative_from_row(row: Dict[str, Any]) -> str:
+def _negative_from_row(row: dict[str, Any]) -> str:
     for k in ("negative_caption", "negative_prompt"):
         v = row.get(k)
         if isinstance(v, str) and v.strip():
@@ -52,7 +52,7 @@ def _negative_from_row(row: Dict[str, Any]) -> str:
     return ""
 
 
-def _image_key(row: Dict[str, Any]) -> str:
+def _image_key(row: dict[str, Any]) -> str:
     return str(row.get("image_path") or row.get("path") or row.get("image") or "")
 
 
@@ -71,8 +71,8 @@ def main() -> int:
         print(f"Not a file: {path}", file=sys.stderr)
         return 1
 
-    dup_buckets: DefaultDict[str, List[str]] = defaultdict(list)
-    overlap_rows: List[Tuple[float, str, str, str]] = []
+    dup_buckets: defaultdict[str, list[str]] = defaultdict(list)
+    overlap_rows: list[tuple[float, str, str, str]] = []
     empty_captions = 0
     lines = 0
     samples_left = int(args.normalize_samples or 0)

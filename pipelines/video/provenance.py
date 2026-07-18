@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .types import ProvenanceRecord, SegmentAssignment
 
@@ -14,12 +14,12 @@ __all__ = ["ProvenanceLog", "record_segment_provenance", "write_provenance_json"
 
 class ProvenanceLog:
     def __init__(self) -> None:
-        self.records: List[ProvenanceRecord] = []
+        self.records: list[ProvenanceRecord] = []
 
     def add(self, record: ProvenanceRecord) -> None:
         self.records.append(record)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
             "segments": [
@@ -40,7 +40,7 @@ class ProvenanceLog:
 def record_segment_provenance(
     seg: SegmentAssignment,
     *,
-    operations: Optional[List[str]] = None,
+    operations: list[str] | None = None,
 ) -> ProvenanceRecord:
     clip = seg.clip
     return ProvenanceRecord(

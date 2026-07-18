@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any
 
 from pipelines.book_comic.book_helpers import pick_metric_requires_vit_ckpt
 
 
-def load_book_manifest(path: Union[str, Path]) -> Dict[str, Any]:
+def load_book_manifest(path: str | Path) -> dict[str, Any]:
     """Load ``book_manifest.json`` or ``book.json`` from a project directory or file path."""
     p = Path(path)
     if p.is_dir():
@@ -28,7 +28,7 @@ def load_book_manifest(path: Union[str, Path]) -> Dict[str, Any]:
     return data
 
 
-def manifest_project_root(manifest_path: Union[str, Path]) -> Path:
+def manifest_project_root(manifest_path: str | Path) -> Path:
     """Directory containing manifest assets (parent of the JSON file)."""
     p = Path(manifest_path)
     if p.is_dir():
@@ -36,15 +36,15 @@ def manifest_project_root(manifest_path: Union[str, Path]) -> Path:
     return p.parent.resolve()
 
 
-def manifest_entries(manifest: Dict[str, Any]) -> List[Dict[str, Any]]:
+def manifest_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     raw = manifest.get("entries")
     if not isinstance(raw, list):
         return []
     return [e for e in raw if isinstance(e, dict)]
 
 
-def manifest_page_indices(entries: List[Dict[str, Any]]) -> List[int]:
-    out: List[int] = []
+def manifest_page_indices(entries: list[dict[str, Any]]) -> list[int]:
+    out: list[int] = []
     for e in entries:
         if e.get("kind") != "page":
             continue
@@ -57,13 +57,13 @@ def manifest_page_indices(entries: List[Dict[str, Any]]) -> List[int]:
 
 
 def manifest_prompt_digest(
-    entries: List[Dict[str, Any]],
+    entries: list[dict[str, Any]],
     *,
     max_chars: int = 100,
     kind: str = "page",
-) -> List[Tuple[int, str]]:
+) -> list[tuple[int, str]]:
     """Return (page_index, truncated prompt) for manifest rows."""
-    rows: List[Tuple[int, str]] = []
+    rows: list[tuple[int, str]] = []
     cover_kinds = frozenset({"cover", "front_cover", "back_cover"})
     for e in entries:
         ek = e.get("kind")
@@ -83,7 +83,7 @@ def manifest_prompt_digest(
     return rows
 
 
-def manifest_summary_lines(manifest: Dict[str, Any]) -> List[str]:
+def manifest_summary_lines(manifest: dict[str, Any]) -> list[str]:
     """Human-readable one-liners for logs or CI artifacts."""
     ent = manifest_entries(manifest)
     pages = [e for e in ent if e.get("kind") == "page"]
@@ -119,18 +119,18 @@ def manifest_summary_lines(manifest: Dict[str, Any]) -> List[str]:
 
 
 def validate_book_manifest(
-    manifest: Dict[str, Any],
+    manifest: dict[str, Any],
     *,
-    project_root: Union[str, Path, None] = None,
+    project_root: str | Path | None = None,
     check_files: bool = False,
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Sanity-check a ``book_manifest.json`` dict (post-run QC).
 
     Returns ``(errors, warnings)``. Errors are structural problems; warnings flag weak configs.
     """
-    errors: List[str] = []
-    warnings: List[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
     if not isinstance(manifest, dict):
         return (["manifest root must be an object"], [])
     ckpt = str(manifest.get("ckpt") or "").strip()
@@ -139,7 +139,7 @@ def validate_book_manifest(
     entries = manifest_entries(manifest)
     if not entries:
         warnings.append("entries list is empty")
-    seen_idx: Dict[int, int] = {}
+    seen_idx: dict[int, int] = {}
     for e in entries:
         if e.get("kind") != "page":
             continue

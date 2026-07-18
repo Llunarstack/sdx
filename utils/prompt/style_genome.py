@@ -11,7 +11,7 @@ import json
 import re
 import uuid
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from utils.prompt.fast_paths import merge_fragments
 
@@ -28,13 +28,13 @@ class StyleGenome:
     camera: str = ""
     lighting: str = ""
     signature: str = ""
-    anti_clone: Tuple[str, ...] = ()
-    positive_fragments: Tuple[str, ...] = ()
-    negative_fragments: Tuple[str, ...] = ()
+    anti_clone: tuple[str, ...] = ()
+    positive_fragments: tuple[str, ...] = ()
+    negative_fragments: tuple[str, ...] = ()
     reasoning: str = ""
 
-    def axis_tokens(self) -> List[str]:
-        out: List[str] = []
+    def axis_tokens(self) -> list[str]:
+        out: list[str] = []
         for part in (self.palette, self.line, self.surface, self.camera, self.lighting, self.signature):
             p = (part or "").strip()
             if p:
@@ -58,7 +58,7 @@ class StyleGenome:
 
     def compile_negative(self, base_negative: str) -> str:
         neg = (base_negative or "").strip()
-        chunks: List[str] = []
+        chunks: list[str] = []
         if self.negative_fragments:
             chunks.append(", ".join(self.negative_fragments))
         if self.anti_clone:
@@ -67,7 +67,7 @@ class StyleGenome:
             return merge_fragments(neg, ", ".join(chunks))
         return neg
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["anti_clone"] = list(self.anti_clone)
         d["positive_fragments"] = list(self.positive_fragments)
@@ -75,8 +75,8 @@ class StyleGenome:
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> StyleGenome:
-        def _tuple(key: str) -> Tuple[str, ...]:
+    def from_dict(cls, data: dict[str, Any]) -> StyleGenome:
+        def _tuple(key: str) -> tuple[str, ...]:
             raw = data.get(key) or ()
             if isinstance(raw, str):
                 return tuple(x.strip() for x in raw.split(",") if x.strip())
@@ -108,7 +108,7 @@ def genome_from_json(text: str) -> StyleGenome:
     return StyleGenome.from_dict(data)
 
 
-def nearest_catalog_style_overlap(genome: StyleGenome) -> Tuple[str, float]:
+def nearest_catalog_style_overlap(genome: StyleGenome) -> tuple[str, float]:
     """
     Return (best_matching_style_id, overlap_score 0–1) against built-in STYLE_SPECS keywords.
     Higher = closer to an existing catalog style (less novel).

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "ScarRecord",
@@ -16,19 +17,19 @@ __all__ = [
 @dataclass(slots=True)
 class ScarRecord:
     character_id: str
-    injuries: List[str] = field(default_factory=list)
+    injuries: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class ScarTimelineReport:
-    by_shot: Dict[str, Dict[str, List[str]]]
-    prompt_injections: Dict[str, str]
+    by_shot: dict[str, dict[str, list[str]]]
+    prompt_injections: dict[str, str]
 
 
 _INJURY_WORDS = ("bruised", "bleeding", "cut", "scarred", "bandaged", "limping", "burnt", "wounded")
 
 
-def parse_scar_config(raw: Any) -> Dict[str, Any]:
+def parse_scar_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -36,9 +37,9 @@ def parse_scar_config(raw: Any) -> Dict[str, Any]:
     return {"enabled": bool(raw)}
 
 
-def _injuries_from_shot(shot: Any) -> Dict[str, List[str]]:
+def _injuries_from_shot(shot: Any) -> dict[str, list[str]]:
     raw = getattr(shot, "injuries", None) or getattr(shot, "scars", None) or {}
-    out: Dict[str, List[str]] = {}
+    out: dict[str, list[str]] = {}
     if isinstance(raw, Mapping):
         for cid, inj in raw.items():
             if isinstance(inj, list):
@@ -60,9 +61,9 @@ def track_scar_timeline(
 ) -> ScarTimelineReport:
     if not config.get("enabled"):
         return ScarTimelineReport(by_shot={}, prompt_injections={})
-    ledger: Dict[str, List[str]] = {}
-    by_shot: Dict[str, Dict[str, List[str]]] = {}
-    injections: Dict[str, str] = {}
+    ledger: dict[str, list[str]] = {}
+    by_shot: dict[str, dict[str, list[str]]] = {}
+    injections: dict[str, str] = {}
 
     for sh in shots:
         sid = str(getattr(sh, "id", ""))

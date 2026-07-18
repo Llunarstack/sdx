@@ -6,7 +6,7 @@ Use from ``train.py`` when you want to start full bidirectional and ramp AR mid-
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 
 _VALID_BLOCKS = (0, 2, 4)
 _VALID_ORDERS = ("raster", "zorder", "snake", "spiral")
@@ -25,7 +25,7 @@ def normalize_ar_blocks(v: int) -> int:
     return 4
 
 
-def parse_ar_order_mix(spec: str | None) -> List[str]:
+def parse_ar_order_mix(spec: str | None) -> list[str]:
     """
     Parse comma-separated AR orders (e.g. ``"raster,zorder,snake"``).
 
@@ -33,7 +33,7 @@ def parse_ar_order_mix(spec: str | None) -> List[str]:
     """
     if not spec or not str(spec).strip():
         return []
-    out: List[str] = []
+    out: list[str] = []
     seen = set()
     for raw_order in str(spec).split(","):
         order = raw_order.strip().lower()
@@ -108,7 +108,7 @@ def resolve_ar_for_step(
     curriculum_start_blocks: int = -1,
     curriculum_target_blocks: int = -1,
     order_mix: str | None = None,
-) -> Tuple[int, str]:
+) -> tuple[int, str]:
     """
     Resolve runtime ``(num_ar_blocks, ar_block_order)`` for a training step.
 
