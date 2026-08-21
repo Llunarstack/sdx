@@ -8,31 +8,47 @@
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
   <a href="docs/releases/v12.md"><img src="https://img.shields.io/badge/release-v12.0.0-0ea5e9?style=flat-square" alt="v12"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=flat-square" alt="License"/></a>
-  <img src="https://img.shields.io/badge/tests-803%2B-22c55e?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-1300%2B-22c55e?style=flat-square" alt="Tests"/>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
+  <a href="#why-sdx">Why SDX</a> ·
+  <a href="#how-sdx-compares">Compare</a> ·
   <a href="#what-you-get">Features</a> ·
   <a href="#pipelines">Pipelines</a> ·
   <a href="#new-in-v12">v12</a> ·
-  <a href="#version-history">History</a> ·
-  <a href="#glossary">Glossary</a> ·
-  <a href="#docs">Docs</a>
+  <a href="#documentation">Docs</a> ·
+  <a href="#glossary">Glossary</a>
 </p>
 
 ---
 
 ## What is SDX?
 
-**SDX** is an open research framework for building **your own** text-to-image and text/image-to-video systems — not a wrapper around a closed API.
+**SDX** is an open research framework for building **your own** text-to-image and text/image-to-video systems. It is not a hosted model, not an API wrapper, and not a scoreboard of someone else's weights.
 
-| | Closed APIs | Typical repos | **SDX** |
-|---|-------------|---------------|---------|
-| Fine-tune your data | ✗ | partial | **✓ end-to-end** |
-| See the full pipeline | ✗ | scattered | **✓ readable entry points** |
-| Layout + video control | vendor-locked | extensions | **✓ scene JSON + box layout** |
-| Reproducibility | ✗ | varies | **✓ 803+ tests + metadata** |
+You own the training loop, the sampling stack, the layout controls, the video director, and the quality critics — end to end, on your hardware.
+
+```
+your data  →  train.py  →  checkpoint  →  sample.py / video studio  →  images & clips
+```
+
+---
+
+## Why SDX
+
+Most products give you **pixels**. SDX gives you the **pipeline**.
+
+| You need… | Typical path | With SDX |
+|-----------|--------------|----------|
+| Model on *your* data | Fine-tune scripts + glue | One `train.py` path (flow, DPO, GRPO) |
+| Layout you can inspect | Vendor UI or plugin zoo | Regional box JSON + scene graphs |
+| Quality that retries | Single-shot generate | TCIS critic loop + pick-best |
+| Video you can direct | Closed APIs / black boxes | Open scene JSON → plan → stitch |
+| Reproducible science | Varies by repo | Metadata, provenance, **1300+** tests |
+
+If you want a pretty demo button, use a hosted API. If you want to **train, measure, and ship** your own system, use SDX.
 
 ---
 
@@ -59,6 +75,57 @@ python -m scripts.tools video_generate --scene examples/scene_frontier.example.j
 
 ---
 
+## How SDX compares
+
+SDX is a **framework you train** — not a hosted model scoreboard. Tables below compare *capability classes* (early 2026). Product versions move fast; the structural gaps usually do not.
+
+Legend: **✓** built-in · **◐** partial / needs extra tooling · **ext** via extensions or plugins · **✗** not available / closed
+
+### Framework vs closed APIs
+
+| Capability | Midjourney | DALL·E / GPT Image | Ideogram | Imagen | **SDX** |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Train on your dataset | ✗ | ✗ | ✗ | ✗ | **✓** |
+| See / fork full pipeline | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Regional / box layout | ◐ | ◐ | ✓ | ◐ | **✓** |
+| Self-critique + retry loop | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Open scene-graph video | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Self-host / air-gap | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Preference training (DPO/GRPO) | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Reproducible checkpoints | ✗ | ✗ | ✗ | ✗ | **✓** |
+
+Closed APIs win on polished defaults and zero ops. SDX wins when you need **ownership, control, and iteration**.
+
+### Framework vs open weights & tooling
+
+| Capability | SDXL | Flux | SD3.5 | Comfy / A1111 | **SDX** |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Full training pipeline | ◐ | ◐ | ◐ | ext | **✓** |
+| Flow matching | ✗ | ✓ | ✓ | ext | **✓** |
+| DPO / GRPO in-tree | ✗ | ◐ | ◐ | ext | **✓** |
+| Regional layout | ext | ext | ext | ext | **✓** |
+| Adaptive CFG (Holy Grail) | ✗ | ✗ | ✗ | ext | **✓** |
+| Multi-scorer pick-best (TCIS) | ✗ | ✗ | ✗ | ◐ | **✓** |
+| Style invention (Style Genome) | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Open scene-graph video | ✗ | ✗ | ✗ | ext | **✓** |
+| Continuity / director modules | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Self-host everything | ✓ | ◐ | ✓ | ✓ | **✓** |
+| Research horizon (`frontier/`) | ✗ | ✗ | ✗ | ✗ | **✓** |
+
+SDXL / Flux / SD3.5 are excellent **bases**. Comfy is an excellent **graph UI**. SDX is the **trainable studio** around a DiT stack — train → sample → critique → direct video — with readable entry points.
+
+### What this is *not*
+
+| Claim we avoid | Reality |
+|----------------|---------|
+| “Beats Midjourney on aesthetics” | No public bake-off here; taste is subjective and APIs change weekly |
+| “Drop-in Flux replacement” | Different product shape: framework + training, not a single published weight |
+| “One checkpoint does everything” | You train (or bring) weights; SDX supplies the stack |
+
+Deeper strategy notes: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) · landscape: [docs/research/LANDSCAPE_2026.md](docs/research/LANDSCAPE_2026.md)
+
+---
+
 ## What you get
 
 <details open>
@@ -66,7 +133,7 @@ python -m scripts.tools video_generate --scene examples/scene_frontier.example.j
 
 - DiT + VAE latent diffusion, flow matching, DPO, GRPO (6 variants)
 - Holy Grail adaptive CFG, TCIS committee scoring, Style Genome
-- Regional box prompting (Ideogram-style layout JSON)
+- Regional box prompting (layout JSON with per-region prompts)
 - Agentic quality: ELIQ, artifacts, drift repair, explainability
 
 </details>
@@ -147,38 +214,21 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 | **Video** | Scene-graph TI2V, 60+ modules, CLI tools |
 | **Frontier** | 25 filmmaker modules + horizon expansion |
 | **Quality** | Continuity validators, thumbnail-first rehearsal |
-| **DX** | 803+ tests, ruff-clean CI, docs restructure |
-| **README** | GitHub-native layout (this file) |
+| **DX** | 1300+ tests, ruff-clean CI, docs restructure |
 
 [Full v12 release notes →](docs/releases/v12.md)
 
----
-
-## v1 vs v12
+### v1 → v12
 
 | | v1 (foundation) | **v12 (now)** |
 |---|-----------------|---------------|
 | Scope | Train + sample images | Image + **video studio** + frontier |
 | Video | ✗ | Scene JSON director pipeline |
 | Layout | ✗ | Regional boxes + storyboard |
-| Tests | few | **803+** |
+| Tests | few | **1300+** |
 | Research | packages | `frontier/` + `research/` |
 
 [Full comparison →](docs/releases/VERSION_COMPARISON.md)
-
----
-
-## How SDX compares (ecosystem)
-
-SDX is a **framework you train** — not a hosted model scoreboard.
-
-| Capability | SDXL | Flux | Ideogram | **SDX** |
-|---|:---:|:---:|:---:|:---:|
-| Full training pipeline | ◐ | ◐ | ✗ | **✓** |
-| Flow / DPO / GRPO | ✗ | ◐ | ✗ | **✓** |
-| Regional layout | ext | ext | ✓ | **✓** |
-| Open scene-graph video | ✗ | ✗ | ✗ | **✓** |
-| Self-host everything | ✓ | ◐ | ✗ | **✓** |
 
 ---
 
@@ -191,7 +241,7 @@ sdx/
 ├── frontier/                          # Experimental research
 ├── pipelines/video/                   # TI2V scene-graph studio (v12)
 ├── utils/generation/                  # Layout, CFG, sample features
-└── tests/                             # 803+ tests
+└── tests/                             # 1300+ tests
 ```
 
 ---
@@ -214,6 +264,7 @@ sdx/
 | Codebase map | [docs/CODEBASE.md](docs/CODEBASE.md) |
 | Video pipeline | [pipelines/video/README.md](pipelines/video/README.md) |
 | Frontier | [frontier/README.md](frontier/README.md) |
+| Competitive notes | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) |
 | v12 release | [docs/releases/v12.md](docs/releases/v12.md) |
 | v1 → v12 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
 | **Jargon & acronyms** | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
@@ -274,7 +325,7 @@ To keep the graph human-only:
 | **v9** | RL-style fine-tuning (GRPO); AI helpers that score and refine each other. |
 | **v10** | Label-free quality scoring, glitch detection, human-readable quality reports. |
 | **v11** | Draw boxes on the image for per-region prompts; reorganized code folders. |
-| **v12** | Full video pipeline from one JSON scene; 25+ director rules; 803+ tests. |
+| **v12** | Full video pipeline from one JSON scene; 25+ director rules; 1300+ tests. |
 
 </details>
 
