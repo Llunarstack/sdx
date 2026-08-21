@@ -77,52 +77,124 @@ python -m scripts.tools video_generate --scene examples/scene_frontier.example.j
 
 ## How SDX compares
 
-SDX is a **framework you train** — not a hosted model scoreboard. Tables below compare *capability classes* (early 2026). Product versions move fast; the structural gaps usually do not.
+SDX is a **framework you train** — not a hosted model scoreboard. Leaders below are compared on *capability classes* (landscape snapshot: mid‑2026). Names and versions move weekly; the structural gaps usually do not.
 
-Legend: **✓** built-in · **◐** partial / needs extra tooling · **ext** via extensions or plugins · **✗** not available / closed
+Legend: **✓** strong / built-in · **◐** partial / LoRA-only / plugin · **ext** community extensions · **✗** not available · **n/a** wrong product shape
 
-### Framework vs closed APIs
+Full research tables + sources → [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md)
 
-| Capability | Midjourney | DALL·E / GPT Image | Ideogram | Imagen | **SDX** |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Train on your dataset | ✗ | ✗ | ✗ | ✗ | **✓** |
-| See / fork full pipeline | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Regional / box layout | ◐ | ◐ | ✓ | ◐ | **✓** |
-| Self-critique + retry loop | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Open scene-graph video | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Self-host / air-gap | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Preference training (DPO/GRPO) | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Reproducible checkpoints | ✗ | ✗ | ✗ | ✗ | **✓** |
+### Landscape: what the leaders are actually good at
 
-Closed APIs win on polished defaults and zero ops. SDX wins when you need **ownership, control, and iteration**.
+#### Closed image APIs
 
-### Framework vs open weights & tooling
+| System | Best known for | Weak / missing |
+|--------|----------------|----------------|
+| **GPT Image 2** (OpenAI) | Prompt following, editing loops, text-in-image, API production | Closed; no train-your-weights; house look; no local air-gap |
+| **Midjourney V8** | Aesthetic craft, lighting, cinematic / concept art | Weak automation API; limited literal control; no self-host; no your-data train |
+| **Gemini / Nano Banana** (Google) | Fast multimodal edit, references, 4K-class Pro path | Closed; ops locked to Google stack |
+| **Ideogram 4** | Typography / posters / layout; **open weights** on latest line | Still not a full research train stack; video not the product |
+| **Recraft V4** | Brand / design graphics, vectors, commercial layout | Closed design tool, not a trainable DiT lab |
+| **Firefly Image 5** | Adobe Creative Cloud fit, commercial licensing story | Ecosystem lock-in; not a research pipeline |
+| **Seedream 5** (ByteDance) | Cinematic stills, semantic prompts | API-first; limited ownership |
 
-| Capability | SDXL | Flux | SD3.5 | Comfy / A1111 | **SDX** |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Full training pipeline | ◐ | ◐ | ◐ | ext | **✓** |
-| Flow matching | ✗ | ✓ | ✓ | ext | **✓** |
-| DPO / GRPO in-tree | ✗ | ◐ | ◐ | ext | **✓** |
-| Regional layout | ext | ext | ext | ext | **✓** |
-| Adaptive CFG (Holy Grail) | ✗ | ✗ | ✗ | ext | **✓** |
-| Multi-scorer pick-best (TCIS) | ✗ | ✗ | ✗ | ◐ | **✓** |
-| Style invention (Style Genome) | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Open scene-graph video | ✗ | ✗ | ✗ | ext | **✓** |
-| Continuity / director modules | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Self-host everything | ✓ | ◐ | ✓ | ✓ | **✓** |
-| Research horizon (`frontier/`) | ✗ | ✗ | ✗ | ✗ | **✓** |
+#### Open-weight image models
 
-SDXL / Flux / SD3.5 are excellent **bases**. Comfy is an excellent **graph UI**. SDX is the **trainable studio** around a DiT stack — train → sample → critique → direct video — with readable entry points.
+| System | Best known for | Weak / missing |
+|--------|----------------|----------------|
+| **FLUX.2** (BFL) | Photoreal quality bar; LoRA on klein; partner APIs | Training = mostly LoRA/adapters; licenses vary (dev vs klein); no in-tree critic/video director |
+| **SD 3.5** | Deepest LoRA / ControlNet / Comfy ecosystem | Needs tooling glue; preference RL not first-class |
+| **Qwen-Image** | Multilingual / CJK text-in-image; Apache-friendly | Newer ecosystem vs SD; not a full studio |
+| **Z-Image Turbo** | Speed / volume on mid GPUs | Ecosystem thinner; quality vs frontier tradeoff |
+| **SDXL** (legacy) | Ubiquitous fine-tunes, tiny GPUs | Older U-Net quality ceiling vs DiT/flow leaders |
+| **ComfyUI / A1111** | Node / UI orchestration over *any* weights | You assemble the science; no opinionated train→critique→video stack |
+
+#### Video (closed + open)
+
+| System | Best known for | Weak / missing |
+|--------|----------------|----------------|
+| **Veo 3.1** (Google) | Overall fidelity + native audio | Closed; watermark / cloud; no open director graph |
+| **Kling 3** | Motion, multi-shot value, 4K-class paths | Closed API; data residency / ToS constraints |
+| **Runway Gen-4.5** | Motion brush, editor, character control | Hosted product; not a forkable training framework |
+| **Luma Ray / Seedance** | I2V atmosphere / multi-shot narrative | Closed; limited reproducibility |
+| **Wan / LTX** (open-ish) | Self-hostable video weights emerging | Still model-centric; little open *scene-graph film studio* |
+
+### Capability matrix (image)
+
+| Capability | GPT Image | Midjourney | Ideogram | FLUX.2 | SD3.5 | Qwen-Image | Comfy | **SDX** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Best-in-class hosted aesthetics | ✓ | **✓** | ◐ | ✓ | ◐ | ◐ | n/a | n/a¹ |
+| Text-in-image | **✓** | ◐ | **✓** | ✓ | ◐ | **✓** | ext | ◐² |
+| Conversational / API edit | **✓** | ◐ | ◐ | ✓ | ext | ✓ | ext | ◐ |
+| Download / run weights | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | **✓** |
+| LoRA / adapter fine-tune | ✗ | ✗ | ✓ | ✓ | **✓** | ◐ | **✓** | **✓** |
+| Full train loop on *your* folder | ✗ | ✗ | ✗ | ◐ | ◐ | ◐ | ext | **✓** |
+| Flow matching in-tree | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ext | **✓** |
+| DPO / GRPO preference train | ✗ | ✗ | ✗ | ✗ | ext | ✗ | ext | **✓** |
+| Regional box layout (native) | ◐ | ◐ | ✓ | ext | ext | ext | ext | **✓** |
+| Self-critique + retry (TCIS / pick-best) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
+| Adaptive CFG stack (Holy Grail) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ext | **✓** |
+| Style invention (Style Genome) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Open scene-graph video director | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ext | **✓** |
+| Continuity / filmmaker modules | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Air-gap + reproducible metadata | ✗ | ✗ | ◐ | ◐ | ◐ | ◐ | ◐ | **✓** |
+| Research horizon registry | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
+
+¹ SDX is not a published aesthetics leaderboard checkpoint — you train (or bring) weights.  
+² Glyph canvas + OCR pick-best help; closed typography specialists still lead raw OCR demos.
+
+### Capability matrix (video)
+
+| Capability | Veo | Kling | Runway | Luma | Wan / LTX | **SDX** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Hosted clip quality / audio | **✓** | **✓** | ✓ | ✓ | ◐ | n/a¹ |
+| Motion brush / editor UX | ◐ | ◐ | **✓** | ◐ | ✗ | ◐ |
+| Multi-shot storyboard | ✓ | **✓** | ✓ | ◐ | ◐ | **✓** |
+| Open scene JSON → plan → stitch | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Identity / continuity validators | ◐ | ◐ | ✓ | ◐ | ✗ | **✓** |
+| Segment critic + retry | ✗ | ✗ | ◐ | ✗ | ✗ | **✓** |
+| Trainable / forkable pipeline | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
+| Self-host entire director stack | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
+
+¹ Default SDX video path is an open **compositional studio** (retrieve → keyframe → motion → polish). Optional VideoDiT exists; frontier clip quality still belongs to hosted Veo/Kling/Runway unless you train.
+
+### What SDX can do that *they* generally cannot
+
+These are structural — hard for a closed API or a weights-only release to match without becoming a different product:
+
+| SDX edge | Why others miss it |
+|----------|--------------------|
+| **End-to-end `train.py` on your data** (flow + VP + LoRA/DoRA) | Closed APIs forbid it; Flux/SD mostly ship **LoRA recipes**, not one readable research loop |
+| **In-tree DPO + GRPO family** | Preference / RL fine-tune lives as scattered papers + third-party scripts elsewhere |
+| **TCIS closed loop** — generate → multi-scorer critique → disagree → retry | Hosted models are almost always **single-shot**; Comfy can approximate with hand-built graphs |
+| **Holy Grail adaptive sampling** as first-class presets | CFG schedules exist as lore/nodes, not an owned stack with tests |
+| **Style Genome** — invent style axes without artist-name cloning | Competitors lock “house style” or rely on artist LoRAs |
+| **Regional boxes + prompt→layout + glyph canvas** in one repo | Ideogram-class layout is closed or plugin-glued |
+| **Open scene-graph film studio** (JSON director, continuity, frontier filmmakers) | Veo/Kling/Runway are products; Wan/LTX are weights — neither is an open director OS |
+| **`frontier/` idea registry** — cinema / narrative / realism experiments | No major vendor ships a browsable research horizon next to production entry points |
+| **Foreign adapter bridge** (sniff LoRA/LyCORIS → DiT roles) | Cross-arch weight reuse is usually “start over in Comfy” |
+| **Air-gap + 1300+ tests + provenance metadata** | SaaS cannot be air-gapped; many FOSS UIs skip scientific reproducibility |
+
+### Where they still win (be honest)
+
+| They win | Prefer |
+|----------|--------|
+| Zero-ops pretty defaults | Midjourney, GPT Image, Veo |
+| Absolute text-in-image demos | Ideogram, GPT Image, Qwen-Image |
+| Deepest node ecosystem today | ComfyUI + SD/FLUX weights |
+| Hosted video fidelity + native audio | Veo, Kling, Runway |
+| Adobe / enterprise creative suite | Firefly |
+
+Use those when you need **pixels tomorrow**. Use SDX when you need to **own the loop**: data → train → sample → critique → direct.
 
 ### What this is *not*
 
 | Claim we avoid | Reality |
 |----------------|---------|
-| “Beats Midjourney on aesthetics” | No public bake-off here; taste is subjective and APIs change weekly |
-| “Drop-in Flux replacement” | Different product shape: framework + training, not a single published weight |
-| “One checkpoint does everything” | You train (or bring) weights; SDX supplies the stack |
+| “Beats Midjourney on aesthetics” | No bake-off claimed; taste is subjective and APIs churn |
+| “Drop-in Flux / Veo replacement” | Different shape: framework + training + director, not one mega-checkpoint |
+| “One demo ckpt does everything” | You train or bring weights; SDX supplies the stack |
 
-Deeper strategy notes: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) · landscape: [docs/research/LANDSCAPE_2026.md](docs/research/LANDSCAPE_2026.md)
+Deeper strategy + weakness→fix map: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) · field notes: [docs/research/LANDSCAPE_2026.md](docs/research/LANDSCAPE_2026.md)
 
 ---
 
@@ -131,10 +203,10 @@ Deeper strategy notes: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.
 <details open>
 <summary><strong>Image generation</strong> — train.py + sample.py</summary>
 
-- DiT + VAE latent diffusion, flow matching, DPO, GRPO (6 variants)
+- DiT + VAE latent diffusion, flow matching, DPO, GRPO family
 - Holy Grail adaptive CFG, TCIS committee scoring, Style Genome
 - Regional box prompting (layout JSON with per-region prompts)
-- Agentic quality: ELIQ, artifacts, drift repair, explainability
+- Agentic quality: pick-best / critics, artifacts, drift repair, eval harness
 
 </details>
 
