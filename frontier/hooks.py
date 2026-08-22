@@ -6,7 +6,7 @@ Safe to import from ``sample.py`` — no heavy model weights.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .engine import FrontierEngine, FrontierPlan, analyze_prompt
 
@@ -14,8 +14,8 @@ from .engine import FrontierEngine, FrontierPlan, analyze_prompt
 def apply_frontier_to_args(
     args: Any,
     *,
-    prompt: Optional[str] = None,
-    engine: Optional[FrontierEngine] = None,
+    prompt: str | None = None,
+    engine: FrontierEngine | None = None,
 ) -> FrontierPlan:
     """
     Mutate an argparse namespace (or similar) with frontier-derived fields.
@@ -36,14 +36,14 @@ def apply_frontier_to_args(
     return plan
 
 
-def frontier_diffusion_hooks(plan: FrontierPlan) -> Dict[str, Any]:
+def frontier_diffusion_hooks(plan: FrontierPlan) -> dict[str, Any]:
     """
     Extra kwargs for ``gaussian_diffusion`` sample loops (optional).
 
     Consumers can multiply per-step noise by ``serendipity_scales[step]`` and
     ``entropy_per_step[step]`` when present.
     """
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     if plan.serendipity is not None:
         out["serendipity_scales"] = list(plan.serendipity.scales)
     if plan.entropy is not None:

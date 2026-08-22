@@ -6,7 +6,6 @@ Used by quality pick-best score normalization and weighted fusion.
 from __future__ import annotations
 
 import ctypes
-from typing import List, Optional
 
 import numpy as np
 
@@ -15,7 +14,7 @@ from sdx_native.native_tools import score_ops_shared_library_path
 
 class ScoreOpsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = score_ops_shared_library_path()
         if p is None:
             return
@@ -42,7 +41,7 @@ class ScoreOpsLib:
     def available(self) -> bool:
         return self._lib is not None
 
-    def norm01(self, scores: List[float]) -> List[float]:
+    def norm01(self, scores: list[float]) -> list[float]:
         if not self._lib:
             raise RuntimeError("sdx_score_ops not built")
         arr = np.asarray(scores, dtype=np.float32)
@@ -56,7 +55,7 @@ class ScoreOpsLib:
             raise RuntimeError("sdx_score_minmax_norm_f32 failed")
         return [float(x) for x in out.tolist()]
 
-    def weighted_sum(self, score_lists: List[List[float]], weights: List[float]) -> List[float]:
+    def weighted_sum(self, score_lists: list[list[float]], weights: list[float]) -> list[float]:
         if not self._lib:
             raise RuntimeError("sdx_score_ops not built")
         if not score_lists:
@@ -82,7 +81,7 @@ class ScoreOpsLib:
         return [float(x) for x in out.tolist()]
 
 
-_LIB: Optional[ScoreOpsLib] = None
+_LIB: ScoreOpsLib | None = None
 
 
 def get_score_ops_lib() -> ScoreOpsLib:
@@ -92,14 +91,14 @@ def get_score_ops_lib() -> ScoreOpsLib:
     return _LIB
 
 
-def maybe_norm01_native(scores: List[float]) -> Optional[List[float]]:
+def maybe_norm01_native(scores: list[float]) -> list[float] | None:
     lib = get_score_ops_lib()
     if not lib.available:
         return None
     return lib.norm01(scores)
 
 
-def maybe_weighted_sum_native(score_lists: List[List[float]], weights: List[float]) -> Optional[List[float]]:
+def maybe_weighted_sum_native(score_lists: list[list[float]], weights: list[float]) -> list[float] | None:
     lib = get_score_ops_lib()
     if not lib.available:
         return None

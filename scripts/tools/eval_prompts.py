@@ -18,9 +18,8 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List
 
-DEFAULT_PROMPTS: Dict[str, str] = {
+DEFAULT_PROMPTS: dict[str, str] = {
     "portrait_real": "portrait of a woman, soft window light, shallow depth of field, sharp eyes, 50mm lens",
     "fullbody_char": "1girl, standing, long dress, legs, shoes, full body, outdoors, sunset",
     "3d_car": "3d render of a red car parked next to a blue house, sunset, detailed reflections",
@@ -44,7 +43,7 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    results: List[Dict[str, str]] = []
+    results: list[dict[str, str]] = []
     repo_root = Path(__file__).resolve().parents[2]
     sample_py = repo_root / "sample.py"
     for key, prompt in DEFAULT_PROMPTS.items():

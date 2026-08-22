@@ -14,9 +14,10 @@ Each line is a JSON object. Supported keys (aliases in parentheses):
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,10 +25,10 @@ class PreferencePair:
     win_path: str
     lose_path: str
     prompt: str
-    raw: Dict[str, Any]
+    raw: dict[str, Any]
 
 
-def _pick_str(d: Dict[str, Any], keys: tuple) -> Optional[str]:
+def _pick_str(d: dict[str, Any], keys: tuple) -> str | None:
     for k in keys:
         v = d.get(k)
         if v is None:
@@ -38,7 +39,7 @@ def _pick_str(d: Dict[str, Any], keys: tuple) -> Optional[str]:
     return None
 
 
-def parse_preference_row(obj: Dict[str, Any]) -> Optional[PreferencePair]:
+def parse_preference_row(obj: dict[str, Any]) -> PreferencePair | None:
     win = _pick_str(obj, ("win_image_path", "winner", "preferred", "win"))
     lose = _pick_str(obj, ("lose_image_path", "loser", "rejected", "lose"))
     prompt = _pick_str(obj, ("caption", "prompt", "text")) or ""

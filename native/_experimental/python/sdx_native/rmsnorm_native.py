@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -12,7 +11,7 @@ from sdx_native.native_tools import cuda_rmsnorm_shared_library_path
 
 class CudaRmsNormLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_rmsnorm_shared_library_path()
         if p is None:
             return
@@ -51,7 +50,7 @@ class CudaRmsNormLib:
         return out
 
 
-_LIB: Optional[CudaRmsNormLib] = None
+_LIB: CudaRmsNormLib | None = None
 
 
 def get_cuda_rmsnorm_lib() -> CudaRmsNormLib:
@@ -67,7 +66,7 @@ def rmsnorm_rows_numpy(x: np.ndarray, *, eps: float = 1e-6) -> np.ndarray:
     return (a / den).astype(np.float32)
 
 
-def maybe_rmsnorm_rows_cuda(x: np.ndarray, *, eps: float = 1e-6) -> Optional[np.ndarray]:
+def maybe_rmsnorm_rows_cuda(x: np.ndarray, *, eps: float = 1e-6) -> np.ndarray | None:
     lib = get_cuda_rmsnorm_lib()
     if not lib.available:
         return None

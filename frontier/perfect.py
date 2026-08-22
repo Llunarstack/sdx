@@ -7,7 +7,7 @@ This is the "turn everything on" orchestrator for maximum generation quality.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 from config.defaults.art_mediums import merge_csv_unique
 
@@ -52,7 +52,7 @@ class PerfectFrontierPlan:
     final_prompt: str = ""
     final_negative: str = ""
     refused: bool = False
-    refuse_reasons: List[str] = field(default_factory=list)
+    refuse_reasons: list[str] = field(default_factory=list)
 
 
 def analyze_perfect(
@@ -144,7 +144,7 @@ def analyze_perfect(
     )
 
 
-def perfect_sample_kwargs(plan: PerfectFrontierPlan, *, base_negative: str = "") -> Dict[str, Any]:
+def perfect_sample_kwargs(plan: PerfectFrontierPlan, *, base_negative: str = "") -> dict[str, Any]:
     if plan.refused:
         return {
             "refused": True,
@@ -163,7 +163,7 @@ def perfect_sample_kwargs(plan: PerfectFrontierPlan, *, base_negative: str = "")
     if typ.cfg_boost > 1.0:
         cfg *= typ.cfg_boost
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         **deep_kw,
         **{k: v for k, v in sub_kw.items() if k not in ("prompt", "negative_prompt")},
         "prompt": plan.final_prompt,

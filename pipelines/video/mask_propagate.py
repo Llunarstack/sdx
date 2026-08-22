@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 import numpy as np
 
@@ -44,12 +44,12 @@ def propagate_mask_sequence(
     frame_paths: Sequence[Path],
     *,
     out_dir: Path,
-) -> List[Path]:
+) -> list[Path]:
     """Forward-warp initial mask through each frame pair's optical flow."""
     out_dir.mkdir(parents=True, exist_ok=True)
     import cv2
 
-    paths: List[Path] = []
+    paths: list[Path] = []
     curr = mask0.astype(np.float32)
     prev_rgb = read_frame_rgb(frame_paths[0])
     h, w = prev_rgb.shape[:2]

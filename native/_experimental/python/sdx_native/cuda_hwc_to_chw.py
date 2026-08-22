@@ -8,7 +8,6 @@ this exists for micro-benchmarks and ctypes experiments outside the main PyTorch
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -17,7 +16,7 @@ from sdx_native.native_tools import cuda_hwc_to_chw_shared_library_path
 
 class CudaHwcLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_hwc_to_chw_shared_library_path()
         if p is None:
             return
@@ -55,7 +54,7 @@ class CudaHwcLib:
         return out
 
 
-_LIB: Optional[CudaHwcLib] = None
+_LIB: CudaHwcLib | None = None
 
 
 def get_cuda_hwc_lib() -> CudaHwcLib:
@@ -73,7 +72,7 @@ def u8_hwc_to_chw_f32_numpy(hwc: np.ndarray) -> np.ndarray:
     return np.transpose(x, (2, 0, 1)).copy()
 
 
-def maybe_u8_hwc_to_chw_f32_cuda(hwc: np.ndarray) -> Optional[np.ndarray]:
+def maybe_u8_hwc_to_chw_f32_cuda(hwc: np.ndarray) -> np.ndarray | None:
     """Return GPU-backed result via optional DLL, or ``None`` if not built."""
     lib = get_cuda_hwc_lib()
     if not lib.available:

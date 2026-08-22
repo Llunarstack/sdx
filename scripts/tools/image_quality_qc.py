@@ -11,7 +11,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
@@ -26,7 +25,7 @@ def _extract_image_path(row: dict) -> str:
     return ""
 
 
-def _resolve_path(image_path: str, manifest_path: Path, image_root: Optional[str]) -> Path:
+def _resolve_path(image_path: str, manifest_path: Path, image_root: str | None) -> Path:
     p = Path(image_path)
     if image_root:
         p = Path(image_root) / p
@@ -54,7 +53,7 @@ def main() -> int:
         return 2
 
     image_root = args.image_root.strip() or None
-    results: List[Dict[str, object]] = []
+    results: list[dict[str, object]] = []
     fail = False
     n = 0
     processed = 0
@@ -91,7 +90,7 @@ def main() -> int:
             contrast = float(m["contrast"])
 
             ok = True
-            reasons: List[str] = []
+            reasons: list[str] = []
             if args.min_sharpness > 0.0 and sharpness < args.min_sharpness:
                 ok = False
                 reasons.append(f"sharpness<{args.min_sharpness}")

@@ -23,7 +23,6 @@ its identity embedding, preventing cross-contamination.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -43,13 +42,13 @@ class CharacterSpec:
     character_id: str
     name: str
     # Bounding box in normalised [0,1] coords: (x1, y1, x2, y2)
-    bbox: Optional[Tuple[float, float, float, float]] = None
+    bbox: tuple[float, float, float, float] | None = None
     # Text description of this character (subset of full prompt)
     description: str = ""
     # Clothing/object tokens that belong to this character
-    owned_tokens: List[int] = field(default_factory=list)
+    owned_tokens: list[int] = field(default_factory=list)
     # Reference embedding (e.g. from IP-Adapter / face encoder)
-    reference_embedding: Optional[torch.Tensor] = None
+    reference_embedding: torch.Tensor | None = None
 
 
 @dataclass(slots=True)
@@ -59,7 +58,7 @@ class InteractionSpec:
     char_a: str  # character_id
     char_b: str  # character_id
     relation: str  # "touching", "hugging", "fighting", "facing", "holding_hands", etc.
-    contact_region: Optional[str] = None  # "hands", "shoulders", "full_body"
+    contact_region: str | None = None  # "hands", "shoulders", "full_body"
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +102,7 @@ class CharacterSlotEmbedding(nn.Module):
         # Identity projection (for reference embeddings from face encoder / IP-Adapter)
         self.identity_proj = nn.Linear(hidden_size, hidden_size, bias=False)
 
-    def encode_bbox(self, bbox: Tuple[float, float, float, float]) -> torch.Tensor:
+    def encode_bbox(self, bbox: tuple[float, float, float, float]) -> torch.Tensor:
         """Encode a bounding box to a feature vector."""
         x1, y1, x2, y2 = bbox
         cx = (x1 + x2) / 2
@@ -116,8 +115,8 @@ class CharacterSlotEmbedding(nn.Module):
     def get_slot(
         self,
         slot_idx: int,
-        bbox: Optional[Tuple[float, float, float, float]] = None,
-        reference_emb: Optional[torch.Tensor] = None,
+        bbox: tuple[float, float, float, float] | None = None,
+        reference_emb: torch.Tensor | None = None,
         device: torch.device = None,
     ) -> torch.Tensor:
         """
@@ -142,7 +141,7 @@ class CharacterSlotEmbedding(nn.Module):
 
     def get_all_slots(
         self,
-        specs: List[CharacterSpec],
+        specs: list[CharacterSpec],
         device: torch.device,
     ) -> torch.Tensor:
         """
@@ -211,7 +210,7 @@ class CharacterIsolationAttention(nn.Module):
     def _build_isolation_bias(
         self,
         character_masks: torch.Tensor,
-        interaction_mask: Optional[torch.Tensor] = None,
+        interaction_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Build additive attention bias from character masks.
@@ -246,8 +245,8 @@ class CharacterIsolationAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        character_masks: Optional[torch.Tensor] = None,
-        interaction_mask: Optional[torch.Tensor] = None,
+        character_masks: torch.Tensor | None = None,
+        interaction_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -488,9 +487,9 @@ class InteractionEncoder(nn.Module):
 
     def forward(
         self,
-        interactions: List[InteractionSpec],
+        interactions: list[InteractionSpec],
         character_slots: torch.Tensor,
-        char_id_to_idx: Dict[str, int],
+        char_id_to_idx: dict[str, int],
     ) -> torch.Tensor:
         """
         Encode all interactions into a single conditioning vector.
@@ -533,7 +532,7 @@ class SpatialMaskGenerator:
 
     @staticmethod
     def bbox_to_mask(
-        bbox: Tuple[float, float, float, float],
+        bbox: tuple[float, float, float, float],
         h_patches: int,
         w_patches: int,
         soft: bool = True,
@@ -568,7 +567,7 @@ class SpatialMaskGenerator:
     @classmethod
     def build_masks(
         cls,
-        specs: List[CharacterSpec],
+        specs: list[CharacterSpec],
         h_patches: int,
         w_patches: int,
         device: torch.device = None,
@@ -640,12 +639,12 @@ class MultiCharacterConditioner(nn.Module):
         self,
         x: torch.Tensor,
         t_emb: torch.Tensor,
-        specs: List[CharacterSpec],
-        interactions: List[InteractionSpec],
+        specs: list[CharacterSpec],
+        interactions: list[InteractionSpec],
         h_patches: int,
         w_patches: int,
-        text_emb: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        text_emb: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             x: (B, N, D) image tokens.

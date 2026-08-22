@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any
 
 
 def sample_args_to_comfy_workflow(
     args: Mapping[str, Any],
     *,
     title: str = "SDX Export",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a portable Comfy-style node graph (API-loadable skeleton)."""
     ckpt = str(args.get("ckpt", "results/best.pt"))
     prompt = str(args.get("prompt", ""))
@@ -63,7 +64,7 @@ def sample_args_to_comfy_workflow(
     }
 
 
-def write_comfy_workflow(path: str | Path, workflow: Dict[str, Any]) -> Path:
+def write_comfy_workflow(path: str | Path, workflow: dict[str, Any]) -> Path:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(workflow, indent=2), encoding="utf-8")

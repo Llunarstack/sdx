@@ -14,7 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -34,7 +34,7 @@ class PromptCase:
     prompt_layout: str = ""  # optional JSON path for --prompt-layout (penta/triple CLIP routing)
 
 
-DEFAULT_SUITE: List[PromptCase] = [
+DEFAULT_SUITE: list[PromptCase] = [
     PromptCase(
         name="text_sign",
         prompt='street cafe storefront, neon sign that says "OPEN 24H", rainy night, cinematic',
@@ -66,7 +66,7 @@ DEFAULT_SUITE: List[PromptCase] = [
 ]
 
 
-SUITE_PACKS: Dict[str, List[PromptCase]] = {
+SUITE_PACKS: dict[str, list[PromptCase]] = {
     "standard_v1": list(DEFAULT_SUITE),
     "top_contender_proxy_v1": list(DEFAULT_SUITE)
     + [
@@ -169,13 +169,13 @@ SUITE_PACKS: Dict[str, List[PromptCase]] = {
 }
 
 
-def _load_suite(path: Optional[Path], suite_pack: str = "standard_v1") -> List[PromptCase]:
+def _load_suite(path: Path | None, suite_pack: str = "standard_v1") -> list[PromptCase]:
     if path is None:
         return list(SUITE_PACKS.get((suite_pack or "standard_v1").strip().lower(), DEFAULT_SUITE))
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise ValueError("suite JSON must be a list of objects")
-    out: List[PromptCase] = []
+    out: list[PromptCase] = []
     for row in data:
         if not isinstance(row, dict):
             continue
@@ -195,7 +195,7 @@ def _load_suite(path: Optional[Path], suite_pack: str = "standard_v1") -> List[P
     return [c for c in out if c.prompt]
 
 
-def _collect_checkpoints(explicit: List[str], compare_to_dir: str) -> List[str]:
+def _collect_checkpoints(explicit: list[str], compare_to_dir: str) -> list[str]:
     ckpts = [str(x).strip() for x in explicit if str(x).strip()]
     d = str(compare_to_dir or "").strip()
     if not d:
@@ -210,7 +210,7 @@ def _collect_checkpoints(explicit: List[str], compare_to_dir: str) -> List[str]:
         if p.suffix.lower() in exts:
             ckpts.append(str(p))
     # Stable order + dedupe.
-    out: List[str] = []
+    out: list[str] = []
     seen = set()
     for c in sorted(ckpts):
         if c in seen:
@@ -220,11 +220,11 @@ def _collect_checkpoints(explicit: List[str], compare_to_dir: str) -> List[str]:
     return out
 
 
-def _parse_seeds(seed: int, seed_list: str) -> List[int]:
+def _parse_seeds(seed: int, seed_list: str) -> list[int]:
     toks = [t.strip() for t in str(seed_list or "").split(",") if t.strip()]
     if not toks:
         return [int(seed)]
-    out: List[int] = []
+    out: list[int] = []
     for t in toks:
         try:
             out.append(int(t))
@@ -233,7 +233,7 @@ def _parse_seeds(seed: int, seed_list: str) -> List[int]:
     return out or [int(seed)]
 
 
-def _aggregate_model_scores(rows: List[float], robustness_penalty: float) -> Dict[str, float]:
+def _aggregate_model_scores(rows: list[float], robustness_penalty: float) -> dict[str, float]:
     if not rows:
         return {"mean_composite": 0.0, "std_composite": 0.0, "robust_score": 0.0}
     mean_v = float(np.mean(rows))
@@ -242,8 +242,8 @@ def _aggregate_model_scores(rows: List[float], robustness_penalty: float) -> Dic
     return {"mean_composite": mean_v, "std_composite": std_v, "robust_score": robust}
 
 
-def _composite_score(case: PromptCase, metrics: Dict[str, float]) -> float:
-    vals: List[float] = []
+def _composite_score(case: PromptCase, metrics: dict[str, float]) -> float:
+    vals: list[float] = []
     # Exposure is already [0,1] in our scorer.
     vals.append(float(np.clip(metrics.get("exposure_balance", 0.5), 0.0, 1.0)))
     # Edge sharpness needs normalization.
@@ -265,9 +265,9 @@ def _composite_score(case: PromptCase, metrics: Dict[str, float]) -> float:
 
 def _score_image(
     case: PromptCase, image_path: Path, *, include_clip: bool, clip_model: str, device: str
-) -> Dict[str, float]:
+) -> dict[str, float]:
     arr = np.array(Image.open(image_path).convert("RGB"), dtype=np.uint8)
-    out: Dict[str, float] = {
+    out: dict[str, float] = {
         "edge_sharpness": float(ttp.score_edge_sharpness(arr)),
         "exposure_balance": float(ttp.score_exposure_balance(arr)),
         "saturation_balance": float(ttp.score_saturation_balance(arr)),
@@ -296,7 +296,7 @@ def _run_sample(
     case: PromptCase,
     args: argparse.Namespace,
 ) -> None:
-    cmd: List[str] = [
+    cmd: list[str] = [
         sys.executable,
         str(sample_py),
         "--ckpt",
@@ -351,7 +351,7 @@ def _run_sample(
 
 def _write_preference_jsonl(
     out_path: Path,
-    rows: List[Dict[str, Any]],
+    rows: list[dict[str, Any]],
     *,
     min_margin: float,
     max_pairs_per_case: int,
@@ -387,8 +387,8 @@ def _write_preference_jsonl(
     return len(pairs)
 
 
-def _failure_tags(case: PromptCase, metrics: Dict[str, float], *, threshold: float) -> List[str]:
-    tags: List[str] = []
+def _failure_tags(case: PromptCase, metrics: dict[str, float], *, threshold: float) -> list[str]:
+    tags: list[str] = []
     comp = float(metrics.get("composite", 0.0) or 0.0)
     if comp < float(threshold):
         tags.append("low_composite")
@@ -410,13 +410,13 @@ def _failure_tags(case: PromptCase, metrics: Dict[str, float], *, threshold: flo
 
 def _write_hardcases_jsonl(
     out_path: Path,
-    rows: List[Dict[str, Any]],
-    cases_by_name: Dict[str, PromptCase],
+    rows: list[dict[str, Any]],
+    cases_by_name: dict[str, PromptCase],
     *,
     threshold: float,
     max_rows: int,
 ) -> int:
-    hard_rows: List[Dict[str, Any]] = []
+    hard_rows: list[dict[str, Any]] = []
     for r in rows:
         case_name = str(r.get("case", "") or "")
         case = cases_by_name.get(case_name)
@@ -550,8 +550,8 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     seeds = _parse_seeds(int(args.seed), str(args.seed_list))
-    results: List[Dict[str, Any]] = []
-    leaderboard: Dict[str, List[float]] = {}
+    results: list[dict[str, Any]] = []
+    leaderboard: dict[str, list[float]] = {}
 
     for ckpt_s in checkpoints:
         ckpt = Path(ckpt_s)

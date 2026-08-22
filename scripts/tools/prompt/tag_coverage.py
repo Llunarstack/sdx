@@ -22,11 +22,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 
-def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -38,7 +39,7 @@ def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
                 continue
 
 
-def _get_caption(rec: Dict[str, Any]) -> str:
+def _get_caption(rec: dict[str, Any]) -> str:
     for k in ("caption", "text", "prompt"):
         v = rec.get(k)
         if v is not None:
@@ -48,7 +49,7 @@ def _get_caption(rec: Dict[str, Any]) -> str:
     return ""
 
 
-def _contains_any(caption_lower: str, terms: List[str]) -> Tuple[bool, List[str]]:
+def _contains_any(caption_lower: str, terms: list[str]) -> tuple[bool, list[str]]:
     hits = []
     for t in terms:
         if t and t in caption_lower:
@@ -102,7 +103,7 @@ def main() -> None:
 
     total = 0
     group_hit_counts = {name: 0 for name, _ in groups}
-    term_counts: Dict[str, int] = {}
+    term_counts: dict[str, int] = {}
 
     for rec in _iter_jsonl(manifest_path):
         cap = _get_caption(rec)

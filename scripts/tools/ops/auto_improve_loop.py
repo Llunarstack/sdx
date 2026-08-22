@@ -16,35 +16,34 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
-def _run(cmd: List[str], *, cwd: Path, dry_run: bool) -> int:
+def _run(cmd: list[str], *, cwd: Path, dry_run: bool) -> int:
     print("Running:", " ".join(cmd), flush=True)
     if dry_run:
         return 0
     return subprocess.run(cmd, cwd=str(cwd)).returncode
 
 
-def _read_leaderboard(path: Path) -> List[Dict[str, object]]:
+def _read_leaderboard(path: Path) -> list[dict[str, object]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         return []
-    out: List[Dict[str, object]] = []
+    out: list[dict[str, object]] = []
     for r in data:
         if isinstance(r, dict):
             out.append(r)
     return out
 
 
-def _best_model_tag(rows: List[Dict[str, object]]) -> str:
+def _best_model_tag(rows: list[dict[str, object]]) -> str:
     if not rows:
         return ""
     best = sorted(rows, key=lambda r: float(r.get("mean_composite", 0.0) or 0.0), reverse=True)[0]
     return str(best.get("model", "") or "").strip()
 
 
-def _resolve_ckpt_by_tag(ckpts: List[Path], tag: str) -> Optional[Path]:
+def _resolve_ckpt_by_tag(ckpts: list[Path], tag: str) -> Path | None:
     t = (tag or "").strip().lower()
     if not t:
         return None
@@ -60,7 +59,7 @@ def _iter_dir(work: Path, it: int, total: int) -> Path:
     return work / f"iter_{it:03d}"
 
 
-def _best_row(rows: List[Dict[str, object]]) -> Optional[Dict[str, object]]:
+def _best_row(rows: list[dict[str, object]]) -> dict[str, object] | None:
     if not rows:
         return None
     return sorted(rows, key=lambda r: float(r.get("mean_composite", 0.0) or 0.0), reverse=True)[0]
@@ -147,7 +146,7 @@ def main() -> int:
         return 2
 
     current_base = Path(args.base_ckpt).resolve()
-    best_overall_ckpt: Optional[Path] = current_base
+    best_overall_ckpt: Path | None = current_base
     best_overall_score = float("-inf")
 
     for it in range(1, int(args.iterations) + 1):

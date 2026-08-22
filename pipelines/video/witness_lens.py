@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["WitnessShotPlan", "parse_witness_config", "plan_witness_lens"]
 
-_LENS_PROMPTS: Dict[str, tuple[str, str]] = {
+_LENS_PROMPTS: dict[str, tuple[str, str]] = {
     "child": ("low camera height child POV, wide-eyed framing, wonder", "adult eye-level detached"),
     "cctv": ("CCTV surveillance angle, slight fish-eye, timestamp overlay feel", "cinematic beauty lighting"),
     "lover": ("intimate close proximity, soft bokeh, tender framing", "wide detached documentary"),
@@ -27,7 +28,7 @@ class WitnessShotPlan:
     negative_suffix: str
 
 
-def parse_witness_config(raw: Any) -> Dict[str, Any]:
+def parse_witness_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -50,11 +51,11 @@ def plan_witness_lens(
     shots: Sequence[Any],
     *,
     config: Mapping[str, Any],
-) -> List[WitnessShotPlan]:
+) -> list[WitnessShotPlan]:
     if not config.get("enabled"):
         return []
     default = str(config.get("default") or "")
-    plans: List[WitnessShotPlan] = []
+    plans: list[WitnessShotPlan] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         lens = _shot_witness(sh, default)

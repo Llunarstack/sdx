@@ -35,14 +35,14 @@ I have successfully implemented a comprehensive character consistency solution f
 
 ### 5. CLI Interface
 - **Character Management Commands**: Complete CLI for character operations
-  - `python scripts/cli.py character create` - Create new character profiles
-  - `python scripts/cli.py character list` - List and filter characters
-  - `python scripts/cli.py character update` - Update existing characters
-  - `python scripts/cli.py character delete` - Remove characters
-  - `python scripts/cli.py character validate` - Validate consistency
-  - `python scripts/cli.py character stats` - Database statistics
+  - `python -m scripts.tools character create` - Create new character profiles
+  - `python -m scripts.tools character list` - List and filter characters
+  - `python -m scripts.tools character update` - Update existing characters
+  - `python -m scripts.tools character delete` - Remove characters
+  - `python -m scripts.tools character validate` - Validate consistency
+  - `python -m scripts.tools character stats` - Database statistics
 - **Enhanced Generation**: Generate images with character consistency
-  - `python scripts/cli.py generate "prompt" --character "character_name"`
+  - `python -m scripts.tools generate "prompt" --character "character_name"`
 
 ### 6. Comprehensive Testing
 - **test_character_consistency.py**: Complete test suite covering all components
@@ -190,13 +190,13 @@ losses = trainer.training_step(batch)
 ### CLI Usage
 ```bash
 # Create character
-python scripts/cli.py character create "Elena Rodriguez" --references ref1.jpg ref2.jpg ref3.jpg --face-shape oval --eye-color hazel
+python -m scripts.tools character create "Elena Rodriguez" --references ref1.jpg ref2.jpg ref3.jpg --face-shape oval --eye-color hazel
 
 # Generate with character
-python scripts/cli.py generate "Elena walking in park" --checkpoint model.pt --character "Elena Rodriguez"
+python -m scripts.tools generate "Elena walking in park" --checkpoint model.pt --character "Elena Rodriguez"
 
 # Validate consistency
-python scripts/cli.py character validate char_12345678 generated_image.png
+python -m scripts.tools character validate char_12345678 generated_image.png
 ```
 
 ## 📈 Next Steps for Production Use

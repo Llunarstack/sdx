@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -37,19 +36,19 @@ class SemanticTriple:
     """A (subject, attribute, relation) triple parsed from a prompt."""
 
     subject: str
-    attributes: List[str] = field(default_factory=list)
-    relations: List[str] = field(default_factory=list)
+    attributes: list[str] = field(default_factory=list)
+    relations: list[str] = field(default_factory=list)
     negated: bool = False
     count: int = 1
-    token_indices: List[int] = field(default_factory=list)  # positions in token sequence
+    token_indices: list[int] = field(default_factory=list)  # positions in token sequence
 
 
 @dataclass(slots=True)
 class ParsedPrompt:
-    triples: List[SemanticTriple]
+    triples: list[SemanticTriple]
     raw: str
-    negation_indices: List[int] = field(default_factory=list)  # token positions of negated concepts
-    count_constraints: Dict[str, int] = field(default_factory=dict)  # subject -> count
+    negation_indices: list[int] = field(default_factory=list)  # token positions of negated concepts
+    count_constraints: dict[str, int] = field(default_factory=dict)  # subject -> count
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +99,9 @@ class PromptParser:
 
     def parse(self, prompt: str) -> ParsedPrompt:
         """Parse a prompt string into semantic triples."""
-        triples: List[SemanticTriple] = []
-        negation_indices: List[int] = []
-        count_constraints: Dict[str, int] = {}
+        triples: list[SemanticTriple] = []
+        negation_indices: list[int] = []
+        count_constraints: dict[str, int] = {}
 
         words = prompt.lower().split()
 
@@ -196,7 +195,7 @@ class AttributeBindingModule(nn.Module):
     def compute_binding_mask(
         self,
         text_emb: torch.Tensor,
-        parsed: Optional[ParsedPrompt] = None,
+        parsed: ParsedPrompt | None = None,
     ) -> torch.Tensor:
         """
         Compute a soft binding mask over text tokens.
@@ -214,7 +213,7 @@ class AttributeBindingModule(nn.Module):
         self,
         attn_logits: torch.Tensor,
         text_emb: torch.Tensor,
-        spatial_mask: Optional[torch.Tensor] = None,
+        spatial_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Apply attribute binding bias to cross-attention logits.
@@ -248,7 +247,7 @@ class AttributeBindingModule(nn.Module):
         self,
         attn_logits: torch.Tensor,
         text_emb: torch.Tensor,
-        spatial_mask: Optional[torch.Tensor] = None,
+        spatial_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         return self.apply_binding(attn_logits, text_emb, spatial_mask)
 
@@ -352,7 +351,7 @@ class CountConstraint(nn.Module):
         self,
         x: torch.Tensor,
         count: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Route image tokens to `count` instance slots.
 
@@ -414,9 +413,9 @@ class SemanticGroundingLoss(nn.Module):
         self,
         attn_maps: torch.Tensor,
         text_emb: torch.Tensor,
-        spatial_masks: Optional[torch.Tensor] = None,
-        count_targets: Optional[Dict[int, int]] = None,
-    ) -> Dict[str, torch.Tensor]:
+        spatial_masks: torch.Tensor | None = None,
+        count_targets: dict[int, int] | None = None,
+    ) -> dict[str, torch.Tensor]:
         """
         Args:
             attn_maps: (B, H, N, L) cross-attention maps (after softmax).
@@ -490,8 +489,8 @@ class PromptAdherenceController:
         attn_logits: torch.Tensor,
         value: torch.Tensor,
         text_emb: torch.Tensor,
-        spatial_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        spatial_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Apply binding + negation to cross-attention logits and values.
 
@@ -510,12 +509,12 @@ class PromptAdherenceController:
 
 
 def attribute_binding_heatmap(
-    attn_weights: "torch.Tensor",
-    parsed: "ParsedPrompt",
+    attn_weights: torch.Tensor,
+    parsed: ParsedPrompt,
     *,
     spatial_h: int,
     spatial_w: int,
-) -> "torch.Tensor":
+) -> torch.Tensor:
     """
     Aggregate cross-attention into a 2D adherence map ``(H, W)``.
 

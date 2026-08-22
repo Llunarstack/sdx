@@ -14,12 +14,12 @@ SFW/NSFW scaffolding was removed; the model is treated as uncensored by default.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
 
 from .content_control_tags import *  # noqa: F401,F403,F405
 
 
-def _split_csv_tokens(text: str) -> List[str]:
+def _split_csv_tokens(text: str) -> list[str]:
     from utils.prompt.fast_paths import split_tags
 
     return split_tags(text)
@@ -30,7 +30,7 @@ def _contains_any(haystack: str, needles: Iterable[str]) -> bool:
     return any(n in haystack for n in needles)
 
 
-def _first_bucket(haystack: str, buckets: Sequence[Tuple[Sequence[str], str]]) -> Optional[str]:
+def _first_bucket(haystack: str, buckets: Sequence[tuple[Sequence[str], str]]) -> str | None:
     """First matching keyword group wins (order preserves old elif chains)."""
     for keywords, value in buckets:
         if _contains_any(haystack, keywords):
@@ -42,12 +42,12 @@ def _merge_kv_pack(
     pos: str,
     neg: str,
     key: str,
-    pos_map: Dict[str, List[str]],
-    neg_map: Optional[Dict[str, List[str]]] = None,
+    pos_map: dict[str, list[str]],
+    neg_map: dict[str, list[str]] | None = None,
     *,
-    shared_neg: Optional[Sequence[str]] = None,
+    shared_neg: Sequence[str] | None = None,
     pos_only: bool = False,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Append tokens for `key` from pos_map; optionally append negatives from shared_neg or neg_map[key].
     Skips unknown keys (not in pos_map). Empty pos lists are a no-op.
@@ -94,32 +94,32 @@ def _remove_conflicting_tags(text: str) -> str:
 
 # --- Keyword buckets for `infer_content_controls_from_prompt` (order = first-hit wins) ---
 
-_INFER_SCENE_DOMAIN: Tuple[Tuple[Tuple[str, ...], str], ...] = (
+_INFER_SCENE_DOMAIN: tuple[tuple[tuple[str, ...], str], ...] = (
     (("car", "vehicle", "truck", "motorcycle", "bicycle", "bus"), "vehicles"),
     (("building", "architecture", "facade", "skyscraper", "interior"), "architecture"),
     (("object", "product shot", "tabletop", "still life"), "objects"),
 )
 
-_INFER_VIEW_ANGLE: Tuple[Tuple[Tuple[str, ...], str], ...] = (
+_INFER_VIEW_ANGLE: tuple[tuple[tuple[str, ...], str], ...] = (
     (("first person", "pov", "through the eyes"), "first_person"),
     (("bird eye", "bird's-eye", "overhead", "top down"), "bird_eye"),
     (("low angle", "from below", "worm eye", "worm's-eye"), "low_angle"),
 )
 
-_INFER_LIGHTING: Tuple[Tuple[Tuple[str, ...], str], ...] = (
+_INFER_LIGHTING: tuple[tuple[tuple[str, ...], str], ...] = (
     (("golden hour", "sunset", "sunrise"), "dramatic_rim"),
     (("studio lighting", "white background", "simple background"), "studio_softbox"),
     (("overcast", "cloudy day", "soft daylight"), "natural_daylight"),
 )
 
-_INFER_STYLE_MODE: Tuple[Tuple[Tuple[str, ...], str], ...] = (
+_INFER_STYLE_MODE: tuple[tuple[tuple[str, ...], str], ...] = (
     (("3d render", "cg", "octane", "blender render", "unreal engine"), "3d"),
     (("photoreal", "raw photo", "dslr", "real photograph"), "photoreal"),
     (("semi realistic", "semi-realistic", "stylized realism", "2.5d"), "semi_real"),
     (("anime", "manga style", "cel shading", "visual novel"), "anime"),
 )
 
-_INFER_HUMAN_MEDIA_FILM: Tuple[str, ...] = (
+_INFER_HUMAN_MEDIA_FILM: tuple[str, ...] = (
     "35mm",
     "kodak",
     "portra",
@@ -128,7 +128,7 @@ _INFER_HUMAN_MEDIA_FILM: Tuple[str, ...] = (
     "analog photo",
     "cinestill",
 )
-_INFER_HUMAN_MEDIA_DSLR: Tuple[str, ...] = (
+_INFER_HUMAN_MEDIA_DSLR: tuple[str, ...] = (
     "dslr",
     "shot on canon",
     "shot on nikon",
@@ -137,7 +137,7 @@ _INFER_HUMAN_MEDIA_DSLR: Tuple[str, ...] = (
     "50mm lens",
     "full frame",
 )
-_INFER_HUMAN_MEDIA_PHOTO: Tuple[str, ...] = (
+_INFER_HUMAN_MEDIA_PHOTO: tuple[str, ...] = (
     "photorealistic",
     "raw photo",
     "real photograph",
@@ -146,7 +146,7 @@ _INFER_HUMAN_MEDIA_PHOTO: Tuple[str, ...] = (
     "smartphone photo realistic",
 )
 
-_INFER_ADHERENCE_STANDARD_KW: Tuple[str, ...] = (
+_INFER_ADHERENCE_STANDARD_KW: tuple[str, ...] = (
     "as described",
     "faithful to prompt",
     "accurate to description",
@@ -154,7 +154,7 @@ _INFER_ADHERENCE_STANDARD_KW: Tuple[str, ...] = (
     "match the caption",
     "follow the prompt",
 )
-_INFER_ADHERENCE_STRICT_KW: Tuple[str, ...] = (
+_INFER_ADHERENCE_STRICT_KW: tuple[str, ...] = (
     "strict adherence",
     "exactly as described",
     "match every detail",
@@ -163,14 +163,14 @@ _INFER_ADHERENCE_STRICT_KW: Tuple[str, ...] = (
 )
 
 
-def infer_content_controls_from_prompt(prompt: str) -> Dict[str, str]:
+def infer_content_controls_from_prompt(prompt: str) -> dict[str, str]:
     """
     Infer likely control modes from prompt keywords.
     Returns partial kwargs for `apply_content_controls`.
     """
     raw_prompt = (prompt or "").strip()
     p = raw_prompt.lower()
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
 
     sd = _first_bucket(p, _INFER_SCENE_DOMAIN)
     if sd:
@@ -329,7 +329,7 @@ def apply_content_controls(
     human_media_mode: str = "none",
     lora_scaffold: str = "none",
     adherence_pack: str = "none",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Apply optional content controls to prompt + negative prompt.
 

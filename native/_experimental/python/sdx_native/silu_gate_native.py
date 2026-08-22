@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -12,7 +11,7 @@ from sdx_native.native_tools import cuda_silu_gate_shared_library_path
 
 class CudaSiluGateLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_silu_gate_shared_library_path()
         if p is None:
             return
@@ -53,7 +52,7 @@ class CudaSiluGateLib:
         return out.reshape(x.shape)
 
 
-_LIB: Optional[CudaSiluGateLib] = None
+_LIB: CudaSiluGateLib | None = None
 
 
 def get_cuda_silu_gate_lib() -> CudaSiluGateLib:
@@ -70,7 +69,7 @@ def silu_gate_numpy(x: np.ndarray, gate: np.ndarray) -> np.ndarray:
     return (x * sig * g).astype(np.float32)
 
 
-def maybe_silu_gate_cuda(x: np.ndarray, gate: np.ndarray) -> Optional[np.ndarray]:
+def maybe_silu_gate_cuda(x: np.ndarray, gate: np.ndarray) -> np.ndarray | None:
     lib = get_cuda_silu_gate_lib()
     if not lib.available:
         return None

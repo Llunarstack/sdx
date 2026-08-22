@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Sequence, Tuple
 
 
 class MutationAxis(str, Enum):
@@ -51,9 +51,9 @@ class PromptMutator:
         mutated, salt = self._apply(text, ax, seed)
         return PromptMutation(ax, text, mutated, salt)
 
-    def mutate_batch(self, prompt: str, *, seed: int = 0, count: int = 4) -> List[PromptMutation]:
+    def mutate_batch(self, prompt: str, *, seed: int = 0, count: int = 4) -> list[PromptMutation]:
         text = (prompt or "").strip()
-        out: List[PromptMutation] = []
+        out: list[PromptMutation] = []
         for i in range(max(1, count)):
             ax = self._pick_axis(text, seed + i * 997)
             mutated, salt = self._apply(text, ax, seed + i)
@@ -66,7 +66,7 @@ class PromptMutator:
         axes = list(self.axes)
         return axes[h % len(axes)]
 
-    def _apply(self, text: str, axis: MutationAxis, seed: int) -> Tuple[str, int]:
+    def _apply(self, text: str, axis: MutationAxis, seed: int) -> tuple[str, int]:
         salt = seed & 0xFFFF
         if axis == MutationAxis.TIME_SHIFT:
             return self._swap_pair(text, _TIME, seed), salt
@@ -87,7 +87,7 @@ class PromptMutator:
             return f"{text}, extreme macro detail on focal texture", salt
         return text, salt
 
-    def _swap_pair(self, text: str, pairs: Sequence[Tuple[str, str]], seed: int) -> str:
+    def _swap_pair(self, text: str, pairs: Sequence[tuple[str, str]], seed: int) -> str:
         for a, b in pairs:
             if re.search(rf"\b{re.escape(a)}\b", text, re.I):
                 return re.sub(rf"\b{re.escape(a)}\b", b, text, count=1, flags=re.I)

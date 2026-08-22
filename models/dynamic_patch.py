@@ -14,7 +14,6 @@ This module provides:
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -53,7 +52,7 @@ class TimestepPatchScheduler:
             return self.fine_size
         return self.base_size
 
-    def get_patch_size_batch(self, timesteps: torch.Tensor, max_t: int = 1000) -> List[int]:
+    def get_patch_size_batch(self, timesteps: torch.Tensor, max_t: int = 1000) -> list[int]:
         """timesteps: (B,) integer timesteps -> list of patch sizes per sample."""
         t_norm = (timesteps.float() / max_t).clamp(0.0, 1.0)
         return [self.get_patch_size(float(t)) for t in t_norm]
@@ -77,7 +76,7 @@ class DynamicPatchEmbed(nn.Module):
         self,
         in_channels: int = 4,
         hidden_size: int = 1152,
-        patch_sizes: Tuple[int, ...] = (4, 8, 16),
+        patch_sizes: tuple[int, ...] = (4, 8, 16),
         img_size: int = 32,
     ):
         super().__init__()
@@ -106,8 +105,8 @@ class DynamicPatchEmbed(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        patch_size: Optional[int] = None,
-    ) -> Tuple[torch.Tensor, int]:
+        patch_size: int | None = None,
+    ) -> tuple[torch.Tensor, int]:
         """
         Args:
             x: (B, C, H, W) latent.

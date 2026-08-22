@@ -6,10 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def load_profile(path: Path) -> Dict[str, Any]:
+def load_profile(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {"likes": [], "dislikes": [], "notes": ""}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -20,21 +20,21 @@ def load_profile(path: Path) -> Dict[str, Any]:
     return data
 
 
-def save_profile(path: Path, data: Dict[str, Any]) -> None:
+def save_profile(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def add_entry(data: Dict[str, Any], *, bucket: str, image: str, prompt: str, score: float = 1.0) -> None:
+def add_entry(data: dict[str, Any], *, bucket: str, image: str, prompt: str, score: float = 1.0) -> None:
     row = {"image": image, "prompt": prompt, "score": float(score)}
     data.setdefault(bucket, []).append(row)
 
 
-def export_pairs(data: Dict[str, Any], *, min_prompt_match: bool = True) -> List[Dict[str, str]]:
+def export_pairs(data: dict[str, Any], *, min_prompt_match: bool = True) -> list[dict[str, str]]:
     """Pair each like against dislikes with the same prompt when possible."""
     likes = list(data.get("likes") or [])
     dislikes = list(data.get("dislikes") or [])
-    pairs: List[Dict[str, str]] = []
+    pairs: list[dict[str, str]] = []
     for win in likes:
         wp = str(win.get("prompt", "") or "")
         for lose in dislikes:

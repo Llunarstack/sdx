@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any
 
 from .style_engines import EnginePreset, RenderEngine, engine_by_id, engine_edit_overrides, match_engine_from_prompt
 
@@ -15,11 +16,11 @@ class RouteDecision:
     engine: RenderEngine
     preset: EnginePreset
     confidence: float
-    reasons: List[str] = field(default_factory=list)
-    edit_overrides: Dict[str, Any] = field(default_factory=dict)
+    reasons: list[str] = field(default_factory=list)
+    edit_overrides: dict[str, Any] = field(default_factory=dict)
     style_positive: str = ""
     style_negative: str = ""
-    retrieval_tags: List[str] = field(default_factory=list)
+    retrieval_tags: list[str] = field(default_factory=list)
 
 
 def route_scene(
@@ -27,10 +28,10 @@ def route_scene(
     *,
     style_hint: str = "",
     engine_override: str = "",
-    layer_stack: Optional[Mapping[str, str]] = None,
+    layer_stack: Mapping[str, str] | None = None,
 ) -> RouteDecision:
     """Analyze prompt + hints → engine + edit overrides."""
-    reasons: List[str] = []
+    reasons: list[str] = []
     if engine_override and engine_override.lower() not in ("auto", ""):
         preset = engine_by_id(engine_override)
         if preset:

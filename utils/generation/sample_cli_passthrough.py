@@ -6,10 +6,10 @@ Used by OCR repair re-invocation so new flags do not require duplicating 200+ li
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 
-def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
+def append_sample_repair_passthrough(cmd: list[str], args: Any) -> None:
     """Append generation knobs from *args* that should match the parent ``sample.py`` run."""
     if int(getattr(args, "width", 0) or 0) > 0:
         cmd.extend(["--width", str(int(getattr(args, "width", 0) or 0))])
@@ -57,11 +57,11 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
     if getattr(args, "gender_swap", False):
         cmd.append("--gender-swap")
     if getattr(args, "anatomy_scale", ""):
-        cmd.extend(["--anatomy-scale", str(getattr(args, "anatomy_scale"))])
+        cmd.extend(["--anatomy-scale", str(args.anatomy_scale)])
     if getattr(args, "object_scale", ""):
-        cmd.extend(["--object-scale", str(getattr(args, "object_scale"))])
+        cmd.extend(["--object-scale", str(args.object_scale)])
     if getattr(args, "scene_scale", ""):
-        cmd.extend(["--scene-scale", str(getattr(args, "scene_scale"))])
+        cmd.extend(["--scene-scale", str(args.scene_scale)])
     for flag, name, default in (
         ("--photo-realism-pack", "photo_realism_pack", "none"),
         ("--photo-color-grade", "photo_color_grade", "none"),
@@ -73,37 +73,37 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
         if val != default:
             cmd.extend([flag, val])
     if float(getattr(args, "photo_realism_strength", 1.0) or 1.0) != 1.0:
-        cmd.extend(["--photo-realism-strength", str(getattr(args, "photo_realism_strength"))])
+        cmd.extend(["--photo-realism-strength", str(args.photo_realism_strength)])
     if not bool(getattr(args, "auto_photo_realism", True)):
         cmd.append("--no-auto-photo-realism")
     if not bool(getattr(args, "photo_postprocess", True)):
         cmd.append("--no-photo-postprocess")
     if float(getattr(args, "photo_post_strength", 0.6) or 0.6) != 0.6:
-        cmd.extend(["--photo-post-strength", str(getattr(args, "photo_post_strength"))])
+        cmd.extend(["--photo-post-strength", str(args.photo_post_strength)])
     if not bool(getattr(args, "realism_autopilot", True)):
         cmd.append("--no-realism-autopilot")
     if getattr(args, "character_sheet", ""):
-        cmd.extend(["--character-sheet", str(getattr(args, "character_sheet"))])
+        cmd.extend(["--character-sheet", str(args.character_sheet)])
     if getattr(args, "label_multi_character_sheets", False):
         cmd.append("--label-multi-character-sheets")
     if getattr(args, "character_prompt_extra", ""):
-        cmd.extend(["--character-prompt-extra", str(getattr(args, "character_prompt_extra"))])
+        cmd.extend(["--character-prompt-extra", str(args.character_prompt_extra)])
     if getattr(args, "character_negative_extra", ""):
-        cmd.extend(["--character-negative-extra", str(getattr(args, "character_negative_extra"))])
+        cmd.extend(["--character-negative-extra", str(args.character_negative_extra)])
     if getattr(args, "prompt_layout", ""):
-        cmd.extend(["--prompt-layout", str(getattr(args, "prompt_layout"))])
+        cmd.extend(["--prompt-layout", str(args.prompt_layout)])
     if getattr(args, "box_layout", ""):
-        cmd.extend(["--box-layout", str(getattr(args, "box_layout"))])
+        cmd.extend(["--box-layout", str(args.box_layout)])
     if str(getattr(args, "box_layout_mode", "regional_cfg") or "regional_cfg").lower() != "regional_cfg":
-        cmd.extend(["--box-layout-mode", str(getattr(args, "box_layout_mode"))])
+        cmd.extend(["--box-layout-mode", str(args.box_layout_mode)])
     if str(getattr(args, "t5_layout_encode", "auto") or "auto").lower() != "auto":
-        cmd.extend(["--t5-layout-encode", str(getattr(args, "t5_layout_encode"))])
+        cmd.extend(["--t5-layout-encode", str(args.t5_layout_encode)])
     if getattr(args, "scene_blueprint", ""):
-        cmd.extend(["--scene-blueprint", str(getattr(args, "scene_blueprint"))])
+        cmd.extend(["--scene-blueprint", str(args.scene_blueprint)])
     if float(getattr(args, "scene_blueprint_strength", 1.0)) != 1.0:
-        cmd.extend(["--scene-blueprint-strength", str(getattr(args, "scene_blueprint_strength"))])
+        cmd.extend(["--scene-blueprint-strength", str(args.scene_blueprint_strength)])
     if float(getattr(args, "character_strength", 1.0)) != 1.0:
-        cmd.extend(["--character-strength", str(getattr(args, "character_strength"))])
+        cmd.extend(["--character-strength", str(args.character_strength)])
     if bool(getattr(args, "uncensored_mode", False)):
         cmd.append("--uncensored-mode")
     for flag, attr in (
@@ -130,13 +130,13 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
     if bool(getattr(args, "anti_style_bleed", False)):
         cmd.append("--anti-style-bleed")
     if getattr(args, "preset", None):
-        cmd.extend(["--preset", str(getattr(args, "preset"))])
+        cmd.extend(["--preset", str(args.preset)])
     if getattr(args, "op_mode", None):
-        cmd.extend(["--op-mode", str(getattr(args, "op_mode"))])
+        cmd.extend(["--op-mode", str(args.op_mode)])
     if getattr(args, "holy_grail_preset", None):
-        cmd.extend(["--holy-grail-preset", str(getattr(args, "holy_grail_preset"))])
+        cmd.extend(["--holy-grail-preset", str(args.holy_grail_preset)])
     if getattr(args, "hard_style", None):
-        cmd.extend(["--hard-style", str(getattr(args, "hard_style"))])
+        cmd.extend(["--hard-style", str(args.hard_style)])
     if getattr(args, "boost_quality", False):
         cmd.append("--boost-quality")
 
@@ -179,9 +179,9 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
         if _hms >= 0.0:
             cmd.extend(["--human-made-strength", str(_hms)])
     if str(getattr(args, "anti_ai_pack", "none") or "none") != "none":
-        cmd.extend(["--anti-ai-pack", str(getattr(args, "anti_ai_pack"))])
+        cmd.extend(["--anti-ai-pack", str(args.anti_ai_pack)])
     if str(getattr(args, "human_media_mode", "none") or "none") != "none":
-        cmd.extend(["--human-media", str(getattr(args, "human_media_mode"))])
+        cmd.extend(["--human-media", str(args.human_media_mode)])
     if getattr(args, "anti_bleed", False):
         cmd.append("--anti-bleed")
     if getattr(args, "diversity", False):
@@ -214,13 +214,13 @@ def append_sample_repair_passthrough(cmd: List[str], args: Any) -> None:
         cmd.append("--no-one-shot-boost")
 
 
-def _append_adapter_control_fallback(cmd: List[str], args: Any) -> None:
+def _append_adapter_control_fallback(cmd: list[str], args: Any) -> None:
     """Minimal adapter/control forward when book_helpers is unavailable."""
     if getattr(args, "style", ""):
-        cmd.extend(["--style", str(getattr(args, "style"))])
+        cmd.extend(["--style", str(args.style)])
         cmd.extend(["--style-strength", str(getattr(args, "style_strength", 0.7))])
     if getattr(args, "control_image", ""):
-        cmd.extend(["--control-image", str(getattr(args, "control_image"))])
+        cmd.extend(["--control-image", str(args.control_image)])
         cmd.extend(["--control-type", str(getattr(args, "control_type", "auto"))])
         cmd.extend(["--control-scale", str(getattr(args, "control_scale", 0.85))])
     if getattr(args, "control", None):

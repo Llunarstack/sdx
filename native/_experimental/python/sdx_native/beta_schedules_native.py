@@ -6,7 +6,7 @@ Falls back to pure NumPy in :mod:`diffusion.schedules` when the DLL is missing.
 from __future__ import annotations
 
 import ctypes
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -15,7 +15,7 @@ from sdx_native.native_tools import beta_schedules_shared_library_path
 _DLL: Any = None
 
 
-def _get_dll() -> Optional[ctypes.CDLL]:
+def _get_dll() -> ctypes.CDLL | None:
     global _DLL
     if _DLL is False:
         return None
@@ -41,7 +41,7 @@ def _get_dll() -> Optional[ctypes.CDLL]:
         return None
 
 
-def squared_cosine_betas_v2_native(n: int, max_beta: float = 0.999) -> Optional[np.ndarray]:
+def squared_cosine_betas_v2_native(n: int, max_beta: float = 0.999) -> np.ndarray | None:
     """
     Return ``(n,)`` float64 betas or ``None`` if the native library is unavailable
     or returns an error.

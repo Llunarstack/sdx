@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping
+from typing import Any
 
 __all__ = [
     "CAMERA_VERBS",
@@ -14,7 +15,7 @@ __all__ = [
 ]
 
 
-CAMERA_VERBS: Dict[str, str] = {
+CAMERA_VERBS: dict[str, str] = {
     "static": "locked tripod, static frame",
     "pan_left": "smooth pan left",
     "pan_right": "smooth pan right",
@@ -44,15 +45,15 @@ class StoryboardCut:
     camera: str = ""
     shot_type: str = ""
     transition: str = "cut"
-    characters: List[str] = field(default_factory=list)
-    objects: List[str] = field(default_factory=list)
-    effects: List[str] = field(default_factory=list)
+    characters: list[str] = field(default_factory=list)
+    objects: list[str] = field(default_factory=list)
+    effects: list[str] = field(default_factory=list)
     start_image: str = ""
     end_image: str = ""
     flf2v: bool = False
-    motion_brush: Dict[str, Any] = field(default_factory=dict)
-    elements: List[str] = field(default_factory=list)
-    bindings: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    motion_brush: dict[str, Any] = field(default_factory=dict)
+    elements: list[str] = field(default_factory=list)
+    bindings: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def camera_prompt_fragment(camera: str) -> str:
@@ -78,7 +79,7 @@ def _infer_shot_type(camera: str, prompt: str) -> str:
     return "medium"
 
 
-def parse_storyboard(raw: Any) -> List[StoryboardCut]:
+def parse_storyboard(raw: Any) -> list[StoryboardCut]:
     if not raw:
         return []
     cuts_raw: Any = raw
@@ -86,7 +87,7 @@ def parse_storyboard(raw: Any) -> List[StoryboardCut]:
         cuts_raw = raw.get("cuts") or raw.get("shots") or []
     if not isinstance(cuts_raw, list):
         return []
-    cuts: List[StoryboardCut] = []
+    cuts: list[StoryboardCut] = []
     for i, row in enumerate(cuts_raw):
         if isinstance(row, str):
             cuts.append(StoryboardCut(id=f"cut_{i}", prompt=row))
@@ -117,7 +118,7 @@ def parse_storyboard(raw: Any) -> List[StoryboardCut]:
     return cuts
 
 
-def _str_list(v: Any) -> List[str]:
+def _str_list(v: Any) -> list[str]:
     if v is None:
         return []
     if isinstance(v, str):

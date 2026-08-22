@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 import numpy as np
 
@@ -26,7 +26,7 @@ def interpolate_between_keyframes(
     count: int,
     use_flow: bool = True,
     prefix: str = "mid",
-) -> List[Path]:
+) -> list[Path]:
     """Generate ``count`` intermediate frames between A and B."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -38,7 +38,7 @@ def interpolate_between_keyframes(
             flow, _ = compute_flow_magnitude(a, b)
         except Exception:
             flow = None
-    paths: List[Path] = []
+    paths: list[Path] = []
     for i in range(1, count + 1):
         t = i / (count + 1)
         if flow is not None:
@@ -58,7 +58,7 @@ def interpolate_sequence(
     out_dir: str | Path,
     *,
     use_flow: bool = True,
-) -> List[Path]:
+) -> list[Path]:
     """
     Expand sparse keyframes to ``target_frame_count`` frames via segment interpolation.
     """
@@ -79,7 +79,7 @@ def interpolate_sequence(
     out.mkdir(parents=True, exist_ok=True)
     segments = len(keys) - 1
     per_seg = max(1, target_frame_count // segments)
-    all_paths: List[Path] = []
+    all_paths: list[Path] = []
     all_paths.append(keys[0])
     for s in range(segments):
         mids = interpolate_between_keyframes(
@@ -100,7 +100,7 @@ def interpolate_sequence(
         last = all_paths[-1]
         while len(all_paths) < target_frame_count:
             all_paths.append(last)
-    final: List[Path] = []
+    final: list[Path] = []
     for i, src in enumerate(all_paths):
         fp = out / f"frame_{i + 1:06d}.png"
         if src.resolve() != fp.resolve():

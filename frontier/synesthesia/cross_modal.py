@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -25,12 +24,12 @@ class SynesthesiaTuning:
 class CrossModalMap:
     """Bundled tuning from audio/mood vocabulary."""
 
-    tunings: Tuple[SynesthesiaTuning, ...]
+    tunings: tuple[SynesthesiaTuning, ...]
     merged_color: str
     merged_rhythm: str
 
 
-_AUDIO_MOOD: Tuple[Tuple[re.Pattern, str, float, float, str, str], ...] = (
+_AUDIO_MOOD: tuple[tuple[re.Pattern, str, float, float, str, str], ...] = (
     (
         re.compile(r"\b(jazz|swing|brass|smoky club)\b", re.I),
         "jazz",
@@ -95,7 +94,7 @@ class SynesthesiaEngine:
         rhythms = ", ".join(h.rhythm_hint for h in hits[:2])
         return CrossModalMap(tuple(hits), colors, rhythms)
 
-    def diffusion_knobs(self, prompt: str) -> Tuple[float, float]:
+    def diffusion_knobs(self, prompt: str) -> tuple[float, float]:
         """Return (serendipity_offset, cfg_multiplier)."""
         m = self.map_prompt(prompt)
         if not m.tunings:

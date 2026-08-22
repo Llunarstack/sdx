@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 import numpy as np
 
@@ -24,12 +24,12 @@ def _shift_rgb(rgb: np.ndarray, dx: float, dy: float) -> np.ndarray:
         return rgb
 
 
-def stabilize_rgb_sequence(frames: Sequence[np.ndarray], *, strength: float = 0.65) -> List[np.ndarray]:
+def stabilize_rgb_sequence(frames: Sequence[np.ndarray], *, strength: float = 0.65) -> list[np.ndarray]:
     """Compensate cumulative camera pan using mean optical flow."""
     if len(frames) < 2:
         return list(frames)
     s = float(max(0.0, min(1.0, strength)))
-    out: List[np.ndarray] = [frames[0]]
+    out: list[np.ndarray] = [frames[0]]
     cum_x, cum_y = 0.0, 0.0
     prev = frames[0]
     for curr in frames[1:]:
@@ -47,7 +47,7 @@ def stabilize_rgb_sequence(frames: Sequence[np.ndarray], *, strength: float = 0.
     return out
 
 
-def stabilize_frame_paths(frame_paths: List[Path], *, strength: float = 0.65) -> List[Path]:
+def stabilize_frame_paths(frame_paths: list[Path], *, strength: float = 0.65) -> list[Path]:
     if len(frame_paths) < 2:
         return frame_paths
     rgbs = [read_frame_rgb(p) for p in frame_paths]

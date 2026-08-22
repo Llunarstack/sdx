@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 import numpy as np
 
@@ -49,7 +49,7 @@ def interpolate_sequence_depth(
     out_dir: str | Path,
     *,
     use_flow: bool = True,
-) -> List[Path]:
+) -> list[Path]:
     """Like ``interpolate_sequence`` but mid-frames use depth-aware blending."""
     from .interpolate import interpolate_sequence
 
@@ -61,13 +61,13 @@ def interpolate_sequence_depth(
     out.mkdir(parents=True, exist_ok=True)
     segments = len(keys) - 1
     per_seg = max(1, target_frame_count // segments)
-    all_paths: List[Path] = [keys[0]]
+    all_paths: list[Path] = [keys[0]]
     for s in range(segments):
         a = read_frame_rgb(keys[s])
         b = read_frame_rgb(keys[s + 1])
         seg_dir = out / f"seg_{s:02d}"
         seg_dir.mkdir(parents=True, exist_ok=True)
-        mids: List[Path] = []
+        mids: list[Path] = []
         count = max(0, per_seg - 2)
         flow = None
         if use_flow:
@@ -96,7 +96,7 @@ def interpolate_sequence_depth(
     elif len(all_paths) < target_frame_count:
         all_paths.extend([all_paths[-1]] * (target_frame_count - len(all_paths)))
 
-    final: List[Path] = []
+    final: list[Path] = []
     for i, src in enumerate(all_paths[:target_frame_count]):
         fp = out / f"frame_{i + 1:06d}.png"
         save_frame_rgb(fp, read_frame_rgb(src))

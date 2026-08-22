@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class WeatherMood(str, Enum):
@@ -26,7 +25,7 @@ class AtmospherePlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, WeatherMood, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, WeatherMood, str, str], ...] = (
     (
         re.compile(r"\b(fog|foggy|misty city|pea soup)\b", re.I),
         WeatherMood.FOG,
@@ -74,7 +73,7 @@ class AtmospherePlanner:
             )
         return AtmospherePlan(WeatherMood.CLEAR, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

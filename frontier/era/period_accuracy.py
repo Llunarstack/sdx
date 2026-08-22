@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class HistoricalEra(str, Enum):
@@ -29,7 +28,7 @@ class EraPlan:
     negative: str
 
 
-_ERAS: Tuple[Tuple[re.Pattern, HistoricalEra, str, str], ...] = (
+_ERAS: tuple[tuple[re.Pattern, HistoricalEra, str, str], ...] = (
     (
         re.compile(r"\b(ancient rome|greek|egyptian|roman|spartan)\b", re.I),
         HistoricalEra.ANCIENT,
@@ -95,7 +94,7 @@ class EraPlanner:
                 return EraPlan(era, pos, neg)
         return EraPlan(HistoricalEra.GENERIC, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

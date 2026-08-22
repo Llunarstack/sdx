@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
 
 
 @dataclass(frozen=True)
@@ -22,13 +21,13 @@ class MoodVector:
 
 @dataclass(frozen=True)
 class MoodPhysicsPlan:
-    vectors: Tuple[MoodVector, ...]
+    vectors: tuple[MoodVector, ...]
     serendipity_offset: float
     cfg_mult: float
     prompt_fragment: str
 
 
-_VECTORS: Tuple[Tuple[re.Pattern, str, float, float, float, str], ...] = (
+_VECTORS: tuple[tuple[re.Pattern, str, float, float, float, str], ...] = (
     (
         re.compile(r"\b(ominous|dread|foreboding|eerie)\b", re.I),
         "ominous",
@@ -77,7 +76,7 @@ _VECTORS: Tuple[Tuple[re.Pattern, str, float, float, float, str], ...] = (
 class MoodPhysics:
     def analyze(self, prompt: str) -> MoodPhysicsPlan:
         text = prompt or ""
-        hits: List[MoodVector] = []
+        hits: list[MoodVector] = []
         for pat, name, ser, cfg, early, frag in _VECTORS:
             if pat.search(text):
                 hits.append(MoodVector(name, ser, cfg, early, frag))
@@ -90,13 +89,13 @@ class MoodPhysics:
         frags = ", ".join(h.fragment for h in hits[:2])
         return MoodPhysicsPlan(tuple(hits), ser, cfg, frags)
 
-    def step_emphasis_curve(self, plan: MoodPhysicsPlan, num_steps: int) -> Tuple[float, ...]:
+    def step_emphasis_curve(self, plan: MoodPhysicsPlan, num_steps: int) -> tuple[float, ...]:
         """Early-heavy vs late-heavy emphasis from mood."""
         if not plan.vectors:
             return tuple(1.0 for _ in range(num_steps))
         early_w = sum(v.step_emphasis_early for v in plan.vectors) / len(plan.vectors)
         n = max(4, num_steps)
-        curve: List[float] = []
+        curve: list[float] = []
         for i in range(n):
             t = i / max(1, n - 1)
             w = (1.0 - t) * early_w + t * (1.0 - early_w)

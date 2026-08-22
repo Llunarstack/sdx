@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 
 def truncate_caption_at_comma_boundary(caption: str, max_len: int) -> str:
     """
@@ -17,10 +15,10 @@ def truncate_caption_at_comma_boundary(caption: str, max_len: int) -> str:
     text = caption.strip()
     if len(text) <= max_len:
         return text
-    parts: List[str] = [p.strip() for p in text.split(",") if p.strip()]
+    parts: list[str] = [p.strip() for p in text.split(",") if p.strip()]
     if not parts:
         return text[:max_len]
-    kept: List[str] = []
+    kept: list[str] = []
     length = 0
     for i, part in enumerate(parts):
         add = len(part) if not kept else len(part) + 2

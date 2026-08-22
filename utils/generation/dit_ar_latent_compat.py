@@ -10,7 +10,8 @@ DiT + block-AR + ViT scorer alignment for latent editing (img2img / inpaint).
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Mapping, Optional, Tuple, Union
+from collections.abc import Mapping
+from typing import Any
 
 import torch
 from models.attention import create_block_causal_mask_2d
@@ -23,7 +24,7 @@ from utils.architecture.ar_block_conditioning import (
 )
 
 
-def dit_latent_hw_from_model(model: Any) -> Tuple[int, int]:
+def dit_latent_hw_from_model(model: Any) -> tuple[int, int]:
     """
     Spatial ``(H, W)`` of the **latent** grid expected by a DiT-like ``x_embedder`` (timm ``PatchEmbed``).
     """
@@ -52,7 +53,7 @@ def dit_patch_grid_side_from_model(model: Any) -> int:
 
 def validate_latent_edit_tensors(
     z0: torch.Tensor,
-    mask_latent: Optional[torch.Tensor],
+    mask_latent: torch.Tensor | None,
     model: Any,
 ) -> None:
     """
@@ -75,8 +76,8 @@ def validate_latent_edit_tensors(
 def refresh_block_ar_mask_on_model(
     model: Any,
     *,
-    num_ar_blocks: Optional[int] = None,
-    ar_block_order: Optional[str] = None,
+    num_ar_blocks: int | None = None,
+    ar_block_order: str | None = None,
 ) -> None:
     """
     Rebuild ``model._ar_mask`` from current ``num_ar_blocks`` / ``ar_block_order`` and ``num_patches``.
@@ -87,20 +88,20 @@ def refresh_block_ar_mask_on_model(
     order = str(
         ar_block_order if ar_block_order is not None else getattr(model, "ar_block_order", "raster") or "raster"
     )
-    setattr(model, "num_ar_blocks", b)
-    setattr(model, "ar_block_order", order)
+    model.num_ar_blocks = b
+    model.ar_block_order = order
     if b <= 0:
-        setattr(model, "_ar_mask", None)
+        model._ar_mask = None
         return
     p = dit_patch_grid_side_from_model(model)
     mask = create_block_causal_mask_2d(p, p, b, block_order=order.strip().lower())
     ref = getattr(model, "pos_embed", None)
     if ref is not None and hasattr(ref, "device"):
         mask = mask.to(device=ref.device)
-    setattr(model, "_ar_mask", mask)
+    model._ar_mask = mask
 
 
-def vit_scorer_ar_vector(num_ar_blocks: Union[int, Any], *, device=None, dtype=torch.float32) -> torch.Tensor:
+def vit_scorer_ar_vector(num_ar_blocks: int | Any, *, device=None, dtype=torch.float32) -> torch.Tensor:
     """
     ``(4,)`` one-hot for ViT quality / dataset QA (same as ``ar_conditioning_vector``).
     """
@@ -110,10 +111,10 @@ def vit_scorer_ar_vector(num_ar_blocks: Union[int, Any], *, device=None, dtype=t
 
 def tag_row_for_vit_scorer(
     row: Mapping[str, Any],
-    num_ar_blocks: Union[int, Any],
+    num_ar_blocks: int | Any,
     *,
     overwrite: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Attach AR fields a ViT scorer / JSONL digest expects (wraps ``tag_manifest_row_ar``)."""
     v = normalize_num_ar_blocks(num_ar_blocks)
     return tag_manifest_row_ar(row, v, overwrite=overwrite)
@@ -122,11 +123,11 @@ def tag_row_for_vit_scorer(
 def generation_edit_metadata(
     *,
     image_size_px: int,
-    num_ar_blocks: Union[int, Any],
+    num_ar_blocks: int | Any,
     strength: float,
     inpaint: bool,
     inpaint_mode: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Small dict for manifests / logs (book pipeline, tooling)."""
     v = normalize_num_ar_blocks(num_ar_blocks)
     return {

@@ -1,5 +1,5 @@
 {
-  "extraPaths": ["native/python", "."],
+  "extraPaths": ["native/_experimental/python", "."],
   "pythonVersion": "3.10",
   "reportMissingImports": false,
   "ignore": [

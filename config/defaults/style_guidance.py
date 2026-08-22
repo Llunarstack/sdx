@@ -7,8 +7,9 @@ Also merges ``config.defaults.style_artists`` bucket/facet quality fragments on 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Sequence, Tuple
+from typing import Literal
 
 __all__ = [
     "StyleGuidanceMode",
@@ -27,7 +28,7 @@ StyleGuidanceMode = Literal["none", "auto", "all"]
 @dataclass(frozen=True, slots=True)
 class StyleSpec:
     id: str
-    keywords: Tuple[str, ...]
+    keywords: tuple[str, ...]
     positive_hints: str
     negative_hints: str
 
@@ -36,7 +37,7 @@ def _word_re(term: str) -> re.Pattern:
     return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
 
 
-def _compile_keywords(keywords: Tuple[str, ...]) -> Tuple[re.Pattern, ...]:
+def _compile_keywords(keywords: tuple[str, ...]) -> tuple[re.Pattern, ...]:
     return tuple(_word_re(k) for k in keywords)
 
 
@@ -44,7 +45,7 @@ def _matches(prompt: str, patterns: Sequence[re.Pattern]) -> bool:
     return any(p.search(prompt) for p in patterns)
 
 
-STYLE_ALIAS_TERMS: Dict[str, Tuple[str, ...]] = {
+STYLE_ALIAS_TERMS: dict[str, tuple[str, ...]] = {
     "shonen": ("battle shonen", "shonen battle", "battle anime"),
     "shojo romance": ("shoujo romance", "shojo romance anime", "romance shoujo"),
     "seinen gritty": ("gritty seinen", "seinen dark", "mature seinen"),
@@ -83,7 +84,7 @@ STYLE_ALIAS_TERMS: Dict[str, Tuple[str, ...]] = {
     "zenless-like anime 3d": ("zenless zone zero style", "zzz style"),
 }
 
-_STYLE_ALIAS_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = tuple(
+_STYLE_ALIAS_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
     (re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE), canonical)
     for canonical, aliases in STYLE_ALIAS_TERMS.items()
     for alias in aliases
@@ -94,7 +95,7 @@ def _expand_style_aliases(prompt: str) -> str:
     p = str(prompt or "").strip()
     if not p:
         return p
-    found: List[str] = []
+    found: list[str] = []
     for pat, canonical in _STYLE_ALIAS_PATTERNS:
         if pat.search(p):
             found.append(canonical)
@@ -106,7 +107,7 @@ def _expand_style_aliases(prompt: str) -> str:
 
 def merge_csv_unique(*chunks: str) -> str:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for chunk in chunks:
         if not chunk or not str(chunk).strip():
             continue
@@ -123,7 +124,7 @@ def merge_csv_unique(*chunks: str) -> str:
 
 
 # Representative cross-medium style/artist/game tags for detection and conditioning.
-ARTIST_REFERENCE_TAGS: Tuple[str, ...] = (
+ARTIST_REFERENCE_TAGS: tuple[str, ...] = (
     # Traditional / modern painters
     "john singer sargent",
     "claude monet",
@@ -228,7 +229,7 @@ ARTIST_REFERENCE_TAGS: Tuple[str, ...] = (
 )
 
 
-STYLE_SPECS: Tuple[StyleSpec, ...] = (
+STYLE_SPECS: tuple[StyleSpec, ...] = (
     StyleSpec(
         id="anime_manga",
         keywords=("anime", "manga", "shonen", "shoujo", "seinen", "isekai", "light novel", "visual novel"),
@@ -409,23 +410,23 @@ STYLE_SPECS: Tuple[StyleSpec, ...] = (
     ),
 )
 
-STYLE_IDS: Tuple[str, ...] = tuple(s.id for s in STYLE_SPECS)
-_STYLE_PATTERNS: Dict[str, Tuple[re.Pattern, ...]] = {s.id: _compile_keywords(s.keywords) for s in STYLE_SPECS}
-_ARTIST_PATTERNS: Tuple[re.Pattern, ...] = tuple(_word_re(a) for a in ARTIST_REFERENCE_TAGS)
+STYLE_IDS: tuple[str, ...] = tuple(s.id for s in STYLE_SPECS)
+_STYLE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {s.id: _compile_keywords(s.keywords) for s in STYLE_SPECS}
+_ARTIST_PATTERNS: tuple[re.Pattern, ...] = tuple(_word_re(a) for a in ARTIST_REFERENCE_TAGS)
 
 
-def detect_style_ids(prompt: str) -> Tuple[str, ...]:
+def detect_style_ids(prompt: str) -> tuple[str, ...]:
     if not prompt or not prompt.strip():
         return ()
     prompt = _expand_style_aliases(prompt)
-    out: List[str] = []
+    out: list[str] = []
     for spec in STYLE_SPECS:
         if _matches(prompt, _STYLE_PATTERNS[spec.id]):
             out.append(spec.id)
     return tuple(out)
 
 
-def _artist_reference_fragments(prompt: str, enabled: bool) -> Tuple[str, str]:
+def _artist_reference_fragments(prompt: str, enabled: bool) -> tuple[str, str]:
     if not enabled:
         return "", ""
     prompt = _expand_style_aliases(prompt)
@@ -437,7 +438,7 @@ def _artist_reference_fragments(prompt: str, enabled: bool) -> Tuple[str, str]:
     return "", ""
 
 
-def _style_tag_quality_safe(prompt: str) -> Tuple[str, str]:
+def _style_tag_quality_safe(prompt: str) -> tuple[str, str]:
     try:
         from config.defaults.style_artists import style_tag_quality_fragments
 
@@ -451,7 +452,7 @@ def style_guidance_fragments(
     mode: StyleGuidanceMode,
     *,
     include_artist_refs: bool,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     m = (mode or "none").lower()
     tp, tn = _style_tag_quality_safe(prompt)
     if m == "none":

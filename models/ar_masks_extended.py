@@ -11,8 +11,6 @@ See ``docs/AR.md`` and ``docs/AR_EXTENSIONS.md``.
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import torch
 
 
@@ -24,14 +22,14 @@ def _morton_encode_2d(bi: int, bj: int, bits: int) -> int:
     return z
 
 
-def block_grid_dims(h: int, w: int, num_ar_blocks: int) -> Tuple[int, int]:
+def block_grid_dims(h: int, w: int, num_ar_blocks: int) -> tuple[int, int]:
     """Patch counts per block along H and W."""
     bh = max(1, (h + num_ar_blocks - 1) // num_ar_blocks)
     bw = max(1, (w + num_ar_blocks - 1) // num_ar_blocks)
     return bh, bw
 
 
-def patch_to_block_indices(i: int, j: int, h: int, w: int, num_ar_blocks: int) -> Tuple[int, int]:
+def patch_to_block_indices(i: int, j: int, h: int, w: int, num_ar_blocks: int) -> tuple[int, int]:
     """Map patch row,col to block row,col."""
     bh, bw = block_grid_dims(h, w, num_ar_blocks)
     return i // bh, j // bw
@@ -54,8 +52,8 @@ def block_snake_rank(bi: int, bj: int, num_ar_blocks: int) -> int:
     return bi * num_ar_blocks + col
 
 
-def _spiral_cells(num_ar_blocks: int) -> List[Tuple[int, int]]:
-    out: List[Tuple[int, int]] = []
+def _spiral_cells(num_ar_blocks: int) -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
     top, left = 0, 0
     bottom, right = num_ar_blocks - 1, num_ar_blocks - 1
     while top <= bottom and left <= right:
@@ -82,7 +80,7 @@ def block_spiral_rank(bi: int, bj: int, num_ar_blocks: int) -> int:
     return int(lut.get((bi, bj), 0))
 
 
-def block_visit_order(num_ar_blocks: int, block_order: str = "raster") -> List[Tuple[int, int]]:
+def block_visit_order(num_ar_blocks: int, block_order: str = "raster") -> list[tuple[int, int]]:
     order = str(block_order or "raster").strip().lower()
     cells = [(bi, bj) for bi in range(num_ar_blocks) for bj in range(num_ar_blocks)]
     if order in ("z", "z-order", "zorder", "morton"):
@@ -144,7 +142,7 @@ def create_block_causal_mask_2d(
     return mask
 
 
-def ar_mask_sparsity_stats(mask: torch.Tensor) -> Tuple[float, int]:
+def ar_mask_sparsity_stats(mask: torch.Tensor) -> tuple[float, int]:
     """Fraction of allowed pairs (finite mask), and N for an N×N mask."""
     if mask.dim() != 2 or mask.shape[0] != mask.shape[1]:
         raise ValueError("mask must be square (N, N)")

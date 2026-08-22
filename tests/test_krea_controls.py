@@ -66,7 +66,7 @@ def test_creativity_mode_raw_skips_expansion():
     args = SimpleNamespace(prompt="sunset", creativity_mode="raw")
     mode = apply_creativity_mode_to_prompt(args)
     assert mode == CreativityMode.RAW
-    assert getattr(args, "_skip_prompt_expansion") is True
+    assert args._skip_prompt_expansion is True
     assert args.prompt == "sunset"
 
 
@@ -111,11 +111,14 @@ def test_aggregate_style_embeddings(tmp_path: Path):
         img = Image.new("RGB", (64, 64), color)
         img.save(tmp_path / f"ref{i}.png")
     refs = parse_style_references(csv_spec=f"{tmp_path / 'ref0.png'}:0.5,{tmp_path / 'ref1.png'}:0.5")
-    emb, dim = aggregate_style_embeddings(
-        refs,
-        device=torch.device("cpu"),
-        model_id="openai/clip-vit-large-patch14",
-        dtype=torch.float32,
-    )
+    try:
+        emb, dim = aggregate_style_embeddings(
+            refs,
+            device=torch.device("cpu"),
+            model_id="openai/clip-vit-large-patch14",
+            dtype=torch.float32,
+        )
+    except OSError as e:
+        pytest.skip(f"CLIP weights unavailable (offline / not cached): {e}")
     assert emb.shape == (1, dim)
     assert torch.isfinite(emb).all()

@@ -1,12 +1,75 @@
 {
+  "profiles": {
+    "train": [
+      "T5-XXL",
+      "CLIP-ViT-L-14",
+      "CLIP-ViT-bigG-14",
+      "LongCLIP-L",
+      "DINOv2-Base"
+    ],
+    "enrich": [
+      "moondream2",
+      "Qwen2.5-14B-Instruct"
+    ],
+    "inference": [
+      "T5-XXL",
+      "CLIP-ViT-L-14",
+      "CLIP-ViT-bigG-14",
+      "moondream2",
+      "Qwen2.5-14B-Instruct",
+      "ImageReward",
+      "PickScore_v1"
+    ],
+    "ultimate": [
+      "T5-XXL",
+      "CLIP-ViT-L-14",
+      "CLIP-ViT-bigG-14",
+      "DINOv2-Base",
+      "DINOv2-Large",
+      "DINOv2-Giant",
+      "SigLIP-SO400M",
+      "Qwen2.5-14B-Instruct",
+      "StableCascade-Prior",
+      "StableCascade-Decoder",
+      "GenSearcher-8B",
+      "ImageReward",
+      "PickScore_v1",
+      "GroundingDINO-Base",
+      "CountGD",
+      "TrOCR-Large-Printed",
+      "PerceptCLIP_IQA",
+      "Depth-Anything-V2-Large",
+      "SAM2-Hiera-Large",
+      "Real-ESRGAN",
+      "LongCLIP-L",
+      "moondream2",
+      "Marigold-Depth-v1-1",
+      "Marigold-Normals-v1-1",
+      "TAESD",
+      "TAESDXL",
+      "CodeFormer",
+      "Consistency-Decoder",
+      "ConvNeXtV2-Large",
+      "LAION-Aesthetic-v2",
+      "AnyDoor-Ref",
+      "WD-EVA02-Large-Tagger"
+    ]
+  },
   "models": [
     {
       "name": "T5-XXL",
-      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL",
-      "hf_fallback": "google/t5-v1_1-xxl",
-      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL",
+      "local_folder": "T5-XXL-safetensors",
+      "hf_fallback": "mcmonkey/google_t5-v1_1-xxl_encoderonly",
+      "allow_patterns": [
+        "model.safetensors",
+        "config.json",
+        "spiece.model",
+        "tokenizer_config.json",
+        "special_tokens_map.json"
+      ],
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\T5-XXL-safetensors",
       "is_local": true,
-      "size_gb": 41.483
+      "size_gb": 9.0
     },
     {
       "name": "CLIP-ViT-L-14",
@@ -23,6 +86,14 @@
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CLIP-ViT-bigG-14",
       "is_local": true,
       "size_gb": 18.925
+    },
+    {
+      "name": "DINOv2-Base",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Base",
+      "hf_fallback": "facebook/dinov2-base",
+      "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\DINOv2-Base",
+      "is_local": false,
+      "size_gb": 0.35
     },
     {
       "name": "DINOv2-Large",
@@ -60,6 +131,7 @@
       "name": "StableCascade-Prior",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Prior",
       "hf_fallback": "stabilityai/stable-cascade-prior",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Prior",
       "is_local": true,
       "size_gb": 17.094
@@ -68,6 +140,7 @@
       "name": "StableCascade-Decoder",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Decoder",
       "hf_fallback": "stabilityai/stable-cascade",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\StableCascade-Decoder",
       "is_local": true,
       "size_gb": 7.279
@@ -76,6 +149,7 @@
       "name": "GenSearcher-8B",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GenSearcher-8B",
       "hf_fallback": "GenSearcher/Gen-Searcher-8B",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\GenSearcher-8B",
       "is_local": true,
       "size_gb": 16.345,
@@ -126,6 +200,7 @@
       "name": "PerceptCLIP_IQA",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PerceptCLIP_IQA",
       "hf_fallback": "PerceptCLIP/PerceptCLIP_IQA",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\PerceptCLIP_IQA",
       "is_local": true,
       "size_gb": 1.143
@@ -165,7 +240,9 @@
     {
       "name": "moondream2",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
-      "hf_fallback": "vikhyatoolkit/moondream2",
+      "hf_fallback": "vikhyatk/moondream2",
+      "hf_revision": "2025-06-21",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\moondream2",
       "is_local": true,
       "size_gb": 3.592
@@ -205,7 +282,12 @@
     {
       "name": "CodeFormer",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CodeFormer",
-      "hf_fallback": "sczhou/CodeFormer",
+      "optional": true,
+      "download_files": {
+        "weights/CodeFormer/codeformer.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
+        "weights/facelib/detection_Resnet50_Final.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth",
+        "weights/facelib/parsing_parsenet.pth": "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth"
+      },
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\CodeFormer",
       "is_local": true,
       "size_gb": 0.532
@@ -229,7 +311,8 @@
     {
       "name": "LAION-Aesthetic-v2",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LAION-Aesthetic-v2",
-      "hf_fallback": "christophschuhmann/improved-aesthetic-predictor",
+      "hf_fallback": "camenduru/improved-aesthetic-predictor",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\LAION-Aesthetic-v2",
       "is_local": true,
       "size_gb": 0.01
@@ -238,9 +321,16 @@
       "name": "AnyDoor-Ref",
       "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
       "hf_fallback": "camenduru/AnyDoor",
+      "optional": true,
       "resolved": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\AnyDoor-Ref",
       "is_local": true,
       "size_gb": 10.34
+    },
+    {
+      "name": "WD-EVA02-Large-Tagger",
+      "local_folder": "C:\\Users\\macfa\\Desktop\\Development\\sdx\\pretrained\\WD-EVA02-Large-Tagger",
+      "hf_fallback": "SmilingWolf/wd-eva02-large-tagger-v3",
+      "size_gb": 1.2
     }
   ]
 }

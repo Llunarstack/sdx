@@ -8,7 +8,7 @@ This is **not** a full Schrödinger-bridge trainer; it is a regularizer that exp
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -28,14 +28,14 @@ def shuffle_pair_latents(latents: torch.Tensor) -> torch.Tensor:
 
 
 def bridge_aux_vp_loss(
-    diffusion: "GaussianDiffusion",
+    diffusion: GaussianDiffusion,
     model: torch.nn.Module,
     latents: torch.Tensor,
     t: torch.Tensor,
     model_kwargs: dict,
     *,
     mix_lambda: float = 0.15,
-    noise: Optional[torch.Tensor] = None,
+    noise: torch.Tensor | None = None,
     noise_offset: float = 0.0,
     min_snr_gamma: float = 5.0,
     loss_weighting: str = "min_snr",

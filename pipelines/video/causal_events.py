@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence, Set
+from typing import Any
 
 __all__ = [
     "CausalRule",
@@ -15,7 +16,7 @@ __all__ = [
 ]
 
 # Built-in physics-adjacent narrative causality (not pixel physics — story physics)
-_BUILTIN_RULES: Dict[str, List[str]] = {
+_BUILTIN_RULES: dict[str, list[str]] = {
     "explosion": ["camera_shake", "dust_cloud", "characters_flinch", "audio_rumble"],
     "gunshot": ["camera_jolt", "muzzle_flash", "echo_reverb"],
     "thunder": ["lightning_flash", "rain_intensify", "characters_glance_up"],
@@ -32,9 +33,9 @@ _BUILTIN_RULES: Dict[str, List[str]] = {
 @dataclass(slots=True)
 class CausalRule:
     trigger: str
-    effects: List[str]
+    effects: list[str]
     camera: str = ""
-    props: Dict[str, str] = field(default_factory=dict)
+    props: dict[str, str] = field(default_factory=dict)
     delay_sec: float = 0.0
 
 
@@ -42,14 +43,14 @@ class CausalRule:
 class CausalRipple:
     shot_id: str
     trigger: str
-    injected_effects: List[str]
+    injected_effects: list[str]
     prompt_suffix: str
     camera_hint: str
-    props_patch: Dict[str, str]
+    props_patch: dict[str, str]
 
 
-def parse_causal_rules(raw: Any) -> List[CausalRule]:
-    rules: List[CausalRule] = []
+def parse_causal_rules(raw: Any) -> list[CausalRule]:
+    rules: list[CausalRule] = []
     if isinstance(raw, Mapping):
         for trig, spec in raw.items():
             if isinstance(spec, list):
@@ -82,13 +83,13 @@ def parse_causal_rules(raw: Any) -> List[CausalRule]:
     return rules
 
 
-def _trigger_patterns(trigger: str) -> List[re.Pattern[str]]:
+def _trigger_patterns(trigger: str) -> list[re.Pattern[str]]:
     t = trigger.lower().replace("_", " ")
     return [re.compile(rf"\b{re.escape(t)}\b", re.I), re.compile(rf"\b{re.escape(trigger)}\b", re.I)]
 
 
-def detect_triggers_in_prompt(prompt: str, rules: Sequence[CausalRule]) -> List[str]:
-    found: List[str] = []
+def detect_triggers_in_prompt(prompt: str, rules: Sequence[CausalRule]) -> list[str]:
+    found: list[str] = []
     p = prompt or ""
     for rule in rules:
         for pat in _trigger_patterns(rule.trigger):
@@ -106,7 +107,7 @@ def detect_triggers_in_prompt(prompt: str, rules: Sequence[CausalRule]) -> List[
     return found
 
 
-_EFFECT_PROMPTS: Dict[str, str] = {
+_EFFECT_PROMPTS: dict[str, str] = {
     "camera_shake": "handheld camera shake from impact",
     "camera_jolt": "sharp camera jolt",
     "camera_whiplash": "violent camera whiplash",
@@ -134,7 +135,7 @@ def apply_causal_ripples(
     rules: Sequence[CausalRule],
     *,
     use_builtins: bool = True,
-) -> List[CausalRipple]:
+) -> list[CausalRipple]:
     merged_rules = list(rules)
     if use_builtins:
         existing = {r.trigger for r in merged_rules}
@@ -142,16 +143,16 @@ def apply_causal_ripples(
             if trig not in existing:
                 merged_rules.append(CausalRule(trigger=trig, effects=effects))
 
-    ripples: List[CausalRipple] = []
+    ripples: list[CausalRipple] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         prompt = str(getattr(sh, "prompt", "") or "")
         triggers = detect_triggers_in_prompt(prompt, merged_rules)
         if not triggers:
             continue
-        effects: Set[str] = set()
-        camera_hints: List[str] = []
-        props_patch: Dict[str, str] = {}
+        effects: set[str] = set()
+        camera_hints: list[str] = []
+        props_patch: dict[str, str] = {}
         for trig in triggers:
             for rule in merged_rules:
                 if rule.trigger != trig:

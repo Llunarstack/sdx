@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "EchoLink",
@@ -25,10 +26,10 @@ class EchoLink:
 
 @dataclass(slots=True)
 class TemporalEchoPlan:
-    links: List[EchoLink] = field(default_factory=list)
+    links: list[EchoLink] = field(default_factory=list)
 
 
-def parse_echo_config(raw: Any) -> Dict[str, Any]:
+def parse_echo_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -54,7 +55,7 @@ def plan_temporal_echoes(
     if not config.get("enabled"):
         return TemporalEchoPlan()
     strength = float(config.get("strength") or 0.45)
-    links: List[EchoLink] = []
+    links: list[EchoLink] = []
 
     manual = config.get("manual") or []
     for row in manual:

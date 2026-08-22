@@ -10,8 +10,6 @@ Scales in Diffusion Models". Works on flow velocities or noise predictions alike
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import torch
 
 
@@ -20,7 +18,7 @@ def decompose_parallel_orthogonal(
     reference: torch.Tensor,
     *,
     eps: float = 1e-8,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     ``delta_parallel = proj_ref(delta)``, ``delta_orth = delta - delta_parallel``.
 
@@ -40,7 +38,7 @@ def apg_guidance_delta(
     *,
     parallel_eta: float = 0.0,
     cfg_rescale: float = 0.0,
-    momentum_delta: Optional[torch.Tensor] = None,
+    momentum_delta: torch.Tensor | None = None,
     momentum_beta: float = 0.2,
 ) -> torch.Tensor:
     """
@@ -68,7 +66,7 @@ def apg_cfg_combine(
     cfg_scale: float,
     parallel_eta: float = 0.0,
     cfg_rescale: float = 0.0,
-    momentum_delta: Optional[torch.Tensor] = None,
+    momentum_delta: torch.Tensor | None = None,
     momentum_beta: float = 0.2,
 ) -> torch.Tensor:
     """``out_uncond + cfg_scale * APG(delta)`` with ``delta = out_cond - out_uncond``."""

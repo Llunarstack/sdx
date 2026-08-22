@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 import numpy as np
 
@@ -20,8 +20,8 @@ def prepare_flf2v_keyframes(
     end_path: str | Path,
     out_dir: str | Path,
     *,
-    mid_keyframe_paths: Optional[Sequence[Path]] = None,
-) -> List[Path]:
+    mid_keyframe_paths: Sequence[Path] | None = None,
+) -> list[Path]:
     """Ordered keyframes: start → mids → end."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -42,11 +42,11 @@ def interpolate_flf2v_sequence(
     target_frame_count: int,
     out_dir: str | Path,
     *,
-    mid_keyframe_paths: Optional[Sequence[Path]] = None,
-    source_frame_paths: Optional[Sequence[Path]] = None,
+    mid_keyframe_paths: Sequence[Path] | None = None,
+    source_frame_paths: Sequence[Path] | None = None,
     use_depth: bool = True,
     use_flow: bool = True,
-) -> List[Path]:
+) -> list[Path]:
     """
     Constrain segment between ``start_path`` and ``end_path``.
 
@@ -63,7 +63,7 @@ def interpolate_flf2v_sequence(
 
     if len(keys) == 2 and source_frame_paths and len(source_frame_paths) >= 3 and use_flow:
         n = target_frame_count
-        paths: List[Path] = []
+        paths: list[Path] = []
         for i in range(n):
             t = i / max(1, n - 1)
             if i == 0:

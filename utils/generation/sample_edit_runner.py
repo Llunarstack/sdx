@@ -12,7 +12,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Union
 
 try:
     from PIL import Image
@@ -33,7 +32,7 @@ def resolve_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def resolve_sample_py(repo_root: Optional[Path] = None) -> Path:
+def resolve_sample_py(repo_root: Path | None = None) -> Path:
     """Absolute path to the repository ``sample.py`` entrypoint."""
     root = repo_root if repo_root is not None else resolve_repo_root()
     p = root / "sample.py"
@@ -46,26 +45,26 @@ def build_sample_command(
     *,
     ckpt: str,
     prompt: str,
-    out_path: Union[str, Path],
-    repo_root: Optional[Path] = None,
-    sample_py: Optional[Path] = None,
+    out_path: str | Path,
+    repo_root: Path | None = None,
+    sample_py: Path | None = None,
     negative_prompt: str = "",
     width: int = 512,
     height: int = 512,
     steps: int = 28,
     cfg_scale: float = 7.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     num: int = 1,
     device: str = "cuda",
-    init_image_path: Optional[Union[str, Path]] = None,
-    mask_image_path: Optional[Union[str, Path]] = None,
+    init_image_path: str | Path | None = None,
+    mask_image_path: str | Path | None = None,
     strength: float = 0.65,
     inpaint_mode: str = "mdm",
-    scheduler: str = "ddim",
-    solver: str = "ddim",
-    timestep_schedule: Optional[str] = None,
-    extra_args: Optional[List[str]] = None,
-) -> List[str]:
+    scheduler: str = "ays_dit",
+    solver: str = "dpmpp_2m",
+    timestep_schedule: str | None = None,
+    extra_args: list[str] | None = None,
+) -> list[str]:
     """
     Construct a ``sample.py`` argv list (executable + args). Caller runs it with no shell.
 
@@ -86,7 +85,7 @@ def build_sample_command(
     if mask_image_path and not init_image_path:
         raise ValueError("Inpainting requires both init image and mask paths.")
 
-    cmd: List[str] = [
+    cmd: list[str] = [
         sys.executable,
         str(script),
         "--ckpt",
@@ -108,9 +107,9 @@ def build_sample_command(
         "--device",
         device,
         "--scheduler",
-        scheduler,
+        scheduler or "ays_dit",
         "--solver",
-        solver,
+        solver or "dpmpp_2m",
     ]
     ts = (timestep_schedule or "").strip()
     if ts:
@@ -141,8 +140,8 @@ def run_sample_inference(
     *,
     ckpt: str,
     prompt: str,
-    out_path: Union[str, Path],
-    cwd: Optional[Union[str, Path]] = None,
+    out_path: str | Path,
+    cwd: str | Path | None = None,
     check: bool = True,
     capture_output: bool = True,
     negative_prompt: str = "",
@@ -150,19 +149,19 @@ def run_sample_inference(
     height: int = 512,
     steps: int = 28,
     cfg_scale: float = 7.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     num: int = 1,
     device: str = "cuda",
-    init_image_path: Optional[Union[str, Path]] = None,
-    mask_image_path: Optional[Union[str, Path]] = None,
+    init_image_path: str | Path | None = None,
+    mask_image_path: str | Path | None = None,
     strength: float = 0.65,
     inpaint_mode: str = "mdm",
-    scheduler: str = "ddim",
-    solver: str = "ddim",
-    timestep_schedule: Optional[str] = None,
-    repo_root: Optional[Path] = None,
-    sample_py: Optional[Path] = None,
-    extra_args: Optional[List[str]] = None,
+    scheduler: str = "ays_dit",
+    solver: str = "dpmpp_2m",
+    timestep_schedule: str | None = None,
+    repo_root: Path | None = None,
+    sample_py: Path | None = None,
+    extra_args: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run ``sample.py`` subprocess.
@@ -216,19 +215,19 @@ def run_edit_with_pillow(
     prompt: str,
     negative_prompt: str,
     base_image: Image.Image,
-    mask_image: Optional[Image.Image],
+    mask_image: Image.Image | None,
     width: int,
     height: int,
     steps: int = 28,
     cfg_scale: float = 7.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     img2img_strength: float = 0.65,
     inpaint_mode: str = "mdm",
     device: str = "cuda",
-    scheduler: str = "ddim",
-    solver: str = "ddim",
-    timestep_schedule: Optional[str] = None,
-    extra_args: Optional[List[str]] = None,
+    scheduler: str = "ays_dit",
+    solver: str = "dpmpp_2m",
+    timestep_schedule: str | None = None,
+    extra_args: list[str] | None = None,
     keep_temp_dir: bool = False,
 ) -> Image.Image:
     """
@@ -237,7 +236,7 @@ def run_edit_with_pillow(
     Mask convention matches ``sample.py``: **white** = inpaint / regenerate region.
     """
     base_rgb = base_image.convert("RGB").resize((int(width), int(height)), Image.Resampling.LANCZOS)
-    mask_l: Optional[Image.Image] = None
+    mask_l: Image.Image | None = None
     if mask_image is not None:
         mask_l = mask_image.convert("L").resize((int(width), int(height)), Image.Resampling.LANCZOS)
 
@@ -248,7 +247,7 @@ def run_edit_with_pillow(
         init_path = tmp / "init.png"
         out_path = tmp / "out.png"
         base_rgb.save(init_path, format="PNG")
-        mask_path: Optional[Path] = None
+        mask_path: Path | None = None
         if mask_l is not None:
             mask_path = tmp / "mask.png"
             mask_l.save(mask_path, format="PNG")

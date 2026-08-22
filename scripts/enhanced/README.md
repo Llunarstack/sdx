@@ -22,4 +22,4 @@ If `sample.py` rejects your checkpoint with a message about EnhancedDiT, use **`
 | **`setup_enhanced.py`** | Environment checks and optional dependency install |
 | **`save_model_checkpoint.py`** | Create / save an initialized Enhanced DiT-XL checkpoint |
 
-See also [docs/ENHANCED_FEATURES.md](../../docs/ENHANCED_FEATURES.md) and [training/enhanced_trainer.py](../../training/enhanced_trainer.py).
+See also this README and [training/enhanced_trainer.py](../../training/enhanced_trainer.py).

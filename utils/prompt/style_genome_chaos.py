@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import random
 import uuid
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Literal
 
 from .style_genome import StyleGenome
 
@@ -17,7 +18,7 @@ InventionMode = Literal["normal", "insane", "apocalypse", "chimera", "glitch", "
 # ---------------------------------------------------------------------------
 # Named presets (instant wild identities)
 # ---------------------------------------------------------------------------
-INSANE_PRESETS: Dict[str, Dict[str, object]] = {
+INSANE_PRESETS: dict[str, dict[str, object]] = {
     "glitch_cathedral": {
         "name": "Glitch Cathedral",
         "palette": "corrupted RGB channel split, sacramental gold bleeding into void black",
@@ -116,7 +117,7 @@ INSANE_PRESETS: Dict[str, Dict[str, object]] = {
     },
 }
 
-WILD_PALETTES: Tuple[str, ...] = (
+WILD_PALETTES: tuple[str, ...] = (
     "molten chrome sunset bleeding into tar black",
     "radioactive honeycomb lattice over bruised violet",
     "bleach-white heat shimmer with singed edge orange",
@@ -128,7 +129,7 @@ WILD_PALETTES: Tuple[str, ...] = (
     "candle soot monochrome except one arterial crimson",
     "holographic foil rainbow trapped under scratched acrylic",
 )
-WILD_LINES: Tuple[str, ...] = (
+WILD_LINES: tuple[str, ...] = (
     "contour lines vibrating like heat distortion",
     "woodcut violence with digital stair-stepping",
     "hair-thin spirograph filigree over blunt masses",
@@ -138,7 +139,7 @@ WILD_LINES: Tuple[str, ...] = (
     "kinetic blur smear on extremities only",
     "topographic map lines treating flesh as terrain",
 )
-WILD_SURFACES: Tuple[str, ...] = (
+WILD_SURFACES: tuple[str, ...] = (
     "liquid mercury skin catching environment",
     "crystalline frost growing on velvet",
     "burnt sugar glass crackle over wax",
@@ -148,7 +149,7 @@ WILD_SURFACES: Tuple[str, ...] = (
     "wet latex with micro bead sweat",
     "volcanic pumice porous matte",
 )
-WILD_CAMERAS: Tuple[str, ...] = (
+WILD_CAMERAS: tuple[str, ...] = (
     "peephole distortion, claustrophobic frame",
     "infrared trail cam wrongness",
     "tilt-shift miniature faking epic scale",
@@ -158,7 +159,7 @@ WILD_CAMERAS: Tuple[str, ...] = (
     "underwater housing dome bend",
     "anamorphic oval bokeh crushing background",
 )
-WILD_LIGHT: Tuple[str, ...] = (
+WILD_LIGHT: tuple[str, ...] = (
     "lightning freeze frame mixed with long exposure trails",
     "blacklight UV revealing hidden ink patterns",
     "multiple colored gels fighting one shadow",
@@ -167,7 +168,7 @@ WILD_LIGHT: Tuple[str, ...] = (
     "firelight strobe through spinning slats",
     "polarized sky sucked dead, ground hyper-saturated",
 )
-WILD_POSITIVE: Tuple[str, ...] = (
+WILD_POSITIVE: tuple[str, ...] = (
     "hallucinatory detail density",
     "impossible material honesty",
     "dream logic scale shift",
@@ -179,7 +180,7 @@ WILD_POSITIVE: Tuple[str, ...] = (
     "maximalist micro clutter zones",
     "sacred profane tension",
 )
-WILD_NEGATIVE: Tuple[str, ...] = (
+WILD_NEGATIVE: tuple[str, ...] = (
     "boring centered stock composition",
     "AI slop smoothness",
     "instagram filter pack",
@@ -192,19 +193,19 @@ WILD_NEGATIVE: Tuple[str, ...] = (
     "safe corporate illustration",
 )
 
-CHAOS_CLAUSE_POSITIVE: Tuple[str, ...] = (
+CHAOS_CLAUSE_POSITIVE: tuple[str, ...] = (
     "visually unforgettable",
     "deliberately uncanny",
     "high concept art direction",
 )
-CHAOS_CLAUSE_NEGATIVE: Tuple[str, ...] = (
+CHAOS_CLAUSE_NEGATIVE: tuple[str, ...] = (
     "forgettable average",
     "template AI look",
     "boring safe composition",
 )
 
 
-def preset_genome(preset_id: str, *, seed_suffix: str = "") -> Optional[StyleGenome]:
+def preset_genome(preset_id: str, *, seed_suffix: str = "") -> StyleGenome | None:
     data = INSANE_PRESETS.get(preset_id.strip().lower().replace("-", "_"))
     if not data:
         return None
@@ -213,11 +214,11 @@ def preset_genome(preset_id: str, *, seed_suffix: str = "") -> Optional[StyleGen
     return StyleGenome.from_dict(d)
 
 
-def list_insane_presets() -> List[str]:
+def list_insane_presets() -> list[str]:
     return sorted(INSANE_PRESETS.keys())
 
 
-def apply_chaos_level(genome: StyleGenome, chaos_level: float, *, rng: Optional[random.Random] = None) -> StyleGenome:
+def apply_chaos_level(genome: StyleGenome, chaos_level: float, *, rng: random.Random | None = None) -> StyleGenome:
     """Push an existing genome toward maximum unhinged (0 = noop, 1 = full spice)."""
     level = max(0.0, min(1.0, float(chaos_level)))
     if level <= 0.01:
@@ -349,11 +350,11 @@ def invent_insane_batch(
     seed: int = 42,
     mode: InventionMode = "insane",
     chaos_level: float = 0.85,
-) -> List[StyleGenome]:
+) -> list[StyleGenome]:
     """Deterministic wild invention without LLM."""
     r = random.Random(seed ^ hash(prompt))
     presets = list(INSANE_PRESETS.keys())
-    genomes: List[StyleGenome] = []
+    genomes: list[StyleGenome] = []
 
     if mode == "glitch":
         g = preset_genome("glitch_cathedral", seed_suffix=str(seed))
@@ -390,7 +391,7 @@ def invent_insane_batch(
 
     if mode == "chimera":
         base = invent_insane_batch(prompt, max(n * 2, 4), seed=seed, mode="insane", chaos_level=chaos_level)
-        chimeras: List[StyleGenome] = []
+        chimeras: list[StyleGenome] = []
         for i in range(n):
             if len(base) < 2:
                 break
@@ -417,7 +418,7 @@ def invent_insane_batch(
 
     # Dedupe by preset/base id stem (hypermutate keeps new ids but same name stem)
     seen_names: set[str] = set()
-    unique: List[StyleGenome] = []
+    unique: list[StyleGenome] = []
     for g in genomes:
         key = g.name.split("[")[0].strip().lower()
         if key in seen_names:
@@ -435,7 +436,7 @@ def invent_insane_batch(
     return unique[:n]
 
 
-def auto_chaos_clauses(chaos_level: float) -> Tuple[str, ...]:
+def auto_chaos_clauses(chaos_level: float) -> tuple[str, ...]:
     """PromptStack clause names to auto-attach at high chaos."""
     if chaos_level < 0.35:
         return ()

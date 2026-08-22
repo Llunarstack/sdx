@@ -7,7 +7,7 @@ Compose into one plan for ``sample.py`` or prompt stack stages.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from config.defaults.art_mediums import merge_csv_unique
 
@@ -58,8 +58,8 @@ def analyze_subject(
     brush_pos, brush_neg = BrushPlanner().fragments(prompt)
     photo = PhotorealStack().plan(prompt)
 
-    pos_parts: List[str] = []
-    neg_parts: List[str] = []
+    pos_parts: list[str] = []
+    neg_parts: list[str] = []
 
     if body and body.positive:
         pos_parts.append(body.positive)
@@ -110,7 +110,7 @@ def analyze_subject(
     )
 
 
-def subject_sample_kwargs(plan: SubjectFrontierPlan, *, base_negative: str = "") -> Dict[str, Any]:
+def subject_sample_kwargs(plan: SubjectFrontierPlan, *, base_negative: str = "") -> dict[str, Any]:
     neg = merge_csv_unique(base_negative, plan.merged_negative)
     cfg_mult = 1.0
     if plan.body:

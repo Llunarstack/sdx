@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Final, List
+from typing import Final
 
 from ..intents.goal_spec import GoalSpec
 
@@ -13,7 +13,7 @@ _DOMAIN_RULES: Final[tuple[tuple[tuple[str, ...], tuple[str, str]], ...]] = (
 )
 
 
-def goal_spec_to_sample_hints(spec: GoalSpec) -> Dict[str, List[str]]:
+def goal_spec_to_sample_hints(spec: GoalSpec) -> dict[str, list[str]]:
     """
     Map high-level GoalSpec fields to CLI flag fragments (conceptual hints).
 

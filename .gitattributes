@@ -1,0 +1,5 @@
+* text=auto
+*.sh text eol=lf
+runpod/** text eol=lf
+scripts/**/*.sh text eol=lf
+runpod/env.defaults text eol=lf

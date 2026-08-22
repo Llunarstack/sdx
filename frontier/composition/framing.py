@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class FramingStyle(str, Enum):
@@ -29,7 +28,7 @@ class CompositionPlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, FramingStyle, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, FramingStyle, str, str], ...] = (
     (
         re.compile(r"\b(rule of thirds|off[- ]center|thirds composition)\b", re.I),
         FramingStyle.RULE_OF_THIRDS,
@@ -83,7 +82,7 @@ class CompositionPlanner:
             )
         return CompositionPlan(FramingStyle.RULE_OF_THIRDS, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

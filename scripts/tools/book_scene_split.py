@@ -20,13 +20,12 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import List
 
 
-def split_into_page_prompts(raw: str) -> List[str]:
+def split_into_page_prompts(raw: str) -> list[str]:
     lines = raw.splitlines()
-    pages: List[str] = []
-    buf: List[str] = []
+    pages: list[str] = []
+    buf: list[str] = []
 
     def flush() -> None:
         nonlocal buf

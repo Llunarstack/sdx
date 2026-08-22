@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from utils.generation.sample_features import load_character_session, save_character_session
 
@@ -29,7 +29,7 @@ def main() -> int:
     path = args.path
 
     if args.cmd == "init":
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "name": args.name,
             "prompt_additions": "",
             "negative_prompt": "",

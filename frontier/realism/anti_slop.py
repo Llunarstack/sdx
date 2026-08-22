@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class RealismTier(str, Enum):
@@ -77,7 +76,7 @@ class AntiSlopScanner:
         }[tier]
         return AntiSlopPlan(tier, pos, _NEG_COMMON, _MICRO)
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

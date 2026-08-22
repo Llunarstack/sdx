@@ -6,8 +6,8 @@ Cheap alternative to multi-LoRA: interpolate curated style profiles before sampl
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -22,10 +22,10 @@ class StyleProfile:
 class StyleDNA:
     blended_positive: str
     blended_negative: str
-    components: Tuple[Tuple[str, float], ...]
+    components: tuple[tuple[str, float], ...]
 
 
-_BUILTIN: Dict[str, StyleProfile] = {
+_BUILTIN: dict[str, StyleProfile] = {
     "editorial": StyleProfile("editorial", "magazine cover, bold typography, clean layout", "amateur snapshot"),
     "noir": StyleProfile("noir", "film noir, high contrast, venetian blind shadows", "flat lighting, oversaturated"),
     "studio": StyleProfile("studio", "studio softbox, seamless backdrop, catalog lighting", "harsh flash, clutter"),
@@ -36,13 +36,13 @@ _BUILTIN: Dict[str, StyleProfile] = {
 
 
 class StyleDNABlender:
-    def __init__(self, profiles: Dict[str, StyleProfile] | None = None) -> None:
+    def __init__(self, profiles: dict[str, StyleProfile] | None = None) -> None:
         self.profiles = dict(profiles or _BUILTIN)
 
-    def blend(self, weights: Sequence[Tuple[str, float]]) -> StyleDNA:
-        pos_parts: List[str] = []
-        neg_parts: List[str] = []
-        comps: List[Tuple[str, float]] = []
+    def blend(self, weights: Sequence[tuple[str, float]]) -> StyleDNA:
+        pos_parts: list[str] = []
+        neg_parts: list[str] = []
+        comps: list[tuple[str, float]] = []
         for sid, w in weights:
             prof = self.profiles.get(sid)
             if prof is None or w <= 0:
@@ -60,7 +60,7 @@ class StyleDNABlender:
 
     def from_prompt_keywords(self, prompt: str) -> StyleDNA | None:
         text = (prompt or "").lower()
-        hits: List[Tuple[str, float]] = []
+        hits: list[tuple[str, float]] = []
         for sid, prof in self.profiles.items():
             if sid.strip().lower() in text or prof.id in text:
                 hits.append((sid, 1.0))

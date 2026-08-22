@@ -12,8 +12,6 @@ Custom i18n:
 
 from __future__ import annotations
 
-from typing import List
-
 
 def normalize_lang_code(lang: str) -> str:
     if not lang:
@@ -69,14 +67,14 @@ def normalize_lang_code(lang: str) -> str:
     return "en"
 
 
-def _examples_to_string(examples: List[str], limit: int = 6) -> str:
+def _examples_to_string(examples: list[str], limit: int = 6) -> str:
     cleaned = [e for e in examples if e]
     if not cleaned:
         return ""
     return ", ".join(cleaned[:limit])
 
 
-def generic_suggestion(category: str, examples: List[str], lang: str) -> str:
+def generic_suggestion(category: str, examples: list[str], lang: str) -> str:
     lang_code = normalize_lang_code(lang)
     ex = _examples_to_string(examples)
     ex_part = f" (e.g., {ex})" if ex else ""

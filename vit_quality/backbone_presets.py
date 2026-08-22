@@ -4,9 +4,7 @@ Suggested timm model names for ViTQualityAdherenceModel.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
-
-TIMM_BACKBONE_PRESETS: List[Tuple[str, str]] = [
+TIMM_BACKBONE_PRESETS: list[tuple[str, str]] = [
     ("vit_small_patch16_224", "Fast baseline; less capacity."),
     ("vit_base_patch16_224", "Default - good speed/quality tradeoff."),
     ("vit_large_patch16_224", "Stronger ViT; needs more VRAM."),
@@ -18,7 +16,7 @@ TIMM_BACKBONE_PRESETS: List[Tuple[str, str]] = [
     ("convnext_base", "ConvNeXt base - often strong on natural images."),
 ]
 
-TIER_ALIASES: Dict[str, str] = {
+TIER_ALIASES: dict[str, str] = {
     "fast": "vit_small_patch16_224",
     "balanced": "vit_base_patch16_224",
     "strong": "vit_large_patch16_224",

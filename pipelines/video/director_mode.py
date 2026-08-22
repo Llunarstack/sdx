@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
 
 from .storyboard import StoryboardCut, camera_prompt_fragment
 
@@ -27,13 +27,13 @@ class DirectorNotes:
 
 @dataclass(slots=True)
 class DirectorExpansion:
-    cuts: List[StoryboardCut]
+    cuts: list[StoryboardCut]
     notes: DirectorNotes
     genre: str = ""
     raw_prompt: str = ""
 
 
-_GENRE_RULES: List[tuple[tuple[str, ...], str, DirectorNotes]] = [
+_GENRE_RULES: list[tuple[tuple[str, ...], str, DirectorNotes]] = [
     (
         ("horror", "scary", "abandoned", "creature", "dark"),
         "horror",
@@ -112,10 +112,10 @@ def genre_director_notes(prompt: str) -> tuple[str, DirectorNotes]:
     )
 
 
-def _infer_shot_sequence(prompt: str, genre: str) -> List[tuple[str, float, str, str]]:
+def _infer_shot_sequence(prompt: str, genre: str) -> list[tuple[str, float, str, str]]:
     """Returns (prompt_fragment, duration_weight, camera, shot_type)."""
     low = prompt.lower()
-    beats: List[tuple[str, float, str, str]] = []
+    beats: list[tuple[str, float, str, str]] = []
     if genre in ("action", "horror"):
         beats.append(("establishing geography and stakes", 0.22, "establishing", "establishing"))
     elif "enter" in low or "walk" in low or "arrive" in low:
@@ -141,7 +141,7 @@ def expand_prompt_to_storyboard(
     *,
     duration_sec: float = 6.0,
     genre_override: str = "",
-    characters: Optional[Sequence[str]] = None,
+    characters: Sequence[str] | None = None,
 ) -> DirectorExpansion:
     """
     Turn one line into Kling-style multi-shot storyboard + director notes.
@@ -155,7 +155,7 @@ def expand_prompt_to_storyboard(
 
     seq = _infer_shot_sequence(prompt, genre)
     total_w = sum(w for _, w, _, _ in seq) or 1.0
-    cuts: List[StoryboardCut] = []
+    cuts: list[StoryboardCut] = []
     chars = list(characters or [])
     for i, (frag, weight, cam, st) in enumerate(seq):
         dur = max(0.5, duration_sec * (weight / total_w))

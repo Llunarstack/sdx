@@ -6,7 +6,7 @@ Does not change the trained mask; useful for partial noising, diagnostics, or fu
 
 from __future__ import annotations
 
-from typing import Iterator, List, Tuple
+from collections.abc import Iterator
 
 import torch
 from models.ar_masks_extended import block_grid_dims
@@ -18,7 +18,7 @@ def iter_macro_block_views(
     num_ar_blocks: int,
     latent_h: int,
     latent_w: int,
-) -> Iterator[Tuple[Tuple[int, int], torch.Tensor]]:
+) -> Iterator[tuple[tuple[int, int], torch.Tensor]]:
     """
     Yield ``((bi, bj), x_block)`` for each macro-block over spatial latent grid.
 
@@ -39,18 +39,18 @@ def iter_macro_block_views(
             yield (bi, bj), x[:, :, r0:r1, c0:c1].contiguous()
 
 
-def stack_macro_blocks(x: torch.Tensor, *, num_ar_blocks: int, latent_h: int, latent_w: int) -> List[torch.Tensor]:
+def stack_macro_blocks(x: torch.Tensor, *, num_ar_blocks: int, latent_h: int, latent_w: int) -> list[torch.Tensor]:
     """Return list of macro-block tensors in raster (bi,bj) order."""
     return [t for _, t in iter_macro_block_views(x, num_ar_blocks=num_ar_blocks, latent_h=latent_h, latent_w=latent_w)]
 
 
 def paste_macro_blocks(
-    blocks: List[torch.Tensor],
+    blocks: list[torch.Tensor],
     *,
     num_ar_blocks: int,
     latent_h: int,
     latent_w: int,
-    batch_channels: Tuple[int, int],
+    batch_channels: tuple[int, int],
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:

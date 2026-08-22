@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from utils.native import (
     manifest_fingerprint_line,
@@ -105,7 +105,7 @@ def preset_for_book_train(name: str) -> BookTrainPreset:
     )
 
 
-def resolve_book_ar_profile(name: str) -> Dict[str, Any]:
+def resolve_book_ar_profile(name: str) -> dict[str, Any]:
     """
     Resolve one-flag AR profile for training.
     """
@@ -171,11 +171,11 @@ def build_train_command(
     python_exe: str,
     args: Any,
     settings: BookTrainPreset,
-    passthrough_train_args: List[str],
-) -> List[str]:
+    passthrough_train_args: list[str],
+) -> list[str]:
     """Build the ``train.py`` command from book-focused settings + passthrough args."""
     train_py = root / "train.py"
-    cmd: List[str] = [python_exe, str(train_py)]
+    cmd: list[str] = [python_exe, str(train_py)]
 
     data_path = str(getattr(args, "data_path", "") or "").strip()
     manifest = str(getattr(args, "manifest_jsonl", "") or "").strip()
@@ -231,7 +231,7 @@ def build_train_command(
     if bool(getattr(args, "no_xformers", False)):
         cmd.append("--no-xformers")
     if int(getattr(args, "num_workers", -1)) >= 0:
-        cmd.extend(["--num-workers", str(int(getattr(args, "num_workers")))])
+        cmd.extend(["--num-workers", str(int(args.num_workers))])
 
     resume = str(getattr(args, "resume", "") or "").strip()
     init_from = str(getattr(args, "init_from", "") or "").strip()
@@ -272,14 +272,14 @@ def run_native_manifest_preflight(
     *,
     min_caption_len: int = 0,
     max_caption_len: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate and fingerprint a manifest, preferring low-level native tools when present.
 
     - Fingerprint: Zig linecrc binary if present, else byte-identical Python fallback.
     - Validation + stats: Rust sdx-jsonl-tools when present.
     """
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "manifest": str(manifest_jsonl),
         "exists": manifest_jsonl.is_file(),
         "fingerprint": "",
@@ -335,11 +335,11 @@ def build_hf_export_command(
     manifest_name: str = "manifest.jsonl",
     max_samples: int = 0,
     streaming: bool = True,
-    shuffle_seed: Optional[int] = None,
-) -> List[str]:
+    shuffle_seed: int | None = None,
+) -> list[str]:
     """Build command for ``scripts/training/hf_export_to_sdx_manifest.py``."""
     export_py = root / "scripts" / "tr" / "hf_export_to_sdx_manifest.py"
-    cmd: List[str] = [
+    cmd: list[str] = [
         python_exe,
         str(export_py),
         "--dataset",
@@ -383,10 +383,10 @@ def build_caption_normalize_command(
     anatomy_guidance: str = "lite",
     style_guidance_mode: str = "auto",
     style_guidance_artists: bool = True,
-) -> List[str]:
+) -> list[str]:
     """Build command for ``scripts/tools/normalize_captions.py`` with book defaults."""
     normalize_py = root / "scripts" / "tools" / "normalize_captions.py"
-    cmd: List[str] = [
+    cmd: list[str] = [
         python_exe,
         str(normalize_py),
         "--in",
@@ -415,7 +415,7 @@ def build_caption_normalize_command(
     return cmd
 
 
-def resolve_train_humanization_pack(name: str) -> Dict[str, Any]:
+def resolve_train_humanization_pack(name: str) -> dict[str, Any]:
     """
     Higher-level normalization defaults to reduce synthetic artifacts during training.
     """

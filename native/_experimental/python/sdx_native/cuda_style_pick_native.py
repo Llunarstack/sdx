@@ -5,7 +5,6 @@ CUDA ``sdx_cuda_ml``: pick best style embedding row by cosine (L2-normalized dot
 from __future__ import annotations
 
 import ctypes
-from typing import Optional, Tuple
 
 import numpy as np
 
@@ -15,7 +14,7 @@ from sdx_native.native_tools import cuda_ml_shared_library_path
 
 class CudaStylePickLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_ml_shared_library_path()
         if p is None:
             return
@@ -41,7 +40,7 @@ class CudaStylePickLib:
         return self._lib is not None
 
 
-_PICK_LIB: Optional[CudaStylePickLib] = None
+_PICK_LIB: CudaStylePickLib | None = None
 
 
 def get_cuda_style_pick_lib() -> CudaStylePickLib:
@@ -56,7 +55,7 @@ def maybe_pick_best_style_embedding(
     candidates: np.ndarray,
     *,
     eps: float = 1e-8,
-) -> Optional[Tuple[int, float]]:
+) -> tuple[int, float] | None:
     """
     ``query`` shape (dim,), ``candidates`` (n, dim). Normalizes rows on GPU path when available.
     Returns (best_index, cosine_score) or None.
@@ -95,7 +94,7 @@ def maybe_pick_best_style_embedding(
     return int(out_i.value), float(out_s.value)
 
 
-def _numpy_pick(query: np.ndarray, candidates: np.ndarray) -> Tuple[int, float]:
+def _numpy_pick(query: np.ndarray, candidates: np.ndarray) -> tuple[int, float]:
     qn = query / (np.linalg.norm(query) + 1e-8)
     cn = candidates / (np.linalg.norm(candidates, axis=1, keepdims=True) + 1e-8)
     scores = cn @ qn

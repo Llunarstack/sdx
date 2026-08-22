@@ -1,0 +1,42 @@
+{
+  "description": "Best HF booru packs that stream image+tags via datasets (no cheesechaser). DeepGHS *-webp-4Mpixel and metadata-only dumps are intentionally excluded.",
+  "packs": [
+    {
+      "name": "danbooru",
+      "site": "Danbooru",
+      "dataset": "ShinoharaHare/Danbooru-2024-Filtered-1M",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags",
+      "note": "1M quality-filtered danbooru2024 slice. deepghs/danbooru2024 (8M) needs cheesechaser (metadata+tars only)."
+    },
+    {
+      "name": "rule34xxx",
+      "site": "Rule34 (rule34.xxx)",
+      "dataset": "deepghs/rule34_full",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags",
+      "note": "Gated — hf auth login + accept license on Hub."
+    },
+    {
+      "name": "e621",
+      "site": "e621",
+      "dataset": "hearmeneigh/e621-rising-v3-curated",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags",
+      "caption_tag_join": " ",
+      "note": "~279k e621-tagged images. boxingscorpionbagel/e621-2024 is metadata+tars (needs cheesechaser)."
+    },
+    {
+      "name": "rule34xyz",
+      "site": "Gelbooru",
+      "dataset": "deepghs/gelbooru_full",
+      "split": "train",
+      "image_field": "image",
+      "caption_field": "tags",
+      "note": "Gated deepghs full mirror. Do NOT use gelbooru-webp-4Mpixel (index-only, breaks export)."
+    }
+  ]
+}

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping
+from typing import Any
 
 __all__ = ["CharacterBible", "parse_character_bibles", "bible_to_prompt", "bible_negative"]
 
@@ -22,12 +23,12 @@ class CharacterBible:
     scars: str = ""
     age: str = ""
     emotion_baseline: str = ""
-    reference_images: List[str] = field(default_factory=list)
+    reference_images: list[str] = field(default_factory=list)
     notes: str = ""
 
 
-def parse_character_bibles(raw: Any) -> Dict[str, CharacterBible]:
-    out: Dict[str, CharacterBible] = {}
+def parse_character_bibles(raw: Any) -> dict[str, CharacterBible]:
+    out: dict[str, CharacterBible] = {}
     if not isinstance(raw, Mapping):
         return out
     for k, v in raw.items():
@@ -60,7 +61,7 @@ def parse_character_bibles(raw: Any) -> Dict[str, CharacterBible]:
 
 
 def bible_to_prompt(b: CharacterBible) -> str:
-    parts: List[str] = []
+    parts: list[str] = []
     if b.name:
         parts.append(f"character {b.name}")
     for label, val in (

@@ -8,7 +8,7 @@ Use ``--frontier-creative`` instead of stacking more art-medium tags.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from config.defaults.art_mediums import merge_csv_unique
 
@@ -37,10 +37,10 @@ class ImaginationPlan:
     merged_negative: str = ""
     serendipity_dial: float = 0.25
     cfg_multiplier: float = 1.0
-    step_emphasis: Optional[Tuple[float, ...]] = None
+    step_emphasis: tuple[float, ...] | None = None
     suppress_contradiction_resolve: bool = False
-    mutations: List[str] = field(default_factory=list)
-    creative_trace: List[str] = field(default_factory=list)
+    mutations: list[str] = field(default_factory=list)
+    creative_trace: list[str] = field(default_factory=list)
 
 
 def analyze_imagination(
@@ -53,9 +53,9 @@ def analyze_imagination(
     random_constraint_seed: int | None = None,
 ) -> ImaginationPlan:
     """Run creative-only analyzers — no art_mediums / shortcomings overlap."""
-    trace: List[str] = []
-    pos_parts: List[str] = []
-    neg_parts: List[str] = []
+    trace: list[str] = []
+    pos_parts: list[str] = []
+    neg_parts: list[str] = []
 
     dream_pos, dream_neg, dream_ser = DreamLogicPlanner().fragments(prompt)
     if dream_pos:
@@ -176,7 +176,7 @@ def analyze_imagination(
     if merged_pos and prompt and len(merged_pos) < 350:
         augmented = f"{prompt}, {merged_pos}"
 
-    mutations: List[str] = []
+    mutations: list[str] = []
     if mutate_count > 0:
         muts = PromptMutator().mutate_batch(prompt, seed=mutate_seed, count=mutate_count)
         mutations = [m.mutated for m in muts if m.mutated.strip()]
@@ -196,9 +196,9 @@ def analyze_imagination(
     )
 
 
-def imagination_sample_kwargs(plan: ImaginationPlan, *, base_negative: str = "") -> Dict[str, Any]:
+def imagination_sample_kwargs(plan: ImaginationPlan, *, base_negative: str = "") -> dict[str, Any]:
     neg = merge_csv_unique(base_negative, plan.merged_negative)
-    kw: Dict[str, Any] = {
+    kw: dict[str, Any] = {
         "prompt": plan.augmented_prompt or plan.prompt,
         "negative_prompt": neg,
         "cfg_scale_multiplier": plan.cfg_multiplier,

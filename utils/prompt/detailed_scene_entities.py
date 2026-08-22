@@ -9,7 +9,7 @@ that diffusion responds to: separation, anti-merge negatives, anatomy, materials
 from __future__ import annotations
 
 import re
-from typing import List, Literal, Tuple
+from typing import Literal
 
 from config.defaults.art_mediums import (
     ANATOMY_NEG_LITE,
@@ -53,7 +53,7 @@ _PEOPLE_HINT = re.compile(
 
 def _merge_unique_csv(*parts: str) -> str:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for block in parts:
         if not block:
             continue
@@ -88,7 +88,7 @@ def detailed_scene_warrants_boost(prompt: str) -> bool:
     return False
 
 
-def extract_key_segments(prompt: str, *, max_segments: int = 12) -> List[str]:
+def extract_key_segments(prompt: str, *, max_segments: int = 12) -> list[str]:
     """Rough noun-phrases from comma-separated prompt chunks (for logging / UI)."""
     raw = [s.strip() for s in (prompt or "").replace("\n", ",").split(",") if s.strip()]
     # Drop very short noise tokens
@@ -101,7 +101,7 @@ def apply_detailed_scene_boost(
     mode: DetailedSceneMode,
     *,
     strength: StrengthMode = "lite",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Return ``(augmented_prompt, negative_fragment)``.
 
@@ -155,8 +155,8 @@ def apply_detailed_scene_boost(
     else:
         pose_pos, pose_neg = pose_lite_pos, pose_lite_neg
 
-    pos_parts: List[str] = [sep_pos, noun_pos, pose_pos]
-    neg_parts: List[str] = [sep_neg, noun_neg, pose_neg]
+    pos_parts: list[str] = [sep_pos, noun_pos, pose_pos]
+    neg_parts: list[str] = [sep_neg, noun_neg, pose_neg]
 
     if _PEOPLE_HINT.search(prompt):
         if strength == "strong":

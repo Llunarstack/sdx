@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import Dict, List
 
-_DEFAULT_WEIGHTS: Dict[str, float] = {
+_DEFAULT_WEIGHTS: dict[str, float] = {
     "instruction_adherence": 2.0,
     "layout_text_legibility": 1.5,
     "physical_plausibility": 1.25,
@@ -33,7 +32,7 @@ class CapabilityDimensions:
 class CapabilityRubric:
     """Weights + thresholds for CapabilityDimensions."""
 
-    weights: Dict[str, float] = field(default_factory=lambda: dict(_DEFAULT_WEIGHTS))
+    weights: dict[str, float] = field(default_factory=lambda: dict(_DEFAULT_WEIGHTS))
     min_pass: float = 0.62
 
     def weighted_sum(self, d: CapabilityDimensions) -> float:
@@ -42,7 +41,7 @@ class CapabilityRubric:
         return ws / zn if zn else 0.0
 
 
-def aggregate_stub(dimensions_list: List[CapabilityDimensions]) -> CapabilityDimensions:
+def aggregate_stub(dimensions_list: list[CapabilityDimensions]) -> CapabilityDimensions:
     """Mean aggregate when multiple verifier heads exist."""
     if not dimensions_list:
         return CapabilityDimensions()

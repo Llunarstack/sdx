@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Optional, Tuple
 
 import numpy as np
 
@@ -12,7 +11,7 @@ from sdx_native.native_tools import cuda_rope_shared_library_path
 
 class CudaRopeLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_rope_shared_library_path()
         if p is None:
             return
@@ -35,7 +34,7 @@ class CudaRopeLib:
 
     def apply_rope_host(
         self, q: np.ndarray, k: np.ndarray, *, theta_base: float = 10000.0
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         if not self._lib:
             raise RuntimeError("sdx_cuda_rope not built")
         q = np.asarray(q, dtype=np.float32, order="C")
@@ -56,7 +55,7 @@ class CudaRopeLib:
         return qo, ko
 
 
-_LIB: Optional[CudaRopeLib] = None
+_LIB: CudaRopeLib | None = None
 
 
 def get_cuda_rope_lib() -> CudaRopeLib:
@@ -71,7 +70,7 @@ def apply_rope_interleaved_numpy(
     k: np.ndarray,
     *,
     theta_base: float = 10000.0,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     q = np.asarray(q, dtype=np.float32)
     k = np.asarray(k, dtype=np.float32)
     if q.shape != k.shape or q.ndim != 2 or (q.shape[1] % 2) != 0:
@@ -104,7 +103,7 @@ def maybe_apply_rope_interleaved_cuda(
     k: np.ndarray,
     *,
     theta_base: float = 10000.0,
-) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray] | None:
     lib = get_cuda_rope_lib()
     if not lib.available:
         return None
