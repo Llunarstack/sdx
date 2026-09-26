@@ -1,0 +1,20 @@
+# Standalone workspace root: prevents cargo from walking up into the sibling
+# native/rust/Cargo.toml (an unrelated, currently-broken package manifest).
+[workspace]
+
+[package]
+name = "sdx-image-ops"
+version = "0.1.0"
+edition = "2021"
+description = "Fast deterministic image ops (object/blob counting for count-adherence) as a C ABI cdylib for Python ctypes"
+license = "MIT"
+
+[lib]
+name = "sdx_image_ops"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true

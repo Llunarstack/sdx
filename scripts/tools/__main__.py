@@ -55,6 +55,8 @@ _CANONICAL: dict[str, Path] = {
     "superior_eval_report": _HERE / "ops" / "superior_eval_report.py",
     "superior_ensemble": _HERE / "ops" / "superior_ensemble.py",
     "run_flywheel": _HERE / "ops" / "run_flywheel.py",
+    "feedback": _HERE / "ops" / "feedback_cli.py",
+    "rsi_loop": _HERE / "ops" / "rsi_loop.py",
     "agentic_generate": _HERE / "ops" / "agentic_generate.py",
     "agentic_evolve": _HERE / "ops" / "agentic_evolve.py",
     "agentic_flywheel": _HERE / "ops" / "agentic_flywheel.py",

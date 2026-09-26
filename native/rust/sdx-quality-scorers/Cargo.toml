@@ -1,0 +1,19 @@
+# Standalone workspace root.
+[workspace]
+
+[package]
+name = "sdx-quality-scorers"
+version = "0.1.0"
+edition = "2021"
+description = "Fast human-likeness / pick-best image quality kernels (cdylib)"
+license = "MIT"
+
+[lib]
+name = "sdx_quality_scorers"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true

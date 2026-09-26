@@ -166,6 +166,10 @@ if command -v cargo >/dev/null 2>&1; then
   (cd "$ROOT/native/rust/sdx-diffusion-math" && cargo build --release)
   echo "==> cargo build: sdx-image-metrics"
   (cd "$ROOT/native/rust/sdx-image-metrics" && cargo build --release)
+  for crate in sdx-image-ops sdx-prompt-ops sdx-canny-ops sdx-style-embed sdx-quality-scorers; do
+    echo "==> cargo build: $crate"
+    (cd "$ROOT/native/rust/$crate" && cargo build --release)
+  done
 else
   echo "(skip) cargo not found"
 fi
