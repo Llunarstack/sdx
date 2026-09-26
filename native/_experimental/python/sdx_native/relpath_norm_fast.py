@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 
 def to_posix_key(path: str) -> str:
@@ -26,9 +26,9 @@ def relpath_if_under(path: str, root: str) -> str:
         return to_posix_key(path)
 
 
-def unique_preserve_order(paths: Iterable[str]) -> List[str]:
+def unique_preserve_order(paths: Iterable[str]) -> list[str]:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for p in paths:
         k = to_posix_key(p)
         if k in seen:

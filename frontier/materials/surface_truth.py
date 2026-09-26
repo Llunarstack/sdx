@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
 
 
 class SurfaceClass(str, Enum):
@@ -26,7 +25,7 @@ class MaterialHint:
     negative: str
 
 
-_SURFACES: Tuple[Tuple[re.Pattern, SurfaceClass, str, str], ...] = (
+_SURFACES: tuple[tuple[re.Pattern, SurfaceClass, str, str], ...] = (
     (
         re.compile(r"\b(chrome|steel|brass|copper|metal|metallic|gold|silver)\b", re.I),
         SurfaceClass.METAL,
@@ -79,9 +78,9 @@ _SURFACES: Tuple[Tuple[re.Pattern, SurfaceClass, str, str], ...] = (
 
 
 class MaterialPlanner:
-    def scan(self, prompt: str) -> List[MaterialHint]:
+    def scan(self, prompt: str) -> list[MaterialHint]:
         text = prompt or ""
-        hits: List[MaterialHint] = []
+        hits: list[MaterialHint] = []
         seen: set[SurfaceClass] = set()
         for pat, surf, pos, neg in _SURFACES:
             if pat.search(text) and surf not in seen:
@@ -89,7 +88,7 @@ class MaterialPlanner:
                 seen.add(surf)
         return hits
 
-    def fragments(self, prompt: str, max_surfaces: int = 4) -> Tuple[str, str]:
+    def fragments(self, prompt: str, max_surfaces: int = 4) -> tuple[str, str]:
         hints = self.scan(prompt)[:max_surfaces]
         if not hints:
             return "", ""

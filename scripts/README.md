@@ -1,4 +1,4 @@
-# `scripts/` — operations and utilities
+﻿# `scripts/` — operations and utilities
 
 All paths are relative to the **repository root**. Prefer running scripts with `python scripts/...` from root so imports match `train.py` / `sample.py`.
 
@@ -6,26 +6,25 @@ All paths are relative to the **repository root**. Prefer running scripts with `
 
 | Directory | Contents |
 |-----------|----------|
-| **`download/`** | `download_models.py`, `download_llm.py`, `download_revolutionary_stack.py`, prune/remove helpers |
-| **`setup/`** | `clone_repos.ps1` / `.sh` — clones DiT, Flux, ControlNet, etc. into `external/` (read-only reference) |
-| **`training/`** | `hf_export_to_sdx_manifest.py`, `hf_download_and_train.py`, `precompute_latents.py`, … |
-| **`tools/`** | Day-to-day utilities — grouped entrypoints (`tools/dev`, `tools/data`, `tools/training`, `tools/prompt`, `tools/ops`, `tools/export`, `tools/repo`) — see **[tools/README.md](tools/README.md)** |
-| **`enhanced/`** | Optional **EnhancedDiT** train / sample / setup — see [enhanced/README.md](enhanced/README.md) |
+| **`download/`** | `download_models.py`, `download_llm.py`, prune/remove helpers |
+| **`setup/`** | `clone_repos.ps1` / `.sh` — clones reference repos into `external/` |
+| **`training/`** | HF export, precompute latents, download-and-train helpers |
+| **`tools/`** | Canonical ops CLI — `python -m scripts.tools <cmd>` — see [tools/README.md](tools/README.md) |
+| **`enhanced/`** | Optional **EnhancedDiT** train / sample / setup |
 
 ## Main CLI
 
-| Script | Purpose |
-|--------|---------|
-| **`cli.py`** | Dataset analysis, config validation, checkpoints, prompt helpers — `python scripts/cli.py --help` |
+| Command | Purpose |
+|---------|---------|
+| **`python -m scripts.tools`** | Dataset, config, checkpoints, prompt preview, quality ops |
+| **`python scripts/run_pipeline.py`** | Full RunPod-style pipeline orchestrator |
 
-## Root-level scripts
+## Compatibility stubs (prefer `scripts.tools`)
 
-| Script | Purpose |
-|--------|---------|
-| **`cascade_generate.py`** | Optional Stable Cascade generation (separate from DiT) |
+Thin redirects remain at `scripts/cascade_generate.py`, `prompt_compose.py`, `profile_image_cli.py`, `research_image_prompt.py`, `integration_smoke.py`.
 
 ## See also
 
-- [docs/CODEBASE.md](../docs/CODEBASE.md) — repo tree, `scripts/` layout, entry points  
-- [docs/FILES.md](../docs/FILES.md) — exhaustive file map  
-- [README.md](../README.md) — main project entry
+- [docs/CODEBASE.md](../docs/CODEBASE.md) — repo tree, entry points
+- [docs/reference/FILES.md](../docs/reference/FILES.md) — file map
+- [README.md](../README.md) — project entry

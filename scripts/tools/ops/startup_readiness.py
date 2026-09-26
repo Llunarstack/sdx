@@ -15,7 +15,7 @@ import platform
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 
 def _package_available(module_name: str) -> bool:
@@ -25,14 +25,14 @@ def _package_available(module_name: str) -> bool:
         return False
 
 
-def _check_packages(required: List[str], optional: List[str]) -> Dict[str, Dict[str, bool]]:
+def _check_packages(required: list[str], optional: list[str]) -> dict[str, dict[str, bool]]:
     return {
         "required": {k: _package_available(k) for k in required},
         "optional": {k: _package_available(k) for k in optional},
     }
 
 
-def _check_paths(paths: List[Path]) -> Dict[str, bool]:
+def _check_paths(paths: list[Path]) -> dict[str, bool]:
     return {str(p): p.exists() for p in paths}
 
 
@@ -44,8 +44,8 @@ def _disk_free_gb(path: Path) -> float:
     return float(usage.free) / float(1024**3)
 
 
-def _gpu_status() -> Dict[str, Any]:
-    out: Dict[str, Any] = {"torch_imported": False, "cuda_available": False, "device_count": 0, "devices": []}
+def _gpu_status() -> dict[str, Any]:
+    out: dict[str, Any] = {"torch_imported": False, "cuda_available": False, "device_count": 0, "devices": []}
     try:
         import torch  # type: ignore
     except Exception:
@@ -65,7 +65,7 @@ def _gpu_status() -> Dict[str, Any]:
     out["device_count"] = n
     devices = []
     for i in range(max(0, n)):
-        row: Dict[str, Any] = {"index": i}
+        row: dict[str, Any] = {"index": i}
         try:
             row["name"] = str(torch.cuda.get_device_name(i))
         except Exception:
@@ -80,7 +80,7 @@ def _gpu_status() -> Dict[str, Any]:
     return out
 
 
-def _gather_native_status() -> Dict[str, Any]:
+def _gather_native_status() -> dict[str, Any]:
     try:
         from utils.native import native_stack_status
 
@@ -89,7 +89,7 @@ def _gather_native_status() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
-def _native_presence_score(native_status: Dict[str, Any]) -> Tuple[int, int]:
+def _native_presence_score(native_status: dict[str, Any]) -> tuple[int, int]:
     keys = [k for k in native_status.keys() if k.startswith("rust_") or k.startswith("zig_") or k.startswith("go_")]
     keys += [k for k in native_status.keys() if k.startswith("libsdx_")]
     keys = sorted(set(keys))
@@ -110,7 +110,7 @@ def build_readiness_report(
     repo_root: Path,
     dataset_manifest: str = "",
     work_dir: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     required_pkgs = ["numpy", "PIL", "torch"]
     optional_pkgs = ["diffusers", "transformers", "cv2", "pytesseract"]
     pkgs = _check_packages(required_pkgs, optional_pkgs)
@@ -137,8 +137,8 @@ def build_readiness_report(
         dataset_path = str(Path(dataset_manifest).resolve())
         dataset_ok = Path(dataset_path).is_file()
 
-    blockers: List[str] = []
-    warnings: List[str] = []
+    blockers: list[str] = []
+    warnings: list[str] = []
 
     if not all(pkgs["required"].values()):
         missing = [k for k, ok in pkgs["required"].items() if not ok]
@@ -201,7 +201,7 @@ def build_readiness_report(
     }
 
 
-def render_readiness_markdown(report: Dict[str, Any]) -> str:
+def render_readiness_markdown(report: dict[str, Any]) -> str:
     status = str(report.get("status", "unknown"))
     score = int(report.get("score", 0) or 0)
     blockers = list(report.get("blockers", []) or [])

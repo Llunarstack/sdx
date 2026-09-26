@@ -34,7 +34,7 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, List, Optional
+from typing import Any
 
 BASE = "https://danbooru.donmai.us"
 DEFAULT_UA = "sdx-danbooru-fetch/1.0 (tag export; respect rate limits)"
@@ -45,12 +45,12 @@ def _request(
     url: str,
     *,
     ua: str,
-    auth_header: Optional[str],
+    auth_header: str | None,
     timeout: float = 120.0,
     retries: int = 4,
     sleep_base: float = 1.0,
 ) -> Any:
-    last: Optional[Exception] = None
+    last: Exception | None = None
     for attempt in range(retries):
         req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": "application/json"})
         if auth_header:
@@ -76,28 +76,28 @@ def _request(
     raise last
 
 
-def _basic_auth_header() -> Optional[str]:
+def _basic_auth_header() -> str | None:
     user = (os.environ.get("DANBOORU_USERNAME") or "").strip()
     key = (os.environ.get("DANBOORU_API_KEY") or "").strip()
     if not user or not key:
         return None
-    token = base64.b64encode(f"{user}:{key}".encode("utf-8")).decode("ascii")
+    token = base64.b64encode(f"{user}:{key}".encode()).decode("ascii")
     return f"Basic {token}"
 
 
 def fetch_pages(
     *,
     limit: int,
-    max_pages: Optional[int],
+    max_pages: int | None,
     sleep_s: float,
     skip_deprecated: bool,
     ua: str,
-    auth_header: Optional[str],
-) -> DefaultDict[int, List[str]]:
+    auth_header: str | None,
+) -> defaultdict[int, list[str]]:
     """
     Returns category_id -> lines ``name<TAB>post_count<TAB>deprecated``
     """
-    buckets: DefaultDict[int, List[str]] = defaultdict(list)
+    buckets: defaultdict[int, list[str]] = defaultdict(list)
     page = 1
     pages_done = 0
     while True:

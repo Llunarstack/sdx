@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 from .segment_processor import process_segment
 from .types import SegmentAssignment, VideoPlan
@@ -28,14 +29,14 @@ def process_segment_with_retry(
     *,
     ckpt: str = "",
     dry_run: bool = False,
-    sample_extra_args: Optional[Sequence[str]] = None,
+    sample_extra_args: Sequence[str] | None = None,
     control_plan: Any = None,
-    policy: Optional[RetryPolicy] = None,
+    policy: RetryPolicy | None = None,
     provenance: Any = None,
-    process_options: Optional[Any] = None,
-) -> tuple[List[Path], Any]:
+    process_options: Any | None = None,
+) -> tuple[list[Path], Any]:
     pol = policy or RetryPolicy()
-    best_frames: List[Path] = []
+    best_frames: list[Path] = []
     best_q: Any = None
     wd = Path(work_dir)
 

@@ -8,8 +8,8 @@ Run: python benchmark_suite.py
 
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class BenchmarkResult:
 class NativeKernelBenchmark:
     def __init__(self, data_size: int = 10240):
         self.data_size = data_size
-        self.results: List[BenchmarkResult] = []
+        self.results: list[BenchmarkResult] = []
         self.baseline_times = {}
 
     def benchmark_numpy(self, name: str, operation: str, func: Callable, iterations: int = 100) -> float:

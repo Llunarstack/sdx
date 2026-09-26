@@ -7,11 +7,11 @@ import argparse
 import html
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def _rows_from_dir(root: Path) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _rows_from_dir(root: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for img in sorted(root.rglob("*.png")):
         meta = img.with_suffix(".json")
         prompt = ""
@@ -27,7 +27,7 @@ def _rows_from_dir(root: Path) -> List[Dict[str, Any]]:
     return rows
 
 
-def render_html(rows: List[Dict[str, Any]], *, title: str = "SDX Style Gallery") -> str:
+def render_html(rows: list[dict[str, Any]], *, title: str = "SDX Style Gallery") -> str:
     cards = []
     for r in rows:
         rel = html.escape(r["path"])

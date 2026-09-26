@@ -14,9 +14,10 @@ Use with ``sample.py --box-layout path.json``. See ``examples/box_layout.example
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -51,7 +52,7 @@ class BoxRegion:
     negative: str = ""
     priority: int = 5
     sketch_path: str = ""
-    strokes: Tuple[SketchStroke, ...] = ()
+    strokes: tuple[SketchStroke, ...] = ()
     sketch_weight: float = 0.7
     reference_path: str = ""
     reference_weight: float = 0.8
@@ -79,10 +80,10 @@ class BoxLayoutSpec:
 
     global_prompt: str = ""
     global_negative: str = ""
-    regions: List[BoxRegion] = field(default_factory=list)
+    regions: list[BoxRegion] = field(default_factory=list)
     feather_px: int = 8
     overlap_mode: str = "priority"  # priority | divide
-    source_dir: Optional[Path] = None
+    source_dir: Path | None = None
     inject: RegionalInjectConfig = field(default_factory=RegionalInjectConfig)
 
 
@@ -93,18 +94,18 @@ class RegionalCFGPlan:
     region_masks: torch.Tensor  # (R, 1, H, W)
     bg_mask: torch.Tensor  # (1, 1, H, W)
     region_cond_embs: torch.Tensor  # (R, L, D)
-    region_names: Tuple[str, ...] = ()
-    region_sketches: Optional[torch.Tensor] = None  # (R, 1, H, W)
-    region_sketch_weights: Tuple[float, ...] = ()
+    region_names: tuple[str, ...] = ()
+    region_sketches: torch.Tensor | None = None  # (R, 1, H, W)
+    region_sketch_weights: tuple[float, ...] = ()
     inject: RegionalInjectConfig = field(default_factory=RegionalInjectConfig)
-    fusion_weights: Tuple[float, ...] = ()  # per-step LAMIC fusion (optional)
+    fusion_weights: tuple[float, ...] = ()  # per-step LAMIC fusion (optional)
 
 
 def _clamp01(v: float) -> float:
     return float(max(0.0, min(1.0, v)))
 
 
-def _parse_box(raw: Any) -> Tuple[float, float, float, float]:
+def _parse_box(raw: Any) -> tuple[float, float, float, float]:
     if isinstance(raw, (list, tuple)) and len(raw) >= 4:
         x1, y1, x2, y2 = (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
     elif isinstance(raw, Mapping):
@@ -184,7 +185,7 @@ def parse_box_layout(data: Mapping[str, Any]) -> BoxLayoutSpec:
     )
 
 
-def load_box_layout_file(path: Union[str, Path]) -> BoxLayoutSpec:
+def load_box_layout_file(path: str | Path) -> BoxLayoutSpec:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"box layout not found: {p}")
@@ -243,8 +244,8 @@ def build_latent_region_masks(
     *,
     device: torch.device,
     dtype: torch.dtype = torch.float32,
-    pixel_size: Optional[int] = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    pixel_size: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Build per-region masks and background mask at latent resolution.
 
@@ -254,7 +255,7 @@ def build_latent_region_masks(
     feather_latent = max(0, int(round(spec.feather_px * latent_h / max(px, 1))))
 
     ordered = sorted(spec.regions, key=lambda r: r.priority, reverse=True)
-    masks: List[torch.Tensor] = []
+    masks: list[torch.Tensor] = []
     occupied = torch.zeros(1, 1, latent_h, latent_w, device=device, dtype=dtype)
 
     for region in ordered:
@@ -280,13 +281,13 @@ def build_latent_region_masks(
 
 
 def expand_model_kwargs_batch(
-    model_kwargs: Dict[str, Any],
+    model_kwargs: dict[str, Any],
     batch: int,
     *,
-    repeat_index: Optional[int] = None,
-) -> Dict[str, Any]:
+    repeat_index: int | None = None,
+) -> dict[str, Any]:
     """Expand tensor kwargs from batch B to ``batch`` (typically R×B)."""
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for k, v in model_kwargs.items():
         if not isinstance(v, torch.Tensor):
             out[k] = v
@@ -345,7 +346,7 @@ def encode_regional_plan(
     region_sketches = build_region_sketch_masks(spec, latent_h, latent_w, device=device, dtype=torch.float32)
     sketch_weights = tuple(float(r.sketch_weight) for r in spec.regions)
 
-    fusion_weights: Tuple[float, ...] = ()
+    fusion_weights: tuple[float, ...] = ()
     if spec.inject.lamic_isolation:
         try:
             from frontier.layout.lamic_schedule import RegionFusionSchedule, fusion_weight_at_step
@@ -373,8 +374,8 @@ def regional_cfg_forward(
     x: torch.Tensor,
     t_batch: torch.Tensor,
     *,
-    model_kwargs_cond: Dict[str, Any],
-    model_kwargs_uncond: Dict[str, Any],
+    model_kwargs_cond: dict[str, Any],
+    model_kwargs_uncond: dict[str, Any],
     plan: RegionalCFGPlan,
     cfg_scale: float,
     cfg_rescale: float = 0.0,
@@ -398,7 +399,7 @@ def regional_cfg_forward(
 
     def _model_out(
         x_in: torch.Tensor,
-        kwargs: Dict[str, Any],
+        kwargs: dict[str, Any],
         *,
         t_in: torch.Tensor | None = None,
     ) -> torch.Tensor:

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 import numpy as np
 
@@ -23,7 +23,7 @@ def score_frame_sharpness(rgb: np.ndarray) -> float:
 def score_temporal_consistency(frame_paths: Sequence[Path]) -> float:
     if len(frame_paths) < 2:
         return 1.0
-    diffs: List[float] = []
+    diffs: list[float] = []
     prev = read_frame_rgb(frame_paths[0]).astype(np.float32)
     for p in frame_paths[1:]:
         curr = read_frame_rgb(p).astype(np.float32)
@@ -47,7 +47,7 @@ def score_segment_quality(
     paths = list(frame_paths)
     temporal = score_temporal_consistency(paths)
     sharpness = float(np.mean([score_frame_sharpness(read_frame_rgb(p)) for p in paths[: min(8, len(paths))]]))
-    notes: List[str] = []
+    notes: list[str] = []
     if temporal < min_temporal:
         notes.append(f"low temporal consistency ({temporal:.3f})")
     if sharpness < min_sharpness:

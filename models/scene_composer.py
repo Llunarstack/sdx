@@ -22,7 +22,6 @@ Architecture:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -39,7 +38,7 @@ class SceneElement:
     element_id: str
     label: str
     element_type: str  # "character", "object", "background", "fx"
-    bbox: Optional[Tuple[float, float, float, float]] = None  # (x1,y1,x2,y2) normalised
+    bbox: tuple[float, float, float, float] | None = None  # (x1,y1,x2,y2) normalised
     depth: float = 0.5  # 0=foreground, 1=background
     scale: float = 1.0  # relative scale
     description: str = ""
@@ -59,10 +58,10 @@ class SceneRelation:
 class SceneGraph:
     """Complete structured scene description."""
 
-    elements: List[SceneElement] = field(default_factory=list)
-    relations: List[SceneRelation] = field(default_factory=list)
+    elements: list[SceneElement] = field(default_factory=list)
+    relations: list[SceneRelation] = field(default_factory=list)
     global_description: str = ""
-    lighting_direction: Tuple[float, float] = (0.5, 0.3)  # (x, y) normalised
+    lighting_direction: tuple[float, float] = (0.5, 0.3)  # (x, y) normalised
     ambient_level: float = 0.5
 
 
@@ -231,7 +230,7 @@ class OcclusionOrderModule(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        scene: Optional[SceneGraph] = None,
+        scene: SceneGraph | None = None,
         h_patches: int = 16,
         w_patches: int = 16,
     ) -> torch.Tensor:
@@ -308,7 +307,7 @@ class ScalePerspectiveConsistency(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        depth_map: Optional[torch.Tensor] = None,
+        depth_map: torch.Tensor | None = None,
         h_patches: int = 16,
         w_patches: int = 16,
     ) -> torch.Tensor:
@@ -388,10 +387,10 @@ class GlobalSceneConditioner(nn.Module):
     def apply(
         self,
         x: torch.Tensor,
-        scene: Optional[SceneGraph],
+        scene: SceneGraph | None,
         h_patches: int,
         w_patches: int,
-        depth_map: Optional[torch.Tensor] = None,
+        depth_map: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Apply scene conditioning to image tokens.
@@ -417,11 +416,11 @@ class GlobalSceneConditioner(nn.Module):
         self,
         x: torch.Tensor,
         text_emb: torch.Tensor,
-        scene: Optional[SceneGraph],
+        scene: SceneGraph | None,
         h_patches: int,
         w_patches: int,
-        device: Optional[torch.device] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        device: torch.device | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Returns:
             x: (B, N, D) scene-conditioned image tokens.

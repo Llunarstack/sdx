@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "GravityWell",
@@ -24,16 +25,16 @@ class GravityWell:
 
 @dataclass(slots=True)
 class SemanticGravityField:
-    wells: List[GravityWell] = field(default_factory=list)
+    wells: list[GravityWell] = field(default_factory=list)
     dominant_id: str = ""
 
-    def top_entities(self, n: int = 3) -> List[str]:
+    def top_entities(self, n: int = 3) -> list[str]:
         ranked = sorted(self.wells, key=lambda w: (-w.weight, -w.lock_priority))
         return [w.entity_id for w in ranked[:n]]
 
 
-def parse_semantic_gravity(raw: Any) -> Dict[str, float]:
-    weights: Dict[str, float] = {}
+def parse_semantic_gravity(raw: Any) -> dict[str, float]:
+    weights: dict[str, float] = {}
     if isinstance(raw, Mapping):
         for eid, spec in raw.items():
             if isinstance(spec, (int, float)):
@@ -50,12 +51,12 @@ def build_gravity_field(
     weights: Mapping[str, float],
     shots: Sequence[Any],
 ) -> SemanticGravityField:
-    appearance_count: Dict[str, int] = {}
+    appearance_count: dict[str, int] = {}
     for sh in shots:
         for eid in list(getattr(sh, "characters", []) or []) + list(getattr(sh, "objects", []) or []):
             appearance_count[str(eid)] = appearance_count.get(str(eid), 0) + 1
 
-    wells: List[GravityWell] = []
+    wells: list[GravityWell] = []
     all_ids = set(cast.keys()) | set(props.keys()) | set(weights.keys())
     for eid in all_ids:
         base = float(weights.get(eid, 0.4))
@@ -77,7 +78,7 @@ def build_gravity_field(
     return SemanticGravityField(wells=wells, dominant_id=dominant)
 
 
-def gravity_edit_overrides(field: SemanticGravityField) -> Dict[str, Any]:
+def gravity_edit_overrides(field: SemanticGravityField) -> dict[str, Any]:
     if not field.wells:
         return {}
     top = field.top_entities(2)

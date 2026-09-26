@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 __all__ = ["ProcessOptions", "parse_process_options"]
 
@@ -43,6 +44,60 @@ class ProcessOptions:
     max_segment_workers: int = 2
     thumbnail_pass: bool = False
     thumbnail_size: int = 128
+    # quality / sample pack (video_helpers)
+    sample: Any = None
+    video_quality: str = "none"
+    # VIDEOMAX / superiority
+    videomax: bool = False
+    permanence_repair: bool = True
+    identity_bind: bool = True
+    extremity_lock: bool = True
+    physics_gate: bool = True
+    physics_repair: bool = False
+    contact_ground: bool = True
+    secondary_track: bool = True
+    occlusion_resolve: bool = False
+    hf_deshimmer: bool = True
+    count_bind: bool = True
+    count_bind_repair: bool = False
+    shot_chain: bool = False
+    shot_chain_strength: float = 0.35
+    glyph_lock: bool = False
+    motion_shutter: bool = False
+    motion_grammar: str = "auto"
+    motion_grammar_positive: str = ""
+    motion_grammar_negative: str = ""
+    invention_stack: str = ""
+    log_feedback: bool = False
+    lip_sync: bool = True
+    native_audio: bool = False
+    leaders_stack: bool = False
+    in_gen_cuts: bool = False
+    camera_path: bool = True
+    motion_intel: bool = True
+    prompt_ground: bool = True
+    use_permanent_dit: bool = False
+    neural_engine: bool = False
+    min_permanence: float = 0.45
+    min_artifact: float = 0.40
+    min_identity: float = 0.0
+    min_extremity: float = 0.0
+    min_glyph: float = 0.0
+    min_physics: float = 0.0
+    min_contact: float = 0.0
+    min_count: float = 0.0
+    min_shimmer: float = 0.0
+    min_secondary: float = 0.0
+    min_occlusion: float = 0.0
+    min_adherence: float = 0.0
+    min_lip_sync: float = 0.0
+    identity_refs: tuple[str, ...] = ()
+    style_route: dict[str, Any] = field(default_factory=dict)
+    videomax_plan: dict[str, Any] = field(default_factory=dict)
+    director_events: list[Any] = field(default_factory=list)
+    director_timeline: dict[str, Any] = field(default_factory=dict)
+    cross_keyframe_identity: bool = False
+    cross_keyframe_identity_strength: float = 0.28
 
 
 def parse_process_options(raw: Mapping[str, Any] | None) -> ProcessOptions:
@@ -81,4 +136,30 @@ def parse_process_options(raw: Mapping[str, Any] | None) -> ProcessOptions:
         max_segment_workers=int(r.get("max_segment_workers", 2) or 2),
         thumbnail_pass=bool(r.get("thumbnail_pass", False)),
         thumbnail_size=int(r.get("thumbnail_size", 128) or 128),
+        sample=r.get("sample"),
+        video_quality=str(r.get("video_quality") or "none"),
+        videomax=bool(r.get("videomax", False) or str(r.get("video_quality", "")).lower() in ("max", "videomax")),
+        permanence_repair=bool(r.get("permanence_repair", True)),
+        identity_bind=bool(r.get("identity_bind", True)),
+        extremity_lock=bool(r.get("extremity_lock", True)),
+        physics_gate=bool(r.get("physics_gate", True)),
+        physics_repair=bool(r.get("physics_repair", False)),
+        contact_ground=bool(r.get("contact_ground", True)),
+        secondary_track=bool(r.get("secondary_track", True)),
+        occlusion_resolve=bool(r.get("occlusion_resolve", False)),
+        hf_deshimmer=bool(r.get("hf_deshimmer", True)),
+        count_bind=bool(r.get("count_bind", True)),
+        count_bind_repair=bool(r.get("count_bind_repair", False)),
+        shot_chain=bool(r.get("shot_chain", False)),
+        shot_chain_strength=float(r.get("shot_chain_strength", 0.35) or 0.35),
+        glyph_lock=bool(r.get("glyph_lock", False)),
+        motion_shutter=bool(r.get("motion_shutter", False)),
+        motion_grammar=str(r.get("motion_grammar", "auto") or "auto"),
+        invention_stack=str(r.get("invention_stack") or ""),
+        log_feedback=bool(r.get("log_feedback", False)),
+        min_permanence=float(r.get("min_permanence", 0.45) or 0.45),
+        min_artifact=float(r.get("min_artifact", 0.40) or 0.40),
+        min_identity=float(r.get("min_identity", 0.0) or 0.0),
+        min_occlusion=float(r.get("min_occlusion", 0.0) or 0.0),
+        min_adherence=float(r.get("min_adherence", 0.0) or 0.0),
     )

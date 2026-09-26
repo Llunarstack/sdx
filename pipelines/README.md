@@ -11,4 +11,4 @@ We split **workflows and documentation** by **target use case**, not by duplicat
 
 **Rule of thumb:** both pipelines use the **same** `train.py` / checkpoints; you may train **two separate checkpoints** (e.g. `results/general/` vs `results/book_comic/`) with different datasets and caption styles. The split here is **where to look** for scripts and conventions—not a second copy of DiT code.
 
-See also: [docs/REGION_CAPTIONS.md](../docs/REGION_CAPTIONS.md) (layout-friendly JSONL), [docs/LANDSCAPE_2026.md](../docs/LANDSCAPE_2026.md) (industry context).
+See also: [docs/REGION_CAPTIONS.md](../docs/reference/REGION_CAPTIONS.md) (layout-friendly JSONL), [docs/LANDSCAPE_2026.md](../docs/research/LANDSCAPE_2026.md) (industry context).

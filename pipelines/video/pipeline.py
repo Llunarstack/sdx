@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 from .i2v import build_i2v_plan, prepare_anchor_frame
 from .process_options import ProcessOptions, parse_process_options
@@ -56,7 +57,7 @@ def run_from_scene_file(
     dry_run: bool = False,
     use_pexels: bool = False,
     allow_download: bool = False,
-    sample_extra_args: Optional[Sequence[str]] = None,
+    sample_extra_args: Sequence[str] | None = None,
 ) -> VideoPipelineResult:
     """Run pipeline from a single scene graph JSON (recommended entry point)."""
     from .retrieval import build_clip_candidate_from_path, load_local_clip_library
@@ -152,7 +153,7 @@ def run_t2v_pipeline(
     allow_download: bool = False,
     dry_run: bool = False,
     keyframe_interval: int = 6,
-    sample_extra_args: Optional[Sequence[str]] = None,
+    sample_extra_args: Sequence[str] | None = None,
 ) -> VideoPipelineResult:
     plan = build_t2v_plan(prompt, duration_sec=duration_sec, fps=fps, width=width, height=height)
     download_dir = Path(work_dir) / "downloads" if allow_download else None
@@ -195,7 +196,7 @@ def run_i2v_pipeline(
     height: int = 720,
     dry_run: bool = False,
     keyframe_interval: int = 8,
-    sample_extra_args: Optional[Sequence[str]] = None,
+    sample_extra_args: Sequence[str] | None = None,
 ) -> VideoPipelineResult:
     ref_clips = [motion_clip] if motion_clip else None
     plan = build_i2v_plan(
@@ -256,12 +257,12 @@ def _process_one_segment(
     ckpt: str,
     dry_run: bool,
     prov: ProvenanceLog,
-    seg_extra: List[str],
+    seg_extra: list[str],
     cp: Any,
     opts: ProcessOptions,
     retry_policy: RetryPolicy,
-    anchor_frame: Optional[Path],
-) -> tuple[int, List[Path], Any]:
+    anchor_frame: Path | None,
+) -> tuple[int, list[Path], Any]:
     def _run_once():
         if opts.quality_retry and ckpt and not dry_run:
             return process_segment_with_retry(
@@ -298,30 +299,30 @@ def _process_one_segment(
 
 def _run_assignments(
     plan: VideoPlan,
-    assignments: List[SegmentAssignment],
+    assignments: list[SegmentAssignment],
     out_path: str | Path,
     *,
     ckpt: str,
     work_dir: str | Path,
     dry_run: bool,
-    sample_extra_args: Optional[Sequence[str]],
-    anchor_frame: Optional[Path] = None,
-    control_plans: Optional[Sequence[Any]] = None,
-    process_options: Optional[ProcessOptions] = None,
+    sample_extra_args: Sequence[str] | None,
+    anchor_frame: Path | None = None,
+    control_plans: Sequence[Any] | None = None,
+    process_options: ProcessOptions | None = None,
 ) -> VideoPipelineResult:
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
     opts = process_options or parse_process_options(plan.metadata.get("edit") if plan.metadata else {})
     retry_policy = RetryPolicy(max_attempts=max(1, opts.max_retries))
     prov = ProvenanceLog()
-    seg_frame_lists: List[List[Path]] = []
-    seg_videos: List[str] = []
+    seg_frame_lists: list[list[Path]] = []
+    seg_videos: list[str] = []
     quality_reports = []
-    source_clips: List[str] = []
-    shot_durations: List[float] = []
+    source_clips: list[str] = []
+    shot_durations: list[float] = []
 
     # Build work items
-    work: List[tuple[SegmentAssignment, Path, List[str], Any]] = []
+    work: list[tuple[SegmentAssignment, Path, list[str], Any]] = []
     for assignment in assignments:
         seg_dir = wd / f"seg_{assignment.shot.index:02d}"
         seg_extra = list(sample_extra_args or [])
@@ -339,7 +340,7 @@ def _run_assignments(
             assignment.edit_strength = cp.init_strength
         work.append((assignment, seg_dir, seg_extra, cp))
 
-    seg_results: dict[int, tuple[List[Path], Any]] = {}
+    seg_results: dict[int, tuple[list[Path], Any]] = {}
 
     if opts.parallel_segments and len(work) > 1:
         from .parallel_segments import SegmentWorkItem, run_segments_parallel

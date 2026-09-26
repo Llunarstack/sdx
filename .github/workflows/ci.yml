@@ -24,7 +24,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Ruff
-        run: python -m ruff check .
+        run: |
+          python -m ruff format --check .
+          python -m ruff check .
 
       # basedpyright exits non-zero on warnings; bash -e would stop before we read errorCount from JSON.
       - name: Basedpyright (curated modules, errors only)
@@ -37,6 +39,10 @@ jobs:
             utils/generation/inference_stages.py \
             utils/generation/eval_prompt_pack.py \
             examples/run_baseline_eval.py \
+            utils/terminal.py \
+            training/train_cli_parser.py \
+            utils/generation/sample_cli_parser.py \
+            utils/generation/sample_helpers.py \
             > "$OUT" || true
           python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; ec=int(s.get('errorCount',0)); wc=int(s.get('warningCount',0)); print(f\"basedpyright: {ec} errors, {wc} warnings\"); sys.exit(1 if ec else 0)" "$OUT"
 

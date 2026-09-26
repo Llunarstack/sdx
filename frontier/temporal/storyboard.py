@@ -7,9 +7,10 @@ Video models get temporal consistency; still-image stacks rarely expose *series*
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any
 
 from frontier.world.world_bible import WorldLock
 
@@ -27,10 +28,10 @@ class StoryboardBeat:
 @dataclass
 class Storyboard:
     title: str = ""
-    beats: List[StoryboardBeat] = field(default_factory=list)
-    carry_tags: List[str] = field(default_factory=list)  # appended to every beat after first
+    beats: list[StoryboardBeat] = field(default_factory=list)
+    carry_tags: list[str] = field(default_factory=list)  # appended to every beat after first
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "title": self.title,
             "carry_tags": self.carry_tags,
@@ -38,7 +39,7 @@ class Storyboard:
         }
 
     @classmethod
-    def load(cls, path: str | Path) -> "Storyboard":
+    def load(cls, path: str | Path) -> Storyboard:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         beats = []
         for i, b in enumerate(data.get("beats", [])):
@@ -60,9 +61,9 @@ class Storyboard:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
-    def expanded_prompts(self) -> List[str]:
+    def expanded_prompts(self) -> list[str]:
         carry = ", ".join(self.carry_tags) if self.carry_tags else ""
-        out: List[str] = []
+        out: list[str] = []
         for i, beat in enumerate(self.beats):
             p = beat.prompt
             if i > 0 and carry:

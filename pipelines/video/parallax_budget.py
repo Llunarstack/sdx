@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["ParallaxLayer", "ParallaxPlan", "parse_parallax_config", "plan_parallax_budget"]
 
@@ -18,12 +19,12 @@ class ParallaxLayer:
 @dataclass(slots=True)
 class ParallaxPlan:
     shot_id: str
-    layers: List[ParallaxLayer]
+    layers: list[ParallaxLayer]
     prompt_suffix: str
-    edit_overrides: Dict[str, Any]
+    edit_overrides: dict[str, Any]
 
 
-def parse_parallax_config(raw: Any) -> Dict[str, Any]:
+def parse_parallax_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -38,15 +39,15 @@ def plan_parallax_budget(
     shots: Sequence[Any],
     *,
     config: Mapping[str, Any],
-) -> List[ParallaxPlan]:
+) -> list[ParallaxPlan]:
     if not config.get("enabled"):
         return []
     n = max(2, min(5, int(config.get("layers") or 3)))
-    plans: List[ParallaxPlan] = []
+    plans: list[ParallaxPlan] = []
     names = ["far_background", "midground", "subject_plane", "foreground_occluder", "ultra_fg"]
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
-        layers: List[ParallaxLayer] = []
+        layers: list[ParallaxLayer] = []
         for i in range(n):
             depth = i / max(1, n - 1)
             motion = 0.15 + depth * 0.85

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import torch
 from PIL import Image
@@ -60,7 +59,7 @@ class ViTManifestDataset(Dataset):
     ):
         self.manifest_path = Path(manifest_jsonl)
         self.image_root = Path(image_root) if image_root else None
-        self.samples: List[Dict[str, object]] = []
+        self.samples: list[dict[str, object]] = []
         if training_augment:
             self.transform = transforms.Compose(
                 [
@@ -126,7 +125,7 @@ class ViTManifestDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> Dict[str, object]:
+    def __getitem__(self, idx: int) -> dict[str, object]:
         s = self.samples[idx]
         img = Image.open(s["image_path"]).convert("RGB")
         x = self.transform(img)
@@ -148,19 +147,19 @@ class ViTManifestDataset(Dataset):
         }
 
 
-def collate_vit_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
+def collate_vit_batch(batch: list[dict[str, object]]) -> dict[str, object]:
     images = torch.stack([b["image"] for b in batch], dim=0)
     text_features = torch.stack([b["text_features"] for b in batch], dim=0)
     ar_conditioning = torch.stack([b["ar_conditioning"] for b in batch], dim=0)
-    out: Dict[str, object] = {
+    out: dict[str, object] = {
         "images": images,
         "text_features": text_features,
         "ar_conditioning": ar_conditioning,
         "captions": [b["caption"] for b in batch],
         "image_paths": [b["image_path"] for b in batch],
     }
-    q_vals: List[Optional[torch.Tensor]] = [b["quality_label"] for b in batch]
-    a_vals: List[Optional[torch.Tensor]] = [b["adherence_score"] for b in batch]
+    q_vals: list[torch.Tensor | None] = [b["quality_label"] for b in batch]
+    a_vals: list[torch.Tensor | None] = [b["adherence_score"] for b in batch]
     if all(v is not None for v in q_vals):
         out["quality_labels"] = torch.stack([v for v in q_vals if v is not None], dim=0)
     else:

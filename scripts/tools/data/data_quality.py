@@ -153,7 +153,7 @@ def main():
             except Exception as e:
                 print(f"native tools: {e}", file=sys.stderr)
                 return 1
-        with open(inp, "r", encoding="utf-8") as f:
+        with open(inp, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

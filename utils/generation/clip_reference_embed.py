@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import torch
 
-_vision_bundle: Optional[Tuple[Any, Any, str]] = None
+_vision_bundle: tuple[Any, Any, str] | None = None
 
 
-def _get_clip_vision(model_id: str, device: torch.device) -> Tuple[Any, Any]:
+def _get_clip_vision(model_id: str, device: torch.device) -> tuple[Any, Any]:
     global _vision_bundle
     if _vision_bundle is not None and _vision_bundle[2] == model_id:
         return _vision_bundle[0], _vision_bundle[1]
@@ -32,7 +32,7 @@ def encode_reference_image_pil(
     device: torch.device,
     model_id: str = "openai/clip-vit-large-patch14",
     dtype: torch.dtype = torch.float32,
-) -> Tuple[torch.Tensor, int]:
+) -> tuple[torch.Tensor, int]:
     """
     Returns (image_embeds, embed_dim) where image_embeds is (1, embed_dim).
     """

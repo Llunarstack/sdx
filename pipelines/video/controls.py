@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "ControlMode",
@@ -40,7 +41,7 @@ class ControlMode(str, Enum):
     GENERATE = "generate"
 
 
-def control_mode_help() -> Dict[str, str]:
+def control_mode_help() -> dict[str, str]:
     return {
         "lock": "Image frozen; text cannot redraw this entity",
         "identity": "Keep face/body identity; allow pose, outfit, lighting changes",
@@ -75,7 +76,7 @@ class ShotBinding:
     entity_id: str
     input_id: str = ""
     text: str = ""
-    control: Optional[ControlMode] = None
+    control: ControlMode | None = None
     part: str = ""
     mask_path: str = ""
     region_box: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
@@ -108,13 +109,13 @@ class EntityControlPlan:
     shot_index: int
     positive_prompt: str
     negative_prompt: str
-    bindings: List[InputBinding] = field(default_factory=list)
-    sample_extra_args: List[str] = field(default_factory=list)
+    bindings: list[InputBinding] = field(default_factory=list)
+    sample_extra_args: list[str] = field(default_factory=list)
     box_layout_path: str = ""
     dissect_prompt: str = ""
     init_image: str = ""
     init_strength: float = 0.65
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _mode_strength(mode: ControlMode) -> float:
@@ -130,7 +131,7 @@ def _mode_strength(mode: ControlMode) -> float:
 
 
 def _prompt_clause(binding: InputBinding) -> str:
-    parts: List[str] = []
+    parts: list[str] = []
     if binding.image and binding.image_role:
         parts.append(f"[image:{binding.entity_id} provides {binding.image_role}]")
     elif binding.image:
@@ -154,13 +155,13 @@ def compile_shot_control_plan(
     """Merge image+text bindings → prompts and sample.py argv fragments."""
     pos_parts = [base_prompt]
     neg_parts = [base_negative] if base_negative else []
-    extra: List[str] = []
-    dissect_parts: List[str] = []
+    extra: list[str] = []
+    dissect_parts: list[str] = []
     init_image = global_init_image
     init_strength = 0.65
     box_layout = ""
-    ref_images: List[str] = []
-    ref_weights: List[str] = []
+    ref_images: list[str] = []
+    ref_weights: list[str] = []
 
     for b in bindings:
         clause = _prompt_clause(b)
@@ -210,7 +211,7 @@ def compile_shot_control_plan(
     )
 
 
-def build_sample_args_for_plan(plan: EntityControlPlan) -> List[str]:
+def build_sample_args_for_plan(plan: EntityControlPlan) -> list[str]:
     args = list(plan.sample_extra_args)
     if plan.init_image and "--init-image" not in args:
         args.extend(["--init-image", plan.init_image, "--strength", str(plan.init_strength)])

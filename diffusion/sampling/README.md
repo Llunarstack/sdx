@@ -22,7 +22,7 @@ simple way to make sampling behave more like a policy:
 ## Minimal integration sketch
 
 ```python
-from diffusion.holy_grail import HolyGrailRecipe, build_holy_grail_step_plan
+from diffusion.sampling import HolyGrailRecipe, build_holy_grail_step_plan
 
 recipe = HolyGrailRecipe(base_cfg=7.5, control_base_scale=1.2, adapter_base_scale=1.0)
 for i in range(total_steps):

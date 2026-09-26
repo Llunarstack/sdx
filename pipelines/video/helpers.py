@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
 
 from .motion import estimate_motion_score
 from .retrieval import load_local_clip_library, rank_clips_for_shot
@@ -44,14 +44,14 @@ def preview_retrieval_rankings(
     local_library: str = "",
     catalog_path: str = "",
     top_k: int = 5,
-) -> List[dict]:
+) -> list[dict]:
     plan = preview_shot_plan(prompt)
     candidates = gather_retrieval_candidates(
         prompt,
         local_library=local_library,
         catalog_path=catalog_path,
     )
-    rows: List[dict] = []
+    rows: list[dict] = []
     for shot in plan.shots:
         ranked = rank_clips_for_shot(shot, candidates)[:top_k]
         rows.append(
@@ -69,12 +69,12 @@ def preview_retrieval_rankings(
 def build_motion_score_cache(
     library_dir: str | Path,
     *,
-    cache_path: Optional[Path] = None,
+    cache_path: Path | None = None,
     max_frames: int = 24,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     lib = Path(library_dir)
     cache_path = cache_path or lib / "motion_scores.json"
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
     if cache_path.is_file():
         try:
             scores = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -94,7 +94,7 @@ def create_clip_sidecar(
     video_path: str | Path,
     *,
     title: str = "",
-    tags: Optional[Sequence[str]] = None,
+    tags: Sequence[str] | None = None,
     license: str = "local",
     url: str = "",
 ) -> Path:

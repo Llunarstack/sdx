@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["ChromaticBeat", "parse_chromatic_arc", "sample_chromatic_for_shots"]
 
-_PALETTES: Dict[str, str] = {
+_PALETTES: dict[str, str] = {
     "hope": "warm gold and soft green accents",
     "dread": "sickly yellow-green and deep violet shadows",
     "rage": "saturated crimson highlights, charcoal blacks",
@@ -27,9 +28,9 @@ class ChromaticBeat:
     post_grade: str
 
 
-def parse_chromatic_arc(raw: Any) -> List[tuple[float, str]]:
+def parse_chromatic_arc(raw: Any) -> list[tuple[float, str]]:
     """Return list of (normalized_time, palette_key)."""
-    pts: List[tuple[float, str]] = []
+    pts: list[tuple[float, str]] = []
     if isinstance(raw, list):
         for i, v in enumerate(raw):
             if isinstance(v, str):
@@ -45,7 +46,7 @@ def parse_chromatic_arc(raw: Any) -> List[tuple[float, str]]:
     return sorted(pts, key=lambda x: x[0])
 
 
-def _sample_palette(pts: List[tuple[float, str]], u: float) -> str:
+def _sample_palette(pts: list[tuple[float, str]], u: float) -> str:
     if not pts:
         return "neutral"
     u = max(0.0, min(1.0, u))
@@ -60,17 +61,17 @@ def _sample_palette(pts: List[tuple[float, str]], u: float) -> str:
 
 
 def sample_chromatic_for_shots(
-    arc: List[tuple[float, str]],
+    arc: list[tuple[float, str]],
     shots: Sequence[Any],
     *,
     total_duration: float,
-) -> List[ChromaticBeat]:
+) -> list[ChromaticBeat]:
     if not arc:
         return []
     dur_sum = sum(float(getattr(s, "duration_sec", 0) or 0) for s in shots)
     total = dur_sum if dur_sum > 0 else total_duration
     elapsed = 0.0
-    out: List[ChromaticBeat] = []
+    out: list[ChromaticBeat] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         d = float(getattr(sh, "duration_sec", 0) or total / max(1, len(shots)))

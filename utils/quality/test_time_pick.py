@@ -6,7 +6,8 @@ Used by sample.py --pick-best (§11.3 IMPROVEMENTS.md).
 from __future__ import annotations
 
 import re
-from typing import Any, List, Optional, Sequence, Tuple, cast
+from collections.abc import Sequence
+from typing import Any, cast
 
 import numpy as np
 
@@ -29,7 +30,7 @@ except Exception:  # pragma: no cover - optional native path
 
 _clip_model: Any = None
 _clip_processor: Any = None
-_clip_model_id: Optional[str] = None
+_clip_model_id: str | None = None
 _vit_model: Any = None
 _vit_cfg: Any = None
 _vit_ckpt: Any = None
@@ -89,7 +90,7 @@ _CV2_FACE_CASCADE = None  # lazy: cv2.CascadeClassifier or False if unavailable
 _CV2_HOG = None  # lazy HOGDescriptor
 
 
-def _norm01(scores: Sequence[float]) -> List[float]:
+def _norm01(scores: Sequence[float]) -> list[float]:
     score_array = np.asarray(scores, dtype=np.float64)
     n = int(score_array.size)
     if n == 0:
@@ -110,7 +111,7 @@ def _norm01(scores: Sequence[float]) -> List[float]:
     return ((score_array - lo) / span).astype(np.float64).tolist()
 
 
-def _weighted_sum(score_lists: Sequence[Sequence[float]], weights: Sequence[float]) -> List[float]:
+def _weighted_sum(score_lists: Sequence[Sequence[float]], weights: Sequence[float]) -> list[float]:
     rows = list(score_lists)
     if not rows:
         return []
@@ -182,11 +183,11 @@ def score_ocr_match(rgb_uint8: np.ndarray, expected: str) -> float:
 
 
 def score_clip_similarity(
-    rgb_uint8_list: List[np.ndarray],
+    rgb_uint8_list: list[np.ndarray],
     prompt: str,
     device: str,
     model_id: str = "openai/clip-vit-base-patch32",
-) -> List[float]:
+) -> list[float]:
     """Per-image CLIP image-text similarity (higher = better prompt alignment)."""
     global _clip_model, _clip_processor, _clip_model_id
     if not prompt or not str(prompt).strip():
@@ -404,7 +405,7 @@ def infer_expected_people_count(prompt: str) -> int:
     return 0
 
 
-def infer_expected_object_count(prompt: str) -> Tuple[int, str]:
+def infer_expected_object_count(prompt: str) -> tuple[int, str]:
     """
     Infer intended repeated non-people object count from prompt text.
     Returns (count, object_hint). count=0 means no object-count intent detected.
@@ -608,7 +609,7 @@ def score_object_count_match(rgb_uint8: np.ndarray, expected_count: int, object_
 
 
 def pick_best_indices(
-    rgb_images: List[np.ndarray],
+    rgb_images: list[np.ndarray],
     prompt: str,
     metric: str,
     device: str,
@@ -620,7 +621,7 @@ def pick_best_indices(
     vit_ckpt_path: str = "",
     vit_use_adherence: bool = False,
     vit_num_ar_blocks: int = -1,
-) -> Tuple[int, List[float]]:
+) -> tuple[int, list[float]]:
     """
     Return (best_index, raw_scores_one_per_image).
     metric: aesthetic, combo_vit_hq, combo_vit_realism, combo_count_vit, plus prior clip/vit/combo_* names.
@@ -632,7 +633,7 @@ def pick_best_indices(
     if metric in ("none", ""):
         return 0, [0.0] * image_count
 
-    def _score_vit_quality() -> List[float]:
+    def _score_vit_quality() -> list[float]:
         """
         Return per-image quality score in roughly [0,1] from vit_quality model.
         If checkpoint/deps aren't available, returns neutral 0.5s.

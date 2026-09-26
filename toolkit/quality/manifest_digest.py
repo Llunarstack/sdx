@@ -15,16 +15,16 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> Dict[str, Any]:
+def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> dict[str, Any]:
     n = 0
     key_counts: Counter[str] = Counter()
     caption_keys = ("caption", "text", "prompt")
     has_image = 0
     has_caption = 0
-    sample_paths: List[str] = []
+    sample_paths: list[str] = []
 
     with path.open(encoding="utf-8", errors="replace") as f:
         for line in f:

@@ -11,7 +11,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 __all__ = [
     "ARTIST_STYLE_PATTERNS",
@@ -68,7 +69,7 @@ STYLE_PHRASE_PREFIXES = (
 )
 
 # --- 2D digital (non-photoreal): SFW-focused styles ---
-DIGITAL_ART_STYLE_TAGS_SFW: List[str] = [
+DIGITAL_ART_STYLE_TAGS_SFW: list[str] = [
     "vector_art",
     "flat_design",
     "corporate_memphis",
@@ -323,7 +324,7 @@ DIGITAL_ART_STYLE_TAGS_SFW: List[str] = [
 ]
 
 # --- 2D digital: mature / adult-genre style anchors (datasets, not content description) ---
-DIGITAL_ART_STYLE_TAGS_NSFW: List[str] = [
+DIGITAL_ART_STYLE_TAGS_NSFW: list[str] = [
     "hentai",
     "eroge_cg",
     "eroge_style",
@@ -423,7 +424,7 @@ DIGITAL_ART_STYLE_TAGS_NSFW: List[str] = [
 ]
 
 # --- 3D rendered / CG: SFW (games, film, product, archviz) ---
-RENDERED_3D_STYLE_TAGS_SFW: List[str] = [
+RENDERED_3D_STYLE_TAGS_SFW: list[str] = [
     "unreal_engine",
     "unreal_engine_5",
     "unity_3d",
@@ -665,7 +666,7 @@ RENDERED_3D_STYLE_TAGS_SFW: List[str] = [
 ]
 
 # --- 3D rendered: adult / mature game & CG style anchors ---
-RENDERED_3D_STYLE_TAGS_NSFW: List[str] = [
+RENDERED_3D_STYLE_TAGS_NSFW: list[str] = [
     "nsfw_3d",
     "adult_game_cg",
     "eroge_3d",
@@ -752,7 +753,7 @@ RENDERED_3D_STYLE_TAGS_NSFW: List[str] = [
 ]
 
 # --- Traditional hand-drawn / painted (physical media or faithful digital mimic) ---
-TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_SFW: List[str] = [
+TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_SFW: list[str] = [
     # Graphite & charcoal
     "pencil_sketch",
     "graphite_drawing",
@@ -985,7 +986,7 @@ TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_SFW: List[str] = [
 ]
 
 # Mature figure / academic studio vocabulary (adult models; art-school context).
-TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_NSFW: List[str] = [
+TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_NSFW: list[str] = [
     "academic_nude_figure_drawing",
     "life_drawing_nude_charcoal",
     "life_drawing_nude_pencil",
@@ -1004,7 +1005,7 @@ TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_NSFW: List[str] = [
 ]
 
 # Core artist / studio / legacy tags (kept first for stable ordering).
-_STYLE_TAGS_CORE: List[str] = [
+_STYLE_TAGS_CORE: list[str] = [
     # Anime / illustration (Danbooru-style; often use underscore)
     "makoto_shinkai",
     "ghibli",
@@ -1082,9 +1083,9 @@ _STYLE_TAGS_CORE: List[str] = [
 ]
 
 
-def _dedupe_preserve_order(items: List[str]) -> List[str]:
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for x in items:
         if x not in seen:
             seen.add(x)
@@ -1092,7 +1093,7 @@ def _dedupe_preserve_order(items: List[str]) -> List[str]:
     return out
 
 
-ARTIST_STYLE_TAGS: List[str] = _dedupe_preserve_order(
+ARTIST_STYLE_TAGS: list[str] = _dedupe_preserve_order(
     _STYLE_TAGS_CORE
     + DIGITAL_ART_STYLE_TAGS_SFW
     + DIGITAL_ART_STYLE_TAGS_NSFW
@@ -1103,7 +1104,7 @@ ARTIST_STYLE_TAGS: List[str] = _dedupe_preserve_order(
 )
 
 # When prompts use tags from a bucket, append medium-specific positive/negative hints (first-pass fidelity).
-STYLE_TAG_BUCKET_QUALITY_HINTS: Dict[str, Tuple[str, str]] = {
+STYLE_TAG_BUCKET_QUALITY_HINTS: dict[str, tuple[str, str]] = {
     "digital_sfw": (
         "coherent 2d digital finish, edge and fill language matching the chosen technique, unified color handling, deliberate flatness or texture where that style expects it",
         "photoreal skin or shading bleeding onto graphic flat regions, muddy gradients, banding in clean fills, accidental 3d lighting on purely 2d subjects, inconsistent line weight",
@@ -1130,7 +1131,7 @@ STYLE_TAG_BUCKET_QUALITY_HINTS: Dict[str, Tuple[str, str]] = {
     ),
 }
 
-_STYLE_TAG_BUCKET_ORDER: Tuple[Tuple[str, Sequence[str]], ...] = (
+_STYLE_TAG_BUCKET_ORDER: tuple[tuple[str, Sequence[str]], ...] = (
     ("digital_sfw", DIGITAL_ART_STYLE_TAGS_SFW),
     ("digital_nsfw", DIGITAL_ART_STYLE_TAGS_NSFW),
     ("traditional_sfw", TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_SFW),
@@ -1144,7 +1145,7 @@ STYLE_TAG_GLOBAL_BUCKET_POSITIVE = "single dominant focal hierarchy, consistent 
 STYLE_TAG_GLOBAL_BUCKET_NEGATIVE = "dueling focal points of equal weight, mid-image style pivot, accidental watermark or UI chrome, compression blocks read as texture"
 
 # (facet_id, trigger_tags, positive_hint, negative_hint) — tags are chosen from bucket lists where possible.
-STYLE_TAG_FACET_RULES: Tuple[Tuple[str, Tuple[str, ...], str, str], ...] = (
+STYLE_TAG_FACET_RULES: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
     (
         "pixel_dither_raster",
         (
@@ -1305,12 +1306,12 @@ STYLE_TAG_FACET_RULES: Tuple[Tuple[str, Tuple[str, ...], str, str], ...] = (
     ),
 )
 
-_FACET_BY_ID: Dict[str, Tuple[str, str]] = {r[0]: (r[2], r[3]) for r in STYLE_TAG_FACET_RULES}
+_FACET_BY_ID: dict[str, tuple[str, str]] = {r[0]: (r[2], r[3]) for r in STYLE_TAG_FACET_RULES}
 
 
 def _merge_csv_hints(*chunks: str) -> str:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for chunk in chunks:
         if not chunk or not str(chunk).strip():
             continue
@@ -1333,7 +1334,7 @@ def _prompt_contains_tag(text_lower: str, tag: str) -> bool:
     return alt in text_lower if alt != tag else False
 
 
-def detect_style_tag_buckets(prompt: str) -> Tuple[str, ...]:
+def detect_style_tag_buckets(prompt: str) -> tuple[str, ...]:
     """
     Return bucket ids (stable order) when the prompt contains any tag from that bucket's list.
     Uses substring match with underscore or space forms (same idea as ``extract_style_from_text``).
@@ -1341,7 +1342,7 @@ def detect_style_tag_buckets(prompt: str) -> Tuple[str, ...]:
     if not (prompt and prompt.strip()):
         return ()
     tl = prompt.lower()
-    found: List[str] = []
+    found: list[str] = []
     for bid, tag_list in _STYLE_TAG_BUCKET_ORDER:
         for tag in tag_list:
             if _prompt_contains_tag(tl, tag):
@@ -1350,7 +1351,7 @@ def detect_style_tag_buckets(prompt: str) -> Tuple[str, ...]:
     return tuple(found)
 
 
-def matching_style_tags_in_prompt(prompt: str, *, max_matches: int = 64) -> List[str]:
+def matching_style_tags_in_prompt(prompt: str, *, max_matches: int = 64) -> list[str]:
     """
     All known bucket-list tags present in the prompt (bucket scan order, deduped).
     Useful for logging, UI, or downstream LoRA routing.
@@ -1358,7 +1359,7 @@ def matching_style_tags_in_prompt(prompt: str, *, max_matches: int = 64) -> List
     if not (prompt and prompt.strip()):
         return []
     tl = prompt.lower()
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for _, tag_list in _STYLE_TAG_BUCKET_ORDER:
         for tag in tag_list:
@@ -1372,19 +1373,19 @@ def matching_style_tags_in_prompt(prompt: str, *, max_matches: int = 64) -> List
     return out
 
 
-def matched_style_facet_ids(prompt: str) -> Tuple[str, ...]:
+def matched_style_facet_ids(prompt: str) -> tuple[str, ...]:
     """Facet ids whose trigger tags appear in the prompt (declaration order)."""
     if not (prompt and prompt.strip()):
         return ()
     tl = prompt.lower()
-    found: List[str] = []
+    found: list[str] = []
     for facet_id, tags, _, _ in STYLE_TAG_FACET_RULES:
         if any(_prompt_contains_tag(tl, t) for t in tags):
             found.append(facet_id)
     return tuple(found)
 
 
-def describe_style_tag_enrichment(prompt: str) -> Dict[str, Any]:
+def describe_style_tag_enrichment(prompt: str) -> dict[str, Any]:
     """Structured summary of bucket hits, facets, matched tags, and merged fragments."""
     pos, neg = style_tag_quality_fragments(prompt)
     return {
@@ -1396,7 +1397,7 @@ def describe_style_tag_enrichment(prompt: str) -> Dict[str, Any]:
     }
 
 
-def style_tag_quality_fragments(prompt: str) -> Tuple[str, str]:
+def style_tag_quality_fragments(prompt: str) -> tuple[str, str]:
     """
     Positive and negative CSV fragments: global coherence, per-bucket hints, and facet hints.
     Safe to merge into caption / negative_caption alongside ``style_guidance_fragments``.
@@ -1405,8 +1406,8 @@ def style_tag_quality_fragments(prompt: str) -> Tuple[str, str]:
     facets = matched_style_facet_ids(prompt)
     if not buckets and not facets:
         return "", ""
-    pos_parts: List[str] = []
-    neg_parts: List[str] = []
+    pos_parts: list[str] = []
+    neg_parts: list[str] = []
     if buckets:
         pos_parts.append(STYLE_TAG_GLOBAL_BUCKET_POSITIVE)
         neg_parts.append(STYLE_TAG_GLOBAL_BUCKET_NEGATIVE)
@@ -1436,7 +1437,7 @@ def style_negative_addon(prompt: str) -> str:
     return n
 
 
-def append_style_tag_quality_to_prompts(positive: str, negative: str) -> Tuple[str, str]:
+def append_style_tag_quality_to_prompts(positive: str, negative: str) -> tuple[str, str]:
     """
     Merge style-tag quality hints into a caption pair (scripts, custom pipelines).
     Uses the same fragments as ``style_guidance_fragments``'s embedded tag pass.
@@ -1459,7 +1460,7 @@ def compact_style_summary_for_clip(prompt: str, *, max_chars: int = 220) -> str:
     """
     if not (prompt and prompt.strip()):
         return ""
-    chunks: List[str] = []
+    chunks: list[str] = []
     b = detect_style_tag_buckets(prompt)
     if b:
         chunks.append("buckets:" + "+".join(b))
@@ -1484,7 +1485,7 @@ def style_embedding_auxiliary_text(prompt: str, *, max_chars: int = 320) -> str:
     """
     if not (prompt and prompt.strip()):
         return ""
-    parts: List[str] = []
+    parts: list[str] = []
     ext = extract_style_from_text(prompt)
     if ext:
         parts.append(ext.replace("_", " ").strip())
@@ -1499,7 +1500,7 @@ def style_embedding_auxiliary_text(prompt: str, *, max_chars: int = 320) -> str:
     return s[: max(1, max_chars - 1)] + "…"
 
 
-def extract_style_from_text(text: str, known_tags: Optional[List[str]] = None) -> Optional[str]:
+def extract_style_from_text(text: str, known_tags: list[str] | None = None) -> str | None:
     """
     Extract a style or artist string from caption/prompt for style conditioning.
     Returns the first match from ARTIST_STYLE_PATTERNS, or a known tag if present.

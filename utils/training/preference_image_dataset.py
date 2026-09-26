@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 import torch
@@ -14,7 +13,7 @@ from utils.training.preference_jsonl import PreferencePair, iter_preference_json
 __all__ = ["PreferenceImageDataset", "collate_preference_batch"]
 
 
-def _resolve_path(p: str, root: Optional[Path]) -> Path:
+def _resolve_path(p: str, root: Path | None) -> Path:
     path = Path(p)
     if path.is_file():
         return path
@@ -40,7 +39,7 @@ class PreferenceImageDataset(torch.utils.data.Dataset):
     """
 
     def __init__(self, jsonl_path: str | Path, *, image_size: int, image_root: str | Path | None = None):
-        self.rows: List[PreferencePair] = list(iter_preference_jsonl(jsonl_path))
+        self.rows: list[PreferencePair] = list(iter_preference_jsonl(jsonl_path))
         if not self.rows:
             raise ValueError(f"No valid preference rows in {jsonl_path}")
         self.image_size = int(image_size)
@@ -64,7 +63,7 @@ class PreferenceImageDataset(torch.utils.data.Dataset):
         }
 
 
-def collate_preference_batch(batch: List[dict]) -> dict:
+def collate_preference_batch(batch: list[dict]) -> dict:
     return {
         "win": torch.stack([b["win"] for b in batch], dim=0),
         "lose": torch.stack([b["lose"] for b in batch], dim=0),

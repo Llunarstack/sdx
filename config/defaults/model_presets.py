@@ -2,7 +2,7 @@
 Model presets and OP modes for sample.py.
 
 Each preset is a light-weight bundle of defaults for cfg-scale, cfg-rescale,
-scheduler, and helper flags (hard-style, naturalize, anti-bleed, diversity, etc.).
+scheduler, solver, and helper flags (hard-style, naturalize, anti-bleed, diversity, etc.).
 
 sample.py should treat these as **soft defaults**:
 - Only apply a preset value when the user did NOT explicitly set that flag.
@@ -12,7 +12,7 @@ sample.py should treat these as **soft defaults**:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -20,29 +20,33 @@ class SamplerPreset:
     name: str
     description: str
     # Core sampler knobs
-    cfg_scale: Optional[float] = None
-    cfg_rescale: Optional[float] = None
-    scheduler: Optional[str] = None  # "ddim" | "euler"
-    steps: Optional[int] = None
+    cfg_scale: float | None = None
+    cfg_rescale: float | None = None
+    scheduler: str | None = None  # ays_dit | ays | ddim | …
+    solver: str | None = None  # dpmpp_2m | unipc | ddim | …
+    flow_solver: str | None = None
+    flow_schedule: str | None = None
+    steps: int | None = None
     # Hard styles / look controls
-    hard_style: Optional[str] = None  # "3d" | "realistic" | "3d_realistic" | "style_mix"
-    naturalize: Optional[bool] = None
-    naturalize_grain: Optional[float] = None
-    anti_bleed: Optional[bool] = None
-    diversity: Optional[bool] = None
-    anti_artifacts: Optional[bool] = None
-    strong_watermark: Optional[bool] = None
+    hard_style: str | None = None  # "3d" | "realistic" | "3d_realistic" | "style_mix"
+    naturalize: bool | None = None
+    naturalize_grain: float | None = None
+    anti_bleed: bool | None = None
+    diversity: bool | None = None
+    anti_artifacts: bool | None = None
+    strong_watermark: bool | None = None
 
 
-PRESETS: Dict[str, SamplerPreset] = {
+PRESETS: dict[str, SamplerPreset] = {
     # SDXL-style: strong prompt adherence, photorealistic by default.
     "sdxl": SamplerPreset(
         name="sdxl",
         description="SDXL-style preset: photorealistic, strong adherence, natural look.",
         cfg_scale=6.5,
         cfg_rescale=0.7,
-        scheduler="ddim",
-        steps=35,
+        scheduler="ays_dit",
+        solver="dpmpp_2m",
+        steps=28,
         hard_style="realistic",
         naturalize=True,
         naturalize_grain=0.015,
@@ -57,8 +61,11 @@ PRESETS: Dict[str, SamplerPreset] = {
         description="Flux-style preset: realistic/photographic; avoids grid artifact and burn.",
         cfg_scale=3.5,
         cfg_rescale=0.7,
-        scheduler="ddim",
-        steps=30,
+        scheduler="ays_dit",
+        solver="dpmpp_2m",
+        flow_solver="dpmpp_2m",
+        flow_schedule="ays",
+        steps=24,
         hard_style="realistic",
         naturalize=True,
         naturalize_grain=0.02,
@@ -73,7 +80,10 @@ PRESETS: Dict[str, SamplerPreset] = {
         description="Anime/stylized preset: strong quality tags, semi-realistic/2.5D support.",
         cfg_scale=7.0,
         cfg_rescale=0.0,
-        scheduler="euler",
+        scheduler="ays_dit",
+        solver="dpmpp_2m",
+        flow_solver="heun",
+        flow_schedule="ays",
         steps=28,
         hard_style="style_mix",
         naturalize=False,
@@ -89,8 +99,9 @@ PRESETS: Dict[str, SamplerPreset] = {
         description="Z-Image-style preset: higher diversity, less centering, strong composition.",
         cfg_scale=6.0,
         cfg_rescale=0.7,
-        scheduler="ddim",
-        steps=40,
+        scheduler="ays_dit",
+        solver="dpmpp_2m",
+        steps=32,
         hard_style=None,
         naturalize=True,
         naturalize_grain=0.015,
@@ -105,7 +116,8 @@ PRESETS: Dict[str, SamplerPreset] = {
         description="Superior Stack preset: strong adherence, natural look, anti-artifact; pair with --pick-best superior_composite.",
         cfg_scale=7.0,
         cfg_rescale=0.7,
-        scheduler="ddim",
+        scheduler="ays_dit",
+        solver="dpmpp_2m",
         steps=28,
         hard_style="realistic",
         naturalize=True,
@@ -115,10 +127,25 @@ PRESETS: Dict[str, SamplerPreset] = {
         anti_artifacts=True,
         strong_watermark=True,
     ),
+    # Few-step quality via UniPC.
+    "fast": SamplerPreset(
+        name="fast",
+        description="Fast few-step preset: UniPC + AYS-DiT (~15 steps).",
+        cfg_scale=6.5,
+        cfg_rescale=0.7,
+        scheduler="ays_dit",
+        solver="unipc",
+        flow_solver="heun",
+        flow_schedule="karras",
+        steps=15,
+        naturalize=True,
+        anti_bleed=True,
+        anti_artifacts=True,
+    ),
 }
 
 
-OP_MODES: Dict[str, Dict[str, Any]] = {
+OP_MODES: dict[str, dict[str, Any]] = {
     # Portrait photography: faces, skin, no AI slop.
     "portrait": {
         "naturalize": True,
@@ -137,6 +164,18 @@ OP_MODES: Dict[str, Dict[str, Any]] = {
         "anti_bleed": True,
         "diversity": True,
         "anti_artifacts": True,
+    },
+    # Few-step UniPC path.
+    "fast": {
+        "solver": "unipc",
+        "scheduler": "ays_dit",
+        "steps": 15,
+    },
+    # Max quality multistep path.
+    "quality": {
+        "solver": "dpmpp_2m",
+        "scheduler": "ays_dit",
+        "steps": 28,
     },
 }
 
@@ -161,7 +200,10 @@ def apply_preset_to_args(args: Any, preset_name: str) -> None:
 
     maybe_set("cfg_scale", preset.cfg_scale, (0.0, 7.5, None))
     maybe_set("cfg_rescale", preset.cfg_rescale, (0.0, None))
-    maybe_set("scheduler", preset.scheduler, ("ddim", None))
+    maybe_set("scheduler", preset.scheduler, ("ddim", "ays_dit", None))
+    maybe_set("solver", preset.solver, ("ddim", "dpmpp_2m", None))
+    maybe_set("flow_solver", preset.flow_solver, ("euler", "dpmpp_2m", None))
+    maybe_set("flow_schedule", preset.flow_schedule, ("linear", "ays", None))
     maybe_set("steps", preset.steps, (0, 50, None))
     maybe_set("hard_style", preset.hard_style, (None, ""))
     maybe_set("naturalize_grain", preset.naturalize_grain, (0.0, 0.015, None))
@@ -186,6 +228,12 @@ def apply_op_mode_to_args(args: Any, mode_name: str) -> None:
     overrides = OP_MODES.get(mode_name)
     if not overrides:
         return
+    _sampler_defaults = {
+        "solver": {"ddim", "dpmpp_2m", "unipc", ""},
+        "scheduler": {"ddim", "ays_dit", "ays", ""},
+        "flow_solver": {"euler", "dpmpp_2m", "heun", ""},
+        "flow_schedule": {"linear", "ays", "karras", ""},
+    }
     for key, value in overrides.items():
         if not hasattr(args, key):
             continue
@@ -193,6 +241,13 @@ def apply_op_mode_to_args(args: Any, mode_name: str) -> None:
         if isinstance(value, bool):
             if value and not current:
                 setattr(args, key, True)
+        elif isinstance(value, str):
+            allowed = _sampler_defaults.get(key)
+            if allowed is not None:
+                if current in allowed or current is None:
+                    setattr(args, key, value)
+            elif current in (None, ""):
+                setattr(args, key, value)
         else:
             if current in (0, 0.0, None):
                 setattr(args, key, value)

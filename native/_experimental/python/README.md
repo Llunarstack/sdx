@@ -1,6 +1,6 @@
 # Python bridge (`sdx_native`)
 
-Package **`sdx_native`** lives under **`native/python/sdx_native/`** so native helpers stay next to Rust/Zig/Go/C++ sources.
+Package **`sdx_native`** lives under **`native/_experimental/python/sdx_native/`** so native helpers stay next to Rust/Zig/Go/C++ sources.
 
 | Module | Role |
 |--------|------|
@@ -15,7 +15,7 @@ Package **`sdx_native`** lives under **`native/python/sdx_native/`** so native h
 
 **Imports**
 
-- Preferred (with repo root on `PYTHONPATH` and `native/python` discoverable): `from sdx_native.native_tools import native_stack_status`
-- Stable alias: `from utils.nt import native_stack_status` (unified shim adds `native/python` to `sys.path`)
+- Preferred (with repo root on `PYTHONPATH` and `native/_experimental/python` discoverable): `from sdx_native.native_tools import native_stack_status`
+- Stable alias: `from utils.nt import native_stack_status` (`utils/nt.py` re-exports `utils.native`, which adds `native/_experimental/python` to `sys.path`)
 
-Pytest adds `native/python` via **`pyproject.toml`** (`pythonpath`).
+Pytest adds `native/_experimental/python` via **`pyproject.toml`** (`pythonpath`).

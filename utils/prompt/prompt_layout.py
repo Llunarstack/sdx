@@ -24,9 +24,10 @@ Schema (all keys optional except you should set at least one content section):
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
+from typing import Any
 
 __all__ = [
     "CompiledPromptLayout",
@@ -45,7 +46,7 @@ __all__ = [
 ]
 
 # Short labels so T5 can attend to section boundaries without special tokens.
-T5_SECTION_LABELS: Dict[str, str] = {
+T5_SECTION_LABELS: dict[str, str] = {
     "quality": "QUALITY",
     "intent": "INTENT",
     "subjects": "SUBJECTS",
@@ -59,10 +60,10 @@ T5_SECTION_LABELS: Dict[str, str] = {
     "color_script": "COLOR",
 }
 
-SectionValue = Union[str, Sequence[str], None]
+SectionValue = str | Sequence[str] | None
 
 # Order of section names in the final prompt (only non-empty sections are emitted).
-PRESET_SECTION_ORDER: Dict[str, Tuple[str, ...]] = {
+PRESET_SECTION_ORDER: dict[str, tuple[str, ...]] = {
     "quality_first": (
         "quality",
         "intent",
@@ -114,9 +115,9 @@ class CompiledPromptLayout:
     positive: str
     negative: str
     preset: str = DEFAULT_PRESET_ORDER
-    sections_used: Tuple[str, ...] = field(default_factory=tuple)
+    sections_used: tuple[str, ...] = field(default_factory=tuple)
     # (section_name, body) in preset order — used for T5-friendly encoding.
-    section_blocks: Tuple[Tuple[str, str], ...] = field(default_factory=tuple)
+    section_blocks: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
     def to_t5_encoder_string(self) -> str:
         """
@@ -137,22 +138,22 @@ class CompiledPromptLayout:
         return "\n".join(lines)
 
 
-def _as_str_list(value: SectionValue) -> List[str]:
+def _as_str_list(value: SectionValue) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
         s = value.strip()
         return [s] if s else []
-    out: List[str] = []
+    out: list[str] = []
     for x in value:
         if isinstance(x, str) and x.strip():
             out.append(x.strip())
     return out
 
 
-def _dedupe_csv(tokens: Sequence[str]) -> List[str]:
+def _dedupe_csv(tokens: Sequence[str]) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for t in tokens:
         k = t.lower().strip()
         if not k or k in seen:
@@ -170,7 +171,7 @@ def _compile_subjects(
     subjects: Any,
     *,
     wrap_labels: bool,
-    neg_out: List[str],
+    neg_out: list[str],
 ) -> str:
     if subjects is None:
         return ""
@@ -179,7 +180,7 @@ def _compile_subjects(
     if not isinstance(subjects, list):
         return ""
 
-    chunks: List[str] = []
+    chunks: list[str] = []
     for i, item in enumerate(subjects):
         if isinstance(item, str) and item.strip():
             chunks.append(item.strip())
@@ -202,9 +203,9 @@ def _compile_subjects(
     return _join_csv(chunks)
 
 
-def _section_strings(data: Mapping[str, Any], subject_neg_out: List[str]) -> Dict[str, str]:
+def _section_strings(data: Mapping[str, Any], subject_neg_out: list[str]) -> dict[str, str]:
     """Map section name -> single comma-joined string (empty if missing)."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for key in (
         "quality",
         "intent",
@@ -239,11 +240,11 @@ def compile_prompt_layout(data: Mapping[str, Any]) -> CompiledPromptLayout:
         preset = DEFAULT_PRESET_ORDER
         order = PRESET_SECTION_ORDER[DEFAULT_PRESET_ORDER]
 
-    subj_neg_tokens: List[str] = []
+    subj_neg_tokens: list[str] = []
     sec = _section_strings(data, subj_neg_tokens)
-    pos_parts: List[str] = []
-    used: List[str] = []
-    blocks: List[Tuple[str, str]] = []
+    pos_parts: list[str] = []
+    used: list[str] = []
+    blocks: list[tuple[str, str]] = []
     for name in order:
         if name == "subjects":
             s = sec.get("subjects", "")
@@ -267,7 +268,7 @@ def compile_prompt_layout(data: Mapping[str, Any]) -> CompiledPromptLayout:
     )
 
 
-def load_prompt_layout_file(path: Union[str, Path]) -> CompiledPromptLayout:
+def load_prompt_layout_file(path: str | Path) -> CompiledPromptLayout:
     """Load JSON object from path and compile."""
     p = Path(path)
     if not p.is_file():
@@ -295,9 +296,9 @@ def substitute_compiled_layout_in_t5_prompt(full_text: str, compiled: CompiledPr
     return full_text.replace(core, structured, 1)
 
 
-def t5_segment_texts_from_layout(compiled: CompiledPromptLayout) -> List[str]:
+def t5_segment_texts_from_layout(compiled: CompiledPromptLayout) -> list[str]:
     """One string per non-empty layout section for segmented T5 tokenization."""
-    out: List[str] = []
+    out: list[str] = []
     for name, body in compiled.section_blocks:
         b = (body or "").strip()
         if not b:
@@ -332,7 +333,7 @@ def triple_clip_caption(compiled: CompiledPromptLayout, flat_full: str) -> str:
     flat = (flat_full or "").strip()
     if not compiled.section_blocks:
         return flat
-    parts: List[str] = []
+    parts: list[str] = []
     for name, body in compiled.section_blocks:
         b = (body or "").strip()
         if not b:
@@ -353,7 +354,7 @@ def multi_clip_caption(compiled: CompiledPromptLayout, flat_full: str) -> str:
     return triple_clip_caption(compiled, flat_full)
 
 
-def t5_segment_texts_for_full_prompt(compiled: CompiledPromptLayout, flat_full: str) -> List[str]:
+def t5_segment_texts_for_full_prompt(compiled: CompiledPromptLayout, flat_full: str) -> list[str]:
     """
     Segmented T5: layout sections plus an ``OTHER:`` segment for merged user / control text after the core,
     so triple conditioning stays aligned with the full :func:`merge_prompt_with_layout` string.

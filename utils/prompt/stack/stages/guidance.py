@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any
 
 from ..context import PromptContext, StackMode
 from ..tokens import append_csv
@@ -97,7 +97,7 @@ def stage_guidance(ctx: PromptContext) -> None:
         args.prompt = prompt
 
 
-def _apply_photo_realism(prompt: str, args: Any) -> Tuple[str, str, dict]:
+def _apply_photo_realism(prompt: str, args: Any) -> tuple[str, str, dict]:
     try:
         from utils.prompt.photo_realism import (
             infer_photo_realism_controls,
@@ -209,7 +209,7 @@ def apply_training_guidance_pair(
     style_guidance_mode: str = "none",
     style_guidance_artists: bool = True,
     include_art_guidance_photography: bool = True,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Training-side helper: same guidance fragments as ``sample.py`` / ``t2i_dataset`` (pos + neg).
 

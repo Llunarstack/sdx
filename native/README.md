@@ -18,7 +18,7 @@ native/
     build/       # gitignored — local CMake output only
   go/sdx-manifest/
   mojo/src/      # optional Mojo experiments
-  python/sdx_native/  # ctypes + Python fallbacks
+  _experimental/python/sdx_native/  # ctypes + Python fallbacks
 ```
 
 **CUDA:** only under `cpp/cuda/`. See [cpp/cuda/README.md](cpp/cuda/README.md).  
@@ -38,7 +38,7 @@ native/
 | **CUDA** `cpp/cuda/` | Optional GPU libs; [cpp/cuda/README.md](cpp/cuda/README.md); `-DSDX_BUILD_CUDA=ON`. |
 | **Go** `go/sdx-manifest` | JSONL **merge**, **explore-stats**, **explore-dedupe** (style manifests). |
 | **Mojo** `mojo/` | [mojo/README.md](mojo/README.md) — `sdx_style_tokens.mojo`, Pixi env. |
-| **Python** `python/sdx_native/` | ctypes wrappers + pure-Python fallbacks. |
+| **Python** `_experimental/python/sdx_native/` | ctypes wrappers + pure-Python fallbacks. |
 
 ## Build (quick)
 
@@ -179,9 +179,10 @@ from utils.prompt.style_native import native_stack_status, pick_best_embedding_i
 
 | Location | Role |
 |----------|------|
-| **`native/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `text_hygiene.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
-| **`utils/native/__init__.py`** | Unified shim (adds `native/python` to `sys.path`) and re-exports `sdx_native` helpers for stable `from utils.nt import …` imports. |
-| **`pyproject.toml`** | Pytest **`pythonpath`** includes `native/python` so `import sdx_native` works in tests. |
+| **`native/_experimental/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `text_hygiene.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
+| **`utils/native/__init__.py`** | Unified shim (adds `native/_experimental/python` to `sys.path`) and re-exports `sdx_native` helpers. |
+| **`utils/nt.py`** | Stable alias: `from utils.nt import …` re-exports `utils.native`. |
+| **`pyproject.toml`** | Pytest **`pythonpath`** includes `native/_experimental/python` so `import sdx_native` works in tests. |
 
 **Wired scripts**
 

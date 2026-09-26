@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -32,16 +32,16 @@ import torch.nn.functional as F
 def merge_hierarchical_captions(
     base_caption: str,
     *,
-    caption_global: Optional[str] = None,
-    caption_local: Optional[str] = None,
-    entity_captions: Optional[Dict[str, str]] = None,
+    caption_global: str | None = None,
+    caption_local: str | None = None,
+    entity_captions: dict[str, str] | None = None,
     separator: str = " | ",
 ) -> str:
     """
     Flatten optional global/local/entity captions into one T5 string.
     Empty parts are skipped.
     """
-    parts: List[str] = []
+    parts: list[str] = []
     if caption_global and caption_global.strip():
         parts.append(caption_global.strip())
     if base_caption and base_caption.strip():
@@ -61,7 +61,7 @@ def hierarchical_caption_dropout(
     *,
     p_drop_global: float = 0.0,
     p_drop_local: float = 0.0,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> str:
     """
     Randomly drop segments separated by `` | `` (as produced by ``merge_hierarchical_captions``)
@@ -74,7 +74,7 @@ def hierarchical_caption_dropout(
     if len(segs) <= 1:
         return merged
     # Heuristic: first segment = global, last = local if 3+ parts; middle = base.
-    keep: List[str] = []
+    keep: list[str] = []
     for i, s in enumerate(segs):
         if i == 0 and p_drop_global > 0 and r.random() < p_drop_global:
             continue
@@ -84,7 +84,7 @@ def hierarchical_caption_dropout(
     return " | ".join(keep) if keep else merged
 
 
-def merge_hierarchical_jsonl_record(sample: Dict[str, Any], separator: str = " | ") -> str:
+def merge_hierarchical_jsonl_record(sample: dict[str, Any], separator: str = " | ") -> str:
     """Read optional keys from a manifest row and return a merged caption string."""
     base = (sample.get("caption") or "").strip()
     cg = sample.get("caption_global")
@@ -160,7 +160,7 @@ def foreground_attention_alignment_loss(
     *,
     token_start: int = 0,
     token_end: int = 0,
-    sample_valid: Optional[torch.Tensor] = None,
+    sample_valid: torch.Tensor | None = None,
     min_fg_patch_mass: float = 0.0,
     eps: float = 1e-6,
 ) -> torch.Tensor:
@@ -234,8 +234,8 @@ def token_coverage_loss(
     token_start: int = 0,
     token_end: int = 0,
     target_coverage: float = 0.025,
-    sample_valid: Optional[torch.Tensor] = None,
-    token_weights: Optional[torch.Tensor] = None,
+    sample_valid: torch.Tensor | None = None,
+    token_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
     Penalize neglected prompt tokens by pushing max patch attention per token above ``target_coverage``.
@@ -273,8 +273,8 @@ def foveated_random_crop_box(
     width: int,
     *,
     crop_frac: float,
-    rng: Optional[random.Random] = None,
-) -> Tuple[int, int, int, int]:
+    rng: random.Random | None = None,
+) -> tuple[int, int, int, int]:
     """
     Return (y0, x0, y1, x1) for a random crop covering ``crop_frac`` of the shorter side
     (then clamped to image bounds). Use to bias training toward random subregions (foveated views).
@@ -302,9 +302,9 @@ class PartAwareCaptionConfig:
 
 def apply_part_aware_caption_pipeline(
     raw_caption: str,
-    sample: Dict[str, Any],
+    sample: dict[str, Any],
     cfg: PartAwareCaptionConfig,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> str:
     """Merge + optional dropout for one manifest row."""
     if not cfg.use_hierarchical_merge:
@@ -320,7 +320,7 @@ def apply_part_aware_caption_pipeline(
     )
 
 
-def dit_patch_grid_hw(num_patches: int) -> Tuple[int, int]:
+def dit_patch_grid_hw(num_patches: int) -> tuple[int, int]:
     """Square grid side for DiT patch tokens (``num_patches = h * w``)."""
     n = int(num_patches)
     s = int(round(n**0.5))
@@ -335,13 +335,13 @@ def compute_dit_attn_grounding_loss(
     diffusion,
     latents_bchw: torch.Tensor,
     t: torch.Tensor,
-    model_kwargs: Dict[str, Any],
+    model_kwargs: dict[str, Any],
     grounding_mask_b1hw: torch.Tensor,
     training_noise: torch.Tensor,
     noise_offset: float = 0.0,
     token_start: int = 0,
     token_end: int = 0,
-    sample_valid: Optional[torch.Tensor] = None,
+    sample_valid: torch.Tensor | None = None,
     min_fg_patch_mass: float = 0.0,
 ) -> torch.Tensor:
     """
@@ -380,7 +380,7 @@ def capture_dit_block0_cross_attn(
     diffusion,
     latents_bchw: torch.Tensor,
     t: torch.Tensor,
-    model_kwargs: Dict[str, Any],
+    model_kwargs: dict[str, Any],
     training_noise: torch.Tensor,
     noise_offset: float = 0.0,
 ) -> torch.Tensor:
@@ -416,7 +416,7 @@ def grounding_loss_from_attn(
     grounding_mask_b1hw: torch.Tensor,
     token_start: int = 0,
     token_end: int = 0,
-    sample_valid: Optional[torch.Tensor] = None,
+    sample_valid: torch.Tensor | None = None,
     min_fg_patch_mass: float = 0.0,
 ) -> torch.Tensor:
     """Compute grounding loss from pre-captured attention."""
@@ -441,8 +441,8 @@ def token_coverage_loss_from_attn(
     token_start: int = 0,
     token_end: int = 0,
     target_coverage: float = 0.025,
-    sample_valid: Optional[torch.Tensor] = None,
-    token_weights: Optional[torch.Tensor] = None,
+    sample_valid: torch.Tensor | None = None,
+    token_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Compute token coverage loss from pre-captured block-0 attention."""
     return token_coverage_loss(

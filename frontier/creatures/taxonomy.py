@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Tuple
 
 
 class CreatureFamily(str, Enum):
@@ -34,7 +33,7 @@ class CreaturePlan:
     negative: str
 
 
-_FAMILY_RULES: Tuple[Tuple[re.Pattern, CreatureFamily], ...] = (
+_FAMILY_RULES: tuple[tuple[re.Pattern, CreatureFamily], ...] = (
     (re.compile(r"\b(dragon|wyvern|drake|wyrm)\b", re.I), CreatureFamily.DRACONIC),
     (re.compile(r"\b(griffin|eagle|hawk|owl|phoenix|harpy|bird)\b", re.I), CreatureFamily.AVIAN),
     (re.compile(r"\b(cat|tiger|lion|panther|feline)\b", re.I), CreatureFamily.FELINE),
@@ -47,7 +46,7 @@ _FAMILY_RULES: Tuple[Tuple[re.Pattern, CreatureFamily], ...] = (
 )
 
 
-_PLANS: Dict[CreatureFamily, CreaturePlan] = {
+_PLANS: dict[CreatureFamily, CreaturePlan] = {
     CreatureFamily.DRACONIC: CreaturePlan(
         CreatureFamily.DRACONIC,
         "four legs or bipedal haunches with wings anchored at shoulders, long neck, tail counterbalance",
@@ -131,7 +130,7 @@ class CreatureTaxonomy:
             return CreatureFamily.GENERIC
         return CreatureFamily.GENERIC
 
-    def plan(self, prompt: str) -> Optional[CreaturePlan]:
+    def plan(self, prompt: str) -> CreaturePlan | None:
         fam = self.classify(prompt)
         if fam == CreatureFamily.GENERIC and not re.search(
             r"\b(creature|monster|beast|dragon|alien)\b", prompt or "", re.I
@@ -139,7 +138,7 @@ class CreatureTaxonomy:
             return None
         return _PLANS[fam]
 
-    def prompt_fragments(self, prompt: str) -> Tuple[str, str]:
+    def prompt_fragments(self, prompt: str) -> tuple[str, str]:
         cp = self.plan(prompt)
         if cp is None:
             return "", ""

@@ -14,7 +14,6 @@ trainer can keep that mapping faithful.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -32,7 +31,7 @@ class CascadedPipelineOutput:
 
     base_latents: torch.Tensor
     refined_latents: torch.Tensor
-    bridge_cycle_loss: Optional[torch.Tensor]
+    bridge_cycle_loss: torch.Tensor | None
 
 
 class CascadedMultimodalPipeline(nn.Module):
@@ -55,7 +54,7 @@ class CascadedMultimodalPipeline(nn.Module):
         self.refiner_model = refiner_model
         self.bridge = RAELatentBridge(rae_channels, dit_channels=dit_channels) if int(rae_channels) > 0 else None
 
-    def _adapt_in(self, latents: torch.Tensor) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def _adapt_in(self, latents: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Map incoming latents into DiT space (no-op without a bridge); also return its cycle loss."""
         if self.bridge is None:
             return latents, None

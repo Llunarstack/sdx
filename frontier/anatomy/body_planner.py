@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
 
 
 class BodyMode(str, Enum):
@@ -26,7 +25,7 @@ class BodyMode(str, Enum):
 @dataclass(frozen=True)
 class AnatomyRisk:
     score: float  # 0..1 likelihood of accidental bad anatomy
-    triggers: Tuple[str, ...]
+    triggers: tuple[str, ...]
     hand_focus: bool
     full_body: bool
 
@@ -154,7 +153,7 @@ class BodyPlanner:
     def assess_risk(self, prompt: str, mode: BodyMode | None = None) -> AnatomyRisk:
         text = prompt or ""
         mode = mode or self.detect_mode(text)
-        triggers: List[str] = []
+        triggers: list[str] = []
         score = 0.0
         hand_focus = bool(_HANDS.search(text))
         full_body = bool(_FULL.search(text))

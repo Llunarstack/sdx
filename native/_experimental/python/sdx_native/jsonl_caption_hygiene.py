@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any
 
 from .text_hygiene import normalize_caption_for_training
 
 
-def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open("r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -35,14 +36,14 @@ def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
 
 
 def normalize_jsonl_caption_fields(
-    rec: Dict[str, Any],
+    rec: dict[str, Any],
     *,
     caption_key: str = "caption",
     negative_caption_key: str = "negative_caption",
     negative_prompt_fallback_key: str = "negative_prompt",
     unicode_form: str = "NFKC",
     strip_controls: bool = True,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Normalize caption-like fields in a JSONL row in-place.
 

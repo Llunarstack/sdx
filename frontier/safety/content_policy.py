@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
 
 
 class PolicyTier(str, Enum):
@@ -29,7 +28,7 @@ class PolicyDecision(str, Enum):
 class SafetyReport:
     decision: PolicyDecision
     tier: PolicyTier
-    reasons: Tuple[str, ...]
+    reasons: tuple[str, ...]
     steer_positive: str = ""
     steer_negative: str = ""
 
@@ -65,7 +64,7 @@ class ContentPolicy:
             return SafetyReport(PolicyDecision.ALLOW, self.tier, ())
 
         text = f"{prompt} {negative}".strip()
-        reasons: List[str] = []
+        reasons: list[str] = []
 
         sexual = bool(_SEXUAL.search(text))
         youth = bool(_YOUTH.search(text))
@@ -102,7 +101,7 @@ class ContentPolicy:
 
         return SafetyReport(PolicyDecision.ALLOW, self.tier, tuple(reasons))
 
-    def apply_steering(self, prompt: str, report: SafetyReport) -> Tuple[str, str]:
+    def apply_steering(self, prompt: str, report: SafetyReport) -> tuple[str, str]:
         if report.decision != PolicyDecision.STEER:
             return prompt, ""
         pos_extra = report.steer_positive

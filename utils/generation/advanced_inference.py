@@ -6,8 +6,9 @@ Integrated with precision control, anatomy correction, consistency management, a
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
@@ -56,7 +57,7 @@ class PromptOptimizer:
         }
 
     def optimize_prompt(
-        self, prompt: str, style: Optional[str] = None, add_quality: bool = True, boost_subject: bool = True
+        self, prompt: str, style: str | None = None, add_quality: bool = True, boost_subject: bool = True
     ) -> str:
         """Optimize a prompt for better generation."""
         # Clean and normalize prompt
@@ -133,7 +134,7 @@ class PromptOptimizer:
         tag_lower = tag.lower().strip("()[]")
         return any(indicator in tag_lower for indicator in subject_indicators)
 
-    def suggest_improvements(self, prompt: str) -> List[str]:
+    def suggest_improvements(self, prompt: str) -> list[str]:
         """Suggest improvements for a prompt."""
         suggestions = []
 
@@ -170,7 +171,7 @@ class BatchInference:
         vae,
         device,
         *,
-        generate_fn: Optional[Callable[..., Image.Image]] = None,
+        generate_fn: Callable[..., Image.Image] | None = None,
     ):
         self.model = model
         self.diffusion = diffusion
@@ -181,8 +182,8 @@ class BatchInference:
         self._generate_fn = generate_fn
 
     def generate_batch(
-        self, prompts: List[str], negative_prompts: Optional[List[str]] = None, **generation_kwargs
-    ) -> List[Image.Image]:
+        self, prompts: list[str], negative_prompts: list[str] | None = None, **generation_kwargs
+    ) -> list[Image.Image]:
         """Generate images for a batch of prompts."""
         if negative_prompts is None:
             negative_prompts = [""] * len(prompts)
@@ -232,7 +233,7 @@ class BatchInference:
         prompts = []
         negative_prompts = []
 
-        with open(prompt_file, "r") as f:
+        with open(prompt_file) as f:
             if prompt_file.endswith(".json"):
                 data = json.load(f)
                 for item in data:
@@ -387,7 +388,7 @@ class QualityAnalyzer:
         return float(np.std(img_array))
 
     @staticmethod
-    def detect_artifacts(image: Image.Image) -> Dict[str, float]:
+    def detect_artifacts(image: Image.Image) -> dict[str, float]:
         """Detect common generation artifacts."""
         artifacts = {"blur_score": 0.0, "noise_score": 0.0, "compression_score": 0.0}
 
@@ -418,7 +419,7 @@ class QualityAnalyzer:
         return artifacts
 
     @staticmethod
-    def analyze_quality(image: Image.Image) -> Dict[str, Any]:
+    def analyze_quality(image: Image.Image) -> dict[str, Any]:
         """Comprehensive quality analysis."""
         analysis = {
             "sharpness": QualityAnalyzer.calculate_sharpness(image),
@@ -449,7 +450,7 @@ class QualityAnalyzer:
 
 
 def create_image_grid(
-    images: List[Image.Image], cols: int = 4, padding: int = 10, background_color: str = "white"
+    images: list[Image.Image], cols: int = 4, padding: int = 10, background_color: str = "white"
 ) -> Image.Image:
     """Create a grid of images."""
     if not images:

@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class BeautifulParadox(str, Enum):
@@ -28,7 +27,7 @@ class ParadoxPlan:
     suppress_contradiction_resolve: bool
 
 
-_PATTERNS: Tuple[Tuple[re.Pattern, BeautifulParadox, str, str], ...] = (
+_PATTERNS: tuple[tuple[re.Pattern, BeautifulParadox, str, str], ...] = (
     (
         re.compile(r"\b(escher|impossible stairs|penrose|relativity)\b", re.I),
         BeautifulParadox.ESCHER,
@@ -64,7 +63,7 @@ class ParadoxKeeper:
                 return ParadoxPlan(kind, pos, neg, suppress_contradiction_resolve=True)
         return ParadoxPlan(BeautifulParadox.NONE, "", "", False)
 
-    def fragments(self, prompt: str) -> Tuple[str, str, bool]:
+    def fragments(self, prompt: str) -> tuple[str, str, bool]:
         p = self.plan(prompt)
         return p.positive, p.negative, p.suppress_contradiction_resolve
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "ScreenDirectionIssue",
@@ -37,12 +38,12 @@ class ScreenDirectionIssue:
 
 @dataclass(slots=True)
 class ScreenDirectionReport:
-    directions: Dict[str, str]
-    issues: List[ScreenDirectionIssue]
-    prompt_patches: Dict[str, str]
+    directions: dict[str, str]
+    issues: list[ScreenDirectionIssue]
+    prompt_patches: dict[str, str]
 
 
-def parse_screen_direction_config(raw: Any) -> Dict[str, Any]:
+def parse_screen_direction_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -77,9 +78,9 @@ def track_screen_direction(shots: Sequence[Any], *, config: Mapping[str, Any]) -
         return ScreenDirectionReport(directions={}, issues=[], prompt_patches={})
     strict = bool(config.get("strict"))
     level = "error" if strict else "warn"
-    directions: Dict[str, str] = {}
-    issues: List[ScreenDirectionIssue] = []
-    patches: Dict[str, str] = {}
+    directions: dict[str, str] = {}
+    issues: list[ScreenDirectionIssue] = []
+    patches: dict[str, str] = {}
 
     prev_dir = ""
     prev_id = ""

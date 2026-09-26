@@ -5,7 +5,6 @@ Stateful **guidance session** for multi-step sampling (APG reverse momentum, etc
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 
@@ -14,7 +13,7 @@ import torch
 class GuidanceSession:
     """Carries cross-step state through a denoise trajectory."""
 
-    prev_apg_delta: Optional[torch.Tensor] = None
+    prev_apg_delta: torch.Tensor | None = None
     apg_momentum_beta: float = 0.0
     step_index: int = 0
 

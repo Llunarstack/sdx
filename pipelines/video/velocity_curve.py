@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 from .video_io import read_frame_rgb, save_frame_rgb
 
@@ -15,12 +14,12 @@ def _smoothstep(t: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
-def ease_indices(source_count: int, target_count: int, *, ease: str = "smooth") -> List[int]:
+def ease_indices(source_count: int, target_count: int, *, ease: str = "smooth") -> list[int]:
     if source_count <= 0 or target_count <= 0:
         return []
     if source_count == target_count:
         return list(range(source_count))
-    out: List[int] = []
+    out: list[int] = []
     for t in range(target_count):
         u = t / max(1, target_count - 1)
         if ease == "smooth":
@@ -34,7 +33,7 @@ def ease_indices(source_count: int, target_count: int, *, ease: str = "smooth") 
     return out
 
 
-def apply_velocity_ease(frame_paths: List[Path], *, ease: str = "smooth") -> List[Path]:
+def apply_velocity_ease(frame_paths: list[Path], *, ease: str = "smooth") -> list[Path]:
     """Retime in-place with smoothstep easing (cinematic acceleration)."""
     if len(frame_paths) < 3:
         return frame_paths

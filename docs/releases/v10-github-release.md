@@ -1,5 +1,7 @@
 # SDX v10.0.0 GitHub Release
 
+> **Historical note:** Snapshot of the v10 release. See [DEPRECATIONS.md](../../DEPRECATIONS.md) for current module paths.
+
 **Production Quality & Explainability Release**
 
 ---

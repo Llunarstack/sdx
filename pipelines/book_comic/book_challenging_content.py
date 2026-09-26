@@ -7,7 +7,8 @@ These strings are **craft / rendering** guidance for uncensored sequential-art r
 
 from __future__ import annotations
 
-from typing import Any, List, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
@@ -103,7 +104,7 @@ CHALLENGE_NEGATIVE_ADDON = (
 
 def merge_challenge_tags(tags: Sequence[str]) -> str:
     """Map challenge tag names to lexicon fragments; unknown tags are skipped."""
-    out: List[str] = []
+    out: list[str] = []
     for raw in tags or []:
         key = str(raw or "").strip().lower().replace("-", "_")
         frag = CHALLENGE_TAG_FRAGMENTS.get(key)
@@ -120,7 +121,7 @@ def challenge_pack_positive(pack: str) -> str:
     if name == "mature_coherence":
         return _PACK_POSITIVE_CORE["mature_coherence"]
     if name == "max":
-        parts: List[str] = [_PACK_POSITIVE_CORE["mature_coherence"]]
+        parts: list[str] = [_PACK_POSITIVE_CORE["mature_coherence"]]
         parts.append(
             merge_prompt_fragments(
                 CHALLENGE_TAG_FRAGMENTS["surreal_weird"],
@@ -158,7 +159,7 @@ def challenging_content_from_mapping(block: Mapping[str, Any]) -> str:
     pack = str(block.get("pack", "none") or "none").strip().lower()
     extra = str(block.get("extra", "") or "").strip()
     tags_raw = block.get("tags") or block.get("challenge_tags") or []
-    tags: List[str] = []
+    tags: list[str] = []
     if isinstance(tags_raw, str) and tags_raw.strip():
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
     elif isinstance(tags_raw, list):
@@ -177,7 +178,7 @@ def visual_memory_challenge_clause(root: Mapping[str, Any]) -> str:
     - ``challenging_content``: object passed to :func:`challenging_content_from_mapping`
     - ``weird_character_notes`` / ``unusual_character_notes``: freeform string
     """
-    bits: List[str] = []
+    bits: list[str] = []
     ch = root.get("challenging_content")
     if isinstance(ch, dict):
         bits.append(challenging_content_from_mapping(ch))

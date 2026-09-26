@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -19,7 +19,7 @@ __all__ = [
 
 
 def color_histogram(rgb: np.ndarray, *, bins: int = 16) -> np.ndarray:
-    hists: List[np.ndarray] = []
+    hists: list[np.ndarray] = []
     for c in range(3):
         h, _ = np.histogram(rgb[..., c], bins=bins, range=(0, 256))
         h = h.astype(np.float32)
@@ -50,7 +50,7 @@ def frame_drift_score(
     frame_rgb: np.ndarray,
     reference_rgb: np.ndarray,
     *,
-    prev_rgb: Optional[np.ndarray] = None,
+    prev_rgb: np.ndarray | None = None,
 ) -> float:
     """Higher = more drift from reference (and optionally previous frame)."""
     h_ref = color_histogram(reference_rgb)
@@ -67,13 +67,13 @@ def frame_drift_score(
 
 def score_sequence_drift(
     frame_paths: Sequence[Path],
-    anchor_path: Optional[str | Path] = None,
-) -> List[Tuple[int, float]]:
+    anchor_path: str | Path | None = None,
+) -> list[tuple[int, float]]:
     if not frame_paths:
         return []
     ref = read_frame_rgb(anchor_path) if anchor_path and Path(anchor_path).is_file() else read_frame_rgb(frame_paths[0])
     prev = None
-    out: List[Tuple[int, float]] = []
+    out: list[tuple[int, float]] = []
     for i, fp in enumerate(frame_paths):
         rgb = read_frame_rgb(fp)
         out.append((i, frame_drift_score(rgb, ref, prev_rgb=prev)))
@@ -84,8 +84,8 @@ def score_sequence_drift(
 def find_drift_frames(
     frame_paths: Sequence[Path],
     *,
-    anchor_path: Optional[str | Path] = None,
+    anchor_path: str | Path | None = None,
     threshold: float = 0.55,
-) -> List[int]:
+) -> list[int]:
     scores = score_sequence_drift(frame_paths, anchor_path)
     return [i for i, s in scores if s >= threshold]

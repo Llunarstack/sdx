@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import functools
 import time
-from typing import Any, Callable, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -14,7 +15,7 @@ class StepTimer:
 
     def __init__(self, ema_decay: float = 0.98) -> None:
         self.ema_decay = float(ema_decay)
-        self._last_start: Optional[float] = None
+        self._last_start: float | None = None
         self.avg_sec: float = 0.0
         self.steps: int = 0
 
@@ -48,7 +49,7 @@ class StepTimer:
         return f"{sec / 3600:.1f}h"
 
 
-def timed(name: str = "", log_fn: Optional[Callable[[str], None]] = None) -> Callable[[F], F]:
+def timed(name: str = "", log_fn: Callable[[str], None] | None = None) -> Callable[[F], F]:
     """
     Decorator: log elapsed seconds. ``log_fn`` defaults to ``print``.
     """

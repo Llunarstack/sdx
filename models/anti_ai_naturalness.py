@@ -70,7 +70,6 @@ Covers every major art style category with its own authentic "human-made" signat
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -99,7 +98,7 @@ def detect_medium(prompt: str) -> MediumProfile:
     return MediumProfile()
 
 
-def detect_all_mediums(prompt: str) -> List[MediumProfile]:
+def detect_all_mediums(prompt: str) -> list[MediumProfile]:
     m = detect_medium(prompt)
     return [m] if m.name != "unknown" else []
 
@@ -114,7 +113,7 @@ class AntiAINaturalnessController(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        medium: Optional[MediumProfile],
+        medium: MediumProfile | None,
         h_patches: int,
         w_patches: int,
         strength: float = 0.5,

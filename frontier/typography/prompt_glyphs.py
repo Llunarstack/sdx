@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
 
 
 @dataclass(frozen=True)
 class TypographyPlan:
-    quoted_text: Tuple[str, ...]
+    quoted_text: tuple[str, ...]
     positive: str
     negative: str
     cfg_boost: float
@@ -21,9 +20,9 @@ _SIGN = re.compile(r"\b(sign|logo|poster|banner|headline|typography|lettering|ti
 
 
 class TypographyPlanner:
-    def extract_quotes(self, prompt: str) -> List[str]:
+    def extract_quotes(self, prompt: str) -> list[str]:
         text = prompt or ""
-        out: List[str] = []
+        out: list[str] = []
         out.extend(_QUOTED.findall(text))
         out.extend(_BRACKET.findall(text))
         return list(dict.fromkeys(t.strip() for t in out if t.strip()))
@@ -53,7 +52,7 @@ class TypographyPlanner:
         )
         return TypographyPlan(quotes, pos, neg, cfg_boost=1.15 if quotes else 1.08)
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

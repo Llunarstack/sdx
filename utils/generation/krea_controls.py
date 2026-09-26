@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence, Tuple
+from typing import Any
 
 __all__ = [
     "CreativityMode",
@@ -57,14 +58,14 @@ class GenerativeSliderPlan:
     cfg_multiplier: float = 1.0
     reference_strength_multiplier: float = 1.0
     serendipity_offset: float = 0.0
-    trace: List[str] = field(default_factory=list)
+    trace: list[str] = field(default_factory=list)
 
 
 def _clamp_slider(v: float) -> float:
     return max(-100.0, min(100.0, float(v)))
 
 
-def _norm_weights(strengths: Sequence[float]) -> List[float]:
+def _norm_weights(strengths: Sequence[float]) -> list[float]:
     ws = [max(0.0, float(s)) for s in strengths]
     total = sum(ws)
     if total <= 0.0:
@@ -77,12 +78,12 @@ def parse_style_references(
     *,
     json_path: str = "",
     csv_spec: str = "",
-) -> List[StyleReference]:
+) -> list[StyleReference]:
     """
     Parse style refs from JSON (``{"references": [{"path", "strength"}]}``)
     or CSV ``path:weight,path2:weight`` (weight defaults to 1.0).
     """
-    out: List[StyleReference] = []
+    out: list[StyleReference] = []
     jp = (json_path or "").strip()
     if jp:
         data = json.loads(Path(jp).read_text(encoding="utf-8"))
@@ -118,9 +119,9 @@ def load_moodboard_paths(
     *,
     json_path: str = "",
     csv_paths: str = "",
-) -> List[str]:
+) -> list[str]:
     """Load moodboard image paths from JSON or comma-separated list."""
-    paths: List[str] = []
+    paths: list[str] = []
     jp = (json_path or "").strip()
     if jp:
         data = json.loads(Path(jp).read_text(encoding="utf-8"))
@@ -145,7 +146,7 @@ def aggregate_style_embeddings(
     device: Any,
     model_id: str,
     dtype: Any,
-) -> Tuple[Any, int]:
+) -> tuple[Any, int]:
     """Weighted-mean CLIP image embedding from multiple style references."""
     import torch
     from PIL import Image
@@ -155,8 +156,8 @@ def aggregate_style_embeddings(
     if not refs:
         raise ValueError("aggregate_style_embeddings requires at least one reference")
 
-    embeds: List[Any] = []
-    weights: List[float] = []
+    embeds: list[Any] = []
+    weights: list[float] = []
     for ref in refs:
         p = Path(ref.path)
         if not p.is_file():
@@ -191,8 +192,8 @@ def build_generative_slider_plan(
         movement=_clamp_slider(movement),
         creativity_mode=CreativityMode(str(creativity_mode or "medium").lower()),
     )
-    pos: List[str] = []
-    neg: List[str] = []
+    pos: list[str] = []
+    neg: list[str] = []
 
     if plan.intensity < -25:
         pos.append("muted palette, soft contrast, understated styling")
@@ -248,7 +249,7 @@ def apply_generative_sliders(args: Any) -> GenerativeSliderPlan:
         args.reference_strength = rs * plan.reference_strength_multiplier
     if plan.serendipity_offset and getattr(args, "frontier_serendipity", None) is not None:
         args.frontier_serendipity = min(1.0, float(args.frontier_serendipity) + plan.serendipity_offset)
-    setattr(args, "_generative_slider_plan", plan)
+    args._generative_slider_plan = plan
     return plan
 
 
@@ -262,14 +263,14 @@ def apply_creativity_mode_to_prompt(args: Any) -> CreativityMode:
 
     prompt = (getattr(args, "prompt", "") or "").strip()
     if not prompt:
-        setattr(args, "_creativity_mode", mode)
+        args._creativity_mode = mode
         return mode
 
     word_count = len(re.findall(r"\w+", prompt))
     short = word_count < 10
 
     if mode == CreativityMode.RAW:
-        setattr(args, "_skip_prompt_expansion", True)
+        args._skip_prompt_expansion = True
     elif mode == CreativityMode.LOW and short:
         low = prompt.lower()
         if "lighting" not in low:
@@ -290,7 +291,7 @@ def apply_creativity_mode_to_prompt(args: Any) -> CreativityMode:
         elif getattr(args, "novelty", None) is not None:
             args.novelty = min(1.0, float(args.novelty) + 0.1)
 
-    setattr(args, "_creativity_mode", mode)
+    args._creativity_mode = mode
     return mode
 
 
@@ -301,16 +302,16 @@ def apply_turbo_preset(args: Any) -> None:
     args.cfg_scale = float(getattr(args, "cfg_scale", 4.5) or 4.5)
     if args.cfg_scale > 2.0:
         args.cfg_scale = 1.0
-    setattr(args, "_krea_turbo_preset", True)
+    args._krea_turbo_preset = True
 
 
-def apply_krea_controls_to_args(args: Any) -> Dict[str, Any]:
+def apply_krea_controls_to_args(args: Any) -> dict[str, Any]:
     """
     Prompt-time Krea controls: turbo preset, creativity mode, generative sliders.
 
     Returns metadata dict (empty if nothing applied).
     """
-    meta: Dict[str, Any] = {}
+    meta: dict[str, Any] = {}
     if getattr(args, "krea_turbo_preset", False):
         apply_turbo_preset(args)
         meta["turbo_preset"] = True
@@ -324,7 +325,7 @@ def apply_krea_controls_to_args(args: Any) -> Dict[str, Any]:
     return meta
 
 
-def _collect_style_refs(args: Any) -> List[StyleReference]:
+def _collect_style_refs(args: Any) -> list[StyleReference]:
     refs = parse_style_references(
         json_path=str(getattr(args, "style_references_json", "") or ""),
         csv_spec=str(getattr(args, "style_ref", "") or ""),
@@ -344,7 +345,7 @@ def _collect_style_refs(args: Any) -> List[StyleReference]:
 
 
 def inject_reference_conditioning(
-    model_kwargs_cond: Dict[str, Any],
+    model_kwargs_cond: dict[str, Any],
     *,
     args: Any,
     cfg: Any,

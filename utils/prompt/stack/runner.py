@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 from .context import PromptContext, PromptResult, StackMode
 
 StageFn = Callable[[PromptContext], None]
 
-_DEFAULT_INFERENCE_STAGES: List[StageFn] = []
-_PREVIEW_STAGES: List[StageFn] = []
-_TRAINING_STAGES: List[StageFn] = []
+_DEFAULT_INFERENCE_STAGES: list[StageFn] = []
+_PREVIEW_STAGES: list[StageFn] = []
+_TRAINING_STAGES: list[StageFn] = []
 
 
 def _load_stages() -> None:
@@ -49,7 +49,7 @@ def _load_stages() -> None:
     ]
 
 
-def run_prompt_stack(ctx: PromptContext, stages: Optional[Sequence[StageFn]] = None) -> PromptResult:
+def run_prompt_stack(ctx: PromptContext, stages: Sequence[StageFn] | None = None) -> PromptResult:
     """
     Run the prompt stack on *ctx* (mutates positive/negative in place).
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "ThumbnailConfig",
@@ -41,7 +42,7 @@ class ThumbnailSpec:
 class ThumbnailRehearsalPlan:
     enabled: bool
     config: ThumbnailConfig
-    specs: List[ThumbnailSpec] = field(default_factory=list)
+    specs: list[ThumbnailSpec] = field(default_factory=list)
     gate_passed: bool = True
     pending_count: int = 0
 
@@ -49,11 +50,11 @@ class ThumbnailRehearsalPlan:
 def parse_thumbnail_config(
     data: Mapping[str, Any] | None,
     *,
-    studio: Optional[Mapping[str, Any]] = None,
-    edit: Optional[Mapping[str, Any]] = None,
+    studio: Mapping[str, Any] | None = None,
+    edit: Mapping[str, Any] | None = None,
 ) -> ThumbnailConfig:
     """Read thumbnail settings from continuity, studio, or edit blocks."""
-    raw: Dict[str, Any] = {}
+    raw: dict[str, Any] = {}
     if isinstance(data, Mapping):
         thumb = data.get("thumbnail") or data.get("thumbnail_first")
         if isinstance(thumb, Mapping):
@@ -82,7 +83,7 @@ def parse_thumbnail_config(
     return ThumbnailConfig(enabled=enabled, size=size, frames_per_shot=frames, gate=gate, prompt_suffix=suffix)
 
 
-def _frame_roles(n: int) -> List[str]:
+def _frame_roles(n: int) -> list[str]:
     if n <= 1:
         return ["start"]
     if n == 2:
@@ -107,7 +108,7 @@ def plan_thumbnails(
     else:
         h, w = size, max(32, int(size * aspect_width / max(1, aspect_height)))
 
-    specs: List[ThumbnailSpec] = []
+    specs: list[ThumbnailSpec] = []
     roles = _frame_roles(config.frames_per_shot)
     pending = 0
 
@@ -145,7 +146,7 @@ def plan_thumbnails(
     )
 
 
-def thumbnail_edit_overrides(config: ThumbnailConfig) -> Dict[str, Any]:
+def thumbnail_edit_overrides(config: ThumbnailConfig) -> dict[str, Any]:
     """Cheap pass overrides when thumbnail_first is active."""
     return {
         "thumbnail_pass": True,
@@ -179,7 +180,7 @@ def apply_thumbnail_timeline(
     return tw, th
 
 
-def thumbnail_gate_issues(plan: ThumbnailRehearsalPlan) -> List[str]:
+def thumbnail_gate_issues(plan: ThumbnailRehearsalPlan) -> list[str]:
     if not plan.enabled or plan.gate_passed:
         return []
     gate = plan.config.gate

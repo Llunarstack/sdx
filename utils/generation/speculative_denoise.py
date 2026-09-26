@@ -10,8 +10,6 @@ Intended for experimentation; tune ``draft_cfg_scale`` and ``blend_if_close`` ca
 
 from __future__ import annotations
 
-from typing import Dict, Optional
-
 import torch
 
 
@@ -20,8 +18,8 @@ def cfg_predict(
     x: torch.Tensor,
     t_batch: torch.Tensor,
     *,
-    model_kwargs_cond: Dict,
-    model_kwargs_uncond: Optional[Dict],
+    model_kwargs_cond: dict,
+    model_kwargs_uncond: dict | None,
     cfg_scale: float,
     cfg_rescale: float = 0.0,
 ) -> torch.Tensor:
@@ -49,8 +47,8 @@ def speculative_cfg_prediction(
     x: torch.Tensor,
     t_batch: torch.Tensor,
     *,
-    model_kwargs_cond: Dict,
-    model_kwargs_uncond: Optional[Dict],
+    model_kwargs_cond: dict,
+    model_kwargs_uncond: dict | None,
     cfg_scale: float,
     draft_cfg_scale: float,
     cfg_rescale: float = 0.0,

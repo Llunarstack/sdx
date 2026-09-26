@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 __all__ = ["StudioCompileResult", "compile_studio_block"]
 
@@ -13,8 +14,8 @@ def compile_studio_block(
     scene_prompt: str,
     duration_sec: float,
     style_notes: str = "",
-    existing_edit: Optional[Mapping[str, Any]] = None,
-) -> "StudioCompileResult":
+    existing_edit: Mapping[str, Any] | None = None,
+) -> StudioCompileResult:
     from .animation_principles import principles_from_dict, principles_prompt
     from .camera_rig import parse_camera_rig, rig_to_prompt
     from .character_memory import bible_negative, bible_to_prompt, parse_character_bibles
@@ -28,8 +29,8 @@ def compile_studio_block(
 
     studio = dict(data.get("studio") or {})
     edit = dict(existing_edit or {})
-    prompt_suffix: List[str] = []
-    neg_suffix: List[str] = []
+    prompt_suffix: list[str] = []
+    neg_suffix: list[str] = []
     storyboard_cuts = None
     motion_clip = str(data.get("motion_clip") or studio.get("motion_clip") or "")
 
@@ -156,13 +157,13 @@ class StudioCompileResult:
     def __init__(
         self,
         *,
-        edit: Dict[str, Any],
+        edit: dict[str, Any],
         prompt_suffix: str,
         negative_suffix: str,
         storyboard_cuts: Any,
         engine: str,
         motion_clip: str,
-        studio_meta: Dict[str, Any],
+        studio_meta: dict[str, Any],
     ) -> None:
         self.edit = edit
         self.prompt_suffix = prompt_suffix

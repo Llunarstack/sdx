@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 from .editor import run_keyframe_batch
 from .keyframes import schedule_keyframes_for_segment
@@ -26,7 +27,7 @@ def synthetic_segment_from_color(
     height: int,
     frame_count: int,
     rgb: tuple[int, int, int] = (32, 32, 48),
-) -> List[Path]:
+) -> list[Path]:
     import numpy as np
 
     from .video_io import save_frame_rgb
@@ -35,7 +36,7 @@ def synthetic_segment_from_color(
     frames_dir.mkdir(parents=True, exist_ok=True)
     arr = np.zeros((height, width, 3), dtype=np.uint8)
     arr[:] = rgb
-    paths: List[Path] = []
+    paths: list[Path] = []
     for i in range(frame_count):
         fp = frames_dir / f"frame_{i + 1:06d}.png"
         save_frame_rgb(fp, arr)
@@ -43,7 +44,7 @@ def synthetic_segment_from_color(
     return paths
 
 
-def _resolve_options(plan: VideoPlan, process_options: Optional[ProcessOptions]) -> ProcessOptions:
+def _resolve_options(plan: VideoPlan, process_options: ProcessOptions | None) -> ProcessOptions:
     if process_options is not None:
         return process_options
     edit = plan.metadata.get("edit") if plan.metadata else None
@@ -80,7 +81,7 @@ def _rig_path_from_control(control_plan: Any) -> str:
     return ""
 
 
-def _should_motion_transfer(opts: ProcessOptions, assignment: SegmentAssignment, source_frames: List[Path]) -> bool:
+def _should_motion_transfer(opts: ProcessOptions, assignment: SegmentAssignment, source_frames: list[Path]) -> bool:
     if not opts.motion_transfer or not source_frames:
         return False
     if assignment.use_motion_only:
@@ -95,12 +96,12 @@ def process_segment(
     *,
     ckpt: str = "",
     dry_run: bool = False,
-    edit_strength: Optional[float] = None,
-    provenance: Optional[ProvenanceLog] = None,
-    sample_extra_args: Optional[Sequence[str]] = None,
+    edit_strength: float | None = None,
+    provenance: ProvenanceLog | None = None,
+    sample_extra_args: Sequence[str] | None = None,
     control_plan: Any = None,
-    process_options: Optional[ProcessOptions] = None,
-) -> tuple[List[Path], Any]:
+    process_options: ProcessOptions | None = None,
+) -> tuple[list[Path], Any]:
     """Returns (final_frame_paths, quality_report)."""
     opts = _resolve_options(plan, process_options)
     wd = Path(work_dir)
@@ -109,9 +110,9 @@ def process_segment(
     tl = plan.timeline
     target_frames = frame_count_for_duration(assignment.shot.duration_sec, tl.fps)
 
-    ops: List[str] = []
+    ops: list[str] = []
     clip = assignment.clip
-    source_frames: List[Path] = []
+    source_frames: list[Path] = []
 
     if control_plan is not None and getattr(control_plan, "metadata", {}).get("element_video_refs"):
         vrefs = control_plan.metadata["element_video_refs"]
@@ -166,7 +167,7 @@ def process_segment(
     if not source_frames:
         source_frames = synthetic_segment_from_color(wd, width=tl.width, height=tl.height, frame_count=target_frames)
 
-    beat_indices: Optional[List[int]] = None
+    beat_indices: list[int] | None = None
     if opts.motion_beat_keyframes and len(source_frames) >= 3:
         try:
             from .motion_beats import detect_motion_beats
@@ -187,7 +188,7 @@ def process_segment(
 
     edited_dir = wd / "keyframes_edited"
     edited_dir.mkdir(parents=True, exist_ok=True)
-    jobs: List[KeyframeEditJob] = []
+    jobs: list[KeyframeEditJob] = []
     strength = float(edit_strength if edit_strength is not None else assignment.edit_strength or opts.edit_strength)
 
     seg_extra = list(sample_extra_args or [])
@@ -419,5 +420,5 @@ def probe_video_safe(path: str | Path):
     return probe_video(path)
 
 
-def render_segment_video(frame_paths: List[Path], out_path: Path, *, fps: float) -> Path:
+def render_segment_video(frame_paths: list[Path], out_path: Path, *, fps: float) -> Path:
     return write_video_from_frames(frame_paths, out_path, fps=fps)

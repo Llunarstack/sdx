@@ -202,7 +202,7 @@ Prompt (+ optional negative, style, control)
 
 These embeddings are passed as `encoder_hidden_states` (and negative as `encoder_hidden_states_negative` for CFG).
 
-- Optional **`token_weights`** (per T5 position): `sample.py` parses `(word)` / `[word]` in the positive prompt, strips brackets for T5, and scales cross-attn conditioning (1.2 / 0.8). Training can mirror this with **`train.py --train-prompt-emphasis`** ([`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py), [TRAINING_TEXT_TO_PIXELS.md](TRAINING_TEXT_TO_PIXELS.md)).
+- Optional **`token_weights`** (per T5 position): `sample.py` parses `(word)` / `[word]` in the positive prompt, strips brackets for T5, and scales cross-attn conditioning (1.2 / 0.8). Training can mirror this with **`train.py --train-prompt-emphasis`** ([`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py), [TRAINING_TEXT_TO_PIXELS.md](guides/TRAINING_TEXT_TO_PIXELS.md)).
 
 **Preview without a GPU:** `python -m scripts.tools preview_generation_prompt --prompt "..."` runs `utils.prompt.content_controls` + the same pos/neg token conflict filter as `sample.py` (subset of flags; no checkpoint). Set `SDX_DEBUG=1` to print a traceback if `apply_content_controls` fails.
 
@@ -303,7 +303,7 @@ So AR does **not** change the diffusion loop or text encoding; it only restricts
 | **black-forest-labs/flux** | Sampling loop, guidance, img2img/fill, structural conditioning docs. Our sampling is in [diffusion/gaussian_diffusion.py](../diffusion/gaussian_diffusion.py) and [sample.py](../sample.py). |
 | **Stability-AI/generative-models** | SD3 / official stack as architecture and training reference. |
 
-Clone them with `scripts/setup/clone_repos.ps1` (Windows) or `scripts/setup/clone_repos.sh` (Linux/macOS). For a file-level map of what in each repo corresponds to our features, see [docs/FILES.md](FILES.md) (section “Key files in external repos”). For a short list of ideas we use (PixAI, ComfyUI, etc.), see [docs/INSPIRATION.md](INSPIRATION.md).
+Clone them with `scripts/setup/clone_repos.ps1` (Windows) or `scripts/setup/clone_repos.sh` (Linux/macOS). For a file-level map of what in each repo corresponds to our features, see [docs/reference/FILES.md](reference/FILES.md) (section “Key files in external repos”). For a short list of ideas we use (PixAI, ComfyUI, etc.), see [docs/research/INSPIRATION.md](research/INSPIRATION.md).
 
 ---
 
@@ -315,7 +315,7 @@ The following are **adapted into our codebase** so they work with our config, tr
 |----------|--------------|--------------|
 | **diffusion/respace.py** | DiT | `space_timesteps(num_timesteps, "ddim50" or "10,15,20")` for flexible inference timesteps. |
 | **diffusion/sampling_utils.py** | ControlNet | `norm_thresholding`, `spatial_norm_thresholding` for x0 dynamic thresholding. |
-| **diffusion/loss_weighting.py** | generative-models | `get_loss_weight(alpha, "unit" \| "edm" \| "v" \| "eps")` for alternative timestep loss weights. |
+| **diffusion/losses/loss_weighting.py** | generative-models | `get_loss_weight(alpha, "unit" \| "edm" \| "v" \| "eps")` for alternative timestep loss weights. |
 | **models/pixart_blocks.py** | PixArt-alpha/sigma | `SizeEmbedder` for (h, w) conditioning; optional building block for multi-res. |
 
 **Config / usage:** Respace: set `timestep_respacing="ddim50"` or `"10,15,20"`. Dynamic threshold: `sample_loop(..., dynamic_threshold_type="norm" or "spatial_norm", dynamic_threshold_value=1.0)` or `--dynamic-threshold-*` in sample.py. Loss weighting: `TrainConfig.loss_weighting="edm"` (or unit/v/eps) and `--loss-weighting` in train.py. SizeEmbedder: import from `models.pixart_blocks` when adding variable-resolution conditioning.
@@ -422,7 +422,7 @@ Write manifest.jsonl + images → use with train.py --manifest-jsonl
 | **T5** | `cfg.text_encoder` | `google/t5-v1_1-xxl` | Yes (e.g. `pretrained/T5-XXL`) |
 | **VAE** | `cfg.vae_model` | `stabilityai/sd-vae-ft-mse` | Yes (e.g. `pretrained/sdxl-vae-fp16-fix`) |
 | **DiT** | Built from cfg; weights in checkpoint | — | Checkpoint only |
-| **LLM** | Not in cfg | — | `pretrained/SmolLM2-360M-Instruct`, `pretrained/Qwen2.5-7B-Instruct` (for prompt expansion; not used inside train/sample) |
+| **LLM** | Not in cfg | — | `pretrained/SmolLM2-360M-Instruct`, `pretrained/Qwen3-14B` (for prompt expansion; not used inside train/sample) |
 
 Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` → `pretrained/`.
 
@@ -436,7 +436,7 @@ Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` →
 | **sample.py** | Checkpoint, prompt, optional style/control/creativity | Image, optional attn .pt |
 | **inference.py** | Checkpoint | Programmatic API (refine, etc.) |
 | **scripts/download/download_models.py** | — | pretrained/T5-XXL, pretrained/sd-vae-ft-mse, pretrained/sdxl-vae*, pretrained/SmolLM*, pretrained/Qwen* |
-| **scripts/download/download_llm.py** | — | pretrained/SmolLM2-360M-Instruct or pretrained/Qwen2.5-7B-Instruct |
+| **scripts/download/download_llm.py** | — | pretrained/SmolLM2-360M-Instruct or pretrained/Qwen3-14B |
 | **scripts/training/self_improve.py** | Checkpoint, prompts or prompts-file | out_dir/images/*.png, out_dir/manifest.jsonl |
 | **scripts/training/precompute_latents.py** | data_path, vae_model | latent_cache_dir/*.pt (per image) |
 | **scripts/setup/clone_repos.ps1 / .sh** | — | external/ (reference repos) |

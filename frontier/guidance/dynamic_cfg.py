@@ -8,8 +8,8 @@ using alignment / smoothness proxies in latent space.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence
 
 import torch
 
@@ -70,9 +70,9 @@ class DynamicCFGPicker:
         x_trajectory: Sequence[torch.Tensor],
         *,
         default: float = 7.5,
-    ) -> List[float]:
+    ) -> list[float]:
         """Build per-step CFG list aligned with ``x_trajectory`` length."""
-        out: List[float] = []
+        out: list[float] = []
         for x in x_trajectory:
             out.append(self.pick(x, default=default))
         return out

@@ -7,7 +7,7 @@ Each entry links to a paper/project and notes implementation status in SDX.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Literal
+from typing import Literal
 
 Status = Literal["implemented", "partial", "planned", "research"]
 
@@ -23,7 +23,7 @@ class ResearchIdea:
     summary: str
 
 
-IDEAS: List[ResearchIdea] = [
+IDEAS: list[ResearchIdea] = [
     ResearchIdea(
         id="regional_cfg",
         title="Training-free regional prompting (DiT)",
@@ -147,7 +147,7 @@ IDEAS: List[ResearchIdea] = [
         source="Agentic T2I 2025–2026",
         url="https://arxiv.org/html/2606.05031",
         status="partial",
-        module="innovations/agentic/",
+        module="utils/agentic/",
         summary="Wire frontier layout metrics into iterative refinement loop.",
     ),
     # --- Horizon: ahead-of-curve (2026) ---
@@ -292,7 +292,7 @@ IDEAS: List[ResearchIdea] = [
         source="Adversarial robustness + red-team loops",
         url="https://arxiv.org/list/cs.CV/recent",
         status="research",
-        module="innovations/agentic/adversarial.py",
+        module="utils/agentic/",
         summary="Graduated refusal vs rewrite instead of hard block.",
     ),
     # --- Subject: bodies, mediums, realism, mature ---
@@ -1254,7 +1254,7 @@ IDEAS: List[ResearchIdea] = [
 ]
 
 
-def list_ideas(*, status: Status | None = None) -> List[ResearchIdea]:
+def list_ideas(*, status: Status | None = None) -> list[ResearchIdea]:
     if status is None:
         return list(IDEAS)
     return [i for i in IDEAS if i.status == status]

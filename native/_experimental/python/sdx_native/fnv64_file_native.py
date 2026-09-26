@@ -6,14 +6,13 @@ from __future__ import annotations
 
 import ctypes
 from pathlib import Path
-from typing import Optional, Tuple
 
 from sdx_native.native_tools import fnv64_file_shared_library_path
 
 
 class Fnv64Lib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = fnv64_file_shared_library_path()
         if p is None:
             return
@@ -33,7 +32,7 @@ class Fnv64Lib:
     def available(self) -> bool:
         return self._lib is not None
 
-    def hash_bytes_newlines(self, path: Path) -> Tuple[int, int, int]:
+    def hash_bytes_newlines(self, path: Path) -> tuple[int, int, int]:
         if not self._lib:
             raise RuntimeError("sdx_fnv64_file not built")
         h = ctypes.c_ulonglong(0)
@@ -47,7 +46,7 @@ class Fnv64Lib:
         return int(h.value), int(b.value), int(n.value)
 
 
-_LIB: Optional[Fnv64Lib] = None
+_LIB: Fnv64Lib | None = None
 
 
 def get_fnv64_lib() -> Fnv64Lib:
@@ -57,7 +56,7 @@ def get_fnv64_lib() -> Fnv64Lib:
     return _LIB
 
 
-def maybe_fnv1a64_file_native(path: Path) -> Optional[Tuple[int, int, int]]:
+def maybe_fnv1a64_file_native(path: Path) -> tuple[int, int, int] | None:
     """Return ``(hash64, bytes, newlines)`` if DLL exists, else ``None``."""
     lib = get_fnv64_lib()
     if not lib.available:

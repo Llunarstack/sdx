@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,9 @@ class StyleFactRetriever:
         self.records = list(records or [])
 
     @classmethod
-    def from_jsonl(cls, path: str | Path, *, max_lines: int = 5000) -> "StyleFactRetriever":
+    def from_jsonl(cls, path: str | Path, *, max_lines: int = 5000) -> StyleFactRetriever:
         p = Path(path)
-        rows: List[dict] = []
+        rows: list[dict] = []
         if not p.is_file():
             return cls([])
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines()):
@@ -49,11 +49,11 @@ class StyleFactRetriever:
                 rows.append({"text": line})
         return cls(rows)
 
-    def query(self, prompt: str, *, top_k: int = 3) -> List[FactMatch]:
+    def query(self, prompt: str, *, top_k: int = 3) -> list[FactMatch]:
         q = _tokenize(prompt)
         if not q or not self.records:
             return []
-        scored: List[FactMatch] = []
+        scored: list[FactMatch] = []
         for i, rec in enumerate(self.records):
             text = str(rec.get("text") or rec.get("fact") or "")
             tags = tuple(str(t) for t in (rec.get("tags") or []))
@@ -70,7 +70,7 @@ class StyleFactRetriever:
     def inject_prompt(self, prompt: str, matches: Sequence[FactMatch], max_chars: int = 200) -> str:
         if not matches:
             return prompt
-        extra: List[str] = []
+        extra: list[str] = []
         n = 0
         for m in matches:
             frag = m.text.strip()

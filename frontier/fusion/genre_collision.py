@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class GenrePair(str, Enum):
@@ -30,7 +29,7 @@ class FusionPlan:
     negative: str
 
 
-_DETECT: Tuple[Tuple[str, str, GenrePair, str, str, str, str], ...] = (
+_DETECT: tuple[tuple[str, str, GenrePair, str, str, str, str], ...] = (
     (
         r"steampunk",
         r"cyberpunk",
@@ -87,7 +86,7 @@ class GenreCollisionEngine:
                 return FusionPlan(pair, dom, acc, pos, neg)
         return FusionPlan(GenrePair.NONE, "", "", "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.detect(prompt)
         return p.positive, p.negative
 

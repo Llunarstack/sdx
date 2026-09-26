@@ -7,7 +7,6 @@ Embeds normalized bbox tokens so coordinate-aware CFG can parse layout from text
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
 
 _LOC_TOKEN = re.compile(
     r"<loc_([0-9.]+)_([0-9.]+)_([0-9.]+)_([0-9.]+)>",
@@ -17,7 +16,7 @@ _LOC_TOKEN = re.compile(
 
 def bind_coordinates_to_prompt(
     prompt: str,
-    box: Tuple[float, float, float, float],
+    box: tuple[float, float, float, float],
     *,
     prefix: bool = True,
 ) -> str:
@@ -30,9 +29,9 @@ def bind_coordinates_to_prompt(
     return f"{token} {p}" if prefix else f"{p} {token}"
 
 
-def parse_loc_tokens(prompt: str) -> List[Tuple[float, float, float, float]]:
+def parse_loc_tokens(prompt: str) -> list[tuple[float, float, float, float]]:
     """Extract all location tokens from a prompt string."""
-    out: List[Tuple[float, float, float, float]] = []
+    out: list[tuple[float, float, float, float]] = []
     for m in _LOC_TOKEN.finditer(prompt or ""):
         out.append((float(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4))))
     return out

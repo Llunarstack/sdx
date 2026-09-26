@@ -20,7 +20,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 def _try_import_pil() -> bool:
@@ -34,7 +34,7 @@ def _try_import_pil() -> bool:
 
 def _run_prompt_lint(
     manifest: Path, *, min_caption_len_chars: int, max_caption_tokens: int, fail_on_overlap: bool
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from utils.prompt.prompt_lint import PromptLintOptions, lint_jsonl_path
 
     opts = PromptLintOptions(
@@ -46,14 +46,14 @@ def _run_prompt_lint(
     return dict(lint_jsonl_path(manifest, opts))
 
 
-def _run_caption_hygiene(manifest: Path, *, report_dups: bool, report_overlap: bool) -> Dict[str, Any]:
+def _run_caption_hygiene(manifest: Path, *, report_dups: bool, report_overlap: bool) -> dict[str, Any]:
     # Keep this as a callable report (no printing).
     import json as _json
     from collections import defaultdict
 
     from sdx_native.text_hygiene import caption_fingerprint, normalize_caption_for_training, pos_neg_token_overlap
 
-    dup_buckets: Dict[str, int] = defaultdict(int)
+    dup_buckets: dict[str, int] = defaultdict(int)
     overlap_rows = 0
     rows = 0
     with manifest.open(encoding="utf-8", errors="replace") as f:
@@ -104,7 +104,7 @@ def _run_image_qc(
     sample: int,
     min_sharpness: float,
     min_contrast: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # Reuse the existing analyzer to avoid duplicating metric code.
     from PIL import Image
     from utils.image_quality_metrics import analyze_image_quality
@@ -113,8 +113,8 @@ def _run_image_qc(
 
     results = 0
     fail = False
-    sharp_min: Optional[float] = None
-    con_min: Optional[float] = None
+    sharp_min: float | None = None
+    con_min: float | None = None
 
     import json as _json
 
@@ -161,12 +161,12 @@ def _run_image_qc(
     }
 
 
-def _try_native_stats(manifest: Path) -> Dict[str, Any]:
+def _try_native_stats(manifest: Path) -> dict[str, Any]:
     try:
         from utils.native import run_rust_jsonl_stats, run_rust_jsonl_validate
     except Exception:
         return {"available": False}
-    out: Dict[str, Any] = {"available": True}
+    out: dict[str, Any] = {"available": True}
     try:
         v = run_rust_jsonl_validate(manifest, timeout=600)
         out["rust_validate_rc"] = int(v.returncode)
@@ -216,7 +216,7 @@ def main() -> int:
         print(f"Not a file: {manifest}", file=sys.stderr)
         return 2
 
-    report: Dict[str, Any] = {"manifest": str(manifest)}
+    report: dict[str, Any] = {"manifest": str(manifest)}
     report["promptlint"] = _run_prompt_lint(
         manifest,
         min_caption_len_chars=int(args.min_caption_len_chars),

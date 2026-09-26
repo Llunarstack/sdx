@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from importlib import import_module
 from importlib.util import find_spec
-from typing import Any, List
+from typing import Any
 
 _HAS_TORCH = find_spec("torch") is not None
 
@@ -31,5 +31,5 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__() -> List[str]:
+def __dir__() -> list[str]:
     return sorted(set(globals().keys()) | set(__all__))

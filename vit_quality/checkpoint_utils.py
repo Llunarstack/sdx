@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import torch
 
 from vit_quality.model import ViTQualityAdherenceModel, build_vit_model
 
 
-def peek_vit_quality_config(ckpt_path: str | Path) -> Dict[str, Any]:
+def peek_vit_quality_config(ckpt_path: str | Path) -> dict[str, Any]:
     """
     Load only the embedded ``config`` dict from a ViT quality checkpoint (no model build).
 
@@ -34,7 +34,7 @@ def load_vit_quality_checkpoint(
     ckpt_path: str | Path,
     *,
     use_ema: bool = False,
-) -> Tuple[ViTQualityAdherenceModel, Dict[str, Any]]:
+) -> tuple[ViTQualityAdherenceModel, dict[str, Any]]:
     """
     Load a ViT ``best.pt``-style checkpoint and return ``(model, config_dict)`` on CPU.
     """
@@ -78,7 +78,7 @@ def load_vit_quality_checkpoint(
     return model, cfg
 
 
-def vit_model_parameter_report(model: ViTQualityAdherenceModel) -> Dict[str, int]:
+def vit_model_parameter_report(model: ViTQualityAdherenceModel) -> dict[str, int]:
     """Total and trainable parameter counts."""
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)

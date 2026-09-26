@@ -26,11 +26,12 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
 
-def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -42,7 +43,7 @@ def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
                 continue
 
 
-def _get_caption(rec: Dict[str, Any]) -> str:
+def _get_caption(rec: dict[str, Any]) -> str:
     for k in ("caption", "text", "prompt"):
         v = rec.get(k)
         if v is not None:
@@ -71,9 +72,9 @@ def _frac(n: int, total: int) -> float:
     return n / total if total else 0.0
 
 
-def _parse_thresholds(thresholds_str: str) -> Dict[str, float]:
+def _parse_thresholds(thresholds_str: str) -> dict[str, float]:
     # Format: cat:0.1,cat2:0.3
-    out: Dict[str, float] = {}
+    out: dict[str, float] = {}
     if not thresholds_str.strip():
         return out
     parts = [p.strip() for p in thresholds_str.split(",") if p.strip()]
@@ -89,7 +90,7 @@ def _parse_thresholds(thresholds_str: str) -> Dict[str, float]:
     return out
 
 
-def _load_custom_categories(custom_path: str) -> Dict[str, Dict[str, Any]]:
+def _load_custom_categories(custom_path: str) -> dict[str, dict[str, Any]]:
     p = Path(custom_path)
     if not p.exists():
         raise SystemExit(f"Custom categories file not found: {p}")
@@ -97,7 +98,7 @@ def _load_custom_categories(custom_path: str) -> Dict[str, Dict[str, Any]]:
     cats = data.get("categories", data)  # allow either wrapper or direct mapping
     if not isinstance(cats, dict):
         raise SystemExit('custom-categories-json must be {"categories": {name: {terms:[...]}}} or {name: {...}}')
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for name, spec in cats.items():
         if not isinstance(spec, dict):
             continue
@@ -153,7 +154,7 @@ def main() -> None:
     # Notes:
     # - NSFW detection is token-based (so it will match your dataset's chosen vocab).
     # - Suggestions for NSFW remain generic unless you include your own categories.
-    built_in: Dict[str, Dict[str, Any]] = {
+    built_in: dict[str, dict[str, Any]] = {
         "nsfw_descriptors": {
             "terms": [
                 "nsfw",
@@ -440,7 +441,7 @@ def main() -> None:
 
     thresholds = _parse_thresholds(args.thresholds)
 
-    counts: Dict[str, int] = {k: 0 for k in categories.keys()}
+    counts: dict[str, int] = {k: 0 for k in categories.keys()}
     total = 0
 
     for rec in _iter_jsonl(manifest_path):
@@ -460,10 +461,10 @@ def main() -> None:
     if total == 0:
         raise SystemExit("No captions found in manifest.")
 
-    fractions: Dict[str, float] = {k: _frac(counts[k], total) for k in categories.keys()}
+    fractions: dict[str, float] = {k: _frac(counts[k], total) for k in categories.keys()}
 
     # Human suggestions language.
-    sug_en: Dict[str, str] = {
+    sug_en: dict[str, str] = {
         "nsfw_descriptors": "If you want NSFW behavior, keep your NSFW descriptors consistent across the dataset and include them early in captions.",
         "weird_strange": "Add more surreal/weird descriptors so the model learns non-standard visuals consistently.",
         "clothes_wardrobe": "Add wardrobe/clothing details (garments, materials, accessories) so outfits are stable.",
@@ -483,7 +484,7 @@ def main() -> None:
 
     lang = str(args.lang or "en").strip()
 
-    def _load_suggestions(path_str: str) -> Dict[str, Dict[str, str]]:
+    def _load_suggestions(path_str: str) -> dict[str, dict[str, str]]:
         p = Path(path_str)
         if not p.exists():
             raise SystemExit(f"Not found: {p}")
@@ -491,13 +492,13 @@ def main() -> None:
         cats = data.get("categories", data)
         if not isinstance(cats, dict):
             raise SystemExit('suggestions-json must be {"categories": {...}} or {...category...} structure.')
-        out: Dict[str, Dict[str, str]] = {}
+        out: dict[str, dict[str, str]] = {}
         for cat, spec in cats.items():
             if isinstance(spec, dict):
                 out[str(cat)] = {str(k): str(v) for k, v in spec.items() if isinstance(v, str)}
         return out
 
-    custom_suggestions: Dict[str, Dict[str, str]] = {}
+    custom_suggestions: dict[str, dict[str, str]] = {}
     if args.suggestions_json:
         custom_suggestions = _load_suggestions(args.suggestions_json)
 
@@ -521,7 +522,7 @@ def main() -> None:
         return generic_suggestion(category_name, examples, normalized_lang)
 
     # Print + optional FAIL gate.
-    failed: List[str] = []
+    failed: list[str] = []
     for name, frac in sorted(fractions.items(), key=lambda kv: kv[1]):
         cnt = counts[name]
         mark = ""

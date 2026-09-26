@@ -5,7 +5,6 @@ Optional Mojo fast path for comma merge/dedupe and style fingerprints.
 from __future__ import annotations
 
 import subprocess
-from typing import List, Optional
 
 from sdx_native.native_tools import REPO_ROOT, mojo_cli_path
 
@@ -16,7 +15,7 @@ def mojo_available() -> bool:
     return mojo_cli_path() is not None and _MOJO_SRC.is_file()
 
 
-def _run_mojo_cli(extra: List[str], *, timeout: float = 60) -> Optional[subprocess.CompletedProcess[str]]:
+def _run_mojo_cli(extra: list[str], *, timeout: float = 60) -> subprocess.CompletedProcess[str] | None:
     cli = mojo_cli_path()
     if not cli or not _MOJO_SRC.is_file():
         return None
@@ -32,7 +31,7 @@ def _run_mojo_cli(extra: List[str], *, timeout: float = 60) -> Optional[subproce
         return None
 
 
-def maybe_merge_comma_dedupe(text: str) -> Optional[str]:
+def maybe_merge_comma_dedupe(text: str) -> str | None:
     if not mojo_available():
         return None
     r = _run_mojo_cli(["merge", text or ""])
@@ -41,7 +40,7 @@ def maybe_merge_comma_dedupe(text: str) -> Optional[str]:
     return (r.stdout or "").strip()
 
 
-def maybe_style_fingerprint(text: str) -> Optional[int]:
+def maybe_style_fingerprint(text: str) -> int | None:
     if not mojo_available():
         return None
     r = _run_mojo_cli(["fingerprint", text or ""])

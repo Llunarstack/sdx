@@ -233,17 +233,17 @@ def main() -> int:
         if bool(getattr(args, "manifest_gate_report_dups", False)):
             gate_cmd.append("--report-dups")
         if int(getattr(args, "manifest_gate_fail_on_dup_groups", 0) or 0) > 0:
-            gate_cmd.extend(["--fail-on-dup-groups", str(int(getattr(args, "manifest_gate_fail_on_dup_groups")))])
+            gate_cmd.extend(["--fail-on-dup-groups", str(int(args.manifest_gate_fail_on_dup_groups))])
         if bool(getattr(args, "manifest_gate_image_qc", False)):
             gate_cmd.append("--image-qc")
             if str(getattr(args, "manifest_gate_image_root", "") or "").strip():
-                gate_cmd.extend(["--image-root", str(getattr(args, "manifest_gate_image_root")).strip()])
+                gate_cmd.extend(["--image-root", str(args.manifest_gate_image_root).strip()])
             if int(getattr(args, "manifest_gate_sample", 0) or 0) > 0:
-                gate_cmd.extend(["--sample", str(int(getattr(args, "manifest_gate_sample")))])
+                gate_cmd.extend(["--sample", str(int(args.manifest_gate_sample))])
             if float(getattr(args, "manifest_gate_min_sharpness", 0.0) or 0.0) > 0.0:
-                gate_cmd.extend(["--min-sharpness", str(float(getattr(args, "manifest_gate_min_sharpness")))])
+                gate_cmd.extend(["--min-sharpness", str(float(args.manifest_gate_min_sharpness))])
             if float(getattr(args, "manifest_gate_min_contrast", 0.0) or 0.0) > 0.0:
-                gate_cmd.extend(["--min-contrast", str(float(getattr(args, "manifest_gate_min_contrast")))])
+                gate_cmd.extend(["--min-contrast", str(float(args.manifest_gate_min_contrast))])
         rc = _run(gate_cmd, cwd=ROOT, label="Manifest gate")
         if rc != 0:
             return rc
@@ -260,15 +260,15 @@ def main() -> int:
             str(filtered_manifest),
         ]
         if str(getattr(args, "filter_dedup", "") or "").strip():
-            dq_cmd.extend(["--dedup", str(getattr(args, "filter_dedup")).strip()])
+            dq_cmd.extend(["--dedup", str(args.filter_dedup).strip()])
         if int(getattr(args, "filter_min_caption_len", 0) or 0) > 0:
-            dq_cmd.extend(["--min-caption-len", str(int(getattr(args, "filter_min_caption_len")))])
+            dq_cmd.extend(["--min-caption-len", str(int(args.filter_min_caption_len))])
         if int(getattr(args, "filter_max_caption_len", 0) or 0) > 0:
-            dq_cmd.extend(["--max-caption-len", str(int(getattr(args, "filter_max_caption_len")))])
+            dq_cmd.extend(["--max-caption-len", str(int(args.filter_max_caption_len))])
         if str(getattr(args, "filter_bad_words", "") or "").strip():
-            dq_cmd.extend(["--bad-words", str(getattr(args, "filter_bad_words")).strip()])
+            dq_cmd.extend(["--bad-words", str(args.filter_bad_words).strip()])
         if float(getattr(args, "filter_min_weight", 0.0) or 0.0) > 0.0:
-            dq_cmd.extend(["--min-weight", str(float(getattr(args, "filter_min_weight")))])
+            dq_cmd.extend(["--min-weight", str(float(args.filter_min_weight))])
         if bool(getattr(args, "filter_native_validate", False)):
             dq_cmd.append("--native-validate")
         rc = _run(dq_cmd, cwd=ROOT, label="Manifest filter/dedupe")
@@ -375,9 +375,9 @@ def main() -> int:
     if int(args.manifest_max_caption_len) > 0:
         train_cmd.extend(["--manifest-max-caption-len", str(int(args.manifest_max_caption_len))])
     if str(getattr(args, "resume", "") or "").strip():
-        train_cmd.extend(["--resume", str(getattr(args, "resume")).strip()])
+        train_cmd.extend(["--resume", str(args.resume).strip()])
     if str(getattr(args, "init_from", "") or "").strip():
-        train_cmd.extend(["--init-from", str(getattr(args, "init_from")).strip()])
+        train_cmd.extend(["--init-from", str(args.init_from).strip()])
 
     if passthrough_train_args:
         train_cmd.extend(["--", *passthrough_train_args])

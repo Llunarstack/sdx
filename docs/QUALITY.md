@@ -10,7 +10,7 @@ Merged: sampling fixes, community issues, model weaknesses, and failure-mode ref
 
 ## Part 1 — Sampling fixes and community issues
 
-Sampling fixes (Civitai-style) and a **community issue matrix** (SDXL, Flux, Z-Image, etc.) with sample.py flags and config/prompt_domains.py references.
+Sampling fixes (Civitai-style) and a **community issue matrix** (SDXL, Flux, Z-Image, etc.) with sample.py flags and config/defaults/prompt_domains.py references.
 
 ---
 
@@ -61,7 +61,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --cfg-scale 7 --cfg-rescale 0
 - **Simpler poses** — “Arms crossed”, “hands in pockets” tend to work better than complex hand poses.
 - **Inpainting** — For a single image, use `--init-image` + `--mask` to inpaint only the hand/face area at 0.4–0.5 strength.
 
-See also `config/prompt_domains.py`: `ANATOMY_NEGATIVES`, `HAND_FIX_PROMPT_TIPS`.
+See also `config/defaults/prompt_domains.py`: `ANATOMY_NEGATIVES`, `HAND_FIX_PROMPT_TIPS`.
 
 ---
 
@@ -92,7 +92,7 @@ python sample.py --ckpt .../best.pt --prompt "storefront sign that says COFFEE i
 # Or explicitly: --text-in-image
 ```
 
-**Training:** Include many examples with correct text in images and captions that describe the exact text (e.g. “sign that says OPEN”). The data pipeline boosts “text_in_image” domain tags (see `data/caption_utils.py`, `config/prompt_domains.py`: `TEXT_IN_IMAGE_PROMPT_TIPS`).
+**Training:** Include many examples with correct text in images and captions that describe the exact text (e.g. “sign that says OPEN”). The data pipeline boosts “text_in_image” domain tags (see `data/caption_utils.py`, `config/defaults/prompt_domains.py`: `TEXT_IN_IMAGE_PROMPT_TIPS`).
 
 ---
 
@@ -122,7 +122,7 @@ This produces a prompt like `MyStyle, 1girl, smile` so the LoRA activates correc
 - If the prompt has **>250 tokens**, `sample.py` prints a note; shorten or reorder so key elements are early.
 - Use **(word)** to emphasize critical terms and **[word]** to de-emphasize.
 
-See `config/prompt_domains.py`: `COMPLEX_PROMPT_TIPS`.
+See `config/defaults/prompt_domains.py`: `COMPLEX_PROMPT_TIPS`.
 
 ---
 
@@ -134,7 +134,7 @@ See `config/prompt_domains.py`: `COMPLEX_PROMPT_TIPS`.
 - **Quality tags help** — Add "masterpiece, best quality, detailed, sharp focus" so any challenging prompt gets stronger conditioning.
 - **Be concrete** — For surreal/abstract, describe colors, layout, and mood; put subject first, then setting, then style.
 - **`--boost-quality`** — Use for maximum adherence on challenging prompts.
-- **Training:** Include diverse examples with consistent tags; the data pipeline boosts "complex" and "challenging" domain tags (see `data/caption_utils.py`, `config/prompt_domains.py`: `CHALLENGING_PROMPT_TIPS`).
+- **Training:** Include diverse examples with consistent tags; the data pipeline boosts "complex" and "challenging" domain tags (see `data/caption_utils.py`, `config/defaults/prompt_domains.py`: `CHALLENGING_PROMPT_TIPS`).
 
 ---
 
@@ -144,12 +144,12 @@ See `config/prompt_domains.py`: `COMPLEX_PROMPT_TIPS`.
 
 **Fixes:**
 
-- **`--hard-style`** — Use `--hard-style 3d`, `realistic`, `3d_realistic`, or `style_mix` to prepend recommended tags so the model anchors on the right look. Set `--negative-prompt` from `config/prompt_domains.py` → `HARD_STYLE_NEGATIVES` for that style (e.g. for 3d: "flat, 2d, blurry, bad proportions").
+- **`--hard-style`** — Use `--hard-style 3d`, `realistic`, `3d_realistic`, or `style_mix` to prepend recommended tags so the model anchors on the right look. Set `--negative-prompt` from `config/defaults/prompt_domains.py` → `HARD_STYLE_NEGATIVES` for that style (e.g. for 3d: "flat, 2d, blurry, bad proportions").
 - **Training:** Captions that contain 3D, photorealistic, or style-mix phrases (e.g. "2.5d", "semi-realistic", "photorealistic anime") are boosted **first** in the pipeline (`data/caption_utils.py` → `HARD_STYLE_TAGS`, `boost_hard_style_tags`) so the model learns these hard styles well.
-- **Style mixing:** Put the dominant style first in the prompt; use explicit phrases like "2.5d", "semi-realistic", "photorealistic anime". See `config/prompt_domains.py` → `STYLE_MIX_TIPS`.
+- **Style mixing:** Put the dominant style first in the prompt; use explicit phrases like "2.5d", "semi-realistic", "photorealistic anime". See `config/defaults/prompt_domains.py` → `STYLE_MIX_TIPS`.
 - **Multiple LoRAs:** Use lower scales (0.5–0.6 each) so they blend; put the dominant LoRA first and its trigger at the start of the prompt. See `LORA_MIX_TIPS` in the same file. If output is muddy, try `--cfg-scale 5` or `--cfg-rescale 0.7`.
 
-See [docs/DOMAINS.md](DOMAINS.md) for full hard-style prompts and negatives.
+See [docs/DOMAINS.md](reference/DOMAINS.md) for full hard-style prompts and negatives.
 
 ---
 
@@ -195,7 +195,7 @@ If you pass `--width` / `--height` much larger or smaller than the model’s nat
 
 ### 12. FLUX grid artifact and full-body / two-head (community fixes)
 
-**FLUX grid:** Visible grid pattern in dark areas (worse with Depth/Canny and upscaling). From [FLUX GitHub #406](https://github.com/black-forest-labs/flux/issues/406): keep **CFG at 3.5 or lower** and **LoRA strength at or below 1.20**; avoid overtrained LoRAs. See `config/prompt_domains.py` → `FLUX_GRID_ARTIFACT_TIPS`.
+**FLUX grid:** Visible grid pattern in dark areas (worse with Depth/Canny and upscaling). From [FLUX GitHub #406](https://github.com/black-forest-labs/flux/issues/406): keep **CFG at 3.5 or lower** and **LoRA strength at or below 1.20**; avoid overtrained LoRAs. See `config/defaults/prompt_domains.py` → `FLUX_GRID_ARTIFACT_TIPS`.
 
 **Full body / two-head:** From [Stable Diffusion Art](https://stable-diffusion-art.com/common-problems-in-ai-images-and-how-to-fix-them/): (1) For full body, add **standing, long dress, legs, shoes** (describe what should appear) rather than only “full body portrait”. (2) Use **1:1** for head/shoulder shots to avoid two-head; use portrait aspect for full-body so one body fills the frame. (3) Garbled faces often need more pixels: use close-up, Hi-Res Fix, better VAE, or face restorer/inpainting. See `FULL_BODY_AND_TWO_HEAD_TIPS`, `GARBLED_FACE_TIPS`.
 
@@ -210,13 +210,13 @@ If you pass `--width` / `--height` much larger or smaller than the model’s nat
 - **`--naturalize`** — One flag that: (1) adds an **anti-AI-look negative** (plastic skin, oversmooth, airbrushed, waxy, doll-like, synthetic, CGI, uncanny, etc.) so the model is steered away from those traits; (2) prepends **natural-look positive** hints (film grain, natural skin texture, subtle imperfections, raw photo, natural lighting) to the prompt; (3) runs a **post-process**: subtle film grain + slight micro-contrast on the decoded image to break up the plastic smoothness.
 - **`--naturalize-grain 0.02`** — Adjust grain strength (0 = no grain, 0.01–0.03 typical). Use 0 if you only want the prompt/negative changes.
 - **Lower CFG** — Try `--cfg-scale 5` or `6` for a less “pushed” look.
-- **Training:** Include diverse, non-perfect references and captions that mention “natural skin texture,” “film grain,” “imperfections,” so the model learns a less polished look. You can add `ANTI_AI_LOOK_NEGATIVE`-style terms to your training negatives (see `config/prompt_domains.py`).
+- **Training:** Include diverse, non-perfect references and captions that mention “natural skin texture,” “film grain,” “imperfections,” so the model learns a less polished look. You can add `ANTI_AI_LOOK_NEGATIVE`-style terms to your training negatives (see `config/defaults/prompt_domains.py`).
 
 ---
 
 ### 14. Training-side tips (fewer issues at inference)
 
-- **Negative prompt in data** — Include quality/anatomy negatives in captions or the dataset so the model learns to avoid them (see `RECOMMENDED_NEGATIVE_BY_DOMAIN`, `ANATOMY_NEGATIVES` in `config/prompt_domains.py`).
+- **Negative prompt in data** — Include quality/anatomy negatives in captions or the dataset so the model learns to avoid them (see `RECOMMENDED_NEGATIVE_BY_DOMAIN`, `ANATOMY_NEGATIVES` in `config/defaults/prompt_domains.py`).
 - **Min-SNR loss** — `--min-snr-gamma 5` (or similar) stabilizes training and can improve clarity.
 - **Native resolution** — Train at the resolution you plan to use for inference to avoid resolution mismatch blur.
 
@@ -226,7 +226,7 @@ These tips align with common Civitai and A1111/ComfyUI recommendations; adjust p
 
 ## Community model issues
 
-Community-reported problems (SDXL, Flux/Klein, Illustrious/NoobAI, Z-Image, Civitai) and the mitigations available in SDX: **config/prompt_domains.py** tips/negatives, **sample.py** flags, and **training** practices.
+Community-reported problems (SDXL, Flux/Klein, Illustrious/NoobAI, Z-Image, Civitai) and the mitigations available in SDX: **config/defaults/prompt_domains.py** tips/negatives, **sample.py** flags, and **training** practices.
 
 **Sources:** Reddit r/StableDiffusion, Civitai articles & comments, FLUX GitHub (#406 grid artifact), [Stable Diffusion Art](https://stable-diffusion-art.com/common-problems-in-ai-images-and-how-to-fix-them/), ComfyUI prompt-engineering docs, Black Forest Labs FLUX.
 
@@ -289,7 +289,7 @@ Community-reported problems (SDXL, Flux/Klein, Illustrious/NoobAI, Z-Image, Civi
 
 ### Config reference
 
-All tips and negatives live in **config/prompt_domains.py**:
+All tips and negatives live in **config/defaults/prompt_domains.py**:
 
 - **Concept bleeding:** `CONCEPT_BLEEDING_NEGATIVE`, `CONCEPT_BLEEDING_POSITIVE`
 - **Artifacts:** `ARTIFACT_NEGATIVES`
@@ -324,8 +324,8 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 
 **Fixes at inference:**
 - Use **positive** tags: `correct hands`, `five fingers`, `natural hands`, `visible hands`.
-- Use **negative:** `config/prompt_domains.py` → `ANATOMY_NEGATIVES`, or `data/caption_utils.py` → `NEGATIVE_ANATOMY`.
-- **Prompt tips:** `config/prompt_domains.py` → `HAND_FIX_PROMPT_TIPS` (object anchoring, simple poses, avoid vague “no deformed hands”).
+- Use **negative:** `config/defaults/prompt_domains.py` → `ANATOMY_NEGATIVES`, or `data/caption_utils.py` → `NEGATIVE_ANATOMY`.
+- **Prompt tips:** `config/defaults/prompt_domains.py` → `HAND_FIX_PROMPT_TIPS` (object anchoring, simple poses, avoid vague “no deformed hands”).
 
 ---
 
@@ -364,7 +364,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 - Train on multiple aspect ratios if possible (see `docs/IMPROVEMENTS.md` multi-resolution).
 
 **Fixes at inference:**
-- Use **1:1** for head/shoulder shots, or for portrait aspect add **full-body cues** so one body fills the frame: “standing”, “long dress”, “legs”, “shoes”. See `config/prompt_domains.py` → `PORTRAIT_ASPECT_TIPS`.
+- Use **1:1** for head/shoulder shots, or for portrait aspect add **full-body cues** so one body fills the frame: “standing”, “long dress”, “legs”, “shoes”. See `config/defaults/prompt_domains.py` → `PORTRAIT_ASPECT_TIPS`.
 
 ---
 
@@ -404,7 +404,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 - Negatives available: `NEGATIVE_COMPOSITION` (duplicate, merged subjects, cropped, cut off).
 
 **Fixes at inference:**
-- Use `config/prompt_domains.py` → `ANATOMY_NEGATIVES` or `data/caption_utils.py` → `NEGATIVE_COMPOSITION` in negative prompt.
+- Use `config/defaults/prompt_domains.py` → `ANATOMY_NEGATIVES` or `data/caption_utils.py` → `NEGATIVE_COMPOSITION` in negative prompt.
 
 ---
 
@@ -437,7 +437,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 - `config/defaults/art_mediums.py` — artist-first medium + anatomy/proportion guidance for `sample.py --art-guidance-mode --anatomy-guidance`, `train.py --train-art-guidance-mode --train-anatomy-guidance`, and book pipeline forwarding.
 - `config/defaults/style_guidance.py` — style-domain + artist/game-name guidance for `sample.py --style-guidance-mode`, `train.py --train-style-guidance-mode`, normalize-captions tooling, and book pipeline forwarding.
 - `data/caption_utils.py` — `DOMAIN_TAGS`, `boost_domain_tags`, `apply_shortcomings_to_caption_pair`, `NEGATIVE_ANATOMY`, `NEGATIVE_FACE`, `NEGATIVE_COMPOSITION`, `NEGATIVE_QUALITY`, `NEGATIVE_TEXT`, `NEGATIVE_ANATOMY_FULL`
-- `config/prompt_domains.py` — `ANATOMY_NEGATIVES`, `HAND_FIX_PROMPT_TIPS`, `PORTRAIT_ASPECT_TIPS`, `RECOMMENDED_NEGATIVE_BY_DOMAIN`
+- `config/defaults/prompt_domains.py` — `ANATOMY_NEGATIVES`, `HAND_FIX_PROMPT_TIPS`, `PORTRAIT_ASPECT_TIPS`, `RECOMMENDED_NEGATIVE_BY_DOMAIN`
 
 ---
 
@@ -454,7 +454,7 @@ Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornn
 - `--boost-quality` — prompt adherence; `--subject-first` — tag order
 - `--cfg-rescale 0.7`, lower `--cfg-scale` — v-pred burn, oversaturation
 
-**Config:** All related negatives and tip lists are in `config/prompt_domains.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`, `EMOTION_PROMPT_TIPS`, `SPATIAL_AWARENESS_TIPS`). See [QUALITY.md](QUALITY.md) (*Community model issues*) for the full issue → mitigation table.
+**Config:** All related negatives and tip lists are in `config/defaults/prompt_domains.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`, `EMOTION_PROMPT_TIPS`, `SPATIAL_AWARENESS_TIPS`). See [QUALITY.md](QUALITY.md) (*Community model issues*) for the full issue → mitigation table.
 
 ---
 
@@ -478,16 +478,16 @@ This section is the honest complement to §1–9 and [QUALITY.md](QUALITY.md): *
 | Problem | SDX mitigation | Remaining gap |
 | :--- | :--- | :--- |
 | **Hands / anatomy** | `DOMAIN_TAGS`, `NEGATIVE_ANATOMY`, `HAND_FIX_PROMPT_TIPS` | No **auxiliary anatomy loss** or hand keypoint head on the denoiser ([`auxiliary_structure_supervision`](../utils/architecture/architecture_map.py)). |
-| **Distant / small faces** | `DISTANT_FACE_TIPS`, `GARBLED_FACE_TIPS` in `config/prompt_domains.py` | In `sample.py`: **`--face-enhance`** (Haar + local sharpen/contrast), **`--face-restore-shell`** for external GFPGAN/ADetailer CLIs; not a full in-repo face restoration model. |
+| **Distant / small faces** | `DISTANT_FACE_TIPS`, `GARBLED_FACE_TIPS` in `config/defaults/prompt_domains.py` | In `sample.py`: **`--face-enhance`** (Haar + local sharpen/contrast), **`--face-restore-shell`** for external GFPGAN/ADetailer CLIs; not a full in-repo face restoration model. |
 | **Composition / cropping** | `NEGATIVE_COMPOSITION`, quality tags, inference `--resize-mode center_crop|saliency_crop` (+ `--resize-saliency-face-bias`) | Saliency crop is heuristic (not semantic segmentation/subject detector); complex multi-subject scenes may still need manual framing. |
-| **Style / concept bleeding** | `--anti-bleed`, dataset boosts | No token-level cross-attention steering (SAG / per-token scale) — see [IMPROVEMENTS.md](IMPROVEMENTS.md) §2.2. |
+| **Style / concept bleeding** | `--anti-bleed`, dataset boosts | No token-level cross-attention steering (SAG / per-token scale) — see [IMPROVEMENTS.md](research/IMPROVEMENTS.md) §2.2. |
 
 ### C. Training / inference tooling gaps (listed elsewhere, summarized)
 
-These are called out in [IMPROVEMENTS.md](IMPROVEMENTS.md) and [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md):
+These are called out in [IMPROVEMENTS.md](research/IMPROVEMENTS.md) and [DIFFUSION_LEVERAGE_ROADMAP.md](research/DIFFUSION_LEVERAGE_ROADMAP.md):
 
 - **Few-step distilled student** (consistency / DMD) — no trainer in repo.  
-- **Full flow-matching / rectified-flow training** — not drop-in for current `GaussianDiffusion` ([MODERN_DIFFUSION.md](MODERN_DIFFUSION.md)).  
+- **Full flow-matching / rectified-flow training** — not drop-in for current `GaussianDiffusion` ([MODERN_DIFFUSION.md](research/MODERN_DIFFUSION.md)).  
 - **Extra samplers** (DPM++ / UniPC as first-class flags) — DDIM/Euler-style path is primary; more schedulers are “add” items.  
 - **Inpaint-aware *training*** (random latent masks) — not wired; inpainting is inference/workflow (`sample.py`, book pipeline).  
 - **DDP + resolution buckets** — buckets exist; multi-GPU + buckets is constrained.  
@@ -497,9 +497,9 @@ These are called out in [IMPROVEMENTS.md](IMPROVEMENTS.md) and [DIFFUSION_LEVERA
 ### D. Where to invest if you want to *close* gaps (not just document them)
 
 1. **Text:** double down on OCR + expected-text workflows **or** train with readable text in-domain; consider external typography for production UI.  
-2. **Structure:** auxiliary heads or ControlNet-style conditioning (see [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md) §3–4).  
+2. **Structure:** auxiliary heads or ControlNet-style conditioning (see [DIFFUSION_LEVERAGE_ROADMAP.md](research/DIFFUSION_LEVERAGE_ROADMAP.md) §3–4).  
 3. **Identity:** reference-image adapter or stronger character-sheet conditioning in `DiT_Text`.  
-4. **Inference control:** SAG / cross-attn hooks in `sample.py` ([IMPROVEMENTS.md](IMPROVEMENTS.md) §2.2).  
+4. **Inference control:** SAG / cross-attn hooks in `sample.py` ([IMPROVEMENTS.md](research/IMPROVEMENTS.md) §2.2).  
 5. **Faces at distance:** optional post-pass script wrapping GFPGAN/CodeFormer or face-region inpaint — **bridge** the doc↔code gap ADetailer users expect.
 
 When you ship a new fix, update **§1–9** or [QUALITY.md](QUALITY.md) for users, and **`architecture_map.py`** for theme status.

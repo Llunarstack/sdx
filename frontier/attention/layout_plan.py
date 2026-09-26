@@ -7,21 +7,22 @@ hook point for future DiT cross-attn processors (Dense Diffusion / BoxDiff linea
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any
 
 
 @dataclass
 class AttentionLayoutPlan:
     """Per-region attention enforcement schedule."""
 
-    region_names: Tuple[str, ...]
-    boxes: Tuple[Tuple[float, float, float, float], ...]
-    enforce_steps: Tuple[int, ...]  # step indices to apply hard masking
+    region_names: tuple[str, ...]
+    boxes: tuple[tuple[float, float, float, float], ...]
+    enforce_steps: tuple[int, ...]  # step indices to apply hard masking
     strength: float = 0.85
     backward_guidance: bool = True  # prefer backward over forward (arXiv:2304.03373)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "region_names": list(self.region_names),
             "boxes": [list(b) for b in self.boxes],
@@ -43,8 +44,8 @@ def build_attention_layout_plan(
 
     Enforces layout primarily in the first ``inject_frac`` of steps (structure phase).
     """
-    names: List[str] = []
-    boxes: List[Tuple[float, float, float, float]] = []
+    names: list[str] = []
+    boxes: list[tuple[float, float, float, float]] = []
     for r in regions:
         names.append(str(getattr(r, "name", f"region_{len(names)}")))
         boxes.append(

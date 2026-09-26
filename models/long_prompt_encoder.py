@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -78,10 +77,10 @@ class ParsedLongPrompt:
 
     raw: str
     positive_text: str  # prompt with inline negatives stripped
-    inline_negatives: List[str]  # extracted negative clauses
-    layers: Dict[str, str]  # semantic layer -> text
-    layer_weights: Dict[str, float]  # importance weight per layer
-    token_priority: Optional[torch.Tensor] = None  # (L,) per-token importance
+    inline_negatives: list[str]  # extracted negative clauses
+    layers: dict[str, str]  # semantic layer -> text
+    layer_weights: dict[str, float]  # importance weight per layer
+    token_priority: torch.Tensor | None = None  # (L,) per-token importance
 
 
 # ---------------------------------------------------------------------------
@@ -103,8 +102,8 @@ class InlineNegativeExtractor:
       negatives: list of extracted negative phrases
     """
 
-    def extract(self, prompt: str) -> Tuple[str, List[str]]:
-        negatives: List[str] = []
+    def extract(self, prompt: str) -> tuple[str, list[str]]:
+        negatives: list[str] = []
         cleaned = prompt
 
         for pattern in INLINE_NEGATIVE_PATTERNS:
@@ -167,7 +166,7 @@ class HierarchicalPromptParser:
         clauses = [c.strip() for c in clauses if c.strip()]
 
         # Step 3: classify each clause
-        layers: Dict[str, List[str]] = {k: [] for k in LAYER_PATTERNS}
+        layers: dict[str, list[str]] = {k: [] for k in LAYER_PATTERNS}
         layers["unclassified"] = []
         for clause in clauses:
             layer = self._classify_clause(clause)
@@ -242,8 +241,8 @@ class ChunkedTextEncoder(nn.Module):
 
     def merge_chunks(
         self,
-        chunk_embeddings: List[torch.Tensor],
-        layer_weights: Optional[List[float]] = None,
+        chunk_embeddings: list[torch.Tensor],
+        layer_weights: list[float] | None = None,
     ) -> torch.Tensor:
         """
         Merge a list of chunk embeddings into one sequence.
@@ -283,8 +282,8 @@ class ChunkedTextEncoder(nn.Module):
 
     def forward(
         self,
-        chunk_embeddings: List[torch.Tensor],
-        layer_weights: Optional[List[float]] = None,
+        chunk_embeddings: list[torch.Tensor],
+        layer_weights: list[float] | None = None,
     ) -> torch.Tensor:
         return self.merge_chunks(chunk_embeddings, layer_weights)
 
@@ -330,7 +329,7 @@ class PromptPriorityWeighter(nn.Module):
     def forward(
         self,
         text_emb: torch.Tensor,
-        raw_tokens: Optional[List[str]] = None,
+        raw_tokens: list[str] | None = None,
     ) -> torch.Tensor:
         """
         Scale text embeddings by learned importance weights.
@@ -440,7 +439,7 @@ class NegativePromptFusion(nn.Module):
         self,
         value: torch.Tensor,
         pos_emb: torch.Tensor,
-        neg_emb: Optional[torch.Tensor],
+        neg_emb: torch.Tensor | None,
     ) -> torch.Tensor:
         """
         Suppress value vectors for tokens that overlap with negatives.
@@ -463,7 +462,7 @@ class NegativePromptFusion(nn.Module):
     def forward(
         self,
         pos_emb: torch.Tensor,
-        neg_emb: Optional[torch.Tensor] = None,
+        neg_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Returns suppressed positive embeddings.
@@ -509,8 +508,8 @@ class LongPromptController:
 
     def merge(
         self,
-        chunk_embeddings: List[torch.Tensor],
-        layer_weights: Optional[Dict[str, float]] = None,
+        chunk_embeddings: list[torch.Tensor],
+        layer_weights: dict[str, float] | None = None,
     ) -> torch.Tensor:
         weights = list(layer_weights.values()) if layer_weights else None
         return self.chunker(chunk_embeddings, weights)
@@ -518,14 +517,14 @@ class LongPromptController:
     def weight(
         self,
         text_emb: torch.Tensor,
-        raw_tokens: Optional[List[str]] = None,
+        raw_tokens: list[str] | None = None,
     ) -> torch.Tensor:
         return self.weighter(text_emb, raw_tokens)
 
     def suppress(
         self,
         pos_emb: torch.Tensor,
-        neg_emb: Optional[torch.Tensor] = None,
+        neg_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         return self.neg_fusion(pos_emb, neg_emb)
 
@@ -533,7 +532,7 @@ class LongPromptController:
         self,
         value: torch.Tensor,
         pos_emb: torch.Tensor,
-        neg_emb: Optional[torch.Tensor],
+        neg_emb: torch.Tensor | None,
     ) -> torch.Tensor:
         return self.neg_fusion.apply_to_cross_attention_values(value, pos_emb, neg_emb)
 

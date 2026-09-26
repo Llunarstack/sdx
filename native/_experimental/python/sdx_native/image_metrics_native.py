@@ -6,7 +6,6 @@ Provides lightweight quality stats for uint8 HWC images.
 from __future__ import annotations
 
 import ctypes
-from typing import Dict, Optional
 
 import numpy as np
 
@@ -15,7 +14,7 @@ from sdx_native.native_tools import image_metrics_shared_library_path
 
 class ImageMetricsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = image_metrics_shared_library_path()
         if p is None:
             return
@@ -71,7 +70,7 @@ class ImageMetricsLib:
             hwc = hwc.astype(np.uint8)
         return np.ascontiguousarray(hwc)
 
-    def stats(self, hwc: np.ndarray, *, clip_low: int = 2, clip_high: int = 253) -> Dict[str, float]:
+    def stats(self, hwc: np.ndarray, *, clip_low: int = 2, clip_high: int = 253) -> dict[str, float]:
         if not self._lib:
             raise RuntimeError("sdx_image_metrics not built")
         arr = self._prep(hwc)
@@ -128,7 +127,7 @@ class ImageMetricsLib:
         return int(rc)
 
 
-_LIB: Optional[ImageMetricsLib] = None
+_LIB: ImageMetricsLib | None = None
 
 
 def get_image_metrics_lib() -> ImageMetricsLib:
@@ -143,7 +142,7 @@ def maybe_image_stats_native(
     *,
     clip_low: int = 2,
     clip_high: int = 253,
-) -> Optional[Dict[str, float]]:
+) -> dict[str, float] | None:
     lib = get_image_metrics_lib()
     if not lib.available:
         return None
@@ -156,7 +155,7 @@ def maybe_count_components_native(
     threshold: int = 140,
     min_area: int = 16,
     max_area: int = 0,
-) -> Optional[int]:
+) -> int | None:
     lib = get_image_metrics_lib()
     if not lib.available:
         return None

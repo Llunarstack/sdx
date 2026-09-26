@@ -2,8 +2,6 @@
 # Keeps structure (edges/depth/pose/layout) without overpowering text/style.
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -43,6 +41,10 @@ _CONTROL_TYPE_ALIASES = {
     "normal": "normal",
     "normalmap": "normal",
     "hed": "hed",
+    "softedge": "hed",
+    "soft_edge": "hed",
+    "normals": "normal",
+    "normals_map": "normal",
 }
 _CONTROL_TYPE_TO_ID = {n: i for i, n in enumerate(CONTROL_TYPE_NAMES)}
 
@@ -85,7 +87,7 @@ def infer_control_type_from_path(path: str) -> str:
     return "unknown"
 
 
-def _expand_control_type_ids(control_type, *, batch_size: int, device: torch.device) -> Optional[torch.Tensor]:
+def _expand_control_type_ids(control_type, *, batch_size: int, device: torch.device) -> torch.Tensor | None:
     if control_type is None:
         return None
     if torch.is_tensor(control_type):
@@ -155,7 +157,7 @@ def _expand_control_type_stack(
     batch_size: int,
     num_controls: int,
     device: torch.device,
-) -> Optional[torch.Tensor]:
+) -> torch.Tensor | None:
     if control_type is None:
         return None
     if torch.is_tensor(control_type):
@@ -284,7 +286,7 @@ class ControlNetEncoder(nn.Module):
         self,
         control_image: torch.Tensor,
         *,
-        target_hw: Optional[Tuple[int, int]] = None,
+        target_hw: tuple[int, int] | None = None,
         control_type=None,
     ) -> torch.Tensor:
         """
@@ -325,7 +327,7 @@ def encode_control_stack(
     encoder: ControlNetEncoder,
     control_image: torch.Tensor,
     *,
-    target_hw: Optional[Tuple[int, int]] = None,
+    target_hw: tuple[int, int] | None = None,
     control_type=None,
     control_scale=1.0,
 ) -> torch.Tensor:

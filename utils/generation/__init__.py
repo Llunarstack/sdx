@@ -5,7 +5,7 @@ are imported eagerly. Torch-dependent code loads when a submodule is accessed.
 
 For hot paths prefer direct imports::
 
-    from utils.generation.master_integration import quick_generate
+    from utils.generation.sample_main import main as sample_main
 """
 
 from __future__ import annotations

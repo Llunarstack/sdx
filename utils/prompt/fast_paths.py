@@ -6,10 +6,10 @@ Import from here in hot paths (``content_controls``, ``stack``, ``neg_filter``).
 
 from __future__ import annotations
 
-from typing import List, Sequence
+from collections.abc import Sequence
 
 
-def split_tags(text: str) -> List[str]:
+def split_tags(text: str) -> list[str]:
     try:
         from sdx_native.caption_csv_fast import split_caption_parts
 
@@ -60,7 +60,7 @@ def merge_fragments(*parts: str) -> str:
 
         return merge_caption_csv(*parts)
     except ImportError:
-        acc: List[str] = []
+        acc: list[str] = []
         seen: set[str] = set()
         for part in parts:
             for tag in split_tags(part):

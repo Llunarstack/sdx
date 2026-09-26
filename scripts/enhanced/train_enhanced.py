@@ -112,7 +112,7 @@ def get_enhanced_config():
     if args.config.endswith(".json"):
         import json
 
-        with open(args.config, "r") as f:
+        with open(args.config) as f:
             config_dict = json.load(f)
         cfg = TrainConfig(**config_dict)
     else:

@@ -18,7 +18,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from time import time
-from typing import Optional
+
+from utils.terminal import configure_stdio_for_console
+
+configure_stdio_for_console()
 
 # Show CLI help without importing the heavy GPU stack: build the (torch-free)
 # argument parser early and exit before ``import torch`` runs. Keeps
@@ -75,7 +78,7 @@ from utils.training.throughput import (
 from utils.training.timestep_curriculum import resolve_timestep_kwargs_for_step
 
 
-def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> Optional[torch.Tensor]:
+def _maybe_ot_pair_noise(cfg, latents: torch.Tensor, device: torch.device) -> torch.Tensor | None:
     """Sample Gaussian noise and optionally OT-couple it to batch latents (train only)."""
     reg = float(getattr(cfg, "ot_noise_pair_reg", 0.0) or 0.0)
     if reg <= 0.0 or latents.shape[0] < 2:
@@ -166,21 +169,21 @@ def _apply_runtime_ar(raw_model, *, num_ar_blocks: int, ar_block_order: str) -> 
     """Update DiT AR regime on a live model (used by curriculum/order-mix training)."""
     b = int(num_ar_blocks)
     order = str(ar_block_order or "raster").strip().lower()
-    setattr(raw_model, "num_ar_blocks", b)
-    setattr(raw_model, "ar_block_order", order)
+    raw_model.num_ar_blocks = b
+    raw_model.ar_block_order = order
     if b <= 0:
-        setattr(raw_model, "_ar_mask", None)
+        raw_model._ar_mask = None
         return
     n_patches = int(getattr(raw_model, "num_patches", 0) or 0)
     if n_patches <= 0:
-        setattr(raw_model, "_ar_mask", None)
+        raw_model._ar_mask = None
         return
     p = int(round(n_patches**0.5))
     mask = create_block_causal_mask_2d(p, p, b, block_order=order)
     ref = getattr(raw_model, "pos_embed", None)
     if ref is not None and hasattr(ref, "device"):
         mask = mask.to(device=ref.device)
-    setattr(raw_model, "_ar_mask", mask)
+    raw_model._ar_mask = mask
 
 
 def _safe_git_info(repo_root: Path) -> dict:
@@ -277,7 +280,17 @@ def get_t5_and_vae(device, cfg: TrainConfig):
         _transformers = transformers
 
     tokenizer = _transformers.AutoTokenizer.from_pretrained(cfg.text_encoder)
-    text_encoder = _transformers.T5EncoderModel.from_pretrained(cfg.text_encoder)
+    # Prefer safetensors — transformers blocks torch.load on .bin when torch<2.6 (CVE-2025-32434).
+    try:
+        text_encoder = _transformers.T5EncoderModel.from_pretrained(cfg.text_encoder, use_safetensors=True)
+    except (ValueError, OSError) as exc:
+        if "safetensors" in str(exc).lower() or "torch.load" in str(exc).lower():
+            raise RuntimeError(
+                f"T5 load failed for {cfg.text_encoder!r}. Run:\n"
+                "  python setup/ensure_t5_safetensors.py\n"
+                "or upgrade torch: pip install 'torch>=2.6' --index-url https://download.pytorch.org/whl/cu124"
+            ) from exc
+        raise
     text_encoder.eval()
     for p in text_encoder.parameters():
         p.requires_grad = False
@@ -285,12 +298,9 @@ def get_t5_and_vae(device, cfg: TrainConfig):
 
     # Autoencoder load (VAE=AutoencoderKL, or RAE=AutoencoderRAE).
     ae_type = getattr(cfg, "autoencoder_type", "kl")
-    from diffusers import AutoencoderKL, AutoencoderRAE
+    from utils.modeling.autoencoder_loading import get_autoencoder_class
 
-    if ae_type == "rae":
-        ae = AutoencoderRAE.from_pretrained(cfg.vae_model)
-    else:
-        ae = AutoencoderKL.from_pretrained(cfg.vae_model)
+    ae = get_autoencoder_class(ae_type).from_pretrained(cfg.vae_model)
 
     ae.eval()
     for p in ae.parameters():
@@ -331,7 +341,7 @@ def encode_text(
         return encode_t5_segment_concat(
             segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
         )
-    with torch.inference_mode():
+    with torch.no_grad():
         tok = tokenizer(
             captions,
             padding="max_length",
@@ -346,7 +356,7 @@ def encode_text(
         return hidden.to(dtype)
 
 
-@torch.inference_mode()
+@torch.no_grad()
 def encode_images_vae(images: torch.Tensor, ae: torch.nn.Module, scale: float = 0.18215) -> torch.Tensor:
     """Encode images to latents.
 
@@ -387,20 +397,27 @@ def _get_repa_vision(device, cfg):
         return _repa_vision_model
 
     # Lazy import: keep startup fast.
-    from transformers import AutoImageProcessor
+    from transformers import AutoImageProcessor, AutoModel
 
-    if "dinov2" in str(encoder_id).lower():
-        from transformers import Dinov2Model
+    enc_lower = str(encoder_id).lower()
+    if "dinov3" in enc_lower or "dinov2" in enc_lower:
+        # DINOv3 / DINOv2: CLS token from last_hidden_state.
+        try:
+            if "dinov2" in enc_lower and "dinov3" not in enc_lower:
+                from transformers import Dinov2Model
 
-        vision_model = Dinov2Model.from_pretrained(encoder_id)
-        # DINOv2 returns last_hidden_state; we will use CLS token.
-    elif "clip" in str(encoder_id).lower():
+                vision_model = Dinov2Model.from_pretrained(encoder_id)
+            else:
+                vision_model = AutoModel.from_pretrained(encoder_id)
+        except Exception:
+            vision_model = AutoModel.from_pretrained(encoder_id)
+    elif "clip" in enc_lower:
         from transformers import CLIPVisionModelWithProjection
 
         vision_model = CLIPVisionModelWithProjection.from_pretrained(encoder_id)
         # CLIP returns pooled image embedding in image_embeds.
     else:
-        raise ValueError(f"Unsupported REPA encoder_model: {encoder_id}. Use dinov2 or clip checkpoints.")
+        raise ValueError(f"Unsupported REPA encoder_model: {encoder_id}. Use dinov3*, dinov2*, or clip* checkpoints.")
 
     processor = AutoImageProcessor.from_pretrained(encoder_id)
     mean = getattr(processor, "image_mean", [0.485, 0.456, 0.406])
@@ -442,9 +459,9 @@ def _repa_features(pixel_values: torch.Tensor, device, cfg) -> torch.Tensor:
     x = (x.to(torch.float32) - _repa_mean) / _repa_std
 
     enc_id = str(getattr(cfg, "repa_encoder_model", "")).lower()
-    if "dinov2" in enc_id:
+    if "dino" in enc_id:
         out = vision_model(pixel_values=x)
-        feat = out.last_hidden_state[:, 0, :]  # CLS token
+        feat = out.last_hidden_state[:, 0, :]  # CLS token (DINOv2 / DINOv3)
     else:
         out = vision_model(pixel_values=x)
         feat = out.image_embeds if hasattr(out, "image_embeds") else out.pooler_output
@@ -470,8 +487,8 @@ def compute_mdm_training_loss(
     mdm_patch_size: int,
     mdm_loss_only_masked: bool,
     mdm_min_mask_patches: int,
-    spectral_kwargs: Optional[dict] = None,
-    prefetched_noise: Optional[torch.Tensor] = None,
+    spectral_kwargs: dict | None = None,
+    prefetched_noise: torch.Tensor | None = None,
 ):
     """
     Masked Diffusion Models (MDM) style training.
@@ -1184,6 +1201,53 @@ def main(cfg: TrainConfig):
 
     if cfg.grad_checkpointing:
         model.enable_gradient_checkpointing()
+
+    # LoRA/DoRA adapter training: wrap target Linears with trainable adapters and
+    # freeze the base DiT. Only the adapters end up in the optimizer (below).
+    lora_training = bool(getattr(cfg, "lora_train", False))
+    if lora_training:
+        from models.lora_train import inject_trainable_lora
+
+        _targets = [t.strip() for t in str(getattr(cfg, "lora_target", "") or "").split(",") if t.strip()]
+        _trainable, _wrapped = inject_trainable_lora(
+            model,
+            rank=int(getattr(cfg, "lora_rank", 16)),
+            alpha=float(getattr(cfg, "lora_alpha", 16.0)),
+            use_dora=bool(getattr(cfg, "lora_dora", False)),
+            targets=_targets or None,
+        )
+        if rank == 0:
+            n_train = sum(p.numel() for p in _trainable)
+            kind = "DoRA" if getattr(cfg, "lora_dora", False) else "LoRA"
+            logger.info(
+                f"{kind} training: wrapped {_wrapped} Linear layers, "
+                f"rank={getattr(cfg, 'lora_rank', 16)} alpha={getattr(cfg, 'lora_alpha', 16.0)}, "
+                f"{n_train:,} trainable params (base frozen)."
+            )
+        if _wrapped == 0:
+            raise ValueError(
+                "--lora-train matched no Linear layers. Adjust --lora-target substrings "
+                "(default targets: attention qkv/proj + MLP fc)."
+            )
+        if int(getattr(cfg, "control_cond_dim", 0) or 0) > 0:
+            from models.lora_train import unfreeze_control_encoder
+
+            _ctrl_n = unfreeze_control_encoder(model)
+            if rank == 0 and _ctrl_n:
+                logger.info(
+                    f"LoRA + control: unfroze control_encoder ({_ctrl_n:,} params trainable alongside adapters)."
+                )
+
+    def _maybe_save_lora_adapter(raw_model, ckpt_path) -> None:
+        """Write an adapter-only file next to a full checkpoint (LoRA training)."""
+        if not lora_training:
+            return
+        from models.lora_train import lora_state_dict
+
+        adapter_path = Path(ckpt_path).with_name(Path(ckpt_path).stem + "_lora.pt")
+        torch.save(lora_state_dict(raw_model), adapter_path)
+        logger.info(f"LoRA adapter saved: {adapter_path}")
+
     ema = deepcopy(model)
     for p in ema.parameters():
         p.requires_grad = False
@@ -1201,7 +1265,9 @@ def main(cfg: TrainConfig):
         prediction_type=getattr(cfg, "prediction_type", "epsilon"),
     )
 
-    opt_params = list(model.parameters())
+    # Only optimize params that need grad (LoRA training freezes the base model;
+    # full training leaves everything trainable, so this is a no-op there).
+    opt_params = [p for p in model.parameters() if p.requires_grad]
     if rae_bridge is not None:
         opt_params += list(rae_bridge.parameters())
     if text_bundle is not None and text_bundle.fusion is not None:
@@ -1267,9 +1333,11 @@ def main(cfg: TrainConfig):
         _apply_train_checkpoint(ckpt, load_optimizer=False)
         logger.info(f"Initialized weights from {init_path} (step=0, fresh optimizer)")
 
-    # Data
-    data_path = cfg.manifest_jsonl or cfg.data_path
-    if not data_path:
+    # Data — manifest JSONL + optional data root for relative image_path rows
+    manifest_path = cfg.manifest_jsonl
+    data_root = cfg.data_path
+    dataset_path = manifest_path or data_root
+    if not dataset_path:
         raise ValueError("Set --data-path or --manifest-jsonl")
 
     if getattr(cfg, "dry_run", False):
@@ -1299,7 +1367,8 @@ def main(cfg: TrainConfig):
     bucket_fixed_assign = max_steps_early > 0 or passes_early > 0
 
     dataset = Text2ImageDataset(
-        data_path,
+        dataset_path,
+        data_root=data_root if manifest_path else None,
         image_size=cfg.image_size,
         latent_cache_dir=latent_dir,
         crop_mode=getattr(cfg, "crop_mode", "center"),
@@ -1325,6 +1394,14 @@ def main(cfg: TrainConfig):
         foveated_crop_frac=float(getattr(cfg, "foveated_crop_frac", 0.55)),
         grounding_mask_soft=bool(getattr(cfg, "grounding_mask_soft", False)),
     )
+
+    if len(dataset) == 0:
+        raise ValueError(
+            f"No training samples found. manifest={manifest_path!r} data_root={data_root!r}. "
+            "Expected a folder of images with matching .txt/.caption sidecars "
+            "(flat or one level of subfolders), or a manifest .jsonl with "
+            "{'image_path', 'caption'} rows resolved against --data-path."
+        )
 
     def _worker_init(worker_id):
         import numpy as np
@@ -1434,13 +1511,26 @@ def main(cfg: TrainConfig):
     else:
         logger.info(f"Epoch-based training: epochs={cfg.epochs}")
 
+    # Real-time terminal dashboard (rank 0 only). Total steps for the progress
+    # bar/ETA: max_steps if step-based, else epochs x steps/epoch.
+    dashboard = None
+    if rank == 0 and bool(getattr(cfg, "live_dashboard", False)):
+        from utils.training.live_dashboard import LiveDashboard
+
+        _dash_total = (
+            max_steps
+            if use_step_based
+            else int(cfg.epochs) * max(1, len(train_dataset) // max(1, cfg.global_batch_size))
+        )
+        dashboard = LiveDashboard(_dash_total, model_name=cfg.model_name)
+
     # Dynamic AR schedules can mutate attention masks/orders during training.
     ar_curriculum_mode = str(getattr(cfg, "ar_curriculum_mode", "none") or "none").strip().lower()
     ar_order_mix_spec = str(getattr(cfg, "ar_order_mix", "") or "")
     ar_order_mix_list = parse_ar_order_mix(ar_order_mix_spec)
     dynamic_ar_runtime = (ar_curriculum_mode != "none") or bool(ar_order_mix_list)
     raw_model_for_ar = model.module if use_ddp else model
-    last_runtime_ar: Optional[tuple[int, str]] = None
+    last_runtime_ar: tuple[int, str] | None = None
     if dynamic_ar_runtime:
         b0, o0 = resolve_ar_for_step(
             start_step,
@@ -1482,10 +1572,10 @@ def main(cfg: TrainConfig):
 
     steps = start_step
     log_steps = 0
-    running_loss_t: Optional[torch.Tensor] = None
-    running_ag_sum_t: Optional[torch.Tensor] = None
+    running_loss_t: torch.Tensor | None = None
+    running_ag_sum_t: torch.Tensor | None = None
     running_ag_count = 0
-    running_cov_sum_t: Optional[torch.Tensor] = None
+    running_cov_sum_t: torch.Tensor | None = None
     running_cov_count = 0
     start_time = time()
     refinement_prob = getattr(cfg, "refinement_prob", 0.0)
@@ -1531,8 +1621,8 @@ def main(cfg: TrainConfig):
         batch_iter = loader
 
         for batch in batch_iter:
-            last_attn_grounding_t: Optional[torch.Tensor] = None
-            last_attn_cov_t: Optional[torch.Tensor] = None
+            last_attn_grounding_t: torch.Tensor | None = None
+            last_attn_cov_t: torch.Tensor | None = None
             if dynamic_ar_runtime:
                 b_now, o_now = resolve_ar_for_step(
                     steps,
@@ -1597,7 +1687,7 @@ def main(cfg: TrainConfig):
             )
 
             with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
-                with torch.inference_mode():
+                with torch.no_grad():
                     if "latent_values" in batch:
                         latents = to_train_device(batch["latent_values"], device, dtype=torch.bfloat16)
                     else:
@@ -1973,6 +2063,20 @@ def main(cfg: TrainConfig):
                 logger.info(
                     f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}{ag_extra}{cov_extra}"
                 )
+                if dashboard is not None:
+                    _aux_bits = []
+                    if avg_ag is not None:
+                        _aux_bits.append(f"attn_grnd={avg_ag:.4f}")
+                    if avg_cov is not None:
+                        _aux_bits.append(f"attn_cov={avg_cov:.4f}")
+                    dashboard.update(
+                        steps,
+                        avg_loss,
+                        steps_per_sec,
+                        lr_val,
+                        img_per_sec=steps_per_sec * cfg.global_batch_size,
+                        aux="  ".join(_aux_bits),
+                    )
                 # IMPROVEMENTS 5.1: TensorBoard / WandB
                 if rank == 0:
                     if tb_writer is not None:
@@ -2037,6 +2141,7 @@ def main(cfg: TrainConfig):
                         ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
+                    _maybe_save_lora_adapter(raw, path)
                     logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
                 if running_loss_t is not None:
                     running_loss_t.zero_()
@@ -2062,6 +2167,7 @@ def main(cfg: TrainConfig):
                     ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                 path = ckpt_dir / f"{steps:07d}.pt"
                 torch.save(ckpt, path)
+                _maybe_save_lora_adapter(raw, path)
                 logger.info(f"Checkpoint saved: {path}")
                 # IMPROVEMENTS 1.5: save Polyak average as polyak.pt
                 if polyak_buf is not None and getattr(cfg, "save_polyak", 0) > 0:
@@ -2109,6 +2215,7 @@ def main(cfg: TrainConfig):
                         ckpt["text_encoder_fusion"] = text_bundle.fusion.state_dict()
                     path = ckpt_dir / "best.pt"
                     torch.save(ckpt, path)
+                    _maybe_save_lora_adapter(raw, path)
                     logger.info(f"Best checkpoint saved: {path} (val loss={best_val_loss:.4f})")
                 else:
                     no_improvement_count += 1
@@ -2128,6 +2235,8 @@ def main(cfg: TrainConfig):
         if use_step_based and steps >= max_steps:
             break
 
+    if dashboard is not None:
+        dashboard.close()
     if use_ddp:
         dist.destroy_process_group()
     logger.info("Training done.")
@@ -2140,9 +2249,6 @@ if __name__ == "__main__":
     sys.argv = _argv
 
     def _train_entry() -> None:
-        from utils.terminal import configure_stdio_for_console
-
-        configure_stdio_for_console()
         parser = build_train_arg_parser()
         args = parser.parse_args()
         from training.book_train_preset import apply_book_train_preset_to_args

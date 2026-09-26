@@ -7,8 +7,8 @@ plus reward-aware SDE noise scaling (calibrated exploration by timestep).
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, List, Sequence
 
 import numpy as np
 import torch
@@ -93,17 +93,17 @@ def short_ode_refine_x0(
 def dense_reward_gains(
     terminal_rewards: Sequence[float],
     step_rewards: Sequence[Sequence[float]],
-) -> List[List[float]]:
+) -> list[list[float]]:
     """
     Convert per-step absolute rewards into incremental gains ``ΔR_t``.
 
     ``step_rewards[g][t]`` is reward at step t for group sample g;
     returns ``ΔR_t = R_t - R_{t-1}`` with ``R_{-1} = 0``.
     """
-    gains: List[List[float]] = []
+    gains: list[list[float]] = []
     for g, traj in enumerate(step_rewards):
         prev = 0.0
-        row: List[float] = []
+        row: list[float] = []
         for r in traj:
             rv = float(r)
             row.append(rv - prev)

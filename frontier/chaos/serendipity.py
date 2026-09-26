@@ -7,7 +7,6 @@ Creativity without destroying prompt adherence.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import torch
 
@@ -16,7 +15,7 @@ import torch
 class SerendipityCurve:
     """Per-step multiplicative noise scale (1.0 = no extra surprise)."""
 
-    scales: Tuple[float, ...]
+    scales: tuple[float, ...]
     peak_step: int
     dial: float  # user creativity 0..1
 
@@ -35,7 +34,7 @@ class SerendipityInjector:
         dial = float(max(0.0, min(1.0, dial)))
         n = self.num_steps
         mid = (n - 1) / 2.0
-        scales: List[float] = []
+        scales: list[float] = []
         peak = 0
         peak_val = 0.0
         for i in range(n):

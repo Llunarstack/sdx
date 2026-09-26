@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 
@@ -16,7 +15,7 @@ __all__ = ["DriftRepairReport", "repair_sequence_drift", "build_drift_repair_pro
 
 @dataclass(slots=True)
 class DriftRepairReport:
-    drift_indices: List[int]
+    drift_indices: list[int]
     repaired_count: int
     max_drift: float
     mean_drift: float
@@ -30,9 +29,9 @@ def build_drift_repair_prompt(base_prompt: str, *, drift_score: float) -> str:
 
 
 def repair_sequence_drift(
-    frame_paths: List[Path],
+    frame_paths: list[Path],
     *,
-    anchor_path: Optional[str | Path] = None,
+    anchor_path: str | Path | None = None,
     threshold: float = 0.55,
     blend_strength: float = 0.45,
 ) -> DriftRepairReport:
@@ -56,7 +55,7 @@ def repair_sequence_drift(
     b = float(max(0.0, min(1.0, blend_strength)))
 
     for i in drift_idx:
-        refs: List[np.ndarray] = []
+        refs: list[np.ndarray] = []
         if i > 0:
             refs.append(rgbs[i - 1])
         if i + 1 < len(rgbs):

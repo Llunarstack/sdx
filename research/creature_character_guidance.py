@@ -9,7 +9,7 @@ Uses ``config.defaults.creature_character_prompts`` for prepend/append snippets 
 
 from __future__ import annotations
 
-from typing import List, Literal, Tuple
+from typing import Literal
 
 from config.defaults.creature_character_prompts import (
     CREATURE_CHARACTER_NSFW_RECOMMENDED_PROMPTS_BY_DOMAIN,
@@ -44,7 +44,7 @@ def _domain_prompt_maps(rating: CreatureRating, *, prompt_lower: str) -> dict:
     )
 
 
-def _context_and_extra_negative(rating: CreatureRating, *, prompt_lower: str) -> Tuple[str, str]:
+def _context_and_extra_negative(rating: CreatureRating, *, prompt_lower: str) -> tuple[str, str]:
     if rating == "sfw":
         return CREATURE_SFW_CONTEXT_POSITIVE, CREATURE_SFW_NEGATIVE_ADDON
     if rating == "nsfw":
@@ -58,7 +58,7 @@ def suggest_creature_prompt_addons(
     prompt: str,
     *,
     rating: CreatureRating = "auto",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Return ``(positive_snippet, negative_snippet)`` from keyword matching.
 
@@ -70,7 +70,7 @@ def suggest_creature_prompt_addons(
     domain_map = _domain_prompt_maps(rating, prompt_lower=lower)
     ctx_pos, extra_neg = _context_and_extra_negative(rating, prompt_lower=lower)
 
-    pos: List[str] = []
+    pos: list[str] = []
     if ctx_pos:
         pos.append(ctx_pos)
 

@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
 def _iter_jsonl(path: Path):
@@ -32,7 +32,7 @@ def _iter_jsonl(path: Path):
                 continue
 
 
-def _get_caption(rec: Dict[str, Any]) -> str:
+def _get_caption(rec: dict[str, Any]) -> str:
     for k in ("caption", "text", "prompt"):
         v = rec.get(k)
         if v is not None:
@@ -42,7 +42,7 @@ def _get_caption(rec: Dict[str, Any]) -> str:
     return ""
 
 
-def _contains_any(caption_lower: str, terms: List[str]) -> bool:
+def _contains_any(caption_lower: str, terms: list[str]) -> bool:
     for t in terms:
         if t and t in caption_lower:
             return True
@@ -155,7 +155,7 @@ def main() -> None:
     def frac(n: int) -> float:
         return n / total
 
-    report: Dict[str, Any] = {
+    report: dict[str, Any] = {
         "manifest": str(manifest_path),
         "rows_scanned": total,
         "coverage": {
@@ -176,7 +176,7 @@ def main() -> None:
         "suggestions": [],
     }
 
-    failures: List[str] = []
+    failures: list[str] = []
     if report["coverage"]["hard_style"] < args.min_hard_style:
         failures.append("hard_style")
     if report["coverage"]["person_descriptors"] < args.min_person:

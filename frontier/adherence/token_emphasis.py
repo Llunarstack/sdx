@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 
 @dataclass(frozen=True)
@@ -20,14 +19,14 @@ class TokenWeight:
 
 @dataclass(frozen=True)
 class TokenEmphasisMap:
-    weights: Tuple[TokenWeight, ...]
+    weights: tuple[TokenWeight, ...]
     cfg_multiplier: float
 
-    def as_prompt_weights(self) -> Dict[str, float]:
+    def as_prompt_weights(self) -> dict[str, float]:
         return {w.token: w.weight for w in self.weights}
 
 
-_HARD_TOKENS: Tuple[Tuple[str, float, str], ...] = (
+_HARD_TOKENS: tuple[tuple[str, float, str], ...] = (
     (r"\btext\b|\btypography\b|\blogo\b|\bsign\b", 1.35, "text rendering"),
     (r"\bhands?\b|\bfingers?\b", 1.25, "anatomy"),
     (r"\beyes?\b|\bpupils?\b", 1.15, "face detail"),
@@ -40,7 +39,7 @@ _HARD_TOKENS: Tuple[Tuple[str, float, str], ...] = (
 class TokenEmphasisPlanner:
     def plan(self, prompt: str, *, base_cfg: float = 7.5) -> TokenEmphasisMap:
         text = prompt or ""
-        weights: List[TokenWeight] = []
+        weights: list[TokenWeight] = []
         boost = 0.0
         for pattern, w, reason in _HARD_TOKENS:
             m = re.search(pattern, text, flags=re.IGNORECASE)

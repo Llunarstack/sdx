@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import numpy as np
 
@@ -26,13 +25,13 @@ def match_luminance(rgb: np.ndarray, target_luma: float, *, strength: float = 0.
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def apply_deflicker(frame_paths: List[Path], *, window: int = 5, strength: float = 0.75) -> List[Path]:
+def apply_deflicker(frame_paths: list[Path], *, window: int = 5, strength: float = 0.75) -> list[Path]:
     """Rolling median luminance target reduces flicker from per-frame edits."""
     if not frame_paths:
         return []
     lumas = [_frame_luma(read_frame_rgb(p)) for p in frame_paths]
     w = max(1, int(window))
-    targets: List[float] = []
+    targets: list[float] = []
     for i in range(len(lumas)):
         lo = max(0, i - w // 2)
         hi = min(len(lumas), i + w // 2 + 1)

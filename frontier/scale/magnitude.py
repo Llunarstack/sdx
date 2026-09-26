@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class ScaleRelation(str, Enum):
@@ -23,7 +22,7 @@ class MagnitudePlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, ScaleRelation, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, ScaleRelation, str, str], ...] = (
     (
         re.compile(r"\b(colossal|giant|titan|kaiju|massive creature|towering)\b", re.I),
         ScaleRelation.TITAN,
@@ -59,7 +58,7 @@ class MagnitudePlanner:
                 return MagnitudePlan(rel, pos, neg)
         return MagnitudePlan(ScaleRelation.NONE, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

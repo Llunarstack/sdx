@@ -6,8 +6,8 @@ cast mention checks, and optional warning strings (T5 / CLIP context is finite).
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Dict, List, Sequence, Set
 
 
 def approximate_token_estimate(text: str, *, chars_per_token: float = 3.2) -> int:
@@ -27,7 +27,7 @@ def composed_prompt_length_report(
     rolling_context: str = "",
     visual_memory_fragment: str = "",
     oc_block: str = "",
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Return per-block character counts and total for a composed book page prompt."""
     parts = {
         "narration_prefix": len((narration_prefix or "").strip()),
@@ -59,8 +59,8 @@ def composed_prompt_length_report(
 class CastMentionResult:
     """Which cast labels were found in a page prompt (case-insensitive substring)."""
 
-    found: List[str] = field(default_factory=list)
-    missing: List[str] = field(default_factory=list)
+    found: list[str] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)
 
     def soft_reminder_fragment(self) -> str:
         """Short positive fragment nudging unnamed cast into the page line (empty if none missing)."""
@@ -80,8 +80,8 @@ def find_cast_mentions(page_prompt: str, cast_names: Sequence[str]) -> CastMenti
     or as a whole token for single-word names.
     """
     text = (page_prompt or "").lower()
-    found: List[str] = []
-    missing: List[str] = []
+    found: list[str] = []
+    missing: list[str] = []
     for raw in cast_names:
         name = str(raw).strip()
         if not name:
@@ -108,8 +108,8 @@ def strip_duplicate_prompt_phrases(text: str) -> str:
     if not s:
         return ""
     parts = [p.strip() for p in s.split(",") if p.strip()]
-    seen: Set[str] = set()
-    out: List[str] = []
+    seen: set[str] = set()
+    out: list[str] = []
     for p in parts:
         key = p.lower()
         if key in seen:
@@ -126,7 +126,7 @@ def panel_layout_hint(
     reading_order: str = "left-to-right",
 ) -> str:
     """Positive tokens for multi-panel pages (comic / manga grids)."""
-    bits: List[str] = []
+    bits: list[str] = []
     n = max(1, int(panels))
     if n == 1:
         bits.append("single clear focal illustration")

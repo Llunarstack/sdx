@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 
 @dataclass(slots=True)
@@ -22,7 +23,7 @@ ToolName = Literal["segment", "depth", "ocr", "retrieve", "noop"]
 @dataclass(slots=True)
 class ToolCall:
     name: ToolName
-    args: Dict[str, Any] = field(default_factory=dict)
+    args: dict[str, Any] = field(default_factory=dict)
     call_id: str = ""
 
 
@@ -30,8 +31,8 @@ class ToolCall:
 class ToolOutcome:
     call: ToolCall
     ok: bool
-    payload: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
 
 
 class ToolStubRegistry:
@@ -40,9 +41,9 @@ class ToolStubRegistry:
     __slots__ = ("_handlers",)
 
     def __init__(self) -> None:
-        self._handlers: Dict[ToolName, Callable[[Dict[str, Any]], Dict[str, Any]]] = {}
+        self._handlers: dict[ToolName, Callable[[dict[str, Any]], dict[str, Any]]] = {}
 
-    def register(self, name: ToolName, fn: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:
+    def register(self, name: ToolName, fn: Callable[[dict[str, Any]], dict[str, Any]]) -> None:
         self._handlers[name] = fn
 
     def invoke(self, call: ToolCall) -> ToolOutcome:
@@ -55,7 +56,7 @@ class ToolStubRegistry:
         except Exception as e:  # noqa: BLE001 — stub tier
             return ToolOutcome(call=call, ok=False, error=str(e))
 
-    def summarize(self, outcomes: List[ToolOutcome]) -> Dict[str, bool]:
+    def summarize(self, outcomes: list[ToolOutcome]) -> dict[str, bool]:
         return {oc.call.name: oc.ok for oc in outcomes}
 
 

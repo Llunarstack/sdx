@@ -1,3 +1,0 @@
-# Moved
-
-This document moved to **[NEXTGEN_SUPERMODEL_ARCHITECTURE](research/NEXTGEN_SUPERMODEL_ARCHITECTURE.md)**.

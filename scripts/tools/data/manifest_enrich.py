@@ -15,14 +15,14 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-def _resolve_image(path_str: str, *, image_root: Optional[Path], manifest_dir: Path) -> Optional[Path]:
+def _resolve_image(path_str: str, *, image_root: Path | None, manifest_dir: Path) -> Path | None:
     p = Path(path_str)
     if p.is_file():
         return p
@@ -36,7 +36,7 @@ def _resolve_image(path_str: str, *, image_root: Optional[Path], manifest_dir: P
     return None
 
 
-def _load_rgb_uint8(path: Path) -> Optional[Any]:
+def _load_rgb_uint8(path: Path) -> Any | None:
     try:
         import numpy as np
         from PIL import Image

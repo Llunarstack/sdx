@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List
 
 _SPLIT_RE = re.compile(r"[,\n;|]+")
 _WS_RE = re.compile(r"\s+")
@@ -22,18 +21,18 @@ DEFAULT_AVOID = [
 
 @dataclass(frozen=True, slots=True)
 class PromptBreakdown:
-    add: List[str]
-    avoid: List[str]
-    neutral: List[str]
+    add: list[str]
+    avoid: list[str]
+    neutral: list[str]
 
 
 def _norm_tag(s: str) -> str:
     return _WS_RE.sub(" ", s.strip().lower())
 
 
-def _unique_keep_order(items: List[str]) -> List[str]:
+def _unique_keep_order(items: list[str]) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for i in items:
         if i not in seen:
             seen.add(i)
@@ -43,9 +42,9 @@ def _unique_keep_order(items: List[str]) -> List[str]:
 
 def breakdown_prompt(prompt: str) -> PromptBreakdown:
     raw_parts = [p.strip() for p in _SPLIT_RE.split(prompt or "") if p.strip()]
-    add: List[str] = []
-    avoid: List[str] = []
-    neutral: List[str] = []
+    add: list[str] = []
+    avoid: list[str] = []
+    neutral: list[str] = []
 
     for p in raw_parts:
         low = _norm_tag(p)
@@ -89,8 +88,8 @@ def breakdown_prompt(prompt: str) -> PromptBreakdown:
 
 
 def compose_positive_with_embedded_negative(
-    add: List[str],
-    avoid: List[str],
+    add: list[str],
+    avoid: list[str],
     *,
     inject_default_avoid: bool = True,
 ) -> str:
@@ -107,7 +106,7 @@ def compose_positive_with_embedded_negative(
     return f"{add_block}, avoid: {avoid_block}"
 
 
-def build_prompt_plan(prompt: str, *, inject_default_avoid: bool = True) -> Dict[str, object]:
+def build_prompt_plan(prompt: str, *, inject_default_avoid: bool = True) -> dict[str, object]:
     b = breakdown_prompt(prompt)
     composed = compose_positive_with_embedded_negative(
         b.add,

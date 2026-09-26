@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional, Tuple
 
 
-def iter_jsonl_line_offsets(path: Path) -> Iterator[Tuple[int, int]]:
+def iter_jsonl_line_offsets(path: Path) -> Iterator[tuple[int, int]]:
     """
     Yield ``(byte_start, byte_length)`` per line including ``\\n`` (if present).
 
@@ -21,8 +21,8 @@ def iter_jsonl_line_offsets(path: Path) -> Iterator[Tuple[int, int]]:
             yield (start, len(line))
 
 
-def build_line_offset_table(path: Path, *, max_lines: Optional[int] = None) -> List[Tuple[int, int]]:
-    out: List[Tuple[int, int]] = []
+def build_line_offset_table(path: Path, *, max_lines: int | None = None) -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
     for i, t in enumerate(iter_jsonl_line_offsets(path)):
         out.append(t)
         if max_lines is not None and len(out) >= max_lines:

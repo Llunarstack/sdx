@@ -8,10 +8,10 @@ and export ``examples/box_layout*.json`` for ``sample.py --box-layout``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Omost uses 9 anchor boxes; we expose the same grid for LLM compatibility.
-OMOST_GRID: Dict[str, tuple[float, float, float, float]] = {
+OMOST_GRID: dict[str, tuple[float, float, float, float]] = {
     "top_left": (0.0, 0.0, 0.33, 0.33),
     "top": (0.33, 0.0, 0.66, 0.33),
     "top_right": (0.66, 0.0, 1.0, 0.33),
@@ -40,7 +40,7 @@ class OmostCanvas:
 
     global_description: str = ""
     global_negative: str = ""
-    local_regions: List[LocalDescription] = field(default_factory=list)
+    local_regions: list[LocalDescription] = field(default_factory=list)
     feather: int = 8
 
     def set_global_description(self, text: str, *, negative: str = "") -> None:
@@ -52,9 +52,9 @@ class OmostCanvas:
         self,
         prompt: str,
         *,
-        box: Optional[tuple[float, float, float, float]] = None,
-        anchor: Optional[str] = None,
-        name: Optional[str] = None,
+        box: tuple[float, float, float, float] | None = None,
+        anchor: str | None = None,
+        name: str | None = None,
         negative: str = "",
         priority: int = 5,
         reference: str = "",
@@ -80,10 +80,10 @@ class OmostCanvas:
             )
         )
 
-    def to_dict(self) -> Dict[str, Any]:
-        regions: List[Dict[str, Any]] = []
+    def to_dict(self) -> dict[str, Any]:
+        regions: list[dict[str, Any]] = []
         for loc in self.local_regions:
-            r: Dict[str, Any] = {
+            r: dict[str, Any] = {
                 "name": loc.name,
                 "box": list(loc.box),
                 "prompt": loc.prompt,
@@ -94,7 +94,7 @@ class OmostCanvas:
             if loc.reference:
                 r["reference"] = loc.reference
             regions.append(r)
-        out: Dict[str, Any] = {
+        out: dict[str, Any] = {
             "global_prompt": self.global_description,
             "feather": self.feather,
             "regions": regions,
@@ -104,7 +104,7 @@ class OmostCanvas:
         return out
 
 
-def canvas_to_box_layout(canvas: OmostCanvas) -> Dict[str, Any]:
+def canvas_to_box_layout(canvas: OmostCanvas) -> dict[str, Any]:
     """Export dict suitable for ``json.dump`` → ``--box-layout``."""
     if not canvas.local_regions:
         raise ValueError("canvas has no local descriptions")

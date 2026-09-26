@@ -6,7 +6,6 @@ import hashlib
 import re
 from dataclasses import dataclass
 from random import Random
-from typing import Dict, Optional
 
 _OC_TRIGGER_RE = re.compile(
     r"\boriginal character\b|\bmy oc\b|\bnew oc\b|\bcreate (?:an|a) character\b|"
@@ -77,7 +76,7 @@ _ARCHETYPES = (
     "space_pilot",
 )
 
-_ARCHETYPE_KEYWORDS: Dict[str, str] = {
+_ARCHETYPE_KEYWORDS: dict[str, str] = {
     "noir_detective": "detective noir trench mystery crime",
     "space_pilot": "space sci-fi pilot spaceship mecha cyberpunk",
     "magical_girl": "magical idol sparkle transformation wand",
@@ -87,7 +86,7 @@ _ARCHETYPE_KEYWORDS: Dict[str, str] = {
     "shonen_lead": "hero adventure battle protagonist",
 }
 
-_STYLE_ARCHETYPE_KEYWORDS: Dict[str, str] = {
+_STYLE_ARCHETYPE_KEYWORDS: dict[str, str] = {
     "space_pilot": "anime 3d game sci-fi cyberpunk mecha pbr unreal",
     "noir_detective": "noir ink crosshatch detective",
     "magical_girl": "idol shoujo magical pastel vtuber",
@@ -108,7 +107,7 @@ _TRAITS = (
     "small beauty mark under eye",
 )
 
-_WARDROBE_BY_ARCHETYPE: Dict[str, tuple[str, ...]] = {
+_WARDROBE_BY_ARCHETYPE: dict[str, tuple[str, ...]] = {
     "space_pilot": ("flight jacket with utility harness", "reinforced boots and tactical gloves"),
     "noir_detective": ("long trench coat and waistcoat", "fedora-inspired headwear with leather holster"),
     "magical_girl": ("iconic transformation outfit with ribbon motifs", "knee-high boots and emblem accessory"),
@@ -118,7 +117,7 @@ _WARDROBE_BY_ARCHETYPE: Dict[str, tuple[str, ...]] = {
     "shonen_lead": ("sporty jacket with bold emblem", "battle-ready belt and fingerless gloves"),
 }
 
-_SILHOUETTE_BY_ARCHETYPE: Dict[str, str] = {
+_SILHOUETTE_BY_ARCHETYPE: dict[str, str] = {
     "space_pilot": "broad upper silhouette with tapered lower body",
     "noir_detective": "long vertical silhouette with coat-tail rhythm",
     "magical_girl": "clear hourglass silhouette with iconic accessory shapes",
@@ -137,7 +136,7 @@ _COLOR_MOTIFS = (
     "black and ivory with one signature accent color",
 )
 
-_EXPRESSIONS_BY_ARCHETYPE: Dict[str, str] = {
+_EXPRESSIONS_BY_ARCHETYPE: dict[str, str] = {
     "space_pilot": "confident smirk, focused glare, determined command shout",
     "noir_detective": "skeptical glance, dry half-smile, intense confrontation stare",
     "magical_girl": "gentle smile, determined shout, radiant heroic expression",
@@ -152,7 +151,7 @@ _DEFAULT_NEGATIVE = (
     "outfit inconsistency, color motif drift, random extra accessories"
 )
 
-_STYLE_TRAIT_BOOSTS: Dict[str, tuple[str, ...]] = {
+_STYLE_TRAIT_BOOSTS: dict[str, tuple[str, ...]] = {
     "anime 3d game": ("clean anime face planes", "stylized topology-friendly hair silhouette"),
     "ink": ("ink-friendly shape breakup", "strong contour readability under monochrome"),
     "oil": ("painterly facial plane transitions", "brush-character-friendly hair masses"),
@@ -187,7 +186,7 @@ def infer_auto_original_character(
     *,
     seed: int = 0,
     style_context: str = "",
-) -> Optional[AutoOriginalCharacterProfile]:
+) -> AutoOriginalCharacterProfile | None:
     """
     Return a synthesized OC profile only when prompt asks for OC/character design.
     """

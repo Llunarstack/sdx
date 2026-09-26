@@ -10,19 +10,17 @@ without each sampler re-validating. Returns a copy; never mutates the input.
 
 from __future__ import annotations
 
-from typing import Dict
-
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     return max(float(lo), min(float(hi), float(v)))
 
 
-def sanitize_holy_grail_kwargs(kwargs: Dict[str, float | bool]) -> Dict[str, float | bool]:
+def sanitize_holy_grail_kwargs(kwargs: dict[str, float | bool]) -> dict[str, float | bool]:
     """
     Clamp and normalize holy-grail kwargs to stable ranges.
     Returns a copied dict.
     """
-    out: Dict[str, float | bool] = dict(kwargs)
+    out: dict[str, float | bool] = dict(kwargs)
     out["holy_grail_cfg_early_ratio"] = _clamp(float(out.get("holy_grail_cfg_early_ratio", 0.72)), 0.4, 1.4)
     out["holy_grail_cfg_late_ratio"] = _clamp(float(out.get("holy_grail_cfg_late_ratio", 1.0)), 0.4, 1.6)
     out["holy_grail_control_mult"] = _clamp(float(out.get("holy_grail_control_mult", 1.0)), 0.0, 2.5)

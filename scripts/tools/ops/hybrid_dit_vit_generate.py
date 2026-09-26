@@ -17,8 +17,8 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Sequence
 
 import torch
 from PIL import Image
@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-def _candidate_paths(out_path: Path, num: int) -> List[Path]:
+def _candidate_paths(out_path: Path, num: int) -> list[Path]:
     stem, ext = out_path.stem, out_path.suffix
     return [out_path.parent / f"{stem}_cand{i}{ext}" for i in range(max(0, int(num)))]
 
@@ -115,14 +115,14 @@ def extract_expected_text(prompt: str) -> str:
     return ""
 
 
-def pareto_front_rows(rows: Sequence[Dict[str, float]], objective_keys: Sequence[str]) -> List[Dict[str, float]]:
+def pareto_front_rows(rows: Sequence[dict[str, float]], objective_keys: Sequence[str]) -> list[dict[str, float]]:
     """
     Return non-dominated rows for max objectives.
     """
     keys = [k for k in objective_keys if k]
     if not rows or not keys:
         return list(rows)
-    front: List[Dict[str, float]] = []
+    front: list[dict[str, float]] = []
     for i, r in enumerate(rows):
         dominated = False
         for j, s in enumerate(rows):
@@ -167,7 +167,7 @@ def anneal_weight(base_weight: float, iteration_idx: int, total_iterations: int,
     return base
 
 
-def uncertainty_score(best_row: Dict[str, float], second_row: Dict[str, float] | None = None) -> float:
+def uncertainty_score(best_row: dict[str, float], second_row: dict[str, float] | None = None) -> float:
     """
     Estimate decision uncertainty in [0,1]; higher means "spend more compute".
     """
@@ -208,7 +208,7 @@ def signature_novelty(
 ) -> float:
     if not memory:
         return 1.0
-    dists: List[float] = []
+    dists: list[float] = []
     for m in memory:
         dm = (
             abs(signature[0] - m[0])
@@ -247,11 +247,11 @@ def maybe_self_correct_prompt(
     return f"{corrective}, {p}".strip()
 
 
-def reflective_prompt_update(prompt: str, best_row: Dict[str, float], *, enable: bool) -> str:
+def reflective_prompt_update(prompt: str, best_row: dict[str, float], *, enable: bool) -> str:
     if not enable:
         return str(prompt)
     p = str(prompt).strip()
-    additions: List[str] = []
+    additions: list[str] = []
     if float(best_row.get("vit_adherence_score", 0.0)) < 0.58:
         additions.append("literal prompt adherence, exact attribute binding")
     if float(best_row.get("count_score", 0.5)) < 0.45:
@@ -286,7 +286,7 @@ def _score_candidates_with_vit(
     expected_people_count: int,
     expected_object_count: int,
     expected_object_hint: str,
-) -> List[Dict[str, float]]:
+) -> list[dict[str, float]]:
     import numpy as np
     from utils.architecture.ar_block_conditioning import ar_conditioning_vector, normalize_num_ar_blocks
     from utils.quality.test_time_pick import (
@@ -320,7 +320,7 @@ def _score_candidates_with_vit(
             ar_b = normalize_num_ar_blocks(default_num_ar_blocks)
         ar_vec = ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0)
 
-    rows: List[Dict[str, float]] = []
+    rows: list[dict[str, float]] = []
     with torch.no_grad():
         for p in candidate_paths:
             if not p.is_file():
@@ -512,17 +512,17 @@ def main() -> int:
     if default_ar < 0:
         default_ar = None
 
-    iter_reports: List[Dict[str, object]] = []
-    global_rows: List[Dict[str, object]] = []
+    iter_reports: list[dict[str, object]] = []
+    global_rows: list[dict[str, object]] = []
     cur_num = max(1, int(args.num))
-    elite_memory: List[tuple[float, float, float, float, float, float]] = []
+    elite_memory: list[tuple[float, float, float, float, float, float]] = []
     i = 0
     while i < iterations_runtime:
         seed_i = seed_for_iteration(int(args.seed_start), i, int(args.seed_stride))
         iter_out = out_path.parent / f"{out_path.stem}_iter{i}{out_path.suffix}"
         shape_pos = ""
         shape_neg = ""
-        shape_blueprint: Dict[str, object] | None = None
+        shape_blueprint: dict[str, object] | None = None
         if bool(args.auto_shape_scaffold):
             from utils.prompt.shape_scaffold import compile_shape_scaffold
 
@@ -654,7 +654,7 @@ def main() -> int:
             selection_pool = pareto[:k] if pareto else selection_pool
 
         # V4: Cross-iteration elite memory adds diversity pressure.
-        selection_pool_enriched: List[Dict[str, float]] = []
+        selection_pool_enriched: list[dict[str, float]] = []
         for r in selection_pool:
             rr = dict(r)
             bonus = 0.0

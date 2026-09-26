@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Tuple
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
 # Aliases → canonical medium keys used below
-_MEDIUM_ALIASES: Dict[str, str] = {
+_MEDIUM_ALIASES: dict[str, str] = {
     "auto": "auto",
     "manga": "manga",
     "manhwa": "webtoon",
@@ -36,7 +35,7 @@ _MEDIUM_ALIASES: Dict[str, str] = {
 }
 
 # Positives: medium → tier → fragment
-_AUTH_POSITIVE: Dict[str, Dict[str, str]] = {
+_AUTH_POSITIVE: dict[str, dict[str, str]] = {
     "manga": {
         "lite": (
             "convincing hand-inked manga line, natural taper on strokes, readable screentone dots "
@@ -120,7 +119,7 @@ _AUTH_POSITIVE: Dict[str, Dict[str, str]] = {
     },
 }
 
-_AUTH_NEGATIVE: Dict[str, Dict[str, str]] = {
+_AUTH_NEGATIVE: dict[str, dict[str, str]] = {
     "manga": {
         "lite": "uniform vector manga lines, muddy screentone smear, same face every panel",
         "standard": (
@@ -236,7 +235,7 @@ def resolve_authenticity_bundle(
     book_type: str = "",
     lexicon_style: str = "",
     visual_memory_book_style: str = "",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Return ``{"positive": str, "negative": str, "effective_medium": str}``.
     *level*: ``none`` | ``lite`` | ``standard`` | ``strong``.
@@ -278,6 +277,6 @@ def resolve_authenticity_bundle(
     return {"positive": pos.strip(), "negative": neg.strip(), "effective_medium": em}
 
 
-def authenticity_preset_names() -> Tuple[str, ...]:
+def authenticity_preset_names() -> tuple[str, ...]:
     """CLI / docs: valid ``--book-authenticity`` levels."""
     return ("none", "lite", "standard", "strong")

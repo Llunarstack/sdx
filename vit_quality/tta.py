@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 import torch
 
 
@@ -10,13 +8,13 @@ def tta_predict(
     model: torch.nn.Module,
     x: torch.Tensor,
     text_features: torch.Tensor,
-    ar_conditioning: Optional[torch.Tensor] = None,
-) -> Dict[str, torch.Tensor]:
+    ar_conditioning: torch.Tensor | None = None,
+) -> dict[str, torch.Tensor]:
     """
     Test-time augmentation with horizontal flip.
     Returns averaged model outputs.
     """
-    outs: List[Dict[str, torch.Tensor]] = []
+    outs: list[dict[str, torch.Tensor]] = []
     outs.append(model(x, text_features, ar_conditioning))
     outs.append(model(torch.flip(x, dims=[3]), text_features, ar_conditioning))
 

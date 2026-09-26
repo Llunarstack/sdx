@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 from .timeline import frame_count_for_duration
 
@@ -14,12 +14,12 @@ __all__ = ["KeyframeSchedule", "pick_keyframe_indices", "schedule_keyframes_for_
 @dataclass(slots=True)
 class KeyframeSchedule:
     segment_index: int
-    frame_indices: List[int]
-    frame_paths: List[Path]
+    frame_indices: list[int]
+    frame_paths: list[Path]
     interval: int
 
 
-def pick_keyframe_indices(total_frames: int, *, interval: int = 6, always_include: Sequence[int] = ()) -> List[int]:
+def pick_keyframe_indices(total_frames: int, *, interval: int = 6, always_include: Sequence[int] = ()) -> list[int]:
     """Every ``interval`` frames plus first/last and optional anchors."""
     if total_frames <= 0:
         return []
@@ -34,13 +34,13 @@ def pick_keyframe_indices(total_frames: int, *, interval: int = 6, always_includ
 
 
 def schedule_keyframes_for_segment(
-    frame_paths: List[Path],
+    frame_paths: list[Path],
     *,
     segment_index: int,
     duration_sec: float,
     fps: float,
     interval: int = 6,
-    beat_indices: Optional[Sequence[int]] = None,
+    beat_indices: Sequence[int] | None = None,
 ) -> KeyframeSchedule:
     target = frame_count_for_duration(duration_sec, fps)
     if len(frame_paths) > target:

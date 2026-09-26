@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "CompositionSpec",
@@ -11,7 +12,7 @@ __all__ = [
     "compose_shot_framing",
 ]
 
-_SHOT_GRAMMAR: Dict[str, Dict[str, str]] = {
+_SHOT_GRAMMAR: dict[str, dict[str, str]] = {
     "close_up": {"headroom": "tight", "lead_room": "minimal", "balance": "face dominant center-third"},
     "close-up": {"headroom": "tight", "lead_room": "minimal", "balance": "face dominant center-third"},
     "medium": {"headroom": "standard", "lead_room": "moderate", "balance": "subject on vertical third"},
@@ -40,7 +41,7 @@ class CompositionSpec:
     negative_suffix: str
 
 
-def parse_mise_config(raw: Any) -> Dict[str, Any]:
+def parse_mise_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": True}
     if isinstance(raw, bool):
@@ -75,7 +76,7 @@ def _grammar_key(shot: Any) -> str:
     return "medium"
 
 
-def compose_shot_framing(shot: Any, *, config: Mapping[str, Any]) -> Optional[CompositionSpec]:
+def compose_shot_framing(shot: Any, *, config: Mapping[str, Any]) -> CompositionSpec | None:
     if not config.get("enabled", True):
         return None
     key = _grammar_key(shot)
@@ -92,8 +93,8 @@ def compose_shot_framing(shot: Any, *, config: Mapping[str, Any]) -> Optional[Co
     )
 
 
-def compose_all_shots(shots: Sequence[Any], config: Mapping[str, Any]) -> List[CompositionSpec]:
-    out: List[CompositionSpec] = []
+def compose_all_shots(shots: Sequence[Any], config: Mapping[str, Any]) -> list[CompositionSpec]:
+    out: list[CompositionSpec] = []
     for sh in shots:
         spec = compose_shot_framing(sh, config=config)
         if spec:

@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
 
 
 @dataclass(frozen=True)
 class PreserveSpec:
-    locked_phrases: Tuple[str, ...]
+    locked_phrases: tuple[str, ...]
     change_phrase: str
     strength_hint: float  # 0..1 img2img / latent edit strength
 
@@ -26,7 +25,7 @@ class CounterfactualEdit:
     inpaint_region: str = ""  # optional box name
 
 
-_CHANGE_PATTERNS: Tuple[Tuple[str, str], ...] = (
+_CHANGE_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\bchange\s+(?:the\s+)?(.+?)\s+to\s+(.+?)(?:\.|$|,)", "change"),
     (r"\bmake\s+(?:the\s+)?(.+?)\s+(.+?)(?:\.|$|,)", "make"),
     (r"\breplace\s+(?:the\s+)?(.+?)\s+with\s+(.+?)(?:\.|$|,)", "replace"),
@@ -62,16 +61,16 @@ class PreserveEditPlanner:
         parts = [f"do not change {p}" for p in spec.locked_phrases[:5]]
         return ", ".join(parts)
 
-    def regional_prompts(self, edit: CounterfactualEdit) -> Tuple[str, str]:
+    def regional_prompts(self, edit: CounterfactualEdit) -> tuple[str, str]:
         """(global_locked, local_change) for two-pass regional."""
         global_p = ", ".join(edit.preserve.locked_phrases) if edit.preserve.locked_phrases else edit.original
         local = edit.preserve.change_phrase
         return global_p, local
 
 
-def _lock_phrases(prompt: str, exclude: set[str]) -> List[str]:
+def _lock_phrases(prompt: str, exclude: set[str]) -> list[str]:
     chunks = [c.strip() for c in re.split(r"[,;]", prompt) if c.strip()]
-    locked: List[str] = []
+    locked: list[str] = []
     for c in chunks:
         if any(ex in c.lower() for ex in exclude):
             continue

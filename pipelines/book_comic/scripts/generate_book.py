@@ -27,8 +27,9 @@ import json
 import shlex
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from PIL import Image
 
@@ -83,7 +84,7 @@ def _apply_book_style(prefix: str, prompt: str) -> str:
     return f"{prefix.strip()}, {prompt}"
 
 
-def _maybe_append_text_says(prompt: str, expected_texts: List[str]) -> str:
+def _maybe_append_text_says(prompt: str, expected_texts: list[str]) -> str:
     if not expected_texts:
         return prompt
     # sample.py has prompt-based detection for "text that says" / "says \""
@@ -99,7 +100,7 @@ def _maybe_append_text_says(prompt: str, expected_texts: List[str]) -> str:
     return f"{prompt.strip()}, {', '.join(extra_parts)}"
 
 
-def _parse_expected_texts(raw: str) -> List[str]:
+def _parse_expected_texts(raw: str) -> list[str]:
     # Accept: "OPEN" or "OPEN,WORLD" or JSON list.
     raw = (raw or "").strip()
     if not raw:
@@ -115,13 +116,13 @@ def _parse_expected_texts(raw: str) -> List[str]:
     return [p for p in parts if p]
 
 
-def _load_prompts_from_file(path: Path) -> List[str]:
+def _load_prompts_from_file(path: Path) -> list[str]:
     """
     Backward-compatible: returns only prompts.
     For per-page expected text overrides, see _load_prompts_with_expected_from_file().
     """
     lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    prompts: List[str] = []
+    prompts: list[str] = []
     for ln in lines:
         ln = ln.strip()
         if not ln:
@@ -130,7 +131,7 @@ def _load_prompts_from_file(path: Path) -> List[str]:
     return prompts
 
 
-def _load_prompts_with_expected_from_file(path: Path) -> List[Tuple[str, str]]:
+def _load_prompts_with_expected_from_file(path: Path) -> list[tuple[str, str]]:
     """
     Supports lines of the form:
       prompt...
@@ -138,7 +139,7 @@ def _load_prompts_with_expected_from_file(path: Path) -> List[Tuple[str, str]]:
       prompt...|||expected text (comma-separated or JSON list)
     """
     lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    specs: List[Tuple[str, str]] = []
+    specs: list[tuple[str, str]] = []
     for ln in lines:
         ln = ln.strip()
         if not ln:
@@ -221,7 +222,7 @@ def _build_speech_bubble_outline_keep_mask_pil(
     *,
     inner_dilate_px: int = 2,
     outer_dilate_px: int = 18,
-) -> Optional[Image.Image]:
+) -> Image.Image | None:
     """
     Build a KEEP mask (black=keep, white=inpaint) for speech-bubble outlines.
 
@@ -287,7 +288,7 @@ def _build_speech_bubble_outline_keep_mask(
     return True
 
 
-def _combine_keep_masks(mask_paths: List[Path], out_path: Path) -> None:
+def _combine_keep_masks(mask_paths: list[Path], out_path: Path) -> None:
     """
     Combine multiple masks where black pixels represent KEEP.
     If ANY mask says KEEP (black), final mask will be KEEP (black).
@@ -335,7 +336,7 @@ def _load_user_anchor_mask(
     m.save(out_path)
 
 
-def _ocr_text_accuracy(text_engine: Any, image: Image.Image, expected_texts: List[str]) -> float:
+def _ocr_text_accuracy(text_engine: Any, image: Image.Image, expected_texts: list[str]) -> float:
     try:
         res = text_engine.validate_text_rendering(image, expected_texts)
         return float(res.get("accuracy_score", 0.0))
@@ -346,7 +347,7 @@ def _ocr_text_accuracy(text_engine: Any, image: Image.Image, expected_texts: Lis
 def _try_ocr_fix(
     *,
     image_path: Path,
-    expected_texts: List[str],
+    expected_texts: list[str],
     prompt: str,
     ckpt: str,
     out_path: Path,
@@ -363,11 +364,11 @@ def _try_ocr_fix(
     max_iters: int,
     threshold: float,
     inpaint_mode: str,
-    seed: Optional[int],
+    seed: int | None,
     sampler: str,
     text_in_image_flag: bool,
     ocr_mask_dilate: int,
-    ocr_extra_flags: Optional[List[str]] = None,
+    ocr_extra_flags: list[str] | None = None,
 ) -> None:
     """
     Repeatedly:
@@ -2217,8 +2218,8 @@ def main() -> None:
     if _pf_errs:
         raise SystemExit("book preflight (strict) failed:\n" + "\n".join(_pf_errs))
 
-    def _cfg_cmd_tail() -> List[str]:
-        tail: List[str] = []
+    def _cfg_cmd_tail() -> list[str]:
+        tail: list[str] = []
         book_helpers.append_optional_sample_flags(
             tail,
             vae_tiling=bool(getattr(args, "vae_tiling", False)),
@@ -2233,8 +2234,8 @@ def main() -> None:
         )
         return tail
 
-    def _photo_tail() -> List[str]:
-        tail: List[str] = []
+    def _photo_tail() -> list[str]:
+        tail: list[str] = []
         prp = str(getattr(args, "photo_realism_pack", "none") or "none").strip().lower()
         if prp != "none":
             tail.extend(["--photo-realism-pack", prp])
@@ -2297,7 +2298,7 @@ def main() -> None:
         _parse_expected_texts(args.pages_expected_text) if args.pages_expected_text.strip() else expected_texts
     )
 
-    book_prefix_map: Dict[str, str] = {
+    book_prefix_map: dict[str, str] = {
         "manga": "manga panel page, black and white ink, screentones, clean lineart, high contrast, dynamic composition",
         "comic": "comic book page, inked lineart, screentone shading, crisp outlines, strong silhouettes, panel layout",
         "novel_cover": "book cover design, title typography, author name, professional layout, readable lettering",
@@ -2468,7 +2469,7 @@ def main() -> None:
     oc_block = prompt_lexicon.original_character_bundle(**_oc_cfg)
     narration_p = (getattr(args, "narration_prefix", "") or "").strip()
 
-    consistency_spec: Dict[str, Any] = {}
+    consistency_spec: dict[str, Any] = {}
     cj = str(getattr(args, "consistency_json", "") or "").strip()
     if cj:
         consistency_spec = dict(consistency_helpers.load_consistency_json(Path(cj)))
@@ -2498,16 +2499,16 @@ def main() -> None:
     context_n = max(0, int(getattr(args, "page_context_previous", 0) or 0))
     context_mc = max(32, int(getattr(args, "page_context_max_chars", 500) or 500))
     start_idx = max(0, int(getattr(args, "start_page", 0) or 0))
-    prev_prompts: List[str] = []
-    manifest_rows: List[Dict[str, Any]] = []
+    prev_prompts: list[str] = []
+    manifest_rows: list[dict[str, Any]] = []
 
     # Load OCR engine lazily (so script can run without tesseract).
     text_engine = None
     ocr_engine = None
 
     # Build page prompts
-    prompts: List[str] = []
-    page_expected_overrides: List[List[str]] = []
+    prompts: list[str] = []
+    page_expected_overrides: list[list[str]] = []
     if args.prompts_file:
         page_specs = _load_prompts_with_expected_from_file(Path(args.prompts_file))
         prompts = [p for (p, _) in page_specs]
@@ -2594,11 +2595,11 @@ def main() -> None:
         prompt: str,
         out_path: Path,
         *,
-        expected_texts_for_prompt: List[str],
-        init_image: Optional[Path] = None,
-        mask_path: Optional[Path] = None,
-        strength: Optional[float] = None,
-        page_seed: Optional[int] = None,
+        expected_texts_for_prompt: list[str],
+        init_image: Path | None = None,
+        mask_path: Path | None = None,
+        strength: float | None = None,
+        page_seed: int | None = None,
     ) -> None:
         prompt_final = _apply_book_style(prompt_prefix, prompt)
         if args.force_text_quote and expected_texts_for_prompt:
@@ -2607,7 +2608,7 @@ def main() -> None:
 
         pick_exp = book_helpers.expected_text_for_pick(expected_texts_for_prompt)
 
-        cmd: List[str] = [
+        cmd: list[str] = [
             sys.executable,
             str(sample_py_path),
             "--ckpt",
@@ -2707,7 +2708,7 @@ def main() -> None:
         side: str,
         user_prompt: str,
         out_path: Path,
-        expected_for_ocr: List[str],
+        expected_for_ocr: list[str],
         manifest_kind: str,
         seed: int,
     ) -> None:
@@ -2791,8 +2792,8 @@ def main() -> None:
         )
 
     # Pages
-    prev_path: Optional[Path] = None
-    user_anchor_mask_internal: Optional[Path] = None
+    prev_path: Path | None = None
+    user_anchor_mask_internal: Path | None = None
     if args.anchor_mask.strip():
         user_anchor_mask_internal = out_dir / "user_anchor_mask.png"
         _load_user_anchor_mask(
@@ -2861,7 +2862,7 @@ def main() -> None:
             )
         else:
             prev_img = Image.open(prev_path).convert("RGB")
-            keep_masks: List[Path] = []
+            keep_masks: list[Path] = []
 
             # Freeze regions from the previous page, inpaint the rest for coherence.
             if args.anchor_face:

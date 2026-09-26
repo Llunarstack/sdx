@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "VisualMotif",
@@ -29,13 +30,13 @@ class VisualMotif:
 @dataclass(slots=True)
 class MotifHauntReport:
     ok: bool
-    unresolved: List[str] = field(default_factory=list)
-    appearances: Dict[str, List[str]] = field(default_factory=dict)
-    injections: Dict[str, str] = field(default_factory=dict)  # shot_id → prompt frag
+    unresolved: list[str] = field(default_factory=list)
+    appearances: dict[str, list[str]] = field(default_factory=dict)
+    injections: dict[str, str] = field(default_factory=dict)  # shot_id → prompt frag
 
 
-def parse_motifs(raw: Any) -> Dict[str, VisualMotif]:
-    out: Dict[str, VisualMotif] = {}
+def parse_motifs(raw: Any) -> dict[str, VisualMotif]:
+    out: dict[str, VisualMotif] = {}
     if isinstance(raw, Mapping):
         for mid, spec in raw.items():
             if isinstance(spec, str):
@@ -70,9 +71,9 @@ def _motif_in_text(motif: VisualMotif, text: str) -> bool:
 
 
 def audit_motif_haunting(motifs: Mapping[str, VisualMotif], shots: Sequence[Any]) -> MotifHauntReport:
-    appearances: Dict[str, List[str]] = {m: [] for m in motifs}
-    injections: Dict[str, str] = {}
-    unresolved: List[str] = []
+    appearances: dict[str, list[str]] = {m: [] for m in motifs}
+    injections: dict[str, str] = {}
+    unresolved: list[str] = []
 
     for i, sh in enumerate(shots):
         sid = str(getattr(sh, "id", f"shot_{i}"))
@@ -120,5 +121,5 @@ def _merge_frag(a: str, b: str) -> str:
     return f"{a}, {b}"
 
 
-def motif_prompt_injections(report: MotifHauntReport) -> Dict[str, str]:
+def motif_prompt_injections(report: MotifHauntReport) -> dict[str, str]:
     return dict(report.injections)

@@ -33,7 +33,8 @@ Wire into sample.py via:
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -109,7 +110,7 @@ class RectifiedFlowLoss:
 
     def __init__(
         self,
-        time_sampler: Optional[Any] = None,
+        time_sampler: Any | None = None,
         prediction_type: str = "velocity",
         loss_weight: str = "uniform",
         min_snr_gamma: float = 0.0,
@@ -176,10 +177,10 @@ class RectifiedFlowLoss:
         model: nn.Module,
         x0: torch.Tensor,
         epsilon: torch.Tensor,
-        model_kwargs: Dict[str, Any],
+        model_kwargs: dict[str, Any],
         *,
-        t: Optional[torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
+        t: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         """
         Compute rectified flow loss.
 
@@ -290,8 +291,8 @@ class RectifiedFlowSampler:
         model: nn.Module,
         x: torch.Tensor,
         t_scalar: float,
-        model_kwargs_cond: Dict[str, Any],
-        model_kwargs_uncond: Optional[Dict[str, Any]],
+        model_kwargs_cond: dict[str, Any],
+        model_kwargs_uncond: dict[str, Any] | None,
         T: int = 1000,
     ) -> torch.Tensor:
         """Single model forward with CFG."""
@@ -341,13 +342,13 @@ class RectifiedFlowSampler:
     def sample(
         self,
         model: nn.Module,
-        shape: Tuple[int, ...],
-        model_kwargs_cond: Dict[str, Any],
+        shape: tuple[int, ...],
+        model_kwargs_cond: dict[str, Any],
         device: torch.device,
-        model_kwargs_uncond: Optional[Dict[str, Any]] = None,
-        x_init: Optional[torch.Tensor] = None,
+        model_kwargs_uncond: dict[str, Any] | None = None,
+        x_init: torch.Tensor | None = None,
         dtype: torch.dtype = torch.float32,
-        callback: Optional[Callable[[int, torch.Tensor], None]] = None,
+        callback: Callable[[int, torch.Tensor], None] | None = None,
     ) -> torch.Tensor:
         """
         Sample from the rectified flow model.
@@ -464,9 +465,9 @@ class ReflowPairing:
         self,
         model: nn.Module,
         x0: torch.Tensor,
-        model_kwargs_cond: Dict[str, Any],
+        model_kwargs_cond: dict[str, Any],
         device: torch.device,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Generate (x0, ε) pairs where ε is the noise that the current model
         would map to x0. These pairs define straighter trajectories.
@@ -517,7 +518,7 @@ class ConsistencyFlowLoss:
         self,
         teacher_model: nn.Module,
         student_model: nn.Module,
-        time_sampler: Optional[Any] = None,
+        time_sampler: Any | None = None,
         consistency_weight: float = 1.0,
         ema_decay: float = 0.999,
     ):
@@ -537,11 +538,11 @@ class ConsistencyFlowLoss:
         self,
         x0: torch.Tensor,
         epsilon: torch.Tensor,
-        model_kwargs: Dict[str, Any],
+        model_kwargs: dict[str, Any],
         *,
-        t: Optional[torch.Tensor] = None,
+        t: torch.Tensor | None = None,
         delta_t: float = 0.05,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Compute consistency loss.
 

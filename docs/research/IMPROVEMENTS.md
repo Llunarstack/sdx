@@ -6,7 +6,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 ## Already in place (baseline)
 
-- **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [QUALITY_AND_ISSUES.md](../QUALITY.md) (*Civitai-style* section).
+- **CFG rescale** (`--cfg-rescale`) and **dynamic threshold** (`--dynamic-threshold`) in sampling — reduce oversaturation at high guidance (ComfyUI/SD3-style). **Configurable CFG** (`--cfg-scale`, default 7.5) so realistic/SDXL-style models can use 5–7. **Batch generation** (`--num N`), **VAE tiling** (`--vae-tiling` or auto when output > 512²) for large decodes, and **safetensors export** (`scripts/tools/export/export_safetensors.py`) for ComfyUI/A1111. **Civitai-style default negative prompt** (quality + anatomy/hands when negative is empty). **Resolution note** when output size is far from model native (blur warning). See [QUALITY.md](../QUALITY.md) (*Civitai-style* section).
 - **Min-SNR weighting** in training — stabilizes learning; avoids overfitting to easy timesteps (SD/SDXL).
 - **Non-uniform training timestep sampling** — `--timestep-sample-mode logit_normal|high_noise` (SD3-style discrete logit-normal or high-noise bias); see [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) and `diffusion/timestep_sampling.py`.
 - **Noise offset** — better light/dark balance in latents (SD/SDXL).
@@ -91,12 +91,12 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 ### 2.5 Style and artist tags (PixAI, Danbooru, Gelbooru) — **coded**
 
 - **Idea:** Make the model really good at styles by using artist/style tags from tag boards; extract style from captions and prompts for the style conditioning head.
-- **Coded:** (a) **config/style_artists.py**: `ARTIST_STYLE_PATTERNS` (e.g. "by X", "style of X", `artist:name`), `ARTIST_STYLE_TAGS` (known tags), `extract_style_from_text()`; (b) **data/caption_utils.py**: `DOMAIN_TAGS["style_artist"]` so style/artist tags are boosted; (c) **data/t2i_dataset.py**: when `style` is empty, auto-fill from caption via `extract_style_from_text` (`extract_style_from_caption=True`); (d) **sample.py**: `--auto-style-from-prompt` to extract style from prompt at inference; (e) **docs/STYLE_ARTIST_TAGS.md** and README.
+- **Coded:** (a) **config/defaults/style_artists.py**: `ARTIST_STYLE_PATTERNS` (e.g. "by X", "style of X", `artist:name`), `ARTIST_STYLE_TAGS` (known tags), `extract_style_from_text()`; (b) **data/caption_utils.py**: `DOMAIN_TAGS["style_artist"]` so style/artist tags are boosted; (c) **data/t2i_dataset.py**: when `style` is empty, auto-fill from caption via `extract_style_from_text` (`extract_style_from_caption=True`); (d) **sample.py**: `--auto-style-from-prompt` to extract style from prompt at inference; (e) **docs/STYLE_ARTIST_TAGS.md** and README.
 
 ### 2.6 Prompt adherence for complex, NSFW, weird prompts — **coded**
 
 - **Idea:** Improve quality and adherence for long/complex prompts, mature content, and surreal/abstract/weird prompts without censoring.
-- **Coded:** (a) **config/prompt_domains.py**: `COMPLEX_PROMPT_TIPS`, `CHALLENGING_PROMPT_TIPS`, and `RECOMMENDED_PROMPTS_BY_DOMAIN` entries for "complex" and "challenging"; (b) **data/caption_utils.py**: domain tags "complex" and "challenging" (surreal, abstract, detailed, etc.) so `boost_domain_tags` reinforces them; `QUALITY_PREFIX` and `prepend_quality_if_short()` for short captions; (c) **sample.py**: `--boost-quality` (prepend "masterpiece, best quality"), long-prompt token count warning (>250 tokens); (d) **docs/QUALITY_AND_ISSUES.md** (*Civitai-style* section): sections “Complex and long prompts” and “Challenging content (NSFW, surreal, abstract, weird)” with tips and no-censorship guidance.
+- **Coded:** (a) **config/defaults/prompt_domains.py**: `COMPLEX_PROMPT_TIPS`, `CHALLENGING_PROMPT_TIPS`, and `RECOMMENDED_PROMPTS_BY_DOMAIN` entries for "complex" and "challenging"; (b) **data/caption_utils.py**: domain tags "complex" and "challenging" (surreal, abstract, detailed, etc.) so `boost_domain_tags` reinforces them; `QUALITY_PREFIX` and `prepend_quality_if_short()` for short captions; (c) **sample.py**: `--boost-quality` (prepend "masterpiece, best quality"), long-prompt token count warning (>250 tokens); (d) **docs/QUALITY.md** (*Civitai-style* section): sections “Complex and long prompts” and “Challenging content (NSFW, surreal, abstract, weird)” with tips and no-censorship guidance.
 
 ---
 
@@ -411,4 +411,4 @@ High-signal directions that are **not all implemented** but are **actionable** a
 2. Optional **thin orchestration CLI** under `scripts/tools/` that chains generate → `test_time_pick` → optional refine—keep minimal and tested if added.
 3. Extend **spatial / relation** coverage tools (see [repo README](../../README.md#extra-features) “Extra features”) for “blue book under red book” style prompts—aligns with “reasoner” stress tests.
 
-Cross-reference: §11 (insane quality), [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md), [QUALITY_AND_ISSUES.md](../QUALITY.md).
+Cross-reference: §11 (insane quality), [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md), [QUALITY.md](../QUALITY.md).

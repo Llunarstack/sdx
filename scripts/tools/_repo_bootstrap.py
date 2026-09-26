@@ -1,4 +1,4 @@
-"""Ensure repo root and ``native/python`` are on ``sys.path`` for tool scripts."""
+"""Ensure repo root and ``native/_experimental/python`` are on ``sys.path`` for tool scripts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_NATIVE_PY = _REPO_ROOT / "native" / "python"
+_NATIVE_PY = _REPO_ROOT / "native" / "_experimental" / "python"
 
 
 def ensure_repo_paths() -> Path:

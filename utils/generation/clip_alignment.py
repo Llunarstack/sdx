@@ -6,14 +6,14 @@ Uses ``transformers`` + ``PIL``. If imports fail, helpers return conservative de
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
+from collections.abc import Callable
 
 import torch
 
-_clip_bundle: Optional[Tuple[object, object, str]] = None
+_clip_bundle: tuple[object, object, str] | None = None
 
 
-def _get_clip_model(model_id: str, device: torch.device) -> Tuple[object, object]:
+def _get_clip_model(model_id: str, device: torch.device) -> tuple[object, object]:
     global _clip_bundle
     if _clip_bundle is not None and _clip_bundle[2] == model_id:
         return _clip_bundle[0], _clip_bundle[1]

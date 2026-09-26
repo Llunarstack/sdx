@@ -1,14 +1,14 @@
 <p align="center">
   <strong>SDX</strong> · Stable Diffusion Transformer eXtended<br/>
-  <sub>Train, layout, direct, and deploy your own image &amp; video models — fully open.</sub>
+  <sub>Train, layout, direct, and improve your own image &amp; video models — fully open.</sub>
 </p>
 
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="docs/releases/v12.md"><img src="https://img.shields.io/badge/release-v12.0.0-0ea5e9?style=flat-square" alt="v12"/></a>
+  <a href="docs/releases/v13.md"><img src="https://img.shields.io/badge/release-v13.0.0-0ea5e9?style=flat-square" alt="v13"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=flat-square" alt="License"/></a>
-  <img src="https://img.shields.io/badge/tests-1300%2B-22c55e?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-1700%2B-22c55e?style=flat-square" alt="Tests"/>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   <a href="#how-sdx-compares">Compare</a> ·
   <a href="#what-you-get">Features</a> ·
   <a href="#pipelines">Pipelines</a> ·
-  <a href="#new-in-v12">v12</a> ·
+  <a href="#new-in-v13">v13</a> ·
   <a href="#documentation">Docs</a> ·
   <a href="#glossary">Glossary</a>
 </p>
@@ -28,7 +28,7 @@
 
 **SDX** is an open research framework for building **your own** text-to-image and text/image-to-video systems. It is not a hosted model, not an API wrapper, and not a scoreboard of someone else's weights.
 
-You own the training loop, the sampling stack, the layout controls, the video director, and the quality critics — end to end, on your hardware.
+You own the training loop, the sampling stack, the layout controls, the video director, the quality critics, and the feedback-to-DPO RSI loop — end to end, on your hardware.
 
 ```
 your data  →  train.py  →  checkpoint  →  sample.py / video studio  →  images & clips
@@ -46,7 +46,7 @@ Most products give you **pixels**. SDX gives you the **pipeline**.
 | Layout you can inspect | Vendor UI or plugin zoo | Regional box JSON + scene graphs |
 | Quality that retries | Single-shot generate | TCIS critic loop + pick-best |
 | Video you can direct | Closed APIs / black boxes | Open scene JSON → plan → stitch |
-| Reproducible science | Varies by repo | Metadata, provenance, **1300+** tests |
+| Reproducible science | Varies by repo | Metadata, provenance, **1700+** tests |
 
 If you want a pretty demo button, use a hosted API. If you want to **train, measure, and ship** your own system, use SDX.
 
@@ -65,13 +65,15 @@ python demo.py
 python train.py --data-path images/ --flow-matching-training --epochs 20
 
 # Sample
-python sample.py --ckpt outputs/best.pt --prompt "your prompt" --out result.png
+python sample.py --ckpt outputs/best.pt --prompt "your prompt" --out result.png --invention-stack auto --log-feedback
 
-# Video — plan from one scene file (v12)
+# Rate: python -m scripts.tools feedback like result.png --prompt "..."
+
+# Video — plan from one scene file
 python -m scripts.tools video_generate --scene examples/scene_frontier.example.json --plan-only
 ```
 
-**Health check:** `python -m toolkit.training.env_health` · **Tests:** `pytest tests/ -q`
+**Health check:** `python -m toolkit.training.env_health` · **Tests:** `pytest tests/ -q` · **RSI:** [docs/guides/RSI_FEEDBACK.md](docs/guides/RSI_FEEDBACK.md)
 
 ---
 
@@ -172,7 +174,7 @@ These are structural — hard for a closed API or a weights-only release to matc
 | **Open scene-graph film studio** (JSON director, continuity, frontier filmmakers) | Veo/Kling/Runway are products; Wan/LTX are weights — neither is an open director OS |
 | **`frontier/` idea registry** — cinema / narrative / realism experiments | No major vendor ships a browsable research horizon next to production entry points |
 | **Foreign adapter bridge** (sniff LoRA/LyCORIS → DiT roles) | Cross-arch weight reuse is usually “start over in Comfy” |
-| **Air-gap + 1300+ tests + provenance metadata** | SaaS cannot be air-gapped; many FOSS UIs skip scientific reproducibility |
+| **Air-gap + 1700+ tests + provenance metadata** | SaaS cannot be air-gapped; many FOSS UIs skip scientific reproducibility |
 
 ### Where they still win (be honest)
 
@@ -211,10 +213,11 @@ Deeper strategy + weakness→fix map: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPET
 </details>
 
 <details open>
-<summary><strong>Video studio (v12)</strong> — pipelines/video/</summary>
+<summary><strong>Video studio (v13)</strong> — pipelines/video/</summary>
 
 One **scene JSON** → retrieve → keyframe edit → motion → polish → stitch.
 
+- **VIDEOMAX:** one-flag identity / permanence / physics / occlusion / shot-chain consistency
 - **Studio:** engine router (realistic / anime / voxel / …), director mode, character & world bibles
 - **Controls:** elements, motion brush, FLF2V, storyboard cuts
 - **Continuity:** eyeline, props, light motivation, thumbnail rehearsal
@@ -279,28 +282,30 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 
 ---
 
-## New in v12
+## New in v13
 
 | Area | Highlights |
 |------|------------|
-| **Video** | Scene-graph TI2V, 60+ modules, CLI tools |
-| **Frontier** | 25 filmmaker modules + horizon expansion |
-| **Quality** | Continuity validators, thumbnail-first rehearsal |
-| **DX** | 1300+ tests, ruff-clean CI, docs restructure |
+| **VIDEOMAX** | One-flag consistency: identity, permanence, physics, occlusion, shot chain |
+| **Invention Lab** | artwave / maxwave / videowave; stacks union (no clobber) |
+| **Ops packs** | ALPHACUT, GAMEASSETS, PHOTOOPS, STYLECAST |
+| **RSI feedback** | feedback like/dislike/pair to DPO; --log-feedback; rsi_loop |
+| **Quality policy** | Compete soft-defaults, CFG-Zero, pick-best num sync |
+| **Tests** | **1700+** pytest cases |
 
-[Full v12 release notes →](docs/releases/v12.md)
+[Full v13 release notes](docs/releases/v13.md) · [RSI](docs/guides/RSI_FEEDBACK.md) · [VIDEOMAX](docs/guides/VIDEOMAX.md)
 
-### v1 → v12
+### v1 to v13
 
-| | v1 (foundation) | **v12 (now)** |
-|---|-----------------|---------------|
-| Scope | Train + sample images | Image + **video studio** + frontier |
-| Video | ✗ | Scene JSON director pipeline |
-| Layout | ✗ | Regional boxes + storyboard |
-| Tests | few | **1300+** |
-| Research | packages | `frontier/` + `research/` |
+| | v1 | **v13** |
+|---|---|---|
+| Scope | Train + sample | Image + video + RSI + inventions |
+| Video | no | Scene JSON + VIDEOMAX |
+| Feedback | no | Thumbs to flywheel to DPO |
+| Tests | few | **1700+** |
 
-[Full comparison →](docs/releases/VERSION_COMPARISON.md)
+[Full comparison](docs/releases/VERSION_COMPARISON.md)
+
 
 ---
 
@@ -311,9 +316,9 @@ sdx/
 ├── train.py · sample.py · demo.py     # Image entry points
 ├── models/ · diffusion/               # DiT, schedulers, sampling
 ├── frontier/                          # Experimental research
-├── pipelines/video/                   # TI2V scene-graph studio (v12)
-├── utils/generation/                  # Layout, CFG, sample features
-└── tests/                             # 1300+ tests
+├── pipelines/video/                   # Scene-graph studio + VIDEOMAX
+├── utils/generation/                  # Layout, CFG, sample, RSI feedback
+└── tests/                             # 1700+ tests
 ```
 
 ---
@@ -333,12 +338,15 @@ sdx/
 | Topic | Link |
 |-------|------|
 | Getting started | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
+| **v13 release** | [docs/releases/v13.md](docs/releases/v13.md) |
+| RSI / user feedback | [docs/guides/RSI_FEEDBACK.md](docs/guides/RSI_FEEDBACK.md) |
+| VIDEOMAX | [docs/guides/VIDEOMAX.md](docs/guides/VIDEOMAX.md) |
 | Codebase map | [docs/CODEBASE.md](docs/CODEBASE.md) |
 | Video pipeline | [pipelines/video/README.md](pipelines/video/README.md) |
 | Frontier | [frontier/README.md](frontier/README.md) |
 | Competitive notes | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) |
 | v12 release | [docs/releases/v12.md](docs/releases/v12.md) |
-| v1 → v12 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
+| v1 → v13 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
 | **Jargon & acronyms** | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 
 ---
@@ -366,7 +374,8 @@ To keep the graph human-only:
 
 | Version | Focus | Notes |
 |---------|--------|--------|
-| **[v12](docs/releases/v12.md)** | AI film studio video, frontier horizon | **Current** · tag `v12.0.0` |
+| **[v13](docs/releases/v13.md)** | VIDEOMAX, RSI feedback, Invention Lab, 1700+ tests | **Current** · tag `v13.0.0` |
+| [v12](docs/releases/v12.md) | AI film studio video, frontier horizon | `v12.0.0` |
 | [v11](docs/releases/v11.md) | Regional box layout, frontier research, package restructure | `v11.0.0` |
 | [v10](docs/releases/v10.md) | ELIQ, artifacts, explainable quality | `v10.0.0` |
 | [v9](docs/releases/v9.md) | GRPO family, Superior Stack, agentic training | `v9.0.0` |
@@ -379,7 +388,7 @@ To keep the graph human-only:
 | [v0.2](docs/releases/v0.2.0.md) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
 | [v0.1](docs/releases/v0.1.0.md) | Foundation train + sample framework | `v0.1.0` |
 
-[Full timeline & v1 → v12 comparison →](docs/releases/VERSION_COMPARISON.md) · **[What does this jargon mean? →](docs/GLOSSARY.md)**
+[Full timeline & v1 → v13 comparison →](docs/releases/VERSION_COMPARISON.md) · **[What does this jargon mean? →](docs/GLOSSARY.md)**
 
 <details>
 <summary><strong>Version history in plain English</strong> (click to expand)</summary>
@@ -398,6 +407,7 @@ To keep the graph human-only:
 | **v10** | Label-free quality scoring, glitch detection, human-readable quality reports. |
 | **v11** | Draw boxes on the image for per-region prompts; reorganized code folders. |
 | **v12** | Full video pipeline from one JSON scene; 25+ director rules; 1300+ tests. |
+| **v13** | VIDEOMAX consistency, RSI thumbs to DPO, Invention Lab waves, 1700+ tests. |
 
 </details>
 

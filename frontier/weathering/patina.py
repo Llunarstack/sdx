@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class WearLevel(str, Enum):
@@ -28,7 +27,7 @@ class PatinaPlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, WearLevel, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, WearLevel, str, str], ...] = (
     (
         re.compile(r"\b(rust|rusted|oxidized|corroded|patina)\b", re.I),
         WearLevel.WEATHERED,
@@ -76,7 +75,7 @@ class PatinaStoryteller:
                 return PatinaPlan(level, pos, neg)
         return PatinaPlan(WearLevel.PRISTINE, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

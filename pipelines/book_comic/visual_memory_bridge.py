@@ -7,12 +7,12 @@ Bridge **visual memory** JSON to other book artifacts:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 
-def export_cast_sheet_lines(mem: Any) -> List[str]:
+def export_cast_sheet_lines(mem: Any) -> list[str]:
     """Bullet lines summarizing each entity (for README, story bible, or QC)."""
-    lines: List[str] = []
+    lines: list[str] = []
     for eid in mem.entity_ids():
         ent = mem.entities.get(eid, {})
         kind = str(ent.get("kind", "character") or "character")
@@ -39,7 +39,7 @@ def minimal_consistency_dict_from_visual_memory(
     mem: Any,
     *,
     page_index: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build a dict compatible with ``consistency_helpers.positive_block_from_mapping`` **additions**.
 
@@ -48,7 +48,7 @@ def minimal_consistency_dict_from_visual_memory(
     ``kind=character`` entity at *page_index* (including page overrides).
     """
     frag = mem.prompt_fragment_for_page(page_index)
-    out: Dict[str, Any] = {"visual_extra": frag}
+    out: dict[str, Any] = {"visual_extra": frag}
 
     for eid in mem.entity_ids():
         eff = mem.effective_entity(eid, page_index)
@@ -68,7 +68,7 @@ def minimal_consistency_dict_from_visual_memory(
     return out
 
 
-def merge_consistency_dicts(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
+def merge_consistency_dicts(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     """Shallow merge with special cases: ``visual_extra`` and ``props`` concatenate."""
     out = dict(base)
     for k, v in extra.items():
@@ -80,7 +80,7 @@ def merge_consistency_dicts(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict
         if k == "props":
             bp = out.get("props")
             ep = v
-            lst: List[Any] = []
+            lst: list[Any] = []
             if isinstance(bp, list):
                 lst.extend(bp)
             elif isinstance(bp, str) and bp.strip():

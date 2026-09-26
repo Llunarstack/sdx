@@ -43,7 +43,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [train.py](../../train.py) | Training: DiT + T5 (optional **triple** CLIP fusion via `--text-encoder-mode triple`), VAE/RAE, REPA, passes/epochs, val, DDP; **--crop-mode**, **--caption-dropout-schedule**, **--save-polyak**, **--wandb-project**, **--tensorboard-dir**, **--dry-run**. |
 | [inference.py](../../inference.py) | Load checkpoint and config for programmatic inference. |
 | [sample.py](../../sample.py) | CLI sampling: prompt, negative prompt, steps, width, height; **--cfg-scale**, **--num N** (batch), **--grid**, **--vae-tiling**, **--cfg-rescale**, **--deterministic** (reproducible); style, control, lora, img2img, sharpen, contrast. High CFG auto-enables rescale/threshold. |
-| [scripts/cli.py](../../scripts/cli.py) | Optional CLI entry (analyze dataset, validate config, checkpoints, …). |
+| [scripts/tools/](../../scripts/tools/) | Canonical ops CLI: `python -m scripts.tools <cmd>`. |
 
 ### Config
 
@@ -85,7 +85,6 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [models/dit.py](../../models/dit.py) | Base DiT (patch embed, timestep embed, adaLN blocks); from Meta DiT. |
 | [models/dit_text.py](../../models/dit_text.py) | T5-conditioned DiT (cross-attention, caption); ViT-Gen options (RoPE, registers, KV-merge). |
 | [models/dit_text_variants.py](../../models/dit_text_variants.py) | Canonical module for DiT-P / Supreme text variants (QK-norm, SwiGLU, AdaLN-Zero, REPA). |
-| [models/dit_predecessor.py](../../models/dit_predecessor.py) | Legacy module path kept for compatibility. |
 | [models/pixart_blocks.py](../../models/pixart_blocks.py) | SizeEmbedder, ZeroInitPatchChannelGate, etc. |
 | [models/rae_latent_bridge.py](../../models/rae_latent_bridge.py) | RAE ↔ 4ch DiT latent **1×1** bridge + cycle loss. |
 | [models/model_enhancements.py](../../models/model_enhancements.py) | **RMSNorm**, **DropPath**, **TokenFiLM**, **SE1x1** — shared blocks for fusion / conditioning. |
@@ -103,7 +102,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 |------|-------------|
 | [utils/__init__.py](../../utils/__init__.py) | Re-exports `quality` helpers. |
 | [utils/checkpoint/checkpoint_loading.py](../../utils/checkpoint/checkpoint_loading.py) | `load_dit_text_checkpoint`: DiT + config + RAE bridge + **`text_encoder_fusion`** state. |
-| [utils/modeling/model_paths.py](../../utils/modeling/model_paths.py) | Resolve `model/` local paths vs HF ids (`default_t5_path`, CLIP, DINOv2, Qwen, Cascade). |
+| [utils/modeling/model_paths.py](../../utils/modeling/model_paths.py) | Resolve `pretrained/` local paths vs HF ids (`default_t5_path`, CLIP, DINOv3, Qwen3, Cascade, …). |
 | [utils/modeling/text_encoder_bundle.py](../../utils/modeling/text_encoder_bundle.py) | **Triple** text stack: T5 + CLIP-L + CLIP-bigG + trainable fusion. |
 | [utils/analysis/llm_client.py](../../utils/analysis/llm_client.py) | Optional Qwen (or HF causal LM) for prompt expansion. |
 | [utils/quality/quality.py](../../utils/quality/quality.py) | Post-process: sharpen (unsharp mask), contrast; **naturalize** (human-art style). |
@@ -116,11 +115,11 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/training/metrics.py](../../utils/training/metrics.py) | FLOPs / logging helpers. |
 | [utils/architecture/dit_architecture.py](../../utils/architecture/dit_architecture.py) | DiT / EnhancedDiT profiling: param counts, default build kwargs, variant lists. |
 | [utils/architecture/ar_block_conditioning.py](../../utils/architecture/ar_block_conditioning.py) | Canonical DiT **block-AR** regime ↔ ViT bridge: JSONL parsing + 4-D one-hot (`num_ar_blocks` 0/2/4 / unknown); see [AR.md](../AR.md). |
-| [native/python/sdx_native/latent_geometry.py](../../native/python/sdx_native/latent_geometry.py) | Latent / DiT **patch token** math (pure Python; matches `native/cpp` C ABI). |
-| [native/python/sdx_native/text_hygiene.py](../../native/python/sdx_native/text_hygiene.py) | Caption **NFKC** + zero-width strip, fingerprints (SHA256 / optional xxhash), pos/neg overlap; training flag `--caption-unicode-normalize`. |
-| [native/python/sdx_native/native_tools.py](../../native/python/sdx_native/native_tools.py) | Optional **`native/`** tool discovery (Rust/Zig/Go/Node), FNV manifest fingerprints, JSONL merge, ctypes `libsdx_latent`. |
-| [native/python/sdx_native/latent_geometry.py](../../native/python/sdx_native/latent_geometry.py) | Canonical Python bridge module for latent geometry helpers (`sdx_native.latent_geometry`). |
-| [native/python/sdx_native/native_tools.py](../../native/python/sdx_native/native_tools.py) | Canonical Python bridge module for native helper discovery/runtime wrappers (`sdx_native.native_tools`). |
+| [native/_experimental/python/sdx_native/latent_geometry.py](../../native/_experimental/python/sdx_native/latent_geometry.py) | Latent / DiT **patch token** math (pure Python; matches `native/cpp` C ABI). |
+| [native/_experimental/python/sdx_native/text_hygiene.py](../../native/_experimental/python/sdx_native/text_hygiene.py) | Caption **NFKC** + zero-width strip, fingerprints (SHA256 / optional xxhash), pos/neg overlap; training flag `--caption-unicode-normalize`. |
+| [native/_experimental/python/sdx_native/native_tools.py](../../native/_experimental/python/sdx_native/native_tools.py) | Optional **`native/`** tool discovery (Rust/Zig/Go/Node), FNV manifest fingerprints, JSONL merge, ctypes `libsdx_latent`. |
+| [native/_experimental/python/sdx_native/latent_geometry.py](../../native/_experimental/python/sdx_native/latent_geometry.py) | Canonical Python bridge module for latent geometry helpers (`sdx_native.latent_geometry`). |
+| [native/_experimental/python/sdx_native/native_tools.py](../../native/_experimental/python/sdx_native/native_tools.py) | Canonical Python bridge module for native helper discovery/runtime wrappers (`sdx_native.native_tools`). |
 | [utils/modeling/nn_inspect.py](../../utils/modeling/nn_inspect.py) | Generic module tree + per-child parameter summary for any `nn.Module`. |
 | [utils/quality/test_time_pick.py](../../utils/quality/test_time_pick.py) | CLIP/edge/OCR best-of-N scoring for sampling. |
 | [utils/generation/orchestration.py](../../utils/generation/orchestration.py) | Named **Designer / Verifier / Reasoner** pipeline roles (`PipelineRole`, `pipeline_roles`) — docs + future orchestration; see [LANDSCAPE_2026.md](../research/LANDSCAPE_2026.md). |
@@ -176,8 +175,8 @@ Index: **[scripts/README.md](../../scripts/README.md)**. **Tools:** **[scripts/t
 | [scripts/enhanced/save_model_checkpoint.py](../../scripts/enhanced/save_model_checkpoint.py) | Save initialized Enhanced DiT-XL checkpoint. |
 | [scripts/setup/clone_repos.ps1](../../scripts/setup/clone_repos.ps1) | Windows: clone DiT, ControlNet, flux, generative-models, PixArt, Z-Image, SiT, Lumina into `external/`. |
 | [scripts/setup/clone_repos.sh](../../scripts/setup/clone_repos.sh) | Linux/macOS: same clones. |
-| [scripts/download/download_models.py](../../scripts/download/download_models.py) | Download best HF models: T5-XXL (text encoder), VAEs (sd-vae-ft-mse, sdxl-vae, sdxl-vae-fp16-fix), LLMs (SmolLM, Qwen2.5-7B). Use `--all` or `--t5` / `--vae` / `--llm` / `--llm-best`. |
-| [scripts/download/download_llm.py](../../scripts/download/download_llm.py) | Download a single LLM for prompt expansion (SmolLM2-360M or Qwen2.5-7B with `--best`). |
+| [scripts/download/download_models.py](../../scripts/download/download_models.py) | Download best HF models: T5-XXL (text encoder), VAEs (sd-vae-ft-mse, sdxl-vae, sdxl-vae-fp16-fix), LLMs (SmolLM, Qwen3-14B). Use `--all` or `--t5` / `--vae` / `--llm` / `--llm-best`. |
+| [scripts/download/download_llm.py](../../scripts/download/download_llm.py) | Download a single LLM for prompt expansion (SmolLM2-360M or Qwen3-14B with `--best`). |
 | [scripts/download/download_revolutionary_stack.py](../../scripts/download/download_revolutionary_stack.py) | Bulk HF snapshot downloads for extended stacks (see `docs/MODEL_STACK.md`). |
 | [scripts/cascade_generate.py](../../scripts/cascade_generate.py) | **Stable Cascade** (diffusers) sampling — optional path; uses `pretrained/StableCascade-*` via `utils/model_paths`. |
 | — | **self_improve.py** (planned, not in `scripts/training/` on this branch) — see [IMPROVEMENTS.md](../research/IMPROVEMENTS.md) §8.6; use `hf_download_and_train.py` for similar loops. |
@@ -187,7 +186,7 @@ Index: **[scripts/README.md](../../scripts/README.md)**. **Tools:** **[scripts/t
 | [docs/DANBOORU_HF.md](../guides/DANBOORU_HF.md) | Using Hugging Face Danbooru-related data with SDX. |
 | [scripts/tools/dev/ckpt_info.py](../../scripts/tools/dev/ckpt_info.py) | Inspect checkpoint: print config, steps, best_loss (no full model load). |
 | [scripts/tools/data/data_quality.py](../../scripts/tools/data/data_quality.py) | Filter/dedup JSONL or folder: `--dedup phash|md5`, `--min-caption-len`, `--bad-words`, `--min-weight` (IMPROVEMENTS 1.6). |
-| [scripts/tools/data/caption_hygiene.py](../../scripts/tools/data/caption_hygiene.py) | JSONL caption Unicode hygiene: `--normalize-samples`, `--report-dups`, `--report-overlap` ([`sdx_native.text_hygiene`](../../native/python/sdx_native/text_hygiene.py)). |
+| [scripts/tools/data/caption_hygiene.py](../../scripts/tools/data/caption_hygiene.py) | JSONL caption Unicode hygiene: `--normalize-samples`, `--report-dups`, `--report-overlap` ([`sdx_native.text_hygiene`](../../native/_experimental/python/sdx_native/text_hygiene.py)). |
 | [scripts/tools/data/ar_tag_manifest.py](../../scripts/tools/data/ar_tag_manifest.py) | Tag JSONL with DiT `num_ar_blocks` + `ar_regime` from `.pt` or explicit flag (ViT AR alignment; [AR.md](../AR.md)). |
 | [scripts/tools/data/manifest_paths.py](../../scripts/tools/data/manifest_paths.py) | List image paths from JSONL (**Rust `image-paths` / `dup-image-paths`** when built); pipe to Zig **`sdx-pathstat`** for file sizes. |
 | [scripts/tools/prompt/prompt_lint.py](../../scripts/tools/prompt/prompt_lint.py) | Prompt adherence lint for SDX JSONL (empty captions, token heuristics, pos/neg overlap). |
@@ -214,7 +213,7 @@ Index: **[scripts/README.md](../../scripts/README.md)**. **Tools:** **[scripts/t
 
 | File | Description |
 |------|-------------|
-| [docs/QUALITY_AND_ISSUES.md](../QUALITY.md) | **Merged:** Civitai-style fixes + community issue matrix; sample.py flags and training tips. |
+| [docs/QUALITY.md](../QUALITY.md) | **Merged:** Civitai-style fixes + community issue matrix; sample.py flags and training tips. |
 | [docs/STYLE_ARTIST_TAGS.md](STYLE_ARTIST_TAGS.md) | Style/artist tags from PixAI, Danbooru, Gelbooru: extraction, training, `--auto-style-from-prompt`. |
 | [docs/REPRODUCIBILITY.md](../guides/REPRODUCIBILITY.md) | Same-seed/same-run: `--deterministic`, `--seed`, CUBLAS (sampling and training). |
 | [docs/INSPIRATION.md](../research/INSPIRATION.md) | What we take from PixAI, ComfyUI, and cloned repos; optional deps. |
@@ -225,14 +224,14 @@ Index: **[scripts/README.md](../../scripts/README.md)**. **Tools:** **[scripts/t
 | [docs/HOW_GENERATION_WORKS.md](../HOW_GENERATION_WORKS.md) | **Merged:** Mermaid/ASCII pipeline, step-by-step generation, config/checkpoint/data wiring (§13). |
 | [docs/PROMPT_STACK.md](../PROMPT_STACK.md) | Inference **text** path before T5: `content_controls`, `neg_filter`, key flags, preview CLI. |
 | [docs/NATIVE_AND_SYSTEM_LIBS.md](../NATIVE_AND_SYSTEM_LIBS.md) | Lower-level libs: in-repo `native/` tools + ecosystem (image I/O, tokenization, QA) vs quality / training / adherence. |
-| [docs/MODEL_STACK.md](../MODEL_STACK.md) | Local **`model/`** paths (T5, CLIP, DINOv2, Cascade, …) + **model enhancements** (RMSNorm, FiLM, cross-attn, cascade blend, RAE scales). |
+| [docs/MODEL_STACK.md](../MODEL_STACK.md) | Local **`pretrained/`** paths (T5, CLIP, DINOv3, Qwen3, Cascade, …) + **model enhancements** (RMSNorm, FiLM, cross-attn, cascade blend, RAE scales). |
 | [docs/LANDSCAPE_2026.md](../research/LANDSCAPE_2026.md) | **Merged 2026 hub:** industry snapshot, post-diffusion themes, workflow + disclaimers. |
 | [docs/BLUEPRINTS.md](../research/BLUEPRINTS.md) | **Merged** flow/solvers/distillation + prompt-accuracy blueprints. |
 | [docs/PROMPT_COOKBOOK.md](../PROMPT_COOKBOOK.md) | Copy-paste `sample.py` recipes (presets, quality, book workflows). |
 | [docs/DOMAINS.md](DOMAINS.md) | 3D, realistic, interior/exterior: how we handle hard-to-generate domains. |
 | [docs/REGION_CAPTIONS.md](REGION_CAPTIONS.md) | JSONL **`parts`** / **`region_captions`**: merge regional labels into T5 text for layout-aware training. |
 | [docs/HF_DATASET_SHORTLIST.md](../guides/HF_DATASET_SHORTLIST.md) | Curated shortlist from provided Hugging Face dataset links (primary/secondary/optional + suggested mix). |
-| [docs/FILES.md](FILES.md) | This file: project file map and external reference links. |
+| [docs/reference/FILES.md](FILES.md) | This file: project file map and external reference links. |
 
 ---
 

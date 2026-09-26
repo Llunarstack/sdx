@@ -6,9 +6,10 @@ Attach identity/style refs to individual boxes before sampling.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -19,7 +20,7 @@ class RegionReference:
     mode: str = "identity"  # identity | style | structure
 
 
-def _resolve(path: str, source_dir: Optional[Path]) -> Optional[Path]:
+def _resolve(path: str, source_dir: Path | None) -> Path | None:
     raw = (path or "").strip()
     if not raw:
         return None
@@ -32,10 +33,10 @@ def _resolve(path: str, source_dir: Optional[Path]) -> Optional[Path]:
 def references_from_layout(
     regions: Sequence[Any],
     *,
-    source_dir: Optional[Path] = None,
-) -> List[RegionReference]:
+    source_dir: Path | None = None,
+) -> list[RegionReference]:
     """Collect ``reference`` / ``reference_image`` paths from layout regions."""
-    out: List[RegionReference] = []
+    out: list[RegionReference] = []
     for r in regions:
         ref = str(getattr(r, "reference_path", "") or getattr(r, "reference", "") or "").strip()
         if not ref:

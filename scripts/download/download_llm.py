@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Download an LLM for prompt understanding/expansion (e.g. short user prompt → detailed caption).
-Uses Hugging Face Hub. Use --best for top-quality (Qwen2.5-7B-Instruct); default is fast/small (SmolLM2-360M).
+Uses Hugging Face Hub. Use --best for top-quality (Qwen3-14B); default is fast/small (SmolLM2-360M).
 """
+
+from __future__ import annotations
 
 import argparse
 import os
@@ -13,24 +15,25 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-BEST_MODEL = "Qwen/Qwen2.5-7B-Instruct"  # Best quality for instruction/prompt following at 7B
-DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"  # Fast download + fast inference
+BEST_MODEL = "Qwen/Qwen3-14B"
+BEST_FOLDER = "Qwen3-14B"
+DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Download an LLM for prompt understanding. Use --best for best quality (Qwen2.5-7B)."
+        description="Download an LLM for prompt understanding. Use --best for best quality (Qwen3-14B)."
     )
     parser.add_argument(
         "--best",
         action="store_true",
-        help="Download the best-quality model: Qwen2.5-7B-Instruct (top instruction following, ~15GB)",
+        help="Download the best-quality model: Qwen3-14B (top instruction following)",
     )
     parser.add_argument(
         "--model",
         type=str,
         default=DEFAULT_MODEL,
-        help="Hugging Face model ID (default: fast 360M; use --best for Qwen2.5-7B-Instruct)",
+        help="Hugging Face model ID (default: fast 360M; use --best for Qwen3-14B)",
     )
     parser.add_argument(
         "--cache-dir",
@@ -42,7 +45,7 @@ def main():
         "--local-dir",
         type=str,
         default=None,
-        help="Save to this dir (e.g. ./model/SmolLM2-360M-Instruct). Default: HF cache.",
+        help="Save to this dir (e.g. ./pretrained/SmolLM2-360M-Instruct). Default: HF cache.",
     )
     parser.add_argument(
         "--max-workers",
@@ -52,6 +55,9 @@ def main():
     )
     args = parser.parse_args()
     model = BEST_MODEL if args.best else args.model
+    local_dir = args.local_dir
+    if local_dir is None and args.best:
+        local_dir = os.path.join(ROOT, "pretrained", BEST_FOLDER)
 
     try:
         from huggingface_hub import snapshot_download
@@ -63,8 +69,8 @@ def main():
         "repo_id": model,
         "max_workers": args.max_workers,
     }
-    if args.local_dir:
-        kwargs["local_dir"] = args.local_dir
+    if local_dir:
+        kwargs["local_dir"] = local_dir
     if args.cache_dir:
         kwargs["cache_dir"] = args.cache_dir
 

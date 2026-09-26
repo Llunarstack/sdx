@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple, Union
 
-Buffer = Union[bytes, memoryview]
+Buffer = bytes | memoryview
 
 # Match native_tools.fnv1a64_bytes stream semantics (FNV-1a 64).
 _FNV_OFFSET = 146959810393466560
@@ -33,7 +32,7 @@ def scan_file_chunks(
     *,
     chunk_size: int = 1 << 20,
     hash_seed: int = _FNV_OFFSET,
-) -> Tuple[int, int, int]:
+) -> tuple[int, int, int]:
     """
     Stream ``path`` in binary: return ``(fnv1a64_hash, newline_count, byte_count)``.
 

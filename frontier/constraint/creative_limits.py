@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
 
 
 class LimitRule(str, Enum):
@@ -25,12 +24,12 @@ class LimitRule(str, Enum):
 
 @dataclass(frozen=True)
 class ConstraintPack:
-    rules: Tuple[LimitRule, ...]
+    rules: tuple[LimitRule, ...]
     positive: str
     negative: str
 
 
-_TRIGGERS: Tuple[Tuple[re.Pattern, LimitRule, str, str], ...] = (
+_TRIGGERS: tuple[tuple[re.Pattern, LimitRule, str, str], ...] = (
     (
         re.compile(r"\b(monochrome only|black and white only|single hue)\b", re.I),
         LimitRule.MONOCHROME,
@@ -77,7 +76,7 @@ _TRIGGERS: Tuple[Tuple[re.Pattern, LimitRule, str, str], ...] = (
 
 
 class CreativeConstraintEngine:
-    def detect(self, prompt: str) -> List[LimitRule]:
+    def detect(self, prompt: str) -> list[LimitRule]:
         text = prompt or ""
         return [rule for pat, rule, _, _ in _TRIGGERS if pat.search(text)]
 
@@ -85,8 +84,8 @@ class CreativeConstraintEngine:
         rules = self.detect(prompt)
         if not rules:
             return ConstraintPack((), "", "")
-        pos_parts: List[str] = []
-        neg_parts: List[str] = []
+        pos_parts: list[str] = []
+        neg_parts: list[str] = []
         for pat, rule, pos, neg in _TRIGGERS:
             if rule in rules:
                 pos_parts.append(pos)

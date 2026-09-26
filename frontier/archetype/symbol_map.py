@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class ArchetypeSymbol(str, Enum):
@@ -25,7 +24,7 @@ class ArchetypePlan:
     negative: str
 
 
-_MAP: Tuple[Tuple[re.Pattern, ArchetypeSymbol, str, str], ...] = (
+_MAP: tuple[tuple[re.Pattern, ArchetypeSymbol, str, str], ...] = (
     (
         re.compile(r"\b(threshold|doorway|gate|portal|liminal)\b", re.I),
         ArchetypeSymbol.THRESHOLD,
@@ -73,7 +72,7 @@ class SymbolMapEngine:
                 return ArchetypePlan(sym, pos, neg)
         return ArchetypePlan(ArchetypeSymbol.NONE, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

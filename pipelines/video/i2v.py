@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 from .shot_planner import plan_video_from_prompt
 from .types import VideoMode, VideoPlan
@@ -50,7 +50,7 @@ def build_i2v_plan(
     fps: float = 24.0,
     width: int = 1280,
     height: int = 720,
-    reference_clips: Optional[Sequence[str]] = None,
+    reference_clips: Sequence[str] | None = None,
 ) -> VideoPlan:
     plan = plan_video_from_prompt(
         prompt,

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 import numpy as np
 
@@ -32,7 +32,7 @@ class TemporalHarmonizer:
             np.uint8
         )
 
-    def harmonize_sequence(self, frames: Sequence[np.ndarray]) -> List[np.ndarray]:
+    def harmonize_sequence(self, frames: Sequence[np.ndarray]) -> list[np.ndarray]:
         if not frames:
             return []
         out = [frames[0]]
@@ -42,17 +42,17 @@ class TemporalHarmonizer:
 
 
 def apply_temporal_smoothing(
-    frame_paths: List[Path],
+    frame_paths: list[Path],
     *,
     alpha: float = 0.15,
     window: int = 3,
-) -> List[Path]:
+) -> list[Path]:
     """Moving average in RGB space (cheap flicker reduction)."""
     if len(frame_paths) <= 1:
         return frame_paths
     window = max(1, int(window))
     rgbs = [read_frame_rgb(p).astype(np.float32) for p in frame_paths]
-    smoothed: List[np.ndarray] = []
+    smoothed: list[np.ndarray] = []
     for i in range(len(rgbs)):
         lo = max(0, i - window)
         hi = min(len(rgbs), i + window + 1)
@@ -67,11 +67,11 @@ def apply_temporal_smoothing(
 
 
 def harmonize_frame_sequence(
-    frame_paths: List[Path],
+    frame_paths: list[Path],
     *,
     alpha_prev: float = 0.12,
     smooth_window: int = 0,
-) -> List[Path]:
+) -> list[Path]:
     th = TemporalHarmonizer(alpha_prev=alpha_prev)
     rgbs = th.harmonize_sequence([read_frame_rgb(p) for p in frame_paths])
     for p, rgb in zip(frame_paths, rgbs):

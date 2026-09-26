@@ -1,4 +1,4 @@
-"""Regression: public prompt stack and config shims."""
+"""Regression: public prompt stack and config exports."""
 
 from __future__ import annotations
 
@@ -10,9 +10,7 @@ def test_stack_exports_append_csv_and_token_set():
     assert append_csv("a", "b") == "a, b"
 
 
-def test_config_prompt_domains_shims():
-    from config.defaults.prompt_domains import DEFAULT_NEGATIVE_PROMPT as canon
-    from config.prompt_domains import DEFAULT_NEGATIVE_PROMPT as shim
-    from config.reference.prompt_domains import DEFAULT_NEGATIVE_PROMPT as legacy
+def test_config_prompt_domains_canonical():
+    from config.defaults.prompt_domains import DEFAULT_NEGATIVE_PROMPT
 
-    assert shim == canon == legacy
+    assert DEFAULT_NEGATIVE_PROMPT

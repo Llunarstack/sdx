@@ -11,7 +11,7 @@ the noise schedule or the model.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 import numpy as np
 
@@ -25,7 +25,7 @@ __all__ = [
 _INDICES_PREFIX = "indices:"
 
 
-def parse_indices_timestep_schedule(name: str) -> Optional[np.ndarray]:
+def parse_indices_timestep_schedule(name: str) -> np.ndarray | None:
     """
     Explicit VP timestep **indices** (high-noise → low-noise).
 
@@ -53,13 +53,13 @@ def _enforce_strict_descending(idx: np.ndarray, num_train: int) -> np.ndarray:
     idx = np.clip(np.asarray(idx, dtype=np.int64), 0, num_train - 1)
     if idx.size == 0:
         return np.array([num_train - 1, 0], dtype=np.int64)
-    out: List[int] = [int(idx[0])]
+    out: list[int] = [int(idx[0])]
     for j in range(1, len(idx)):
         v = int(idx[j])
         if v >= out[-1]:
             v = out[-1] - 1
         out.append(max(v, 0))
-    dedup: List[int] = [out[0]]
+    dedup: list[int] = [out[0]]
     for v in out[1:]:
         if v < dedup[-1]:
             dedup.append(v)
@@ -107,7 +107,7 @@ def _resample_length(desc: np.ndarray, target_len: int, num_train: int) -> np.nd
 
 ScheduleFn = Callable[[int, int, np.ndarray], np.ndarray]
 
-INFERENCE_TIMESTEP_SCHEDULES: Dict[str, ScheduleFn] = {}
+INFERENCE_TIMESTEP_SCHEDULES: dict[str, ScheduleFn] = {}
 _KARRAS_RHO_DEFAULT = 7.0
 
 
@@ -172,6 +172,81 @@ def _schedule_quad_cosine(num_train: int, num_infer: int, alpha_cumprod: np.ndar
     return np.round(t_float).astype(np.int64)[::-1]
 
 
+def _ays_progress_knots(variant: str) -> np.ndarray:
+    """Normalized progress 0 (noise) → 1 (clean) for Align-Your-Steps style grids."""
+    if variant == "ays_dit":
+        # SDX DiT / T5: denser mid-SNR (hardest denoising band).
+        return np.array(
+            [
+                0.0,
+                0.04,
+                0.10,
+                0.18,
+                0.28,
+                0.38,
+                0.48,
+                0.58,
+                0.68,
+                0.78,
+                0.88,
+                0.94,
+                0.98,
+                1.0,
+            ],
+            dtype=np.float64,
+        )
+    # Classic AYS-inspired (SDXL-like) progressive density.
+    return np.array(
+        [0.0, 0.05, 0.12, 0.22, 0.35, 0.50, 0.65, 0.78, 0.88, 0.94, 0.98, 1.0],
+        dtype=np.float64,
+    )
+
+
+def _schedule_ays_family(
+    num_train: int,
+    num_infer: int,
+    alpha_cumprod: np.ndarray,
+    *,
+    variant: str = "ays",
+) -> np.ndarray:
+    """
+    Align-Your-Steps style index schedule via log-SNR interpolation.
+
+    Knots define progress in [0,1]; we place those on the log-SNR path of ᾱ,
+    then resample to ``num_infer`` descending discrete timesteps.
+    """
+    if num_infer <= 1:
+        return np.array([num_train - 1], dtype=np.int64)
+    ac = np.asarray(alpha_cumprod, dtype=np.float64)
+    ac = np.clip(ac, 1e-9, 1.0 - 1e-9)
+    logsnr = np.log(ac) - np.log(1.0 - ac)
+    # t=0 clean → high logsnr; t=T-1 noisy → low logsnr
+    ls_clean = float(logsnr[0])
+    ls_noise = float(logsnr[-1])
+    knots = _ays_progress_knots(variant)
+    # progress 0 = noise (low logsnr), 1 = clean (high logsnr)
+    target_ls = ls_noise + knots * (ls_clean - ls_noise)
+    # Resample knots to num_infer points along the knot curve
+    knot_x = np.linspace(0.0, 1.0, len(knots))
+    u = np.linspace(0.0, 1.0, num_infer)
+    target = np.interp(u, knot_x, target_ls)
+    idx = np.array([int(np.argmin(np.abs(logsnr - ti))) for ti in target], dtype=np.int64)
+    # Ensure high→low (noise→clean): first should be near T-1
+    if idx[0] < idx[-1]:
+        idx = idx[::-1].copy()
+    return idx
+
+
+@register_timestep_schedule("ays")
+def _schedule_ays(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    return _schedule_ays_family(num_train, num_infer, alpha_cumprod, variant="ays")
+
+
+@register_timestep_schedule("ays_dit")
+def _schedule_ays_dit(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    return _schedule_ays_family(num_train, num_infer, alpha_cumprod, variant="ays_dit")
+
+
 def build_inference_timesteps(
     name: str,
     num_train_timesteps: int,
@@ -206,5 +281,5 @@ def build_inference_timesteps(
     return _resample_length(raw, num_inference_steps, num_train_timesteps)
 
 
-def list_timestep_schedules() -> List[str]:
+def list_timestep_schedules() -> list[str]:
     return sorted(set(INFERENCE_TIMESTEP_SCHEDULES.keys()) | {"karras_rho"})

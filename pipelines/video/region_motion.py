@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence, Tuple
 
 import numpy as np
 
@@ -15,9 +15,9 @@ from .video_io import read_frame_rgb, save_frame_rgb
 __all__ = ["load_rig_boxes", "apply_regional_motion", "feather_mask"]
 
 
-def load_rig_boxes(rig_path: str | Path) -> List[Tuple[str, Tuple[float, float, float, float], bool]]:
+def load_rig_boxes(rig_path: str | Path) -> list[tuple[str, tuple[float, float, float, float], bool]]:
     data = json.loads(Path(rig_path).read_text(encoding="utf-8"))
-    out: List[Tuple[str, Tuple[float, float, float, float], bool]] = []
+    out: list[tuple[str, tuple[float, float, float, float], bool]] = []
     for r in data.get("regions", []):
         if "box" not in r:
             continue
@@ -40,7 +40,7 @@ def feather_mask(mask: np.ndarray, radius: int = 6) -> np.ndarray:
         return m
 
 
-def _crop_box(rgb: np.ndarray, box: Tuple[float, float, float, float]) -> tuple[np.ndarray, int, int, int, int]:
+def _crop_box(rgb: np.ndarray, box: tuple[float, float, float, float]) -> tuple[np.ndarray, int, int, int, int]:
     h, w = rgb.shape[:2]
     x0, y0, x1, y1 = box
     ix0 = int(max(0, min(w - 1, x0 * w)))
@@ -76,7 +76,7 @@ def apply_regional_motion(
     *,
     target_count: int,
     locked_only: bool = False,
-) -> List[Path]:
+) -> list[Path]:
     """
     Warp rig regions independently using source clip flow, composite onto anchor.
 
@@ -102,7 +102,7 @@ def apply_regional_motion(
         m = rasterize_box_mask(w, h, box)
         part_masks[name] = feather_mask(m, radius=8)
 
-    acc: List[np.ndarray] = []
+    acc: list[np.ndarray] = []
     n = min(len(source_frame_paths), max(target_count, 2))
     curr_full = anchor.copy()
     acc.append(np.clip(curr_full, 0, 255).astype(np.uint8))
@@ -146,7 +146,7 @@ def apply_regional_motion(
     from .motion_transfer import retime_frame_list
 
     acc = retime_frame_list(acc, target_count)
-    paths: List[Path] = []
+    paths: list[Path] = []
     for j, rgb in enumerate(acc):
         fp = out / f"frame_{j + 1:06d}.png"
         save_frame_rgb(fp, rgb)

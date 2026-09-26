@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["OffscreenEvent", "OffscreenPlan", "parse_offscreen_map", "plan_offscreen_space"]
 
-_OFFSCREEN_PRESETS: Dict[str, Dict[str, str]] = {
+_OFFSCREEN_PRESETS: dict[str, dict[str, str]] = {
     "crowd_left": {
         "audio": "muffled crowd noise from offscreen left",
         "light": "occasional flash from offscreen left",
@@ -47,16 +48,16 @@ class OffscreenEvent:
 @dataclass(slots=True)
 class OffscreenPlan:
     shot_id: str
-    events: List[OffscreenEvent] = field(default_factory=list)
+    events: list[OffscreenEvent] = field(default_factory=list)
     prompt_suffix: str = ""
 
 
-def parse_offscreen_map(raw: Any) -> Dict[str, List[OffscreenEvent]]:
-    out: Dict[str, List[OffscreenEvent]] = {}
+def parse_offscreen_map(raw: Any) -> dict[str, list[OffscreenEvent]]:
+    out: dict[str, list[OffscreenEvent]] = {}
     if not isinstance(raw, Mapping):
         return out
     for shot_id, spec in raw.items():
-        events: List[OffscreenEvent] = []
+        events: list[OffscreenEvent] = []
         zones = spec if isinstance(spec, list) else (spec.get("zones") or spec.get("offscreen") or [])
         if isinstance(zones, str):
             zones = [zones]
@@ -88,9 +89,9 @@ def parse_offscreen_map(raw: Any) -> Dict[str, List[OffscreenEvent]]:
 
 def plan_offscreen_space(
     shots: Sequence[Any],
-    offscreen_map: Mapping[str, List[OffscreenEvent]],
-) -> List[OffscreenPlan]:
-    plans: List[OffscreenPlan] = []
+    offscreen_map: Mapping[str, list[OffscreenEvent]],
+) -> list[OffscreenPlan]:
+    plans: list[OffscreenPlan] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         inline = getattr(sh, "offscreen", None)
@@ -102,7 +103,7 @@ def plan_offscreen_space(
             events.append(OffscreenEvent(zone=inline))
         if not events:
             continue
-        frags: List[str] = []
+        frags: list[str] = []
         for ev in events:
             if ev.audio:
                 frags.append(ev.audio)

@@ -39,7 +39,7 @@ DESIGNER = PipelineRole(
 VERIFIER = PipelineRole(
     name="verifier",
     description="Quality and consistency checks: anatomy, sharpness, text OCR match; optional refine.",
-    sdx_module_hint="utils/quality/test_time_pick.py, vit_quality/, sample.py refinement flags",
+    sdx_module_hint="utils/generation/editing_phase.py, utils/quality/test_time_pick.py, vit_quality/",
 )
 
 REASONER = PipelineRole(
@@ -48,10 +48,19 @@ REASONER = PipelineRole(
     sdx_module_hint="utils/modeling/text_encoder_bundle.py, utils/analysis/llm_client.py, JSONL region_captions",
 )
 
+EDITOR = PipelineRole(
+    name="editor",
+    description=(
+        "Post-decode editing phase: break into pieces, prompt-gap / OCR / anatomy / RAG edits, "
+        "loop until cohesive and non-AI-looking."
+    ),
+    sdx_module_hint="utils/generation/editing_phase.py, scripts/tools/editing_phase.py",
+)
+
 
 def pipeline_roles() -> tuple[PipelineRole, ...]:
     """Return the canonical ordered tuple of pipeline roles."""
-    return (DESIGNER, VERIFIER, REASONER)
+    return (DESIGNER, REASONER, VERIFIER, EDITOR)
 
 
 def sample_cli_hint(

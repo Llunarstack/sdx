@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import IO, Any, Dict, Literal, Optional, Tuple
+from typing import IO, Any, Literal
 
 MultiInstancePreset = Literal[
     "none",
@@ -37,7 +37,7 @@ class MultiInstanceAugment:
     prompt_suffix: str
     negative_suffix: str
     min_candidates: int
-    suggested_expected_count: Optional[int]
+    suggested_expected_count: int | None
     workflow_note: str
 
 
@@ -132,7 +132,7 @@ def apply_multi_instance_preset(
     preset: str,
     *,
     user_expected_count: int = 0,
-) -> Tuple[str, str, int, Optional[int], str]:
+) -> tuple[str, str, int, int | None, str]:
     """Returns ``( augmented_prompt, negative_fragment, min_candidates, expected_count_hint, workflow_note )``."""
     prompt = (prompt or "").strip()
     key = (preset or "none").lower().strip()
@@ -150,13 +150,13 @@ def apply_multi_instance_preset(
     else:
         out_prompt = prompt
 
-    ec: Optional[int] = user_expected_count if user_expected_count > 0 else aug.suggested_expected_count
+    ec: int | None = user_expected_count if user_expected_count > 0 else aug.suggested_expected_count
     neg = aug.negative_suffix
 
     return out_prompt, neg, aug.min_candidates, ec, aug.workflow_note
 
 
-def multi_instance_auto_settings(preset_key: str) -> Dict[str, Any]:
+def multi_instance_auto_settings(preset_key: str) -> dict[str, Any]:
     """
     Companion defaults for ``--multi-instance-auto`` in ``sample.py``.
 

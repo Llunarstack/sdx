@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 
-def fast_numpy_stack_status() -> Dict[str, Any]:
+def fast_numpy_stack_status() -> dict[str, Any]:
     """Cheap introspection for diagnostics (no optional DLLs required)."""
-    out: Dict[str, Any] = {"numpy": False, "torch": False, "xxhash": False}
+    out: dict[str, Any] = {"numpy": False, "torch": False, "xxhash": False}
     try:
         import numpy as np  # noqa: F401
 

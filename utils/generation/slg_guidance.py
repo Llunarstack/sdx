@@ -8,12 +8,10 @@ Requires a third forward with ``skip_blocks`` on the DiT (see ``models/dit_text.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 
 
-def default_skip_block_indices(depth: int, *, fraction: float = 0.55) -> Tuple[int, ...]:
+def default_skip_block_indices(depth: int, *, fraction: float = 0.55) -> tuple[int, ...]:
     """Heuristic middle blocks to skip (SD3.5 uses ~7,8,9 on 28 blocks)."""
     d = max(1, int(depth))
     mid = int(round(float(fraction) * (d - 1)))
@@ -39,7 +37,7 @@ def slg_combine(
     return cfg_pred + float(slg_scale) * slg_delta
 
 
-def parse_skip_blocks(spec: str, *, depth: int = 28) -> Tuple[int, ...]:
+def parse_skip_blocks(spec: str, *, depth: int = 28) -> tuple[int, ...]:
     """Parse ``7,8,9`` or ``auto`` into block indices."""
     s = str(spec or "").strip().lower()
     if not s or s == "none":

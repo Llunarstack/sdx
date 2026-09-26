@@ -6,7 +6,7 @@
 > python -m scripts.tools update_project_structure
 > ```
 >
-> Generated: **2026-06-24 03:00:20 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-07-18 19:55:41 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -32,16 +32,8 @@ sdx/
 │   │   ├── style_artists.py
 │   │   ├── style_guidance.py
 │   │   └── superior_stack.py
-│   ├── reference/
-│   │   ├── __init__.py
-│   │   └── prompt_domains.py
 │   ├── __init__.py
-│   ├── ai_image_shortcomings.py
-│   ├── art_mediums.py
-│   ├── prompt_domains.py
 │   ├── README.md
-│   ├── style_artists.py
-│   ├── style_guidance.py
 │   └── train_config.py
 ├── data/
 │   ├── danbooru/
@@ -53,15 +45,14 @@ sdx/
 │   ├── caption_truncate.py
 │   ├── caption_utils.py
 │   ├── enhanced_dataset.py
+│   ├── manifest_utils.py
 │   ├── t2i_dataset.py
-│   └── vector_index_sampler.py
+│   ├── vector_index_sampler.py
+│   └── video_catalog.json
 ├── datasets/
 │   ├── train/
 │   └── README.md
 ├── diffusion/
-│   ├── holy_grail/
-│   │   ├── __init__.py
-│   │   └── README.md
 │   ├── losses/
 │   │   ├── __init__.py
 │   │   ├── loss_weighting.py
@@ -78,17 +69,16 @@ sdx/
 │   │   ├── recommender.py
 │   │   ├── runtime_guard.py
 │   │   └── style_router.py
-│   ├── sampling_extras/
+│   ├── solvers/
 │   │   ├── __init__.py
-│   │   └── README.md
+│   │   ├── base.py
+│   │   ├── dpm_solver_pp.py
+│   │   ├── flow_ode.py
+│   │   └── unipc.py
 │   ├── __init__.py
-│   ├── adaptive_cfg_scheduler.py
-│   ├── adversarial_distillation.py
-│   ├── attention_steering.py
 │   ├── bridge_training.py
 │   ├── cascaded_multimodal_pipeline.py
 │   ├── cfg_schedulers.py
-│   ├── consistency_utils.py
 │   ├── flow_matching.py
 │   ├── flow_rectified.py
 │   ├── gaussian_diffusion.py
@@ -99,28 +89,42 @@ sdx/
 │   ├── respace.py
 │   ├── sampling_utils.py
 │   ├── schedules.py
-│   ├── self_conditioning.py
 │   ├── snr_utils.py
 │   ├── spectral_sfp.py
 │   └── timestep_sampling.py
 ├── docs/
 │   ├── agentic/
-│   │   ├── AGENTIC_STACK.md
-│   │   ├── INNOVATIONS_AGENTIC.md
-│   │   └── QUALITY_AGENTS.md
+│   │   └── AGENTIC_STACK.md
 │   ├── assets/
 │   │   └── gallery/
 │   ├── brain/
 │   │   └── VISUAL_BRAIN.md
+│   ├── design/
+│   │   └── WEBSITE_DESIGN_BRIEF.md
 │   ├── guides/
-│   │   ├── ADVANCED_OPTIMIZATION.md
+│   │   ├── BOOK_COMIC_TECH.md
 │   │   ├── CHARACTER_CONSISTENCY_IMPLEMENTATION.md
-│   │   └── INTEGRATION.md
+│   │   ├── DANBOORU_HF.md
+│   │   ├── EDITING_PHASE.md
+│   │   ├── HARDWARE.md
+│   │   ├── HF_DATASET_SHORTLIST.md
+│   │   ├── IMAGE_CAPTIONING.md
+│   │   ├── INTEGRATION.md
+│   │   ├── REPRODUCIBILITY.md
+│   │   ├── SAMPLING.md
+│   │   ├── SMOKE_TRAINING.md
+│   │   └── TRAINING_TEXT_TO_PIXELS.md
 │   ├── recipes/
 │   │   ├── eval_baseline_prompts.md
 │   │   ├── fast_training.md
 │   │   ├── local_ci_mirror.md
 │   │   └── quick_eval_holy_grail.md
+│   ├── reference/
+│   │   ├── DOMAINS.md
+│   │   ├── FILES.md
+│   │   ├── PRETRAINED_RECOMMENDED.md
+│   │   ├── REGION_CAPTIONS.md
+│   │   └── STYLE_ARTIST_TAGS.md
 │   ├── releases/
 │   │   ├── v0.1.0.md
 │   │   ├── v0.2.0.md
@@ -128,6 +132,8 @@ sdx/
 │   │   ├── v10.md
 │   │   ├── v11-github-release.md
 │   │   ├── v11.md
+│   │   ├── v12-github-release.md
+│   │   ├── v12.md
 │   │   ├── v3.md
 │   │   ├── v4.md
 │   │   ├── v5.md
@@ -137,54 +143,33 @@ sdx/
 │   │   ├── v8.md
 │   │   ├── v9.md
 │   │   └── VERSION_COMPARISON.md
-│   ├── reports/
-│   │   ├── character_consistency_demo_report.md
-│   │   └── character_consistency_demo_results.json
 │   ├── research/
 │   │   ├── AGENTIC_RESEARCH_2026.md
+│   │   ├── BLUEPRINTS.md
+│   │   ├── DIFFUSION_LEVERAGE_ROADMAP.md
 │   │   ├── IMAGE_QUALITY_LEVERS_2026.md
-│   │   ├── IMPROVEMENT_IDEAS.md
+│   │   ├── IMPROVEMENTS.md
+│   │   ├── INSPIRATION.md
+│   │   ├── LANDSCAPE_2026.md
+│   │   ├── MODERN_DIFFUSION.md
+│   │   ├── NEXTGEN_SUPERMODEL_ARCHITECTURE.md
+│   │   ├── README.md
 │   │   ├── SAMPLING_EXPERIMENTS_BACKLOG.md
 │   │   └── SUPERIOR_RESEARCH_2026.md
 │   ├── AR.md
-│   ├── AR_EXTENSIONS.md
-│   ├── BLUEPRINTS.md
-│   ├── BOOK_COMIC_TECH.md
-│   ├── CANONICAL_STRUCTURE.md
 │   ├── CODEBASE.md
-│   ├── CODEBASE_GUIDE.md
-│   ├── COMMON_SHORTCOMINGS_AI_IMAGES.md
-│   ├── DANBOORU_HF.md
-│   ├── DIFFUSION_LEVERAGE_ROADMAP.md
-│   ├── DOMAINS.md
-│   ├── ENHANCED_FEATURES.md
-│   ├── FILES.md
 │   ├── GETTING_STARTED.md
-│   ├── HARDWARE.md
-│   ├── HF_DATASET_SHORTLIST.md
+│   ├── GLOSSARY.md
 │   ├── HOLY_GRAIL_OVERVIEW.md
 │   ├── HOW_GENERATION_WORKS.md
-│   ├── IMPROVEMENTS.md
-│   ├── INSPIRATION.md
-│   ├── LANDSCAPE_2026.md
 │   ├── MODEL_STACK.md
-│   ├── MODEL_WEAKNESSES.md
-│   ├── MODERN_DIFFUSION.md
 │   ├── NATIVE_AND_SYSTEM_LIBS.md
-│   ├── NATIVE_KERNELS.md
-│   ├── NEXTGEN_SUPERMODEL_ARCHITECTURE.md
 │   ├── PROMPT_COOKBOOK.md
 │   ├── PROMPT_STACK.md
-│   ├── QUALITY_AND_ISSUES.md
+│   ├── QUALITY.md
 │   ├── README.md
-│   ├── REGION_CAPTIONS.md
-│   ├── REPRODUCIBILITY.md
-│   ├── SMOKE_TRAINING.md
-│   ├── STYLE_ARTIST_TAGS.md
 │   ├── SUPERIOR_STACK.md
-│   ├── TCIS_MODEL.md
-│   ├── TCIS_OVERVIEW.md
-│   └── TRAINING_TEXT_TO_PIXELS.md
+│   └── TCIS.md
 ├── examples/
 │   ├── __init__.py
 │   ├── book_visual_memory.example.json
@@ -193,147 +178,197 @@ sdx/
 │   ├── eval_prompts_baseline.json
 │   ├── example_character_consistency.py
 │   ├── example_style_harmonization.py
+│   ├── moodboard.example.json
 │   ├── multi_character_scene.example.json
 │   ├── prompt_layout.example.json
 │   ├── prompt_layout_group_mansion_nsfw.json
-│   └── run_baseline_eval.py
+│   ├── run_baseline_eval.py
+│   ├── scene.example.json
+│   ├── scene_continuity.example.json
+│   ├── scene_frontier.example.json
+│   ├── scene_i2v_control.example.json
+│   ├── scene_studio.example.json
+│   ├── scene_tier1.example.json
+│   ├── style_references.example.json
+│   └── video_plan.example.json
 ├── frontier/
+│   ├── adherence/
+│   │   ├── __init__.py
+│   │   └── token_emphasis.py
+│   ├── anatomy/
+│   │   ├── __init__.py
+│   │   └── body_planner.py
+│   ├── archetype/
+│   │   ├── __init__.py
+│   │   └── symbol_map.py
+│   ├── atmosphere/
+│   │   ├── __init__.py
+│   │   └── volumetric.py
 │   ├── attention/
 │   │   ├── __init__.py
+│   │   ├── dense_diffusion.py
 │   │   └── layout_plan.py
+│   ├── blend/
+│   │   ├── __init__.py
+│   │   └── style_dna.py
+│   ├── causality/
+│   │   ├── __init__.py
+│   │   └── physical_plausibility.py
 │   ├── chaos/
 │   │   ├── __init__.py
 │   │   ├── entropy_budget.py
 │   │   └── serendipity.py
+│   ├── cinema/
+│   │   ├── __init__.py
+│   │   ├── absence_pulse.py
+│   │   ├── shot_grammar.py
+│   │   └── video_bridge.py
+│   ├── collective/
+│   │   ├── __init__.py
+│   │   └── crowd_grammar.py
 │   ├── compose/
 │   │   ├── __init__.py
 │   │   └── multi_reference.py
+│   ├── composition/
+│   │   ├── __init__.py
+│   │   └── framing.py
+│   ├── constraint/
+│   │   ├── __init__.py
+│   │   └── creative_limits.py
+│   ├── counterfactual/
+│   │   ├── __init__.py
+│   │   └── preserve_edit.py
+│   ├── creatures/
+│   │   ├── __init__.py
+│   │   └── taxonomy.py
+│   ├── economy/
+│   │   ├── __init__.py
+│   │   └── compute_budget.py
+│   ├── era/
+│   │   ├── __init__.py
+│   │   └── period_accuracy.py
+│   ├── focal/
+│   │   ├── __init__.py
+│   │   └── story_dof.py
+│   ├── fusion/
+│   │   ├── __init__.py
+│   │   └── genre_collision.py
+│   ├── glitch/
+│   │   ├── __init__.py
+│   │   └── intentional_artifacts.py
 │   ├── guidance/
 │   │   ├── __init__.py
 │   │   ├── dynamic_cfg.py
 │   │   └── guidance_interval.py
+│   ├── harmony/
+│   │   ├── __init__.py
+│   │   └── palette.py
+│   ├── inverse/
+│   │   ├── __init__.py
+│   │   └── layout_sketch.py
+│   ├── latent/
+│   │   └── __init__.py
 │   ├── layout/
 │   │   ├── __init__.py
 │   │   ├── coordinate_bind.py
 │   │   ├── lamic_schedule.py
 │   │   ├── layout_metrics.py
 │   │   └── omost_canvas.py
+│   ├── lighting/
+│   │   ├── __init__.py
+│   │   └── motivated_light.py
 │   ├── logic/
 │   │   ├── __init__.py
 │   │   ├── absence.py
 │   │   └── contradiction.py
+│   ├── materials/
+│   │   ├── __init__.py
+│   │   └── surface_truth.py
+│   ├── mature/
+│   │   ├── __init__.py
+│   │   └── mature_guidance.py
+│   ├── medium/
+│   │   ├── __init__.py
+│   │   ├── brush_planner.py
+│   │   └── extended_mediums.py
 │   ├── memory/
 │   │   ├── __init__.py
 │   │   └── generation_echo.py
+│   ├── motion/
+│   │   ├── __init__.py
+│   │   └── action_freeze.py
+│   ├── multiview/
+│   │   └── __init__.py
+│   ├── mutation/
+│   │   ├── __init__.py
+│   │   └── prompt_mutator.py
 │   ├── narrative/
 │   │   ├── __init__.py
+│   │   ├── chromatic_field.py
 │   │   ├── moment.py
+│   │   ├── tension_field.py
 │   │   └── witness.py
+│   ├── optics/
+│   │   ├── __init__.py
+│   │   └── lens_character.py
+│   ├── paradox/
+│   │   ├── __init__.py
+│   │   └── beautiful_paradox.py
+│   ├── provenance/
+│   │   ├── __init__.py
+│   │   └── audit_bundle.py
+│   ├── realism/
+│   │   ├── __init__.py
+│   │   ├── anti_slop.py
+│   │   └── photoreal_stack.py
+│   ├── retrieval/
+│   │   ├── __init__.py
+│   │   └── fact_rag.py
+│   ├── rhythm/
+│   │   ├── __init__.py
+│   │   └── visual_beat.py
+│   ├── safety/
+│   │   ├── __init__.py
+│   │   └── content_policy.py
+│   ├── scale/
+│   │   ├── __init__.py
+│   │   └── magnitude.py
+│   ├── semantics/
+│   │   ├── __init__.py
+│   │   └── relation_graph.py
+│   ├── surreal/
+│   │   ├── __init__.py
+│   │   └── dream_logic.py
+│   ├── synesthesia/
+│   │   ├── __init__.py
+│   │   └── cross_modal.py
+│   ├── temporal/
+│   │   ├── __init__.py
+│   │   └── storyboard.py
+│   ├── typography/
+│   │   ├── __init__.py
+│   │   └── prompt_glyphs.py
+│   ├── uncertainty/
+│   │   ├── __init__.py
+│   │   └── confidence_gate.py
+│   ├── vibe/
+│   │   ├── __init__.py
+│   │   └── mood_physics.py
+│   ├── weathering/
+│   │   ├── __init__.py
+│   │   └── patina.py
+│   ├── world/
+│   │   ├── __init__.py
+│   │   └── world_bible.py
 │   ├── __init__.py
 │   ├── engine.py
 │   ├── hooks.py
+│   ├── imagination.py
+│   ├── perfect.py
 │   ├── README.md
-│   └── registry.py
-├── innovations/
-│   ├── agentic/
-│   │   ├── __init__.py
-│   │   ├── adaptive_learning.py
-│   │   ├── adversarial.py
-│   │   ├── artifact_detector.py
-│   │   ├── composition_reasoner.py
-│   │   ├── drift_detector.py
-│   │   ├── ensemble.py
-│   │   ├── explainable_scoring.py
-│   │   ├── flow_consistency.py
-│   │   ├── memory_prefs.py
-│   │   ├── perceptual_metrics.py
-│   │   ├── prompt_adherence.py
-│   │   ├── prompt_optimizer.py
-│   │   ├── quality_control.py
-│   │   ├── quality_framework.py
-│   │   ├── quality_monitor.py
-│   │   ├── refinement_loop.py
-│   │   ├── rlhf.py
-│   │   ├── vision_reward.py
-│   │   └── visual_reasoning.py
-│   ├── capabilities/
-│   │   ├── __init__.py
-│   │   ├── animation.py
-│   │   ├── dynamic.py
-│   │   ├── engine.py
-│   │   ├── eraser.py
-│   │   ├── hooks.py
-│   │   ├── inpainting.py
-│   │   ├── loop_video.py
-│   │   ├── outpainting.py
-│   │   ├── remix.py
-│   │   └── weights.py
-│   ├── consistency/
-│   │   ├── __init__.py
-│   │   ├── character.py
-│   │   ├── color.py
-│   │   ├── engine.py
-│   │   ├── hooks.py
-│   │   ├── seeding.py
-│   │   ├── semantic.py
-│   │   ├── style.py
-│   │   ├── temporal.py
-│   │   └── variation.py
-│   ├── control/
-│   │   ├── __init__.py
-│   │   ├── camera.py
-│   │   ├── color.py
-│   │   ├── detail.py
-│   │   ├── effects.py
-│   │   ├── engine.py
-│   │   ├── hooks.py
-│   │   ├── lighting.py
-│   │   └── spatial.py
-│   ├── multimodal/
-│   │   ├── __init__.py
-│   │   ├── audio2img.py
-│   │   ├── depth.py
-│   │   ├── engine.py
-│   │   ├── hooks.py
-│   │   ├── img2img.py
-│   │   ├── scene_graph.py
-│   │   ├── sketch2img.py
-│   │   ├── text_3d.py
-│   │   └── video_style.py
-│   ├── quality/
-│   │   ├── __init__.py
-│   │   ├── cloth.py
-│   │   ├── engine.py
-│   │   ├── global_light.py
-│   │   ├── hooks.py
-│   │   ├── liquid.py
-│   │   ├── metallic.py
-│   │   ├── skin.py
-│   │   └── subpixel.py
-│   ├── semantics/
-│   │   ├── __init__.py
-│   │   ├── ambiguity.py
-│   │   ├── decomposer.py
-│   │   ├── engine.py
-│   │   ├── hooks.py
-│   │   ├── nuance.py
-│   │   └── style.py
-│   ├── speed/
-│   │   ├── __init__.py
-│   │   ├── adaptive.py
-│   │   ├── batching.py
-│   │   ├── cache.py
-│   │   ├── engine.py
-│   │   ├── hooks.py
-│   │   ├── layer_skip.py
-│   │   ├── lora_accel.py
-│   │   ├── tiling.py
-│   │   └── token_prune.py
-│   ├── __init__.py
-│   ├── INNOVATION_GUIDE.md
-│   ├── pipeline.py
-│   ├── README.md
-│   └── registry.py
+│   ├── registry.py
+│   ├── subject.py
+│   └── synthesis.py
 ├── models/
 │   ├── __init__.py
 │   ├── anti_ai_naturalness.py
@@ -344,15 +379,14 @@ sdx/
 │   ├── complex_prompt_handler.py
 │   ├── controlnet.py
 │   ├── dit.py
-│   ├── dit_predecessor.py
 │   ├── dit_text.py
 │   ├── dit_text_variants.py
 │   ├── dynamic_patch.py
 │   ├── enhanced_dit.py
-│   ├── generation_pipeline.py
 │   ├── linear_attention.py
 │   ├── long_prompt_encoder.py
 │   ├── lora.py
+│   ├── lora_train.py
 │   ├── model_enhancements.py
 │   ├── moe.py
 │   ├── multi_character.py
@@ -366,8 +400,7 @@ sdx/
 │   ├── scene_composer.py
 │   ├── superior_vit.py
 │   ├── taca.py
-│   ├── vit_next_blocks.py
-│   └── vit_superior.py
+│   └── vit_next_blocks.py
 ├── native/
 │   ├── _experimental/
 │   │   ├── c/
@@ -598,6 +631,97 @@ sdx/
 │   │   └── visual_memory_bridge.py
 │   ├── image_gen/
 │   │   └── README.md
+│   ├── video/
+│   │   ├── scripts/
+│   │   │   └── generate_video.py
+│   │   ├── __init__.py
+│   │   ├── animation_principles.py
+│   │   ├── anticipation_windup.py
+│   │   ├── audio_mux.py
+│   │   ├── auto_rig.py
+│   │   ├── breath_cadence.py
+│   │   ├── camera_empathy.py
+│   │   ├── camera_rig.py
+│   │   ├── camera_stabilize.py
+│   │   ├── causal_events.py
+│   │   ├── character_memory.py
+│   │   ├── chromatic_arc.py
+│   │   ├── continuity_validators.py
+│   │   ├── controls.py
+│   │   ├── counterfactual_beats.py
+│   │   ├── deflicker.py
+│   │   ├── depth_interpolate.py
+│   │   ├── diegetic_focus.py
+│   │   ├── director_mode.py
+│   │   ├── director_personalities.py
+│   │   ├── drift_repair.py
+│   │   ├── editor.py
+│   │   ├── elements.py
+│   │   ├── emotional_contagion.py
+│   │   ├── flf2v.py
+│   │   ├── flow_consistency.py
+│   │   ├── frame_enhance.py
+│   │   ├── frontier_compiler.py
+│   │   ├── generation_router.py
+│   │   ├── helpers.py
+│   │   ├── i2v.py
+│   │   ├── identity_lock.py
+│   │   ├── interpolate.py
+│   │   ├── keyframes.py
+│   │   ├── kinetic_continuity.py
+│   │   ├── layer_stack.py
+│   │   ├── mask_propagate.py
+│   │   ├── material_memory.py
+│   │   ├── mise_en_scene.py
+│   │   ├── motif_tracker.py
+│   │   ├── motion.py
+│   │   ├── motion_beats.py
+│   │   ├── motion_brush.py
+│   │   ├── motion_library.py
+│   │   ├── motion_transfer.py
+│   │   ├── narrative_debt.py
+│   │   ├── narrative_tension.py
+│   │   ├── offscreen_space.py
+│   │   ├── parallax_budget.py
+│   │   ├── parallel_segments.py
+│   │   ├── pipeline.py
+│   │   ├── pose_control.py
+│   │   ├── post_grade.py
+│   │   ├── process_options.py
+│   │   ├── provenance.py
+│   │   ├── quality.py
+│   │   ├── README.md
+│   │   ├── reference_sheet.py
+│   │   ├── region_motion.py
+│   │   ├── rehearsal_pipeline.py
+│   │   ├── retrieval.py
+│   │   ├── scar_timeline.py
+│   │   ├── scene_graph.py
+│   │   ├── scene_preflight.py
+│   │   ├── screen_direction.py
+│   │   ├── segment_processor.py
+│   │   ├── segment_retry.py
+│   │   ├── semantic_drift.py
+│   │   ├── semantic_gravity.py
+│   │   ├── shot_planner.py
+│   │   ├── silence_map.py
+│   │   ├── stinger_frames.py
+│   │   ├── stitch.py
+│   │   ├── storyboard.py
+│   │   ├── studio_compiler.py
+│   │   ├── style_engines.py
+│   │   ├── t2v.py
+│   │   ├── temporal.py
+│   │   ├── temporal_echo.py
+│   │   ├── thumbnail_rehearsal.py
+│   │   ├── timeline.py
+│   │   ├── transition_fx.py
+│   │   ├── types.py
+│   │   ├── velocity_curve.py
+│   │   ├── video_io.py
+│   │   ├── weather_inertia.py
+│   │   ├── witness_lens.py
+│   │   └── world_memory.py
 │   ├── __init__.py
 │   └── README.md
 ├── pretrained/
@@ -620,9 +744,21 @@ sdx/
 │   ├── CRAFT-text-detector/
 │   │   ├── craft_mlt_25k.pth
 │   │   └── craft_refiner_CTW1500.pth
-│   ├── Depth-Anything-V2-Large/
-│   ├── DINOv2-Giant/
-│   ├── DINOv2-Large/
+│   ├── DC-AE-f32c32/
+│   │   ├── config.json
+│   │   ├── LICENSE.txt
+│   │   └── README.md
+│   ├── Depth-Anything-V3-Large/
+│   │   ├── config.json
+│   │   └── README.md
+│   ├── DINOv3-ViT-B16/
+│   │   ├── LICENSE.md
+│   │   ├── README.md
+│   │   └── SDX_HUB.json
+│   ├── DINOv3-ViT-L16/
+│   │   ├── LICENSE.md
+│   │   ├── README.md
+│   │   └── SDX_HUB.json
 │   ├── Donut-base/
 │   │   ├── .gitignore
 │   │   ├── added_tokens.json
@@ -633,17 +769,63 @@ sdx/
 │   │   ├── special_tokens_map.json
 │   │   ├── tokenizer.json
 │   │   └── tokenizer_config.json
+│   ├── FLUX.2-dev/
+│   │   ├── scheduler/
+│   │   ├── text_encoder/
+│   │   ├── tokenizer/
+│   │   ├── LICENSE.md
+│   │   ├── README.md
+│   │   └── SDX_HUB.json
+│   ├── FLUX.2-klein-4B/
+│   │   ├── scheduler/
+│   │   │   └── scheduler_config.json
+│   │   ├── text_encoder/
+│   │   │   ├── config.json
+│   │   │   ├── generation_config.json
+│   │   │   └── model.safetensors.index.json
+│   │   ├── tokenizer/
+│   │   │   ├── added_tokens.json
+│   │   │   ├── chat_template.jinja
+│   │   │   ├── merges.txt
+│   │   │   ├── special_tokens_map.json
+│   │   │   ├── tokenizer.json
+│   │   │   ├── tokenizer_config.json
+│   │   │   └── vocab.json
+│   │   ├── transformer/
+│   │   │   └── config.json
+│   │   └── vae/
+│   │       └── config.json
+│   ├── FLUX.2-klein-9B/
+│   │   ├── scheduler/
+│   │   ├── text_encoder/
+│   │   ├── tokenizer/
+│   │   ├── transformer/
+│   │   ├── LICENSE.md
+│   │   ├── README.md
+│   │   └── SDX_HUB.json
+│   ├── Gemma-3-4B-IT/
+│   │   ├── README.md
+│   │   └── SDX_HUB.json
 │   ├── GenSearcher-8B/
 │   ├── GroundingDINO-Base/
-│   ├── HPSv2-hf/
+│   ├── HPSv3/
 │   │   ├── config.json
+│   │   └── README.md
+│   ├── ImageReward/
+│   ├── InternVL3-8B/
+│   │   ├── added_tokens.json
+│   │   ├── chat_template.jinja
+│   │   ├── config.json
+│   │   ├── generation_config.json
+│   │   ├── merges.txt
+│   │   ├── model.safetensors.index.json
 │   │   ├── preprocessor_config.json
+│   │   ├── processor_config.json
 │   │   ├── README.md
 │   │   ├── special_tokens_map.json
 │   │   ├── tokenizer.json
 │   │   ├── tokenizer_config.json
 │   │   └── vocab.json
-│   ├── ImageReward/
 │   ├── Kosmos-2-patch14-224/
 │   │   ├── added_tokens.json
 │   │   ├── annotated_snowman.jpg
@@ -662,7 +844,11 @@ sdx/
 │   ├── LongCLIP-L/
 │   ├── Marigold-Depth-v1-1/
 │   ├── Marigold-Normals-v1-1/
-│   ├── moondream2/
+│   ├── moondream3-preview/
+│   │   ├── config.json
+│   │   ├── LICENSE.md
+│   │   ├── model.safetensors.index.json
+│   │   └── README.md
 │   ├── OwlViT-base-patch32/
 │   │   ├── config.json
 │   │   ├── merges.txt
@@ -673,10 +859,84 @@ sdx/
 │   │   └── vocab.json
 │   ├── PerceptCLIP_IQA/
 │   ├── PickScore_v1/
-│   ├── Qwen2.5-14B-Instruct/
+│   ├── Qwen-Image/
+│   │   ├── scheduler/
+│   │   │   └── scheduler_config.json
+│   │   ├── text_encoder/
+│   │   │   ├── config.json
+│   │   │   ├── generation_config.json
+│   │   │   └── model.safetensors.index.json
+│   │   ├── tokenizer/
+│   │   │   ├── added_tokens.json
+│   │   │   ├── chat_template.jinja
+│   │   │   ├── merges.txt
+│   │   │   ├── special_tokens_map.json
+│   │   │   ├── tokenizer_config.json
+│   │   │   └── vocab.json
+│   │   ├── transformer/
+│   │   │   ├── config.json
+│   │   │   └── diffusion_pytorch_model.safetensors.index.json
+│   │   └── vae/
+│   │       └── config.json
+│   ├── Qwen-Image-2512/
+│   │   ├── scheduler/
+│   │   │   └── scheduler_config.json
+│   │   ├── text_encoder/
+│   │   │   ├── config.json
+│   │   │   ├── generation_config.json
+│   │   │   └── model.safetensors.index.json
+│   │   ├── tokenizer/
+│   │   │   ├── added_tokens.json
+│   │   │   ├── chat_template.jinja
+│   │   │   ├── merges.txt
+│   │   │   ├── special_tokens_map.json
+│   │   │   ├── tokenizer_config.json
+│   │   │   └── vocab.json
+│   │   ├── transformer/
+│   │   │   ├── config.json
+│   │   │   └── diffusion_pytorch_model.safetensors.index.json
+│   │   └── vae/
+│   │       └── config.json
+│   ├── Qwen3-14B/
+│   │   ├── config.json
+│   │   ├── generation_config.json
+│   │   ├── merges.txt
+│   │   ├── model.safetensors.index.json
+│   │   ├── README.md
+│   │   ├── tokenizer.json
+│   │   ├── tokenizer_config.json
+│   │   └── vocab.json
+│   ├── Qwen3-8B/
+│   │   ├── config.json
+│   │   ├── generation_config.json
+│   │   ├── merges.txt
+│   │   ├── model.safetensors.index.json
+│   │   ├── README.md
+│   │   ├── tokenizer.json
+│   │   ├── tokenizer_config.json
+│   │   └── vocab.json
+│   ├── Qwen3-VL-8B-Instruct/
+│   │   ├── chat_template.json
+│   │   ├── config.json
+│   │   ├── generation_config.json
+│   │   ├── merges.txt
+│   │   ├── model.safetensors.index.json
+│   │   ├── preprocessor_config.json
+│   │   ├── README.md
+│   │   ├── tokenizer.json
+│   │   ├── tokenizer_config.json
+│   │   ├── video_preprocessor_config.json
+│   │   └── vocab.json
 │   ├── Real-ESRGAN/
 │   ├── SAM2-Hiera-Large/
-│   ├── SigLIP-SO400M/
+│   ├── SigLIP2-SO400M/
+│   │   ├── config.json
+│   │   ├── preprocessor_config.json
+│   │   ├── README.md
+│   │   ├── special_tokens_map.json
+│   │   ├── tokenizer.json
+│   │   ├── tokenizer.model
+│   │   └── tokenizer_config.json
 │   ├── StableCascade-Decoder/
 │   ├── StableCascade-Prior/
 │   ├── T5-XXL/
@@ -687,7 +947,17 @@ sdx/
 │   │   ├── taesd_decoder.safetensors
 │   │   └── taesd_encoder.safetensors
 │   ├── TAESDXL/
-│   └── TrOCR-Large-Printed/
+│   ├── TrOCR-Large-Printed/
+│   ├── UMT5-XXL/
+│   │   ├── config.json
+│   │   ├── generation_config.json
+│   │   ├── pytorch_model.bin.index.json
+│   │   ├── README.md
+│   │   ├── special_tokens_map.json
+│   │   ├── spiece.model
+│   │   ├── tokenizer.json
+│   │   └── tokenizer_config.json
+│   └── RECOMMENDED.md
 ├── research/
 │   ├── agi_image/
 │   │   ├── alignment/
@@ -738,14 +1008,52 @@ sdx/
 │   │   ├── perceptual_proxies.py
 │   │   └── rank_and_gate.py
 │   ├── __init__.py
-│   ├── autoregressive_plans.py
 │   ├── creature_character_guidance.py
-│   ├── diffusion_noise_structures.py
-│   ├── hybrid_sampling_schedules.py
-│   ├── latent_agreement.py
-│   ├── physics_visual_guidance.py
-│   └── quality_timestep_weights.py
+│   └── physics_visual_guidance.py
 ├── results/
+├── runpod/
+│   ├── lib/
+│   │   ├── ensure_repo.sh
+│   │   ├── fix_shell.sh
+│   │   ├── hf_sites.sh
+│   │   ├── install_native.sh
+│   │   ├── install_python_deps.sh
+│   │   ├── install_scrape_secrets.sh
+│   │   ├── install_system_deps.sh
+│   │   ├── load_secrets.sh
+│   │   ├── train_features.sh
+│   │   ├── turbo_hf.sh
+│   │   ├── turbo_scrape.sh
+│   │   └── verify_env.sh
+│   ├── bootstrap.sh
+│   ├── budget.sh
+│   ├── datasets.sh
+│   ├── download.sh
+│   ├── env.defaults
+│   ├── IMAGE_GEN_PIPELINE.md
+│   ├── README.md
+│   ├── requirements-extra.txt
+│   ├── requirements-runpod.txt
+│   ├── run.ps1
+│   ├── run.sh
+│   ├── sample.sh
+│   ├── scrape.sh
+│   ├── scrape_stats.sh
+│   ├── sdx.sh
+│   ├── secret.txt
+│   ├── secrets.example.txt
+│   ├── setup.ps1
+│   ├── setup.sh
+│   ├── start.sh
+│   ├── status.sh
+│   ├── test.ps1
+│   ├── test.sh
+│   ├── train.sh
+│   ├── train_h100.sh
+│   ├── train_lora_bank.sh
+│   ├── train_ultimate.sh
+│   ├── ultimate.sh
+│   └── update.sh
 ├── runs/
 │   ├── 000-EnhancedDiT-XL-2/
 │   │   └── checkpoints/
@@ -767,9 +1075,23 @@ sdx/
 │   │   ├── save_model_checkpoint.py
 │   │   ├── setup_enhanced.py
 │   │   └── train_enhanced.py
+│   ├── scrape/
+│   │   ├── __init__.py
+│   │   ├── booru_client.py
+│   │   ├── frame_split.py
+│   │   ├── gelbooru_auth.py
+│   │   ├── media_validate.py
+│   │   ├── post_cap.py
+│   │   ├── README.md
+│   │   ├── rule34xyz_v2.py
+│   │   ├── safety.py
+│   │   ├── scrape_cli.py
+│   │   ├── secrets_config.py
+│   │   └── sites.py
 │   ├── setup/
 │   │   ├── clone_repos.ps1
-│   │   └── clone_repos.sh
+│   │   ├── clone_repos.sh
+│   │   └── runpod_setup.sh
 │   ├── tools/
 │   │   ├── data/
 │   │   │   ├── __init__.py
@@ -786,8 +1108,8 @@ sdx/
 │   │   │   ├── architecture_themes.py
 │   │   │   ├── ckpt_info.py
 │   │   │   ├── cursorfix.sh
-│   │   │   ├── gen_archive_shims.py
 │   │   │   ├── generate_sdx_architecture_diagram.py
+│   │   │   ├── integration_smoke.py
 │   │   │   ├── make_gallery.py
 │   │   │   ├── prepare-commit-msg
 │   │   │   ├── quick_test.py
@@ -812,12 +1134,14 @@ sdx/
 │   │   │   ├── agentic_generate.py
 │   │   │   ├── agentic_roles.py
 │   │   │   ├── auto_improve_loop.py
+│   │   │   ├── cascade_generate.py
 │   │   │   ├── gen_searcher_bridge.py
 │   │   │   ├── hybrid_dit_vit_generate.py
 │   │   │   ├── model_soup.py
 │   │   │   ├── op_preflight.py
 │   │   │   ├── orchestrate_pipeline.py
 │   │   │   ├── pretrained_status.py
+│   │   │   ├── profile_image_cli.py
 │   │   │   ├── run_agentic.ps1
 │   │   │   ├── run_flywheel.py
 │   │   │   ├── startup_readiness.py
@@ -830,7 +1154,9 @@ sdx/
 │   │   │   └── visual_brain_generate.py
 │   │   ├── prompt/
 │   │   │   ├── __init__.py
+│   │   │   ├── prompt_compose.py
 │   │   │   ├── prompt_lint.py
+│   │   │   ├── research_image_prompt.py
 │   │   │   ├── suggest_style_packs.py
 │   │   │   └── tag_coverage.py
 │   │   ├── repo/
@@ -853,14 +1179,19 @@ sdx/
 │   │   ├── __init__.py
 │   │   ├── __main__.py
 │   │   ├── _repo_bootstrap.py
+│   │   ├── auto_refine.py
+│   │   ├── benchmark_history.py
 │   │   ├── benchmark_suite.py
 │   │   ├── book_manifest_check.py
 │   │   ├── book_prompt_audit.py
 │   │   ├── book_scene_split.py
+│   │   ├── character_session.py
 │   │   ├── complex_prompt_coverage.py
+│   │   ├── creative_explore.py
 │   │   ├── dit_variant_compare.py
 │   │   ├── download_all_danbooru_categorized_tags.py
 │   │   ├── edit_inpaint.py
+│   │   ├── editing_phase.py
 │   │   ├── eval_prompts.py
 │   │   ├── explore_styles.py
 │   │   ├── fetch_danbooru_tags.py
@@ -871,12 +1202,16 @@ sdx/
 │   │   ├── op_pipeline.ps1
 │   │   ├── preview_generation_prompt.py
 │   │   ├── preview_prompt_stack.py
+│   │   ├── prompt_diff.py
 │   │   ├── prompt_gap_scout.py
 │   │   ├── README.md
 │   │   ├── seed_explorer.py
 │   │   ├── spatial_coverage.py
 │   │   ├── split_danbooru_general_tags.py
+│   │   ├── style_gallery.py
+│   │   ├── taste_profile.py
 │   │   ├── training_timestep_preview.py
+│   │   ├── video_generate.py
 │   │   ├── visual_memory_patch.py
 │   │   └── vit_inspect.py
 │   ├── training/
@@ -885,15 +1220,33 @@ sdx/
 │   │   └── precompute_latents.py
 │   ├── __init__.py
 │   ├── cascade_generate.py
-│   ├── cli.py
-│   └── README.md
+│   ├── integration_smoke.py
+│   ├── profile_image_cli.py
+│   ├── prompt_compose.py
+│   ├── README.md
+│   ├── research_image_prompt.py
+│   └── run_pipeline.py
+├── setup/
+│   ├── build_artist_index.py
+│   ├── build_lora_bank_index.py
+│   ├── build_lora_subsets.py
+│   ├── build_rag_corpus.py
+│   ├── cleanup_scrape_media.py
+│   ├── download_datasets.py
+│   ├── download_hf_datasets.py
+│   ├── download_pretrained.py
+│   ├── enrich_manifest_captions.py
+│   ├── ensure_repa_encoder.py
+│   ├── ensure_t5_safetensors.py
+│   ├── hf_dataset_packs.json
+│   ├── merge_manifests.py
+│   ├── preprocess_control_maps.py
+│   ├── sanitize_manifest.py
+│   └── tag_manifest_wd.py
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py
-│   ├── test_advanced_agentic_systems.py
-│   ├── test_advanced_quality_systems.py
 │   ├── test_agentic_stack.py
-│   ├── test_agentic_systems.py
 │   ├── test_agi_image_scaffold.py
 │   ├── test_ai_image_shortcomings.py
 │   ├── test_ar_curriculum.py
@@ -931,11 +1284,18 @@ sdx/
 │   ├── test_diffusion_math.py
 │   ├── test_dit_ar_latent_compat.py
 │   ├── test_edit_masks.py
+│   ├── test_editing_phase.py
+│   ├── test_enrich_manifest.py
 │   ├── test_error_handling_utils.py
 │   ├── test_eval_prompt_pack.py
 │   ├── test_eval_report.py
+│   ├── test_frame_split.py
 │   ├── test_frontier.py
+│   ├── test_frontier_creative.py
+│   ├── test_frontier_horizon.py
 │   ├── test_frontier_ideas.py
+│   ├── test_frontier_perfect.py
+│   ├── test_frontier_subject.py
 │   ├── test_generation_pkg_exports.py
 │   ├── test_hf_control.py
 │   ├── test_hf_index.py
@@ -946,14 +1306,17 @@ sdx/
 │   ├── test_human_made.py
 │   ├── test_hybrid_dit_vit_generate.py
 │   ├── test_image_dissection.py
+│   ├── test_image_profiler.py
 │   ├── test_image_resize.py
 │   ├── test_inference_research_hooks.py
 │   ├── test_inference_stages.py
-│   ├── test_innovations.py
 │   ├── test_jsonl_caption_hygiene_native.py
 │   ├── test_jsonutil.py
+│   ├── test_krea_controls.py
 │   ├── test_latent_edit_helpers.py
+│   ├── test_lora_train.py
 │   ├── test_manifest_gate_tool.py
+│   ├── test_media_validate.py
 │   ├── test_mine_preference_pairs_tool.py
 │   ├── test_model_forward.py
 │   ├── test_model_paths_gen_searcher.py
@@ -966,28 +1329,35 @@ sdx/
 │   ├── test_physics_material_prompts.py
 │   ├── test_pixel_perfect.py
 │   ├── test_plain_dict_snapshot.py
+│   ├── test_post_cap.py
 │   ├── test_prompt_breakdown.py
+│   ├── test_prompt_composer_artists.py
 │   ├── test_prompt_emphasis_import.py
 │   ├── test_prompt_lexicon_artist_helpers.py
 │   ├── test_prompt_ops_native.py
+│   ├── test_prompt_research.py
 │   ├── test_prompt_stack.py
 │   ├── test_prompt_stack_exports.py
+│   ├── test_prompt_train_sample_parity.py
 │   ├── test_prompt_training_pkg_lazy.py
 │   ├── test_rag_prompt_gen_searcher.py
-│   ├── test_refinement_loop.py
 │   ├── test_regional_box_prompting.py
-│   ├── test_research_sketches.py
-│   ├── test_research_systems.py
+│   ├── test_reverse_search.py
+│   ├── test_rule34xyz_v2.py
 │   ├── test_run_artifacts.py
 │   ├── test_run_baseline_eval.py
 │   ├── test_runtime_profiling.py
 │   ├── test_sample_cli_passthrough.py
 │   ├── test_sample_edit_runner.py
+│   ├── test_sample_features.py
 │   ├── test_sampling.py
 │   ├── test_sampling_flex.py
+│   ├── test_scene_graph.py
+│   ├── test_scrape_safety.py
 │   ├── test_scripts_tools_dispatcher.py
 │   ├── test_segmentation_to_mask.py
 │   ├── test_simple_latent_generate.py
+│   ├── test_solvers_schedules.py
 │   ├── test_startup_readiness_tool.py
 │   ├── test_style_artists.py
 │   ├── test_style_genome.py
@@ -995,21 +1365,22 @@ sdx/
 │   ├── test_style_native.py
 │   ├── test_superior_extended.py
 │   ├── test_superior_stack.py
-│   ├── test_superior_wave10.py
-│   ├── test_superior_wave11.py
-│   ├── test_superior_wave12.py
-│   ├── test_superior_wave3.py
-│   ├── test_superior_wave4.py
-│   ├── test_superior_wave5.py
-│   ├── test_superior_wave6.py
-│   ├── test_superior_wave7.py
-│   ├── test_superior_wave8.py
-│   ├── test_superior_wave9.py
+│   ├── test_superior_waves.py
+│   ├── test_superior_waves_torch.py
 │   ├── test_test_time_pick.py
 │   ├── test_text_encoder_penta.py
 │   ├── test_text_encoder_stack.py
 │   ├── test_timestep_curriculum.py
+│   ├── test_training_wiring.py
+│   ├── test_ultimate_pipeline.py
 │   ├── test_validate_checkpoint.py
+│   ├── test_video_continuity.py
+│   ├── test_video_controls.py
+│   ├── test_video_frontier.py
+│   ├── test_video_perfect.py
+│   ├── test_video_pipeline.py
+│   ├── test_video_studio.py
+│   ├── test_video_tier1.py
 │   ├── test_visual_brain.py
 │   ├── test_visual_design.py
 │   ├── test_visual_design_full.py
@@ -1040,109 +1411,6 @@ sdx/
 │   ├── train_args.py
 │   └── train_cli_parser.py
 ├── utils/
-│   ├── _archive/
-│   │   ├── agentic/
-│   │   │   ├── __init__.py
-│   │   │   ├── agent.py
-│   │   │   ├── experience.py
-│   │   │   ├── planner.py
-│   │   │   ├── reflector.py
-│   │   │   ├── roles.py
-│   │   │   ├── state.py
-│   │   │   └── tools.py
-│   │   ├── analysis/
-│   │   │   ├── __init__.py
-│   │   │   ├── data_analysis.py
-│   │   │   └── llm_client.py
-│   │   ├── architecture/
-│   │   │   ├── __init__.py
-│   │   │   ├── ar_block_conditioning.py
-│   │   │   ├── ar_block_layout.py
-│   │   │   ├── architecture_map.py
-│   │   │   ├── dit_architecture.py
-│   │   │   └── enhanced_utils.py
-│   │   ├── brain/
-│   │   │   ├── __init__.py
-│   │   │   ├── image_search.py
-│   │   │   ├── scene_brief.py
-│   │   │   ├── understand.py
-│   │   │   └── visual_brain.py
-│   │   ├── checkpoint/
-│   │   │   ├── __init__.py
-│   │   │   ├── checkpoint_loading.py
-│   │   │   └── checkpoint_manager.py
-│   │   ├── consistency/
-│   │   │   ├── __init__.py
-│   │   │   ├── character_consistency.py
-│   │   │   ├── character_customization.py
-│   │   │   ├── character_lock.py
-│   │   │   ├── consistency_losses.py
-│   │   │   ├── consistency_system.py
-│   │   │   └── style_harmonization.py
-│   │   ├── modeling/
-│   │   │   ├── __init__.py
-│   │   │   ├── ckpt_text_stack.py
-│   │   │   ├── hf_control.py
-│   │   │   ├── hf_index.py
-│   │   │   ├── hf_loaders.py
-│   │   │   ├── hf_reward.py
-│   │   │   ├── hf_scaffold.py
-│   │   │   ├── hf_upscale.py
-│   │   │   ├── model_paths.py
-│   │   │   ├── model_viz.py
-│   │   │   ├── multi_encoder_encode.py
-│   │   │   ├── nn_inspect.py
-│   │   │   ├── t5_segmented_encode.py
-│   │   │   ├── text_encoder_bundle.py
-│   │   │   └── text_encoder_stack.py
-│   │   ├── quantization/
-│   │   │   ├── __init__.py
-│   │   │   └── nf4_codec.py
-│   │   ├── runtime/
-│   │   │   ├── __init__.py
-│   │   │   ├── jsonutil.py
-│   │   │   ├── plain_dict.py
-│   │   │   └── profiling.py
-│   │   ├── superior/
-│   │   │   ├── __init__.py
-│   │   │   ├── auto_loop.py
-│   │   │   ├── auto_stack.py
-│   │   │   ├── block_cache.py
-│   │   │   ├── cfg_rejection.py
-│   │   │   ├── composite_ranker.py
-│   │   │   ├── dbc_cache.py
-│   │   │   ├── distill.py
-│   │   │   ├── dpo_pipeline.py
-│   │   │   ├── dynamic_dit.py
-│   │   │   ├── ensemble.py
-│   │   │   ├── eval_report.py
-│   │   │   ├── feature_cache.py
-│   │   │   ├── flywheel.py
-│   │   │   ├── frequency_cfg.py
-│   │   │   ├── glyph_encoder.py
-│   │   │   ├── hard_negative.py
-│   │   │   ├── inference_pipeline.py
-│   │   │   ├── linear_attention.py
-│   │   │   ├── model_soup.py
-│   │   │   ├── online_reward.py
-│   │   │   ├── prompt_expand.py
-│   │   │   ├── quality_gates.py
-│   │   │   ├── retrieval.py
-│   │   │   ├── reward_scorer.py
-│   │   │   ├── self_correct.py
-│   │   │   ├── taylor_cache.py
-│   │   │   └── vit_mining.py
-│   │   └── visual_design/
-│   │       ├── __init__.py
-│   │       ├── argv.py
-│   │       ├── compose.py
-│   │       ├── negatives.py
-│   │       ├── presets.py
-│   │       ├── registry.py
-│   │       ├── registry_core.py
-│   │       ├── registry_extra.py
-│   │       ├── sampling.py
-│   │       └── validate.py
 │   ├── agentic/
 │   │   ├── __init__.py
 │   │   ├── agent.py
@@ -1152,6 +1420,10 @@ sdx/
 │   │   ├── roles.py
 │   │   ├── state.py
 │   │   └── tools.py
+│   ├── analysis/
+│   │   ├── __init__.py
+│   │   ├── data_analysis.py
+│   │   └── llm_client.py
 │   ├── architecture/
 │   │   ├── __init__.py
 │   │   ├── ar_block_conditioning.py
@@ -1165,16 +1437,33 @@ sdx/
 │   │   ├── scene_brief.py
 │   │   ├── understand.py
 │   │   └── visual_brain.py
-│   ├── compression/
-│   │   └── model_compression.py
+│   ├── caption/
+│   │   ├── __init__.py
+│   │   ├── api_keys.py
+│   │   ├── danbooru_lookup.py
+│   │   ├── e621_lookup.py
+│   │   ├── image_profiler.py
+│   │   ├── prompt_research.py
+│   │   ├── reverse_search.py
+│   │   └── wd_tagger.py
+│   ├── checkpoint/
+│   │   ├── __init__.py
+│   │   ├── checkpoint_loading.py
+│   │   └── checkpoint_manager.py
+│   ├── consistency/
+│   │   ├── __init__.py
+│   │   ├── character_consistency.py
+│   │   ├── character_customization.py
+│   │   ├── character_lock.py
+│   │   ├── consistency_losses.py
+│   │   ├── consistency_system.py
+│   │   └── style_harmonization.py
 │   ├── data_quality/
 │   │   ├── cleanup/
 │   │   │   ├── __init__.py
 │   │   │   └── dataset_cleaner.py
 │   │   ├── __init__.py
 │   │   └── pipeline.py
-│   ├── distributed/
-│   │   └── distributed_inference.py
 │   ├── generation/
 │   │   ├── spatial_layout_dsl/
 │   │   │   ├── __init__.py
@@ -1190,30 +1479,35 @@ sdx/
 │   │   ├── cfg_zero_star.py
 │   │   ├── clip_alignment.py
 │   │   ├── clip_reference_embed.py
+│   │   ├── comfy_export.py
 │   │   ├── dit_ar_latent_compat.py
 │   │   ├── edit_masks.py
+│   │   ├── editing_phase.py
 │   │   ├── eval_prompt_pack.py
 │   │   ├── guidance_probe.py
 │   │   ├── guidance_session.py
 │   │   ├── guidance_stack.py
 │   │   ├── image_dissection.py
-│   │   ├── image_editing.py
 │   │   ├── inference_research_hooks.py
 │   │   ├── inference_stages.py
-│   │   ├── iterative_refinement.py
+│   │   ├── krea_controls.py
 │   │   ├── latent_edit_helpers.py
-│   │   ├── master_integration.py
 │   │   ├── micrograin_stabilizer.py
 │   │   ├── multimodal_generation.py
 │   │   ├── orchestration.py
 │   │   ├── part_compositing.py
+│   │   ├── per_region_cads.py
 │   │   ├── precision_control.py
 │   │   ├── rectified_cfgpp.py
 │   │   ├── regional_box_prompting.py
 │   │   ├── regional_box_sketch.py
 │   │   ├── run_artifacts.py
+│   │   ├── sample_cli_parser.py
 │   │   ├── sample_cli_passthrough.py
 │   │   ├── sample_edit_runner.py
+│   │   ├── sample_features.py
+│   │   ├── sample_helpers.py
+│   │   ├── sample_main.py
 │   │   ├── segmentation_to_mask.py
 │   │   ├── simple_latent_generate.py
 │   │   ├── slg_guidance.py
@@ -1221,24 +1515,28 @@ sdx/
 │   │   ├── tcfg.py
 │   │   ├── text_rendering.py
 │   │   └── zeresfdg.py
-│   ├── inference/
-│   │   ├── batch_optimization/
-│   │   │   ├── __init__.py
-│   │   │   └── batch_optimizer.py
-│   │   └── inference_optimizer.py
-│   ├── monitoring/
-│   │   └── performance_profiler.py
-│   ├── native/
+│   ├── lora/
 │   │   ├── __init__.py
-│   │   └── kernel_selector.py
-│   ├── optimization/
-│   │   ├── attention/
-│   │   │   ├── __init__.py
-│   │   │   └── flash_attention.py
-│   │   ├── quantization/
-│   │   │   ├── __init__.py
-│   │   │   └── quantizer.py
-│   │   └── advanced_model_optimization.py
+│   │   └── lora_bank.py
+│   ├── modeling/
+│   │   ├── __init__.py
+│   │   ├── autoencoder_loading.py
+│   │   ├── ckpt_text_stack.py
+│   │   ├── hf_control.py
+│   │   ├── hf_index.py
+│   │   ├── hf_loaders.py
+│   │   ├── hf_reward.py
+│   │   ├── hf_scaffold.py
+│   │   ├── hf_upscale.py
+│   │   ├── model_paths.py
+│   │   ├── model_viz.py
+│   │   ├── multi_encoder_encode.py
+│   │   ├── nn_inspect.py
+│   │   ├── t5_segmented_encode.py
+│   │   ├── text_encoder_bundle.py
+│   │   └── text_encoder_stack.py
+│   ├── native/
+│   │   └── __init__.py
 │   ├── prompt/
 │   │   ├── prompt_difficulty/
 │   │   │   ├── __init__.py
@@ -1261,6 +1559,8 @@ sdx/
 │   │   │   └── tokens.py
 │   │   ├── __init__.py
 │   │   ├── advanced_prompting.py
+│   │   ├── artist_registry.py
+│   │   ├── artist_tag.py
 │   │   ├── auto_oc.py
 │   │   ├── composition_brief.py
 │   │   ├── content_control_tag_data.py
@@ -1276,6 +1576,7 @@ sdx/
 │   │   ├── originality_augment.py
 │   │   ├── photo_realism.py
 │   │   ├── prompt_breakdown.py
+│   │   ├── prompt_composer.py
 │   │   ├── prompt_emphasis.py
 │   │   ├── prompt_i18n.py
 │   │   ├── prompt_layout.py
@@ -1306,12 +1607,15 @@ sdx/
 │   │   ├── face_region_enhance.py
 │   │   ├── human_made.py
 │   │   ├── quality.py
-│   │   ├── test_time_pick.py
-│   │   └── vit_critic_loop.py
-│   ├── speed/
-│   │   ├── extreme_quantization.py
-│   │   ├── numba_acceleration.py
-│   │   └── operator_fusion.py
+│   │   └── test_time_pick.py
+│   ├── quantization/
+│   │   ├── __init__.py
+│   │   └── nf4_codec.py
+│   ├── runtime/
+│   │   ├── __init__.py
+│   │   ├── jsonutil.py
+│   │   ├── plain_dict.py
+│   │   └── profiling.py
 │   ├── superior/
 │   │   ├── __init__.py
 │   │   ├── auto_loop.py
@@ -1353,32 +1657,43 @@ sdx/
 │   │   │   └── hard_negative_miner.py
 │   │   ├── __init__.py
 │   │   ├── ar_curriculum.py
-│   │   ├── auxiliary_structure_supervision.py
 │   │   ├── branch_grpo.py
 │   │   ├── config_validator.py
 │   │   ├── dense_grpo.py
 │   │   ├── device_perf.py
 │   │   ├── diffusion_dpo_loss.py
 │   │   ├── dpo_advanced.py
-│   │   ├── dpo_reward_pipeline.py
 │   │   ├── error_handling.py
 │   │   ├── fast_dataloader.py
 │   │   ├── flash_grpo.py
 │   │   ├── flow_grpo.py
 │   │   ├── grpo_guard.py
 │   │   ├── ladd_distillation.py
+│   │   ├── live_dashboard.py
 │   │   ├── metrics.py
 │   │   ├── ot_noise_pairing.py
 │   │   ├── part_aware_training.py
 │   │   ├── preference_image_dataset.py
 │   │   ├── preference_jsonl.py
-│   │   ├── self_improvement_loop.py
 │   │   ├── throughput.py
 │   │   ├── timestep_curriculum.py
 │   │   └── turning_point_grpo.py
+│   ├── visual_design/
+│   │   ├── __init__.py
+│   │   ├── argv.py
+│   │   ├── compose.py
+│   │   ├── negatives.py
+│   │   ├── presets.py
+│   │   ├── registry.py
+│   │   ├── registry_core.py
+│   │   ├── registry_extra.py
+│   │   ├── sampling.py
+│   │   └── validate.py
 │   ├── __init__.py
+│   ├── hf_secrets.py
 │   ├── image_quality_metrics.py
 │   ├── image_resize.py
+│   ├── nt.py
 │   └── terminal.py
 ├── vit_quality/
 │   ├── __init__.py
@@ -1396,6 +1711,101 @@ sdx/
 │   ├── rank.py
 │   ├── train.py
 │   └── tta.py
+├── workflows/
+│   └── comfyui/
+│       ├── custom_nodes/
+│       │   ├── sdx_model_intelligence/
+│       │   │   ├── __init__.py
+│       │   │   ├── anima_ultimate_nodes.py
+│       │   │   ├── correction_nodes.py
+│       │   │   ├── nodes.py
+│       │   │   ├── README.md
+│       │   │   ├── reference_nodes.py
+│       │   │   └── sdx_presets.py
+│       │   └── sdx_unified_sampler/
+│       │       ├── __init__.py
+│       │       ├── dit_nodes.py
+│       │       └── nodes.py
+│       ├── presets/
+│       │   ├── civitai_bulk_manifest.json
+│       │   ├── civitai_nsfw_positions_manifest.json
+│       │   ├── civitai_quality_downloads.json
+│       │   ├── downloaded_lora_triggers.json
+│       │   ├── inspo_index.json
+│       │   ├── lora_compat.json
+│       │   ├── model_profiles.json
+│       │   ├── multi_character_roster.json
+│       │   ├── prompt_adherence_stack.json
+│       │   ├── prompt_packs.json
+│       │   ├── quality_stack_v2.json
+│       │   ├── sampler_bench_illustrious_eps.json
+│       │   ├── sampler_scheduler_profiles.json
+│       │   └── size_presets.json
+│       ├── scripts/
+│       │   ├── api_to_ui_workflow.py
+│       │   ├── batch_anima_adult_characters.py
+│       │   ├── batch_anima_corrected.py
+│       │   ├── batch_anima_universal_matrix.py
+│       │   ├── batch_anima_variety.py
+│       │   ├── batch_anime_solid.py
+│       │   ├── batch_anti_ai_style.py
+│       │   ├── batch_hd_anime_sex.py
+│       │   ├── batch_hd_best.py
+│       │   ├── batch_hentai_anima.py
+│       │   ├── batch_hentai_best.py
+│       │   ├── batch_hot_style_variety.py
+│       │   ├── batch_multi_model_generate.py
+│       │   ├── batch_quality_first.py
+│       │   ├── batch_sdx_corrected.py
+│       │   ├── batch_section_generate.log.err
+│       │   ├── batch_section_generate.py
+│       │   ├── batch_section_generate_v2.py
+│       │   ├── batch_v2.log.err
+│       │   ├── batch_workflow_v3.py
+│       │   ├── build_regional_multichar.py
+│       │   ├── civitai_bulk_fetch.py
+│       │   ├── civitai_download.ps1
+│       │   ├── civitai_nsfw_positions_fetch.py
+│       │   ├── collect_web_inspiration.py
+│       │   ├── download_weights.ps1
+│       │   ├── expand_moodboards.ps1
+│       │   ├── fix_sdx_correction.py
+│       │   ├── gen_illustrious_impact_hd4.py
+│       │   ├── gen_illustrious_regional_hd4.py
+│       │   ├── gen_noobai_regional_hd4.py
+│       │   ├── install_quality_stack.ps1
+│       │   ├── progress_sections.py
+│       │   ├── promote_to_aether.py
+│       │   ├── quality_research_bench.py
+│       │   ├── run_api_workflow.py
+│       │   ├── sampler_quality_bench.py
+│       │   ├── validate_multi_char_nodes.py
+│       │   └── validate_sdx_nodes.py
+│       ├── florence2_caption_helper_api.json
+│       ├── multi_character_no_bleed_maskbounds_api.json
+│       ├── multi_character_no_bleed_stitch_api.json
+│       ├── multi_character_no_bleed_v3_api.json
+│       ├── multi_character_orgy_futa_furry_v2_api.json
+│       ├── MULTI_CHARACTER_README.md
+│       ├── multi_character_regional_illustrious_v3_api.json
+│       ├── multi_character_regional_trio_v4_api.json
+│       ├── multi_character_regional_v4_api.json
+│       ├── orgy_positions_futa_furry_grid_v3_api.json
+│       ├── orgy_single_canvas_4mask_api.json
+│       ├── prompt_adherence_illustrious_api.json
+│       ├── PROMPT_ADHERENCE_README.md
+│       ├── README.md
+│       ├── sdx_ntrmix_solid_api.json
+│       ├── ultimate_anima_3d_api.json
+│       ├── ultimate_anima_api.json
+│       ├── ultimate_anima_dit_silvermoon.json
+│       ├── ultimate_anima_dit_silvermoon_api.json
+│       ├── ultimate_anima_silvermoon.json
+│       ├── ultimate_anima_silvermoon_api.json
+│       ├── ultimate_illustrious_api.json
+│       ├── ultimate_vpred_api.json
+│       ├── unified_ksampler_illustrious_hq_api.json
+│       └── wd14_prompt_helper_api.json
 ├── .editorconfig
 ├── .env.example
 ├── .gitignore
@@ -1421,5 +1831,5 @@ sdx/
 ## See also
 
 - [docs/CODEBASE.md](docs/CODEBASE.md) — navigate the tree, `scripts/` layout, contribution rules
-- [docs/FILES.md](docs/FILES.md) — full file map
+- [docs/reference/FILES.md](docs/reference/FILES.md) — full file map
 

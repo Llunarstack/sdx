@@ -8,7 +8,8 @@ sees compositional variety tokens, not only at sample time. Token list:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 __all__ = ["inject_originality_tokens", "default_originality_tokens"]
 
 
-def default_originality_tokens() -> List[str]:
+def default_originality_tokens() -> list[str]:
     try:
         from config.defaults.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
 
@@ -30,7 +31,7 @@ def inject_originality_tokens(
     strength: float,
     rng: np.random.Generator,
     *,
-    tokens: Optional[Sequence[str]] = None,
+    tokens: Sequence[str] | None = None,
 ) -> str:
     """
     Insert *k* random originality tokens after leading person/subject tags (comma-separated).

@@ -17,9 +17,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 from data.caption_utils import (
     add_anti_blending_and_count,
@@ -38,7 +39,7 @@ except Exception:
 _CHUNK_ROWS = 2048
 
 
-def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -61,7 +62,7 @@ def _process_caption_pair(
     anatomy_guidance: str = "none",
     style_guidance_mode: str = "none",
     style_guidance_artists: bool = True,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     cap = caption or ""
     neg = negative or ""
     cap = normalize_tag_order(cap)
@@ -83,7 +84,7 @@ def _process_caption_pair(
     return cap.strip(), neg.strip()
 
 
-def _process_jsonl_lines_worker(payload: Dict[str, Any]) -> List[str]:
+def _process_jsonl_lines_worker(payload: dict[str, Any]) -> list[str]:
     """
     Worker for multiprocessing: takes a dict with keys:
     - lines: List[str]
@@ -112,7 +113,7 @@ def _process_jsonl_lines_worker(payload: Dict[str, Any]) -> List[str]:
     cfg = dict(payload.get("cfg") or {})
     unicode_normalize = bool(cfg.get("unicode_normalize", False))
 
-    def process_pair(caption: str, negative: str) -> Tuple[str, str]:
+    def process_pair(caption: str, negative: str) -> tuple[str, str]:
         cap = caption or ""
         neg = negative or ""
         cap = normalize_tag_order(cap)
@@ -133,7 +134,7 @@ def _process_jsonl_lines_worker(payload: Dict[str, Any]) -> List[str]:
         )
         return cap.strip(), neg.strip()
 
-    out_lines: List[str] = []
+    out_lines: list[str] = []
     for line in payload.get("lines") or []:
         line = (line or "").strip()
         if not line:
@@ -241,14 +242,17 @@ def main() -> None:
     count = 0
     if workers > 0:
         max_workers = min(workers, max(1, (os.cpu_count() or 4)))
-        with out_path.open("w", encoding="utf-8", newline="\n") as fw, in_path.open(
-            "r",
-            encoding="utf-8",
-            errors="replace",
-        ) as f:
-            pending: List[Any] = []
+        with (
+            out_path.open("w", encoding="utf-8", newline="\n") as fw,
+            in_path.open(
+                "r",
+                encoding="utf-8",
+                errors="replace",
+            ) as f,
+        ):
+            pending: list[Any] = []
             with ProcessPoolExecutor(max_workers=max_workers) as ex:
-                chunk: List[str] = []
+                chunk: list[str] = []
                 for line in f:
                     chunk.append(line)
                     if len(chunk) >= _CHUNK_ROWS:

@@ -5,7 +5,6 @@ Optional CUDA image luma metrics via ``sdx_cuda_image_metrics`` shared library.
 from __future__ import annotations
 
 import ctypes
-from typing import Dict, Optional
 
 import numpy as np
 
@@ -14,7 +13,7 @@ from sdx_native.native_tools import cuda_image_metrics_shared_library_path
 
 class CudaImageMetricsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_image_metrics_shared_library_path()
         if p is None:
             return
@@ -38,7 +37,7 @@ class CudaImageMetricsLib:
     def available(self) -> bool:
         return self._lib is not None
 
-    def stats(self, hwc: np.ndarray, *, clip_low: int = 2, clip_high: int = 253) -> Dict[str, float]:
+    def stats(self, hwc: np.ndarray, *, clip_low: int = 2, clip_high: int = 253) -> dict[str, float]:
         if not self._lib:
             raise RuntimeError("sdx_cuda_image_metrics not built")
         if hwc.ndim != 3:
@@ -64,7 +63,7 @@ class CudaImageMetricsLib:
         return {"mean_luma": float(mean.value), "clip_ratio": float(ratio.value)}
 
 
-_LIB: Optional[CudaImageMetricsLib] = None
+_LIB: CudaImageMetricsLib | None = None
 
 
 def get_cuda_image_metrics_lib() -> CudaImageMetricsLib:
@@ -79,7 +78,7 @@ def maybe_image_luma_stats_cuda(
     *,
     clip_low: int = 2,
     clip_high: int = 253,
-) -> Optional[Dict[str, float]]:
+) -> dict[str, float] | None:
     lib = get_cuda_image_metrics_lib()
     if not lib.available:
         return None

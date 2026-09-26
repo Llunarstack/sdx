@@ -16,12 +16,11 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 from PIL import Image
 
 
-def _make_grid(images: List[Path], rows: int, cols: int, out_path: Path) -> None:
+def _make_grid(images: list[Path], rows: int, cols: int, out_path: Path) -> None:
     pil_images = [Image.open(p).convert("RGB") for p in images]
     if not pil_images:
         return
@@ -55,7 +54,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     seeds = [args.base_seed + i for i in range(total)]
-    img_paths: List[Path] = []
+    img_paths: list[Path] = []
     repo_root = Path(__file__).resolve().parents[2]
     sample_py = repo_root / "sample.py"
     for idx, seed in enumerate(seeds):

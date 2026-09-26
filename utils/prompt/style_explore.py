@@ -5,9 +5,10 @@ Style explore planner — invent genomes, compile prompts, optional mutation exp
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from .style_genome import StyleGenome, nearest_catalog_style_overlap
 from .style_genome_chaos import (
@@ -34,7 +35,7 @@ class ExploreCandidate:
     catalog_overlap: float = 0.0
     candidate_kind: str = "base"
 
-    def to_manifest_row(self) -> Dict[str, Any]:
+    def to_manifest_row(self) -> dict[str, Any]:
         return {
             "caption": self.positive,
             "negative_caption": self.negative,
@@ -52,7 +53,7 @@ class ExplorePlan:
     """Full explore session output."""
 
     base_prompt: str
-    candidates: List[ExploreCandidate] = field(default_factory=list)
+    candidates: list[ExploreCandidate] = field(default_factory=list)
     reasoning: str = ""
 
     def write_manifest(self, path: Path) -> None:
@@ -78,13 +79,13 @@ def compile_genome_pair(
     return pos, neg, style
 
 
-def resolve_style_genome_for_args(args: Any, base_prompt: str) -> Optional[StyleGenome]:
+def resolve_style_genome_for_args(args: Any, base_prompt: str) -> StyleGenome | None:
     """
     Load or invent a genome and attach to *args* for PromptStack / sample.py.
 
     Sets: ``_active_style_genome``, ``style`` (if empty), ``_style_genome_catalog_overlap``.
     """
-    genome: Optional[StyleGenome] = None
+    genome: StyleGenome | None = None
     path = str(getattr(args, "style_genome_file", "") or "").strip()
     if path:
         text = Path(path).read_text(encoding="utf-8")
@@ -126,23 +127,23 @@ def resolve_style_genome_for_args(args: Any, base_prompt: str) -> Optional[Style
         clauses = str(getattr(args, "prompt_clauses", "") or "")
         auto = auto_chaos_clauses(float(getattr(args, "style_chaos_level", 0) or 0))
         if auto and not clauses:
-            setattr(args, "prompt_clauses", ",".join(auto))
+            args.prompt_clauses = ",".join(auto)
         elif auto:
-            setattr(args, "prompt_clauses", f"{clauses},{','.join(auto)}")
+            args.prompt_clauses = f"{clauses},{','.join(auto)}"
         idx = int(getattr(args, "style_genome_index", 0) or 0)
         if genomes:
             genome = genomes[min(idx, len(genomes) - 1)]
-            setattr(args, "_invented_style_genomes", genomes)
+            args._invented_style_genomes = genomes
 
     if genome is None:
         return None
 
-    setattr(args, "_active_style_genome", genome)
+    args._active_style_genome = genome
     _, overlap = nearest_catalog_style_overlap(genome)
-    setattr(args, "_style_genome_catalog_overlap", overlap)
+    args._style_genome_catalog_overlap = overlap
 
     if not (getattr(args, "style", None) or "").strip():
-        setattr(args, "style", genome.style_head_string())
+        args.style = genome.style_head_string()
 
     return genome
 
@@ -167,7 +168,7 @@ class StyleExplorePlanner:
         base_negative: str = "",
         creativity_level: float = 0.75,
         seed: int = 42,
-        mutation_strategies: Optional[Sequence[str]] = None,
+        mutation_strategies: Sequence[str] | None = None,
         invention_mode: InventionMode = "normal",
         chaos_level: float = 0.0,
         fusion_pairs: bool = False,
@@ -187,7 +188,7 @@ class StyleExplorePlanner:
             pg = preset_genome(preset)
             if pg is not None:
                 genomes.insert(0, pg)
-        candidates: List[ExploreCandidate] = []
+        candidates: list[ExploreCandidate] = []
         mutator = None
         if mutations_per_genome > 0:
             try:
@@ -277,7 +278,7 @@ def record_explore_winner(
     prompt: str,
     pick_metric: str = "",
     image_path: str = "",
-    bank_path: Optional[Path] = None,
+    bank_path: Path | None = None,
 ) -> None:
     bank = StyleGenomeBank(bank_path)
     bank.append(

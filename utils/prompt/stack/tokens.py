@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Set
-
 from utils.prompt.fast_paths import (
     append_unique,
     join_tags,
@@ -21,9 +19,9 @@ __all__ = [
 ]
 
 
-def token_set(text: str) -> Set[str]:
+def token_set(text: str) -> set[str]:
     """Lowercased tokens from comma- and space-separated prompt text."""
-    out: Set[str] = set()
+    out: set[str] = set()
     for part in (text or "").split(","):
         for word in part.split():
             w = word.strip().lower()

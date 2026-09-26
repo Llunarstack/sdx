@@ -8,16 +8,16 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
 from .style_genome import StyleGenome
 
 
-def native_stack_status() -> Dict[str, Any]:
+def native_stack_status() -> dict[str, Any]:
     """Discovery JSON for diagnostics (``quick_test --show-native``)."""
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "rust_style_ops": False,
         "cuda_style_pick": False,
         "go_explore": False,
@@ -78,7 +78,7 @@ def text_overlap(a: str, b: str) -> float:
 def pick_best_embedding_index(
     query: np.ndarray,
     candidates: np.ndarray,
-) -> Tuple[int, float]:
+) -> tuple[int, float]:
     from sdx_native.cuda_style_pick_native import maybe_pick_best_style_embedding
 
     picked = maybe_pick_best_style_embedding(query, candidates)
@@ -158,7 +158,7 @@ def explore_dedupe_python(in_path: Path, out_path: Path, *, key: str = "style_ge
     return len(order)
 
 
-def run_go_explore_stats(manifest_path: Path) -> Optional[str]:
+def run_go_explore_stats(manifest_path: Path) -> str | None:
     try:
         from sdx_native.native_tools import go_sdx_manifest_exe
 
@@ -209,7 +209,7 @@ def run_go_explore_dedupe(
         return False
 
 
-def compile_genome_style_native(genome: StyleGenome, base_prompt: str, base_negative: str = "") -> Tuple[str, str, str]:
+def compile_genome_style_native(genome: StyleGenome, base_prompt: str, base_negative: str = "") -> tuple[str, str, str]:
     """Compile using Rust axis merge when available."""
     from .style_explore import compile_genome_pair
 

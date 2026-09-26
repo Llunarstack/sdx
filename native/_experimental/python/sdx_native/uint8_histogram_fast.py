@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import numpy as np
 
 
-def histogram_u8_channels(hwc: np.ndarray) -> List[np.ndarray]:
+def histogram_u8_channels(hwc: np.ndarray) -> list[np.ndarray]:
     """
     ``hwc`` uint8, shape ``(H,W,C)``. Returns list of length ``C`` with shape ``(256,)`` int64 counts.
     """
@@ -16,7 +14,7 @@ def histogram_u8_channels(hwc: np.ndarray) -> List[np.ndarray]:
     if hwc.dtype != np.uint8:
         hwc = hwc.astype(np.uint8, copy=False)
     c = hwc.shape[2]
-    out: List[np.ndarray] = []
+    out: list[np.ndarray] = []
     for i in range(c):
         out.append(np.bincount(hwc[:, :, i].reshape(-1), minlength=256).astype(np.int64))
     return out
@@ -33,7 +31,7 @@ def luminance_histogram_u8(hwc: np.ndarray) -> np.ndarray:
     return np.bincount(y.reshape(-1), minlength=256).astype(np.int64)
 
 
-def clip_histogram_percentiles(hist: np.ndarray, *, low_pct: float, high_pct: float) -> Tuple[int, int]:
+def clip_histogram_percentiles(hist: np.ndarray, *, low_pct: float, high_pct: float) -> tuple[int, int]:
     """Inclusive bin indices from cumulative distribution (0..255)."""
     h = hist.astype(np.float64)
     total = h.sum()

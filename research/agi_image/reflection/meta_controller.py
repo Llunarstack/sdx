@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List
 
 
 class ControlDecisionKind(str, Enum):
@@ -17,8 +16,8 @@ class ControlDecisionKind(str, Enum):
 class MetaControllerState:
     """Rolling advice from a supervisory loop (human or scripted)."""
 
-    decisions: List[ControlDecisionKind] = field(default_factory=list)
-    rationales: List[str] = field(default_factory=list)
+    decisions: list[ControlDecisionKind] = field(default_factory=list)
+    rationales: list[str] = field(default_factory=list)
 
     def propose(self, kind: ControlDecisionKind, rationale: str) -> None:
         self.decisions.append(kind)

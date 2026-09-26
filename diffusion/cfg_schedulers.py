@@ -25,7 +25,7 @@ selected via the ``cfg_guidance_schedule`` option ("linear", "cosine",
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 import torch
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping
+from typing import Any
 
 from .style_engines import engine_by_id
 
@@ -21,9 +22,9 @@ class LayerSpec:
 
 @dataclass(slots=True)
 class LayerStack:
-    layers: List[LayerSpec] = field(default_factory=list)
+    layers: list[LayerSpec] = field(default_factory=list)
 
-    def engines_by_layer(self) -> Dict[str, str]:
+    def engines_by_layer(self) -> dict[str, str]:
         return {layer.name: layer.engine for layer in self.layers}
 
 

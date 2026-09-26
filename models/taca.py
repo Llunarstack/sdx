@@ -12,7 +12,6 @@ Drop-in replacement for the cross-attention in DiTTextBlock / MM-DiT blocks.
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -94,7 +93,7 @@ class TACA(nn.Module):
         self,
         x: torch.Tensor,
         text_emb: torch.Tensor,
-        timestep: Optional[torch.Tensor] = None,
+        timestep: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:

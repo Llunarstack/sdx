@@ -5,7 +5,6 @@ Per-batch CFG gap probe for **CFG-Rejection** reranking (multi-sample).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 import torch
 
@@ -17,7 +16,7 @@ class GuidanceProbe:
     """Accumulate early-step CFG gaps per batch row."""
 
     tau_steps: int = 4
-    trackers: List[CFGRejectionTracker] = field(default_factory=list)
+    trackers: list[CFGRejectionTracker] = field(default_factory=list)
 
     def ensure_batch(self, batch_size: int) -> None:
         while len(self.trackers) < int(batch_size):
@@ -31,10 +30,10 @@ class GuidanceProbe:
         for i in range(b):
             self.trackers[i].note(out_cond[i : i + 1], out_uncond[i : i + 1])
 
-    def accumulated_scores(self) -> List[float]:
+    def accumulated_scores(self) -> list[float]:
         return [t.accumulated_early_score() for t in self.trackers]
 
-    def rerank_indices(self) -> List[int]:
+    def rerank_indices(self) -> list[int]:
         scores = self.accumulated_scores()
         if not scores:
             return []

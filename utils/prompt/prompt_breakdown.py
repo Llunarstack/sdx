@@ -13,8 +13,9 @@ long tag-style prompts.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Sequence, Tuple
+from typing import Literal
 
 from utils.prompt.prompt_layout import PRESET_SECTION_ORDER, T5_SECTION_LABELS
 
@@ -23,7 +24,7 @@ BreakdownFormat = Literal["ordered", "labeled"]
 BreakdownOrder = Literal["subject_first", "quality_first", "scene_first"]
 
 # Lowercase substrings → layout section (first match wins by highest score per segment).
-_KEYWORD_BUCKETS: Dict[str, Tuple[str, ...]] = {
+_KEYWORD_BUCKETS: dict[str, tuple[str, ...]] = {
     "quality": (
         "masterpiece",
         "best quality",
@@ -210,8 +211,8 @@ def warrant_prompt_breakdown(prompt: str) -> bool:
     return len(chunks) >= 5
 
 
-def _split_segments(prompt: str) -> List[str]:
-    parts: List[str] = []
+def _split_segments(prompt: str) -> list[str]:
+    parts: list[str] = []
     for chunk in re.split(r"[,;]", prompt):
         c = chunk.strip()
         if c:
@@ -233,9 +234,9 @@ def _classify_segment(seg: str) -> str:
     return best
 
 
-def _dedupe_preserve(seq: Sequence[str]) -> List[str]:
+def _dedupe_preserve(seq: Sequence[str]) -> list[str]:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for s in seq:
         k = s.lower().strip()
         if not k or k in seen:
@@ -249,15 +250,15 @@ def _dedupe_preserve(seq: Sequence[str]) -> List[str]:
 class PromptBreakdownResult:
     """Structured buckets + rendered strings."""
 
-    sections: Dict[str, List[str]] = field(default_factory=dict)
+    sections: dict[str, list[str]] = field(default_factory=dict)
     ordered_flat: str = ""
     labeled_t5: str = ""
-    section_order: Tuple[str, ...] = ()
+    section_order: tuple[str, ...] = ()
 
 
-def breakdown_prompt_to_sections(prompt: str) -> Dict[str, List[str]]:
+def breakdown_prompt_to_sections(prompt: str) -> dict[str, list[str]]:
     """Map section name → list of clause strings."""
-    buckets: Dict[str, List[str]] = {k: [] for k in _KEYWORD_BUCKETS}
+    buckets: dict[str, list[str]] = {k: [] for k in _KEYWORD_BUCKETS}
     buckets["subjects"] = []
     for seg in _split_segments(prompt):
         cat = _classify_segment(seg)
@@ -278,13 +279,13 @@ def build_breakdown(
     """
     prompt = (prompt or "").strip()
     raw = breakdown_prompt_to_sections(prompt)
-    merged: Dict[str, List[str]] = {
+    merged: dict[str, list[str]] = {
         "subjects": _dedupe_preserve(raw.get("subjects", [])),
         **{k: _dedupe_preserve(raw.get(k, [])) for k in _KEYWORD_BUCKETS},
     }
     order_names = PRESET_SECTION_ORDER.get(order, PRESET_SECTION_ORDER["subject_first"])
-    ordered_parts: List[str] = []
-    section_blocks: List[Tuple[str, str]] = []
+    ordered_parts: list[str] = []
+    section_blocks: list[tuple[str, str]] = []
 
     for name in order_names:
         if name == "intent":
@@ -324,7 +325,7 @@ def apply_prompt_breakdown(
     *,
     order: BreakdownOrder = "subject_first",
     output_format: BreakdownFormat = "ordered",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Returns ``(string_for_cache_and_clip, string_for_t5)``.
 

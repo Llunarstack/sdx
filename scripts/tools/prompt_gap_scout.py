@@ -25,7 +25,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from utils.prompt.prompt_i18n import generic_suggestion
 
@@ -80,7 +80,7 @@ def main() -> None:
     prompt = _load_prompt(args)
 
     # Categories mirror complex_prompt_coverage defaults, but the tool outputs missing items.
-    categories: Dict[str, Dict[str, Any]] = {
+    categories: dict[str, dict[str, Any]] = {
         "weird_strange": {
             "terms": ["surreal", "abstract", "bizarre", "uncanny", "weird", "strange", "impossible", "glitch"],
             "examples_en": "surreal, abstract, uncanny, glitchy non-standard geometry",
@@ -331,7 +331,7 @@ def main() -> None:
 
     cap_lower = prompt.lower()
 
-    found: Dict[str, bool] = {}
+    found: dict[str, bool] = {}
     for name, spec in categories.items():
         terms = spec.get("terms", [])
         found_any = False
@@ -345,17 +345,17 @@ def main() -> None:
     missing = [name for name, ok in sorted(found.items(), key=lambda kv: kv[0]) if not ok]
     present = [name for name, ok in sorted(found.items(), key=lambda kv: kv[0]) if ok]
 
-    suggestions_en: Dict[str, str] = {
+    suggestions_en: dict[str, str] = {
         name: categories[name].get("suggest_en", "") for name in categories.keys() if name in categories
     }
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "prompt": prompt,
         "present_categories": present,
         "missing_categories": missing,
     }
 
     # Optional external i18n
-    def _load_suggestions(path_str: str) -> Dict[str, Dict[str, str]]:
+    def _load_suggestions(path_str: str) -> dict[str, dict[str, str]]:
         p = Path(path_str)
         if not p.exists():
             raise SystemExit(f"Not found: {p}")
@@ -363,7 +363,7 @@ def main() -> None:
         cats = data.get("categories", data)
         if not isinstance(cats, dict):
             raise SystemExit('suggestions-json must be {"categories": {...}} or {...category...} structure.')
-        out2: Dict[str, Dict[str, str]] = {}
+        out2: dict[str, dict[str, str]] = {}
         for cat, spec in cats.items():
             if isinstance(spec, dict):
                 out2[str(cat)] = {str(k): str(v) for k, v in spec.items() if isinstance(v, str)}
@@ -373,7 +373,7 @@ def main() -> None:
     normalized_lang = lang.lower()
     is_en = normalized_lang in ("en", "eng", "english")
 
-    custom_suggestions: Dict[str, Dict[str, str]] = {}
+    custom_suggestions: dict[str, dict[str, str]] = {}
     if args.suggestions_json:
         custom_suggestions = _load_suggestions(args.suggestions_json)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import timm
 import torch
@@ -31,13 +31,13 @@ class ViTQualityAdherenceModel(nn.Module):
         fuse_dropout: float = 0.1,
         text_proj_dropout: float = 0.0,
         backbone_grad_checkpointing: bool = False,
-        timm_kwargs: Optional[Dict[str, Any]] = None,
+        timm_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__()
         self.use_ar_conditioning = bool(use_ar_conditioning)
         self.ar_cond_dim = int(ar_cond_dim) if self.use_ar_conditioning else 0
         self.text_proj_dropout = float(text_proj_dropout)
-        tk: Dict[str, Any] = dict(timm_kwargs or {})
+        tk: dict[str, Any] = dict(timm_kwargs or {})
         self.backbone = timm.create_model(
             model_name,
             pretrained=pretrained,
@@ -69,8 +69,8 @@ class ViTQualityAdherenceModel(nn.Module):
         self,
         images: torch.Tensor,
         text_features: torch.Tensor,
-        ar_conditioning: Optional[torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
+        ar_conditioning: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         img_feat = self.backbone(images)
         if self.use_ar_conditioning:
             if ar_conditioning is None:
@@ -102,7 +102,7 @@ def build_vit_model(
     fuse_dropout: float = 0.1,
     text_proj_dropout: float = 0.0,
     backbone_grad_checkpointing: bool = False,
-    timm_kwargs: Optional[Dict[str, Any]] = None,
+    timm_kwargs: dict[str, Any] | None = None,
 ) -> ViTQualityAdherenceModel:
     return ViTQualityAdherenceModel(
         model_name=model_name,

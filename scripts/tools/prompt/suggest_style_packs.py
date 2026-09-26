@@ -12,15 +12,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def _compact_cli_row(row: Dict[str, str]) -> Dict[str, str]:
-    out: Dict[str, str] = {
+def _compact_cli_row(row: dict[str, str]) -> dict[str, str]:
+    out: dict[str, str] = {
         "id": str(row.get("id", "")),
         "category": str(row.get("category", "")),
         "score": str(row.get("score", "0")),
@@ -40,8 +39,8 @@ def _compact_cli_row(row: Dict[str, str]) -> Dict[str, str]:
     return out
 
 
-def _format_as_command(row: Dict[str, str]) -> str:
-    parts: List[str] = []
+def _format_as_command(row: dict[str, str]) -> str:
+    parts: list[str] = []
     if row.get("lexicon_style"):
         parts.extend(["--lexicon-style", row["lexicon_style"]])
     if row.get("art_medium_pack"):

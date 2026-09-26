@@ -20,9 +20,10 @@ gracefully fall back to plan-only + facts-only behavior.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any
 
 try:
     import torch  # noqa: F401
@@ -32,8 +33,8 @@ except ModuleNotFoundError:
     _TORCH_AVAILABLE = False
 
 
-ImageLike = Union[str, Path]
-BBox = Tuple[int, int, int, int]  # (x0, y0, x1, y1)
+ImageLike = str | Path
+BBox = tuple[int, int, int, int]  # (x0, y0, x1, y1)
 
 _PRETRAINED = Path(__file__).resolve().parents[2] / "pretrained"
 _GDINO_PATH = _PRETRAINED / "GroundingDINO-Base"
@@ -55,11 +56,11 @@ class DissectedPart:
     """Result of attempting to extract a requested part."""
 
     request: PartRequest
-    bbox: Optional[BBox] = None
-    mask_path: Optional[str] = None
-    crop_path: Optional[str] = None
+    bbox: BBox | None = None
+    mask_path: str | None = None
+    crop_path: str | None = None
     confidence: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 _IMG_REF_RE = re.compile(
@@ -85,7 +86,7 @@ _BG_FROM_IMG_RE = re.compile(
 )
 
 
-def parse_part_requests(prompt: str, *, default_source_index: int = 0) -> List[PartRequest]:
+def parse_part_requests(prompt: str, *, default_source_index: int = 0) -> list[PartRequest]:
     """
     Extract PartRequest entries from a user prompt.
 
@@ -95,7 +96,7 @@ def parse_part_requests(prompt: str, *, default_source_index: int = 0) -> List[P
     if not p:
         return []
 
-    reqs: List[PartRequest] = []
+    reqs: list[PartRequest] = []
 
     # 1) Explicit "X from image N" requests.
     for m in _PART_FROM_IMG_RE.finditer(p):
@@ -121,7 +122,7 @@ def parse_part_requests(prompt: str, *, default_source_index: int = 0) -> List[P
 
     # Deduplicate (same part+idx+role).
     seen = set()
-    out: List[PartRequest] = []
+    out: list[PartRequest] = []
     for r in reqs:
         key = (r.part.lower().strip(), int(r.source_index), r.role.lower().strip())
         if key in seen:
@@ -141,11 +142,11 @@ def visual_facts_from_requests(
     requests: Sequence[PartRequest],
     *,
     num_reference_images: int,
-) -> List[str]:
+) -> list[str]:
     """
     Build short textual "facts" describing what to extract, suitable for RAG merging.
     """
-    facts: List[str] = []
+    facts: list[str] = []
     if not requests:
         return facts
 
@@ -167,10 +168,10 @@ def dissect_images_to_parts(
     prompt: str,
     reference_images: Sequence[ImageLike],
     *,
-    output_dir: Union[str, Path],
+    output_dir: str | Path,
     default_source_index: int = 0,
     enable_heavy_models: bool = True,
-) -> Tuple[List[PartRequest], List[DissectedPart], List[str]]:
+) -> tuple[list[PartRequest], list[DissectedPart], list[str]]:
     """
     High-level helper used by RAG/generation.
 
@@ -180,7 +181,7 @@ def dissect_images_to_parts(
     reqs = parse_part_requests(prompt, default_source_index=default_source_index)
     facts = visual_facts_from_requests(prompt, reqs, num_reference_images=len(reference_images))
 
-    parts: List[DissectedPart] = [DissectedPart(request=r) for r in reqs]
+    parts: list[DissectedPart] = [DissectedPart(request=r) for r in reqs]
 
     # If heavy models are disabled, return plan+facts only.
     # If torch is unavailable, we still support non-ML extraction (background full-mask,
@@ -248,7 +249,7 @@ def dissect_images_to_parts(
         y1 = max(y0 + 1, min(h, int(y1)))
         return (x0, y0, x1, y1)
 
-    def _bbox_mask(size: Tuple[int, int], box: BBox) -> Image.Image:
+    def _bbox_mask(size: tuple[int, int], box: BBox) -> Image.Image:
         w, h = size
         x0, y0, x1, y1 = _clip_box(box, w, h)
         m = np.zeros((h, w), dtype=np.uint8)
@@ -260,7 +261,7 @@ def dissect_images_to_parts(
         pil: Image.Image,
         mask: Image.Image,
         stem: str,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         mask_p = out_dir / f"{stem}_mask.png"
         crop_p = out_dir / f"{stem}_crop.png"
         mask.save(mask_p)
@@ -297,7 +298,7 @@ def dissect_images_to_parts(
             continue
 
         # Foreground part: try grounding bbox.
-        box: Optional[BBox] = None
+        box: BBox | None = None
         score = 0.0
         if gdino is not None:
             try:

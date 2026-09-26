@@ -60,5 +60,5 @@ or rely on a strong global caption only — the model is not required to see `[l
 
 ## See also
 
-- [docs/FILES.md](FILES.md) — data module entry points  
+- [docs/reference/FILES.md](FILES.md) — data module entry points  
 - [README § Data format](../../README.md#data-format) — manifest overview  

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "ElementDef",
@@ -20,12 +21,12 @@ class ElementDef:
     """Reusable visual DNA: character, location, style, or prop."""
 
     id: str
-    images: List[str] = field(default_factory=list)
+    images: list[str] = field(default_factory=list)
     video_ref: str = ""
     bind_subject: bool = False
     reference_sheet: bool = False
     role: str = "character"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     reference_strength: float = 0.85
     negative: str = ""
     text_hint: str = ""
@@ -33,12 +34,12 @@ class ElementDef:
 
 @dataclass(slots=True)
 class ElementsLibrary:
-    elements: Dict[str, ElementDef] = field(default_factory=dict)
+    elements: dict[str, ElementDef] = field(default_factory=dict)
 
-    def get(self, element_id: str) -> Optional[ElementDef]:
+    def get(self, element_id: str) -> ElementDef | None:
         return self.elements.get(element_id)
 
-    def ids(self) -> List[str]:
+    def ids(self) -> list[str]:
         return list(self.elements.keys())
 
 
@@ -79,7 +80,7 @@ def resolve_element_images(
     work_dir: str | Path,
     *,
     max_refs: int = 3,
-) -> List[str]:
+) -> list[str]:
     """Return up to ``max_refs`` image paths; optionally build reference sheet."""
     wd = Path(work_dir)
     wd.mkdir(parents=True, exist_ok=True)
@@ -96,15 +97,15 @@ def compile_element_refs(
     library: ElementsLibrary,
     element_ids: Sequence[str],
     work_dir: str | Path,
-) -> tuple[List[str], List[str], List[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     """
     Compile element IDs → (image_paths, weights, video_refs).
 
     ``weights`` are ``path:strength`` strings for ``--style-ref``.
     """
-    images: List[str] = []
-    weights: List[str] = []
-    videos: List[str] = []
+    images: list[str] = []
+    weights: list[str] = []
+    videos: list[str] = []
     for eid in element_ids:
         el = library.get(eid)
         if not el:

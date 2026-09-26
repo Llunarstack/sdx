@@ -11,7 +11,6 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -21,7 +20,7 @@ class CharacterRecord:
     visual_tokens: str  # appended to prompt when character appears
     negative_tokens: str = ""
     reference_path: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -30,17 +29,17 @@ class LocationRecord:
     name: str
     visual_tokens: str
     palette: str = ""  # e.g. "teal shadows, amber highlights"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
 class WorldLock:
     """Hard constraints for one generation."""
 
-    character_ids: List[str] = field(default_factory=list)
+    character_ids: list[str] = field(default_factory=list)
     location_id: str = ""
-    must_preserve: List[str] = field(default_factory=list)  # "red scarf", "clock tower"
-    forbid: List[str] = field(default_factory=list)
+    must_preserve: list[str] = field(default_factory=list)  # "red scarf", "clock tower"
+    forbid: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -48,12 +47,12 @@ class WorldBible:
     """Loadable world state for multi-shot / series generation."""
 
     world_id: str = "default"
-    characters: Dict[str, CharacterRecord] = field(default_factory=dict)
-    locations: Dict[str, LocationRecord] = field(default_factory=dict)
+    characters: dict[str, CharacterRecord] = field(default_factory=dict)
+    locations: dict[str, LocationRecord] = field(default_factory=dict)
     lore: str = ""
 
     @classmethod
-    def load(cls, path: str | Path) -> "WorldBible":
+    def load(cls, path: str | Path) -> WorldBible:
         p = Path(path)
         data = json.loads(p.read_text(encoding="utf-8"))
         chars = {k: CharacterRecord(**v) for k, v in data.get("characters", {}).items()}
@@ -76,16 +75,16 @@ class WorldBible:
         }
         p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-    def detect_characters(self, prompt: str) -> List[CharacterRecord]:
+    def detect_characters(self, prompt: str) -> list[CharacterRecord]:
         text = (prompt or "").lower()
-        hits: List[CharacterRecord] = []
+        hits: list[CharacterRecord] = []
         for rec in self.characters.values():
             names = [rec.display_name.lower(), rec.id.lower(), *[t.lower() for t in rec.tags]]
             if any(n and n in text for n in names):
                 hits.append(rec)
         return hits
 
-    def detect_location(self, prompt: str) -> Optional[LocationRecord]:
+    def detect_location(self, prompt: str) -> LocationRecord | None:
         text = (prompt or "").lower()
         for rec in self.locations.values():
             if rec.name.lower() in text or rec.id.lower() in text:
@@ -110,7 +109,7 @@ class WorldBible:
         return ", ".join(parts)
 
     def negative_for_lock(self, lock: WorldLock) -> str:
-        negs: List[str] = []
+        negs: list[str] = []
         for cid in lock.character_ids:
             rec = self.characters.get(cid)
             if rec and rec.negative_tokens:
@@ -119,8 +118,8 @@ class WorldBible:
             negs.append(item)
         return ", ".join(negs)
 
-    def references_for_lock(self, lock: WorldLock) -> List[str]:
-        paths: List[str] = []
+    def references_for_lock(self, lock: WorldLock) -> list[str]:
+        paths: list[str] = []
         for cid in lock.character_ids:
             rec = self.characters.get(cid)
             if rec and rec.reference_path:
@@ -131,7 +130,7 @@ class WorldBible:
 _NAME_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b")
 
 
-def guess_proper_nouns(prompt: str) -> List[str]:
+def guess_proper_nouns(prompt: str) -> list[str]:
     """Cheap proper-noun harvest for auto world-bible seeding."""
     return list(dict.fromkeys(_NAME_RE.findall(prompt or "")))
 

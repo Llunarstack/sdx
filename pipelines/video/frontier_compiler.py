@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "ShotEnrichment",
@@ -20,17 +21,17 @@ class ShotEnrichment:
     prompt_suffix: str = ""
     negative_suffix: str = ""
     duration_delta: float = 0.0
-    edit_overrides: Dict[str, Any] = field(default_factory=dict)
-    effects: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    edit_overrides: dict[str, Any] = field(default_factory=dict)
+    effects: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
 class FrontierCompileResult:
-    enrichments: Dict[str, ShotEnrichment] = field(default_factory=dict)
-    global_edit: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    issues: List[str] = field(default_factory=list)
+    enrichments: dict[str, ShotEnrichment] = field(default_factory=dict)
+    global_edit: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    issues: list[str] = field(default_factory=list)
 
 
 def _block(data: Mapping[str, Any], key: str) -> Any:
@@ -42,7 +43,7 @@ def _block(data: Mapping[str, Any], key: str) -> Any:
     return None
 
 
-def _merge_enrichment(store: Dict[str, ShotEnrichment], shot_id: str, shot_index: int) -> ShotEnrichment:
+def _merge_enrichment(store: dict[str, ShotEnrichment], shot_id: str, shot_index: int) -> ShotEnrichment:
     if shot_id not in store:
         store[shot_id] = ShotEnrichment(shot_id=shot_id, shot_index=shot_index)
     return store[shot_id]
@@ -62,8 +63,8 @@ def compile_frontier_layers(
     scene_prompt: str = "",
     duration_sec: float = 6.0,
     genre: str = "",
-    cast: Optional[Mapping[str, Any]] = None,
-    props: Optional[Mapping[str, Any]] = None,
+    cast: Mapping[str, Any] | None = None,
+    props: Mapping[str, Any] | None = None,
 ) -> FrontierCompileResult:
     """Apply all frontier/novel layers to shots."""
     from .anticipation_windup import parse_anticipation_config, plan_anticipation_windups
@@ -78,10 +79,10 @@ def compile_frontier_layers(
     from .semantic_gravity import build_gravity_field, gravity_edit_overrides, parse_semantic_gravity
     from .temporal_echo import parse_echo_config, plan_temporal_echoes
 
-    store: Dict[str, ShotEnrichment] = {}
-    meta: Dict[str, Any] = {}
-    issues: List[str] = []
-    global_edit: Dict[str, Any] = {}
+    store: dict[str, ShotEnrichment] = {}
+    meta: dict[str, Any] = {}
+    issues: list[str] = []
+    global_edit: dict[str, Any] = {}
 
     cast = cast or {}
     props = props or {}
@@ -89,7 +90,7 @@ def compile_frontier_layers(
     # 1. Narrative Tension Thermostat
     tension_raw = _block(data, "tension") or _block(data, "tension_curve")
     curve = parse_tension_curve(tension_raw, genre=genre or str((data.get("studio") or {}).get("genre") or ""))
-    tension_profiles: List[Any] = []
+    tension_profiles: list[Any] = []
     if curve:
         tension_profiles = sample_tension_for_shots(curve, shots, total_duration=duration_sec)
         meta["tension_curve"] = [{"shot_id": p.shot_id, "tension": p.tension} for p in tension_profiles]
@@ -403,7 +404,7 @@ def compile_frontier_layers(
     return FrontierCompileResult(enrichments=store, global_edit=global_edit, metadata=meta, issues=issues)
 
 
-def list_frontier_modules() -> List[Dict[str, str]]:
+def list_frontier_modules() -> list[dict[str, str]]:
     return [
         {
             "id": "tension_thermostat",

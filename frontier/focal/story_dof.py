@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class FocusIntent(str, Enum):
@@ -24,7 +23,7 @@ class FocalStory:
     cfg_hint: float
 
 
-_RULES: Tuple[Tuple[re.Pattern, FocusIntent, str, str, float], ...] = (
+_RULES: tuple[tuple[re.Pattern, FocusIntent, str, str, float], ...] = (
     (
         re.compile(r"\b(shallow dof|bokeh|blurred background|subject isolation)\b", re.I),
         FocusIntent.ISOLATE,
@@ -64,7 +63,7 @@ class FocalStoryteller:
                 return FocalStory(intent, pos, neg, cfg)
         return FocalStory(FocusIntent.NONE, "", "", 1.0)
 
-    def fragments(self, prompt: str) -> Tuple[str, str, float]:
+    def fragments(self, prompt: str) -> tuple[str, str, float]:
         p = self.plan(prompt)
         return p.positive, p.negative, p.cfg_hint
 

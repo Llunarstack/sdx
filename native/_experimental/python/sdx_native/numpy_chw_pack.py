@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 
 
@@ -52,7 +50,7 @@ def stack_chw_batch(images_chw: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(images_chw.astype(np.float32, copy=False))
 
 
-def channel_mean_std(chw: np.ndarray, *, axis_spatial: Tuple[int, int] = (1, 2)) -> Tuple[np.ndarray, np.ndarray]:
+def channel_mean_std(chw: np.ndarray, *, axis_spatial: tuple[int, int] = (1, 2)) -> tuple[np.ndarray, np.ndarray]:
     """Per-channel mean and std over spatial dims (batch NCHW: pass single image or reduce batch)."""
     if chw.ndim == 3:
         m = chw.mean(axis=axis_spatial)

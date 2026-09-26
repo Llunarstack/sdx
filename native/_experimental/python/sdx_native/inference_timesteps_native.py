@@ -7,7 +7,7 @@ or returns an error, callers should fall back to pure NumPy.
 from __future__ import annotations
 
 import ctypes
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -16,7 +16,7 @@ from sdx_native.native_tools import inference_timesteps_shared_library_path
 _DLL: Any = None
 
 
-def _get_dll() -> Optional[ctypes.CDLL]:
+def _get_dll() -> ctypes.CDLL | None:
     global _DLL
     if _DLL is False:
         return None
@@ -44,7 +44,7 @@ def _get_dll() -> Optional[ctypes.CDLL]:
         return None
 
 
-def finalize_inference_timesteps_native(raw: np.ndarray, target_len: int, num_train: int) -> Optional[np.ndarray]:
+def finalize_inference_timesteps_native(raw: np.ndarray, target_len: int, num_train: int) -> np.ndarray | None:
     """
     Match :func:`diffusion.inference_timesteps._resample_length_numpy` when the native
     library is built and accepts the inputs. Returns ``None`` if unavailable or on error.

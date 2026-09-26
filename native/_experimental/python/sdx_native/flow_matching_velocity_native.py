@@ -7,7 +7,6 @@ Educational kernel aligned with ``diffusion/flow_matching.py``; training stays i
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -16,7 +15,7 @@ from sdx_native.native_tools import cuda_flow_matching_shared_library_path
 
 class CudaFlowVelocityLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_flow_matching_shared_library_path()
         if p is None:
             return
@@ -58,7 +57,7 @@ class CudaFlowVelocityLib:
         return out.reshape(x0.shape)
 
 
-_LIB: Optional[CudaFlowVelocityLib] = None
+_LIB: CudaFlowVelocityLib | None = None
 
 
 def get_cuda_flow_velocity_lib() -> CudaFlowVelocityLib:
@@ -72,7 +71,7 @@ def flow_velocity_residual_numpy(x0: np.ndarray, eps: np.ndarray) -> np.ndarray:
     return (np.asarray(eps, dtype=np.float32) - np.asarray(x0, dtype=np.float32)).astype(np.float32)
 
 
-def maybe_flow_velocity_residual_cuda(x0: np.ndarray, eps: np.ndarray) -> Optional[np.ndarray]:
+def maybe_flow_velocity_residual_cuda(x0: np.ndarray, eps: np.ndarray) -> np.ndarray | None:
     lib = get_cuda_flow_velocity_lib()
     if not lib.available:
         return None
