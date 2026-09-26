@@ -53,6 +53,7 @@ data/danbooru/tags/all_tags_categorized.txt
 data/integration_smoke/
 
 # Outputs
+outputs/
 *.pt
 *.png
 *.jpg

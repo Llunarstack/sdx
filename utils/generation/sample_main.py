@@ -642,12 +642,50 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
     if getattr(args, "explore_styles", False) and num_gen < int(getattr(args, "invent_styles", 3) or 3):
         num_gen = int(args.invent_styles)
         args.num = num_gen
-    if num_gen < 2 and str(getattr(args, "pick_best", "none")).lower() not in ("none", ""):
-        print("Note: --pick-best only applies with --num >= 2; ignoring.", file=sys.stderr)
+    if num_gen < 3 and str(getattr(args, "pick_best", "none") or "none").strip().lower() not in ("none", ""):
+        num_gen = 3
+        args.num = int(num_gen)
 
     from utils.generation.sample_features import apply_sample_feature_prompt_phase
 
     apply_sample_feature_prompt_phase(args, steps=int(getattr(args, "steps", 50) or 50))
+
+    from utils.generation.quality_stack import apply_best_model_policy
+
+    apply_best_model_policy(args, prompt=str(getattr(args, "prompt", "") or ""))
+
+    if bool(getattr(args, "apply_user_taste", False)):
+        from utils.generation.user_taste import apply_taste_to_prompts, load_user_taste
+
+        _taste = load_user_taste()
+        _t_pos, _t_neg = apply_taste_to_prompts(
+            str(getattr(args, "prompt", "") or ""),
+            str(getattr(args, "negative_prompt", "") or ""),
+            _taste,
+        )
+        args.prompt = _t_pos
+        if _t_neg:
+            args.negative_prompt = _t_neg
+
+    _inv_rt = None
+    try:
+        from utils.generation.inventions.wire import apply_invention_to_namespace
+
+        _inv_rt = apply_invention_to_namespace(args)
+    except Exception as _inv_ex:
+        print(f"Warning: invention stack skipped: {_inv_ex}", file=sys.stderr)
+
+    num_gen = max(1, getattr(args, "num", 1))
+    if getattr(args, "explore_styles", False) and num_gen < int(getattr(args, "invent_styles", 3) or 3):
+        num_gen = int(args.invent_styles)
+        args.num = num_gen
+    _pb_floor = str(getattr(args, "pick_best", "none") or "none").strip().lower()
+    if _pb_floor not in ("none", "") and num_gen < 3:
+        num_gen = 3
+        args.num = int(num_gen)
+    if _inv_rt is not None and _pb_floor not in ("none", "") and num_gen < 3:
+        num_gen = 3
+        args.num = int(num_gen)
 
     # Resolve emphasis (word)/[word] first so we have prompt_to_encode for conflict filter
     if "(" in args.prompt or "[" in args.prompt:
@@ -1150,6 +1188,13 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
         else:
             cre = torch.full((num_gen,), c0, device=device, dtype=cond_emb.dtype)
         model_kwargs_cond["creativity"] = cre
+
+    if bool(getattr(args, "internal_guidance_block", False)):
+        model_kwargs_cond["internal_guidance_block"] = True
+        model_kwargs_uncond["internal_guidance_block"] = True
+    if bool(getattr(args, "genesis_ops", False)):
+        model_kwargs_cond["genesis_ops"] = True
+        model_kwargs_uncond["genesis_ops"] = True
 
     # Control image(s): supports single --control-image and stacked --control specs.
     control_specs: list[tuple[str, str, float]] = []
@@ -2741,6 +2786,37 @@ def main():  # pyright: ignore[reportGeneralTypeIssues] — body exceeds analyze
             },
         )
         print(f"Saved character session: {_sess_out}", file=sys.stderr)
+
+    if bool(getattr(args, "log_feedback", False)) or str(getattr(args, "feedback_log", "") or "").strip():
+        try:
+            from utils.training.feedback_bus import default_feedback_log, record_generation, record_pick
+
+            _fb_log = str(getattr(args, "feedback_log", "") or "").strip() or str(default_feedback_log())
+            _cand_paths: list[str] = []
+            if num_gen > 1:
+                if getattr(args, "pick_save_all", False):
+                    _cand_paths = [str(out_path.parent / f"{stem}_cand{i}{ext}") for i in range(num_gen)]
+                else:
+                    _cand_paths = [str(out_path.parent / f"{stem}_{i}{ext}") for i in range(num_gen)]
+            record_generation(
+                str(out_path),
+                prompt=str(getattr(args, "prompt", "") or ""),
+                ckpt=str(getattr(args, "ckpt", "") or ""),
+                seed=int(getattr(args, "seed", 0) or 0),
+                candidates=_cand_paths if len(_cand_paths) > 1 else None,
+                log_path=_fb_log,
+            )
+            if num_gen > 1 and pick_m != "none" and _cand_paths:
+                _lose = [_cand_paths[i] for i in range(len(_cand_paths)) if i != best_idx]
+                if _lose:
+                    record_pick(
+                        str(out_path),
+                        _lose,
+                        prompt=str(getattr(args, "prompt", "") or ""),
+                        log_path=_fb_log,
+                    )
+        except Exception as _fb_ex:
+            print(f"feedback log skipped: {_fb_ex}", file=sys.stderr)
 
     # Optional: write prompt/seed/steps sidecar for reproducibility
     if getattr(args, "save_prompt", False):

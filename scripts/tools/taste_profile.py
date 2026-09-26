@@ -77,11 +77,23 @@ def main() -> int:
     if args.cmd == "like":
         add_entry(prof, bucket="likes", image=args.image, prompt=args.prompt, score=args.score)
         save_profile(args.profile, prof)
+        try:
+            from utils.training.feedback_bus import record_like
+
+            record_like(args.image, prompt=args.prompt)
+        except Exception:
+            pass
         print(f"Added like -> {args.profile}")
         return 0
     if args.cmd == "dislike":
         add_entry(prof, bucket="dislikes", image=args.image, prompt=args.prompt)
         save_profile(args.profile, prof)
+        try:
+            from utils.training.feedback_bus import record_dislike
+
+            record_dislike(args.image, prompt=args.prompt)
+        except Exception:
+            pass
         print(f"Added dislike -> {args.profile}")
         return 0
     if args.cmd == "show":

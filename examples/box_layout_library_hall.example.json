@@ -1,0 +1,71 @@
+{
+  "global_prompt": "grand classical library hall, vaulted ceiling, coherent multi-story depth, stable vanishing point",
+  "global_negative": "warped perspective, melting architecture, floating shelves, inconsistent depth, broken vanishing lines",
+  "feather": 10,
+  "overlap_mode": "priority",
+  "regions": [
+    {
+      "name": "ceiling_vault",
+      "box": [0.0, 0.0, 1.0, 0.16],
+      "priority": 4,
+      "prompt": "vaulted ceiling frescoes, consistent arches, single vanishing point",
+      "negative": "floor furniture, floating bookshelves"
+    },
+    {
+      "name": "center_aisle",
+      "box": [0.34, 0.55, 0.66, 1.0],
+      "priority": 6,
+      "prompt": "stone aisle floor tiles, leading lines to vanishing point, clear depth",
+      "negative": "bookshelf in center, railing across aisle"
+    },
+    {
+      "name": "far_end_wall",
+      "box": [0.38, 0.22, 0.62, 0.55],
+      "priority": 5,
+      "prompt": "distant end wall, arched doorway, atmospheric haze, far depth plane",
+      "negative": "foreground pillars, close balcony rail"
+    },
+    {
+      "name": "left_ground_shelves",
+      "box": [0.0, 0.48, 0.34, 0.95],
+      "priority": 10,
+      "prompt": "ground floor arched bookshelves, pillars flush with aisle, near depth plane",
+      "negative": "receding incorrectly, floating upper gallery merge"
+    },
+    {
+      "name": "right_ground_shelves",
+      "box": [0.66, 0.48, 1.0, 0.95],
+      "priority": 10,
+      "prompt": "ground floor arched bookshelves, pillars flush with aisle, near depth plane",
+      "negative": "receding incorrectly, floating upper gallery merge"
+    },
+    {
+      "name": "left_balcony_rail",
+      "box": [0.0, 0.40, 0.36, 0.50],
+      "priority": 11,
+      "prompt": "wooden balcony railing, walkway in front of upper shelves, same depth as ground pillars",
+      "negative": "shelves flush with rail, missing walkway, railing fused into books"
+    },
+    {
+      "name": "right_balcony_rail",
+      "box": [0.64, 0.40, 1.0, 0.50],
+      "priority": 11,
+      "prompt": "wooden balcony railing, walkway in front of upper shelves, same depth as ground pillars",
+      "negative": "shelves flush with rail, missing walkway, railing fused into books"
+    },
+    {
+      "name": "left_upper_shelves",
+      "box": [0.02, 0.10, 0.28, 0.42],
+      "priority": 12,
+      "prompt": "upper story bookshelves recessed behind the balcony walkway, deeper wall plane than the railing",
+      "negative": "upper shelves farther forward than ground, wall thinner upstairs, melted arches"
+    },
+    {
+      "name": "right_upper_shelves",
+      "box": [0.72, 0.10, 0.98, 0.42],
+      "priority": 12,
+      "prompt": "upper story bookshelves recessed behind the balcony walkway, deeper wall plane than the railing",
+      "negative": "upper shelves farther forward than ground, wall thinner upstairs, melted arches"
+    }
+  ]
+}

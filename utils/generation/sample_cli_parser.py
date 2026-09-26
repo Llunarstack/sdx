@@ -970,6 +970,22 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Fraction of ODE steps to zero when --cfg-zero-star (default 4%%).",
     )
     parser.add_argument(
+        "--internal-guidance-block",
+        action="store_true",
+        help="Enable internal-guidance block residual path in DiT (experimental).",
+    )
+    parser.add_argument(
+        "--internal-guidance",
+        action="store_true",
+        dest="internal_guidance_block",
+        help="Alias for --internal-guidance-block.",
+    )
+    parser.add_argument(
+        "--genesis-ops",
+        action="store_true",
+        help="Enable genesis operator hooks during sampling (experimental).",
+    )
+    parser.add_argument(
         "--qsilk-micrograin",
         type=float,
         default=0.0,
@@ -2318,6 +2334,22 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--creative-random-constraint",
         action="store_true",
         help="With --frontier-creative: apply one random art-school constraint (monochrome, silhouette, etc.).",
+    )
+    parser.add_argument(
+        "--feedback-log",
+        type=str,
+        default="",
+        help="Append generation provenance to this feedback JSONL (default: outputs/feedback/feedback.jsonl).",
+    )
+    parser.add_argument(
+        "--log-feedback",
+        action="store_true",
+        help="Log generation provenance to the default feedback bus JSONL.",
+    )
+    parser.add_argument(
+        "--apply-user-taste",
+        action="store_true",
+        help="Merge outputs/user_taste.json preferences into prompt/negative before encode.",
     )
     parser.add_argument(
         "--character-session",
