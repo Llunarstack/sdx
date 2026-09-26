@@ -9,7 +9,7 @@ import shutil
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from PIL import Image
 
@@ -40,35 +40,35 @@ class GenerationRequest:
     height: int = 512
     steps: int = 20
     cfg_scale: float = 7.5
-    seed: Optional[int] = None
+    seed: int | None = None
 
     # Advanced features
-    character_name: Optional[str] = None
-    style_name: Optional[str] = None
-    scene_id: Optional[str] = None
+    character_name: str | None = None
+    style_name: str | None = None
+    scene_id: str | None = None
 
     # Precision control
     use_precision_control: bool = False
-    object_layout: Optional[str] = None
-    spatial_constraints: List[str] = None
+    object_layout: str | None = None
+    spatial_constraints: list[str] = None
 
     # Anatomy correction
     use_anatomy_correction: bool = False
-    focus_areas: List[str] = None
+    focus_areas: list[str] = None
     pose_type: str = "standing"
 
     # Text rendering
     has_text: bool = False
-    text_content: List[str] = None
+    text_content: list[str] = None
     typography_type: str = "general"
 
     # Image editing
-    base_image: Optional[Image.Image] = None
-    edit_mask: Optional[Image.Image] = None
+    base_image: Image.Image | None = None
+    edit_mask: Image.Image | None = None
     edit_instruction: str = ""
     edit_type: str = "replace"
-    heuristic_edit_region: Optional[str] = None  # coarse mask when edit_mask is None (see edit_masks)
-    segment_prompt: Optional[str] = None  # natural-language region → segmentation_to_mask (see priority below)
+    heuristic_edit_region: str | None = None  # coarse mask when edit_mask is None (see edit_masks)
+    segment_prompt: str | None = None  # natural-language region → segmentation_to_mask (see priority below)
     segment_mask_feather: float = 4.0
     use_segmentation_models: bool = True  # Grounding DINO + SAM2 in pretrained/, else phrase heuristics
 
@@ -83,8 +83,8 @@ class GenerationRequest:
     sample_device: str = "cuda"
     sample_scheduler: str = "ddim"
     sample_solver: str = "ddim"
-    timestep_schedule: Optional[str] = None
-    extra_sample_args: Optional[List[str]] = None
+    timestep_schedule: str | None = None
+    extra_sample_args: list[str] | None = None
 
     # Professional / educational visual packs (same semantics as ``sample.py``)
     visual_design_domain: str = "none"
@@ -110,21 +110,21 @@ class GenerationResult:
     image: Image.Image
     prompt_used: str
     negative_prompt_used: str
-    generation_params: Dict[str, Any]
+    generation_params: dict[str, Any]
 
     # Quality metrics
     quality_score: float = 0.0
-    quality_analysis: Dict[str, Any] = None
+    quality_analysis: dict[str, Any] = None
 
     # Validation results
-    anatomy_validation: Dict[str, Any] = None
-    text_validation: Dict[str, Any] = None
-    precision_validation: Dict[str, Any] = None
+    anatomy_validation: dict[str, Any] = None
+    text_validation: dict[str, Any] = None
+    precision_validation: dict[str, Any] = None
 
     # Processing log
-    processing_steps: List[str] = None
-    optimization_applied: List[str] = None
-    issues_detected: List[str] = None
+    processing_steps: list[str] = None
+    optimization_applied: list[str] = None
+    issues_detected: list[str] = None
 
     def __post_init__(self):
         if self.quality_analysis is None:
@@ -285,7 +285,7 @@ class MultimodalGenerator:
 
         return result
 
-    async def _optimize_prompt(self, request: GenerationRequest) -> Dict[str, Any]:
+    async def _optimize_prompt(self, request: GenerationRequest) -> dict[str, Any]:
         """Optimize the input prompt using advanced prompting system."""
         analyzer = self.prompting_system["analyzer"]
         optimizer = self.prompting_system["optimizer"]
@@ -320,7 +320,7 @@ class MultimodalGenerator:
             prompt, character_name=request.character_name, style_name=request.style_name, scene_id=request.scene_id
         )
 
-    async def _apply_precision_control(self, prompt: str, request: GenerationRequest) -> Dict[str, Any]:
+    async def _apply_precision_control(self, prompt: str, request: GenerationRequest) -> dict[str, Any]:
         """Apply precision control for exact object placement."""
         scene_composer = self.precision_system["scene_composer"]
         counting_validator = self.precision_system["counting_validator"]
@@ -355,7 +355,7 @@ class MultimodalGenerator:
             },
         }
 
-    async def _apply_anatomy_correction(self, prompt: str, request: GenerationRequest) -> Dict[str, Any]:
+    async def _apply_anatomy_correction(self, prompt: str, request: GenerationRequest) -> dict[str, Any]:
         """Apply anatomy correction for better human figures."""
         anatomy_validator = self.anatomy_system["anatomy_validator"]
         hand_corrector = self.anatomy_system["hand_corrector"]
@@ -391,7 +391,7 @@ class MultimodalGenerator:
             },
         }
 
-    async def _apply_text_rendering(self, prompt: str, request: GenerationRequest) -> Dict[str, Any]:
+    async def _apply_text_rendering(self, prompt: str, request: GenerationRequest) -> dict[str, Any]:
         """Apply text rendering enhancements."""
         text_engine = self.text_system["engine"]
 
@@ -601,7 +601,7 @@ class MultimodalGenerator:
                 "spatial_relationships": "maintained",
             }
 
-    def _extract_objects_from_prompt(self, prompt: str) -> List[str]:
+    def _extract_objects_from_prompt(self, prompt: str) -> list[str]:
         """Extract objects from prompt for layout planning."""
         # Simple object extraction - would be more sophisticated in practice
         common_objects = [
@@ -657,34 +657,34 @@ class MultimodalGenerator:
             else:
                 self.generation_stats["optimization_usage"][opt] = 1
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get generation statistics."""
         return self.generation_stats.copy()
 
-    def create_character(self, name: str, description: str, reference_prompt: str = None) -> Dict[str, Any]:
+    def create_character(self, name: str, description: str, reference_prompt: str = None) -> dict[str, Any]:
         """Create a new character profile for consistency."""
         consistency_manager = self.consistency_system["consistency_manager"]
         profile = consistency_manager.create_character_profile(name, description, reference_prompt)
         return asdict(profile)
 
-    def create_style(self, name: str, description: str, reference_prompt: str = None) -> Dict[str, Any]:
+    def create_style(self, name: str, description: str, reference_prompt: str = None) -> dict[str, Any]:
         """Create a new style profile for consistency."""
         consistency_manager = self.consistency_system["consistency_manager"]
         profile = consistency_manager.create_style_profile(name, description, reference_prompt)
         return asdict(profile)
 
-    def create_scene(self, scene_id: str, location: str, base_prompt: str) -> Dict[str, Any]:
+    def create_scene(self, scene_id: str, location: str, base_prompt: str) -> dict[str, Any]:
         """Create a new scene context for consistency."""
         consistency_manager = self.consistency_system["consistency_manager"]
         context = consistency_manager.create_scene_context(scene_id, location, base_prompt)
         return asdict(context)
 
-    def analyze_prompt(self, prompt: str) -> Dict[str, Any]:
+    def analyze_prompt(self, prompt: str) -> dict[str, Any]:
         """Analyze a prompt for optimization opportunities."""
         analyzer = self.prompting_system["analyzer"]
         return analyzer.analyze_prompt(prompt)
 
-    def suggest_improvements(self, prompt: str) -> List[str]:
+    def suggest_improvements(self, prompt: str) -> list[str]:
         """Suggest improvements for a prompt."""
         analysis = self.analyze_prompt(prompt)
         return analysis.get("recommendations", [])
@@ -698,8 +698,8 @@ class BatchMultimodalGenerator:
         self.logger = logging.getLogger(__name__)
 
     async def generate_batch(
-        self, requests: List[GenerationRequest], max_concurrent: int = 4
-    ) -> List[GenerationResult]:
+        self, requests: list[GenerationRequest], max_concurrent: int = 4
+    ) -> list[GenerationResult]:
         """Generate multiple images concurrently."""
         self.logger.info(f"Starting batch generation: {len(requests)} requests")
 
@@ -735,8 +735,8 @@ class BatchMultimodalGenerator:
         return results
 
     def create_batch_from_prompts(
-        self, prompts: List[str], base_request: GenerationRequest = None
-    ) -> List[GenerationRequest]:
+        self, prompts: list[str], base_request: GenerationRequest = None
+    ) -> list[GenerationRequest]:
         """Create batch requests from a list of prompts."""
         if base_request is None:
             base_request = GenerationRequest(prompt="")

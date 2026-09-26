@@ -6,7 +6,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,14 +26,14 @@ class TrainingMetrics:
     gpu_memory_gb: float
 
     # Optional validation metrics
-    val_loss: Optional[float] = None
-    val_steps: Optional[int] = None
+    val_loss: float | None = None
+    val_steps: int | None = None
 
     # Optional refinement metrics
-    refinement_loss: Optional[float] = None
-    refinement_ratio: Optional[float] = None
+    refinement_loss: float | None = None
+    refinement_ratio: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for logging."""
         return asdict(self)
 
@@ -41,9 +41,9 @@ class TrainingMetrics:
 class MetricsTracker:
     """Track and log training metrics."""
 
-    def __init__(self, log_dir: Optional[str] = None):
+    def __init__(self, log_dir: str | None = None):
         self.log_dir = Path(log_dir) if log_dir else None
-        self.metrics_history: List[TrainingMetrics] = []
+        self.metrics_history: list[TrainingMetrics] = []
         self.best_loss = float("inf")
         self.best_val_loss = float("inf")
         self.start_time = time.time()
@@ -77,7 +77,7 @@ class MetricsTracker:
         recent_metrics = self.metrics_history[-window:]
         return np.mean([m.loss for m in recent_metrics])
 
-    def get_training_speed(self) -> Dict[str, float]:
+    def get_training_speed(self) -> dict[str, float]:
         """Get training speed statistics."""
         if len(self.metrics_history) < 2:
             return {"samples_per_second": 0.0, "steps_per_minute": 0.0}
@@ -108,7 +108,7 @@ class MetricsTracker:
         else:
             return f"{minutes}m"
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get training summary statistics."""
         if not self.metrics_history:
             return {}
@@ -147,7 +147,7 @@ class ProgressBar:
         self.current_step = 0
         self.start_time = time.time()
 
-    def update(self, step: int, loss: float, lr: float, extra_info: Optional[Dict] = None):
+    def update(self, step: int, loss: float, lr: float, extra_info: dict | None = None):
         """Update progress bar."""
         self.current_step = step
         progress = step / self.total_steps

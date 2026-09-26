@@ -20,14 +20,15 @@ Key upgrades over v1:
 
 import copy
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Prompt intent classification
 # ---------------------------------------------------------------------------
 
-_INTENT_PATTERNS: Dict[str, List[str]] = {
+_INTENT_PATTERNS: dict[str, list[str]] = {
     "portrait": [
         r"\b(portrait|headshot|bust|face|close.?up|selfie|profile)\b",
         r"\b(1girl|1boy|1woman|1man|solo)\b",
@@ -55,7 +56,7 @@ _INTENT_PATTERNS: Dict[str, List[str]] = {
 
 # Semantic conflict pairs: (term_a, term_b, conflict_description)
 # These are mutually contradictory regardless of which category they appear in.
-_SEMANTIC_CONFLICTS: List[Tuple[str, str, str]] = [
+_SEMANTIC_CONFLICTS: list[tuple[str, str, str]] = [
     ("photorealistic", "anime", "realism vs stylization"),
     ("photorealistic", "cartoon", "realism vs stylization"),
     ("photorealistic", "illustration", "realism vs stylization"),
@@ -96,7 +97,7 @@ _SEMANTIC_CONFLICTS: List[Tuple[str, str, str]] = [
 ]
 
 # Intent → recommended quality additions
-_INTENT_QUALITY_BOOSTS: Dict[str, List[str]] = {
+_INTENT_QUALITY_BOOSTS: dict[str, list[str]] = {
     "portrait": [
         "detailed facial features",
         "natural skin texture",
@@ -139,7 +140,7 @@ _INTENT_QUALITY_BOOSTS: Dict[str, List[str]] = {
 def classify_prompt_intent(prompt: str) -> str:
     """Classify the dominant intent of a prompt."""
     p = prompt.lower()
-    scores: Dict[str, int] = {}
+    scores: dict[str, int] = {}
     for intent, patterns in _INTENT_PATTERNS.items():
         score = sum(1 for pat in patterns if re.search(pat, p, re.IGNORECASE))
         if score:
@@ -147,7 +148,7 @@ def classify_prompt_intent(prompt: str) -> str:
     return max(scores, key=lambda k: scores[k]) if scores else "scene"
 
 
-def detect_semantic_conflicts(prompt: str) -> List[Dict[str, Any]]:
+def detect_semantic_conflicts(prompt: str) -> list[dict[str, Any]]:
     """
     Detect semantic contradictions in a prompt regardless of category.
     Returns list of conflict dicts: term_a, term_b, description, severity.
@@ -160,7 +161,7 @@ def detect_semantic_conflicts(prompt: str) -> List[Dict[str, Any]]:
     ]
 
 
-def resolve_semantic_conflicts(prompt: str) -> Tuple[str, List[str]]:
+def resolve_semantic_conflicts(prompt: str) -> tuple[str, list[str]]:
     """
     Remove the lower-priority (later-occurring) term from each conflicting pair.
     Returns (resolved_prompt, list_of_removed_parts).
@@ -170,7 +171,7 @@ def resolve_semantic_conflicts(prompt: str) -> Tuple[str, List[str]]:
         return prompt, []
 
     parts = [p.strip() for p in prompt.split(",") if p.strip()]
-    removed: List[str] = []
+    removed: list[str] = []
 
     for conflict in conflicts:
         term_a, term_b = conflict["term_a"], conflict["term_b"]
@@ -195,7 +196,7 @@ class PromptElement:
     category: str
     priority: float
     weight: float = 1.0
-    conflicts: Optional[tuple] = field(default=None)
+    conflicts: tuple | None = field(default=None)
 
     def __post_init__(self):
         if self.conflicts is None:
@@ -220,14 +221,14 @@ class PromptElement:
 class PromptStructure:
     """Represents the structure of an optimized prompt."""
 
-    subject: List[PromptElement]
-    style: List[PromptElement]
-    composition: List[PromptElement]
-    quality: List[PromptElement]
-    technical: List[PromptElement]
-    negative: List[PromptElement]
+    subject: list[PromptElement]
+    style: list[PromptElement]
+    composition: list[PromptElement]
+    quality: list[PromptElement]
+    technical: list[PromptElement]
+    negative: list[PromptElement]
 
-    def get_all_elements(self) -> List[PromptElement]:
+    def get_all_elements(self) -> list[PromptElement]:
         """Get all elements in priority order."""
         all_elements = self.subject + self.style + self.composition + self.quality + self.technical
         return sorted(all_elements, key=lambda x: x.priority, reverse=True)
@@ -383,7 +384,7 @@ class PromptAnalyzer:
             "too_long": 400,  # Over 400 chars - likely over-specified
         }
 
-    def analyze_prompt(self, prompt: str) -> Dict[str, Any]:
+    def analyze_prompt(self, prompt: str) -> dict[str, Any]:
         """Analyze a prompt and return detailed breakdown."""
         elements = self._parse_prompt_elements(prompt)
         categorized = self._categorize_elements(elements)
@@ -408,7 +409,7 @@ class PromptAnalyzer:
             "recommendations": self._generate_recommendations(prompt, categorized, all_conflicts, complexity, intent),
         }
 
-    def _parse_prompt_elements(self, prompt: str) -> List[Tuple[str, float]]:
+    def _parse_prompt_elements(self, prompt: str) -> list[tuple[str, float]]:
         """Parse prompt into individual elements."""
         # Split by commas and clean up
         elements = [elem.strip() for elem in prompt.split(",")]
@@ -442,7 +443,7 @@ class PromptAnalyzer:
 
         return processed_elements
 
-    def _categorize_elements(self, elements: List[Tuple[str, float]]) -> Dict[str, List[PromptElement]]:
+    def _categorize_elements(self, elements: list[tuple[str, float]]) -> dict[str, list[PromptElement]]:
         """Categorize prompt elements by type."""
         categorized = {category: [] for category in self.categories.keys()}
 
@@ -494,7 +495,7 @@ class PromptAnalyzer:
         else:
             return "environment"  # Multi-word phrases often describe environment
 
-    def _detect_conflicts(self, categorized: Dict[str, List[PromptElement]]) -> List[Dict[str, Any]]:
+    def _detect_conflicts(self, categorized: dict[str, list[PromptElement]]) -> list[dict[str, Any]]:
         """Detect conflicting elements in the prompt."""
         conflicts = []
 
@@ -529,7 +530,7 @@ class PromptAnalyzer:
 
         return conflicts
 
-    def _assess_complexity(self, prompt: str, categorized: Dict[str, List[PromptElement]]) -> float:
+    def _assess_complexity(self, prompt: str, categorized: dict[str, list[PromptElement]]) -> float:
         """Assess prompt complexity score (0-1)."""
         complexity_factors = {
             "length": min(len(prompt) / 500, 1.0) * 0.3,  # Length factor
@@ -578,11 +579,11 @@ class PromptAnalyzer:
     def _generate_recommendations(
         self,
         prompt: str,
-        categorized: Dict[str, List[PromptElement]],
-        conflicts: List[Dict[str, Any]],
+        categorized: dict[str, list[PromptElement]],
+        conflicts: list[dict[str, Any]],
         complexity: float,
         intent: str = "scene",
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate optimization recommendations."""
         recommendations = []
 
@@ -673,7 +674,7 @@ class PromptOptimizer:
 
     def optimize_prompt(
         self, prompt: str, optimization_level: str = "balanced", target_style: str = None, max_length: int = 300
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Optimize a prompt using various strategies."""
         # Analyze original prompt
         analysis = self.analyzer.analyze_prompt(prompt)
@@ -715,8 +716,8 @@ class PromptOptimizer:
         }
 
     def _simplify_prompt(
-        self, elements: Dict[str, List[PromptElement]], analysis: Dict[str, Any], target_style: str
-    ) -> Tuple[Dict[str, List[PromptElement]], str]:
+        self, elements: dict[str, list[PromptElement]], analysis: dict[str, Any], target_style: str
+    ) -> tuple[dict[str, list[PromptElement]], str]:
         """Simplify prompt by removing low-priority elements."""
         simplified = {}
         removed_count = 0
@@ -732,8 +733,8 @@ class PromptOptimizer:
         return simplified, log_entry
 
     def _prioritize_elements(
-        self, elements: Dict[str, List[PromptElement]], analysis: Dict[str, Any], target_style: str
-    ) -> Tuple[Dict[str, List[PromptElement]], str]:
+        self, elements: dict[str, list[PromptElement]], analysis: dict[str, Any], target_style: str
+    ) -> tuple[dict[str, list[PromptElement]], str]:
         """Prioritize elements by importance and relevance."""
         prioritized = {}
 
@@ -773,8 +774,8 @@ class PromptOptimizer:
         return prioritized, log_entry
 
     def _resolve_conflicts(
-        self, elements: Dict[str, List[PromptElement]], analysis: Dict[str, Any], target_style: str
-    ) -> Tuple[Dict[str, List[PromptElement]], str]:
+        self, elements: dict[str, list[PromptElement]], analysis: dict[str, Any], target_style: str
+    ) -> tuple[dict[str, list[PromptElement]], str]:
         """Resolve conflicting elements by keeping highest priority ones."""
         resolved = {}
         conflicts_resolved = 0
@@ -807,8 +808,8 @@ class PromptOptimizer:
         return resolved, log_entry
 
     def _balance_categories(
-        self, elements: Dict[str, List[PromptElement]], analysis: Dict[str, Any], target_style: str
-    ) -> Tuple[Dict[str, List[PromptElement]], str]:
+        self, elements: dict[str, list[PromptElement]], analysis: dict[str, Any], target_style: str
+    ) -> tuple[dict[str, list[PromptElement]], str]:
         """Balance elements across categories."""
         balanced = {}
 
@@ -840,8 +841,8 @@ class PromptOptimizer:
         return balanced, log_entry
 
     def _enhance_clarity(
-        self, elements: Dict[str, List[PromptElement]], analysis: Dict[str, Any], target_style: str
-    ) -> Tuple[Dict[str, List[PromptElement]], str]:
+        self, elements: dict[str, list[PromptElement]], analysis: dict[str, Any], target_style: str
+    ) -> tuple[dict[str, list[PromptElement]], str]:
         """Enhance prompt clarity by adding missing essential elements."""
         enhanced = {cat: list(elem_list) for cat, elem_list in elements.items()}  # Deep-enough copy
         additions = 0
@@ -864,7 +865,7 @@ class PromptOptimizer:
         log_entry = f"Enhanced clarity: added {additions} essential elements"
         return enhanced, log_entry
 
-    def _identify_element_conflicts(self, elements: List[PromptElement]) -> List[List[PromptElement]]:
+    def _identify_element_conflicts(self, elements: list[PromptElement]) -> list[list[PromptElement]]:
         """Identify conflicting elements within a category."""
         # This is simplified - would be more sophisticated in practice
         conflict_keywords = [
@@ -903,7 +904,7 @@ class PromptOptimizer:
         return conflict_groups
 
     def _build_optimized_prompt(
-        self, elements: Dict[str, List[PromptElement]], max_length: int, target_style: str
+        self, elements: dict[str, list[PromptElement]], max_length: int, target_style: str
     ) -> str:
         """Build the final optimized prompt."""
         # Collect all elements and sort by priority
@@ -936,7 +937,7 @@ class PromptOptimizer:
         return ", ".join(prompt_parts)
 
     def _calculate_improvement_score(
-        self, original_analysis: Dict[str, Any], optimized_analysis: Dict[str, Any]
+        self, original_analysis: dict[str, Any], optimized_analysis: dict[str, Any]
     ) -> float:
         """Calculate improvement score between original and optimized prompts."""
         improvements = 0.0
@@ -994,9 +995,9 @@ class CreativeRAGOptimizer:
         self.analyzer = PromptAnalyzer()
         self.optimizer = PromptOptimizer()
         self._device = device
-        self._rag_engine: Optional[Any] = None  # lazy-loaded
+        self._rag_engine: Any | None = None  # lazy-loaded
 
-    def _get_rag_engine(self) -> Optional[Any]:
+    def _get_rag_engine(self) -> Any | None:
         if self._rag_engine is None:
             try:
                 from utils.prompt.creative_rag import CreativeRAGEngine
@@ -1010,15 +1011,15 @@ class CreativeRAGOptimizer:
         self,
         prompt: str,
         *,
-        reference_image_path: Optional[str] = None,
-        reference_image_paths: Optional[Sequence[str]] = None,
-        facts: Optional[Sequence[str]] = None,
+        reference_image_path: str | None = None,
+        reference_image_paths: Sequence[str] | None = None,
+        facts: Sequence[str] | None = None,
         creativity_level: float = 0.7,
         optimization_level: str = "balanced",
         max_length: int = 350,
         seed: int = 42,
         use_rag: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Full creative optimization pipeline.
 
@@ -1088,7 +1089,7 @@ class CreativeRAGOptimizer:
         # Enforce max_length
         if len(final_prompt) > max_length:
             parts = [p.strip() for p in final_prompt.split(",") if p.strip()]
-            trimmed: List[str] = []
+            trimmed: list[str] = []
             length = 0
             for p in parts:
                 if length + len(p) + 2 > max_length:

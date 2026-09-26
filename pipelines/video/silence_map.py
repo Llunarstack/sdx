@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["SilenceBeat", "parse_silence_map", "plan_silence_beats"]
 
@@ -17,8 +18,8 @@ class SilenceBeat:
     audio_note: str
 
 
-def parse_silence_map(raw: Any) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
+def parse_silence_map(raw: Any) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
     if isinstance(raw, Mapping):
         for sid, spec in raw.items():
             if isinstance(spec, (int, float)):
@@ -30,9 +31,9 @@ def parse_silence_map(raw: Any) -> Dict[str, Dict[str, Any]]:
 
 def plan_silence_beats(
     shots: Sequence[Any],
-    silence_map: Mapping[str, Dict[str, Any]],
-) -> List[SilenceBeat]:
-    beats: List[SilenceBeat] = []
+    silence_map: Mapping[str, dict[str, Any]],
+) -> list[SilenceBeat]:
+    beats: list[SilenceBeat] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         spec = silence_map.get(sid, {})

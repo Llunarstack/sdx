@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Sequence, Set
+from typing import Any
 
 __all__ = [
     "PlotThread",
@@ -27,14 +28,14 @@ class PlotThread:
 @dataclass(slots=True)
 class NarrativeDebtReport:
     ok: bool
-    open_threads: List[str] = field(default_factory=list)
-    resolved_threads: List[str] = field(default_factory=list)
-    unpaid: List[str] = field(default_factory=list)
-    injections: Dict[str, str] = field(default_factory=dict)
+    open_threads: list[str] = field(default_factory=list)
+    resolved_threads: list[str] = field(default_factory=list)
+    unpaid: list[str] = field(default_factory=list)
+    injections: dict[str, str] = field(default_factory=dict)
 
 
-def parse_narrative_threads(raw: Any) -> Dict[str, PlotThread]:
-    out: Dict[str, PlotThread] = {}
+def parse_narrative_threads(raw: Any) -> dict[str, PlotThread]:
+    out: dict[str, PlotThread] = {}
     if isinstance(raw, Mapping):
         for tid, spec in raw.items():
             if isinstance(spec, str):
@@ -64,11 +65,11 @@ def audit_narrative_debt(
 ) -> NarrativeDebtReport:
     if not threads:
         return NarrativeDebtReport(ok=True)
-    open_set: Set[str] = set()
-    resolved: List[str] = []
-    unpaid: List[str] = []
-    injections: Dict[str, str] = {}
-    opened_at: Dict[str, int] = {}
+    open_set: set[str] = set()
+    resolved: list[str] = []
+    unpaid: list[str] = []
+    injections: dict[str, str] = {}
+    opened_at: dict[str, int] = {}
 
     for i, sh in enumerate(shots):
         sid = str(getattr(sh, "id", f"shot_{i}"))

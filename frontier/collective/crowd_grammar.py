@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class CrowdScale(str, Enum):
@@ -22,7 +21,7 @@ class CrowdPlan:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, CrowdScale, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, CrowdScale, str, str], ...] = (
     (
         re.compile(r"\b(crowd|packed|stadium|concert audience|protest march)\b", re.I),
         CrowdScale.CROWD,
@@ -58,7 +57,7 @@ class CrowdGrammar:
             )
         return CrowdPlan(CrowdScale.NONE, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

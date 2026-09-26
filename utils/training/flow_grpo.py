@@ -12,7 +12,7 @@ but a working loop: sample → score → weighted fine-tune on high-reward traje
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -109,10 +109,10 @@ def decode_latent_to_rgb_uint8(
 def rollout_flow_sample(
     model: torch.nn.Module,
     diffusion: Any,
-    shape: Tuple[int, ...],
+    shape: tuple[int, ...],
     *,
-    model_kwargs_cond: Dict[str, Any],
-    model_kwargs_uncond: Optional[Dict[str, Any]],
+    model_kwargs_cond: dict[str, Any],
+    model_kwargs_uncond: dict[str, Any] | None,
     cfg_scale: float,
     steps: int,
     device: str,

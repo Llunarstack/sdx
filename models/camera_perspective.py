@@ -28,7 +28,6 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -121,7 +120,7 @@ class CameraSpecParser:
         r"frame within frame|framing": "frame_in_frame",
     }
 
-    def _match_map(self, text: str, mapping: Dict[str, str], default: str) -> str:
+    def _match_map(self, text: str, mapping: dict[str, str], default: str) -> str:
         for pattern, value in mapping.items():
             if re.search(pattern, text, re.IGNORECASE):
                 return value
@@ -415,7 +414,7 @@ class DepthOfFieldModule(nn.Module):
         self,
         x: torch.Tensor,
         camera_emb: torch.Tensor,
-        depth_map: Optional[torch.Tensor] = None,
+        depth_map: torch.Tensor | None = None,
         h_patches: int = 16,
         w_patches: int = 16,
     ) -> torch.Tensor:
@@ -497,7 +496,7 @@ class CameraConditioner(nn.Module):
         camera_emb: torch.Tensor,
         h_patches: int,
         w_patches: int,
-        depth_map: Optional[torch.Tensor] = None,
+        depth_map: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Apply all camera conditioning to image tokens.

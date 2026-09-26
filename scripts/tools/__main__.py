@@ -14,11 +14,15 @@ import runpy
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
-for _p in (_REPO, _REPO / "native" / "python"):
-    _s = str(_p)
-    if _s not in sys.path:
-        sys.path.insert(0, _s)
+from scripts.tools._repo_bootstrap import ensure_repo_paths
+
+ensure_repo_paths()
+
+from utils.terminal import configure_stdio_for_console  # noqa: E402
+
+# Tool scripts don't all guard their own stdio; without this, argparse help
+# containing arrows crashes on legacy Windows console encodings (cp1252).
+configure_stdio_for_console()
 
 _HERE = Path(__file__).resolve().parent
 
@@ -51,6 +55,8 @@ _CANONICAL: dict[str, Path] = {
     "superior_eval_report": _HERE / "ops" / "superior_eval_report.py",
     "superior_ensemble": _HERE / "ops" / "superior_ensemble.py",
     "run_flywheel": _HERE / "ops" / "run_flywheel.py",
+    "feedback": _HERE / "ops" / "feedback_cli.py",
+    "rsi_loop": _HERE / "ops" / "rsi_loop.py",
     "agentic_generate": _HERE / "ops" / "agentic_generate.py",
     "agentic_evolve": _HERE / "ops" / "agentic_evolve.py",
     "agentic_flywheel": _HERE / "ops" / "agentic_flywheel.py",
@@ -104,6 +110,11 @@ _CANONICAL: dict[str, Path] = {
     "generate_sdx_architecture_diagram": _HERE / "dev" / "generate_sdx_architecture_diagram.py",
     "architecture_themes": _HERE / "dev" / "architecture_themes.py",
     "validate_config_json": _HERE / "dev" / "validate_config_json.py",
+    "integration_smoke": _HERE / "dev" / "integration_smoke.py",
+    "cascade_generate": _HERE / "ops" / "cascade_generate.py",
+    "profile_image_cli": _HERE / "ops" / "profile_image_cli.py",
+    "prompt_compose": _HERE / "prompt" / "prompt_compose.py",
+    "research_image_prompt": _HERE / "prompt" / "research_image_prompt.py",
     "update_project_structure": _HERE / "repo" / "update_project_structure.py",
     "verify_doc_links": _HERE / "repo" / "verify_doc_links.py",
     "clean_repo_artifacts": _HERE / "repo" / "clean_repo_artifacts.py",

@@ -9,8 +9,6 @@ This module does **not** call external APIs; it only returns strings and (w, h) 
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
-
 # ---------------------------------------------------------------------------
 # Negative prompts — reduce typical gen-AI failures on comic/manga pages
 # ---------------------------------------------------------------------------
@@ -55,7 +53,7 @@ def combined_comic_negative(*, include_lettering: bool = True, include_anatomy: 
 # Style snippets (append to user prompt or book prefix)
 # ---------------------------------------------------------------------------
 
-STYLE_SNIPPETS: Dict[str, str] = {
+STYLE_SNIPPETS: dict[str, str] = {
     "none": "",
     "shonen": "dynamic action lines, speed lines, bold ink weight, expressive eyes, impact frames",
     "shoujo": "delicate linework, soft screentone gradients, sparkles, emotional close-ups, flower motifs",
@@ -149,7 +147,7 @@ STYLE_SNIPPETS: Dict[str, str] = {
     "gouache_poster_graphic": "gouache poster style, matte opaque color blocks, bold shape simplification, print-strong composition hierarchy",
 }
 
-ART_MEDIUM_VARIANTS: Dict[str, Dict[str, str]] = {
+ART_MEDIUM_VARIANTS: dict[str, dict[str, str]] = {
     "none": {},
     "digital_art": {
         "none": "",
@@ -287,7 +285,7 @@ ART_MEDIUM_VARIANTS: Dict[str, Dict[str, str]] = {
     },
 }
 
-ART_MEDIUM_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+ART_MEDIUM_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "digital_painting_pro": {"family": "digital_art", "variant": "painting"},
     "drawing_ink_pro": {"family": "drawing_art", "variant": "ink"},
@@ -338,7 +336,7 @@ ART_MEDIUM_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     "watercolor_botanical_master": {"family": "painting_art", "variant": "watercolor_botanical"},
 }
 
-POPULAR_STYLE_PRESETS: List[Dict[str, str]] = [
+POPULAR_STYLE_PRESETS: list[dict[str, str]] = [
     # Digital (1-15)
     {
         "id": "digital_fantasy_splash",
@@ -807,7 +805,7 @@ POPULAR_STYLE_PRESETS: List[Dict[str, str]] = [
 # - clear reading order and eye path
 # - controlled shot language (establishing -> medium -> close-up)
 # - value hierarchy and texture discipline (screentone/halftone)
-ARTIST_CRAFT_PROFILES: Dict[str, str] = {
+ARTIST_CRAFT_PROFILES: dict[str, str] = {
     "none": "",
     "manga_pro": (
         "clear right-to-left panel flow, dominant-to-secondary focal hierarchy, "
@@ -833,7 +831,7 @@ ARTIST_CRAFT_PROFILES: Dict[str, str] = {
     ),
 }
 
-ARTIST_STYLE_PROFILES: Dict[str, str] = {
+ARTIST_STYLE_PROFILES: dict[str, str] = {
     "none": "",
     # Anime / manga creators
     "shinkai_cinematic_anime": (
@@ -942,7 +940,7 @@ ARTIST_STYLE_PROFILES: Dict[str, str] = {
     ),
 }
 
-SHOT_LANGUAGE_HINTS: Dict[str, str] = {
+SHOT_LANGUAGE_HINTS: dict[str, str] = {
     "none": "",
     "mixed": "balanced mix of establishing, medium, and close-up shots with clear continuity",
     "cinematic": "film-language shot grammar, motivated camera changes, over-shoulder dialogue coverage",
@@ -950,14 +948,14 @@ SHOT_LANGUAGE_HINTS: Dict[str, str] = {
     "dialogue_coverage": "dialogue-first shot coverage, over-shoulder and reaction close-ups, readable speaker turns",
 }
 
-PACING_PLAN_HINTS: Dict[str, str] = {
+PACING_PLAN_HINTS: dict[str, str] = {
     "none": "",
     "decompressed": "decompressed pacing, more panels per action beat, breathing room in gutters",
     "balanced": "balanced pacing with alternating wide setup and tight emotional beats",
     "compressed": "compressed pacing, fewer panels with decisive story beats and efficient transitions",
 }
 
-LETTERING_CRAFT_HINTS: Dict[str, str] = {
+LETTERING_CRAFT_HINTS: dict[str, str] = {
     "none": "",
     "standard": (
         "speech balloons placed in reading order, tails clearly pointing to speaker, "
@@ -969,19 +967,19 @@ LETTERING_CRAFT_HINTS: Dict[str, str] = {
     ),
 }
 
-VALUE_PLAN_HINTS: Dict[str, str] = {
+VALUE_PLAN_HINTS: dict[str, str] = {
     "none": "",
     "bw_hierarchy": "black-white value hierarchy, three-step value grouping, focal point highest contrast",
     "color_script": "cohesive color script across page beats, controlled palette shifts, value-first readability",
 }
 
-SCREENTONE_PLAN_HINTS: Dict[str, str] = {
+SCREENTONE_PLAN_HINTS: dict[str, str] = {
     "none": "",
     "clean": "clean screentone application, moire-safe dot scale, controlled gradients on form turns",
     "dramatic": "dramatic screentone contrast, heavy blacks plus selective tone gradients for depth",
 }
 
-LINEWORK_TECHNIQUE_HINTS: Dict[str, str] = {
+LINEWORK_TECHNIQUE_HINTS: dict[str, str] = {
     "none": "",
     "clean_contour": "clean contour discipline, consistent edge control, intentional line economy",
     "expressive_weight": "expressive line-weight modulation, pressure-driven stroke hierarchy, focal contour emphasis",
@@ -990,7 +988,7 @@ LINEWORK_TECHNIQUE_HINTS: Dict[str, str] = {
     "calligraphic_ink": "calligraphic ink stroke cadence, brush-pressure flow, elegant taper variation",
 }
 
-RENDERING_TECHNIQUE_HINTS: Dict[str, str] = {
+RENDERING_TECHNIQUE_HINTS: dict[str, str] = {
     "none": "",
     "cel_anime": "anime cel-render technique, hard-value bands, selective highlight accents, contour-first readability",
     "painterly_2d": "painterly 2d rendering, edge-varied form turns, brush economy, focal-detail restraint",
@@ -999,7 +997,7 @@ RENDERING_TECHNIQUE_HINTS: Dict[str, str] = {
     "hybrid_2d3d": "hybrid 2d-3d render compositing, unified shading language, coherent stylization bridge",
 }
 
-SHADING_TECHNIQUE_PLAN_HINTS: Dict[str, str] = {
+SHADING_TECHNIQUE_PLAN_HINTS: dict[str, str] = {
     "none": "",
     "chiaroscuro": "chiaroscuro shadow design, dramatic light-dark grouping, narrative contrast control",
     "ambient_occlusion": "ambient-occlusion-aware contact shadowing, grounded object anchoring, subtle crevice depth",
@@ -1008,7 +1006,7 @@ SHADING_TECHNIQUE_PLAN_HINTS: Dict[str, str] = {
     "volumetric_depth": "volumetric depth shading, atmospheric light shafts, depth-staged value falloff",
 }
 
-MATERIAL_TECHNIQUE_HINTS: Dict[str, str] = {
+MATERIAL_TECHNIQUE_HINTS: dict[str, str] = {
     "none": "",
     "fabric_folds": "fabric rendering technique, fold-tension logic, weave-aware specular softness",
     "metal_surface": "metal rendering technique, anisotropic highlight direction, clean micro-scratch cue control",
@@ -1017,7 +1015,7 @@ MATERIAL_TECHNIQUE_HINTS: Dict[str, str] = {
     "paper_grain": "paper-grain technique, substrate interaction cues, dry/wet media response realism",
 }
 
-COMPOSITION_TECHNIQUE_HINTS: Dict[str, str] = {
+COMPOSITION_TECHNIQUE_HINTS: dict[str, str] = {
     "none": "",
     "rule_of_thirds": "rule-of-thirds composition technique, stable focal placement, balanced negative space",
     "leading_lines": "leading-lines composition technique, guided eye flow, perspective-driven narrative direction",
@@ -1026,7 +1024,7 @@ COMPOSITION_TECHNIQUE_HINTS: Dict[str, str] = {
     "negative_space": "negative-space composition technique, breathing-room control, high-intent visual hierarchy",
 }
 
-ARTIST_TECHNIQUE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+ARTIST_TECHNIQUE_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "digital_2d_master": {
         "linework_technique": "clean_contour",
@@ -1072,7 +1070,7 @@ ARTIST_TECHNIQUE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-COLOR_THEORY_HINTS: Dict[str, str] = {
+COLOR_THEORY_HINTS: dict[str, str] = {
     "none": "",
     "balanced": "60-30-10 color balance, focal color hierarchy, controlled saturation rhythm",
     "complementary": "complementary color contrast with controlled intensity and value-safe separation",
@@ -1085,7 +1083,7 @@ COLOR_THEORY_HINTS: Dict[str, str] = {
     "gamut_print": "print-safe gamut-aware color decisions, avoid out-of-gamut clipping and muddy conversion",
 }
 
-GRADIENT_BLEND_HINTS: Dict[str, str] = {
+GRADIENT_BLEND_HINTS: dict[str, str] = {
     "none": "",
     "clean": "clean gradient transitions, anti-banding ramps, controlled blend-mode stacking",
     "painterly": "painterly gradient transitions, edge-aware blending, visible brush-transition character",
@@ -1094,7 +1092,7 @@ GRADIENT_BLEND_HINTS: Dict[str, str] = {
     "volumetric": "volumetric gradient flow through fog/haze shafts with physically plausible falloff",
 }
 
-SHADING_TECHNIQUE_HINTS: Dict[str, str] = {
+SHADING_TECHNIQUE_HINTS: dict[str, str] = {
     "none": "",
     "cel": "cel-shading logic, hard shadow boundaries, intentional shadow-shape design",
     "soft_painterly": "soft painterly form-turn shading, edge hierarchy, controlled reflected-light accents",
@@ -1104,7 +1102,7 @@ SHADING_TECHNIQUE_HINTS: Dict[str, str] = {
     "subsurface": "subsurface scattering where appropriate, skin/wax translucency with restrained bloom",
 }
 
-RENDER_PIPELINE_HINTS: Dict[str, str] = {
+RENDER_PIPELINE_HINTS: dict[str, str] = {
     "none": "",
     "illustration_2d": "2d illustration render discipline, value-first readability, clean silhouette hierarchy",
     "anime_2d": "anime 2d render discipline, stable line/cel grammar, controlled highlight placement",
@@ -1114,7 +1112,7 @@ RENDER_PIPELINE_HINTS: Dict[str, str] = {
     "hybrid_2d3d": "hybrid 2d/3d render integration, unified lighting language, style-consistent material treatment",
 }
 
-COLOR_RENDER_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+COLOR_RENDER_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "anime_cel_master": {
         "color_theory_mode": "triadic",
@@ -1160,7 +1158,7 @@ COLOR_RENDER_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-ORIGINAL_CHARACTER_ARCHETYPES: Dict[str, str] = {
+ORIGINAL_CHARACTER_ARCHETYPES: dict[str, str] = {
     "none": "",
     "shonen_lead": "energetic protagonist silhouette, readable hero shape language, expressive action-ready posture",
     "cool_rival": "sharp rival silhouette, restrained expression set, angular design accents",
@@ -1171,7 +1169,7 @@ ORIGINAL_CHARACTER_ARCHETYPES: Dict[str, str] = {
     "space_pilot": "functional sci-fi costume logic, helmet/gear identity anchors, practical movement silhouette",
 }
 
-ARTIST_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+ARTIST_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "manga_cinematic": {
         "craft_profile": "manga_pro",
@@ -1383,7 +1381,7 @@ ARTIST_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-OC_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+OC_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "heroine_scifi": {
         "archetype": "space_pilot",
@@ -1411,7 +1409,7 @@ OC_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-BOOK_STYLE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+BOOK_STYLE_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "manga_nsfw_action": {
         "artist_pack": "manga_cinematic",
@@ -1439,7 +1437,7 @@ BOOK_STYLE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-HUMANIZE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
+HUMANIZE_PACK_PRESETS: dict[str, dict[str, str]] = {
     "none": {},
     "lite": {
         "humanize_profile": "lite",
@@ -1478,7 +1476,7 @@ HUMANIZE_PACK_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-HUMANIZE_PROFILE_HINTS: Dict[str, str] = {
+HUMANIZE_PROFILE_HINTS: dict[str, str] = {
     "none": "",
     "lite": "subtle hand-drawn irregularities, natural edge variance, avoid sterile symmetry",
     "balanced": "human-made mark-making cadence, varied stroke pressure, intentional imperfection rhythm",
@@ -1487,14 +1485,14 @@ HUMANIZE_PROFILE_HINTS: Dict[str, str] = {
     "filmic": "human-captured photographic feel, mild lens personality, natural scene imperfections",
 }
 
-HUMANIZE_IMPERFECTION_HINTS: Dict[str, str] = {
+HUMANIZE_IMPERFECTION_HINTS: dict[str, str] = {
     "none": "",
     "lite": "slight line wobble and tiny spacing variation where appropriate",
     "balanced": "controlled imperfection in line weight, texture breakup, and shape repetition",
     "strong": "pronounced hand-made variance in line rhythm, spacing, and micro-texture",
 }
 
-HUMANIZE_MATERIALITY_HINTS: Dict[str, str] = {
+HUMANIZE_MATERIALITY_HINTS: dict[str, str] = {
     "none": "",
     "paper": "subtle paper tooth interaction, natural ink absorption feel",
     "ink_paper": "ink-on-paper behavior, dry-brush streaks, halftone print texture discipline",
@@ -1503,14 +1501,14 @@ HUMANIZE_MATERIALITY_HINTS: Dict[str, str] = {
     "film": "organic film grain feel, photographic texture depth, non-digital tonal rolloff",
 }
 
-HUMANIZE_ASYMMETRY_HINTS: Dict[str, str] = {
+HUMANIZE_ASYMMETRY_HINTS: dict[str, str] = {
     "none": "",
     "lite": "natural facial asymmetry and non-mirrored detail placement",
     "balanced": "human asymmetry in features, posture, and repeated costume details",
     "strong": "clearly non-mirrored human asymmetry across face, pose, and accessories",
 }
 
-HUMANIZE_NEGATIVE_HINTS: Dict[str, str] = {
+HUMANIZE_NEGATIVE_HINTS: dict[str, str] = {
     "none": "",
     "lite": "plastic skin, over-smoothed gradients, sterile perfect symmetry",
     "balanced": "ai soup texture, uniform procedural lines, copy-paste detail repetition, uncanny perfection",
@@ -1538,7 +1536,7 @@ PRINT_FINISH_HINT = "print-ready line weight, crisp halftone, no banding, clean 
 COVER_SPOTLIGHT_HINT = "strong focal point on hero figure, title area reserved, balanced negative space for typography"
 
 # Panel / grid hints (sequential art — model follows training; these are soft cues)
-PANEL_LAYOUT_HINTS: Dict[str, str] = {
+PANEL_LAYOUT_HINTS: dict[str, str] = {
     "none": "",
     "single": "single full-bleed panel, one clear focal composition",
     "two_panel_horizontal": "two horizontal panels stacked, clear gutter between tiers",
@@ -1554,7 +1552,7 @@ PANEL_LAYOUT_HINTS: Dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 # Webtoon / scroll: tall canvas; many models trained near 512–768 short side
-ASPECT_PRESETS: Dict[str, Tuple[int, int]] = {
+ASPECT_PRESETS: dict[str, tuple[int, int]] = {
     "none": (0, 0),
     "square": (512, 512),
     "print_manga": (768, 1024),  # portrait page-ish
@@ -1632,7 +1630,7 @@ def suggest_negative_addon(
     return f"{u}, {extra}"
 
 
-def aspect_dimensions(preset_name: str) -> Tuple[int, int]:
+def aspect_dimensions(preset_name: str) -> tuple[int, int]:
     key = (preset_name or "none").lower().strip()
     return ASPECT_PRESETS.get(key, (0, 0))
 
@@ -1674,7 +1672,7 @@ def resolve_color_render_controls(
     shading_technique: str = "none",
     render_pipeline: str = "none",
     color_render_extra: str = "",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve color/render controls from one preset pack + explicit overrides.
     """
@@ -1729,7 +1727,7 @@ def resolve_artist_technique_controls(
     material_technique: str = "none",
     composition_technique: str = "none",
     artist_technique_extra: str = "",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve artist-technique controls from preset pack + explicit overrides.
     """
@@ -1798,7 +1796,7 @@ def resolve_art_medium_controls(
     art_medium_family: str = "none",
     art_medium_variant: str = "none",
     art_medium_extra: str = "",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve broad art-medium controls from one pack + explicit overrides.
     """
@@ -1826,7 +1824,7 @@ def art_medium_bundle(
     """
     Build prompt fragments for broad medium families + concrete variants.
     """
-    bits: List[str] = []
+    bits: list[str] = []
     hint = _lookup_medium_hint(family, variant)
     if hint:
         bits.append(hint)
@@ -1900,7 +1898,7 @@ def resolve_artist_controls(
     lettering_craft: str = "none",
     value_plan: str = "none",
     screentone_plan: str = "none",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve artist controls from a preset pack + explicit CLI overrides.
 
@@ -1943,7 +1941,7 @@ def resolve_oc_controls(
     silhouette: str = "",
     color_motifs: str = "",
     expression_sheet: str = "",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve OC controls from a preset pack + explicit CLI overrides.
     """
@@ -1979,7 +1977,7 @@ def resolve_book_style_controls(
     book_style_pack: str = "none",
     artist_pack: str = "none",
     oc_pack: str = "none",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve higher-level style controls from one pack + explicit overrides.
 
@@ -2006,7 +2004,7 @@ def resolve_humanize_controls(
     materiality_mode: str = "none",
     asymmetry_level: str = "none",
     negative_level: str = "none",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Resolve humanization controls from one pack + explicit overrides.
     """
@@ -2035,7 +2033,7 @@ def infer_auto_humanize_controls(
     *,
     book_type: str = "manga",
     lexicon_style: str = "none",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Infer practical default humanization settings from high-level intent.
     """
@@ -2053,7 +2051,7 @@ def infer_auto_humanize_controls(
     return resolve_humanize_controls(humanize_pack="balanced")
 
 
-def _tokenize_style_query(text: str) -> List[str]:
+def _tokenize_style_query(text: str) -> list[str]:
     cleaned = "".join(ch.lower() if (ch.isalnum() or ch == "_") else " " for ch in str(text or ""))
     return [t for t in cleaned.split() if t]
 
@@ -2063,7 +2061,7 @@ def suggest_popular_style_presets(
     *,
     category: str = "all",
     limit: int = 10,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """
     Rank curated popular style presets by free-text query overlap.
 
@@ -2076,7 +2074,7 @@ def suggest_popular_style_presets(
     cat = str(category or "all").strip().lower()
     k = max(1, int(limit))
 
-    scored: List[Dict[str, str]] = []
+    scored: list[dict[str, str]] = []
     for row in POPULAR_STYLE_PRESETS:
         row_cat = str(row.get("category", "")).lower()
         if cat not in ("", "all") and row_cat != cat:

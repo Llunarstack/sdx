@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import traceback
-from typing import Any, Tuple
+from typing import Any
 
 from .context import PromptArtifacts, PromptContext, StackMode
 from .runner import run_prompt_stack
@@ -39,7 +39,7 @@ def apply_sample_prompt_stack(
     character_negative_additions: str = "",
     scene_negative_additions: str = "",
     apply_scale_distortion: bool = False,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Run the unified prompt stack for ``sample.py`` (guidance → negative → controls → finalize).
 
@@ -82,11 +82,11 @@ def apply_sample_prompt_stack(
             traceback.print_exc()
         return prompt_to_encode, _fallback_negative(args, prompt_to_encode)
 
-    setattr(args, "_encode_t5_positive_hint", result.t5_positive_hint or "")
+    args._encode_t5_positive_hint = result.t5_positive_hint or ""
     if result.analysis:
-        setattr(args, "_prompt_stack_analysis", result.analysis)
+        args._prompt_stack_analysis = result.analysis
     if result.resolved_controls:
-        setattr(args, "_prompt_stack_controls", result.resolved_controls)
+        args._prompt_stack_controls = result.resolved_controls
     if os.environ.get("SDX_PROMPT_STACK_TRACE", "").strip():
         print("Prompt stack trace:", " -> ".join(result.trace), file=sys.stderr)
 

@@ -3,10 +3,10 @@ Creative RAG (Retrieval-Augmented Generation) engine for SDX.
 
 Bridges the gap between "statistically probable" and "genuinely novel" by:
 
-1. **Image understanding** — uses moondream2 (pretrained/moondream2) to deeply
+1. **Image understanding** — uses moondream3 (or legacy moondream2) to deeply
    describe a reference image in correlation with the user's prompt intent.
-2. **Concept synthesis** — uses Qwen2.5-14B (pretrained/Qwen2.5-14B-Instruct) to
-   reason about the prompt + image description and generate novel creative directions
+2. **Concept synthesis** — uses Qwen3-14B (falls back to local Qwen2.5-14B-Instruct)
+   to reason about the prompt + image description and generate novel creative directions
    that go beyond what the model would produce by default.
 3. **Fact grounding** — merges retrieved facts (from GenSearcher or any JSONL source)
    into the prompt via the existing rag_prompt.py pipeline.
@@ -35,17 +35,24 @@ from __future__ import annotations
 import hashlib
 import re
 import textwrap
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+
+from utils.modeling.model_paths import (
+    default_gen_searcher_8b_path,
+    default_moondream2_path,
+    default_qwen_path,
+    repo_root,
+)
 
 # ---------------------------------------------------------------------------
-# Pretrained model paths (mirrors utils/modeling/model_paths.py conventions)
+# Pretrained model paths (prefer 2026 defaults; honor legacy local folders)
 # ---------------------------------------------------------------------------
-_PRETRAINED_ROOT = Path(__file__).resolve().parents[2] / "pretrained"
-_MOONDREAM_PATH = _PRETRAINED_ROOT / "moondream2"
-_QWEN_PATH = _PRETRAINED_ROOT / "Qwen2.5-14B-Instruct"
-_GENSEARCHER_PATH = _PRETRAINED_ROOT / "GenSearcher-8B"
+_PRETRAINED_ROOT = repo_root() / "pretrained"
+_MOONDREAM_PATH = Path(default_moondream2_path())
+_QWEN_PATH = Path(default_qwen_path())
+_GENSEARCHER_PATH = Path(default_gen_searcher_8b_path())
 
 # Aligned with multi-reference ingestion (API-style caps); dissect/RAG facts use full list.
 MAX_REFERENCE_IMAGES_RAG = 16
@@ -65,8 +72,8 @@ class RAGEnrichmentResult:
     negative_additions: str
     reasoning: str
     image_description: str = ""
-    retrieved_facts: List[str] = field(default_factory=list)
-    concept_layers: Dict[str, str] = field(default_factory=dict)
+    retrieved_facts: list[str] = field(default_factory=list)
+    concept_layers: dict[str, str] = field(default_factory=dict)
     novelty_score: float = 0.0  # 0–1: how much was added vs original
     fallback_used: bool = False  # True when heavy models were unavailable
 
@@ -76,7 +83,7 @@ class RAGEnrichmentResult:
 # ---------------------------------------------------------------------------
 
 # Intent keywords → semantic layer
-_LAYER_PATTERNS: Dict[str, List[str]] = {
+_LAYER_PATTERNS: dict[str, list[str]] = {
     "subject": [
         r"\b(\d+)?(girl|boy|woman|man|person|character|figure|warrior|samurai|knight|"
         r"wizard|mage|elf|dragon|creature|robot|android|alien|cat|dog|animal)\b",
@@ -107,7 +114,7 @@ _LAYER_PATTERNS: Dict[str, List[str]] = {
 }
 
 # Per-layer enrichment vocabulary (used in fallback path)
-_LAYER_ENRICHMENTS: Dict[str, List[str]] = {
+_LAYER_ENRICHMENTS: dict[str, list[str]] = {
     "subject": [
         "intricate costume details",
         "expressive micro-expressions",
@@ -155,7 +162,7 @@ _LAYER_ENRICHMENTS: Dict[str, List[str]] = {
 }
 
 # Cross-domain creative bridges: when two layers co-occur, add these
-_CROSS_DOMAIN_BRIDGES: Dict[Tuple[str, str], List[str]] = {
+_CROSS_DOMAIN_BRIDGES: dict[tuple[str, str], list[str]] = {
     ("mood", "style"): [
         "style-mood unity",
         "medium reinforces emotion",
@@ -184,7 +191,7 @@ _CROSS_DOMAIN_BRIDGES: Dict[Tuple[str, str], List[str]] = {
 }
 
 # Novelty injection: concepts that push beyond statistical defaults
-_NOVELTY_INJECTIONS: Dict[str, List[str]] = {
+_NOVELTY_INJECTIONS: dict[str, list[str]] = {
     "composition": [
         "unexpected negative space",
         "asymmetric visual weight",
@@ -224,10 +231,10 @@ _NOVELTY_INJECTIONS: Dict[str, List[str]] = {
 }
 
 
-def _decompose_prompt(prompt: str) -> Dict[str, List[str]]:
+def _decompose_prompt(prompt: str) -> dict[str, list[str]]:
     """Extract semantic layers from a prompt using regex patterns."""
     p = prompt.lower()
-    found: Dict[str, List[str]] = {}
+    found: dict[str, list[str]] = {}
     for layer, patterns in _LAYER_PATTERNS.items():
         matches = []
         for pat in patterns:
@@ -242,10 +249,10 @@ def _decompose_prompt(prompt: str) -> Dict[str, List[str]]:
 
 def _build_fallback_enrichment(
     prompt: str,
-    layers: Dict[str, List[str]],
+    layers: dict[str, list[str]],
     creativity_level: float,
     rng_seed: int,
-) -> Tuple[str, str, Dict[str, str]]:
+) -> tuple[str, str, dict[str, str]]:
     """
     Pure-Python enrichment when heavy models are unavailable.
     Returns (additions_csv, negative_additions, concept_layers_dict).
@@ -254,8 +261,8 @@ def _build_fallback_enrichment(
 
     rng = random.Random(rng_seed)
 
-    additions: List[str] = []
-    concept_layers: Dict[str, str] = {}
+    additions: list[str] = []
+    concept_layers: dict[str, str] = {}
 
     # Per-layer enrichments
     for layer, matches in layers.items():
@@ -288,7 +295,7 @@ def _build_fallback_enrichment(
 
     # Deduplicate while preserving order
     seen: set = set()
-    deduped: List[str] = []
+    deduped: list[str] = []
     for a in additions:
         k = a.lower().strip()
         if k not in seen and k not in prompt.lower():
@@ -340,7 +347,7 @@ def _moondream_describe_many(
         model.eval()
 
         n = len(paths)
-        chunks: List[str] = []
+        chunks: list[str] = []
         for i, path in enumerate(paths):
             img = _PIL_Image.open(path).convert("RGB")
             question = (
@@ -388,13 +395,13 @@ def _moondream_describe(
 def _qwen_synthesize(
     prompt: str,
     image_description: str,
-    facts: List[str],
-    layers: Dict[str, List[str]],
+    facts: list[str],
+    layers: dict[str, list[str]],
     creativity_level: float,
     *,
     device: str = "cpu",
     max_new_tokens: int = 512,
-) -> Tuple[str, str, str]:
+) -> tuple[str, str, str]:
     """
     Use Qwen2.5-14B to synthesize novel creative directions.
     Returns (enriched_additions, negative_additions, reasoning).
@@ -539,7 +546,7 @@ class CreativeRAGEngine:
         cache_size: int = 64,
     ) -> None:
         self._device = device
-        self._cache: Dict[str, RAGEnrichmentResult] = {}
+        self._cache: dict[str, RAGEnrichmentResult] = {}
         self._cache_size = cache_size
 
     def _cache_key(self, prompt: str, ref_paths_seq: Sequence[str], creativity_level: float) -> str:
@@ -551,9 +558,9 @@ class CreativeRAGEngine:
         self,
         prompt: str,
         *,
-        reference_image_path: Optional[str] = None,
-        reference_image_paths: Optional[Sequence[str]] = None,
-        facts: Optional[Sequence[str]] = None,
+        reference_image_path: str | None = None,
+        reference_image_paths: Sequence[str] | None = None,
+        facts: Sequence[str] | None = None,
         creativity_level: float = 0.7,
         seed: int = 42,
         use_qwen: bool = True,
@@ -578,8 +585,8 @@ class CreativeRAGEngine:
                 0.6 = balanced novelty + coherence
                 0.9 = push hard for genuinely unexpected directions
             seed: Deterministic seed for reproducible enrichment.
-            use_qwen: Whether to attempt Qwen2.5 synthesis (requires pretrained/Qwen2.5-14B-Instruct).
-            use_moondream: Whether to attempt moondream2 image understanding (requires pretrained/moondream2).
+            use_qwen: Whether to attempt Qwen synthesis (prefers pretrained/Qwen3-14B).
+            use_moondream: Whether to attempt moondream image understanding (prefers moondream3).
             max_additions: Maximum number of additions to append to the prompt.
 
         Returns:
@@ -595,7 +602,7 @@ class CreativeRAGEngine:
             )
 
         # Normalize reference images: keep backwards compatibility with single path.
-        ref_paths: List[str] = []
+        ref_paths: list[str] = []
         if reference_image_paths:
             ref_paths = [str(p) for p in reference_image_paths if p and str(p).strip()]
         if reference_image_path and str(reference_image_path).strip():
@@ -645,7 +652,7 @@ class CreativeRAGEngine:
         negative_additions = ""
         reasoning = ""
         fallback_used = False
-        concept_layers: Dict[str, str] = {}
+        concept_layers: dict[str, str] = {}
 
         if use_qwen and _QWEN_PATH.exists():
             enriched_additions, negative_additions, reasoning = _qwen_synthesize(
@@ -722,7 +729,7 @@ class CreativeRAGEngine:
         prompt: str,
         facts_path: str,
         *,
-        reference_image_path: Optional[str] = None,
+        reference_image_path: str | None = None,
         creativity_level: float = 0.7,
         max_facts: int = 16,
         seed: int = 42,
@@ -744,7 +751,7 @@ class CreativeRAGEngine:
         prompt: str,
         searcher_json_path: str,
         *,
-        reference_image_path: Optional[str] = None,
+        reference_image_path: str | None = None,
         creativity_level: float = 0.7,
         max_facts: int = 16,
         seed: int = 42,
@@ -767,13 +774,13 @@ class CreativeRAGEngine:
 # ---------------------------------------------------------------------------
 
 
-def _facts_to_tokens(facts: List[str], max_tokens: int = 4) -> str:
+def _facts_to_tokens(facts: list[str], max_tokens: int = 4) -> str:
     """
     Distill a list of facts into a small set of prompt-compatible tokens.
     Extracts the most concrete, visually-relevant nouns and adjectives.
     """
     # Simple heuristic: extract capitalized nouns and distinctive adjectives
-    tokens: List[str] = []
+    tokens: list[str] = []
     seen: set = set()
     for fact in facts[: max_tokens * 3]:
         # Extract short phrases (1-3 words) that look like visual descriptors
@@ -825,7 +832,7 @@ def _facts_to_tokens(facts: List[str], max_tokens: int = 4) -> str:
 # Module-level convenience function
 # ---------------------------------------------------------------------------
 
-_default_engine: Optional[CreativeRAGEngine] = None
+_default_engine: CreativeRAGEngine | None = None
 
 
 def get_default_engine(device: str = "cpu") -> CreativeRAGEngine:
@@ -839,9 +846,9 @@ def get_default_engine(device: str = "cpu") -> CreativeRAGEngine:
 def enrich_prompt(
     prompt: str,
     *,
-    reference_image_path: Optional[str] = None,
-    reference_image_paths: Optional[Sequence[str]] = None,
-    facts: Optional[Sequence[str]] = None,
+    reference_image_path: str | None = None,
+    reference_image_paths: Sequence[str] | None = None,
+    facts: Sequence[str] | None = None,
     creativity_level: float = 0.7,
     seed: int = 42,
     device: str = "cpu",

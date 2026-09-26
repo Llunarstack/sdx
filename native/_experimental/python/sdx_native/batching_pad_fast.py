@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -12,7 +12,7 @@ def pad_1d_sequences(
     *,
     pad_value: float = 0.0,
     dtype: np.dtype = np.float32,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Pad list of 1D arrays to ``(B, T_max)``. Returns ``(batch, lengths)`` where lengths is ``(B,)`` int64.
     """
@@ -28,7 +28,7 @@ def pad_1d_sequences(
     return out, lens
 
 
-def pad_2d_hw(images: Sequence[np.ndarray], *, pad_value: float = 0.0) -> Tuple[np.ndarray, Tuple[int, int]]:
+def pad_2d_hw(images: Sequence[np.ndarray], *, pad_value: float = 0.0) -> tuple[np.ndarray, tuple[int, int]]:
     """Pad ``(H,W,C)`` images to common ``Hmax,Wmax`` (bottom-right align)."""
     if not images:
         raise ValueError("empty")

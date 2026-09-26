@@ -14,11 +14,11 @@ import json
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
-JsonlRow = Dict[str, Any]
+JsonlRow = dict[str, Any]
 
 
 def _l2_normalize_rows(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -33,7 +33,7 @@ class InMemoryVectorIndex:
     """
 
     embeddings: np.ndarray
-    rows: List[JsonlRow]
+    rows: list[JsonlRow]
     normalized: bool = False
 
     def __post_init__(self) -> None:
@@ -47,7 +47,7 @@ class InMemoryVectorIndex:
         else:
             self._z = _l2_normalize_rows(self.embeddings)
 
-    def topk_cosine(self, query: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    def topk_cosine(self, query: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
         """Return (indices, scores) for k largest cosine similarities."""
         q = np.asarray(query, dtype=np.float32).reshape(1, -1)
         q = _l2_normalize_rows(q)
@@ -64,7 +64,7 @@ class InMemoryVectorIndex:
         batch_size: int,
         similarity_focus: float = 0.5,
         k_neighbors: int = 32,
-    ) -> List[JsonlRow]:
+    ) -> list[JsonlRow]:
         """
         Mix uniform random rows with neighbors of a random anchor (focus on "dense" regions of embedding space).
         ``similarity_focus`` in [0,1]: fraction of batch drawn from neighbor pool.
@@ -75,7 +75,7 @@ class InMemoryVectorIndex:
         anchor = rng.randrange(n)
         neigh_idx, _ = self.topk_cosine(self.embeddings[anchor], max(k_neighbors, batch_size))
         pool = list(neigh_idx)
-        out: List[JsonlRow] = []
+        out: list[JsonlRow] = []
         n_sim = int(round(batch_size * similarity_focus))
         n_uni = batch_size - n_sim
         for _ in range(n_sim):
@@ -95,7 +95,7 @@ def load_jsonl_embeddings_npz(
     """
     z = np.load(npz_path)
     emb = np.asarray(z["embeddings"], dtype=np.float32)
-    rows: List[JsonlRow] = []
+    rows: list[JsonlRow] = []
     with jsonl_path.open(encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -118,7 +118,7 @@ class QdrantVectorSampler:
         *,
         url: str = "http://127.0.0.1:6333",
         collection: str = "sdx_training",
-        vector_name: Optional[str] = None,
+        vector_name: str | None = None,
     ) -> None:
         try:
             from qdrant_client import QdrantClient  # type: ignore[import-untyped]
@@ -128,9 +128,9 @@ class QdrantVectorSampler:
         self._collection = collection
         self._vector_name = vector_name
 
-    def search(self, query: np.ndarray, k: int) -> List[Dict[str, Any]]:
+    def search(self, query: np.ndarray, k: int) -> list[dict[str, Any]]:
         qv = query.astype(np.float32).reshape(-1).tolist()
-        kwargs: Dict[str, Any] = {"collection_name": self._collection, "query_vector": qv, "limit": k}
+        kwargs: dict[str, Any] = {"collection_name": self._collection, "query_vector": qv, "limit": k}
         if self._vector_name:
             kwargs["using"] = self._vector_name
         hits = self._client.search(**kwargs)
@@ -142,8 +142,8 @@ class QdrantVectorSampler:
             out.append(pl)
         return out
 
-    def scroll_all_ids(self, batch: int = 256) -> List[Union[str, int]]:
-        ids: List[Union[str, int]] = []
+    def scroll_all_ids(self, batch: int = 256) -> list[str | int]:
+        ids: list[str | int] = []
         offset = None
         while True:
             points, offset = self._client.scroll(self._collection, limit=batch, offset=offset, with_payload=False)

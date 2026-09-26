@@ -1,0 +1,30 @@
+{
+  "description": "print poster for a coffee roaster, paper stock, tight grid, not a photo of a poster on a wall",
+  "style": {
+    "color_palette": ["#C41E3A", "#1A1A2E", "#F4E8D0"]
+  },
+  "compositional_deconstruction": {
+    "elements": [
+      {
+        "type": "text",
+        "name": "headline",
+        "text": "NIGHT ROAST",
+        "desc": "bold condensed sans, high-contrast knockout type",
+        "bbox": [80, 80, 220, 920]
+      },
+      {
+        "type": "text",
+        "name": "subhead",
+        "text": "EST. 2011",
+        "desc": "small tracking-out caps under the title",
+        "bbox": [230, 80, 300, 920]
+      },
+      {
+        "type": "obj",
+        "name": "product",
+        "desc": "single ceramic cup, steam, centered below the type, no extra props",
+        "bbox": [340, 220, 880, 780]
+      }
+    ]
+  }
+}

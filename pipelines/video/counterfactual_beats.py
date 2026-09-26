@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, List, Mapping, Sequence
+from typing import Any
 
 __all__ = [
     "CounterfactualBranch",
@@ -25,12 +26,12 @@ class CounterfactualBranch:
 
 @dataclass(slots=True)
 class CounterfactualPlan:
-    branches: List[CounterfactualBranch] = field(default_factory=list)
+    branches: list[CounterfactualBranch] = field(default_factory=list)
     merge_strategy: str = "none"  # none | montage | choose_one
 
 
-def parse_counterfactuals(raw: Any) -> tuple[List[CounterfactualBranch], str]:
-    branches: List[CounterfactualBranch] = []
+def parse_counterfactuals(raw: Any) -> tuple[list[CounterfactualBranch], str]:
+    branches: list[CounterfactualBranch] = []
     strategy = "none"
     if isinstance(raw, Mapping):
         strategy = str(raw.get("merge_strategy") or raw.get("strategy") or "none")

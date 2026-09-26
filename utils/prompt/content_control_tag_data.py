@@ -18,16 +18,15 @@ from __future__ import annotations
 import csv
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 _TAG_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "prompt_tags"
 
 
-def _expand_refs_in_table(raw: Dict[str, Dict[str, List[str]]]) -> Dict[str, Dict[str, List[str]]]:
+def _expand_refs_in_table(raw: dict[str, dict[str, list[str]]]) -> dict[str, dict[str, list[str]]]:
     """Expand ``__REF__:pack`` rows by splicing the referenced pack's flat ``_`` tags (in order)."""
 
-    def expand_list(tags: List[str], stack: List[str]) -> List[str]:
-        out: List[str] = []
+    def expand_list(tags: list[str], stack: list[str]) -> list[str]:
+        out: list[str] = []
         for t in tags:
             if t.startswith("__REF__:"):
                 name = t[8:].strip()
@@ -44,7 +43,7 @@ def _expand_refs_in_table(raw: Dict[str, Dict[str, List[str]]]) -> Dict[str, Dic
 
 def load_tag_tables(
     directory: Path | None = None,
-) -> Dict[str, Dict[str, List[str]]]:
+) -> dict[str, dict[str, list[str]]]:
     """
     Merge all ``*.csv`` under ``directory`` into ``{pack: {mode: [tags...]}}``.
     Missing directory or files returns empty dict (caller may fall back).
@@ -53,7 +52,7 @@ def load_tag_tables(
     if not root.is_dir():
         return {}
 
-    merged: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
+    merged: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     for path in sorted(root.glob("*.csv")):
         try:
             with path.open(newline="", encoding="utf-8-sig") as f:
@@ -77,18 +76,18 @@ def load_tag_tables(
     return _expand_refs_in_table(plain)
 
 
-def flat_pack(tables: Dict[str, Dict[str, List[str]]], pack: str) -> List[str]:
+def flat_pack(tables: dict[str, dict[str, list[str]]], pack: str) -> list[str]:
     return list((tables.get(pack) or {}).get("_", []))
 
 
-def dict_pack(tables: Dict[str, Dict[str, List[str]]], pack: str) -> Dict[str, List[str]]:
+def dict_pack(tables: dict[str, dict[str, list[str]]], pack: str) -> dict[str, list[str]]:
     d = tables.get(pack) or {}
     return {k: list(v) for k, v in d.items()}
 
 
-def conflicting_pairs_from_table(tables: Dict[str, Dict[str, List[str]]]) -> List[Tuple[str, str]]:
+def conflicting_pairs_from_table(tables: dict[str, dict[str, list[str]]]) -> list[tuple[str, str]]:
     rows = flat_pack(tables, "conflicting_tag_pairs")
-    out: List[Tuple[str, str]] = []
+    out: list[tuple[str, str]] = []
     for r in rows:
         if "|||" in r:
             a, b = r.split("|||", 1)

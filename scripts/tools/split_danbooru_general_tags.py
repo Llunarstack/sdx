@@ -21,7 +21,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 
 def _wrap(s: str) -> str:
@@ -34,7 +33,7 @@ def matches_pattern(tag: str, pattern: str) -> bool:
     return _wrap(pattern) in _wrap(tag)
 
 
-def load_rules(path: Path) -> Tuple[List[str], Dict[str, List[str]]]:
+def load_rules(path: Path) -> tuple[list[str], dict[str, list[str]]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     order = list(data["bucket_order"])
     patterns = {k: list(v) for k, v in data["patterns"].items()}
@@ -45,10 +44,10 @@ def split_general(
     general_path: Path,
     rules_path: Path,
     out_dir: Path,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     order, patterns = load_rules(rules_path)
     # Ensure all pattern buckets exist in order
-    buckets: Dict[str, List[str]] = {b: [] for b in order}
+    buckets: dict[str, list[str]] = {b: [] for b in order}
     buckets["general_other"] = []
 
     with general_path.open(encoding="utf-8") as f:
@@ -72,7 +71,7 @@ def split_general(
                 buckets["general_other"].append(line + "\n")
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    counts: Dict[str, int] = {}
+    counts: dict[str, int] = {}
     for name, lines in buckets.items():
         p = out_dir / f"{name}.txt"
         p.write_text("".join(lines), encoding="utf-8")

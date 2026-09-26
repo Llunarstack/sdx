@@ -21,7 +21,7 @@ image** tokens in ``sample.py``; **SFP** spectral training loss; **logit-normal*
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Protocol
 
 import torch
 import torch.nn.functional as F
@@ -35,8 +35,8 @@ import torch.nn.functional as F
 class DualStageLatentPlan:
     """Coarse layout latent grid vs target fine grid (both in VAE latent units, i.e. px/8)."""
 
-    layout_latent_hw: Tuple[int, int]
-    target_latent_hw: Tuple[int, int]
+    layout_latent_hw: tuple[int, int]
+    target_latent_hw: tuple[int, int]
     layout_steps: int
     detail_steps: int
 
@@ -72,15 +72,15 @@ def plan_dual_stage_latents(
 
 
 def apply_size_embed_to_model_kwargs(
-    model_kwargs_cond: Dict,
-    model_kwargs_uncond: Dict,
+    model_kwargs_cond: dict,
+    model_kwargs_uncond: dict,
     *,
     cfg,
     cond_emb: torch.Tensor,
     latent_h: int,
     latent_w: int,
     device: torch.device,
-) -> Tuple[Dict, Dict]:
+) -> tuple[dict, dict]:
     """Copy kwargs and set ``size_embed`` for PixArt-style models (no-op if ``size_embed_dim`` is 0)."""
     mc = dict(model_kwargs_cond)
     mu = dict(model_kwargs_uncond)
@@ -138,7 +138,7 @@ class GlyphEncoderProtocol(Protocol):
 
     embed_dim: int
 
-    def encode_utf8(self, texts: List[str], device: torch.device) -> torch.Tensor:
+    def encode_utf8(self, texts: list[str], device: torch.device) -> torch.Tensor:
         """Return (B, L, D) tensor to fuse with T5/CLIP (model-specific wiring not done here)."""
         ...
 
@@ -148,7 +148,7 @@ class NullGlyphEncoder:
 
     embed_dim: int = 64
 
-    def encode_utf8(self, texts: List[str], device: torch.device) -> torch.Tensor:
+    def encode_utf8(self, texts: list[str], device: torch.device) -> torch.Tensor:
         b = max(1, len(texts))
         return torch.zeros((b, 1, self.embed_dim), device=device, dtype=torch.float32)
 
@@ -187,7 +187,7 @@ def score_latent_prompt_alignment(
     latent: torch.Tensor,
     prompt: str,
     *,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     clip_model_id: str = "",
     vae: Any = None,
     latent_scale: float = 1.0,
@@ -252,7 +252,7 @@ class TemporalHarmonizerStub:
     def condition_latent(
         self,
         latent_t: torch.Tensor,
-        latent_prev: Optional[torch.Tensor] = None,
+        latent_prev: torch.Tensor | None = None,
         *,
         alpha_prev: float = 0.0,
     ) -> torch.Tensor:

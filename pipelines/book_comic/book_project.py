@@ -21,7 +21,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
 BOOK_JSON = "book.json"
 COVERS_DIR = "covers"
@@ -38,11 +38,11 @@ class BookProject:
     ckpt: str = ""
     book_type: str = "comic"
     model_note: str = "Uses the same DiT-Text checkpoint as train.py / sample.py (one generative model)."
-    entries: List[Dict[str, Any]] = field(default_factory=list)
-    extra: Dict[str, Any] = field(default_factory=dict)
+    entries: list[dict[str, Any]] = field(default_factory=list)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def open(cls, path: Union[str, Path], *, create: bool = True) -> BookProject:
+    def open(cls, path: str | Path, *, create: bool = True) -> BookProject:
         root = Path(path).resolve()
         if create:
             root.mkdir(parents=True, exist_ok=True)
@@ -60,7 +60,7 @@ class BookProject:
         return proj
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], *, root: Path) -> BookProject:
+    def from_dict(cls, data: dict[str, Any], *, root: Path) -> BookProject:
         ent = data.get("entries")
         entries = [e for e in ent if isinstance(e, dict)] if isinstance(ent, list) else []
         return cls(
@@ -93,7 +93,7 @@ class BookProject:
     def covers_dir(self) -> Path:
         return self.root / COVERS_DIR
 
-    def add_entry(self, entry: Dict[str, Any]) -> None:
+    def add_entry(self, entry: dict[str, Any]) -> None:
         self.entries.append(dict(entry))
 
     def rel(self, path: Path) -> str:
@@ -102,8 +102,8 @@ class BookProject:
         except ValueError:
             return path.name
 
-    def to_dict(self) -> Dict[str, Any]:
-        out: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
             "version": 1,
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "title": self.title,
@@ -144,7 +144,7 @@ class BookProject:
             check_files=True,
         )
 
-    def export_book_manifest(self) -> Dict[str, Any]:
+    def export_book_manifest(self) -> dict[str, Any]:
         """Shape compatible with ``book_manifest.json`` validators."""
         return {
             "ckpt": self.ckpt,

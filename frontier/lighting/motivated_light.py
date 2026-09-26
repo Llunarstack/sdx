@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class LightPattern(str, Enum):
@@ -26,7 +25,7 @@ class LightSetup:
     negative: str
 
 
-_RULES: Tuple[Tuple[re.Pattern, LightPattern, str, str], ...] = (
+_RULES: tuple[tuple[re.Pattern, LightPattern, str, str], ...] = (
     (
         re.compile(r"\b(rembrandt|triangle shadow|classic portrait light)\b", re.I),
         LightPattern.REMBRANDT,
@@ -92,7 +91,7 @@ class LightingPlanner:
             )
         return LightSetup(LightPattern.OVERCAST, "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         s = self.plan(prompt)
         return s.positive, s.negative
 

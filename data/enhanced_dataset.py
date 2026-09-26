@@ -15,7 +15,7 @@ JSONL fields (all optional, extend the base t2i_dataset.py schema):
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -46,7 +46,7 @@ class EnhancedT2IDataset(Text2ImageDataset):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _load_spatial_layout(self, raw: Any) -> Optional[torch.Tensor]:
+    def _load_spatial_layout(self, raw: Any) -> torch.Tensor | None:
         """
         Parse spatial layout from JSONL field.
         raw: list of [x1, y1, x2, y2] normalised bboxes, or None.
@@ -65,7 +65,7 @@ class EnhancedT2IDataset(Text2ImageDataset):
             t[i] = torch.tensor(box, dtype=torch.float32)
         return t
 
-    def _load_anatomy_mask(self, mask_rel: str, image_path: str, idx: int) -> Optional[torch.Tensor]:
+    def _load_anatomy_mask(self, mask_rel: str, image_path: str, idx: int) -> torch.Tensor | None:
         """Load anatomy mask and resize to patch grid. Returns (1, H, W) float32."""
         rp = self._resolve_aux_path(mask_rel)
         if rp is None or not rp.exists():
@@ -87,7 +87,7 @@ class EnhancedT2IDataset(Text2ImageDataset):
         self,
         tokens: Any,
         positions: Any,
-    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         """
         Parse text tokens and positions.
         tokens: list of strings
@@ -122,7 +122,7 @@ class EnhancedT2IDataset(Text2ImageDataset):
     # __getitem__
     # ------------------------------------------------------------------
 
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         out = super().__getitem__(idx)
         s = self.samples[idx]
 
@@ -165,7 +165,7 @@ class EnhancedT2IDataset(Text2ImageDataset):
         return out
 
 
-def collate_enhanced(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+def collate_enhanced(batch: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Collate function for EnhancedT2IDataset.
     Stacks enhanced tensors when all samples have them; otherwise omits the key.

@@ -12,4 +12,4 @@ Expected layout (see root `.gitignore`):
 - `tags/buckets/*.txt` — bucketed splits  
 - `tags/all_tags_categorized.txt` — merged categorized file (when used)  
 
-Training from Hugging Face Danbooru-style datasets is described in [docs/DANBOORU_HF.md](../../docs/DANBOORU_HF.md).
+Training from Hugging Face Danbooru-style datasets is described in [docs/DANBOORU_HF.md](../../docs/guides/DANBOORU_HF.md).

@@ -5,7 +5,6 @@ Defaults for the **Agentic Stack** (``utils/agentic/``).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass(slots=True)
@@ -22,7 +21,7 @@ class AgenticStackDefaults:
     trajectory_variants: int = 3
     evolve_iterations: int = 2
     superior_preset: str = "superior"
-    extra_sample_args: List[str] = field(
+    extra_sample_args: list[str] = field(
         default_factory=lambda: [
             "--zeresfdg-strength",
             "1",

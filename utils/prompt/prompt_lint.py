@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)
 
 
-def tokenize_normalized(text: str) -> List[str]:
+def tokenize_normalized(text: str) -> list[str]:
     """
     Lightweight tokenizer for prompt adherence linting.
 
@@ -22,7 +22,7 @@ def tokenize_normalized(text: str) -> List[str]:
     return [t.lower() for t in _TOKEN_RE.findall(text)]
 
 
-def _get_str(d: dict, keys: Iterable[str]) -> Optional[str]:
+def _get_str(d: dict, keys: Iterable[str]) -> str | None:
     for k in keys:
         v = d.get(k)
         if isinstance(v, str):
@@ -32,7 +32,7 @@ def _get_str(d: dict, keys: Iterable[str]) -> Optional[str]:
     return None
 
 
-def get_pos_neg_text(row: dict) -> Tuple[str, str]:
+def get_pos_neg_text(row: dict) -> tuple[str, str]:
     """
     Extract (caption/positive, negative) from a manifest row.
     Keys match SDX conventions:
@@ -52,7 +52,7 @@ class PromptLintOptions:
     fail_on_overlap: bool = False
 
 
-def lint_manifest_rows(rows: Iterable[dict], opts: PromptLintOptions) -> Dict[str, object]:
+def lint_manifest_rows(rows: Iterable[dict], opts: PromptLintOptions) -> dict[str, object]:
     total_lines = 0
     parse_errors = 0
     empty_caption_rows = 0
@@ -66,7 +66,7 @@ def lint_manifest_rows(rows: Iterable[dict], opts: PromptLintOptions) -> Dict[st
 
     overlap_rows = 0
     max_overlap_distinct_tokens = 0
-    overlap_token_counts: Dict[str, int] = {}
+    overlap_token_counts: dict[str, int] = {}
 
     for row in rows:
         total_lines += 1
@@ -105,7 +105,7 @@ def lint_manifest_rows(rows: Iterable[dict], opts: PromptLintOptions) -> Dict[st
     if opts.top_overlap_tokens > 0:
         top = top[: opts.top_overlap_tokens]
 
-    out: Dict[str, object] = {
+    out: dict[str, object] = {
         "promptlint_file": None,
         "lines_total": total_lines,
         "json_parse_errors": parse_errors,
@@ -124,7 +124,7 @@ def lint_manifest_rows(rows: Iterable[dict], opts: PromptLintOptions) -> Dict[st
     return out
 
 
-def lint_jsonl_path(path: Path, opts: PromptLintOptions) -> Dict[str, object]:
+def lint_jsonl_path(path: Path, opts: PromptLintOptions) -> dict[str, object]:
     """
     Stream a JSONL file and compute prompt lint stats.
     Expects one JSON object per non-empty line.
@@ -143,7 +143,7 @@ def lint_jsonl_path(path: Path, opts: PromptLintOptions) -> Dict[str, object]:
 
     overlap_rows = 0
     max_overlap_distinct_tokens = 0
-    overlap_token_counts: Dict[str, int] = {}
+    overlap_token_counts: dict[str, int] = {}
 
     with path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -212,7 +212,7 @@ def lint_jsonl_path(path: Path, opts: PromptLintOptions) -> Dict[str, object]:
     }
 
 
-def should_fail(stats: Dict[str, object], opts: PromptLintOptions) -> bool:
+def should_fail(stats: dict[str, object], opts: PromptLintOptions) -> bool:
     if not opts.fail_on_overlap:
         return False
     return int(stats.get("pos_neg_overlap_rows", 0)) > 0

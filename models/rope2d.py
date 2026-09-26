@@ -31,8 +31,6 @@ References:
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import torch
 
 
@@ -41,9 +39,9 @@ def build_2d_rope_freqs(
     width: int,
     head_dim: int,
     base: float = 10000.0,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     dtype: torch.dtype = torch.float32,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Build (cos, sin) frequency tensors for 2D RoPE.
 
@@ -104,7 +102,7 @@ def apply_rope2d(
     sin: torch.Tensor,
     *,
     input_format: str = "BHND",
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply 2D RoPE to query and key tensors.
 
@@ -163,7 +161,7 @@ class RoPE2D(torch.nn.Module):
         width: int,
         device: torch.device,
         dtype: torch.dtype = torch.float32,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Normalise device to string so that torch.device('cuda:0') and
         # torch.device('cuda', 0) hash to the same key.
         key = (height, width, str(device), dtype)
@@ -182,7 +180,7 @@ class RoPE2D(torch.nn.Module):
         height: int,
         width: int,
         input_format: str = "BHND",
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         cos, sin = self.get_freqs(height, width, device=q.device, dtype=q.dtype)
         return apply_rope2d(q, k, cos, sin, input_format=input_format)
 
@@ -193,7 +191,7 @@ class RoPE2D(torch.nn.Module):
         height: int,
         width: int,
         input_format: str = "BHND",
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         return self.apply(q, k, height, width, input_format=input_format)
 
 

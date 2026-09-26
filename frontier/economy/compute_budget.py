@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
 
 
 class GuidanceTier(str, Enum):
@@ -22,7 +21,7 @@ class GuidanceTier(str, Enum):
 @dataclass(frozen=True)
 class ComputeBudget:
     num_steps: int
-    tiers: Tuple[GuidanceTier, ...]
+    tiers: tuple[GuidanceTier, ...]
     estimated_cost: float  # relative 0..1 vs all-FULL baseline
 
 
@@ -46,7 +45,7 @@ class ComputeBudgetPlanner:
         heavy_at_progress: float = 0.65,
     ) -> ComputeBudget:
         n = self.num_steps
-        tiers: List[GuidanceTier] = []
+        tiers: list[GuidanceTier] = []
         cost_map = {GuidanceTier.SKIP: 0.0, GuidanceTier.LITE: 0.35, GuidanceTier.FULL: 1.0, GuidanceTier.HEAVY: 1.8}
         heavy_idx = int(heavy_at_progress * (n - 1))
 

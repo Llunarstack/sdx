@@ -4,14 +4,13 @@ Heuristic **inpaint masks** (grayscale: white = regenerate, black = preserve) wh
 These are layout priors only—good for refinement loops (“fix the face”, “redo the background”)
 until you plug in SAM/detector-driven masks.
 
-Regions match :class:`~utils.generation.iterative_refinement.EditRouter` inpaint hints:
+Regions match edit-router inpaint hints used by the editing phase tools:
 ``face``, ``hands``, ``clothing``, ``background``, ``subject`` (generic center mass), ``full``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Tuple, Union
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -26,7 +25,7 @@ __all__ = [
 HEURISTIC_EDIT_REGIONS = frozenset({"face", "hands", "clothing", "background", "subject", "full"})
 
 
-def normalize_heuristic_region(region: Optional[str]) -> str:
+def normalize_heuristic_region(region: str | None) -> str:
     """Return a known region token; unrecognized values become ``subject``."""
     key = (region or "subject").strip().lower()
     return key if key in HEURISTIC_EDIT_REGIONS else "subject"
@@ -35,7 +34,7 @@ def normalize_heuristic_region(region: Optional[str]) -> str:
 def heuristic_inpaint_mask(
     width: int,
     height: int,
-    region: Optional[str],
+    region: str | None,
     *,
     feather_radius: float = 5.0,
 ) -> Image.Image:
@@ -75,17 +74,17 @@ def heuristic_inpaint_mask(
     return m
 
 
-def _subject_ellipse_bbox(w: int, h: int) -> Tuple[float, float, float, float]:
+def _subject_ellipse_bbox(w: int, h: int) -> tuple[float, float, float, float]:
     cx, cy = w / 2, h * 0.45
     rx, ry = w * 0.34, h * 0.48
     return cx - rx, cy - ry, cx + rx, cy + ry
 
 
 def save_heuristic_mask(
-    path: Union[str, Path],
+    path: str | Path,
     width: int,
     height: int,
-    region: Optional[str],
+    region: str | None,
     *,
     feather_radius: float = 5.0,
 ) -> Path:

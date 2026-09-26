@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -25,9 +26,9 @@ __all__ = [
 ]
 
 
-def apply_sample_feature_args(args: Any, *, steps: int = 50) -> Dict[str, Any]:
+def apply_sample_feature_args(args: Any, *, steps: int = 50) -> dict[str, Any]:
     """Apply --frontier, --character-session, etc. Mutates ``args`` in place."""
-    extra_kw: Dict[str, Any] = {}
+    extra_kw: dict[str, Any] = {}
     extra_kw.update(_apply_character_session(args))
     extra_kw.update(_apply_frontier_perfect(args, steps=steps))
     extra_kw.update(_apply_frontier_creative(args, steps=steps))
@@ -66,9 +67,9 @@ def _apply_krea_controls(args: Any) -> None:
     apply_krea_controls_to_args(args)
 
 
-def apply_sample_feature_diffusion_phase(args: Any, *, steps: int = 50) -> Dict[str, Any]:
+def apply_sample_feature_diffusion_phase(args: Any, *, steps: int = 50) -> dict[str, Any]:
     """Diffusion-time kwargs (after layout / regional plan)."""
-    extra: Dict[str, Any] = {}
+    extra: dict[str, Any] = {}
     extra.update(_apply_frontier_perfect(args, steps=steps, diffusion_only=True))
     extra.update(_apply_frontier_creative(args, steps=steps, diffusion_only=True))
     extra.update(_apply_frontier(args, steps=steps, diffusion_only=True))
@@ -77,7 +78,7 @@ def apply_sample_feature_diffusion_phase(args: Any, *, steps: int = 50) -> Dict[
     return extra
 
 
-def _apply_frontier_perfect(args: Any, *, steps: int, diffusion_only: bool = False) -> Dict[str, Any]:
+def _apply_frontier_perfect(args: Any, *, steps: int, diffusion_only: bool = False) -> dict[str, Any]:
     perfect = getattr(args, "frontier_perfect", False)
     subject_only = getattr(args, "frontier_subject", False)
     if not perfect and not subject_only:
@@ -124,7 +125,7 @@ def _apply_frontier_perfect(args: Any, *, steps: int, diffusion_only: bool = Fal
     return {k: v for k, v in kw.items() if k not in ("prompt", "negative_prompt")}
 
 
-def _apply_frontier_creative(args: Any, *, steps: int, diffusion_only: bool = False) -> Dict[str, Any]:
+def _apply_frontier_creative(args: Any, *, steps: int, diffusion_only: bool = False) -> dict[str, Any]:
     if not getattr(args, "frontier_creative", False):
         return {}
 
@@ -143,7 +144,7 @@ def _apply_frontier_creative(args: Any, *, steps: int, diffusion_only: bool = Fa
     args.imagination_plan = plan
 
     if diffusion_only:
-        extra: Dict[str, Any] = {}
+        extra: dict[str, Any] = {}
         if plan.step_emphasis:
             extra["step_emphasis"] = list(plan.step_emphasis)
         from frontier.chaos.serendipity import SerendipityInjector
@@ -172,7 +173,7 @@ def write_fix_region_mask(
     *,
     image_size: int,
     out_path: str | Path,
-) -> Tuple[Path, str]:
+) -> tuple[Path, str]:
     """Rasterize a box region to an inpaint mask PNG; returns (path, regional prompt)."""
     import torch
     from PIL import Image
@@ -189,7 +190,7 @@ def write_fix_region_mask(
     return p, reg_prompt
 
 
-def _apply_frontier(args: Any, *, steps: int, diffusion_only: bool = False) -> Dict[str, Any]:
+def _apply_frontier(args: Any, *, steps: int, diffusion_only: bool = False) -> dict[str, Any]:
     if getattr(args, "frontier_perfect", False) or getattr(args, "frontier_subject", False):
         return {}
     if getattr(args, "frontier_creative", False):
@@ -211,7 +212,7 @@ def _apply_frontier(args: Any, *, steps: int, diffusion_only: bool = False) -> D
 
             args.prompt = ContradictionScanner().suggest_rewrite(args.prompt or "")
     hooks = frontier_diffusion_hooks(plan)
-    extra: Dict[str, Any] = {}
+    extra: dict[str, Any] = {}
     if hooks.get("serendipity_scales"):
         extra["step_noise_scales"] = hooks["serendipity_scales"]
     if hooks.get("entropy_per_step"):
@@ -223,7 +224,7 @@ def _apply_frontier(args: Any, *, steps: int, diffusion_only: bool = False) -> D
     return extra
 
 
-def _apply_character_session(args: Any) -> Dict[str, Any]:
+def _apply_character_session(args: Any) -> dict[str, Any]:
     path = str(getattr(args, "character_session", "") or "").strip()
     if not path:
         return {}
@@ -242,7 +243,7 @@ def _apply_character_session(args: Any) -> Dict[str, Any]:
     return {}
 
 
-def _apply_attention_layout(args: Any, *, steps: int) -> Dict[str, Any]:
+def _apply_attention_layout(args: Any, *, steps: int) -> dict[str, Any]:
     if not getattr(args, "box_attn_layout", False):
         return {}
     box_spec = getattr(args, "_box_layout_spec", None)
@@ -262,7 +263,7 @@ def _apply_attention_layout(args: Any, *, steps: int) -> Dict[str, Any]:
     return {"attention_layout_plan": plan}
 
 
-def _apply_per_region_cads(args: Any) -> Dict[str, Any]:
+def _apply_per_region_cads(args: Any) -> dict[str, Any]:
     if not getattr(args, "per_region_cads", False):
         return {}
     box_spec = getattr(args, "_box_layout_spec", None)
@@ -274,7 +275,7 @@ def _apply_per_region_cads(args: Any) -> Dict[str, Any]:
     return {}
 
 
-def load_character_session(path: str | Path) -> Dict[str, Any]:
+def load_character_session(path: str | Path) -> dict[str, Any]:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"character session not found: {p}")
@@ -284,7 +285,7 @@ def load_character_session(path: str | Path) -> Dict[str, Any]:
     return data
 
 
-def save_character_session(path: str | Path, data: Dict[str, Any]) -> None:
+def save_character_session(path: str | Path, data: dict[str, Any]) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -297,7 +298,7 @@ def build_region_fix_mask(
     latent_h: int,
     latent_w: int,
     device: Any = None,
-) -> Tuple[Any, str]:
+) -> tuple[Any, str]:
     """Return (mask tensor 1,1,H,W), regional prompt for ``region_name``."""
     import torch
 
@@ -332,14 +333,14 @@ def score_image_heuristic(image_rgb_u8: np.ndarray) -> float:
 @dataclass
 class AutoRefineResult:
     best_index: int
-    scores: List[float]
-    outputs: List[str]
-    prompts: List[str] = field(default_factory=list)
+    scores: list[float]
+    outputs: list[str]
+    prompts: list[str] = field(default_factory=list)
 
 
-def _replace_or_append_prompt(cmd: List[str], prompt: str) -> List[str]:
+def _replace_or_append_prompt(cmd: list[str], prompt: str) -> list[str]:
     """Return a copy of ``cmd`` with ``--prompt`` value replaced or appended."""
-    out: List[str] = []
+    out: list[str] = []
     replaced = False
     i = 0
     while i < len(cmd):
@@ -377,9 +378,9 @@ def run_auto_refine_candidates(
     """
     from PIL import Image
 
-    scores: List[float] = []
-    outputs: List[str] = []
-    prompts_used: List[str] = []
+    scores: list[float] = []
+    outputs: list[str] = []
+    prompts_used: list[str] = []
     best_i = 0
     best_s = -1.0
     n = max(1, int(num_candidates))
@@ -502,10 +503,10 @@ def plt_colormap_inferno(arr: np.ndarray) -> np.ndarray:
     return np.stack([r, g, b], axis=-1)
 
 
-def append_benchmark_history(leaderboard_path: Path, history_path: Path) -> Dict[str, Any]:
+def append_benchmark_history(leaderboard_path: Path, history_path: Path) -> dict[str, Any]:
     """Append ``leaderboard.json`` snapshot to rolling history file."""
     lb = json.loads(leaderboard_path.read_text(encoding="utf-8"))
-    hist: List[Any] = []
+    hist: list[Any] = []
     if history_path.is_file():
         hist = json.loads(history_path.read_text(encoding="utf-8"))
         if not isinstance(hist, list):

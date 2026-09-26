@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["EmpathyMove", "parse_empathy_config", "plan_camera_empathy"]
 
@@ -13,7 +14,7 @@ class EmpathyMove:
     emotion: str
     camera_prompt: str
     negative: str
-    edit_overrides: Dict[str, Any]
+    edit_overrides: dict[str, Any]
 
 
 _EMPATHY_MAP = {
@@ -56,7 +57,7 @@ _EMPATHY_MAP = {
 }
 
 
-def parse_empathy_config(raw: Any) -> Dict[str, Any]:
+def parse_empathy_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -84,11 +85,11 @@ def plan_camera_empathy(
     *,
     config: Mapping[str, Any],
     tension_by_shot: Mapping[str, float] | None = None,
-) -> List[tuple[str, EmpathyMove]]:
+) -> list[tuple[str, EmpathyMove]]:
     if not config.get("enabled"):
         return []
     tension_by_shot = tension_by_shot or {}
-    out: List[tuple[str, EmpathyMove]] = []
+    out: list[tuple[str, EmpathyMove]] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         em = _infer_emotion(sh, tension_by_shot.get(sid, 0.5))

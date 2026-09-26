@@ -8,7 +8,7 @@ Make the model **really good at styles** by using artist and style tags from tag
 
 1. **Training**  
    - JSONL can include a `"style"` field (e.g. `"style": "oil painting, miyazaki"`).  
-   - If `style` is **empty**, the dataset **auto-fills** it from the caption using patterns like "by X", "style of X", `artist:name`, and a list of known artist/style tags (`config/style_artists.py`).  
+   - If `style` is **empty**, the dataset **auto-fills** it from the caption using patterns like "by X", "style of X", `artist:name`, and a list of known artist/style tags (`config/defaults/style_artists.py`).  
    - Style is encoded with T5 and blended via `style_embed_dim` / `style_strength`, so the model learns to follow it without overpowering the main prompt.
 
 2. **Inference**  
@@ -21,7 +21,7 @@ Make the model **really good at styles** by using artist and style tags from tag
 
 - **Phrases:** `by artist_name`, `art by X`, `drawn by X`, `in the style of X`, `style of X`, `like X`, `similar to X`  
 - **Tag-board:** `artist:name`, `style:name` (Danbooru/Gelbooru style)  
-- **Known tags:** If the caption contains a tag from `ARTIST_STYLE_TAGS` in `config/style_artists.py` (e.g. `ghibli`, `oil_painting`, `makoto_shinkai`), that tag is used as the style when no explicit style is set.
+- **Known tags:** If the caption contains a tag from `ARTIST_STYLE_TAGS` in `config/defaults/style_artists.py` (e.g. `ghibli`, `oil_painting`, `makoto_shinkai`), that tag is used as the style when no explicit style is set.
 
 ---
 
@@ -37,7 +37,7 @@ Make the model **really good at styles** by using artist and style tags from tag
    - Leave `"style": ""` or omit it; the dataset will fill `style` from the caption when `extract_style_from_caption=True` (default).
 
 3. **Add your own tags**  
-   - Edit `config/style_artists.py` and extend `ARTIST_STYLE_TAGS` with artist names or style tags from your dataset (e.g. from Danbooru/PixAI exports).
+   - Edit `config/defaults/style_artists.py` and extend `ARTIST_STYLE_TAGS` with artist names or style tags from your dataset (e.g. from Danbooru/PixAI exports).
 
 ---
 
@@ -59,7 +59,7 @@ Requires a model trained with `--style-embed-dim 4096` (or your text_dim).
 
 | File | Role |
 |------|------|
-| `config/style_artists.py` | Patterns and `ARTIST_STYLE_TAGS`; `extract_style_from_text()`. |
+| `config/defaults/style_artists.py` | Patterns and `ARTIST_STYLE_TAGS`; `extract_style_from_text()`. |
 | `data/caption_utils.py` | `DOMAIN_TAGS["style_artist"]`: tags boosted for style learning. |
 | `data/t2i_dataset.py` | Auto-fill `style` from caption when empty (`extract_style_from_caption=True`). |
 | `sample.py` | `--auto-style-from-prompt`: extract style from prompt and use as style conditioning. |

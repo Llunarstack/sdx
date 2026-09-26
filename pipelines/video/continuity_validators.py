@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "ContinuityIssue",
@@ -15,7 +16,7 @@ __all__ = [
     "format_continuity_report",
 ]
 
-_GAZE_ALIASES: Dict[str, str] = {
+_GAZE_ALIASES: dict[str, str] = {
     "left": "frame_left",
     "right": "frame_right",
     "camera": "camera",
@@ -96,12 +97,12 @@ class ValidatorConfig:
 @dataclass(slots=True)
 class ContinuityReport:
     ok: bool
-    issues: List[ContinuityIssue] = field(default_factory=list)
+    issues: list[ContinuityIssue] = field(default_factory=list)
 
-    def errors(self) -> List[ContinuityIssue]:
+    def errors(self) -> list[ContinuityIssue]:
         return [i for i in self.issues if i.level == "error"]
 
-    def warnings(self) -> List[ContinuityIssue]:
+    def warnings(self) -> list[ContinuityIssue]:
         return [i for i in self.issues if i.level == "warn"]
 
 
@@ -160,8 +161,8 @@ def _is_dialogue_pair(g1: str, g2: str) -> bool:
     return pair == {"frame_left", "frame_right"} or pair == {"off_screen_left", "off_screen_right"}
 
 
-def validate_eyeline(shots: Sequence[Any], *, strict: bool = False) -> List[ContinuityIssue]:
-    issues: List[ContinuityIssue] = []
+def validate_eyeline(shots: Sequence[Any], *, strict: bool = False) -> list[ContinuityIssue]:
+    issues: list[ContinuityIssue] = []
     level = "error" if strict else "warn"
     for i in range(len(shots) - 1):
         a, b = shots[i], shots[i + 1]
@@ -210,7 +211,7 @@ def validate_eyeline(shots: Sequence[Any], *, strict: bool = False) -> List[Cont
     return issues
 
 
-def _props_state(shot: Any) -> Dict[str, str]:
+def _props_state(shot: Any) -> dict[str, str]:
     raw = getattr(shot, "props_state", None) or {}
     if isinstance(raw, Mapping):
         return {str(k): str(v) for k, v in raw.items()}
@@ -222,17 +223,17 @@ def validate_prop_continuity(
     ledger: Mapping[str, Any],
     *,
     strict: bool = False,
-) -> List[ContinuityIssue]:
-    issues: List[ContinuityIssue] = []
+) -> list[ContinuityIssue]:
+    issues: list[ContinuityIssue] = []
     level = "error" if strict else "warn"
-    tracked: Dict[str, str] = {}
+    tracked: dict[str, str] = {}
     for pid, spec in ledger.items():
         if isinstance(spec, Mapping):
             tracked[str(pid)] = str(spec.get("initial") or spec.get("state") or "")
         elif isinstance(spec, str):
             tracked[str(pid)] = spec
 
-    last_state: Dict[str, str] = dict(tracked)
+    last_state: dict[str, str] = dict(tracked)
     irreversible = ("broken", "destroyed", "empty", "gone", "shattered", "consumed")
 
     for i, sh in enumerate(shots):
@@ -264,13 +265,13 @@ def validate_prop_continuity(
     return issues
 
 
-def _shot_lighting(shot: Any) -> Dict[str, Any]:
+def _shot_lighting(shot: Any) -> dict[str, Any]:
     raw = getattr(shot, "lighting", None) or {}
     return dict(raw) if isinstance(raw, Mapping) else {}
 
 
-def validate_light_motivation(shots: Sequence[Any], *, strict: bool = False) -> List[ContinuityIssue]:
-    issues: List[ContinuityIssue] = []
+def validate_light_motivation(shots: Sequence[Any], *, strict: bool = False) -> list[ContinuityIssue]:
+    issues: list[ContinuityIssue] = []
     level = "error" if strict else "warn"
     last_sun = ""
 
@@ -314,8 +315,8 @@ def validate_light_motivation(shots: Sequence[Any], *, strict: bool = False) -> 
     return issues
 
 
-def validate_silhouette_readability(shots: Sequence[Any]) -> List[ContinuityIssue]:
-    issues: List[ContinuityIssue] = []
+def validate_silhouette_readability(shots: Sequence[Any]) -> list[ContinuityIssue]:
+    issues: list[ContinuityIssue] = []
     for i, sh in enumerate(shots):
         sid = str(getattr(sh, "id", f"shot_{i}"))
         prompt = str(getattr(sh, "prompt", "") or "").lower()
@@ -350,8 +351,8 @@ def validate_silhouette_readability(shots: Sequence[Any]) -> List[ContinuityIssu
 def run_continuity_validation(
     shots: Sequence[Any],
     *,
-    continuity: Optional[Mapping[str, Any]] = None,
-    config: Optional[ValidatorConfig] = None,
+    continuity: Mapping[str, Any] | None = None,
+    config: ValidatorConfig | None = None,
 ) -> ContinuityReport:
     cfg = config or parse_validator_config(continuity or {})
     ledger = {}
@@ -360,7 +361,7 @@ def run_continuity_validation(
         if not isinstance(ledger, Mapping):
             ledger = {}
 
-    issues: List[ContinuityIssue] = []
+    issues: list[ContinuityIssue] = []
     if cfg.eyeline and shots:
         issues.extend(validate_eyeline(shots, strict=cfg.strict))
     if cfg.props and shots:

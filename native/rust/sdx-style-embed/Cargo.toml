@@ -1,0 +1,19 @@
+# Standalone workspace root.
+[workspace]
+
+[package]
+name = "sdx-style-embed"
+version = "0.1.0"
+edition = "2021"
+description = "InstantStyle CLIP embed math (weighted blend, content subtract, L2) as cdylib"
+license = "MIT"
+
+[lib]
+name = "sdx_style_embed"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true

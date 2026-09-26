@@ -5,7 +5,6 @@ Optional ``sdx_cuda_ml`` DLL: L2-normalize each row of a float32 matrix ``(n_row
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 import numpy as np
 
@@ -14,7 +13,7 @@ from sdx_native.native_tools import cuda_ml_shared_library_path
 
 class CudaMlLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = cuda_ml_shared_library_path()
         if p is None:
             return
@@ -50,7 +49,7 @@ class CudaMlLib:
             raise RuntimeError(f"sdx_cuda_l2_normalize_rows_f32_host failed (code {rc})")
 
 
-_LIB: Optional[CudaMlLib] = None
+_LIB: CudaMlLib | None = None
 
 
 def get_cuda_ml_lib() -> CudaMlLib:
@@ -68,7 +67,7 @@ def l2_normalize_rows_numpy(x: np.ndarray, *, eps: float = 1e-8) -> np.ndarray:
     return (x / n).astype(np.float32)
 
 
-def maybe_l2_normalize_rows_cuda(x: np.ndarray, *, eps: float = 1e-8) -> Optional[np.ndarray]:
+def maybe_l2_normalize_rows_cuda(x: np.ndarray, *, eps: float = 1e-8) -> np.ndarray | None:
     """Return normalized copy via CUDA if DLL exists; else ``None`` (caller can use NumPy)."""
     lib = get_cuda_ml_lib()
     if not lib.available:

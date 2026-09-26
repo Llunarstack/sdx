@@ -7,9 +7,10 @@ they implement Ideogram-style *draw + describe* per zone.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -38,7 +39,7 @@ __all__ = [
 class SketchStroke:
     """One polyline inside a region box (coordinates relative to the box, 0–1)."""
 
-    points: Tuple[Tuple[float, float], ...]
+    points: tuple[tuple[float, float], ...]
     width: float = 0.025  # fraction of box min side
 
 
@@ -46,17 +47,17 @@ def _clamp01(v: float) -> float:
     return float(max(0.0, min(1.0, v)))
 
 
-def parse_strokes(raw: Any) -> List[SketchStroke]:
+def parse_strokes(raw: Any) -> list[SketchStroke]:
     if not isinstance(raw, list):
         return []
-    out: List[SketchStroke] = []
+    out: list[SketchStroke] = []
     for item in raw:
         if not isinstance(item, Mapping):
             continue
         pts_raw = item.get("points", item.get("path", []))
         if not isinstance(pts_raw, list) or len(pts_raw) < 2:
             continue
-        pts: List[Tuple[float, float]] = []
+        pts: list[tuple[float, float]] = []
         for p in pts_raw:
             if isinstance(p, (list, tuple)) and len(p) >= 2:
                 pts.append((_clamp01(float(p[0])), _clamp01(float(p[1]))))
@@ -74,7 +75,7 @@ def spec_has_sketches(spec: Any) -> bool:
     return False
 
 
-def _resolve_sketch_path(region: Any, source_dir: Optional[Path]) -> Optional[Path]:
+def _resolve_sketch_path(region: Any, source_dir: Path | None) -> Path | None:
     raw = (region.sketch_path or "").strip()
     if not raw:
         return None
@@ -84,7 +85,7 @@ def _resolve_sketch_path(region: Any, source_dir: Optional[Path]) -> Optional[Pa
     return p if p.is_file() else None
 
 
-def _box_pixel_bounds(region: Any, height: int, width: int) -> Tuple[int, int, int, int]:
+def _box_pixel_bounds(region: Any, height: int, width: int) -> tuple[int, int, int, int]:
     y0 = int(region.y1 * height)
     y1 = max(y0 + 1, int(region.y2 * height))
     x0 = int(region.x1 * width)
@@ -93,7 +94,7 @@ def _box_pixel_bounds(region: Any, height: int, width: int) -> Tuple[int, int, i
 
 
 def _draw_strokes_on_image(
-    img: "Image.Image",
+    img: Image.Image,
     region: Any,
     strokes: Sequence[SketchStroke],
     *,
@@ -105,7 +106,7 @@ def _draw_strokes_on_image(
     x0, y0, x1, y1 = _box_pixel_bounds(region, img.height, img.width)
     bw, bh = x1 - x0, y1 - y0
     for stroke in strokes:
-        px_pts: List[Tuple[float, float]] = []
+        px_pts: list[tuple[float, float]] = []
         for u, v in stroke.points:
             px_pts.append((x0 + u * bw, y0 + v * bh))
         line_w = max(1.0, stroke.width * min(bw, bh))
@@ -113,7 +114,7 @@ def _draw_strokes_on_image(
 
 
 def _paste_sketch_image(
-    canvas: "Image.Image",
+    canvas: Image.Image,
     region: Any,
     sketch_path: Path,
 ) -> None:
@@ -131,7 +132,7 @@ def rasterize_region_sketch(
     height: int,
     width: int,
     *,
-    source_dir: Optional[Path] = None,
+    source_dir: Path | None = None,
     device: torch.device,
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
@@ -168,12 +169,12 @@ def build_region_sketch_masks(
     *,
     device: torch.device,
     dtype: torch.dtype = torch.float32,
-) -> Optional[torch.Tensor]:
+) -> torch.Tensor | None:
     """Stack per-region sketch masks ``(R, 1, H, W)`` or ``None`` if no sketches."""
     if not spec_has_sketches(spec):
         return None
     source_dir = getattr(spec, "source_dir", None)
-    masks: List[torch.Tensor] = []
+    masks: list[torch.Tensor] = []
     for region in spec.regions:
         if region.sketch_path or region.strokes:
             masks.append(
@@ -195,8 +196,8 @@ def build_composite_sketch_pil(
     spec: Any,
     pixel_size: int,
     *,
-    source_dir: Optional[Path] = None,
-) -> "Image.Image":
+    source_dir: Path | None = None,
+) -> Image.Image:
     """Full-frame RGB scribble control image (white lines on black) at ``pixel_size``."""
     if Image is None:
         raise RuntimeError("Pillow is required for box sketch rasterization")
@@ -222,7 +223,7 @@ def build_composite_sketch_tensor(
     spec: Any,
     pixel_size: int,
     *,
-    source_dir: Optional[Path] = None,
+    source_dir: Path | None = None,
     device: torch.device,
 ) -> torch.Tensor:
     """Control-net style tensor ``(3, H, W)`` normalized to ``[-1, 1]``."""

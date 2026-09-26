@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -19,7 +19,7 @@ import torch.nn.functional as F
 @dataclass
 class InferredRegion:
     name: str
-    box: Tuple[float, float, float, float]  # normalized xyxy
+    box: tuple[float, float, float, float]  # normalized xyxy
     prompt: str = ""
     confidence: float = 0.5
 
@@ -27,10 +27,10 @@ class InferredRegion:
 @dataclass
 class LayoutSketch:
     global_prompt: str = ""
-    regions: List[InferredRegion] = field(default_factory=list)
-    source_size: Tuple[int, int] = (0, 0)
+    regions: list[InferredRegion] = field(default_factory=list)
+    source_size: tuple[int, int] = (0, 0)
 
-    def to_box_layout(self) -> Dict[str, Any]:
+    def to_box_layout(self) -> dict[str, Any]:
         return {
             "global_prompt": self.global_prompt,
             "regions": [{"name": r.name, "box": list(r.box), "prompt": r.prompt or r.name} for r in self.regions],
@@ -89,14 +89,14 @@ class LayoutSketchInferer:
         w: int,
         *,
         max_regions: int,
-    ) -> List[InferredRegion]:
+    ) -> list[InferredRegion]:
         g = self.grid
-        counts: Dict[int, int] = {}
+        counts: dict[int, int] = {}
         for lab in labels.tolist():
             counts[lab] = counts.get(lab, 0) + 1
         total = g * g
         ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
-        regions: List[InferredRegion] = []
+        regions: list[InferredRegion] = []
         idx = 0
         for lab, cnt in ranked:
             if cnt / total < self.min_area_frac:

@@ -8,7 +8,7 @@ Saves to pretrained/ (or --model-dir). Defaults are chosen to save disk space.
 - VAE (decode quality): --vae downloads only sd-vae-ft-mse (train default) + sdxl-vae-fp16-fix (best decode).
   Use --vae-all to get sd-vae-ft-ema and sdxl-vae as well (usually not needed).
 - CLIP: only with --clip (optional, for future T5+CLIP). Not included in --all.
-- LLM: --llm (SmolLM 360M) or --llm-best (Qwen2.5-7B). --all includes only the default LLM (360M); add --llm-best if needed.
+- LLM: --llm (SmolLM 360M) or --llm-best (Qwen3-14B). --all includes only the default LLM (360M); add --llm-best if needed.
 
 Use --all to download the minimal recommended set: T5-XXL, 2 VAEs, SmolLM 360M (saves space).
 To free space after downloading everything, run: python scripts/download/remove_unused_models.py
@@ -52,11 +52,16 @@ PENTA_TEXT_REPOS = TRIPLE_TEXT_REPOS + [
     ("creative-graphic-design/LongCLIP-L", "LongCLIP-L"),
 ]
 LLM_DEFAULT = "HuggingFaceTB/SmolLM2-360M-Instruct"
-LLM_BEST = "Qwen/Qwen2.5-7B-Instruct"
+LLM_BEST = "Qwen/Qwen3-14B"
+LLM_BEST_FOLDER = "Qwen3-14B"
 
 ADVANCED_REPOS = [
     ("creative-graphic-design/LongCLIP-L", "LongCLIP-L"),
-    ("vikhyatoolkit/moondream2", "moondream2"),
+    ("moondream/moondream3-preview", "moondream3-preview"),
+    ("MizzenAI/HPSv3", "HPSv3"),
+    ("facebook/dinov3-vitl16-pretrain-lvd1689m", "DINOv3-ViT-L16"),
+    ("google/siglip2-so400m-patch16-384", "SigLIP2-SO400M"),
+    ("Qwen/Qwen3-8B", "Qwen3-8B"),
     ("prs-eth/marigold-depth-v1-1", "Marigold-Depth-v1-1"),
     ("prs-eth/marigold-normals-v1-1", "Marigold-Normals-v1-1"),
     ("madebyollin/taesd", "TAESD"),
@@ -187,13 +192,11 @@ def main():
         help="Download penta stack weights: T5-XXL + CLIP-L + bigG + H + LongCLIP-L",
     )
     parser.add_argument("--llm", action="store_true", help="Download default LLM (SmolLM2-360M) for prompt expansion")
-    parser.add_argument(
-        "--llm-best", action="store_true", help="Download best LLM (Qwen2.5-7B-Instruct) for prompt expansion"
-    )
+    parser.add_argument("--llm-best", action="store_true", help="Download best LLM (Qwen3-14B) for prompt expansion")
     parser.add_argument(
         "--advanced",
         action="store_true",
-        help="Download advanced optional models (LongCLIP, moondream2, Marigold, TAESD, CodeFormer, ConvNeXtV2, consistency decoder, aesthetic predictor, AnyDoor ref).",
+        help="Download advanced optional models (LongCLIP, moondream3, HPSv3, DINOv3, SigLIP2, Qwen3-8B, Marigold, TAESD, CodeFormer, ConvNeXtV2, consistency decoder, aesthetic predictor, AnyDoor ref).",
     )
     parser.add_argument(
         "--config-only",
@@ -278,7 +281,7 @@ def main():
         n += 1
 
     if do_llm_best:
-        local_dir = os.path.join(args.model_dir, "Qwen2.5-7B-Instruct")
+        local_dir = os.path.join(args.model_dir, LLM_BEST_FOLDER)
         print(f"Downloading LLM (essential files only): {LLM_BEST} -> {local_dir}")
         download(LLM_BEST, local_dir, args.max_workers, allow_patterns=ALLOW_LLM)
         n += 1

@@ -26,7 +26,6 @@
 | [TCIS.md](TCIS.md) | Tri-consensus hybrid loop (DiT + ViT quality) |
 | [AR.md](AR.md) | Block-wise autoregressive training + extensions |
 | [SUPERIOR_STACK.md](SUPERIOR_STACK.md) | RAG, pick-best, CLIP self-correction |
-| [NATIVE_KERNELS.md](NATIVE_KERNELS.md) | Optional native acceleration |
 | [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) | Native + ecosystem lib map |
 
 ---
@@ -42,8 +41,9 @@
 | [guides/HARDWARE.md](guides/HARDWARE.md) | VRAM, storage, latent cache |
 | [guides/BOOK_COMIC_TECH.md](guides/BOOK_COMIC_TECH.md) | Sequential art + `generate_book` |
 | [guides/REPRODUCIBILITY.md](guides/REPRODUCIBILITY.md) | `--seed`, `--deterministic` |
-| [guides/ADVANCED_OPTIMIZATION.md](guides/ADVANCED_OPTIMIZATION.md) | Speed / quantization |
 | [guides/INTEGRATION.md](guides/INTEGRATION.md) | Data cleaning, spatial DSL |
+| [guides/IMAGE_CAPTIONING.md](guides/IMAGE_CAPTIONING.md) | Captioning tooling |
+| [guides/SAMPLING.md](guides/SAMPLING.md) | Solvers and sampling schedules |
 
 ---
 
@@ -60,7 +60,7 @@
 
 ## Research (`research/`)
 
-Roadmaps and industry notes — not required for day-to-day use.
+Roadmaps and industry notes — not required for day-to-day use. Start with [research/README.md](research/README.md).
 
 | Doc | What it covers |
 |-----|----------------|
@@ -70,7 +70,6 @@ Roadmaps and industry notes — not required for day-to-day use.
 | [research/BLUEPRINTS.md](research/BLUEPRINTS.md) | Distillation + prompt-accuracy notes |
 | [research/DIFFUSION_LEVERAGE_ROADMAP.md](research/DIFFUSION_LEVERAGE_ROADMAP.md) | High-leverage upgrades |
 | [research/IMAGE_QUALITY_LEVERS_2026.md](research/IMAGE_QUALITY_LEVERS_2026.md) | 2026 quality research map |
-| [research/IMPROVEMENT_IDEAS.md](research/IMPROVEMENT_IDEAS.md) | Creative backlog |
 | [research/SAMPLING_EXPERIMENTS_BACKLOG.md](research/SAMPLING_EXPERIMENTS_BACKLOG.md) | CFG/steps experiment grids |
 | [research/INSPIRATION.md](research/INSPIRATION.md) | PixAI, ComfyUI influences |
 | [research/NEXTGEN_SUPERMODEL_ARCHITECTURE.md](research/NEXTGEN_SUPERMODEL_ARCHITECTURE.md) | Architecture themes |
@@ -82,8 +81,6 @@ Roadmaps and industry notes — not required for day-to-day use.
 | Doc | What it covers |
 |-----|----------------|
 | [agentic/AGENTIC_STACK.md](agentic/AGENTIC_STACK.md) | Agent orchestration |
-| [agentic/QUALITY_AGENTS.md](agentic/QUALITY_AGENTS.md) | Quality agents |
-| [../innovations/README.md](../innovations/README.md) | Innovations package |
 | [../frontier/README.md](../frontier/README.md) | Frontier research (layout, guidance) |
 | [../pipelines/README.md](../pipelines/README.md) | image_gen vs book_comic |
 
@@ -98,6 +95,7 @@ Roadmaps and industry notes — not required for day-to-day use.
 | [recipes/local_ci_mirror.md](recipes/local_ci_mirror.md) | Mirror CI locally |
 | [releases/v12.md](releases/v12.md) | Latest release notes |
 | [releases/VERSION_COMPARISON.md](releases/VERSION_COMPARISON.md) | Full version timeline (v0.1 → v12) |
+| [GLOSSARY.md](GLOSSARY.md) | Plain-English jargon & acronym reference |
 | [releases/v11.md](releases/v11.md) | v11 release notes |
 
 ---
@@ -106,8 +104,8 @@ Roadmaps and industry notes — not required for day-to-day use.
 
 | Doc | What it covers |
 |-----|----------------|
-| [design/WEBSITE_DESIGN_BRIEF.md](design/WEBSITE_DESIGN_BRIEF.md) | Product UI mockup brief (not implemented) |
 | [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | Auto-generated full tree |
+| [../DEPRECATIONS.md](../DEPRECATIONS.md) | Removed paths and migrations |
 
 ---
 
@@ -118,5 +116,3 @@ python -m scripts.tools smoke_imports
 python -m scripts.tools verify_doc_links
 pytest tests/ -q
 ```
-
-Old paths at `docs/*.md` root may be **redirect stubs** pointing to the new location.

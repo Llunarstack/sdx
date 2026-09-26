@@ -10,20 +10,21 @@ negative prompt additions. For classical composition scaffolding at inference, u
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 from utils.runtime.jsonutil import loads as json_loads
 
 
-def _as_list(value: Any) -> List[str]:
+def _as_list(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
         v = value.strip()
         return [v] if v else []
     if isinstance(value, list):
-        out: List[str] = []
+        out: list[str] = []
         for x in value:
             if isinstance(x, str) and x.strip():
                 out.append(x.strip())
@@ -31,9 +32,9 @@ def _as_list(value: Any) -> List[str]:
     return []
 
 
-def _dedupe(tokens: Iterable[str]) -> List[str]:
+def _dedupe(tokens: Iterable[str]) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for t in tokens:
         key = t.lower().strip()
         if not key or key in seen:
@@ -43,9 +44,9 @@ def _dedupe(tokens: Iterable[str]) -> List[str]:
     return out
 
 
-def _actor_tokens(actor: Dict[str, Any], index: int) -> Tuple[List[str], List[str]]:
-    pos: List[str] = []
-    neg: List[str] = []
+def _actor_tokens(actor: dict[str, Any], index: int) -> tuple[list[str], list[str]]:
+    pos: list[str] = []
+    neg: list[str] = []
     label = str(actor.get("id", f"actor_{index + 1}")).strip() or f"actor_{index + 1}"
     role = str(actor.get("role", "")).strip()
     anchor = str(actor.get("spatial_anchor", "") or actor.get("screen_position", "")).strip()
@@ -74,9 +75,9 @@ def _actor_tokens(actor: Dict[str, Any], index: int) -> Tuple[List[str], List[st
     return pos, neg
 
 
-def _relation_tokens(rel: Dict[str, Any]) -> Tuple[List[str], List[str]]:
-    pos: List[str] = []
-    neg: List[str] = []
+def _relation_tokens(rel: dict[str, Any]) -> tuple[list[str], list[str]]:
+    pos: list[str] = []
+    neg: list[str] = []
     a = str(rel.get("a", "")).strip()
     b = str(rel.get("b", "")).strip()
     kind = str(rel.get("kind", "")).strip()
@@ -90,9 +91,9 @@ def _relation_tokens(rel: Dict[str, Any]) -> Tuple[List[str], List[str]]:
     return pos, neg
 
 
-def _compile_blueprint_dict(data: Dict[str, Any], strength: float = 1.0) -> Tuple[str, str]:
-    pos: List[str] = []
-    neg: List[str] = []
+def _compile_blueprint_dict(data: dict[str, Any], strength: float = 1.0) -> tuple[str, str]:
+    pos: list[str] = []
+    neg: list[str] = []
 
     # Global scene controls
     for key in (
@@ -155,7 +156,7 @@ def _compile_blueprint_dict(data: Dict[str, Any], strength: float = 1.0) -> Tupl
     return ", ".join(pos), ", ".join(neg)
 
 
-def load_scene_blueprint(path: str, strength: float = 1.0) -> Tuple[str, str]:
+def load_scene_blueprint(path: str, strength: float = 1.0) -> tuple[str, str]:
     """
     Load scene blueprint JSON and return `(positive_additions, negative_additions)`.
     """
@@ -168,7 +169,7 @@ def load_scene_blueprint(path: str, strength: float = 1.0) -> Tuple[str, str]:
     return _compile_blueprint_dict(data, strength=strength)
 
 
-def compile_scene_blueprint_dict(data: Dict[str, Any], strength: float = 1.0) -> Tuple[str, str]:
+def compile_scene_blueprint_dict(data: dict[str, Any], strength: float = 1.0) -> tuple[str, str]:
     """
     Compile an in-memory scene blueprint dict into `(positive_additions, negative_additions)`.
     """

@@ -16,19 +16,25 @@ pip install -r requirements.txt
 ## Commands
 
 ```bash
+python -m ruff format --check .
 python -m ruff check .
 
 OUT=/tmp/basedpyright.json
 python -m basedpyright --outputjson \
-  native/python/sdx_native/diffusion_sigma_fast.py \
+  native/_experimental/python/sdx_native/diffusion_sigma_fast.py \
   utils/generation/run_artifacts.py \
   diffusion/snr_utils.py \
   utils/generation/inference_stages.py \
   utils/generation/eval_prompt_pack.py \
   examples/run_baseline_eval.py \
+  utils/terminal.py \
+  training/train_cli_parser.py \
+  utils/generation/sample_cli_parser.py \
+  utils/generation/sample_helpers.py \
   > "$OUT" || true
 python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; ec=int(s.get('errorCount',0)); wc=int(s.get('warningCount',0)); print(f'basedpyright: {ec} errors, {wc} warnings'); sys.exit(1 if ec else 0)" "$OUT"
 
+python -m scripts.tools smoke_imports
 python -m scripts.tools verify_doc_links
 
 python -m pytest tests/ -q --tb=short

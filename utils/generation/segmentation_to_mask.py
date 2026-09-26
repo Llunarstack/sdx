@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Any
 
 try:
     import numpy as np
@@ -27,13 +27,13 @@ _PRETRAINED = Path(__file__).resolve().parents[2] / "pretrained"
 GDINO_REPO_PATH = _PRETRAINED / "GroundingDINO-Base"
 SAM2_REPO_PATH = _PRETRAINED / "SAM2-Hiera-Large"
 
-BBox = Tuple[int, int, int, int]
+BBox = tuple[int, int, int, int]
 
 
 @dataclass(frozen=True, slots=True)
 class SegmentationMaskResult:
     mask: Image.Image  # mode "L"
-    bbox: Optional[BBox]
+    bbox: BBox | None
     mode: str
     notes: str = ""
 
@@ -46,7 +46,7 @@ _PHRASE_TO_REGION_TERMS = (
 )
 
 
-def phrase_to_fallback_region(text: str) -> Optional[str]:
+def phrase_to_fallback_region(text: str) -> str | None:
     """If *text* looks like an edit noun phrase, map to a coarse heuristic region."""
     t = (text or "").strip().lower()
     if not t:
@@ -141,7 +141,7 @@ def _clip_box(box: BBox, w: int, h: int) -> BBox:
     return (x0, y0, x1, y1)
 
 
-def _bbox_to_mask(size: Tuple[int, int], box: BBox) -> Image.Image:
+def _bbox_to_mask(size: tuple[int, int], box: BBox) -> Image.Image:
     assert np is not None
     w, h = size
     x0, y0, x1, y1 = _clip_box(box, w, h)
@@ -174,7 +174,7 @@ def detect_box_for_phrase(
     phrase: str,
     *,
     threshold: float = 0.2,
-) -> Tuple[Optional[BBox], float]:
+) -> tuple[BBox | None, float]:
     """Run Grounding DINO if available; return (bbox, score)."""
     gdino = _load_gdino()
     w, h = pil_rgb.size
@@ -198,7 +198,7 @@ def detect_box_for_phrase(
 
 
 def build_segmentation_mask_for_edit(
-    image: Union[Image.Image, str, Path],
+    image: Image.Image | str | Path,
     target_phrase: str,
     *,
     feather_radius: float = 4.0,
@@ -237,7 +237,7 @@ def build_segmentation_mask_for_edit(
         return SegmentationMaskResult(mask=mask, bbox=None, mode="heuristic_subject_default", notes="models disabled")
 
     box, score = detect_box_for_phrase(pil, phrase, threshold=gdino_threshold)
-    bbox_mask: Optional[Image.Image] = None
+    bbox_mask: Image.Image | None = None
     if box is None and fallback_region:
         mask = heuristic_inpaint_mask(w, h, fallback_region, feather_radius=max(0.0, float(feather_radius)))
         return SegmentationMaskResult(

@@ -18,27 +18,28 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Set, Tuple
+from typing import Any
 
 
-def _group_key(row: Dict[str, Any]) -> Tuple[str, str]:
+def _group_key(row: dict[str, Any]) -> tuple[str, str]:
     case = str(row.get("case", "") or "").strip()
     prompt = str(row.get("prompt", "") or "").strip()
     return case, prompt
 
 
 def mine_pairs(
-    rows: Iterable[Dict[str, Any]],
+    rows: Iterable[dict[str, Any]],
     *,
     min_margin: float = 0.08,
     max_pairs_per_case: int = 2,
     require_existing_files: bool = True,
-    hard_case_names: Set[str] | None = None,
+    hard_case_names: set[str] | None = None,
     hardcase_extra_pairs: int = 0,
     hardcase_min_margin_scale: float = 1.0,
-) -> List[Dict[str, Any]]:
-    groups: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for r in rows:
         if not isinstance(r, dict):
             continue
@@ -47,7 +48,7 @@ def mine_pairs(
             continue
         groups.setdefault(key, []).append(r)
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for (case, prompt), items in groups.items():
         is_hardcase = case in (hard_case_names or set())
         eff_max_pairs = int(max_pairs_per_case) + (int(hardcase_extra_pairs) if is_hardcase else 0)
@@ -94,8 +95,8 @@ def mine_pairs(
     return out
 
 
-def _read_hardcase_names(path: Path) -> Set[str]:
-    out: Set[str] = set()
+def _read_hardcase_names(path: Path) -> set[str]:
+    out: set[str] = set()
     if not path.is_file():
         return out
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -114,7 +115,7 @@ def _read_hardcase_names(path: Path) -> Set[str]:
     return out
 
 
-def _write_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for r in rows:
@@ -142,7 +143,7 @@ def main() -> None:
     data = json.loads(in_path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise SystemExit("results json must be a list")
-    hard_case_names: Set[str] = set()
+    hard_case_names: set[str] = set()
     if str(args.hardcases_jsonl).strip():
         hard_case_names = _read_hardcase_names(Path(str(args.hardcases_jsonl).strip()))
     rows = mine_pairs(

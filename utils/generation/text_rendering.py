@@ -5,7 +5,7 @@ Handles typography, text placement, and style integration in generated images.
 
 import difflib
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -36,7 +36,7 @@ class TextRenderingEngine:
             "artistic": "artistic typography, creative lettering, stylized text, decorative font",
         }
 
-    def extract_text_requirements(self, prompt: str) -> Dict[str, Any]:
+    def extract_text_requirements(self, prompt: str) -> dict[str, Any]:
         """Extract text rendering requirements from prompt."""
         text_info = {
             "has_text": False,
@@ -118,7 +118,7 @@ class TextRenderingEngine:
 
         return text_info
 
-    def enhance_prompt_for_text(self, prompt: str, text_info: Dict[str, Any]) -> str:
+    def enhance_prompt_for_text(self, prompt: str, text_info: dict[str, Any]) -> str:
         """Enhance prompt with text rendering instructions."""
         if not text_info["has_text"]:
             return prompt
@@ -159,7 +159,7 @@ class TextRenderingEngine:
 
         return enhanced_prompt
 
-    def create_text_mask(self, image_size: Tuple[int, int], text_info: Dict[str, Any]) -> Optional[torch.Tensor]:
+    def create_text_mask(self, image_size: tuple[int, int], text_info: dict[str, Any]) -> torch.Tensor | None:
         """Create a mask for text placement guidance."""
         if not text_info["has_text"] or not text_info["text_content"]:
             return None
@@ -186,7 +186,7 @@ class TextRenderingEngine:
 
         return mask
 
-    def validate_text_rendering(self, image: Image.Image, expected_text: List[str]) -> Dict[str, Any]:
+    def validate_text_rendering(self, image: Image.Image, expected_text: list[str]) -> dict[str, Any]:
         """Validate text rendering quality in generated image."""
         try:
             import pytesseract
@@ -278,7 +278,7 @@ class TypographyStyler:
             "elegant": [("#2F4F4F", "#F5F5DC"), ("#696969", "#F8F8FF")],
         }
 
-    def suggest_typography_improvements(self, prompt: str, text_info: Dict[str, Any]) -> List[str]:
+    def suggest_typography_improvements(self, prompt: str, text_info: dict[str, Any]) -> list[str]:
         """Suggest typography improvements for better text rendering."""
         suggestions = []
 
@@ -308,7 +308,7 @@ class TypographyStyler:
 
         return suggestions
 
-    def generate_text_variations(self, base_prompt: str, text_content: List[str]) -> List[str]:
+    def generate_text_variations(self, base_prompt: str, text_content: list[str]) -> list[str]:
         """Generate prompt variations optimized for text rendering."""
         variations = []
 
@@ -330,7 +330,7 @@ class TextAwareInpainting:
         # pytesseract.image_to_data conf is usually an integer in [0, 100]
         self.text_detection_threshold = 60
 
-    def detect_text_regions(self, image: Image.Image) -> List[Dict[str, Any]]:
+    def detect_text_regions(self, image: Image.Image) -> list[dict[str, Any]]:
         """Detect text regions in an image for targeted editing."""
         try:
             import pytesseract
@@ -358,7 +358,7 @@ class TextAwareInpainting:
         except ImportError:
             return []
 
-    def create_text_edit_mask(self, image: Image.Image, target_text: str = None) -> Optional[Image.Image]:
+    def create_text_edit_mask(self, image: Image.Image, target_text: str = None) -> Image.Image | None:
         """Create a mask for text editing operations."""
         text_regions = self.detect_text_regions(image)
 
@@ -390,8 +390,8 @@ class TextAwareInpainting:
         y_tol = max(8.0, avg_h * 0.55)
 
         regions_sorted = sorted(regions_to_use, key=lambda r: (r["bbox"][1] + r["bbox"][3]) * 0.5)
-        clusters: List[List[Dict[str, Any]]] = []
-        cluster_centers: List[float] = []
+        clusters: list[list[dict[str, Any]]] = []
+        cluster_centers: list[float] = []
 
         for r in regions_sorted:
             x1, y1, x2, y2 = r["bbox"]
@@ -458,7 +458,7 @@ class TextAwareInpainting:
 
         return mask
 
-    def suggest_text_edits(self, image: Image.Image) -> List[Dict[str, Any]]:
+    def suggest_text_edits(self, image: Image.Image) -> list[dict[str, Any]]:
         """Suggest possible text edits for an image."""
         text_regions = self.detect_text_regions(image)
 

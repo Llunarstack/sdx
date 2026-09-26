@@ -13,11 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 
-def _row_image_caption(obj: Mapping[str, Any]) -> Tuple[str, str]:
+def _row_image_caption(obj: Mapping[str, Any]) -> tuple[str, str]:
     image = str(obj.get("image_path") or obj.get("path") or obj.get("image") or "").strip()
     cap = str(obj.get("caption") or obj.get("text") or "").strip()
     return image, cap
@@ -26,7 +27,7 @@ def _row_image_caption(obj: Mapping[str, Any]) -> Tuple[str, str]:
 def jsonl_stat_text(path: Path) -> str:
     """Same summary lines as the old ``sdx-jsonl-stat.mjs``."""
     total = empty_skip = parse_err = missing = ok = 0
-    cap_lens: List[int] = []
+    cap_lens: list[int] = []
     with path.open(encoding="utf-8", errors="replace") as f:
         for line in f:
             total += 1
@@ -72,8 +73,8 @@ def jsonl_stat_text(path: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _tokenize_normalized(text: Optional[str]) -> List[str]:
-    out: List[str] = []
+def _tokenize_normalized(text: str | None) -> list[str]:
+    out: list[str] = []
     cur = []
     for ch in str(text or ""):
         o = ord(ch)
@@ -88,7 +89,7 @@ def _tokenize_normalized(text: Optional[str]) -> List[str]:
     return out
 
 
-def _caption_neg_from_obj(obj: Dict[str, Any]) -> Tuple[str, str]:
+def _caption_neg_from_obj(obj: dict[str, Any]) -> tuple[str, str]:
     cap = None
     if isinstance(obj.get("caption"), str):
         cap = obj["caption"]
@@ -113,7 +114,7 @@ def promptlint_text(
     max_caption_tokens: int = 0,
     top_overlap_tokens: int = 10,
     fail_on_overlap: bool = False,
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
     """Same report lines and exit semantics as ``sdx-promptlint.mjs``."""
     raw = path.read_text(encoding="utf-8", errors="replace")
     file_lines = raw.splitlines()
@@ -121,11 +122,11 @@ def promptlint_text(
     total_lines = parse_errors = empty_caption_rows = rows_over_max_tokens = 0
     ok_rows = 0
     caption_token_set_sum = 0
-    caption_token_set_min: Optional[int] = None
+    caption_token_set_min: int | None = None
     caption_token_set_max = 0
     overlap_rows = 0
     max_overlap_distinct_tokens = 0
-    overlap_token_counts: Dict[str, int] = {}
+    overlap_token_counts: dict[str, int] = {}
 
     for line in file_lines:
         total_lines += 1
@@ -199,7 +200,7 @@ def promptlint_text(
     return "\n".join(out_lines) + "\n", code
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
         print("usage: python -m sdx_native.jsonl_manifest_pure stat|promptlint ...", file=sys.stderr)

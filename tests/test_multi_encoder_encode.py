@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from utils.modeling.multi_encoder_encode import (
     clip_and_long_captions_for_layout,
@@ -20,7 +19,7 @@ class _FakeFusion:
 @dataclass
 class _FakeBundle:
     mode: str
-    fusion: Optional[_FakeFusion] = None
+    fusion: _FakeFusion | None = None
 
 
 def test_encode_kwargs_t5_only():

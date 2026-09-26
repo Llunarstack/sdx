@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Sequence, Tuple
+from typing import Literal
 
 __all__ = [
     "GuidanceMode",
@@ -24,7 +25,7 @@ AnatomyGuidanceMode = Literal["none", "lite", "strong"]
 @dataclass(frozen=True, slots=True)
 class MediumSpec:
     id: str
-    keywords: Tuple[str, ...]
+    keywords: tuple[str, ...]
     positive_hints: str
     negative_hints: str
     is_photography: bool = False
@@ -34,7 +35,7 @@ def _word_re(term: str) -> re.Pattern:
     return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
 
 
-def _compile_keywords(keywords: Tuple[str, ...]) -> Tuple[re.Pattern, ...]:
+def _compile_keywords(keywords: tuple[str, ...]) -> tuple[re.Pattern, ...]:
     return tuple(_word_re(k) for k in keywords)
 
 
@@ -42,7 +43,7 @@ def _matches(prompt: str, patterns: Sequence[re.Pattern]) -> bool:
     return any(p.search(prompt) for p in patterns)
 
 
-MEDIUM_ALIAS_TERMS: Dict[str, Tuple[str, ...]] = {
+MEDIUM_ALIAS_TERMS: dict[str, tuple[str, ...]] = {
     "digital painting": ("digital paint", "painted digitally", "procreate painting", "photoshop painting"),
     "concept art": ("concept key art", "keyframe concept", "environment concept art"),
     "pixel art": ("pixelart", "retro pixel", "sprite art"),
@@ -60,7 +61,7 @@ MEDIUM_ALIAS_TERMS: Dict[str, Tuple[str, ...]] = {
     "miniature diorama photo": ("miniature photo", "diorama photography", "tabletop diorama shot"),
 }
 
-_MEDIUM_ALIAS_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = tuple(
+_MEDIUM_ALIAS_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
     (re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE), canonical)
     for canonical, aliases in MEDIUM_ALIAS_TERMS.items()
     for alias in aliases
@@ -71,7 +72,7 @@ def _expand_medium_aliases(prompt: str) -> str:
     p = str(prompt or "").strip()
     if not p:
         return p
-    found: List[str] = []
+    found: list[str] = []
     for pat, canonical in _MEDIUM_ALIAS_PATTERNS:
         if pat.search(p):
             found.append(canonical)
@@ -83,7 +84,7 @@ def _expand_medium_aliases(prompt: str) -> str:
 
 def merge_csv_unique(*chunks: str) -> str:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for chunk in chunks:
         if not chunk or not str(chunk).strip():
             continue
@@ -99,7 +100,7 @@ def merge_csv_unique(*chunks: str) -> str:
     return ", ".join(out)
 
 
-MEDIUM_SPECS: Tuple[MediumSpec, ...] = (
+MEDIUM_SPECS: tuple[MediumSpec, ...] = (
     # --- Traditional ---
     MediumSpec(
         id="oil_painting",
@@ -295,10 +296,10 @@ MEDIUM_SPECS: Tuple[MediumSpec, ...] = (
     ),
 )
 
-MEDIUM_IDS: Tuple[str, ...] = tuple(s.id for s in MEDIUM_SPECS)
-_MEDIUM_PATTERNS: Dict[str, Tuple[re.Pattern, ...]] = {s.id: _compile_keywords(s.keywords) for s in MEDIUM_SPECS}
+MEDIUM_IDS: tuple[str, ...] = tuple(s.id for s in MEDIUM_SPECS)
+_MEDIUM_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {s.id: _compile_keywords(s.keywords) for s in MEDIUM_SPECS}
 
-_PERSON_PATTERNS: Tuple[re.Pattern, ...] = tuple(
+_PERSON_PATTERNS: tuple[re.Pattern, ...] = tuple(
     _word_re(k)
     for k in (
         "person",
@@ -369,13 +370,13 @@ PHOTO_COLOR_GRADE_NEG = (
 )
 
 
-def _color_render_fragments(spec_ids: Sequence[str]) -> Tuple[str, str]:
+def _color_render_fragments(spec_ids: Sequence[str]) -> tuple[str, str]:
     """
     Add medium-aware color theory / shading / rendering guidance.
     """
     ids = set(spec_ids)
-    pos_parts: List[str] = [COLOR_THEORY_CORE_POS]
-    neg_parts: List[str] = [COLOR_THEORY_CORE_NEG]
+    pos_parts: list[str] = [COLOR_THEORY_CORE_POS]
+    neg_parts: list[str] = [COLOR_THEORY_CORE_NEG]
 
     has_3d = bool(ids & {"hard_surface_3d", "archviz_3d", "toon_3d", "stylized_game_texture"})
     has_photo = any(i.endswith("_photo") or "photo" in i for i in ids)
@@ -404,11 +405,11 @@ def _color_render_fragments(spec_ids: Sequence[str]) -> Tuple[str, str]:
     return merge_csv_unique(*pos_parts), merge_csv_unique(*neg_parts)
 
 
-def detect_medium_ids(prompt: str, *, include_photography: bool) -> Tuple[str, ...]:
+def detect_medium_ids(prompt: str, *, include_photography: bool) -> tuple[str, ...]:
     if not prompt or not prompt.strip():
         return ()
     prompt = _expand_medium_aliases(prompt)
-    out: List[str] = []
+    out: list[str] = []
     for spec in MEDIUM_SPECS:
         if spec.is_photography and not include_photography:
             continue
@@ -417,7 +418,7 @@ def detect_medium_ids(prompt: str, *, include_photography: bool) -> Tuple[str, .
     return tuple(out)
 
 
-def _anatomy_fragments(prompt: str, mode: AnatomyGuidanceMode) -> Tuple[str, str]:
+def _anatomy_fragments(prompt: str, mode: AnatomyGuidanceMode) -> tuple[str, str]:
     m = (mode or "none").lower()
     if m == "none":
         return "", ""
@@ -435,7 +436,7 @@ def guidance_fragments(
     *,
     include_photography: bool,
     anatomy_mode: AnatomyGuidanceMode = "none",
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     m = (mode or "none").lower()
     if m == "none":
         return _anatomy_fragments(prompt, anatomy_mode)

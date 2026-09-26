@@ -75,7 +75,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--resolution-buckets",
         type=str,
         default="",
-        help="IMPROVEMENTS §1.1: comma-separated sizes, e.g. 256,384,512 or 512x768,256x512 (single-GPU only; no val-split)",
+        help="IMPROVEMENTS sec 1.1: comma-separated sizes, e.g. 256,384,512 or 512x768,256x512 (single-GPU only; no val-split)",
     )
     parser.add_argument("--global-batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=100)
@@ -283,11 +283,14 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repa-encoder-model",
         type=str,
-        default="facebook/dinov2-base",
-        help="Frozen vision encoder: dinov2* or clip* (HF id)",
+        default="facebook/dinov3-vitl16-pretrain-lvd1689m",
+        help="Frozen vision encoder: dinov3* / dinov2* / clip* (HF id)",
     )
     parser.add_argument(
-        "--repa-out-dim", type=int, default=768, help="Projection output dim; must match encoder embedding dim"
+        "--repa-out-dim",
+        type=int,
+        default=1024,
+        help="Projection output dim; must match encoder embedding dim (DINOv3-L=1024)",
     )
     parser.add_argument(
         "--repa-projector-hidden-dim", type=int, default=0, help="REPA projector hidden dim (0=linear head)"
@@ -364,6 +367,30 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         help="Restrict LoRA application to a layer group: all (default), first third, middle third, or last third.",
     )
     parser.add_argument(
+        "--lora-train",
+        action="store_true",
+        help="Train LoRA/DoRA adapters only (freeze the base DiT). Saves small adapter-only checkpoints "
+        "compatible with `sample.py --lora`.",
+    )
+    parser.add_argument("--lora-rank", type=int, default=16, help="LoRA/DoRA rank (with --lora-train).")
+    parser.add_argument("--lora-alpha", type=float, default=16.0, help="LoRA/DoRA alpha scaling (with --lora-train).")
+    parser.add_argument(
+        "--lora-dora",
+        action="store_true",
+        help="Use DoRA (weight-decomposed LoRA) instead of plain LoRA when --lora-train is set.",
+    )
+    parser.add_argument(
+        "--lora-target",
+        type=str,
+        default="",
+        help="Comma-separated module-name substrings to wrap with adapters (default: attention + MLP linears).",
+    )
+    parser.add_argument(
+        "--live-dashboard",
+        action="store_true",
+        help="Show a real-time terminal dashboard (progress, loss trend, throughput, ETA, GPU) during training.",
+    )
+    parser.add_argument(
         "--beta-schedule",
         type=str,
         default="linear",
@@ -416,7 +443,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--ot-noise-pair-reg",
         type=float,
         default=0.0,
-        help="Sinkhorn OT coupling between batch latents and Gaussian noise (0=off; try 0.03–0.1). Experimental.",
+        help="Sinkhorn OT coupling between batch latents and Gaussian noise (0=off; try 0.03-0.1). Experimental.",
     )
     parser.add_argument(
         "--ot-noise-pair-iters",
@@ -446,14 +473,14 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--bridge-aux-lambda",
         type=float,
         default=0.2,
-        help="Endpoint mix lambda for --bridge-aux-weight (0–1].",
+        help="Endpoint mix lambda for --bridge-aux-weight (0-1].",
     )
     parser.add_argument(
         "--timestep-sample-mode",
         type=str,
         default="uniform",
         choices=["uniform", "logit_normal", "high_noise", "low_noise"],
-        help="Training t distribution: uniform | logit_normal (SD3-style) | high_noise (Beta→large t) | low_noise (Beta→small t)",
+        help="Training t distribution: uniform | logit_normal (SD3-style) | high_noise (Beta->large t) | low_noise (Beta->small t)",
     )
     parser.add_argument(
         "--timestep-logit-mean",
@@ -479,7 +506,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--init-from",
         type=str,
         default=None,
-        help="Load weights from checkpoint (same as resume) but ignore optimizer/steps — use for fine-tuning "
+        help="Load weights from checkpoint (same as resume) but ignore optimizer/steps  -  use for fine-tuning "
         "(e.g. book/comic) from a general SDX checkpoint. Mutually exclusive with --resume.",
     )
     parser.add_argument(
@@ -719,19 +746,19 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--train-originality-prob",
         type=float,
         default=0.0,
-        help="Per-sample prob to inject novelty phrases (like sample.py --originality); 0=off, try 0.1–0.25",
+        help="Per-sample prob to inject novelty phrases (like sample.py --originality); 0=off, try 0.1-0.25",
     )
     parser.add_argument(
         "--train-originality-strength",
         type=float,
         default=0.5,
-        help="0–1: how many originality tokens to insert when augment triggers (default 0.5)",
+        help="0-1: how many originality tokens to insert when augment triggers (default 0.5)",
     )
     parser.add_argument(
         "--creativity-jitter-std",
         type=float,
         default=0.0,
-        help="Gaussian noise on training creativity scalar when --creativity-embed-dim > 0 (0=off; try 0.05–0.15)",
+        help="Gaussian noise on training creativity scalar when --creativity-embed-dim > 0 (0=off; try 0.05-0.15)",
     )
     parser.add_argument(
         "--save-polyak",
@@ -765,7 +792,7 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         choices=["", "fast", "balanced", "production"],
         help=(
             "Book/comic/manga training bundle on the same DiT-Text stack (AR, hierarchical captions, "
-            "guidance packs). Empty=off. Same checkpoint family as sample.py — not a separate model type."
+            "guidance packs). Empty=off. Same checkpoint family as sample.py  -  not a separate model type."
         ),
     )
     parser.add_argument(

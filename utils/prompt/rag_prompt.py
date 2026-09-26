@@ -10,8 +10,9 @@ retrieval (vector DB, HTTP, filesystem) and pass ``facts`` here.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Union
+from typing import Any
 
 
 def merge_facts_into_prompt(
@@ -40,11 +41,11 @@ def merge_facts_into_prompt(
 
 
 def load_facts_from_jsonl(
-    path: Union[str, Path],
+    path: str | Path,
     *,
     text_key: str = "text",
     max_entries: int = 32,
-) -> List[str]:
+) -> list[str]:
     """
     Load up to ``max_entries`` string fields from a JSONL file (one JSON object per line).
 
@@ -54,14 +55,14 @@ def load_facts_from_jsonl(
     p = Path(path)
     if not p.is_file():
         return []
-    out: List[str] = []
+    out: list[str] = []
     with open(p, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             try:
-                obj: Dict[str, Any] = json.loads(line)
+                obj: dict[str, Any] = json.loads(line)
             except json.JSONDecodeError:
                 continue
             t = obj.get(text_key)
@@ -73,12 +74,12 @@ def load_facts_from_jsonl(
     return out
 
 
-def facts_from_mapping(items: Iterable[Dict[str, Any]], *, text_key: str = "text") -> List[str]:
+def facts_from_mapping(items: Iterable[dict[str, Any]], *, text_key: str = "text") -> list[str]:
     """Extract ``text_key`` from each dict in ``items``."""
     return [str(d[text_key]).strip() for d in items if text_key in d and str(d.get(text_key, "")).strip()]
 
 
-def _append_if_text(out: List[str], seen: set, value: Any, *, max_item_chars: int = 280) -> None:
+def _append_if_text(out: list[str], seen: set, value: Any, *, max_item_chars: int = 280) -> None:
     s = str(value or "").strip()
     if not s:
         return
@@ -91,7 +92,7 @@ def _append_if_text(out: List[str], seen: set, value: Any, *, max_item_chars: in
     out.append(s)
 
 
-def _extract_text_lines(obj: Any, out: List[str], seen: set, *, max_item_chars: int = 280) -> None:
+def _extract_text_lines(obj: Any, out: list[str], seen: set, *, max_item_chars: int = 280) -> None:
     if obj is None:
         return
     if isinstance(obj, str):
@@ -117,14 +118,14 @@ def facts_from_gen_searcher_payload(
     *,
     max_entries: int = 24,
     max_item_chars: int = 280,
-) -> List[str]:
+) -> list[str]:
     """
     Extract text facts from Gen-Searcher-like outputs (JSON object/list).
 
     Works with common fields from agentic-search style outputs, while remaining
     robust to schema drift by recursively scanning nested text-bearing fields.
     """
-    out: List[str] = []
+    out: list[str] = []
     seen: set = set()
     if payload is None:
         return out
@@ -153,11 +154,11 @@ def facts_from_gen_searcher_payload(
 
 
 def load_facts_from_gen_searcher_json(
-    path: Union[str, Path],
+    path: str | Path,
     *,
     max_entries: int = 24,
     max_item_chars: int = 280,
-) -> List[str]:
+) -> list[str]:
     """
     Load Gen-Searcher-style facts from either .json or .jsonl file.
 
@@ -169,7 +170,7 @@ def load_facts_from_gen_searcher_json(
         return []
     suffix = p.suffix.lower()
     if suffix == ".jsonl":
-        out: List[str] = []
+        out: list[str] = []
         seen: set = set()
         with p.open(encoding="utf-8") as f:
             for line in f:
@@ -201,10 +202,10 @@ def load_facts_from_gen_searcher_json(
 
 def retrieve_facts_for_query_local(
     query: str,
-    corpus_path: Union[str, Path],
+    corpus_path: str | Path,
     *,
     top_k: int = 8,
-) -> List[str]:
+) -> list[str]:
     """TF-IDF retrieval from a JSONL corpus (see ``utils.superior.retrieval``)."""
     from utils.superior.retrieval import build_tfidf_index_from_jsonl, retrieve_facts_for_query
 

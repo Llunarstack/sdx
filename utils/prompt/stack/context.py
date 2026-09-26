@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any
 
 
 class StackMode(str, Enum):
@@ -42,8 +43,8 @@ class PromptContext:
     mode: StackMode = StackMode.INFERENCE
     args: Any = None
     artifacts: PromptArtifacts = field(default_factory=PromptArtifacts)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    trace: List[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    trace: list[str] = field(default_factory=list)
 
     # Post-stack hints (sample.py encoding)
     t5_positive_hint: str = ""
@@ -55,6 +56,6 @@ class PromptResult:
     positive: str
     negative: str
     t5_positive_hint: str = ""
-    trace: List[str] = field(default_factory=list)
-    analysis: Optional[Mapping[str, Any]] = None
-    resolved_controls: Optional[Mapping[str, str]] = None
+    trace: list[str] = field(default_factory=list)
+    analysis: Mapping[str, Any] | None = None
+    resolved_controls: Mapping[str, str] | None = None

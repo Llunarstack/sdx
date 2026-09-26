@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from config.train_config import TrainConfig
 from utils.modeling.model_paths import default_t5_path
 
 
-def parse_caption_dropout_schedule(s: Optional[str]):
+def parse_caption_dropout_schedule(s: str | None):
     """Parse '0,0.2,10000,0.05' -> [(0, 0.2), (10000, 0.05)]. Returns None if s is None/empty."""
     if not s or not str(s).strip():
         return None
@@ -21,7 +19,7 @@ def parse_caption_dropout_schedule(s: Optional[str]):
     return schedule if schedule else None
 
 
-def parse_resolution_buckets(s: Optional[str]):
+def parse_resolution_buckets(s: str | None):
     """Parse ``256,384`` or ``512x768,256x512`` into list[(H, W)] or None."""
     if not s or not str(s).strip():
         return None
@@ -39,7 +37,7 @@ def parse_resolution_buckets(s: Optional[str]):
     return buckets or None
 
 
-def parse_mdm_mask_schedule(s: Optional[str]):
+def parse_mdm_mask_schedule(s: str | None):
     """Parse '0,0.05,500,0.25' -> [(0,0.05),(500,0.25)] or None."""
     if not s or not str(s).strip():
         return None
@@ -74,6 +72,12 @@ def build_train_config_from_args(args) -> TrainConfig:
         global_batch_size=args.global_batch_size,
         epochs=args.epochs,
         lr=args.lr,
+        lora_train=bool(getattr(args, "lora_train", False)),
+        lora_rank=int(getattr(args, "lora_rank", 16)),
+        lora_alpha=float(getattr(args, "lora_alpha", 16.0)),
+        lora_dora=bool(getattr(args, "lora_dora", False)),
+        lora_target=str(getattr(args, "lora_target", "") or ""),
+        live_dashboard=bool(getattr(args, "live_dashboard", False)),
         num_workers=args.num_workers,
         prefetch_factor=int(getattr(args, "prefetch_factor", 2)),
         cuda_stream_prefetch=not bool(getattr(args, "no_cuda_stream_prefetch", False)),

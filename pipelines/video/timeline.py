@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from .types import MasterTimeline, SegmentAssignment, TransitionType
 
@@ -24,7 +23,7 @@ def normalize_segment_window(
     target_duration_sec: float,
     *,
     in_sec: float = 0.0,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """
     Pick in/out window inside clip and speed factor to hit target duration.
 
@@ -46,8 +45,8 @@ class TimelineSlot:
     transition: TransitionType
 
 
-def build_master_slots(assignments: List[SegmentAssignment], timeline: MasterTimeline) -> List[TimelineSlot]:
-    slots: List[TimelineSlot] = []
+def build_master_slots(assignments: list[SegmentAssignment], timeline: MasterTimeline) -> list[TimelineSlot]:
+    slots: list[TimelineSlot] = []
     cursor = 0
     for i, seg in enumerate(assignments):
         n = frame_count_for_duration(seg.shot.duration_sec, timeline.fps)
@@ -73,13 +72,13 @@ def transition_overlap_frames(transition: TransitionType, fps: float) -> int:
     return 0
 
 
-def retime_frame_indices(source_count: int, target_count: int) -> List[int]:
+def retime_frame_indices(source_count: int, target_count: int) -> list[int]:
     """Map target frame indices to nearest source indices."""
     if source_count <= 0 or target_count <= 0:
         return []
     if source_count == target_count:
         return list(range(source_count))
-    out: List[int] = []
+    out: list[int] = []
     for t in range(target_count):
         src = int(round(t * (source_count - 1) / max(1, target_count - 1)))
         out.append(min(source_count - 1, max(0, src)))

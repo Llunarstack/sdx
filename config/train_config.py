@@ -1,7 +1,6 @@
 """Training configuration — single source of truth for all hyperparameters."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 
 @dataclass(slots=True)
@@ -10,17 +9,17 @@ class TrainConfig:
     # Data
     # -------------------------------------------------------------------------
     data_path: str = ""
-    manifest_jsonl: Optional[str] = None
+    manifest_jsonl: str | None = None
     image_size: int = 256
     # Optional list of (H, W) targets for multi-resolution / aspect-ratio bucketing.
     # None = single square crop at --image-size.
-    resolution_buckets: Optional[List[Tuple[int, int]]] = None
+    resolution_buckets: list[tuple[int, int]] | None = None
     num_workers: int = -1  # -1 or --auto-num-workers: CPU/dataset heuristic; else explicit count
     global_batch_size: int = 128
     caption_dropout_prob: float = 0.1
     # Step-dependent caption dropout schedule: list of (step, prob) breakpoints.
     # Example: [(0, 0.2), (10000, 0.05)] decays from 0.2 to 0.05 over 10k steps.
-    caption_dropout_schedule: Optional[List[tuple]] = None
+    caption_dropout_schedule: list[tuple] | None = None
     crop_mode: str = "center"  # "center" | "random" | "largest_center"
     # Merge JSONL `parts` / `region_captions` into the T5 caption string.
     region_caption_mode: str = "append"  # "append" | "prefix" | "off"
@@ -99,13 +98,15 @@ class TrainConfig:
     # Aligns DiT internal features with a frozen DINOv2 or CLIP encoder.
     # -------------------------------------------------------------------------
     repa_weight: float = 0.0  # 0 = off
-    # Recommended encoders:
-    #   "facebook/dinov2-base"          (768-dim)
-    #   "openai/clip-vit-large-patch14" (768-dim)
-    repa_encoder_model: str = "facebook/dinov2-base"
+    # Recommended encoders (match repa_out_dim):
+    #   "facebook/dinov3-vitl16-pretrain-lvd1689m"  (1024-dim, default)
+    #   "facebook/dinov3-vitb16-pretrain-lvd1689m"  (768-dim)
+    #   "facebook/dinov2-base"                      (768-dim, legacy)
+    #   "openai/clip-vit-large-patch14"             (768-dim)
+    repa_encoder_model: str = "facebook/dinov3-vitl16-pretrain-lvd1689m"
     # Must match the frozen encoder embedding dim:
-    #   CLIP ViT-L/14 → 768, DINOv2-base → 768, DINOv2-large → 1024.
-    repa_out_dim: int = 768
+    #   DINOv3-L/16 → 1024, DINOv3-B/16 / DINOv2-base / CLIP-L → 768.
+    repa_out_dim: int = 1024
     repa_projector_hidden_dim: int = 0  # 0 = linear projection head
 
     # -------------------------------------------------------------------------
@@ -224,12 +225,24 @@ class TrainConfig:
     save_best: bool = True  # save checkpoint whenever train loss improves
 
     # -------------------------------------------------------------------------
+    # LoRA / DoRA adapter training (freeze base DiT, train adapters only)
+    # -------------------------------------------------------------------------
+    lora_train: bool = False
+    lora_rank: int = 16
+    lora_alpha: float = 16.0
+    lora_dora: bool = False
+    lora_target: str = ""  # comma-separated module-name substrings; "" = defaults
+
+    # Real-time terminal training dashboard (rich live panel; rank-0 only).
+    live_dashboard: bool = False
+
+    # -------------------------------------------------------------------------
     # Validation + early stopping
     # -------------------------------------------------------------------------
     val_split: float = 0.0  # fraction held out for validation (0 = off)
     val_every: int = 2000  # evaluate every N steps
     early_stopping_patience: int = 0  # stop after N val checks with no improvement (0 = off)
-    val_max_batches: Optional[int] = None  # cap val batches per eval (None = full set)
+    val_max_batches: int | None = None  # cap val batches per eval (None = full set)
 
     # -------------------------------------------------------------------------
     # Refinement
@@ -249,7 +262,7 @@ class TrainConfig:
     mdm_mask_ratio: float = 0.0  # 0 = off; e.g. 0.2–0.5
     # Step-dependent mask ratio schedule: list of (t_step, mask_ratio) breakpoints.
     # Example: [(0, 0.05), (500, 0.25), (999, 0.35)]
-    mdm_mask_schedule: Optional[List[tuple]] = None
+    mdm_mask_schedule: list[tuple] | None = None
     mdm_patch_size: int = 2  # must match DiT patch embed size (typically 2)
     mdm_loss_only_masked: bool = True
     mdm_min_mask_patches: int = 1  # minimum masked patches per sample
@@ -267,10 +280,10 @@ class TrainConfig:
     # Curriculum
     # -------------------------------------------------------------------------
     # Increase max caption length at these step thresholds.
-    curriculum_caption_steps: Optional[List[int]] = None  # e.g. [5000, 15000, 30000]
-    curriculum_max_lengths: Optional[List[int]] = None  # e.g. [77, 150, 300]
+    curriculum_caption_steps: list[int] | None = None  # e.g. [5000, 15000, 30000]
+    curriculum_max_lengths: list[int] | None = None  # e.g. [77, 150, 300]
     # Difficulty curriculum: prefer easy/hard samples at different training stages.
-    curriculum_difficulty_steps: Optional[List[int]] = None  # e.g. [0, 5000, 10000]
+    curriculum_difficulty_steps: list[int] | None = None  # e.g. [0, 5000, 10000]
     curriculum_difficulty_easy_first: bool = True
 
     # -------------------------------------------------------------------------
@@ -290,11 +303,11 @@ class TrainConfig:
     log_every: int = 50
     ckpt_every: int = 5000
     global_seed: int = 42
-    resume: Optional[str] = None  # path to checkpoint to resume from
+    resume: str | None = None  # path to checkpoint to resume from
     # Load model/EMA (and aux modules) from checkpoint but start step 0 with a fresh optimizer.
-    init_from: Optional[str] = None
-    wandb_project: Optional[str] = None  # e.g. "sdx" to enable WandB logging
-    tensorboard_dir: Optional[str] = None  # e.g. "runs" to enable TensorBoard
+    init_from: str | None = None
+    wandb_project: str | None = None  # e.g. "sdx" to enable WandB logging
+    tensorboard_dir: str | None = None  # e.g. "runs" to enable TensorBoard
     log_images_every: int = 0  # 0 = off; log a sample image every N steps
     log_images_prompt: str = "a photo of a cat"
     dry_run: bool = False  # run 1 step then exit (verify setup)
@@ -306,7 +319,7 @@ class TrainConfig:
     # Reproducibility
     # -------------------------------------------------------------------------
     deterministic: bool = False
-    latent_cache_dir: Optional[str] = None  # precomputed latents for faster training
+    latent_cache_dir: str | None = None  # precomputed latents for faster training
 
     # -------------------------------------------------------------------------
     # Host throughput (CUDA / CPU)
@@ -339,7 +352,7 @@ class TrainConfig:
         return max(1, self.global_batch_size // self.world_size)
 
 
-def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: Optional[float] = None) -> dict:
+def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: float | None = None) -> dict:
     """Build the keyword-argument dict for DiT model constructors from a config object.
 
     Works with both ``TrainConfig`` instances and checkpoint config objects (any object

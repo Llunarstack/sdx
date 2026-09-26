@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class ShotType(str, Enum):
@@ -34,7 +33,7 @@ class ShotPlan:
     lens_hint: str
 
 
-_SHOTS: Tuple[Tuple[re.Pattern, ShotType, str, str, str], ...] = (
+_SHOTS: tuple[tuple[re.Pattern, ShotType, str, str, str], ...] = (
     (
         re.compile(r"\b(establishing shot|extreme wide|city establishing)\b", re.I),
         ShotType.ESTABLISHING,
@@ -109,7 +108,7 @@ class ShotGrammar:
             )
         return ShotPlan(ShotType.MEDIUM, "", "", "")
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         pos = ", ".join(x for x in (p.positive, p.lens_hint) if x)
         return pos, p.negative

@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
 
 class MatureClass(str, Enum):
@@ -91,7 +90,7 @@ class MatureGuidance:
         neg = ", ".join(p for p in (_NEG_BASE, extra_neg) if p)
         return MaturePlan(cls, pos, neg, lighting, anatomy)
 
-    def fragments(self, prompt: str) -> Tuple[str, str]:
+    def fragments(self, prompt: str) -> tuple[str, str]:
         p = self.plan(prompt)
         return p.positive, p.negative
 

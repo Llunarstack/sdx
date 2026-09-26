@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any
 
 
-def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -28,7 +29,7 @@ def _iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
                 continue
 
 
-def _get_caption(rec: Dict[str, Any]) -> str:
+def _get_caption(rec: dict[str, Any]) -> str:
     for k in ("caption", "text", "prompt"):
         v = rec.get(k)
         if v is not None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 from ..planning.generation_plan import GenerationPlan
 
@@ -18,7 +18,7 @@ class PlanAccept:
     reviewer_id: str
     proposal: PlanProposal
     accepted_step_ids: list[str]
-    amendments: Dict[str, str] = field(default_factory=dict)
+    amendments: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -29,9 +29,9 @@ class VerificationVerdict:
     iteration: int
     acceptance: bool
     summary: str = ""
-    suggestion: Optional[str] = None
-    metrics: Dict[str, float] = field(default_factory=dict)
-    artefacts: Dict[str, Any] = field(default_factory=dict)
+    suggestion: str | None = None
+    metrics: dict[str, float] = field(default_factory=dict)
+    artefacts: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = ["PlanAccept", "PlanProposal", "VerificationVerdict"]

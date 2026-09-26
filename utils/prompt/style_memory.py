@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .style_genome import StyleGenome
 
@@ -24,7 +24,7 @@ class StyleGenomeRecord:
     image_path: str = ""
     saved_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "genome": self.genome.to_dict(),
             "score": self.score,
@@ -35,7 +35,7 @@ class StyleGenomeRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> StyleGenomeRecord:
+    def from_dict(cls, data: dict[str, Any]) -> StyleGenomeRecord:
         return cls(
             genome=StyleGenome.from_dict(dict(data.get("genome") or {})),
             score=float(data.get("score") or 0.0),
@@ -49,13 +49,13 @@ class StyleGenomeRecord:
 class StyleGenomeBank:
     """Append-only JSONL store of high-scoring genomes."""
 
-    def __init__(self, path: Optional[Path] = None) -> None:
+    def __init__(self, path: Path | None = None) -> None:
         self.path = Path(path) if path else _default_bank_path()
 
-    def load(self, limit: int = 200) -> List[StyleGenomeRecord]:
+    def load(self, limit: int = 200) -> list[StyleGenomeRecord]:
         if not self.path.is_file():
             return []
-        rows: List[StyleGenomeRecord] = []
+        rows: list[StyleGenomeRecord] = []
         with self.path.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -72,10 +72,10 @@ class StyleGenomeBank:
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record.to_dict(), ensure_ascii=False) + "\n")
 
-    def top_genomes(self, k: int = 5) -> List[StyleGenome]:
+    def top_genomes(self, k: int = 5) -> list[StyleGenome]:
         rows = sorted(self.load(), key=lambda r: r.score, reverse=True)
         seen: set[str] = set()
-        out: List[StyleGenome] = []
+        out: list[StyleGenome] = []
         for row in rows:
             if row.genome.id in seen:
                 continue

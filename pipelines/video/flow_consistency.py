@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import numpy as np
 
@@ -29,7 +28,7 @@ def _fb_error(flow_fwd: np.ndarray, flow_bwd: np.ndarray) -> np.ndarray:
         return np.zeros((h, w), dtype=np.float32)
 
 
-def repair_flow_consistency(frame_paths: List[Path], *, threshold: float = 2.5, blend: float = 0.45) -> List[Path]:
+def repair_flow_consistency(frame_paths: list[Path], *, threshold: float = 2.5, blend: float = 0.45) -> list[Path]:
     """Blend inconsistent pixels toward previous frame (reduces ghosting)."""
     if len(frame_paths) < 2:
         return frame_paths

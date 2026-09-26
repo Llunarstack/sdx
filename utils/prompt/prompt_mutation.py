@@ -42,14 +42,15 @@ from __future__ import annotations
 import hashlib
 import random
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Vocabulary tables for mutations
 # ---------------------------------------------------------------------------
 
-_SYNONYM_MAP: Dict[str, List[str]] = {
+_SYNONYM_MAP: dict[str, list[str]] = {
     # Subjects
     "woman": ["female figure", "young woman", "girl", "lady", "female character"],
     "man": ["male figure", "young man", "guy", "gentleman", "male character"],
@@ -82,7 +83,7 @@ _SYNONYM_MAP: Dict[str, List[str]] = {
     "wearing": ["dressed in", "clothed in", "adorned with"],
 }
 
-_SPECIFICITY_ADDITIONS: Dict[str, List[str]] = {
+_SPECIFICITY_ADDITIONS: dict[str, list[str]] = {
     "sunset": ["warm amber and orange tones", "long shadows", "golden rim light"],
     "forest": ["dappled light through canopy", "moss-covered ground", "ancient trees"],
     "portrait": ["catchlights in eyes", "natural skin texture", "three-quarter view"],
@@ -99,7 +100,7 @@ _SPECIFICITY_ADDITIONS: Dict[str, List[str]] = {
     "background": ["atmospheric depth", "environmental storytelling", "coherent perspective"],
 }
 
-_STYLE_ANCHORS: Dict[str, List[str]] = {
+_STYLE_ANCHORS: dict[str, list[str]] = {
     "photorealistic": [
         "shot on Canon EOS R5, 85mm f/1.4",
         "Hasselblad medium format, natural light",
@@ -148,7 +149,7 @@ _REORDER_PRIORITY_PATTERNS = [
     r"\b(solo|duo|group)\b",
 ]
 
-_CULTURAL_CONTEXTS: Dict[str, List[str]] = {
+_CULTURAL_CONTEXTS: dict[str, list[str]] = {
     "samurai": ["Edo period Japan", "feudal Japanese aesthetic", "bushido warrior tradition"],
     "knight": ["medieval European", "chivalric tradition", "Gothic armor style"],
     "wizard": ["arcane tradition", "mystical scholarly aesthetic", "ancient magical order"],
@@ -171,7 +172,7 @@ class MutationResult:
 
     prompt: str
     strategy: str
-    changes: List[str] = field(default_factory=list)
+    changes: list[str] = field(default_factory=list)
     confidence: float = 1.0  # how likely this mutation is to improve results
 
 
@@ -198,8 +199,8 @@ class PromptMutationEngine:
     def __init__(
         self,
         n_mutations: int = 4,
-        strategies: Optional[List[str]] = None,
-        seed: Optional[int] = None,
+        strategies: list[str] | None = None,
+        seed: int | None = None,
         max_length: int = 300,
         preserve_emphasis: bool = True,
     ):
@@ -215,7 +216,7 @@ class PromptMutationEngine:
         h = hashlib.sha256(prompt.encode()).hexdigest()[:8]
         return random.Random(int(h, 16))
 
-    def mutate(self, prompt: str) -> List[MutationResult]:
+    def mutate(self, prompt: str) -> list[MutationResult]:
         """
         Generate n_mutations varied versions of the prompt.
 
@@ -251,7 +252,7 @@ class PromptMutationEngine:
         prompt: str,
         strategy: str,
         rng: random.Random,
-    ) -> Optional[MutationResult]:
+    ) -> MutationResult | None:
         """Apply a single mutation strategy."""
         if strategy == "synonym":
             return self._mutate_synonym(prompt, rng)
@@ -273,7 +274,7 @@ class PromptMutationEngine:
             return self._mutate_negative_inversion(prompt, rng)
         return None
 
-    def _mutate_synonym(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_synonym(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Replace key words with synonyms."""
         parts = [p.strip() for p in prompt.split(",")]
         changes = []
@@ -300,7 +301,7 @@ class PromptMutationEngine:
             confidence=0.8,
         )
 
-    def _mutate_specificity(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_specificity(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Add specific details to vague elements."""
         additions = []
         prompt_lower = prompt.lower()
@@ -324,7 +325,7 @@ class PromptMutationEngine:
             confidence=0.9,
         )
 
-    def _mutate_style_anchor(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_style_anchor(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Add style-specific technical vocabulary."""
         prompt_lower = prompt.lower()
 
@@ -342,7 +343,7 @@ class PromptMutationEngine:
 
         return None
 
-    def _mutate_reorder(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_reorder(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Reorder elements to put the most important first."""
         parts = [p.strip() for p in prompt.split(",") if p.strip()]
         if len(parts) <= 2:
@@ -378,7 +379,7 @@ class PromptMutationEngine:
             confidence=0.75,
         )
 
-    def _mutate_emphasis(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_emphasis(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Add (word) emphasis to key elements."""
         if "(" in prompt and self.preserve_emphasis:
             return None  # Already has emphasis
@@ -410,7 +411,7 @@ class PromptMutationEngine:
             confidence=0.7,
         )
 
-    def _mutate_quality_anchor(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_quality_anchor(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Add quality anchor tags if missing."""
         prompt_lower = prompt.lower()
         quality_present = any(
@@ -430,7 +431,7 @@ class PromptMutationEngine:
             confidence=0.85,
         )
 
-    def _mutate_cultural_context(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_cultural_context(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Add cultural/historical grounding."""
         prompt_lower = prompt.lower()
 
@@ -448,7 +449,7 @@ class PromptMutationEngine:
 
         return None
 
-    def _mutate_technical_spec(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_technical_spec(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """Add technical photography/art terms."""
         prompt_lower = prompt.lower()
 
@@ -492,7 +493,7 @@ class PromptMutationEngine:
 
         return None
 
-    def _mutate_negative_inversion(self, prompt: str, rng: random.Random) -> Optional[MutationResult]:
+    def _mutate_negative_inversion(self, prompt: str, rng: random.Random) -> MutationResult | None:
         """
         Rephrase to avoid common failure modes.
 
@@ -549,8 +550,8 @@ class MutationPipelineResult:
     best_prompt: str
     best_score: float
     original_prompt: str
-    all_mutations: List[MutationResult]
-    all_scores: List[float]
+    all_mutations: list[MutationResult]
+    all_scores: list[float]
     pick_metric: str
     winner_index: int
 
@@ -582,7 +583,7 @@ class MutationGenerationPipeline:
 
     def __init__(
         self,
-        engine: Optional[PromptMutationEngine] = None,
+        engine: PromptMutationEngine | None = None,
         pick_metric: str = "combo",
         device: str = "cuda",
         clip_model_id: str = "openai/clip-vit-base-patch32",

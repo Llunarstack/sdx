@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -50,29 +50,29 @@ class EnhancedTrainingBatch:
     class_labels: torch.Tensor
 
     # Enhanced feature data
-    spatial_layouts: Optional[torch.Tensor] = None
-    anatomy_masks: Optional[torch.Tensor] = None
-    text_tokens: Optional[torch.Tensor] = None
-    text_positions: Optional[torch.Tensor] = None
-    typography_styles: Optional[torch.Tensor] = None
-    character_ids: Optional[torch.Tensor] = None
-    style_ids: Optional[torch.Tensor] = None
+    spatial_layouts: torch.Tensor | None = None
+    anatomy_masks: torch.Tensor | None = None
+    text_tokens: torch.Tensor | None = None
+    text_positions: torch.Tensor | None = None
+    typography_styles: torch.Tensor | None = None
+    character_ids: torch.Tensor | None = None
+    style_ids: torch.Tensor | None = None
 
     # Character consistency data
-    character_profiles: Optional[List[CharacterProfile]] = None
-    reference_images: Optional[torch.Tensor] = None
-    character_embeddings: Optional[torch.Tensor] = None
+    character_profiles: list[CharacterProfile] | None = None
+    reference_images: torch.Tensor | None = None
+    character_embeddings: torch.Tensor | None = None
 
     # Style harmonization data
-    original_prompt: Optional[str] = None
-    harmonized_prompt: Optional[str] = None
-    lora_configs: Optional[List[Dict[str, Any]]] = None
-    style_conflicts: Optional[Dict[str, Any]] = None
+    original_prompt: str | None = None
+    harmonized_prompt: str | None = None
+    lora_configs: list[dict[str, Any]] | None = None
+    style_conflicts: dict[str, Any] | None = None
 
     # Ground truth for validation
-    object_counts: Optional[torch.Tensor] = None
-    anatomy_keypoints: Optional[torch.Tensor] = None
-    text_content: Optional[List[str]] = None
+    object_counts: torch.Tensor | None = None
+    anatomy_keypoints: torch.Tensor | None = None
+    text_content: list[str] | None = None
 
 
 class SpatialControlLoss(nn.Module):
@@ -90,8 +90,8 @@ class SpatialControlLoss(nn.Module):
         self,
         predicted_noise: torch.Tensor,
         target_noise: torch.Tensor,
-        spatial_layout: Optional[torch.Tensor] = None,
-        object_counts: Optional[torch.Tensor] = None,
+        spatial_layout: torch.Tensor | None = None,
+        object_counts: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if spatial_layout is None:
             return torch.tensor(0.0, device=predicted_noise.device)
@@ -153,8 +153,8 @@ class AnatomyAwareLoss(nn.Module):
         self,
         predicted_noise: torch.Tensor,
         target_noise: torch.Tensor,
-        anatomy_mask: Optional[torch.Tensor] = None,
-        anatomy_keypoints: Optional[torch.Tensor] = None,
+        anatomy_mask: torch.Tensor | None = None,
+        anatomy_keypoints: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if anatomy_mask is None:
             return torch.tensor(0.0, device=predicted_noise.device)
@@ -201,8 +201,8 @@ class TextRenderingLoss(nn.Module):
         self,
         predicted_noise: torch.Tensor,
         target_noise: torch.Tensor,
-        text_tokens: Optional[torch.Tensor] = None,
-        text_positions: Optional[torch.Tensor] = None,
+        text_tokens: torch.Tensor | None = None,
+        text_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if text_tokens is None:
             return torch.tensor(0.0, device=predicted_noise.device)
@@ -251,10 +251,10 @@ class ConsistencyLoss(nn.Module):
         self,
         predicted_noise: torch.Tensor,
         target_noise: torch.Tensor,
-        character_ids: Optional[torch.Tensor] = None,
-        style_ids: Optional[torch.Tensor] = None,
-        character_features: Optional[torch.Tensor] = None,
-        style_features: Optional[torch.Tensor] = None,
+        character_ids: torch.Tensor | None = None,
+        style_ids: torch.Tensor | None = None,
+        character_features: torch.Tensor | None = None,
+        style_features: torch.Tensor | None = None,
     ) -> torch.Tensor:
         consistency_loss = 0.0
 
@@ -329,11 +329,11 @@ class EnhancedTrainer:
         batch: EnhancedTrainingBatch,
         predicted_noise: torch.Tensor,
         target_noise: torch.Tensor,
-        generated_images: Optional[torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
+        generated_images: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         """Compute enhanced loss with all advanced features."""
 
-        losses: Dict[str, torch.Tensor] = {}
+        losses: dict[str, torch.Tensor] = {}
 
         # Spatial control loss
         if batch.spatial_layouts is not None:
@@ -381,7 +381,7 @@ class EnhancedTrainer:
 
         return losses
 
-    def training_step(self, batch: EnhancedTrainingBatch) -> Dict[str, torch.Tensor]:
+    def training_step(self, batch: EnhancedTrainingBatch) -> dict[str, torch.Tensor]:
         """Single training step with enhanced features."""
 
         # Standard diffusion forward pass
@@ -449,10 +449,10 @@ class EnhancedTrainer:
         alpha_t = torch.cos(t_norm * np.pi / 2) ** 2
         return torch.sqrt(alpha_t).view(-1, 1, 1, 1) * x_0 + torch.sqrt(1 - alpha_t).view(-1, 1, 1, 1) * noise
 
-    def validate_generation(self, generated_images: torch.Tensor, batch: EnhancedTrainingBatch) -> Dict[str, float]:
+    def validate_generation(self, generated_images: torch.Tensor, batch: EnhancedTrainingBatch) -> dict[str, float]:
         """Validate generated images against enhanced features."""
 
-        validation_results: Dict[str, float] = {}
+        validation_results: dict[str, float] = {}
 
         # Convert to PIL images for validation
         from torchvision.transforms import ToPILImage
@@ -490,20 +490,20 @@ class EnhancedTrainer:
     # ------------------------------------------------------------------ #
 
     def create_character(
-        self, name: str, reference_images: List[str], physical_features=None, style_preferences=None
+        self, name: str, reference_images: list[str], physical_features=None, style_preferences=None
     ) -> CharacterProfile:
         """Create a new character profile."""
         return self.character_database.create_character(name, reference_images, physical_features, style_preferences)
 
-    def update_character(self, character_id: str, updates: Dict[str, Any]) -> CharacterProfile:
+    def update_character(self, character_id: str, updates: dict[str, Any]) -> CharacterProfile:
         """Update an existing character profile."""
         return self.character_database.update_character(character_id, updates)
 
-    def get_character(self, character_id: str) -> Optional[CharacterProfile]:
+    def get_character(self, character_id: str) -> CharacterProfile | None:
         """Get character profile by ID."""
         return self.character_database.get_character(character_id)
 
-    def list_characters(self, filters: Optional[Dict[str, Any]] = None) -> List[CharacterProfile]:
+    def list_characters(self, filters: dict[str, Any] | None = None) -> list[CharacterProfile]:
         """List all characters with optional filtering."""
         return self.character_database.list_characters(filters)
 
@@ -511,15 +511,15 @@ class EnhancedTrainer:
         """Delete a character profile."""
         return self.character_database.delete_character(character_id)
 
-    def validate_character_consistency(self, image: torch.Tensor, character_id: str) -> Dict[str, float]:
+    def validate_character_consistency(self, image: torch.Tensor, character_id: str) -> dict[str, float]:
         """Validate consistency of generated image against character."""
         return self.character_database.validate_consistency(image, character_id)
 
-    def update_consistency_loss_weights(self, new_weights: Dict[str, float]) -> None:
+    def update_consistency_loss_weights(self, new_weights: dict[str, float]) -> None:
         """Update character consistency loss weights during training."""
         self.character_consistency_manager.update_loss_weights(new_weights)
 
-    def get_consistency_statistics(self) -> Dict[str, Any]:
+    def get_consistency_statistics(self) -> dict[str, Any]:
         """Get statistics about character consistency system."""
         return {
             "character_count": len(self.character_database.characters),
@@ -536,9 +536,9 @@ class EnhancedTrainer:
         if not batch.original_prompt or not batch.lora_configs:
             return batch  # No harmonization needed
 
-        harmonized_prompts: List[str] = []
-        harmonized_lora_configs: List[Any] = []
-        style_analyses: List[Dict[str, Any]] = []
+        harmonized_prompts: list[str] = []
+        harmonized_lora_configs: list[Any] = []
+        style_analyses: list[dict[str, Any]] = []
 
         batch_size = batch.images.shape[0]
 
@@ -569,9 +569,7 @@ class EnhancedTrainer:
 
         return batch
 
-    def validate_style_harmony(
-        self, prompt: str, lora_configs: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+    def validate_style_harmony(self, prompt: str, lora_configs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """Validate style harmony for a given prompt and LoRA configuration."""
         return self.style_harmonizer.harmonize_styles(
             prompt=prompt,
@@ -579,11 +577,11 @@ class EnhancedTrainer:
             user_preferences={"harmonization_mode": "analyze_only"},
         )
 
-    def get_style_recommendations(self, prompt: str, lora_configs: Optional[List[Dict[str, Any]]] = None) -> List[str]:
+    def get_style_recommendations(self, prompt: str, lora_configs: list[dict[str, Any]] | None = None) -> list[str]:
         """Get style harmonization recommendations."""
         result = self.validate_style_harmony(prompt, lora_configs)
 
-        recommendations: List[str] = []
+        recommendations: list[str] = []
         if result["style_analysis"]["conflict_level"] != "none":
             recommendations.append(f"Detected {result['style_analysis']['conflict_level']} style conflicts")
             recommendations.append(f"Dominant style: {result['style_analysis']['dominant_style']}")

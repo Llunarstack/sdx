@@ -191,7 +191,7 @@ Minimal C implementations for legacy support
 
 ---
 
-## 8. **Python** - `native/python/` (165 files)
+## 8. **Python** - `native/_experimental/python/` (123 files)
 Reference implementations and utilities
 
 ---

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 import torch
 import torch.nn as nn
 
@@ -10,12 +8,12 @@ from .model_enhancements import RMSNorm, TokenFiLM
 
 def concat_padding_masks(
     batch_size: int,
-    segment_masks: List[Optional[torch.Tensor]],
-    segment_lengths: List[int],
+    segment_masks: list[torch.Tensor | None],
+    segment_lengths: list[int],
     *,
     device: torch.device,
     dtype: torch.dtype = torch.bool,
-) -> Optional[torch.Tensor]:
+) -> torch.Tensor | None:
     """
     Build ``src_key_padding_mask`` (B, S) for ``TransformerEncoder``: True = ignore position.
 
@@ -23,7 +21,7 @@ def concat_padding_masks(
     """
     if all(m is None for m in segment_masks):
         return None
-    cols: List[torch.Tensor] = []
+    cols: list[torch.Tensor] = []
     for m, n in zip(segment_masks, segment_lengths):
         if m is None:
             cols.append(torch.zeros(batch_size, n, device=device, dtype=dtype))
@@ -50,7 +48,7 @@ class _VisionTextCrossAttention(nn.Module):
         self,
         vision: torch.Tensor,
         memory: torch.Tensor,
-        memory_key_padding_mask: Optional[torch.Tensor] = None,
+        memory_key_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         q = self.q_norm(vision)
         k = self.kv_norm(memory)
@@ -176,12 +174,12 @@ class NativeMultimodalTransformer(nn.Module):
         vision_tokens: torch.Tensor,
         text_tokens: torch.Tensor,
         *,
-        extra_tokens: Optional[torch.Tensor] = None,
-        vision_padding_mask: Optional[torch.Tensor] = None,
-        text_padding_mask: Optional[torch.Tensor] = None,
-        extra_padding_mask: Optional[torch.Tensor] = None,
-        film_cond: Optional[torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
+        extra_tokens: torch.Tensor | None = None,
+        vision_padding_mask: torch.Tensor | None = None,
+        text_padding_mask: torch.Tensor | None = None,
+        extra_padding_mask: torch.Tensor | None = None,
+        film_cond: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         """
         Args:
             vision_padding_mask: (B, Nv) bool, True = padded vision token (ignored in self-attn).
@@ -204,7 +202,7 @@ class NativeMultimodalTransformer(nn.Module):
         t = self._add_modality(t, 1)
 
         ne = 0
-        e: Optional[torch.Tensor] = None
+        e: torch.Tensor | None = None
         if extra_tokens is not None:
             if self.extra_proj is None:
                 raise ValueError("extra_tokens provided but extra_dim was 0 at init")
@@ -213,9 +211,9 @@ class NativeMultimodalTransformer(nn.Module):
             e = self._add_modality(e, 2)
 
         if self.cross_attn is not None:
-            mem_parts: List[torch.Tensor] = [t]
-            mem_masks: List[Optional[torch.Tensor]] = [text_padding_mask]
-            mem_lens: List[int] = [nt]
+            mem_parts: list[torch.Tensor] = [t]
+            mem_masks: list[torch.Tensor | None] = [text_padding_mask]
+            mem_lens: list[int] = [nt]
             if e is not None:
                 mem_parts.append(e)
                 mem_masks.append(extra_padding_mask)
@@ -224,14 +222,14 @@ class NativeMultimodalTransformer(nn.Module):
             mem_pad = concat_padding_masks(b, mem_masks, mem_lens, device=v.device, dtype=torch.bool)
             v = self.cross_attn(v, memory, memory_key_padding_mask=mem_pad)
 
-        seq_list: List[torch.Tensor] = [v, t]
+        seq_list: list[torch.Tensor] = [v, t]
         if e is not None:
             seq_list.append(e)
 
         x = torch.cat(seq_list, dim=1)
 
-        pad_parts: List[Optional[torch.Tensor]] = [vision_padding_mask, text_padding_mask]
-        len_parts: List[int] = [nv, nt]
+        pad_parts: list[torch.Tensor | None] = [vision_padding_mask, text_padding_mask]
+        len_parts: list[int] = [nv, nt]
         if e is not None:
             pad_parts.append(extra_padding_mask)
             len_parts.append(ne)
@@ -252,7 +250,7 @@ class NativeMultimodalTransformer(nn.Module):
         else:
             y_all = torch.cat([fv, ft], dim=1)
 
-        out: Dict[str, torch.Tensor] = {
+        out: dict[str, torch.Tensor] = {
             "fused_vision_tokens": fv,
             "fused_text_tokens": ft,
             "fused_all_tokens": y_all,

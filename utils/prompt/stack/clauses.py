@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional, Sequence
 
 from .tokens import append_unique
 
@@ -25,7 +25,7 @@ class IntentClause:
 
 
 # Built-in clauses for stack extensions and book/visual-memory hooks.
-CLAUSE_REGISTRY: Dict[str, IntentClause] = {
+CLAUSE_REGISTRY: dict[str, IntentClause] = {
     "uncensored.fidelity": IntentClause(
         name="uncensored.fidelity",
         positive=(
@@ -122,7 +122,7 @@ def apply_clauses(
     negative: str,
     clause_names: Sequence[str],
     *,
-    registry: Optional[Mapping[str, IntentClause]] = None,
+    registry: Mapping[str, IntentClause] | None = None,
 ) -> tuple[str, str]:
     reg = registry or CLAUSE_REGISTRY
     p, n = positive, negative
@@ -135,5 +135,5 @@ def apply_clauses(
     return p, n
 
 
-def list_clauses() -> List[str]:
+def list_clauses() -> list[str]:
     return sorted(CLAUSE_REGISTRY.keys())

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 __all__ = ["bridge_shot_prompt", "list_video_frontier_modules", "unified_frontier_augment"]
 
 
-def list_video_frontier_modules() -> List[Dict[str, str]]:
+def list_video_frontier_modules() -> list[dict[str, str]]:
     from pipelines.video.frontier_compiler import list_frontier_modules
 
     return list_frontier_modules()
@@ -18,7 +19,7 @@ def bridge_shot_prompt(
     *,
     tension: float = 0.5,
     num_steps: int = 28,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Augment a single keyframe prompt using SDX + video frontier."""
     from pipelines.video.causal_events import apply_causal_ripples, parse_causal_rules
     from pipelines.video.mise_en_scene import compose_shot_framing, parse_mise_config
@@ -42,7 +43,7 @@ def bridge_shot_prompt(
     ripple = apply_causal_ripples([_Shot(prompt)], parse_causal_rules({}), use_builtins=True)
     mise = compose_shot_framing(_Shot(prompt), config=parse_mise_config({"enabled": True}))
 
-    frags: List[str] = list(
+    frags: list[str] = list(
         plan.augmented_prompt.replace(prompt, "").strip(", ").split(", ") if plan.augmented_prompt != prompt else []
     )
     frags.extend(tension_plan.prompt_fragments)
@@ -52,7 +53,7 @@ def bridge_shot_prompt(
     if ripple:
         frags.append(ripple[0].prompt_suffix)
 
-    negatives: List[str] = []
+    negatives: list[str] = []
     if plan.echo_negative:
         negatives.append(plan.echo_negative)
     for flag in plaus:
@@ -78,9 +79,9 @@ def bridge_shot_prompt(
 
 def unified_frontier_augment(
     data: Mapping[str, Any],
-    shots: List[Any],
+    shots: list[Any],
     **kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from pipelines.video.frontier_compiler import compile_frontier_layers
 
     result = compile_frontier_layers(data, shots, **kwargs)

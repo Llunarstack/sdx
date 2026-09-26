@@ -7,14 +7,14 @@ Stores artifact tags from rejected outputs and merges them into negative prompts
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Deque, Dict, List, Sequence
 
 
 @dataclass
 class ArtifactEcho:
     prompt_fingerprint: str
-    tags: List[str]
+    tags: list[str]
     severity: float
 
 
@@ -41,8 +41,8 @@ class GenerationEchoMemory:
     def __init__(self, capacity: int = 64, fingerprint_words: int = 6) -> None:
         self.capacity = max(4, int(capacity))
         self.fingerprint_words = max(2, int(fingerprint_words))
-        self._echoes: Deque[ArtifactEcho] = deque(maxlen=self.capacity)
-        self._by_fp: Dict[str, List[str]] = {}
+        self._echoes: deque[ArtifactEcho] = deque(maxlen=self.capacity)
+        self._by_fp: dict[str, list[str]] = {}
 
     @staticmethod
     def fingerprint(prompt: str, *, words: int = 6) -> str:
@@ -66,12 +66,12 @@ class GenerationEchoMemory:
                 bucket.append(t)
         return echo
 
-    def tags_for_prompt(self, prompt: str) -> List[str]:
+    def tags_for_prompt(self, prompt: str) -> list[str]:
         fp = self.fingerprint(prompt, words=self.fingerprint_words)
         return list(self._by_fp.get(fp, []))
 
     def negative_suffix(self, prompt: str, *, min_severity: float = 0.5) -> str:
-        tags: List[str] = []
+        tags: list[str] = []
         fp = self.fingerprint(prompt, words=self.fingerprint_words)
         for echo in self._echoes:
             if echo.severity < min_severity:
@@ -81,7 +81,7 @@ class GenerationEchoMemory:
         # always include baseline artifact guard at low weight
         tags.extend(_DEFAULT_ARTIFACT_TAGS[:3])
         seen: set[str] = set()
-        out: List[str] = []
+        out: list[str] = []
         for t in tags:
             if t not in seen:
                 seen.add(t)

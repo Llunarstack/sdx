@@ -4,7 +4,7 @@ Unified **guidance stack** dispatcher (ZeResFDG, FDG, APG, CFG-Zero*, Rectified-
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -34,8 +34,8 @@ def combine_guided_prediction(
     sample_step: int = 0,
     total_steps: int = 1,
     cfg_zero_init_frac: float = 0.04,
-    spectral_ema: Optional[SpectralGuidanceEMA] = None,
-    guidance_session: Optional["GuidanceSession"] = None,
+    spectral_ema: SpectralGuidanceEMA | None = None,
+    guidance_session: GuidanceSession | None = None,
 ) -> torch.Tensor:
     """Single entry point for all guidance variants used by ``cfg_batched``."""
     if out_cond.shape != x.shape and out_cond.shape[1] > x.shape[1]:

@@ -11,14 +11,13 @@ Falls back to pure-Python implementations when the library is not built.
 from __future__ import annotations
 
 import ctypes
-from typing import Optional
 
 from sdx_native.native_tools import rust_prompt_ops_shared_library_path
 
 
 class PromptOpsLib:
     def __init__(self) -> None:
-        self._lib: Optional[ctypes.CDLL] = None
+        self._lib: ctypes.CDLL | None = None
         p = rust_prompt_ops_shared_library_path()
         if p is None:
             return
@@ -51,7 +50,7 @@ class PromptOpsLib:
         return self._lib is not None
 
 
-_LIB: Optional[PromptOpsLib] = None
+_LIB: PromptOpsLib | None = None
 
 
 def get_prompt_ops_lib() -> PromptOpsLib:
@@ -61,7 +60,7 @@ def get_prompt_ops_lib() -> PromptOpsLib:
     return _LIB
 
 
-def maybe_filter_negative_by_positive(positive: str, negative: str) -> Optional[str]:
+def maybe_filter_negative_by_positive(positive: str, negative: str) -> str | None:
     """Rust filter when built; else ``None`` (caller uses Python)."""
     lib = get_prompt_ops_lib()
     if not lib.available:
@@ -94,7 +93,7 @@ def maybe_filter_negative_by_positive(positive: str, negative: str) -> Optional[
     return buf.raw[: int(rc2)].decode("utf-8", errors="replace")
 
 
-def maybe_merge_caption_csv(a: str, b: str) -> Optional[str]:
+def maybe_merge_caption_csv(a: str, b: str) -> str | None:
     lib = get_prompt_ops_lib()
     if not lib.available:
         return None

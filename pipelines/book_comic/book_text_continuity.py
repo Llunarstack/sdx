@@ -6,14 +6,15 @@ Prompt-only: pair with ``--expected-text`` / OCR repair for strongest dialogue l
 
 from __future__ import annotations
 
-from typing import Any, List, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
 
 def lettering_visual_memory_fragment(lettering: Mapping[str, Any]) -> str:
     """Build a fragment from visual-memory ``lettering`` object."""
-    bits: List[str] = []
+    bits: list[str] = []
     bal = str(lettering.get("balloon_style", "") or "").strip()
     if bal:
         bits.append(f"consistent speech balloon style: {bal}")
@@ -46,12 +47,12 @@ def text_continuity_clause(spec: Mapping[str, Any]) -> str:
     - ``narration_caption_style``: e.g. \"italic rectangular captions top-left\"
     - ``strict_script``: if true, insist lettering matches provided wording
     """
-    bits: List[str] = []
+    bits: list[str] = []
     if bool(spec.get("strict_script", False)):
         bits.append("strict script fidelity: every visible word in balloons and captions matches the writer script")
 
     raw_p = spec.get("locked_phrases") or spec.get("must_include") or spec.get("must_include_phrases")
-    phrases: List[str] = []
+    phrases: list[str] = []
     if isinstance(raw_p, list):
         phrases = [str(x).strip() for x in raw_p if str(x).strip()]
     elif isinstance(raw_p, str) and raw_p.strip():

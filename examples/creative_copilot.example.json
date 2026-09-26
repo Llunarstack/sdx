@@ -1,0 +1,6 @@
+{
+  "goal": "A close-up portrait of a knight in neon rain",
+  "reference_images": ["path/to/style_ref_01.png", "path/to/style_ref_02.png"],
+  "structure_image": "path/to/pose_or_layout.png",
+  "notes": "Pass paths to: python -m scripts.tools creative_copilot --prompt \"...\" --reference-images a.png,b.png --structure-image pose.png --ckpt results/best.pt --execute"
+}

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 __all__ = ["ContagionPlan", "parse_contagion_config", "plan_emotional_contagion"]
 
-_EMOTION_CROWD: Dict[str, str] = {
+_EMOTION_CROWD: dict[str, str] = {
     "fear": "background extras anxious, wide eyes, protective postures, scattered retreat",
     "joy": "background crowd smiling, relaxed shoulders, celebratory micro-gestures",
     "anger": "background onlookers tense, clenched jaws, confrontational stances",
@@ -26,7 +27,7 @@ class ContagionPlan:
     prompt_suffix: str
 
 
-def parse_contagion_config(raw: Any) -> Dict[str, Any]:
+def parse_contagion_config(raw: Any) -> dict[str, Any]:
     if raw is None:
         return {"enabled": False}
     if isinstance(raw, Mapping):
@@ -53,11 +54,11 @@ def plan_emotional_contagion(
     shots: Sequence[Any],
     *,
     config: Mapping[str, Any],
-) -> List[ContagionPlan]:
+) -> list[ContagionPlan]:
     if not config.get("enabled"):
         return []
     default_source = str(config.get("source") or "")
-    plans: List[ContagionPlan] = []
+    plans: list[ContagionPlan] = []
     for sh in shots:
         sid = str(getattr(sh, "id", ""))
         em = _shot_emotion(sh)

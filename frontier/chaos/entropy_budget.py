@@ -7,7 +7,6 @@ Prevents "everything is equally noisy" — spend entropy where it helps composit
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import torch
 
@@ -15,8 +14,8 @@ import torch
 @dataclass(frozen=True)
 class EntropyBudget:
     total: float
-    per_step: Tuple[float, ...]
-    per_region: Tuple[float, ...]  # e.g. foreground vs background weights
+    per_step: tuple[float, ...]
+    per_region: tuple[float, ...]  # e.g. foreground vs background weights
 
 
 class EntropyBudgetAllocator:
@@ -42,7 +41,7 @@ class EntropyBudgetAllocator:
         total = max(0.0, float(total))
         n = self.num_steps
         third = max(1, n // 3)
-        per_step: List[float] = []
+        per_step: list[float] = []
         for i in range(n):
             if i < third:
                 w = early_weight
