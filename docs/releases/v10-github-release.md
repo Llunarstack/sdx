@@ -138,8 +138,8 @@ monitor = RealTimeQualityMonitoringSystem()
 for step in range(50):
     result = monitor.monitor_generation_step(image, timestep, step)
     print(f"Quality: {result['current_quality']}")
-    
-    if result['early_stop_recommended']:
+
+    if result["early_stop_recommended"]:
         print(f"Stopping early: {result['early_stop_reasons']}")
         break
 ```
@@ -155,7 +155,7 @@ print(f"Artifact Score: {result['overall_artifact_score']:.1%}")
 print(f"Type: {result['dominant_artifact_type']}")
 print(f"Severity: {result['severity']}")
 
-for fix in result['remediation_suggestions']:
+for fix in result["remediation_suggestions"]:
     print(f"  - {fix['strategy']}")
 ```
 
@@ -166,10 +166,10 @@ from innovations.agentic import ExplainableQualityScoringSystem
 scorer = ExplainableQualityScoringSystem()
 result = scorer.score_with_explanation(image)
 
-print(result['explanation'])
+print(result["explanation"])
 # Output:
 # Overall Quality Score: 73%
-# 
+#
 # Quality Breakdown by Dimension:
 #   • Composition: 85% - Strength
 #   • Color: 68% - Needs work (muddy colors)

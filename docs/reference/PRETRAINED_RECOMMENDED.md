@@ -45,14 +45,14 @@ Resolution order is implemented in `utils/modeling/model_paths.py`: **local fold
 
 ```python
 from utils.modeling.model_paths import (
-    default_qwen_path,                 # Qwen3-14B
-    default_qwen3_text_encoder_path,   # Qwen3-8B
-    default_qwen_vl_path,              # Qwen3-VL-8B
-    default_repa_vision_path,          # DINOv3-L
-    default_siglip_path,               # SigLIP2
-    default_hps_path,                  # prefers HPSv3 (alias: default_hpsv2_path)
-    default_moondream_path,            # prefers moondream3 (alias: default_moondream2_path)
-    default_depth_anything_path,       # prefers DA3
+    default_qwen_path,  # Qwen3-14B
+    default_qwen3_text_encoder_path,  # Qwen3-8B
+    default_qwen_vl_path,  # Qwen3-VL-8B
+    default_repa_vision_path,  # DINOv3-L
+    default_siglip_path,  # SigLIP2
+    default_hps_path,  # prefers HPSv3 (alias: default_hpsv2_path)
+    default_moondream_path,  # prefers moondream3 (alias: default_moondream2_path)
+    default_depth_anything_path,  # prefers DA3
 )
 ```
 

@@ -133,6 +133,8 @@ class SceneGraph:
     retrieval: dict[str, Any] = field(default_factory=dict)
     edit: dict[str, Any] = field(default_factory=dict)
     continuity: dict[str, Any] = field(default_factory=dict)
+    events: list[Any] = field(default_factory=list)
+    references: list[Any] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -156,7 +158,12 @@ def parse_scene_dict(data: Mapping[str, Any]) -> SceneGraph:
     if isinstance(scene, str):
         scene = {"prompt": scene}
     mode_raw = str(data.get("mode") or scene.get("mode") or "t2v").lower()
-    mode = VideoMode.I2V if mode_raw == "i2v" else VideoMode.T2V
+    if mode_raw == "i2v":
+        mode = VideoMode.I2V
+    elif mode_raw == "v2v":
+        mode = VideoMode.V2V
+    else:
+        mode = VideoMode.T2V
 
     cast = _parse_entities(data.get("characters") or data.get("cast") or {})
     props = _parse_entities(data.get("objects") or data.get("props") or {}, prefix="prop")
@@ -254,6 +261,8 @@ def parse_scene_dict(data: Mapping[str, Any]) -> SceneGraph:
         retrieval=dict(data.get("retrieval") or {}),
         edit=dict(data.get("edit") or {}),
         continuity=dict(data.get("continuity") or {}),
+        events=list(data.get("events") or scene.get("events") or []),
+        references=list(data.get("references") or data.get("refs") or scene.get("references") or []),
         raw=dict(data),
     )
 
@@ -348,6 +357,8 @@ def validate_scene_graph(graph: SceneGraph) -> list[str]:
         issues.append("Need scene.prompt or at least one shot")
     if graph.mode == VideoMode.I2V and not graph.anchor_image and not graph.inputs:
         issues.append("i2v mode requires anchor_image or inputs[].image")
+    if graph.mode == VideoMode.V2V and not graph.motion_clip:
+        issues.append("v2v mode requires motion_clip")
     for sh in graph.shots:
         for cid in sh.characters:
             if cid not in graph.cast:

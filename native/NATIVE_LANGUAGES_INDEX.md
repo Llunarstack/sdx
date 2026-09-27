@@ -226,19 +226,20 @@ quantized = sdx_native.quantize_int8(data, 127.0)
 
 ### CUDA Integration (ctypes)
 ```python
-lib = ctypes.CDLL('./libsdx_cuda.so')
+lib = ctypes.CDLL("./libsdx_cuda.so")
 lib.cuda_quantize_int8(input_ptr, output_ptr, 127.0, size)
 ```
 
 ### Go Integration (ctypes)
 ```python
-lib = ctypes.CDLL('./libsdx_go.so')
+lib = ctypes.CDLL("./libsdx_go.so")
 # Call Go functions directly
 ```
 
 ### Julia Integration (PyJulia)
 ```python
 from julia import Main
+
 Main.include("native/julia/sdx_kernels.jl")
 result = Main.quantize_int8(data, 127.0)
 ```

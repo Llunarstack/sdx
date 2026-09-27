@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-
 from pipelines.video.process_options import ProcessOptions, parse_process_options
 from pipelines.video.superior_pass import run_superior_pass
 from pipelines.video.video_helpers import apply_cli_overrides_to_process_options, apply_video_quality_preset
@@ -75,8 +74,8 @@ def test_parse_videomax_from_edit() -> None:
 
 
 def test_physics_repair_detects_center_jump(tmp_path: Path) -> None:
-    from pipelines.video.physics_repair import apply_physics_repair
     from PIL import Image
+    from pipelines.video.physics_repair import apply_physics_repair
 
     paths = []
     for i in range(5):

@@ -7,19 +7,19 @@ keyframes), then exports Diffusion-DPO JSONL that feeds the existing
 Schema (one JSON object per line)::
 
     {
-      "event": "like" | "dislike" | "pair" | "pick" | "generate",
-      "prompt": "...",
-      "image_path": "...",          # primary asset for like/dislike/generate
-      "win_image_path": "...",      # pair / pick
-      "lose_image_path": "...",
-      "score": 1.0,                 # optional user score 0..1
-      "ckpt": "...",
-      "seed": 0,
-      "run_id": "...",
-      "media_type": "image" | "video",
-      "source": "user",
-      "timestamp": 1710000000.0,
-      "notes": ""
+        "event": "like" | "dislike" | "pair" | "pick" | "generate",
+        "prompt": "...",
+        "image_path": "...",  # primary asset for like/dislike/generate
+        "win_image_path": "...",  # pair / pick
+        "lose_image_path": "...",
+        "score": 1.0,  # optional user score 0..1
+        "ckpt": "...",
+        "seed": 0,
+        "run_id": "...",
+        "media_type": "image" | "video",
+        "source": "user",
+        "timestamp": 1710000000.0,
+        "notes": "",
     }
 """
 
@@ -28,9 +28,10 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 __all__ = [
     "FeedbackEvent",
