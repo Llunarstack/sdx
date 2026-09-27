@@ -24,10 +24,7 @@ This guide explains how to integrate the new image generation improvement featur
 from utils.data_quality.cleanup import DatasetCleaner
 
 # Initialize cleaner
-cleaner = DatasetCleaner(
-    dataset_dir="data/raw_images",
-    output_dir="data/cleaned_images"
-)
+cleaner = DatasetCleaner(dataset_dir="data/raw_images", output_dir="data/cleaned_images")
 
 # Scan and assess quality
 assessment = cleaner.scan_and_assess()
@@ -79,26 +76,22 @@ from utils.training.hard_negative_mining import HardNegativeMiner
 # Initialize miner
 miner = HardNegativeMiner(
     difficulty_threshold=0.7,  # Consider examples with >0.7 difficulty as hard
-    max_hard_negatives=1000
+    max_hard_negatives=1000,
 )
 
 # During training loop
 for batch_idx, batch in enumerate(dataloader):
     images, captions = batch
-    
+
     # Forward pass
     outputs = model(images)
     losses = criterion(outputs, targets)
-    
+
     # Record hard examples
     new_hard = miner.record_batch(
-        image_paths=[...],
-        captions=captions,
-        model_outputs=outputs,
-        targets=targets,
-        batch_losses=losses
+        image_paths=[...], captions=captions, model_outputs=outputs, targets=targets, batch_losses=losses
     )
-    
+
     if new_hard:
         print(f"Found {len(new_hard)} hard examples")
 
@@ -164,11 +157,7 @@ prompts = [...]
 analyses = scorer.batch_score_prompts(prompts)
 
 # Sort by difficulty
-sorted_analyses = sorted(
-    zip(prompts, analyses),
-    key=lambda x: x[1].overall_score,
-    reverse=True
-)
+sorted_analyses = sorted(zip(prompts, analyses), key=lambda x: x[1].overall_score, reverse=True)
 
 print("Hardest prompts to generate:")
 for prompt, analysis in sorted_analyses[:10]:
@@ -186,17 +175,13 @@ scorer = PromptDifficultyScorer()
 # Tag dataset with difficulty
 for img_path, caption in dataset:
     analysis = scorer.score_prompt(caption)
-    
+
     # Store difficulty as metadata
-    metadata[img_path] = {
-        'caption': caption,
-        'difficulty': analysis.overall_score,
-        'level': analysis.complexity_level
-    }
+    metadata[img_path] = {"caption": caption, "difficulty": analysis.overall_score, "level": analysis.complexity_level}
 
 # Use for stratified sampling during training
-easy_samples = [s for s, m in metadata.items() if m['difficulty'] < 0.4]
-hard_samples = [s for s, m in metadata.items() if m['difficulty'] > 0.7]
+easy_samples = [s for s, m in metadata.items() if m["difficulty"] < 0.4]
+hard_samples = [s for s, m in metadata.items() if m["difficulty"] > 0.7]
 ```
 
 ---
@@ -239,18 +224,8 @@ compiled = compiler.parse_layout_string(layout_dsl)
 
 # Method 2: Programmatic
 compiler = LayoutDSLCompiler()
-compiler.add_region(
-    name="subject",
-    position=LayoutPosition.CENTER,
-    prompt="subject of photo",
-    priority=10
-)
-compiler.add_region(
-    name="background",
-    position=LayoutPosition.BOTTOM_LEFT,
-    prompt="landscape background",
-    priority=5
-)
+compiler.add_region(name="subject", position=LayoutPosition.CENTER, prompt="subject of photo", priority=10)
+compiler.add_region(name="background", position=LayoutPosition.BOTTOM_LEFT, prompt="landscape background", priority=5)
 compiled = compiler.compile()
 
 # Get unified prompt
@@ -262,7 +237,7 @@ print(visualization)
 
 # Use attention masks for conditional generation
 attention_mask = compiled.attention_mask  # [H, W]
-region_masks = compiled.region_masks     # Dict[name -> mask]
+region_masks = compiled.region_masks  # Dict[name -> mask]
 ```
 
 ### Integration with ControlNet:
@@ -301,29 +276,21 @@ from utils.training.ensemble_training import EnsembleTrainer, EnsembleTrainingCo
 # Create ensemble of models
 models = [create_model() for _ in range(3)]
 
-config = EnsembleTrainingConfig(
-    ensemble_size=3,
-    diversity_weight=0.1,
-    enable_knowledge_distillation=True
-)
+config = EnsembleTrainingConfig(ensemble_size=3, diversity_weight=0.1, enable_knowledge_distillation=True)
 
 trainer = EnsembleTrainer(models, config)
 
 # Training loop
-optimizer = torch.optim.AdamW(
-    [p for m in models for p in m.parameters()],
-    lr=1e-4
-)
+optimizer = torch.optim.AdamW([p for m in models for p in m.parameters()], lr=1e-4)
 
 for epoch in range(num_epochs):
     for batch in dataloader:
         x, targets, timesteps, conditions = batch
-        
+
         # Ensemble training step
         losses = trainer.train_step(x, targets, timesteps, conditions, optimizer)
-        
-        print(f"Loss: {losses['total_loss']:.4f}, "
-              f"Disagreement: {losses['ensemble_disagreement']:.4f}")
+
+        print(f"Loss: {losses['total_loss']:.4f}, Disagreement: {losses['ensemble_disagreement']:.4f}")
 
 # Save ensemble
 trainer.save_ensemble("checkpoints/ensemble")
@@ -364,24 +331,19 @@ if args.use_ensemble:
 from utils.training.contrastive_objectives import ImageTextMatchingLoss
 
 # Create loss
-itm_loss = ImageTextMatchingLoss(
-    alignment_weight=0.5,
-    nt_xent_weight=0.3,
-    uniformity_weight=0.2,
-    temperature=0.07
-)
+itm_loss = ImageTextMatchingLoss(alignment_weight=0.5, nt_xent_weight=0.3, uniformity_weight=0.2, temperature=0.07)
 
 # In training loop
 for batch in dataloader:
     images, captions = batch
-    
+
     # Get embeddings
-    image_embed = image_encoder(images)      # [B, D]
-    text_embed = text_encoder(captions)      # [B, D]
-    
+    image_embed = image_encoder(images)  # [B, D]
+    text_embed = text_encoder(captions)  # [B, D]
+
     # Compute contrastive loss
     loss = itm_loss(image_embed, text_embed)
-    
+
     # Backprop
     loss.backward()
     optimizer.step()
@@ -391,21 +353,14 @@ image_embed_aug = image_encoder(augment(images))
 text_embed_aug = text_encoder(augment_prompt(captions))
 
 loss = itm_loss(
-    image_embed=image_embed,
-    text_embed=text_embed,
-    image_features_aug=image_embed_aug,
-    text_features_aug=text_embed_aug
+    image_embed=image_embed, text_embed=text_embed, image_features_aug=image_embed_aug, text_features_aug=text_embed_aug
 )
 ```
 
 ### Use Individual Losses:
 
 ```python
-from utils.training.contrastive_objectives import (
-    NTXentLoss,
-    AlignmentLoss,
-    SupConLoss
-)
+from utils.training.contrastive_objectives import NTXentLoss, AlignmentLoss, SupConLoss
 
 # NT-Xent for SimCLR-style learning
 nt_xent = NTXentLoss(temperature=0.07)
@@ -522,7 +477,7 @@ hard_miner.export_hard_negatives("logs/hard_negatives.csv")
 
 ```python
 # Track hard negative discoveries
-disagreement_trend = hard_miner.training_stats['disagreement']
+disagreement_trend = hard_miner.training_stats["disagreement"]
 print(f"Avg disagreement: {sum(disagreement_trend) / len(disagreement_trend):.4f}")
 
 # Check ensemble diversity
@@ -530,16 +485,12 @@ ensemble_summary = ensemble_trainer.get_training_summary()
 print(f"Ensemble disagreement trend: {ensemble_summary['disagreement_trend']}")
 
 # Analyze prompt difficulty distribution
-difficult_prompts = [
-    (p, prompt_difficulties[p]) 
-    for p in dataset 
-    if prompt_difficulties[p] > 0.7
-]
+difficult_prompts = [(p, prompt_difficulties[p]) for p in dataset if prompt_difficulties[p] > 0.7]
 print(f"Found {len(difficult_prompts)} difficult prompts")
 
 # Monitor batch quality
 for batch in test_dataloader:
-    quality = batch_optimizer.compute_batch_quality_score(batch['latents'])
+    quality = batch_optimizer.compute_batch_quality_score(batch["latents"])
     print(f"Batch quality: {quality:.2f}")
 ```
 

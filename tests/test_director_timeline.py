@@ -10,7 +10,7 @@ from pipelines.video.director_timeline import (
     prompt_for_keyframe,
 )
 from pipelines.video.motion_grammar import grammar_for_engine
-from pipelines.video.process_options import ProcessOptions, parse_process_options
+from pipelines.video.process_options import parse_process_options
 from pipelines.video.scene_graph import parse_scene_dict, validate_scene_graph
 from pipelines.video.style_router import route_style
 from pipelines.video.types import VideoMode
@@ -76,7 +76,10 @@ def test_scene_v2v_cgi_events() -> None:
 
 def test_process_options_director_events() -> None:
     opts = parse_process_options(
-        {"director_events": [{"at_sec": 0.5, "prompt": "boom"}], "multimodal_refs": [{"path": "a.png", "role": "style"}]}
+        {
+            "director_events": [{"at_sec": 0.5, "prompt": "boom"}],
+            "multimodal_refs": [{"path": "a.png", "role": "style"}],
+        }
     )
     assert opts.director_events
     assert opts.multimodal_refs

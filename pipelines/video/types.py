@@ -10,6 +10,7 @@ from typing import Any, Literal
 class VideoMode(str, Enum):
     T2V = "t2v"
     I2V = "i2v"
+    V2V = "v2v"
 
 
 class TransitionType(str, Enum):

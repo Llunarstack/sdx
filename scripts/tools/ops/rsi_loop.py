@@ -110,7 +110,12 @@ def main(argv: list[str] | None = None) -> int:
         include_synthetic=True,
     )
     print(f"User feedback pairs: {n_user} → {user_pairs}", flush=True)
-    if n_user < int(args.min_user_pairs) and not args.from_pairs and not args.from_benchmark and not args.from_pick_best:
+    if (
+        n_user < int(args.min_user_pairs)
+        and not args.from_pairs
+        and not args.from_benchmark
+        and not args.from_pick_best
+    ):
         print(
             f"Need at least --min-user-pairs {args.min_user_pairs} (have {n_user}). "
             "Rate more images: python -m scripts.tools feedback like|dislike|pair ...",

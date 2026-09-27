@@ -237,6 +237,7 @@ python -m scripts.tools video_generate --scene examples/scene_studio.example.jso
 
 ```python
 from frontier.registry import list_ideas
+
 implemented = list_ideas(status="implemented")
 ```
 

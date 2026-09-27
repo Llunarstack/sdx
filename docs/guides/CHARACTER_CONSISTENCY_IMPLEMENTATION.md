@@ -144,14 +144,14 @@ character_database/
 ### Loss Function Weights
 ```python
 loss_weights = {
-    'character_consistency_loss': 1.0,
-    'triplet_loss': 0.5,
-    'contrastive_loss': 0.3,
-    'perceptual_loss': 0.7,
-    'adversarial_loss': 0.2,
-    'temporal_loss': 0.4,
-    'style_invariant_loss': 0.3,
-    'multiscale_loss': 0.5
+    "character_consistency_loss": 1.0,
+    "triplet_loss": 0.5,
+    "contrastive_loss": 0.3,
+    "perceptual_loss": 0.7,
+    "adversarial_loss": 0.2,
+    "temporal_loss": 0.4,
+    "style_invariant_loss": 0.3,
+    "multiscale_loss": 0.5,
 }
 ```
 
@@ -169,7 +169,7 @@ character = db.create_character(
     name="My Character",
     reference_images=["ref1.jpg", "ref2.jpg", "ref3.jpg"],
     physical_features=features,
-    style_preferences=style
+    style_preferences=style,
 )
 ```
 

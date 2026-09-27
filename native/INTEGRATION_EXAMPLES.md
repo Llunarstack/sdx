@@ -11,22 +11,24 @@ import numpy as np
 from pathlib import Path
 import sdx_native  # Rust via PyO3 bindings
 
+
 class QuantizedModelInference:
     def __init__(self, model_path: str):
         self.model = load_model(model_path)
         self.scale = 127.0
-        
+
     def forward(self, x: np.ndarray) -> np.ndarray:
         # Quantize to INT8 using Rust SIMD
         x_quant = sdx_native.quantize_int8(x.astype(np.float32), self.scale)
-        
+
         # Run inference on quantized model
         output_quant = self.model(x_quant)
-        
+
         # Dequantize back to float32
         output = sdx_native.dequantize_int8(output_quant, self.scale)
-        
+
         return output.numpy()
+
 
 # Usage
 inference = QuantizedModelInference("models/sdx-v1-quant.pt")
@@ -100,38 +102,27 @@ import numpy as np
 from ctypes import c_float, c_int, c_int8
 
 # Load CUDA kernels
-cuda_lib = ctypes.CDLL('./libsdx_cuda.so')
+cuda_lib = ctypes.CDLL("./libsdx_cuda.so")
+
 
 class CudaQuantization:
     def quantize(self, data: np.ndarray, scale: float) -> np.ndarray:
         # Allocate GPU memory
         input_gpu = gpu_malloc(data.nbytes)
         output_gpu = gpu_malloc(len(data))
-        
+
         # Copy to GPU
-        cuda_lib.cuda_memcpy_host_to_device(
-            data.ctypes.data_as(ctypes.c_void_p),
-            input_gpu,
-            data.nbytes
-        )
-        
+        cuda_lib.cuda_memcpy_host_to_device(data.ctypes.data_as(ctypes.c_void_p), input_gpu, data.nbytes)
+
         # Run quantization kernel
-        cuda_lib.cuda_quantize_int8(
-            input_gpu,
-            output_gpu,
-            c_float(scale),
-            c_int(len(data))
-        )
-        
+        cuda_lib.cuda_quantize_int8(input_gpu, output_gpu, c_float(scale), c_int(len(data)))
+
         # Copy back
         result = np.zeros(len(data), dtype=np.int8)
-        cuda_lib.cuda_memcpy_device_to_host(
-            output_gpu,
-            result.ctypes.data_as(ctypes.c_void_p),
-            len(data)
-        )
-        
+        cuda_lib.cuda_memcpy_device_to_host(output_gpu, result.ctypes.data_as(ctypes.c_void_p), len(data))
+
         return result
+
 
 quant = CudaQuantization()
 x_quant = quant.quantize(x.astype(np.float32), 127.0)
@@ -155,53 +146,56 @@ import sdx_native  # Rust
 import subprocess
 import json
 
+
 class HybridPipeline:
     def __init__(self):
         self.rust_enabled = self._check_rust()
         self.go_enabled = self._check_go()
         self.cuda_enabled = self._check_cuda()
-        
+
     def _check_rust(self) -> bool:
         try:
             import sdx_native
+
             return True
         except ImportError:
             return False
-    
+
     def _check_go(self) -> bool:
         return Path("./libsdx_go.so").exists()
-    
+
     def _check_cuda(self) -> bool:
         return Path("./libsdx_cuda.so").exists()
-    
+
     def process_batch(self, latents: np.ndarray) -> np.ndarray:
         """Process image generation batch with automatic kernel selection."""
-        
+
         # Quantization: Use Rust (best CPU performance)
         if self.rust_enabled:
             latents_quant = sdx_native.quantize_int8(latents.astype(np.float32), 127.0)
         else:
             latents_quant = np.clip(latents * 127.0, -128, 127).astype(np.int8)
-        
+
         # Attention: Use Go for multi-core CPU
         if self.go_enabled:
             output = self._call_go_attention(latents_quant)
         else:
             # Fallback to Python
             output = self._python_attention(latents_quant)
-        
+
         # GELU: Use Rust SIMD
         if self.rust_enabled:
             output = sdx_native.gelu_batch(output)
         else:
             output = self._python_gelu(output)
-        
+
         return output
-    
+
     def _call_go_attention(self, x):
         """Call Go attention via subprocess."""
         # This would be optimized via shared library binding
         pass
+
 
 # Usage
 pipeline = HybridPipeline()
@@ -304,6 +298,7 @@ from native.benchmark_suite import NativeKernelBenchmark
 benchmark = NativeKernelBenchmark(data_size=10240)
 benchmark.run()
 
+
 # Custom operation benchmarking
 def measure_performance(func, num_iterations: int = 100) -> float:
     times = []
@@ -312,16 +307,16 @@ def measure_performance(func, num_iterations: int = 100) -> float:
         func()
         end = time.perf_counter()
         times.append((end - start) * 1000)  # ms
-    
+
     # Exclude warmup iterations
     return np.mean(times[10:])
 
+
 import sdx_native
+
 data = np.random.randn(10240).astype(np.float32)
 
-time_rust = measure_performance(
-    lambda: sdx_native.quantize_int8(data, 127.0)
-)
+time_rust = measure_performance(lambda: sdx_native.quantize_int8(data, 127.0))
 print(f"Rust Quantization: {time_rust:.3f}ms")
 ```
 

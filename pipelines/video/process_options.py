@@ -96,6 +96,7 @@ class ProcessOptions:
     videomax_plan: dict[str, Any] = field(default_factory=dict)
     director_events: list[Any] = field(default_factory=list)
     director_timeline: dict[str, Any] = field(default_factory=dict)
+    multimodal_refs: list[Any] = field(default_factory=list)
     cross_keyframe_identity: bool = False
     cross_keyframe_identity_strength: float = 0.28
 
@@ -162,4 +163,6 @@ def parse_process_options(raw: Mapping[str, Any] | None) -> ProcessOptions:
         min_identity=float(r.get("min_identity", 0.0) or 0.0),
         min_occlusion=float(r.get("min_occlusion", 0.0) or 0.0),
         min_adherence=float(r.get("min_adherence", 0.0) or 0.0),
+        director_events=list(r.get("director_events") or []),
+        multimodal_refs=list(r.get("multimodal_refs") or []),
     )
