@@ -10,17 +10,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# Keys that gaussian_diffusion.sample_loop / flow loops accept (subset + known extras).
-_DIFFUSION_SAFE_KEYS = frozenset(
-    {
-        "step_noise_scales",
-        "attention_layout_plan",
-        "attention_layout_masks",
-        "per_region_cads",
-        "cads_noise_scale",
-        "cads_mix_ratio",
-    }
-)
+# Planner keys that GaussianDiffusion.sample_loop accepts.
+_DIFFUSION_SAFE_KEYS = frozenset({"step_noise_scales", "attention_layout_plan"})
 
 
 def apply_token_emphasis_to_args(args: Any, *, prompt: str | None = None) -> dict[str, Any]:
@@ -30,7 +21,7 @@ def apply_token_emphasis_to_args(args: Any, *, prompt: str | None = None) -> dic
     Safe to call from quality policy / frontier prompt phase. Skips if prompt
     already contains ``(word:1.`` weight tags from a prior pass.
     """
-    from frontier.adherence.token_emphasis import TokenEmphasisPlanner
+    from frontier.synthesis import TokenEmphasisPlanner
 
     text = prompt if prompt is not None else str(getattr(args, "prompt", "") or "")
     if not text.strip():
@@ -84,7 +75,7 @@ def merge_step_emphasis_into_noise_scales(
 
 
 def sanitize_diffusion_feature_kwargs(extra: dict[str, Any]) -> dict[str, Any]:
-    """Drop / remap planner keys that would crash ``sample_loop(**kwargs)``."""
+    """Keep only planner keys ``sample_loop`` accepts (``step_emphasis`` folds into ``step_noise_scales``)."""
     if not extra:
         return {}
     work = dict(extra)
@@ -94,34 +85,7 @@ def sanitize_diffusion_feature_kwargs(extra: dict[str, Any]) -> dict[str, Any]:
             step_emphasis=emphasis,
             step_noise_scales=work.get("step_noise_scales"),
         )
-    # Strip known metadata that never belongs in the sampler
-    for dead in (
-        "frontier_token_emphasis",
-        "frontier_cfg_emphasis_mult",
-        "frontier_step_emphasis",
-        "frontier_recommend_best_of_n",
-        "frontier_guidance_tiers",
-        "frontier_compute_cost",
-        "frontier_relation_hints",
-        "cfg_scale_multiplier",
-        "perfect_frontier",
-        "safety_decision",
-        "safety_tier",
-        "refused",
-        "refuse_reasons",
-        "prompt",
-        "negative_prompt",
-        "serendipity_scales",
-        "entropy_per_step",
-    ):
-        work.pop(dead, None)
-
-    # Keep safe keys + anything that looks like an intentional sampler hook
-    out: dict[str, Any] = {}
-    for k, v in work.items():
-        if k in _DIFFUSION_SAFE_KEYS or k.startswith(("cads_", "attention_", "step_", "region_")):
-            out[k] = v
-    return out
+    return {k: v for k, v in work.items() if k in _DIFFUSION_SAFE_KEYS and v is not None}
 
 
 __all__ = [

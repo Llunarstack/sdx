@@ -1,4 +1,4 @@
-from utils.runtime.profiling import ProfileConfig, consume_profile_args, run_with_cprofile
+from utils.runtime import ProfileConfig, consume_profile_args, run_with_cprofile
 
 
 def test_consume_profile_args_strips_flags():

@@ -12,7 +12,6 @@ from dataclasses import asdict, dataclass, field
 __all__ = [
     "PromptFacets",
     "decompose_prompt_facets",
-    "facets_need_clarify",
 ]
 
 _STYLE_RE = re.compile(
@@ -154,7 +153,3 @@ def decompose_prompt_facets(prompt: str) -> PromptFacets:
         facets.search_queries["style"] = f"{styl} art style reference"
         facets.search_queries["artist"] = styl
     return facets
-
-
-def facets_need_clarify(facets: PromptFacets) -> bool:
-    return bool(facets.missing)

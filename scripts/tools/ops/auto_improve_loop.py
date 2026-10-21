@@ -13,16 +13,14 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-def _run(cmd: list[str], *, cwd: Path, dry_run: bool) -> int:
-    print("Running:", " ".join(cmd), flush=True)
-    if dry_run:
-        return 0
-    return subprocess.run(cmd, cwd=str(cwd)).returncode
+from utils.superior.auto_loop import run_tool  # noqa: E402
 
 
 def _read_leaderboard(path: Path) -> list[dict[str, object]]:
@@ -137,7 +135,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    root = Path(__file__).resolve().parents[3]
+    root = ROOT
     work = Path(args.work_dir)
     if not args.dry_run:
         work.mkdir(parents=True, exist_ok=True)
@@ -162,9 +160,6 @@ def main() -> int:
 
         # 1) Benchmark base + export preferences.
         bench_cmd_1 = [
-            sys.executable,
-            "-m",
-            "scripts.tools.benchmark_suite",
             "--ckpt",
             str(current_base),
             "--out-dir",
@@ -214,7 +209,7 @@ def main() -> int:
                     "--vit-mine-preferences",
                 ]
             )
-        rc = _run(bench_cmd_1, cwd=root, dry_run=bool(args.dry_run))
+        rc = run_tool("benchmark_suite", bench_cmd_1, repo_root=root, dry_run=bool(args.dry_run))
         if rc != 0:
             return rc
 
@@ -222,9 +217,6 @@ def main() -> int:
         if bool(args.export_hardcases):
             hardcase_jsonl = (it_dir / "hardcases.jsonl").resolve()
             remine_cmd = [
-                sys.executable,
-                "-m",
-                "scripts.tools.training.mine_preference_pairs",
                 "--results-json",
                 str((bench_before / "results.json").resolve()),
                 "--out-jsonl",
@@ -241,16 +233,12 @@ def main() -> int:
                 "--hardcase-min-margin-scale",
                 str(float(args.hardcase_margin_scale)),
             ]
-            rc = _run(remine_cmd, cwd=root, dry_run=bool(args.dry_run))
+            rc = run_tool("mine_preference_pairs", remine_cmd, repo_root=root, dry_run=bool(args.dry_run))
             if rc != 0:
                 return rc
 
         # 2) DPO stage-2.
         dpo_cmd = [
-            sys.executable,
-            "-m",
-            "scripts.tools",
-            "train_diffusion_dpo",
             "--ckpt",
             str(current_base),
             "--preference-jsonl",
@@ -268,7 +256,7 @@ def main() -> int:
             "--device",
             str(args.device),
         ]
-        rc = _run(dpo_cmd, cwd=root, dry_run=bool(args.dry_run))
+        rc = run_tool("train_diffusion_dpo", dpo_cmd, repo_root=root, dry_run=bool(args.dry_run))
         if rc != 0:
             return rc
 
@@ -276,7 +264,7 @@ def main() -> int:
         ckpts_compare = [current_base, dpo_ckpt]
         if bool(getattr(args, "model_soup", False)):
             if not args.dry_run:
-                from utils.superior.model_soup import save_soup_checkpoint, soup_checkpoints
+                from utils.superior.auto_loop import save_soup_checkpoint, soup_checkpoints
 
                 w_base = float(getattr(args, "soup_weight_base", 0.35))
                 w_dpo = float(getattr(args, "soup_weight_dpo", 0.65))
@@ -287,9 +275,6 @@ def main() -> int:
 
         # 3) Benchmark base vs DPO (+ soup if enabled).
         bench_cmd_2 = [
-            sys.executable,
-            "-m",
-            "scripts.tools.benchmark_suite",
             "--ckpt",
             *[str(p) for p in ckpts_compare],
             "--out-dir",
@@ -318,7 +303,7 @@ def main() -> int:
         if bool(getattr(args, "use_hard_negatives", False)):
             results_path = bench_before / "results.json"
             if results_path.is_file() and not args.dry_run:
-                from utils.superior.hard_negative import (
+                from utils.superior.auto_loop import (
                     benchmark_sample_args_for_negatives,
                     load_hard_negatives_from_results,
                 )
@@ -329,7 +314,7 @@ def main() -> int:
                     bench_cmd_2.extend(["--sample-arg", tok])
                 if bundle.negative_suffix:
                     print(f"[auto_improve_loop] hard negatives: {bundle.negative_suffix[:120]}...")
-        rc = _run(bench_cmd_2, cwd=root, dry_run=bool(args.dry_run))
+        rc = run_tool("benchmark_suite", bench_cmd_2, repo_root=root, dry_run=bool(args.dry_run))
         if rc != 0:
             return rc
 

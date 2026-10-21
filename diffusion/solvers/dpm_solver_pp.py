@@ -1,9 +1,9 @@
-"""
-DPM-Solver++ (Lu et al.) — data-prediction / x0 form for VP diffusion,
-and Adams–Bashforth-style multistep for rectified-flow ODEs.
+"""DPM-Solver++ multistep data-prediction solvers (Lu et al. 2022, arXiv:2211.01095).
 
-VP uses exponential integrators on λ = ½ log(ᾱ/(1-ᾱ)).
-Flow uses multistep integration of dx/ds = v on s ∈ [1, 0].
+One exponential integrator for any interpolant ``x = alpha*x0 + sigma*eps`` on
+``lambda = log(alpha/sigma)``: VP uses ``alpha = sqrt(abar)``, ``sigma = sqrt(1-abar)``;
+rectified flow uses ``alpha = 1-s``, ``sigma = s`` with ``x0 = x - s*v``. ``eta > 0`` gives the
+DPM-Solver++(2M) SDE update (noise ``sigma_next*sqrt(1-exp(-2*eta*h))*z``); ``eta = 0`` is the ODE.
 """
 
 from __future__ import annotations
@@ -15,103 +15,89 @@ import torch
 from diffusion.solvers.base import SolverState
 
 
-def lambda_from_alpha_cumprod(alpha_bar: torch.Tensor) -> torch.Tensor:
-    """λ(t) = ½ log(ᾱ / (1-ᾱ))."""
-    ab = alpha_bar.clamp(1e-12, 1.0 - 1e-12)
-    return 0.5 * torch.log(ab / (1.0 - ab))
+def _lam(alpha: float, sigma: float) -> float:
+    return math.log(max(alpha, 1e-12)) - math.log(max(sigma, 1e-12))
 
 
-def _expand_coeff(c: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-    while c.ndim < x.ndim:
-        c = c.unsqueeze(-1)
-    return c
+def dpmpp_update(
+    *,
+    x: torch.Tensor,
+    x0_pred: torch.Tensor,
+    alpha_cur: float,
+    sigma_cur: float,
+    alpha_next: float,
+    sigma_next: float,
+    state: SolverState,
+    order: int = 2,
+    eta: float = 0.0,
+    noise: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, SolverState]:
+    """One DPM-Solver++ step (orders 1-3; ``eta`` > 0 only up to order 2) from the current to the next level.
+
+    A step onto ``sigma_next == 0`` returns the data prediction: lambda is infinite there, and the
+    first-order update is exact (diffusers' ``final_sigmas_type="zero"``).
+    """
+    lam_c = _lam(alpha_cur, sigma_cur)
+    state.push(x0_pred.detach(), lam_c)
+    if sigma_next <= 0.0:
+        return x0_pred, state
+    use = min(int(order), state.order)
+    if eta > 0.0 and use > 2:
+        raise ValueError("the DPM-Solver++ SDE update is implemented up to order 2")
+    h = max(_lam(alpha_next, sigma_next) - lam_c, 1e-8)
+    eh = float(eta) * h
+    phi = -math.expm1(-h - eh)
+    d0 = x0_pred
+    x_next = (sigma_next / max(sigma_cur, 1e-12)) * math.exp(-eh) * x + alpha_next * phi * d0
+    if use >= 2:
+        r0 = max((lam_c - state.timesteps[-2]) / h, 1e-6)
+        d1_0 = (d0 - state.model_outputs[-2]) / r0
+        if use == 2:
+            x_next = x_next + 0.5 * alpha_next * phi * d1_0
+        else:
+            r1 = max((state.timesteps[-2] - state.timesteps[-3]) / h, 1e-6)
+            d1_1 = (state.model_outputs[-2] - state.model_outputs[-3]) / r1
+            d1 = d1_0 + (r0 / (r0 + r1)) * (d1_0 - d1_1)
+            d2 = (d1_0 - d1_1) / (r0 + r1)
+            x_next = x_next + alpha_next * (1.0 - phi / h) * d1 - alpha_next * ((h - phi) / h**2 - 0.5) * d2
+    if eh > 0.0:
+        z = torch.randn_like(x) if noise is None else noise
+        x_next = x_next + sigma_next * math.sqrt(-math.expm1(-2.0 * eh)) * z
+    return x_next, state
+
+
+def _vp_alpha_sigma(alpha_bar) -> tuple[float, float]:
+    """``(sqrt(abar), sqrt(1 - abar))`` from the first element of ``alpha_bar`` (uniform over the batch)."""
+    ab = float(torch.as_tensor(alpha_bar).reshape(-1)[0])
+    return math.sqrt(ab), math.sqrt(max(1.0 - ab, 0.0))
 
 
 def vp_dpmpp_update(
     *,
     x: torch.Tensor,
     x0_pred: torch.Tensor,
-    alpha_bar_cur: torch.Tensor,
-    alpha_bar_next: torch.Tensor,
+    alpha_bar_cur: torch.Tensor | float,
+    alpha_bar_next: torch.Tensor | float,
     state: SolverState,
     order: int = 2,
+    eta: float = 0.0,
+    noise: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, SolverState]:
-    """
-    One DPM-Solver++ step from current (noisier) → next (cleaner).
-
-    ``alpha_bar_*`` are per-batch scalars shape (B,) or broadcastable.
-    ``order`` is 1 (first-order), 2 (2M), or 3 (3M).
-    """
-    device = x.device
-    dtype = x.dtype
-    ab_c = alpha_bar_cur.to(device=device, dtype=torch.float64)
-    ab_n = alpha_bar_next.to(device=device, dtype=torch.float64)
-    if ab_c.ndim == 0:
-        ab_c = ab_c.expand(x.shape[0])
-        ab_n = ab_n.expand(x.shape[0])
-
-    lam_c = lambda_from_alpha_cumprod(ab_c)
-    lam_n = lambda_from_alpha_cumprod(ab_n)
-    h = (lam_n - lam_c).clamp(min=1e-8)
-
-    alpha_n = ab_n.sqrt()
-    sigma_c = (1.0 - ab_c).clamp(min=1e-12).sqrt()
-    sigma_n = (1.0 - ab_n).clamp(min=1e-12).sqrt()
-
-    x0 = x0_pred.to(dtype=torch.float64)
-    x64 = x.to(dtype=torch.float64)
-
-    # Use effective order based on available history (after we push current).
-    # Push current x0 at λ_cur before computing (matches diffusers multistep).
-    state.push(x0.detach().to(dtype=dtype), float(lam_c.reshape(-1)[0].item()))
-
-    n_hist = state.order
-    use_order = min(int(order), n_hist)
-
-    sigma_ratio = _expand_coeff(sigma_n / sigma_c.clamp(min=1e-12), x64)
-    alpha_n_e = _expand_coeff(alpha_n, x64)
-    exp_h = torch.exp(-h)
-    phi_1 = _expand_coeff(exp_h - 1.0, x64)  # e^{-h}-1
-
-    m0 = state.model_outputs[-1].to(dtype=torch.float64)
-
-    if use_order == 1 or n_hist < 2:
-        x_next = sigma_ratio * x64 - alpha_n_e * phi_1 * m0
-    elif use_order == 2 or n_hist < 3:
-        m1 = state.model_outputs[-2].to(dtype=torch.float64)
-        lam_s1 = state.timesteps[-2]
-        # h_0 = λ_cur - λ_prev (previous was noisier → smaller λ)
-        h0 = float(lam_c.reshape(-1)[0].item()) - float(lam_s1)
-        r0 = h0 / float(h.reshape(-1)[0].item() + 1e-12)
-        r0 = max(r0, 1e-6)
-        d0 = m0
-        d1 = (1.0 / r0) * (m0 - m1)
-        x_next = sigma_ratio * x64 - alpha_n_e * phi_1 * d0 - 0.5 * alpha_n_e * phi_1 * d1
-    else:
-        m1 = state.model_outputs[-2].to(dtype=torch.float64)
-        m2 = state.model_outputs[-3].to(dtype=torch.float64)
-        lam0 = float(lam_c.reshape(-1)[0].item())
-        lam1 = float(state.timesteps[-2])
-        lam2 = float(state.timesteps[-3])
-        h0 = lam0 - lam1
-        h1 = lam1 - lam2
-        hh = float(h.reshape(-1)[0].item())
-        r0 = max(h0 / (hh + 1e-12), 1e-6)
-        r1 = max(h1 / (hh + 1e-12), 1e-6)
-        d0 = m0
-        d1_0 = (1.0 / r0) * (m0 - m1)
-        d1_1 = (1.0 / r1) * (m1 - m2)
-        # DPM-Solver++ 3M coefficients (Lu et al. / Diffusers)
-        d1 = d1_0 + (1.0 / (r0 + r1 + 1e-12)) * (r0 * (d1_0 - d1_1))
-        d2 = (1.0 / (r0 + r1 + 1e-12)) * (d1_0 - d1_1)
-        x_next = (
-            sigma_ratio * x64
-            - alpha_n_e * phi_1 * d0
-            - 0.5 * alpha_n_e * phi_1 * d1
-            - (1.0 / 6.0) * alpha_n_e * (phi_1 + _expand_coeff(torch.exp(-h) + h - 1.0, x64)) * d2
-        )
-
-    return x_next.to(dtype=dtype), state
+    """DPM-Solver++ on the VP schedule; ``order`` 1, 2 (2M) or 3 (3M). ᾱ is uniform over the batch."""
+    alpha_cur, sigma_cur = _vp_alpha_sigma(alpha_bar_cur)
+    alpha_next, sigma_next = _vp_alpha_sigma(alpha_bar_next)
+    return dpmpp_update(
+        x=x,
+        x0_pred=x0_pred,
+        alpha_cur=alpha_cur,
+        sigma_cur=sigma_cur,
+        alpha_next=alpha_next,
+        sigma_next=sigma_next,
+        state=state,
+        order=order,
+        eta=eta,
+        noise=noise,
+    )
 
 
 def flow_dpmpp_2m_update(
@@ -121,27 +107,20 @@ def flow_dpmpp_2m_update(
     s_cur: float,
     s_next: float,
     state: SolverState,
+    eta: float = 0.0,
+    noise: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, SolverState]:
-    """
-    Multistep (Adams–Bashforth 2) update for rectified-flow ODE dx/ds = v.
-
-    First step falls back to Euler; subsequent steps use 2M correction.
-    """
-    ds = float(s_next) - float(s_cur)
-    state.push(velocity.detach(), float(s_cur))
-    v0 = velocity
-    if state.order < 2 or abs(ds) < 1e-12:
-        x_next = x + v0 * ds
-        return x_next, state
-
-    v1 = state.model_outputs[-2]
-    s_prev = state.timesteps[-2]
-    ds_prev = float(s_cur) - float(s_prev)
-    r = ds_prev / (ds + 1e-12) if abs(ds) > 1e-12 else 1.0
-    r = max(abs(r), 1e-6) * math.copysign(1.0, r if r != 0 else 1.0)
-    # Standard AB2 / DPM++-style 2M on constant-step ODE:
-    # x += ds * ((1 + 1/(2r)) v0 - (1/(2r)) v_prev)
-    c0 = 1.0 + 0.5 / r
-    c1 = -0.5 / r
-    x_next = x + ds * (c0 * v0 + c1 * v1)
-    return x_next, state
+    """DPM-Solver++(2M) on rectified flow ``x = (1-s)*x0 + s*eps``; the first step reduces to Euler."""
+    s_c, s_n = float(s_cur), float(s_next)
+    return dpmpp_update(
+        x=x,
+        x0_pred=x - s_c * velocity,
+        alpha_cur=1.0 - s_c,
+        sigma_cur=s_c,
+        alpha_next=1.0 - s_n,
+        sigma_next=s_n,
+        state=state,
+        order=2,
+        eta=eta,
+        noise=noise,
+    )

@@ -1,24 +1,24 @@
-"""Style-domain + artist/game reference guidance packs (auto-detect or full).
+"""Style-domain and artist/game reference guidance packs (auto-detected or all).
 
-Also merges ``config.defaults.style_artists`` bucket/facet quality fragments on every call
-(``_style_tag_quality_safe``) so inference and caption utils stay in sync.
+Every call also merges the ``style_artists`` bucket/facet quality fragments, so inference and the
+caption utils stay in sync.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
+
+from ._lexicon import alias_patterns, compile_keywords, expand_aliases, matches, merge_csv_unique, word_re
+from .style_artists import style_tag_quality_fragments
 
 __all__ = [
     "StyleGuidanceMode",
     "StyleSpec",
     "STYLE_SPECS",
-    "STYLE_IDS",
     "ARTIST_REFERENCE_TAGS",
     "detect_style_ids",
-    "merge_csv_unique",
     "style_guidance_fragments",
 ]
 
@@ -31,18 +31,6 @@ class StyleSpec:
     keywords: tuple[str, ...]
     positive_hints: str
     negative_hints: str
-
-
-def _word_re(term: str) -> re.Pattern:
-    return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
-
-
-def _compile_keywords(keywords: tuple[str, ...]) -> tuple[re.Pattern, ...]:
-    return tuple(_word_re(k) for k in keywords)
-
-
-def _matches(prompt: str, patterns: Sequence[re.Pattern]) -> bool:
-    return any(p.search(prompt) for p in patterns)
 
 
 STYLE_ALIAS_TERMS: dict[str, tuple[str, ...]] = {
@@ -84,43 +72,7 @@ STYLE_ALIAS_TERMS: dict[str, tuple[str, ...]] = {
     "zenless-like anime 3d": ("zenless zone zero style", "zzz style"),
 }
 
-_STYLE_ALIAS_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
-    (re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE), canonical)
-    for canonical, aliases in STYLE_ALIAS_TERMS.items()
-    for alias in aliases
-)
-
-
-def _expand_style_aliases(prompt: str) -> str:
-    p = str(prompt or "").strip()
-    if not p:
-        return p
-    found: list[str] = []
-    for pat, canonical in _STYLE_ALIAS_PATTERNS:
-        if pat.search(p):
-            found.append(canonical)
-    if not found:
-        return p
-    extras = ", ".join(sorted(set(found)))
-    return f"{p}, {extras}"
-
-
-def merge_csv_unique(*chunks: str) -> str:
-    seen = set()
-    out: list[str] = []
-    for chunk in chunks:
-        if not chunk or not str(chunk).strip():
-            continue
-        for part in str(chunk).split(","):
-            p = part.strip()
-            if not p:
-                continue
-            k = p.lower()
-            if k in seen:
-                continue
-            seen.add(k)
-            out.append(p)
-    return ", ".join(out)
+_STYLE_ALIAS_PATTERNS = alias_patterns(STYLE_ALIAS_TERMS)
 
 
 # Representative cross-medium style/artist/game tags for detection and conditioning.
@@ -410,41 +362,32 @@ STYLE_SPECS: tuple[StyleSpec, ...] = (
     ),
 )
 
-STYLE_IDS: tuple[str, ...] = tuple(s.id for s in STYLE_SPECS)
-_STYLE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {s.id: _compile_keywords(s.keywords) for s in STYLE_SPECS}
-_ARTIST_PATTERNS: tuple[re.Pattern, ...] = tuple(_word_re(a) for a in ARTIST_REFERENCE_TAGS)
+_STYLE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {s.id: compile_keywords(s.keywords) for s in STYLE_SPECS}
+_ARTIST_PATTERNS: tuple[re.Pattern, ...] = tuple(word_re(a) for a in ARTIST_REFERENCE_TAGS)
+
+
+def _detect_specs(prompt: str) -> list[StyleSpec]:
+    if not prompt or not prompt.strip():
+        return []
+    prompt = expand_aliases(prompt, _STYLE_ALIAS_PATTERNS)
+    return [s for s in STYLE_SPECS if matches(prompt, _STYLE_PATTERNS[s.id])]
 
 
 def detect_style_ids(prompt: str) -> tuple[str, ...]:
-    if not prompt or not prompt.strip():
-        return ()
-    prompt = _expand_style_aliases(prompt)
-    out: list[str] = []
-    for spec in STYLE_SPECS:
-        if _matches(prompt, _STYLE_PATTERNS[spec.id]):
-            out.append(spec.id)
-    return tuple(out)
+    """Ids of the style domains named in ``prompt`` (aliases folded to canonical terms)."""
+    return tuple(s.id for s in _detect_specs(prompt))
 
 
 def _artist_reference_fragments(prompt: str, enabled: bool) -> tuple[str, str]:
     if not enabled:
         return "", ""
-    prompt = _expand_style_aliases(prompt)
-    if _matches(prompt, _ARTIST_PATTERNS):
+    prompt = expand_aliases(prompt, _STYLE_ALIAS_PATTERNS)
+    if matches(prompt, _ARTIST_PATTERNS):
         return (
             "style-faithful motif consistency, coherent brush/line grammar across the whole frame",
             "style token drift, mixed incompatible artist signatures in one subject region",
         )
     return "", ""
-
-
-def _style_tag_quality_safe(prompt: str) -> tuple[str, str]:
-    try:
-        from config.defaults.style_artists import style_tag_quality_fragments
-
-        return style_tag_quality_fragments(prompt)
-    except Exception:
-        return "", ""
 
 
 def style_guidance_fragments(
@@ -453,16 +396,14 @@ def style_guidance_fragments(
     *,
     include_artist_refs: bool,
 ) -> tuple[str, str]:
+    """``(positive, negative)`` style-domain hints + artist-reference pack + style-tag quality fragments.
+
+    ``mode="none"`` skips the domain hints, ``"all"`` uses every domain, anything else detects them from ``prompt``.
+    """
     m = (mode or "none").lower()
-    tp, tn = _style_tag_quality_safe(prompt)
-    if m == "none":
-        ap, an = _artist_reference_fragments(prompt, include_artist_refs)
-        return merge_csv_unique(ap, tp), merge_csv_unique(an, tn)
-    if m == "all":
-        specs = list(STYLE_SPECS)
-    else:
-        specs = [s for s in STYLE_SPECS if s.id in detect_style_ids(prompt)]
-    pos = merge_csv_unique(*(s.positive_hints for s in specs))
-    neg = merge_csv_unique(*(s.negative_hints for s in specs))
+    specs = [] if m == "none" else list(STYLE_SPECS) if m == "all" else _detect_specs(prompt)
     ap, an = _artist_reference_fragments(prompt, include_artist_refs)
-    return merge_csv_unique(pos, ap, tp), merge_csv_unique(neg, an, tn)
+    tp, tn = style_tag_quality_fragments(prompt)
+    pos = merge_csv_unique(*(s.positive_hints for s in specs), ap, tp)
+    neg = merge_csv_unique(*(s.negative_hints for s in specs), an, tn)
+    return pos, neg

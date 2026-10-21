@@ -9,32 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from config.defaults._lexicon import dedupe_tags
 
-def _normalize_list_or_str(v: Any) -> list[str]:
-    if v is None:
-        return []
-    if isinstance(v, str):
-        s = v.strip()
-        return [s] if s else []
-    if isinstance(v, list):
-        out: list[str] = []
-        for x in v:
-            if isinstance(x, str) and x.strip():
-                out.append(x.strip())
-        return out
-    return []
-
-
-def _dedupe_keep_order(tokens: list[str]) -> list[str]:
-    seen = set()
-    out: list[str] = []
-    for t in tokens:
-        key = t.lower().strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        out.append(t.strip())
-    return out
+from utils.prompt.tags import str_list
 
 
 def build_character_prompt_additions(
@@ -58,37 +35,37 @@ def build_character_prompt_additions(
         positive_tokens.append(f"screen position: {spatial_anchor}")
 
     # Backward-compatible keys
-    positive_tokens.extend(_normalize_list_or_str(profile.get("prompt")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("positive")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("appearance")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("style_tags")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("clothing")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("accessories")))
-    negative_tokens.extend(_normalize_list_or_str(profile.get("negative")))
-    negative_tokens.extend(_normalize_list_or_str(profile.get("negative_prompt")))
+    positive_tokens.extend(str_list(profile.get("prompt")))
+    positive_tokens.extend(str_list(profile.get("positive")))
+    positive_tokens.extend(str_list(profile.get("appearance")))
+    positive_tokens.extend(str_list(profile.get("style_tags")))
+    positive_tokens.extend(str_list(profile.get("clothing")))
+    positive_tokens.extend(str_list(profile.get("accessories")))
+    negative_tokens.extend(str_list(profile.get("negative")))
+    negative_tokens.extend(str_list(profile.get("negative_prompt")))
 
     # Rich character keys (original or existing/canon)
-    positive_tokens.extend(_normalize_list_or_str(profile.get("character_name")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("source")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("franchise")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("aliases")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("identity_tokens")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("canon_traits")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("face_features")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("hair_features")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("body_features")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("wardrobe")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("materials")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("signature_items")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("pose_preferences")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("camera_preferences")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("environment_preferences")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("personality_cues")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("lighting_preferences")))
-    positive_tokens.extend(_normalize_list_or_str(profile.get("artist_style_mix")))
+    positive_tokens.extend(str_list(profile.get("character_name")))
+    positive_tokens.extend(str_list(profile.get("source")))
+    positive_tokens.extend(str_list(profile.get("franchise")))
+    positive_tokens.extend(str_list(profile.get("aliases")))
+    positive_tokens.extend(str_list(profile.get("identity_tokens")))
+    positive_tokens.extend(str_list(profile.get("canon_traits")))
+    positive_tokens.extend(str_list(profile.get("face_features")))
+    positive_tokens.extend(str_list(profile.get("hair_features")))
+    positive_tokens.extend(str_list(profile.get("body_features")))
+    positive_tokens.extend(str_list(profile.get("wardrobe")))
+    positive_tokens.extend(str_list(profile.get("materials")))
+    positive_tokens.extend(str_list(profile.get("signature_items")))
+    positive_tokens.extend(str_list(profile.get("pose_preferences")))
+    positive_tokens.extend(str_list(profile.get("camera_preferences")))
+    positive_tokens.extend(str_list(profile.get("environment_preferences")))
+    positive_tokens.extend(str_list(profile.get("personality_cues")))
+    positive_tokens.extend(str_list(profile.get("lighting_preferences")))
+    positive_tokens.extend(str_list(profile.get("artist_style_mix")))
 
-    negative_tokens.extend(_normalize_list_or_str(profile.get("avoid_tokens")))
-    negative_tokens.extend(_normalize_list_or_str(profile.get("identity_drift_negative")))
+    negative_tokens.extend(str_list(profile.get("avoid_tokens")))
+    negative_tokens.extend(str_list(profile.get("identity_drift_negative")))
 
     # Gender presentation controls (opt-in metadata)
     gender_pres = str(profile.get("gender_presentation", "") or "").strip().lower()
@@ -100,8 +77,8 @@ def build_character_prompt_additions(
         positive_tokens.append("female-presenting")
 
     # Optional strict identity locks (for preexisting/canon stability)
-    positive_tokens.extend(_normalize_list_or_str(profile.get("lock_tokens")))
-    negative_tokens.extend(_normalize_list_or_str(profile.get("anti_lock_break_tokens")))
+    positive_tokens.extend(str_list(profile.get("lock_tokens")))
+    negative_tokens.extend(str_list(profile.get("anti_lock_break_tokens")))
 
     # Legacy safety behavior becomes optional: only apply when not uncensored.
     if not uncensored_mode:
@@ -123,16 +100,14 @@ def build_character_prompt_additions(
             filtered_neg.append(t)
         negative_tokens = filtered_neg
 
-    positive_tokens = _dedupe_keep_order(positive_tokens)
-    negative_tokens = _dedupe_keep_order(negative_tokens)
+    positive_tokens = dedupe_tags(positive_tokens)
+    negative_tokens = dedupe_tags(negative_tokens)
 
     # Identity strength: >1 repeats high-priority identity cues to improve adherence.
     strength = max(0.5, min(float(character_strength), 2.0))
     if strength > 1.0:
-        identity_focus = _normalize_list_or_str(profile.get("identity_tokens")) + _normalize_list_or_str(
-            profile.get("character_name")
-        )
-        identity_focus = _dedupe_keep_order(identity_focus)
+        identity_focus = str_list(profile.get("identity_tokens")) + str_list(profile.get("character_name"))
+        identity_focus = dedupe_tags(identity_focus)
         if identity_focus:
             for tok in identity_focus:
                 positive_tokens.append(f"({tok})")

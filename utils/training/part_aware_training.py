@@ -24,9 +24,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-# ---------------------------------------------------------------------------
 # Hierarchical / part-level captions (training-time dropout)
-# ---------------------------------------------------------------------------
 
 
 def merge_hierarchical_captions(
@@ -103,9 +101,7 @@ def merge_hierarchical_jsonl_record(sample: dict[str, Any], separator: str = " |
     )
 
 
-# ---------------------------------------------------------------------------
 # Masks on patch grid (align with DiT patch tokens)
-# ---------------------------------------------------------------------------
 
 
 def image_mask_to_patch_weights(
@@ -263,9 +259,7 @@ def token_coverage_loss(
     return per_sample_loss.mean()
 
 
-# ---------------------------------------------------------------------------
 # Foveated / multi-scale crop box (data augmentation)
-# ---------------------------------------------------------------------------
 
 
 def foveated_random_crop_box(
@@ -329,51 +323,6 @@ def dit_patch_grid_hw(num_patches: int) -> tuple[int, int]:
     return s, s
 
 
-def compute_dit_attn_grounding_loss(
-    *,
-    train_model: torch.nn.Module,
-    diffusion,
-    latents_bchw: torch.Tensor,
-    t: torch.Tensor,
-    model_kwargs: dict[str, Any],
-    grounding_mask_b1hw: torch.Tensor,
-    training_noise: torch.Tensor,
-    noise_offset: float = 0.0,
-    token_start: int = 0,
-    token_end: int = 0,
-    sample_valid: torch.Tensor | None = None,
-    min_fg_patch_mass: float = 0.0,
-) -> torch.Tensor:
-    """
-    Auxiliary loss: align **first DiT block** cross-attention (``return_attn=True`` in ``DiT_Text``)
-    with a foreground mask downsampled to the patch grid.
-
-    **Limitations:** Only ``DiT_Text`` (and clones with the same API) is supported; attention is taken
-    from block 0 only. Incompatible with grad checkpointing during this forward — checkpointing is
-    temporarily disabled on the model while ``return_attn`` runs.
-    """
-    if not hasattr(train_model, "num_patches"):
-        raise TypeError("train_model must expose num_patches (e.g. DiT_Text)")
-    attn_w = capture_dit_block0_cross_attn(
-        train_model=train_model,
-        diffusion=diffusion,
-        latents_bchw=latents_bchw,
-        t=t,
-        model_kwargs=model_kwargs,
-        training_noise=training_noise,
-        noise_offset=noise_offset,
-    )
-    return grounding_loss_from_attn(
-        attn_w=attn_w,
-        train_model=train_model,
-        grounding_mask_b1hw=grounding_mask_b1hw,
-        token_start=token_start,
-        token_end=token_end,
-        sample_valid=sample_valid,
-        min_fg_patch_mass=min_fg_patch_mass,
-    )
-
-
 def capture_dit_block0_cross_attn(
     *,
     train_model: torch.nn.Module,
@@ -382,14 +331,12 @@ def capture_dit_block0_cross_attn(
     t: torch.Tensor,
     model_kwargs: dict[str, Any],
     training_noise: torch.Tensor,
-    noise_offset: float = 0.0,
 ) -> torch.Tensor:
-    """Run one forward pass at x_t and return block-0 cross-attention (B, heads, N, L).
+    """Run one forward pass at ``x_t = q_sample(latents, t, training_noise)`` and return block-0 cross-attention
+    ``(B, heads, N, L)``. ``training_noise`` must be the exact noise of the main loss (noise offset included).
 
-    Note: grad checkpointing is temporarily disabled for this pass because
-    ``return_attn=True`` requires the full forward graph to be materialised.
-    The returned attention tensor is detached — gradients flow through the
-    main training loss, not through this auxiliary capture.
+    Grad checkpointing is disabled for this pass because ``return_attn=True`` needs the full graph; gradients of
+    the auxiliary loss flow through the returned attention.
     """
     mk = dict(model_kwargs)
     mk.pop("return_attn", None)
@@ -398,7 +345,7 @@ def capture_dit_block0_cross_attn(
         train_model._grad_checkpointing = False
     try:
         with torch.no_grad():
-            x_t = diffusion.q_sample(latents_bchw, t, noise=training_noise, noise_offset=noise_offset)
+            x_t = diffusion.q_sample(latents_bchw, t, noise=training_noise)
         out = train_model(x_t, t, return_attn=True, **mk)
     finally:
         if was_ckpt:

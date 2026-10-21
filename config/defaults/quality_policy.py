@@ -1,55 +1,51 @@
-"""
-Best-model **quality policy** — compete mode (max aggression).
+"""Prompt-routed quality policy: per-profile soft defaults that ``quality_stack.apply_best_model_policy`` fills in.
 
-Every profile soft-fills the strongest practical stack so SDX outruns closed
-APIs on *control surface*: anti-AI look, guidance, anatomy, text repair,
-multi-candidate pick, and edit loops. Escape: ``--no-quality-defaults``.
+Each profile covers guidance, anti-AI look, anatomy, text repair and multi-candidate pick; values only land on
+args that are still unset. Opt out with ``--no-quality-defaults``.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
+
+from utils.safety.minor_guard import is_sexual
+from utils.safety.minor_guard import reasons as minor_guard_reasons
 
 
 @dataclass(frozen=True, slots=True)
 class ProfileRecipe:
-    """Max-strength soft defaults for one prompt profile."""
+    """Soft defaults for one prompt profile (``None`` leaves that arg alone)."""
 
     name: str
-    # Sampler / look
-    sampler_preset: str | None = "superior"
-    op_mode: str | None = None
     holy_grail: bool = True
     holy_grail_preset: str = "aggressive"
     cfg_scale: float | None = None
-    cfg_rescale: float | None = 0.7
+    # Guidance stack: APG (eta 0, reverse momentum -0.5, Sadat et al. ICLR 2025) removes the
+    # oversaturating parallel component; FDG weights low frequencies below and high frequencies above
+    # the CFG strength (paper's SD-XL setting is w_low=5, w_high=10). APG already handles saturation,
+    # so the Lin et al. rescale stays off by default.
+    cfg_rescale: float | None = 0.0
     apg_parallel_eta: float | None = 0.0
-    apg_momentum_beta: float | None = 0.2
-    fdg_cfg_strength: float | None = 0.5
-    zeresfdg_strength: float | None = 0.85
+    apg_momentum_beta: float | None = -0.5
+    fdg_low: float | None = 0.6
+    fdg_high: float | None = 1.3
     qsilk_micrograin: float | None = 0.12
     steps: int | None = 32
-    # Anti-AI / human look
     human_made: str = "strong"
     less_ai: bool = True
     naturalize: bool = True
     naturalize_deep: bool = True
     anti_ai_pack: str = "strong"
     human_media: str | None = "dslr"
-    shortcomings_mitigation: str = "all"
-    anatomy_guidance: str = "strong"
+    # Keyword-matched packs only; "all" floods every prompt with skin/hands/pixel/vector text.
+    shortcomings_mitigation: str = "auto"
+    anatomy_guidance: str = "lite"
     diversity: bool = True
     anti_bleed: bool = True
     anti_artifacts: bool = True
     strong_watermark: bool = True
-    # Mid-network residuals
-    naturalness_strength: float = 0.45
-    anatomy_attention_strength: float = 0.4
-    glyph_residual_strength: float = 0.14
-    # Prompt / pick / repair
-    expand_prompt: bool = True
+    expand_prompt: bool = False
     anti_slop: bool = True
     photo_realism_prefer: str | None = "documentary"
     hand_mode: str | None = "detailed"
@@ -57,64 +53,19 @@ class ProfileRecipe:
     typography_mode: str | None = None
     text_in_image: bool = False
     ocr_fix: bool = False
-    # Test-time selection
     num: int | None = 3
     pick_best: str | None = "superior_composite"
-    # Frontier / self-correct
     frontier_subject: bool = False
     superior_self_correct: bool = True
-    adherence_negation_scale: float = 0.55
-    adherence_binding_boost: float = 0.15
-    # Guidance interval (skip early CFG — research default from GuidanceInterval)
-    cfg_skip_early_frac: float | None = 0.08
-    cfg_skip_late_frac: float | None = 0.0
-    # Soft token emphasis for hands/text/counts
+    # Guidance interval in EDM sigma (Kynkäänniemi et al. 2024; their SD-XL band).
+    cfg_interval: str | None = "0.28,5.42"
     token_emphasis: bool = True
 
 
-# ``--pick-best`` choices that currently exist (sample CLI / test_time_pick).
-_KNOWN_PICK_BEST = frozenset(
-    {
-        "auto",
-        "none",
-        "clip",
-        "edge",
-        "ocr",
-        "vit",
-        "aesthetic",
-        "combo",
-        "combo_vit",
-        "combo_vit_hq",
-        "combo_vit_realism",
-        "combo_count_vit",
-        "combo_exposure",
-        "combo_structural",
-        "combo_architecture",
-        "combo_hq",
-        "combo_count",
-        "combo_realism",
-        "combo_contact",
-        "combo_hand",
-        "combo_occlusion",
-        "combo_reflection",
-        "combo_spatial_bind",
-        "combo_human",
-        "aesthetic_realism",
-        "superior_composite",
-    }
-)
-
-
-def _pick_best_or_realism(preferred: str) -> str:
-    """Use ``preferred`` when the pick-best metric exists, else combo_vit_realism."""
-    return preferred if preferred in _KNOWN_PICK_BEST else "combo_vit_realism"
-
-
-# Compete-mode profiles — first match wins.
+# Keyed by the names ``match_profile_name`` returns.
 PROFILES: dict[str, ProfileRecipe] = {
     "text_render": ProfileRecipe(
         name="text_render",
-        sampler_preset="sdxl",
         holy_grail_preset="balanced",
         cfg_scale=6.5,
         steps=36,
@@ -123,9 +74,6 @@ PROFILES: dict[str, ProfileRecipe] = {
         naturalize_deep=False,
         human_media=None,
         anatomy_guidance="none",
-        anatomy_attention_strength=0.0,
-        naturalness_strength=0.15,
-        glyph_residual_strength=0.22,
         typography_mode="poster",
         text_in_image=True,
         ocr_fix=True,
@@ -136,20 +84,18 @@ PROFILES: dict[str, ProfileRecipe] = {
         num=4,
         frontier_subject=False,
         anti_slop=False,
-        fdg_cfg_strength=0.35,
+        fdg_low=0.85,
+        fdg_high=1.15,
+        cfg_interval=None,
     ),
     "photoreal": ProfileRecipe(
         name="photoreal",
-        sampler_preset="flux",
-        op_mode="portrait",
         holy_grail_preset="photoreal",
         cfg_scale=3.8,
         steps=32,
-        fdg_cfg_strength=0.55,
+        fdg_high=1.5,
         human_media="dslr",
         photo_realism_prefer="documentary",
-        naturalness_strength=0.48,
-        anatomy_attention_strength=0.38,
         hand_mode="detailed",
         pose_naturalness="natural",
         frontier_subject=True,
@@ -158,16 +104,12 @@ PROFILES: dict[str, ProfileRecipe] = {
     ),
     "portrait": ProfileRecipe(
         name="portrait",
-        sampler_preset="flux",
-        op_mode="portrait",
         holy_grail_preset="photoreal",
         cfg_scale=3.8,
         steps=34,
-        fdg_cfg_strength=0.55,
+        fdg_high=1.5,
         human_media="photographic",
         photo_realism_prefer="studio_portrait",
-        naturalness_strength=0.5,
-        anatomy_attention_strength=0.42,
         hand_mode="detailed",
         pose_naturalness="intimate_natural",
         frontier_subject=True,
@@ -176,24 +118,19 @@ PROFILES: dict[str, ProfileRecipe] = {
     ),
     "anime": ProfileRecipe(
         name="anime",
-        sampler_preset="pixai",
-        op_mode="anime_char",
-        holy_grail_preset="pixai",
+        holy_grail_preset="anime",
         cfg_scale=5.5,
-        cfg_rescale=0.7,
+        cfg_rescale=0.3,
         apg_parallel_eta=None,
         apg_momentum_beta=None,
-        fdg_cfg_strength=0.25,
-        zeresfdg_strength=0.5,
+        fdg_low=0.8,
+        fdg_high=1.2,
         steps=28,
         human_made="standard",
         naturalize=False,
         naturalize_deep=False,
         human_media=None,
         anatomy_guidance="strong",
-        naturalness_strength=0.28,
-        anatomy_attention_strength=0.35,
-        glyph_residual_strength=0.08,
         photo_realism_prefer=None,
         hand_mode="stable",
         pose_naturalness="dynamic_natural",
@@ -204,17 +141,12 @@ PROFILES: dict[str, ProfileRecipe] = {
     ),
     "pixai": ProfileRecipe(
         name="pixai",
-        sampler_preset="pixai_pro",
-        op_mode="pro",
-        holy_grail_preset="pixai",
+        holy_grail_preset="anime",
         cfg_scale=6.0,
-        cfg_rescale=0.7,
         steps=36,
         human_made="standard",
         naturalize=False,
         anatomy_guidance="strong",
-        naturalness_strength=0.3,
-        anatomy_attention_strength=0.38,
         hand_mode="stable",
         pose_naturalness="dynamic_natural",
         pick_best="combo_vit",
@@ -223,7 +155,6 @@ PROFILES: dict[str, ProfileRecipe] = {
     ),
     "illustration": ProfileRecipe(
         name="illustration",
-        sampler_preset="zit",
         holy_grail_preset="illustration",
         cfg_scale=6.5,
         steps=30,
@@ -232,8 +163,6 @@ PROFILES: dict[str, ProfileRecipe] = {
         naturalize_deep=False,
         human_media=None,
         photo_realism_prefer=None,
-        naturalness_strength=0.32,
-        anatomy_attention_strength=0.3,
         hand_mode="stable",
         anti_slop=False,
         pick_best="combo_vit",
@@ -241,15 +170,10 @@ PROFILES: dict[str, ProfileRecipe] = {
     ),
     "people": ProfileRecipe(
         name="people",
-        sampler_preset="superior",
-        op_mode="fullbody",
         holy_grail_preset="aggressive",
         cfg_scale=6.5,
         steps=34,
-        fdg_cfg_strength=0.5,
         photo_realism_prefer="cinematic",
-        naturalness_strength=0.45,
-        anatomy_attention_strength=0.45,
         hand_mode="grip",
         pose_naturalness="dynamic_natural",
         frontier_subject=True,
@@ -260,8 +184,7 @@ PROFILES: dict[str, ProfileRecipe] = {
         name="occlusion",
         holy_grail_preset="aggressive",
         anatomy_guidance="strong",
-        anatomy_attention_strength=0.45,
-        pick_best=_pick_best_or_realism("combo_occlusion"),
+        pick_best="combo_occlusion",
         num=3,
         frontier_subject=True,
     ),
@@ -269,7 +192,7 @@ PROFILES: dict[str, ProfileRecipe] = {
         name="reflection",
         holy_grail_preset="aggressive",
         anatomy_guidance="strong",
-        pick_best=_pick_best_or_realism("combo_reflection"),
+        pick_best="combo_reflection",
         num=3,
         frontier_subject=True,
     ),
@@ -278,7 +201,6 @@ PROFILES: dict[str, ProfileRecipe] = {
         holy_grail_preset="photoreal",
         cfg_scale=5.5,
         anatomy_guidance="strong",
-        anatomy_attention_strength=0.35,
         hand_mode="stable",
         pose_naturalness="natural",
         pick_best="combo_vit_realism",
@@ -298,10 +220,9 @@ PROFILES: dict[str, ProfileRecipe] = {
         photo_realism_prefer=None,
         anti_slop=False,
         anatomy_guidance="strong",
-        anatomy_attention_strength=0.5,
         hand_mode="detailed",
         pose_naturalness="intimate_natural",
-        pick_best=_pick_best_or_realism("combo_contact"),
+        pick_best="combo_contact",
         num=3,
         frontier_subject=True,
     ),
@@ -309,20 +230,16 @@ PROFILES: dict[str, ProfileRecipe] = {
         name="bind",
         holy_grail_preset="aggressive",
         anatomy_guidance="strong",
-        pick_best=_pick_best_or_realism("combo_spatial_bind"),
+        pick_best="combo_spatial_bind",
         num=3,
         frontier_subject=True,
     ),
     "default": ProfileRecipe(
         name="default",
-        sampler_preset="superior",
         holy_grail_preset="aggressive",
         cfg_scale=6.5,
         steps=32,
-        fdg_cfg_strength=0.45,
         photo_realism_prefer=None,
-        naturalness_strength=0.4,
-        anatomy_attention_strength=0.35,
         hand_mode="stable",
         pose_naturalness="natural",
         pick_best="superior_composite",
@@ -335,167 +252,91 @@ PROFILES: dict[str, ProfileRecipe] = {
 
 @dataclass(slots=True)
 class QualityPolicy:
-    """Global compete-mode switches."""
+    """Global switches over the per-profile recipes."""
 
     enabled: bool = True
-    aggression: str = "max"  # max | balanced (balanced softens num/pick)
+    aggression: str = "max"  # max | balanced (balanced skips the multi-candidate pick)
     enable_holy_grail: bool = True
-    enable_adherence_modulate: bool = True
-    enable_glyph: bool = True
-    # Multi-candidate pick is on by default in max mode (costs more VRAM/time)
     enable_pick_best: bool = True
     enable_ocr_auto: bool = True
     enable_frontier_subject: bool = True
     enable_token_emphasis: bool = True
-    enable_cfg_skip_early: bool = True
-    # Still-image competitor gaps (spatial / glyphs / binding / anti-float)
-    enable_auto_layout: bool = True
-    enable_prompt_ground: bool = True
-    enable_glyph_canvas: bool = True
-    enable_contact_shadow: bool = True
-    enable_design_brief: bool = True
-    enable_community_recipes: bool = True
+    enable_cfg_interval: bool = True
     enable_box_attn: bool = True
-    enable_prompt_reinject: bool = True
-    edit_gate_default: str = "auto"
     profiles: dict[str, ProfileRecipe] = field(default_factory=lambda: dict(PROFILES))
-    train_shortcomings_mitigation: str = "all"
-    train_anatomy_guidance: str = "strong"
-    # Stronger text-cond modulation than v1
-    adherence_negation_scale: float = 0.55
-    adherence_binding_boost: float = 0.15
 
 
 POLICY = QualityPolicy()
 
-_NSFW_PROFILE_RE = re.compile(
-    r"\b(nsfw|nude|naked|explicit|erotic|hentai|topless|lingerie|"
-    r"penis|vagina|pussy|handjob|blowjob|paizuri|cowgirl|missionary|"
-    r"creampie|ahegao|tentacle|uncensored|sexbot|sex\s*bot|"
-    r"intercourse|orgasm|lewd|ecchi|bondage|bdsm|sex|fuck(?:ing)?)\b",
-    re.I,
+
+_TEXT_CUES = ("text that says", "text says", "sign that says", "storefront", "typograph", "lettering", "[text:")
+_SFW_CUES = ("sfw", "safe for work", "work-safe", "family-friendly", "linkedin", "passport photo", "corporate headshot")
+_PIXAI_CUES = ("pixai", "tsubaki", "serin", "moonlit garden", "full-body illustration")
+_ANIME_CUES = ("anime", "manga", "cel shading", "waifu", "danbooru", "visual novel")
+_ILLUSTRATION_CUES = ("illustration", "concept art", "painterly", "comic", "storybook", "watercolor", "oil paint")
+_OCCLUSION_CUES = (
+    "fence",
+    "occlud",
+    "chain-link",
+    "through the gaps",
+    "partly hidden behind",
+    "visible through",
+    "wine glass",
 )
-_MINOR_PROFILE_RE = re.compile(
-    r"\b(child|children|kid|kids|toddler|infant|baby|minor|loli|shota)\b",
-    re.I,
+_REFLECTION_CUES = ("reflection", "reflected", "puddle", "mirror surface")
+_BIND_COLORS = ("red", "blue", "green", "yellow", "orange", "purple", "pink", "white", "black", "brown")
+_PORTRAIT_CUES = ("portrait", "headshot", "beauty shot", "passport photo")
+_PHOTO_CUES = (
+    "photo",
+    "photoreal",
+    "dslr",
+    "raw photo",
+    "8k photo",
+    "cinematic photo",
+    "documentary",
+    "street photo",
+    "hyperreal",
+    "realistic",
 )
+_PEOPLE_CUES = ("person", "people", "man", "woman", "girl", "boy", "hands", "full body", "character")
+
+
+def _has_any(text: str, cues: tuple[str, ...]) -> bool:
+    return any(c in text for c in cues)
 
 
 def match_profile_name(prompt: str, *, style: str = "") -> str:
-    """First matching profile id for this prompt (see PROFILES)."""
+    """First matching ``PROFILES`` key for this prompt (plain substring cues, checked in priority order)."""
+    prompt = prompt or ""
     text = f"{prompt} {style}".lower()
-    if any(
-        k in text
-        for k in (
-            "text that says",
-            "text says",
-            "sign that says",
-            "storefront",
-            "typograph",
-            "lettering",
-            "[text:",
-        )
-    ) or ('"' in (prompt or "") and len(prompt or "") < 400):
-        if '"' in (prompt or "") or "“" in (prompt or "") or "[text:" in text:
-            return "text_render"
-    if not _MINOR_PROFILE_RE.search(text) and _NSFW_PROFILE_RE.search(text):
+    quoted = '"' in prompt
+    # Text rendering needs an explicit quoted string or [text:...] span to draw.
+    if "[text:" in text or (quoted and len(prompt) < 400) or ((quoted or "“" in prompt) and _has_any(text, _TEXT_CUES)):
+        return "text_render"
+    if is_sexual(text) and not minor_guard_reasons(text, training=True):
         return "nsfw"
-    if any(
-        k in text
-        for k in (
-            "sfw",
-            "safe for work",
-            "work-safe",
-            "family-friendly",
-            "linkedin",
-            "passport photo",
-            "corporate headshot",
-        )
-    ):
+    if _has_any(text, _SFW_CUES):
         return "sfw"
-    if any(k in text for k in ("pixai", "tsubaki", "serin", "moonlit garden", "full-body illustration")):
+    if _has_any(text, _PIXAI_CUES):
         return "pixai"
-    if any(k in text for k in ("anime", "manga", "cel shading", "waifu", "danbooru", "visual novel")):
+    if _has_any(text, _ANIME_CUES):
         return "anime"
-    if any(
-        k in text for k in ("illustration", "concept art", "painterly", "comic", "storybook", "watercolor", "oil paint")
-    ):
+    if _has_any(text, _ILLUSTRATION_CUES):
         return "illustration"
     # Occlusion / reflection / bind before portrait so fence scenes pick physics.
-    if any(
-        k in text
-        for k in (
-            "fence",
-            "occlud",
-            "chain-link",
-            "through the gaps",
-            "partly hidden behind",
-            "visible through",
-            "wine glass",
-        )
-    ):
+    if _has_any(text, _OCCLUSION_CUES):
         return "occlusion"
-    if (
-        "reflection" in text
-        or "reflected" in text
-        or ("chrome" in text and "granite" in text)
-        or "puddle" in text
-        or "mirror surface" in text
-    ):
+    if _has_any(text, _REFLECTION_CUES) or ("chrome" in text and "granite" in text):
         return "reflection"
     if "on the left" in text and "on the right" in text:
         return "bind"
-    if "left of" in text:
-        color_hits = sum(
-            1
-            for c in (
-                "red",
-                "blue",
-                "green",
-                "yellow",
-                "orange",
-                "purple",
-                "pink",
-                "white",
-                "black",
-                "brown",
-            )
-            if c in text
-        )
-        if color_hits >= 2:
-            return "bind"
-    if any(k in text for k in ("portrait", "headshot", "beauty shot", "passport photo")):
+    if "left of" in text and sum(c in text for c in _BIND_COLORS) >= 2:
+        return "bind"
+    if _has_any(text, _PORTRAIT_CUES):
         return "portrait"
-    if any(
-        k in text
-        for k in (
-            "photo",
-            "photoreal",
-            "dslr",
-            "raw photo",
-            "8k photo",
-            "cinematic photo",
-            "documentary",
-            "street photo",
-            "hyperreal",
-            "realistic",
-        )
-    ):
+    if _has_any(text, _PHOTO_CUES):
         return "photoreal"
-    if any(
-        k in text
-        for k in (
-            "person",
-            "people",
-            "man",
-            "woman",
-            "girl",
-            "boy",
-            "hands",
-            "full body",
-            "character",
-        )
-    ):
+    if _has_any(text, _PEOPLE_CUES):
         return "people"
     return "default"
 
@@ -505,22 +346,12 @@ def recipe_for_prompt(prompt: str, *, style: str = "") -> ProfileRecipe:
     return POLICY.profiles.get(name, POLICY.profiles["default"])
 
 
-def soft_set(args: Any, name: str, value: Any, *, unset: tuple[Any, ...] | None = None) -> bool:
-    """Set getattr(args,name) only when it looks unset. Returns True if applied."""
-    if value is None or not hasattr(args, name):
+def soft_set(args: Any, name: str, value: Any, *, unset: tuple[Any, ...]) -> bool:
+    """Set ``args.name = value`` only while its current value is in ``unset``; True when applied."""
+    if value is None or not hasattr(args, name) or getattr(args, name) not in unset:
         return False
-    cur = getattr(args, name)
-    if unset is None:
-        if isinstance(value, bool):
-            unset = (False,)
-        elif isinstance(value, (int, float)):
-            unset = (0, 0.0, -1, -1.0, None)
-        else:
-            unset = (None, "", "none", "off", "0")
-    if cur in unset:
-        setattr(args, name, value)
-        return True
-    return False
+    setattr(args, name, value)
+    return True
 
 
 __all__ = [

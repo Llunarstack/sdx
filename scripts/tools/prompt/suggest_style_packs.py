@@ -11,11 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
 
 
 def _compact_cli_row(row: dict[str, str]) -> dict[str, str]:
@@ -70,11 +65,9 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Emit JSON rows.")
     args = parser.parse_args()
 
-    import sys
+    from scripts.tools._repo_bootstrap import ensure_repo_paths
 
-    root = _repo_root()
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+    ensure_repo_paths()
 
     from pipelines.book_comic.prompt_lexicon import suggest_popular_style_presets
 

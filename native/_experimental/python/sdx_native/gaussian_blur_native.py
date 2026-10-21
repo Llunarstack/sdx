@@ -1,84 +1,42 @@
 """
-Optional ``sdx_cuda_gaussian_blur`` wrapper — depthwise Gaussian blur on float32
-latent tensors (B, C, H, W).
-
-Matches ``gaussian_blur_latent()`` in ``diffusion/sampling_utils.py`` and
-``_gaussian_blur()`` in ``diffusion/sampling/latent_refiner.py``.
-
-Falls back to pure PyTorch when the native library is not built.
+Optional ``sdx_cuda_gaussian_blur`` wrapper: depthwise Gaussian blur on float32 latents (B, C, H, W),
+matching ``diffusion.sampling_utils.gaussian_blur_latent``. Callers fall back to PyTorch when it is not built.
 """
 
 from __future__ import annotations
 
 import ctypes
+import functools
 
 import numpy as np
 
-from sdx_native.native_tools import cuda_gaussian_blur_shared_library_path
+from sdx_native.native_tools import load_shared_library
 
 
-class CudaGaussianBlurLib:
-    def __init__(self) -> None:
-        self._lib: ctypes.CDLL | None = None
-        p = cuda_gaussian_blur_shared_library_path()
-        if p is None:
-            return
-        try:
-            lib = ctypes.CDLL(str(p))
-        except OSError:
-            return
-        lib.sdx_cuda_gaussian_blur_latent_f32.argtypes = [
-            ctypes.c_void_p,  # src_host
-            ctypes.c_void_p,  # dst_host
-            ctypes.c_int,  # B
-            ctypes.c_int,  # C
-            ctypes.c_int,  # H
-            ctypes.c_int,  # W
-            ctypes.c_float,  # sigma
-        ]
-        lib.sdx_cuda_gaussian_blur_latent_f32.restype = ctypes.c_int
-        self._lib = lib
-
-    @property
-    def available(self) -> bool:
-        return self._lib is not None
-
-    def blur(self, x: np.ndarray, sigma: float) -> np.ndarray:
-        """Blur a (B, C, H, W) float32 array in-place and return it."""
-        if self._lib is None:
-            raise RuntimeError("sdx_cuda_gaussian_blur not built")
-        if x.ndim != 4:
-            raise ValueError("expected 4-D array (B, C, H, W)")
-        x = np.ascontiguousarray(x, dtype=np.float32)
-        B, C, H, W = x.shape
-        dst = np.empty_like(x)
-        rc = self._lib.sdx_cuda_gaussian_blur_latent_f32(
-            x.ctypes.data_as(ctypes.c_void_p),
-            dst.ctypes.data_as(ctypes.c_void_p),
-            ctypes.c_int(B),
-            ctypes.c_int(C),
-            ctypes.c_int(H),
-            ctypes.c_int(W),
-            ctypes.c_float(float(sigma)),
+@functools.cache
+def _lib() -> ctypes.CDLL | None:
+    lib = load_shared_library("sdx_cuda_gaussian_blur")
+    if lib is not None:
+        # src_host, dst_host, B, C, H, W, sigma
+        lib.sdx_cuda_gaussian_blur_latent_f32.argtypes = (
+            [ctypes.c_void_p, ctypes.c_void_p] + [ctypes.c_int] * 4 + [ctypes.c_float]
         )
-        if rc != 0:
-            raise RuntimeError(f"sdx_cuda_gaussian_blur_latent_f32 failed (rc={rc})")
-        return dst
-
-
-_LIB: CudaGaussianBlurLib | None = None
-
-
-def _get_lib() -> CudaGaussianBlurLib:
-    global _LIB
-    if _LIB is None:
-        _LIB = CudaGaussianBlurLib()
-    return _LIB
+        lib.sdx_cuda_gaussian_blur_latent_f32.restype = ctypes.c_int
+    return lib
 
 
 def maybe_gaussian_blur_cuda(x: np.ndarray, sigma: float) -> np.ndarray | None:
-    """Return blurred array via CUDA kernel, or None if not available."""
-    lib = _get_lib()
-    if not lib.available:
+    """Blurred copy of a (B, C, H, W) array via the CUDA kernel, or ``None`` if not available."""
+    lib = _lib()
+    if lib is None:
         return None
-    return lib.blur(x, sigma)
+    if x.ndim != 4:
+        raise ValueError("expected 4-D array (B, C, H, W)")
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    dst = np.empty_like(x)
+    rc = lib.sdx_cuda_gaussian_blur_latent_f32(
+        x.ctypes.data_as(ctypes.c_void_p), dst.ctypes.data_as(ctypes.c_void_p), *x.shape, float(sigma)
+    )
+    if rc != 0:
+        raise RuntimeError(f"sdx_cuda_gaussian_blur_latent_f32 failed (rc={rc})")
+    return dst

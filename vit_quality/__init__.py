@@ -17,22 +17,16 @@ __all__ = [
     "vit_model_parameter_report",
     "pairwise_ranking_loss",
     "binary_focal_loss_with_logits",
-    "breakdown_prompt",
-    "compose_positive_with_embedded_negative",
-    "build_prompt_plan",
 ]
 
 _ATTR_ORIGIN: dict[str, str] = {
-    "ViTConfig": "config",
+    "ViTConfig": "model",
     "ViTQualityAdherenceModel": "model",
     "build_vit_model": "model",
     "load_vit_quality_checkpoint": "checkpoint_utils",
     "vit_model_parameter_report": "checkpoint_utils",
-    "pairwise_ranking_loss": "losses",
-    "binary_focal_loss_with_logits": "losses",
-    "breakdown_prompt": "prompt_system",
-    "compose_positive_with_embedded_negative": "prompt_system",
-    "build_prompt_plan": "prompt_system",
+    "pairwise_ranking_loss": "model",
+    "binary_focal_loss_with_logits": "model",
 }
 
 

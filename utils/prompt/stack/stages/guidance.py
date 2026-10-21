@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from utils.prompt.tags import append_csv
+
 from ..context import PromptContext, StackMode
-from ..tokens import append_csv
 
 
 def stage_guidance(ctx: PromptContext) -> None:
@@ -211,9 +212,7 @@ def apply_training_guidance_pair(
     include_art_guidance_photography: bool = True,
 ) -> tuple[str, str]:
     """
-    Training-side helper: same guidance fragments as ``sample.py`` / ``t2i_dataset`` (pos + neg).
-
-    Mirrors ``apply_shortcomings_to_caption_pair`` + art + style without duplicating config logic.
+    Training-side helper: same shortcomings / art / style guidance fragments as ``sample.py`` (pos + neg).
     """
     ctx = PromptContext(
         positive=caption,

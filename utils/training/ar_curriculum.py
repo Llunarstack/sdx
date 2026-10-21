@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-_VALID_BLOCKS = (0, 2, 4)
 _VALID_ORDERS = ("raster", "zorder", "snake", "spiral")
 
 

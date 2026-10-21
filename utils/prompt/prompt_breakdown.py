@@ -13,13 +13,13 @@ long tag-style prompts.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
+from config.defaults._lexicon import dedupe_tags
+
 from utils.prompt.prompt_layout import PRESET_SECTION_ORDER, T5_SECTION_LABELS
 
-BreakdownMode = Literal["off", "auto", "on"]
 BreakdownFormat = Literal["ordered", "labeled"]
 BreakdownOrder = Literal["subject_first", "quality_first", "scene_first"]
 
@@ -234,18 +234,6 @@ def _classify_segment(seg: str) -> str:
     return best
 
 
-def _dedupe_preserve(seq: Sequence[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for s in seq:
-        k = s.lower().strip()
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        out.append(s.strip())
-    return out
-
-
 @dataclass(slots=True)
 class PromptBreakdownResult:
     """Structured buckets + rendered strings."""
@@ -280,8 +268,8 @@ def build_breakdown(
     prompt = (prompt or "").strip()
     raw = breakdown_prompt_to_sections(prompt)
     merged: dict[str, list[str]] = {
-        "subjects": _dedupe_preserve(raw.get("subjects", [])),
-        **{k: _dedupe_preserve(raw.get(k, [])) for k in _KEYWORD_BUCKETS},
+        "subjects": dedupe_tags(raw.get("subjects", [])),
+        **{k: dedupe_tags(raw.get(k, [])) for k in _KEYWORD_BUCKETS},
     }
     order_names = PRESET_SECTION_ORDER.get(order, PRESET_SECTION_ORDER["subject_first"])
     ordered_parts: list[str] = []
@@ -340,7 +328,6 @@ def apply_prompt_breakdown(
 
 __all__ = [
     "BreakdownFormat",
-    "BreakdownMode",
     "BreakdownOrder",
     "PromptBreakdownResult",
     "apply_prompt_breakdown",

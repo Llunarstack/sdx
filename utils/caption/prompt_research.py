@@ -1,11 +1,8 @@
-"""Research the best diffusion prompt for an image via uncensored VLM + local RAG.
+"""Research the best diffusion prompt for an image (instead of reverse image search like SauceNAO/TinEye).
 
-Instead of reverse image search (SauceNAO/TinEye), use your own booru corpus:
-  1. VLM describes the image (explicit / NSFW-safe — no refusals)
-  2. TF-IDF RAG retrieves similar captions/tags from ``rag_corpus.jsonl``
-  3. Creative RAG (moondream + Qwen) synthesizes a training-quality prompt
-
-This is the recommended path for unknown images when you already scrape danbooru/e621.
+1. VLM describes the image (explicit / NSFW-safe — no refusals)
+2. TF-IDF RAG retrieves similar captions/tags from your own booru ``rag_corpus.jsonl``
+3. Creative RAG (moondream + Qwen) synthesizes a training-quality prompt
 """
 
 from __future__ import annotations

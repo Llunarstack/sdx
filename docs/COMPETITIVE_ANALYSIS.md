@@ -176,7 +176,7 @@ Their strength is also a ceiling: outputs are recognizable and hard to push off.
 
 - **Solution:** sdx's `creativity_embed_dim` + `style_embed_dim` + MoE experts
   are a genuine differentiator. Formalize a **style-dispersion objective**:
-  during preference mining (`utils/superior/vit_mining.py`), reward *intra-prompt
+  during preference mining (`utils/superior/auto_loop.py`), reward *intra-prompt
   diversity* that stays on-prompt (ViT adherence high, pairwise embedding
   distance high). This directly attacks the sameness competitors can't escape.
 
@@ -206,7 +206,8 @@ Shared weakness (SD3.5 especially) at distance and in crowds.
 - **Solution:** multi-crop high-res ViT scoring. Today `vit_quality` resizes
   everything to 224 and `book_model_readiness.py` already warns about it. Add a
   tiled/multi-crop scoring path so the critic actually *sees* small faces, then
-  let TCIS resample crops that fail. Land in `vit_quality/tta.py` + dataset.
+  let TCIS resample crops that fail. Pick-time scoring already tiles aspect-preserving
+  crops (`test_time_pick._vit_views`); manifest scoring (`vit_quality/infer.py`) still squashes.
 
 ---
 

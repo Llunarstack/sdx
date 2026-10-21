@@ -1,31 +1,34 @@
-# Quality and post-processing utilities for better-looking images.
-# Inspired by ComfyUI, A1111, and common diffusion workflows.
+"""Deterministic sRGB finishing helpers (contrast, saturation, tone, clarity, grades, filters).
+
+Stochastic capture effects (sensor noise, film grain, lens) live in ``utils.quality.camera_isp``.
+"""
 
 import numpy as np
 
 
-def add_film_grain(image: np.ndarray, amount: float = 0.02, seed: int | None = None) -> np.ndarray:
-    """
-    Add subtle luminance grain to reduce the plastic/AI look. amount in [0.01, 0.04] is typical.
-    image: (H, W, C) uint8 or float [0,255]. Returns same dtype.
-    """
-    if amount <= 0:
-        return image
-    rng = np.random.default_rng(seed)
-    is_uint = image.dtype == np.uint8
-    if is_uint:
-        img = image.astype(np.float32)
-    else:
-        img = np.asarray(image, dtype=np.float32).copy()
-    h, w, c = img.shape
-    # Slightly less grain in shadows (lum factor) so it looks natural
-    gray = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    lum = np.clip(gray / 255.0, 0.05, 1.0)
-    noise = rng.normal(0, amount * 255, (h, w)).astype(np.float32) * (0.4 + 0.6 * lum)
-    img = np.clip(img + noise[..., np.newaxis], 0, 255)
-    if is_uint:
-        return np.clip(img, 0, 255).astype(np.uint8)
-    return img
+def rgb_to_luminance(rgb: np.ndarray) -> np.ndarray:
+    """Rec.601 luma of an (..., 3) array, float32."""
+    x = np.asarray(rgb, dtype=np.float32)
+    return x[..., 0] * 0.299 + x[..., 1] * 0.587 + x[..., 2] * 0.114
+
+
+def ramp(x: float, lo: float, hi: float) -> float:
+    """0 at ``lo``, 1 at ``hi``, linear between (``lo > hi`` gives a falling ramp)."""
+    return float(np.clip((x - lo) / (hi - lo), 0.0, 1.0))
+
+
+def pearson(a: np.ndarray, b: np.ndarray) -> float:
+    """Pearson correlation of two equally sized arrays; 0 when either is flat."""
+    x = np.asarray(a, dtype=np.float64).ravel()
+    y = np.asarray(b, dtype=np.float64).ravel()
+    if x.size < 2 or y.size != x.size:
+        return 0.0
+    x = x - x.mean()
+    y = y - y.mean()
+    denom = float(np.sqrt(np.dot(x, x) * np.dot(y, y)))
+    if denom < 1e-8:
+        return 0.0
+    return float(np.clip(np.dot(x, y) / denom, -1.0, 1.0))
 
 
 def naturalize(
@@ -34,89 +37,19 @@ def naturalize(
     micro_contrast: float = 1.02,
     seed: int | None = None,
 ) -> np.ndarray:
-    """
-    Light post-process to make the image look less AI-generated: subtle film grain + slight contrast.
-    grain_amount: 0 = off, 0.01–0.03 typical; micro_contrast: 1.0 = off, 1.01–1.05 subtle.
-    """
-    if grain_amount <= 0 and abs(micro_contrast - 1.0) < 1e-6:
-        return image
+    """Micro-contrast plus density-space film grain (``camera_isp.simulate_film``, no lens effects).
 
-    # Work in float to safely apply multiple non-linear transforms.
-    out = image
-    if abs(micro_contrast - 1.0) >= 1e-6:
-        out = contrast(out, factor=micro_contrast)
-        if out.dtype == np.float32 or out.dtype == np.float64:
-            out = np.clip(out, 0, 255)
-        else:
-            out = out.astype(np.uint8)
+    ``grain_amount`` 0.015 is ISO 400 colour negative; grain RMS grows with sqrt(ISO), so the
+    ISO scales with the square of the amount. Returns the input dtype.
+    """
+    out = contrast(np.asarray(image, dtype=np.float32), factor=micro_contrast)
     if grain_amount > 0:
-        out = add_film_grain(out, amount=grain_amount, seed=seed)
-        out = np.clip(out, 0, 255)
+        from utils.quality.camera_isp import NO_LENS, FilmStock, simulate_film
 
-    # Additional "human art" cosmetics:
-    # - Paper texture (low-frequency luminance noise)
-    # - Mild warmth (tint)
-    # - Soft vignette
-    # - Very slight edge softness blend
-    # These are intentionally subtle and only apply when grain_amount > 0.
-    strength = float(max(0.0, grain_amount)) / 0.015  # normalize so default=1.0
-    strength = min(max(strength, 0.0), 2.0)
-    if strength > 0:
-        from PIL import Image
-
-        rng = np.random.default_rng(seed)
-        is_uint = out.dtype == np.uint8
-        img = out.astype(np.float32, copy=False)
-        h, w, c = img.shape
-
-        # Paper texture: low-frequency noise blended into luminance.
-        # Use downsample/upsample to avoid high-frequency speckle.
-        small_h = max(8, h // 8)
-        small_w = max(8, w // 8)
-        tex_small = rng.normal(0.0, 1.0, size=(small_h, small_w)).astype(np.float32)
-        tex_img = Image.fromarray(
-            (np.clip((tex_small - tex_small.min()) / (np.ptp(tex_small) + 1e-8), 0.0, 1.0) * 255.0).astype(np.uint8)
-        )
-        tex = np.array(tex_img.resize((w, h), resample=Image.BILINEAR), dtype=np.float32)
-        tex = tex / 255.0 - 0.5  # centered [-0.5, 0.5]
-        paper_amt = 0.035 * strength  # in luminance units
-        lum = img[:, :, 0] * 0.299 + img[:, :, 1] * 0.587 + img[:, :, 2] * 0.114
-        lum = np.clip(lum + lum * tex * paper_amt, 0.0, 255.0)
-
-        # Re-scale channels to preserve chroma roughly.
-        chroma = (img + 1e-6) / (img.mean(axis=2, keepdims=True) + 1e-6)
-        img = chroma * lum[:, :, None] / (chroma.mean(axis=2, keepdims=True) + 1e-6)
-
-        # Warm tint: bias red up slightly, blue down slightly.
-        warm = 0.018 * strength
-        img[:, :, 0] = img[:, :, 0] * (1.0 + warm)
-        img[:, :, 2] = img[:, :, 2] * (1.0 - warm)
-
-        # Vignette: subtle radial attenuation.
-        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
-        cy, cx = (h - 1) / 2.0, (w - 1) / 2.0
-        rr = ((yy - cy) ** 2 + (xx - cx) ** 2) ** 0.5
-        rr = rr / (rr.max() + 1e-6)
-        vig = 1.0 - (0.10 * strength) * (rr**2)
-        img = img * vig[:, :, None]
-
-        # Edge softness: blend with a lightly blurred version (PIL blur).
-        try:
-            from PIL import ImageFilter
-
-            pil = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), mode="RGB")
-            blurred = pil.filter(ImageFilter.GaussianBlur(radius=0.6))
-            blended = Image.blend(pil, blurred, alpha=min(0.12 * strength, 0.20))
-            img = np.array(blended, dtype=np.float32)
-        except Exception:
-            # If PIL blur fails for any reason, keep paper/warm/vignette only.
-            pass
-
-        img = np.clip(img, 0, 255)
-        if is_uint:
-            return img.astype(np.uint8)
-        return img
-
+        iso = int(np.clip(400.0 * (float(grain_amount) / 0.015) ** 2, 25, 6400))
+        out = simulate_film(out, FilmStock("naturalize", iso=iso, lens=NO_LENS), seed=int(seed or 0))
+    if image.dtype == np.uint8:
+        return np.clip(np.rint(out), 0, 255).astype(np.uint8)
     return out
 
 
@@ -181,57 +114,16 @@ def contrast_pil(pil_image, factor: float):
 
 
 def saturation_rgb(image: np.ndarray, factor: float = 1.0) -> np.ndarray:
-    """
-    Color saturation in RGB via PIL. factor 1.0 = unchanged; 1.05–1.2 adds pop without nuking skintones
-    as much as contrast. image: (H, W, 3) uint8 (or float [0,255] coerced).
+    """Blend away from / toward Rec.601 gray (same maths as PIL ``ImageEnhance.Color``), in float.
+
+    factor 1.0 = unchanged; 1.05-1.2 adds pop. Returns the input dtype.
     """
     if abs(float(factor) - 1.0) < 1e-6:
         return image
-    from PIL import Image, ImageEnhance
-
-    is_uint = image.dtype == np.uint8
-    arr = np.clip(np.asarray(image, dtype=np.float32), 0, 255).astype(np.uint8)
-    pil = Image.fromarray(arr, mode="RGB")
-    out = ImageEnhance.Color(pil).enhance(float(factor))
-    o = np.array(out, dtype=np.uint8)
-    if not is_uint:
-        return o.astype(np.float32)
-    return o
-
-
-def add_motion_blur(
-    image: np.ndarray,
-    amount: float = 0.12,
-    angle_deg: float = 0.0,
-    seed: int | None = None,
-) -> np.ndarray:
-    """
-    Subtle directional blur (LANDSCAPE: authenticity / lens-like motion).
-    ``amount`` in [0, 0.35]: blend strength toward a shifted copy along ``angle_deg``.
-    """
-    if amount <= 0:
-        return image
-    rng = np.random.default_rng(seed)
-    is_uint = image.dtype == np.uint8
-    img = image.astype(np.float32, copy=True)
-    h, w, c = img.shape
-    rad = np.deg2rad(angle_deg + rng.uniform(-2.0, 2.0))
-    dx = int(round(3 * amount * np.cos(rad)))
-    dy = int(round(3 * amount * np.sin(rad)))
-    if dx == 0 and dy == 0:
-        dx = 1
-    shifted = np.roll(np.roll(img, dx, axis=1), dy, axis=0)
-    a = float(min(0.35, max(0.02, amount)))
-    out = (1.0 - a) * img + a * shifted
-    out = np.clip(out, 0, 255)
-    if is_uint:
-        return out.astype(np.uint8)
-    return out
-
-
-def _rgb_to_luminance(rgb: np.ndarray) -> np.ndarray:
-    """rgb float (H,W,3) -> luminance (H,W)."""
-    return rgb[..., 0] * 0.299 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.114
+    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
+    gray = rgb_to_luminance(img)[..., None]
+    out = np.clip(gray + float(factor) * (img - gray), 0.0, 255.0)
+    return np.rint(out).astype(np.uint8) if image.dtype == np.uint8 else out
 
 
 def gentle_s_curve_luminance(image: np.ndarray, strength: float = 0.0) -> np.ndarray:
@@ -243,7 +135,7 @@ def gentle_s_curve_luminance(image: np.ndarray, strength: float = 0.0) -> np.nda
         return image
     is_uint = image.dtype == np.uint8
     img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    lum = _rgb_to_luminance(img)
+    lum = rgb_to_luminance(img)
     x = np.clip(lum / 255.0, 0.0, 1.0)
     smooth = 3.0 * x * x - 2.0 * x * x * x
     st = float(min(1.0, max(0.0, strength)))
@@ -270,7 +162,7 @@ def chroma_smooth_light(image: np.ndarray, amount: float = 0.0, sigma: float = 1
         return image
     is_uint = image.dtype == np.uint8
     img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    lum = _rgb_to_luminance(img)
+    lum = rgb_to_luminance(img)
     gray = np.stack([lum, lum, lum], axis=-1)
     chroma = img - gray
     ch_blur = gaussian_filter(chroma, sigma=(sigma, sigma, 0), mode="reflect")
@@ -294,7 +186,7 @@ def luminance_clarity(image: np.ndarray, amount: float = 0.0, radius: float = 1.
         return image
     is_uint = image.dtype == np.uint8
     img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    lum = _rgb_to_luminance(img)
+    lum = rgb_to_luminance(img)
     blur = gaussian_filter(lum, sigma=float(radius), mode="reflect")
     sharp_lum = lum + float(amount) * (lum - blur)
     sharp_lum = np.clip(sharp_lum, 1e-3, 255.0)
@@ -305,21 +197,17 @@ def luminance_clarity(image: np.ndarray, amount: float = 0.0, radius: float = 1.
     return out
 
 
-def polish_pass(image: np.ndarray, amount: float = 0.0, seed: int | None = None) -> np.ndarray:
+def polish_pass(image: np.ndarray, amount: float = 0.0) -> np.ndarray:
     """
-    One-knob cross-style finish: mild S-curve + chroma smooth + luminance clarity + tiny grain.
+    One-knob cross-style finish: mild S-curve + chroma smooth + luminance clarity.
     amount in [0, 1]; try 0.35–0.7. Stacks on top of other passes if you also set --clarity etc.
     """
     if amount <= 0:
         return image
     a = float(min(1.0, max(0.0, amount)))
-    out = np.asarray(image, dtype=np.uint8) if image.dtype != np.uint8 else image
-    out = gentle_s_curve_luminance(out, strength=0.22 * a)
+    out = gentle_s_curve_luminance(image, strength=0.22 * a)
     out = chroma_smooth_light(out, amount=0.32 * a, sigma=1.0 + 0.4 * a)
-    out = luminance_clarity(out, amount=0.28 * a, radius=0.85 + 0.35 * a)
-    if a > 0.15:
-        out = add_film_grain(out, amount=0.008 * a, seed=seed)
-    return out
+    return luminance_clarity(out, amount=0.28 * a, radius=0.85 + 0.35 * a)
 
 
 # Baseline adds for --finishing-preset (added to explicit --clarity / --tone-punch / --chroma-smooth).
@@ -331,37 +219,6 @@ FINISHING_PRESET_BASELINES = {
     "characters": (0.14, 0.075, 0.14),
     "painterly": (0.10, 0.11, 0.09),
 }
-
-
-def add_lens_glare(
-    image: np.ndarray,
-    strength: float = 0.1,
-    seed: int | None = None,
-) -> np.ndarray:
-    """
-    Soft additive bloom toward one corner (cheap lens-flare stand-in; LANDSCAPE §1).
-    ``strength`` ~0.05–0.2 typical.
-    """
-    if strength <= 0:
-        return image
-    rng = np.random.default_rng(seed)
-    is_uint = image.dtype == np.uint8
-    img = image.astype(np.float32, copy=True)
-    h, w, c = img.shape
-    # Radial gradient from a random edge point
-    sx = rng.choice([0, w - 1])
-    sy = rng.choice([0, h - 1])
-    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
-    d = np.sqrt((xx - sx) ** 2 + (yy - sy) ** 2)
-    d = d / (d.max() + 1e-6)
-    glow = (1.0 - np.clip(d, 0, 1)) ** 2
-    glow = glow[:, :, None]
-    warm = np.array([1.0, 0.95, 0.85], dtype=np.float32) * 255.0
-    add = strength * glow * warm
-    out = np.clip(img + add, 0, 255)
-    if is_uint:
-        return out.astype(np.uint8)
-    return out
 
 
 def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: float = 0.6) -> np.ndarray:
@@ -378,7 +235,7 @@ def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: f
 
     is_uint = image.dtype == np.uint8
     img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    lum = _rgb_to_luminance(img) / 255.0
+    lum = rgb_to_luminance(img) / 255.0
     sh = np.clip(1.0 - lum, 0.0, 1.0)[..., None]
     hi = np.clip(lum, 0.0, 1.0)[..., None]
 
@@ -404,7 +261,7 @@ def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: f
         out[..., 0] += 10.0 * s * hi[..., 0]
         out = contrast(out, factor=1.0 + 0.05 * s)
     elif p == "noir_bw":
-        g = _rgb_to_luminance(img)
+        g = rgb_to_luminance(img)
         out = np.stack([g, g, g], axis=-1)
         out = contrast(out, factor=1.0 + 0.14 * s)
     elif p == "fujifilm_eterna":
@@ -420,33 +277,30 @@ def apply_photo_color_grade(image: np.ndarray, preset: str = "none", strength: f
     return out.astype(np.uint8) if is_uint else out
 
 
-def apply_photo_filter(
-    image: np.ndarray, filter_name: str = "none", strength: float = 0.5, seed: int | None = None
-) -> np.ndarray:
+def apply_photo_filter(image: np.ndarray, filter_name: str = "none", strength: float = 0.5) -> np.ndarray:
     """
-    Lightweight photography filter simulation.
-    Filters: none|pro_mist|polarizer|nd_long_exposure|vintage_diffusion|clean_digital
+    Optical filter simulation. Filters: none|pro_mist|polarizer|nd_long_exposure|vintage_diffusion|clean_digital.
+
+    Mist and vintage diffusion scatter light in linear light (``camera_isp.apply_diffusion_filter``).
+    ``nd_long_exposure`` only steers the prompt: motion blur of moving subjects cannot be added
+    after the fact. Returns the input dtype.
     """
     f = str(filter_name or "none").lower().strip()
-    if f == "none":
-        return image
     s = float(min(1.0, max(0.0, strength)))
-    if s <= 0:
+    if f in ("none", "nd_long_exposure") or s <= 0:
         return image
     out = image
-    if f == "pro_mist":
-        out = add_lens_glare(out, strength=0.05 + 0.09 * s, seed=seed)
-        out = chroma_smooth_light(out, amount=0.10 * s, sigma=1.2)
-        out = contrast(out, factor=1.0 - 0.03 * s)
+    if f in ("pro_mist", "vintage_diffusion"):
+        from utils.quality.camera_isp import apply_diffusion_filter
+
+        if f == "pro_mist":
+            out = apply_diffusion_filter(out, amount=0.04 + 0.08 * s, radius_frac=0.02)
+        else:
+            out = apply_diffusion_filter(out, amount=0.10 + 0.15 * s, radius_frac=0.008)
     elif f == "polarizer":
         out = saturation_rgb(out, factor=1.0 + 0.08 * s)
         out = gentle_s_curve_luminance(out, strength=0.08 * s)
-    elif f == "nd_long_exposure":
-        out = add_motion_blur(out, amount=0.10 + 0.16 * s, angle_deg=0.0, seed=seed)
-    elif f == "vintage_diffusion":
-        out = contrast(out, factor=1.0 - 0.06 * s)
-        out = add_film_grain(out, amount=0.008 + 0.012 * s, seed=seed)
     elif f == "clean_digital":
         out = chroma_smooth_light(out, amount=0.08 * s, sigma=0.9)
         out = luminance_clarity(out, amount=0.08 * s, radius=0.9)
-    return np.clip(np.asarray(out), 0, 255).astype(np.uint8)
+    return out

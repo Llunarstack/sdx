@@ -34,15 +34,6 @@ BLOCKED_DOWNLOAD_EXTS = frozenset(
 # Raw animation sources — frame-split to JPEG, then delete the source file.
 SPLITTABLE_SOURCE_EXTS = frozenset({".gif", ".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"})
 
-_IMAGE_MAGIC = (
-    (b"\xff\xd8\xff", ".jpg"),
-    (b"\x89PNG\r\n\x1a\n", ".png"),
-    (b"GIF87a", ".gif"),
-    (b"GIF89a", ".gif"),
-    (b"RIFF", ".webp"),  # WEBP after RIFF....WEBP
-    (b"BM", ".bmp"),
-)
-
 
 def normalize_ext(ext: str) -> str:
     e = (ext or "").lower().strip()
@@ -53,10 +44,6 @@ def normalize_ext(ext: str) -> str:
 
 def is_blocked_download_ext(ext: str) -> bool:
     return normalize_ext(ext) in BLOCKED_DOWNLOAD_EXTS
-
-
-def is_trainable_image_ext(ext: str) -> bool:
-    return normalize_ext(ext) in TRAINABLE_IMAGE_EXTS
 
 
 def sniff_media_kind(path: Path) -> str:

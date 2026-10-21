@@ -48,7 +48,32 @@ def test_saucenao_hit_needs_full_threshold():
     assert hit_meets_threshold(hit, 75.0) is False
 
 
-def test_reverse_search_enabled_without_keys():
-    from utils.caption.api_keys import reverse_search_enabled
+def test_fetch_booru_post_parses_danbooru_and_e621(monkeypatch):
+    import requests
+    from utils.caption.reverse_search import fetch_booru_post
 
-    assert reverse_search_enabled() is True
+    payloads = {
+        "danbooru": {"tag_string_character": "hatsune_miku", "tag_string_artist": "kei", "tag_string": "a b"},
+        "e621": {"post": {"tags": {"character": ["renamon"], "general": ["fur", " "], "meta": "x"}}},
+    }
+
+    class _Resp:
+        def __init__(self, data):
+            self.data = data
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.data
+
+    def fake_get(url, **kwargs):
+        return _Resp(payloads["danbooru" if "danbooru" in url else "e621"])
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    db = fetch_booru_post("danbooru", "12")
+    assert db.character_tags == ["hatsune_miku"] and db.artist_tags == ["kei"] and db.tag_string == "a b"
+    e6 = fetch_booru_post("e621", "34")
+    assert e6.character_tags == ["renamon"] and e6.general_tags == ["fur"] and e6.tag_string == "renamon fur"
+    assert fetch_booru_post("pixiv", "1") is None
+    assert fetch_booru_post("danbooru", "abc") is None

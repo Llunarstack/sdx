@@ -85,11 +85,3 @@ class TestEditingPhaseDryRun:
         assert (tmp_path / "pieces").is_dir()
         assert result.actions_applied or result.diagnosis_history
         assert result.stopped_reason in {"max_iters", "no_actions", "gates_passed"}
-
-
-class TestOrchestrationRoles:
-    def test_editor_role_present(self):
-        from utils.generation.orchestration import pipeline_roles
-
-        names = [r.name for r in pipeline_roles()]
-        assert names == ["designer", "reasoner", "verifier", "editor"]

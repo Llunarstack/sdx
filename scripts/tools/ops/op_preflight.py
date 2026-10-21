@@ -17,29 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
-def _iter_jsonl(path: Path):
-    import json as _json
-
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield _json.loads(line)
-            except _json.JSONDecodeError:
-                continue
-
-
-def _get_caption(rec: dict[str, Any]) -> str:
-    for k in ("caption", "text", "prompt"):
-        v = rec.get(k)
-        if v is not None:
-            s = str(v).strip()
-            if s:
-                return s
-    return ""
+from data.manifest_utils import caption_from_row, iter_manifest_rows
 
 
 def _contains_any(caption_lower: str, terms: list[str]) -> bool:
@@ -128,8 +106,8 @@ def main() -> None:
     # Optional: also compute quality tag presence just for visibility.
     hits_quality = 0
 
-    for rec in _iter_jsonl(manifest_path):
-        cap = _get_caption(rec)
+    for rec in iter_manifest_rows(manifest_path):
+        cap = caption_from_row(rec)
         if not cap:
             continue
         total += 1

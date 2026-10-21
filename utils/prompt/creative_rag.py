@@ -40,19 +40,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from utils.modeling.model_paths import (
-    default_gen_searcher_8b_path,
     default_moondream2_path,
     default_qwen_path,
-    repo_root,
 )
 
-# ---------------------------------------------------------------------------
-# Pretrained model paths (prefer 2026 defaults; honor legacy local folders)
-# ---------------------------------------------------------------------------
-_PRETRAINED_ROOT = repo_root() / "pretrained"
 _MOONDREAM_PATH = Path(default_moondream2_path())
 _QWEN_PATH = Path(default_qwen_path())
-_GENSEARCHER_PATH = Path(default_gen_searcher_8b_path())
 
 # Aligned with multi-reference ingestion (API-style caps); dissect/RAG facts use full list.
 MAX_REFERENCE_IMAGES_RAG = 16
@@ -60,9 +53,7 @@ MAX_REFERENCE_IMAGES_RAG = 16
 MAX_MOONDREAM_REFERENCE_IMAGES = 8
 
 
-# ---------------------------------------------------------------------------
 # Result dataclass
-# ---------------------------------------------------------------------------
 @dataclass(slots=True)
 class RAGEnrichmentResult:
     """Output of CreativeRAGEngine.enrich()."""
@@ -78,9 +69,7 @@ class RAGEnrichmentResult:
     fallback_used: bool = False  # True when heavy models were unavailable
 
 
-# ---------------------------------------------------------------------------
 # Lightweight semantic decomposition (no heavy models required)
-# ---------------------------------------------------------------------------
 
 # Intent keywords → semantic layer
 _LAYER_PATTERNS: dict[str, list[str]] = {
@@ -312,9 +301,7 @@ def _build_fallback_enrichment(
     return ", ".join(deduped), negative_additions, concept_layers
 
 
-# ---------------------------------------------------------------------------
 # Heavy model helpers (lazy-loaded, gracefully degraded)
-# ---------------------------------------------------------------------------
 
 
 def _moondream_describe_many(
@@ -380,16 +367,6 @@ def _moondream_describe_many(
         return "\n\n".join(chunks).strip()
     except Exception:
         return ""
-
-
-def _moondream_describe(
-    image_path: str,
-    prompt_context: str,
-    *,
-    device: str = "cpu",
-) -> str:
-    """Describe a single reference via moondream2 (wrapper over ``_moondream_describe_many``)."""
-    return _moondream_describe_many([image_path], prompt_context, device=device, max_images=1)
 
 
 def _qwen_synthesize(
@@ -526,9 +503,7 @@ def _extract_field(text: str, field_name: str) -> str:
     return ""
 
 
-# ---------------------------------------------------------------------------
 # Main engine
-# ---------------------------------------------------------------------------
 
 
 class CreativeRAGEngine:
@@ -769,9 +744,7 @@ class CreativeRAGEngine:
         )
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _facts_to_tokens(facts: list[str], max_tokens: int = 4) -> str:
@@ -828,9 +801,7 @@ def _facts_to_tokens(facts: list[str], max_tokens: int = 4) -> str:
     return ", ".join(tokens)
 
 
-# ---------------------------------------------------------------------------
 # Module-level convenience function
-# ---------------------------------------------------------------------------
 
 _default_engine: CreativeRAGEngine | None = None
 

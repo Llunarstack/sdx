@@ -10,8 +10,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from utils.generation.orchestration import DESIGNER, REASONER, VERIFIER
-
 from .state import AgentContext
 from .tools import AgentTool, ToolRegistry
 
@@ -65,7 +63,7 @@ class RolePipeline:
         r2 = self.registry.execute(AgentTool.expand_prompt)
         ok = r1.ok and r2.ok
         return RoleStageResult(
-            role=REASONER.name,
+            role="reasoner",
             ok=ok,
             message=f"rag={r1.message} expand={r2.message}",
             data={"prompt": self.registry.session["prompt"], "facts": r1.data.get("facts", [])},
@@ -74,7 +72,7 @@ class RolePipeline:
     def run_designer(self, *, out_suffix: str = "") -> RoleStageResult:
         r = self.registry.execute(AgentTool.generate, out_suffix=out_suffix)
         return RoleStageResult(
-            role=DESIGNER.name,
+            role="designer",
             ok=r.ok,
             message=r.message,
             data={"out": r.data.get("out", ""), "cmd": r.data.get("cmd", [])},
@@ -83,7 +81,7 @@ class RolePipeline:
     def run_verifier(self) -> RoleStageResult:
         r = self.registry.execute(AgentTool.verify)
         return RoleStageResult(
-            role=VERIFIER.name,
+            role="verifier",
             ok=r.ok,
             message=r.message,
             data=dict(r.data),

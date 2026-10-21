@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from research.agi_image.planning.generation_plan import GenerationStepKind
-from utils.agentic.planner import plan_visual_brain
+from utils.agentic.planner import GenerationStepKind, plan_visual_brain
 from utils.brain.scene_brief import SceneBrief, SceneElement, prompt_coverage_score, synthesize_scene_brief
 from utils.brain.visual_brain import VisualBrain, VisualBrainConfig
 from utils.generation.image_dissection import parse_part_requests

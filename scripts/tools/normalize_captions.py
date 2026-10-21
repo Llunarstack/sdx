@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -30,6 +29,7 @@ from data.caption_utils import (
     boost_quality_tags,
     normalize_tag_order,
 )
+from data.manifest_utils import iter_manifest_rows
 
 try:
     from sdx_native.jsonl_caption_hygiene import normalize_jsonl_caption_fields as _native_hygiene_row
@@ -37,18 +37,6 @@ except Exception:
     _native_hygiene_row = None  # type: ignore[assignment]
 
 _CHUNK_ROWS = 2048
-
-
-def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
 
 
 def _process_caption_pair(
@@ -66,9 +54,9 @@ def _process_caption_pair(
     cap = caption or ""
     neg = negative or ""
     cap = normalize_tag_order(cap)
-    cap = boost_hard_style_tags(cap, repeat_factor=3)
-    cap = boost_quality_tags(cap, repeat_factor=3)
-    cap = boost_domain_tags(cap, repeat_factor=2)
+    cap = boost_hard_style_tags(cap)
+    cap = boost_quality_tags(cap)
+    cap = boost_domain_tags(cap)
     cap, neg = add_anti_blending_and_count(cap, neg)
     cap, neg = apply_training_guidance_to_caption_pair(
         cap,
@@ -117,9 +105,9 @@ def _process_jsonl_lines_worker(payload: dict[str, Any]) -> list[str]:
         cap = caption or ""
         neg = negative or ""
         cap = normalize_tag_order(cap)
-        cap = boost_hard_style_tags(cap, repeat_factor=3)
-        cap = boost_quality_tags(cap, repeat_factor=3)
-        cap = boost_domain_tags(cap, repeat_factor=2)
+        cap = boost_hard_style_tags(cap)
+        cap = boost_quality_tags(cap)
+        cap = boost_domain_tags(cap)
         cap, neg = add_anti_blending_and_count(cap, neg)
         cap, neg = apply_training_guidance_to_caption_pair(
             cap,
@@ -267,7 +255,7 @@ def main() -> None:
                         count += 1
     else:
         with out_path.open("w", encoding="utf-8", newline="\n") as fw:
-            for rec in _iter_jsonl(in_path):
+            for rec in iter_manifest_rows(in_path):
                 if bool(getattr(args, "unicode_normalize", False)) and _native_hygiene_row is not None:
                     _native_hygiene_row(rec)
                 caption = str(rec.get("caption", "") or "")

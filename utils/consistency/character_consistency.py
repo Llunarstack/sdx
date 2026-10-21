@@ -668,8 +668,3 @@ class CharacterDatabase:
                 self.characters[profile.character_id] = profile
             except Exception as e:
                 print(f"Error loading character profile {profile_file}: {e}")
-
-
-def create_character_consistency_system(database_path: str = "./character_database") -> CharacterDatabase:
-    """Create and initialize the character consistency system."""
-    return CharacterDatabase(database_path)

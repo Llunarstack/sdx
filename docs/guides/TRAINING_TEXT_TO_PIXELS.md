@@ -65,4 +65,4 @@ So: the model **learns** which text positions matter for which image regions fro
 
 ## Caption dropout + emphasis
 
-If you use **`--caption-dropout-schedule`**, dropped samples still get **uniform** token weights (all **1.0**) for that step so conditioning stays consistent with the empty-caption embedding.
+Caption dropout (**`--caption-dropout-prob`**, default 0.1, or **`--caption-dropout-schedule`**) replaces a sample's caption with the empty prompt *before* encoding, the same uncond `sample.py` uses for CFG, so dropped samples get **uniform** token weights (all **1.0**).

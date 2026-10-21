@@ -2,7 +2,7 @@
 Programmatic text-to-image for loaded stacks (DiT + ``GaussianDiffusion`` + VAE).
 
 ``sample.py`` remains the full CLI; this module is for **library-style** calls
-(e.g. batch scripts, tests, ``BatchInference``) without duplicating its flags.
+(e.g. batch scripts, tests) without duplicating its flags.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from typing import Any
 
 import torch
 from PIL import Image
+
+from utils.safety.minor_guard import is_sexual, require_allowed, require_image_allowed
 
 _log = logging.getLogger(__name__)
 
@@ -73,6 +75,9 @@ def sample_one_image_pil(
         vae.eval()
         text_encoder.eval()
 
+    negative_prompt = require_allowed(prompt, negative_prompt)
+    if cfg_scale < 1.0:
+        require_allowed(f"{prompt}, {negative_prompt}")
     both = encode_text(
         [prompt, negative_prompt],
         tokenizer,
@@ -125,4 +130,6 @@ def sample_one_image_pil(
     decoded = vae.decode(x0)
     image = decoded.sample if hasattr(decoded, "sample") else decoded
     image = (image * 0.5 + 0.5).clamp(0, 1)
-    return tensor_bchw01_to_pil(image)
+    pil = tensor_bchw01_to_pil(image)
+    require_image_allowed(pil, sexual=is_sexual(prompt) or (cfg_scale < 1.0 and is_sexual(negative_prompt)))
+    return pil

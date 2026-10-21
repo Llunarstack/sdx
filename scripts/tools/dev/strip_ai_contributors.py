@@ -41,7 +41,14 @@ def message_callback(message: bytes) -> bytes:
     return _filter_message(message.decode("utf-8", errors="replace"))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=f"{__doc__} Rewrites every commit hash (git filter-repo --force).")
+    ap.add_argument("--yes", action="store_true", help="Required: confirm rewriting the whole history")
+    if not ap.parse_args(argv).yes:
+        print("Refusing to rewrite history without --yes.", file=sys.stderr)
+        return 2
     try:
         import git_filter_repo as fr
     except ImportError:

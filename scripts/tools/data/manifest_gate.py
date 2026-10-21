@@ -106,8 +106,10 @@ def _run_image_qc(
     min_contrast: float,
 ) -> dict[str, Any]:
     # Reuse the existing analyzer to avoid duplicating metric code.
+    import numpy as np
     from PIL import Image
-    from utils.image_quality_metrics import analyze_image_quality
+    from utils.quality.quality import rgb_to_luminance
+    from utils.quality.test_time_pick import score_edge_sharpness
 
     from scripts.tools.image_quality_qc import _extract_image_path, _resolve_path  # type: ignore
 
@@ -141,9 +143,9 @@ def _run_image_qc(
                 img = Image.open(path).convert("RGB")
             except Exception:
                 continue
-            m = analyze_image_quality(img)
-            sharpness = float(m["sharpness"])
-            contrast = float(m["contrast"])
+            rgb = np.asarray(img, dtype=np.uint8)
+            sharpness = float(score_edge_sharpness(rgb))
+            contrast = float(rgb_to_luminance(rgb).std())
             results += 1
             sharp_min = sharpness if sharp_min is None else min(sharp_min, sharpness)
             con_min = contrast if con_min is None else min(con_min, contrast)

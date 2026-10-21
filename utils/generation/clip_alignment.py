@@ -25,6 +25,22 @@ def _get_clip_model(model_id: str, device: torch.device) -> tuple[object, object
     return model, proc
 
 
+def _clip_feature_tensor(features) -> torch.Tensor:
+    """Projected CLIP embeddings from ``get_{image,text}_features`` across transformers versions.
+
+    transformers>=5 returns a ``BaseModelOutputWithPooling`` whose ``pooler_output`` holds the
+    projected features; older versions return the tensor directly.
+    """
+    if isinstance(features, torch.Tensor):
+        return features
+    pooled = getattr(features, "pooler_output", None)
+    if pooled is None and isinstance(features, tuple) and len(features) > 1:
+        pooled = features[1]
+    if not isinstance(pooled, torch.Tensor):
+        raise TypeError(f"cannot extract CLIP features from {type(features).__name__}")
+    return pooled
+
+
 def tensor_chw01_to_pil(t: torch.Tensor):
     """t: (3, H, W) float [0, 1]."""
     from PIL import Image
@@ -48,10 +64,12 @@ def clip_image_text_cosine(
     nbc = device.type == "cuda"
     inputs = {k: v.to(device, non_blocking=nbc) for k, v in inputs.items()}
     with torch.inference_mode():
-        img_f = model.get_image_features(pixel_values=inputs["pixel_values"])
-        txt_f = model.get_text_features(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs.get("attention_mask"),
+        img_f = _clip_feature_tensor(model.get_image_features(pixel_values=inputs["pixel_values"]))
+        txt_f = _clip_feature_tensor(
+            model.get_text_features(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs.get("attention_mask"),
+            )
         )
         img_f = img_f / (img_f.norm(dim=-1, keepdim=True) + 1e-8)
         txt_f = txt_f / (txt_f.norm(dim=-1, keepdim=True) + 1e-8)

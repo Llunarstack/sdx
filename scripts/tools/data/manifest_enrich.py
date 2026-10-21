@@ -21,19 +21,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-
-def _resolve_image(path_str: str, *, image_root: Path | None, manifest_dir: Path) -> Path | None:
-    p = Path(path_str)
-    if p.is_file():
-        return p
-    if image_root:
-        q = (image_root / path_str).resolve()
-        if q.is_file():
-            return q
-    q = (manifest_dir / path_str).resolve()
-    if q.is_file():
-        return q
-    return None
+from data.manifest_utils import resolve_image_path
+from utils.data_quality import perceptual_hash
 
 
 def _load_rgb_uint8(path: Path) -> Any | None:
@@ -47,16 +36,6 @@ def _load_rgb_uint8(path: Path) -> Any | None:
         return np.asarray(im, dtype=np.uint8)
     except Exception:
         return None
-
-
-def _perceptual_hash_hex(path: Path, size: int = 8) -> str:
-    try:
-        import imagehash
-        from PIL import Image
-
-        return str(imagehash.phash(Image.open(path), hash_size=size))
-    except Exception:
-        return ""
 
 
 def _aesthetic_proxy(rgb) -> float:
@@ -125,7 +104,7 @@ def main() -> int:
             if not path_s:
                 n_skip += 1
                 continue
-            img_path = _resolve_image(path_s, image_root=image_root, manifest_dir=manifest_dir)
+            img_path = resolve_image_path(path_s, image_root, manifest_dir)
             if img_path is None:
                 n_bad_path += 1
                 continue
@@ -137,7 +116,7 @@ def main() -> int:
             row = dict(row)
             row["aesthetic_proxy"] = round(_aesthetic_proxy(rgb), 6)
             if args.with_phash:
-                h = _perceptual_hash_hex(img_path)
+                h = perceptual_hash(img_path)
                 if h:
                     row["dedupe_phash"] = h
             if score_clip_similarity is not None and cap:

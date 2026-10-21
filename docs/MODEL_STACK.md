@@ -80,7 +80,7 @@ When folders exist under `pretrained/`, paths resolve automatically (see `utils/
 | Watermark-Detector / CLIP-IQA | QA + reward scaffolds |
 | GFPGAN / SwinIR-classical | face restore + upscale scaffolds |
 
-Registry index: ``utils/modeling/hf_index.py`` (`summary()`, `role_counts()`). Upscale helpers: ``utils/modeling/hf_upscale.py``.
+Registry index and post-process model lists: ``utils/modeling/hf_scaffold.py`` (`registry_summary()`, `role_counts()`, `UPSCALE_MODELS`, `FACE_RESTORE_MODELS`).
 
 ## Config-only scaffold (no checkpoint download)
 
@@ -135,41 +135,14 @@ Real backends live in `diffusion/solvers/` (DPM-Solver++ 2M/3M, UniPC, flow midp
 ## Other
 
 - **Qwen prompt expansion:** `utils/analysis/llm_client.py` (`load_qwen_causal_lm`, `expand_prompt_qwen`).
-- **Stable Cascade (Diffusers):** `python scripts/cascade_generate.py --prompt "..."` — separate from DiT; does not share the DiT forward pass.
+- **Stable Cascade (Diffusers):** `python -m scripts.tools cascade_generate --prompt "..."` — separate from DiT; does not share the DiT forward pass.
 - **Advanced optional downloads:** `python scripts/download/download_models.py --advanced` to fetch LongCLIP / moondream3 / HPSv3 / DINOv3 / SigLIP2 / Qwen3-8B / Marigold / TAESD / Consistency-Decoder / ConvNeXtV2 / LAION Aesthetic v2 / AnyDoor reference.
 
 ---
 
-## Model enhancements (shared blocks & fusion)
+## Shared building blocks
 
-Small, composable pieces under [`models/model_enhancements.py`](../models/model_enhancements.py) and optional flags on multimodal / cascade / RAE modules.
-
-### `model_enhancements.py`
-
-| Class / helper | Role |
-|----------------|------|
-| **`RMSNorm`** | Root mean square norm (no mean centering); lighter than LayerNorm. |
-| **`DropPath`** | Stochastic depth on a residual branch (training). |
-| **`TokenFiLM`** | Global cond vector → per-channel scale/shift on `(B, N, D)` tokens. |
-| **`SE1x1`** | Squeeze–excitation gating on `(B, D)` or `(B, N, D)`. |
-| **`apply_gate_residual`** | `x + gate * branch` with broadcast gate. |
-
-Import: `from models import RMSNorm, DropPath, TokenFiLM, SE1x1` (also `models.model_enhancements`).
-
-### `NativeMultimodalTransformer`
-
-| Option | Default | Effect |
-|--------|---------|--------|
-| **`cross_attn_heads`** | `0` | If &gt; 0, vision tokens **cross-attend** to text (+ extra) **before** joint `TransformerEncoder`. |
-| **`output_norm`** | `"layernorm"` | `"rmsnorm"` uses **`RMSNorm`** after the encoder stack. |
-| **`film_cond_dim`** | `0` | If &gt; 0, **`TokenFiLM`** on **vision** tokens; forward requires **`film_cond`** `(B, dim)`. |
-
-### `CascadedMultimodalDiffusion`
-
-| Option | Default | Effect |
-|--------|---------|--------|
-| **`blend_base_refine`** | `1.0` | `final = (1-w)*base_out + w*refine_out` (ablation / stability). `1.0` matches previous “refine only” behavior. |
-| **`detach_base_for_refine`** (forward kw) | `False` | Refine stage sees **detached** `base_out` (train refine with frozen base). |
+[`models/dit.py`](../models/dit.py) holds the pieces every DiT reuses: `modulate`, `timestep_embedding`, `TimestepEmbedder`, `FinalLayer`, `LayerScale` (an init of `0` means off: `gamma` starts at 1, never 0, so adaLN-Zero branches still train) and `xavier_init_linears`. Norms are `torch.nn.RMSNorm` and stochastic depth is `timm.layers.DropPath`. `DiT-P*` / `DiT-Supreme*` are `DiT_Text` subclasses in [`models/dit_text.py`](../models/dit_text.py) that only change the block options (QK-norm, full-width SwiGLU, RMSNorm).
 
 ### `RAELatentBridge`
 
@@ -177,4 +150,4 @@ Import: `from models import RMSNorm, DropPath, TokenFiLM, SE1x1` (also `models.m
 |--------|---------|--------|
 | **`learnable_output_scale`** | `False` | Scalar **`scale_dit`** / **`scale_rae`** on conv outputs (training stability). |
 
-See also [`models/native_multimodal_transformer.py`](../models/native_multimodal_transformer.py), [`models/cascaded_multimodal_diffusion.py`](../models/cascaded_multimodal_diffusion.py), [CODEBASE.md](CODEBASE.md).
+See also [CODEBASE.md](CODEBASE.md).

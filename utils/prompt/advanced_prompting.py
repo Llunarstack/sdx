@@ -24,9 +24,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-# ---------------------------------------------------------------------------
 # Prompt intent classification
-# ---------------------------------------------------------------------------
 
 _INTENT_PATTERNS: dict[str, list[str]] = {
     "portrait": [
@@ -215,23 +213,6 @@ class PromptElement:
             and self.weight == other.weight
             and self.conflicts == other.conflicts
         )
-
-
-@dataclass(slots=True)
-class PromptStructure:
-    """Represents the structure of an optimized prompt."""
-
-    subject: list[PromptElement]
-    style: list[PromptElement]
-    composition: list[PromptElement]
-    quality: list[PromptElement]
-    technical: list[PromptElement]
-    negative: list[PromptElement]
-
-    def get_all_elements(self) -> list[PromptElement]:
-        """Get all elements in priority order."""
-        all_elements = self.subject + self.style + self.composition + self.quality + self.technical
-        return sorted(all_elements, key=lambda x: x.priority, reverse=True)
 
 
 class PromptAnalyzer:
@@ -974,9 +955,7 @@ def create_advanced_prompting_system():
     return {"analyzer": PromptAnalyzer(), "optimizer": PromptOptimizer()}
 
 
-# ---------------------------------------------------------------------------
 # CreativeRAGOptimizer: full pipeline combining all systems
-# ---------------------------------------------------------------------------
 
 
 class CreativeRAGOptimizer:

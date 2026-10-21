@@ -209,7 +209,7 @@ def diagnose_image(
     caption: str = "",
 ) -> Diagnosis:
     """Verifier pass: gates + prompt gaps + text/anatomy cues."""
-    from utils.superior.quality_gates import GateThresholds, QualityGateRunner
+    from utils.superior.inference_pipeline import GateThresholds, QualityGateRunner
 
     d = Diagnosis()
     d.piece_labels = infer_piece_labels(prompt) if cfg.enable_pieces else []
@@ -430,7 +430,6 @@ def apply_art_post(image_rgb: np.ndarray) -> np.ndarray:
             composition_strength=0.15,
             value_structure=True,
             value_midtone_contrast=0.08,
-            asymmetry_strength=0.05,
             lost_found_strength=0.1,
         )
         return apply_artistic_pipeline(image_rgb, cfg)

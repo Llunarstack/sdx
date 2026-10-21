@@ -1,4 +1,4 @@
-"""Tests for compete-mode quality policy + naturalness/adherence hooks."""
+"""Tests for the compete-mode quality policy and the text-embedding adherence / glyph hooks."""
 
 from __future__ import annotations
 
@@ -19,8 +19,9 @@ def _blank_args(**over):
         apg_momentum_beta=0.0,
         cfg_scale=7.5,
         cfg_rescale=0.0,
-        fdg_cfg_strength=0.0,
-        zeresfdg_strength=0.0,
+        fdg_low=1.0,
+        fdg_high=1.0,
+        cfg_interval="",
         qsilk_micrograin=0.0,
         steps=50,
         preset=None,
@@ -38,9 +39,6 @@ def _blank_args(**over):
         hand_mode="none",
         pose_naturalness="none",
         typography_mode="none",
-        naturalness_strength=-1.0,
-        anatomy_attention_strength=-1.0,
-        glyph_residual_strength=-1.0,
         expand_prompt=False,
         anti_bleed=False,
         anti_artifacts=False,
@@ -52,45 +50,11 @@ def _blank_args(**over):
         num=1,
         superior_self_correct=False,
         no_quality_defaults=False,
-        auto_layout=False,
-        no_auto_layout=False,
-        prompt_ground=False,
-        no_prompt_ground=False,
-        glyph_canvas=False,
-        no_glyph_canvas=False,
-        contact_shadow_auto=False,
-        no_contact_shadow=False,
-        contact_shadow=-1.0,
         box_attn_layout=False,
         per_region_cads=False,
-        no_box_attn_layout=False,
-        prompt_early_scale=-1.0,
-        prompt_reinject_every_n=0,
-        prompt_reinject_alpha=0.0,
     )
     base.update(over)
     return SimpleNamespace(**base)
-
-
-def test_anti_ai_naturalness_changes_tokens():
-    from models.anti_ai_naturalness import AntiAINaturalnessController, detect_medium
-
-    ctrl = AntiAINaturalnessController(32)
-    x = torch.randn(2, 64, 32)
-    medium = detect_medium("photoreal dslr portrait photo")
-    assert medium.family == "photo"
-    out = ctrl(x, medium, 8, 8, strength=0.5)
-    assert out.shape == x.shape
-    assert not torch.allclose(out, x)
-
-
-def test_anatomy_spatial_prior():
-    from models.anatomy_attention import apply_anatomy_spatial_prior
-
-    x = torch.randn(1, 64, 16)
-    out = apply_anatomy_spatial_prior(x, 8, 8, strength=0.4)
-    assert out.shape == x.shape
-    assert not torch.allclose(out, x)
 
 
 def test_quality_policy_photoreal_compete():
@@ -102,14 +66,14 @@ def test_quality_policy_photoreal_compete():
     assert meta.get("aggression") == "max"
     assert args.holy_grail is True
     assert float(args.apg_parallel_eta) == 0.0
-    assert float(args.cfg_rescale) == 0.7
+    assert float(args.apg_momentum_beta) == -0.5
+    assert float(args.fdg_low) < 1.0 < float(args.fdg_high)
+    assert args.cfg_interval == "0.28,5.42"
     assert str(args.human_made) == "strong"
     assert int(args.num) >= 3
     assert str(args.pick_best) not in ("none", "")
     assert args.ocr_fix is False or True  # may stay false without quotes
     assert "plastic" in str(args.negative_prompt).lower() or "anti_slop" in str(meta.get("applied"))
-    assert args.auto_layout is True
-    assert args.prompt_ground is True
     assert args.box_attn_layout is True
 
 
@@ -130,7 +94,6 @@ def test_quality_policy_text_render_ocr():
     assert meta["profile"] == "text_render"
     assert args.text_in_image is True
     assert args.ocr_fix is True
-    assert float(args.glyph_residual_strength) >= 0.2
 
 
 def test_quality_policy_anime_brain():
@@ -139,9 +102,20 @@ def test_quality_policy_anime_brain():
     args = _blank_args(prompt="anime girl, cel shading, manga panel")
     meta = apply_best_model_policy(args)
     assert meta["profile"] == "anime"
-    assert args.preset == "pixai"
+    assert args.preset is None and args.op_mode is None
     assert args.holy_grail is True
-    assert str(args.holy_grail_preset) == "pixai"
+    assert str(args.holy_grail_preset) == "anime"
+
+
+def test_quality_policy_keeps_user_frontier_mode():
+    from utils.generation.quality_stack import apply_best_model_policy
+
+    args = _blank_args(prompt="a castle in the clouds", frontier=True)
+    apply_best_model_policy(args)
+    assert args.frontier_subject is False
+    args = _blank_args(prompt="a castle in the clouds")
+    apply_best_model_policy(args)
+    assert args.frontier_subject is True
 
 
 def test_quality_policy_occlusion_fence():
@@ -192,88 +166,6 @@ def test_quality_policy_opt_out():
     assert meta.get("skipped") is True
 
 
-def test_adherence_and_glyph_modulation():
-    from utils.generation.quality_stack import enrich_text_conditioning, prompt_needs_glyph
-
-    assert prompt_needs_glyph('storefront sign that says "OPEN"')
-    enc = torch.randn(1, 32, 64)
-    out = enrich_text_conditioning(
-        enc,
-        'red shirt, no glasses, sign says "OPEN"',
-        enable_adherence=True,
-        enable_glyph=True,
-        glyph_strength=0.1,
-        expected_texts=["OPEN"],
-        negation_scale=0.55,
-        binding_boost=0.15,
-    )
-    assert out.shape == enc.shape
-    assert not torch.allclose(out, enc)
-
-
-def test_dit_quality_kwargs_auto():
-    from utils.generation.quality_stack import dit_quality_kwargs
-
-    args = SimpleNamespace(
-        naturalness_strength=-1.0,
-        less_ai=True,
-        human_made="none",
-        anatomy_guidance="strong",
-        anatomy_attention_strength=-1.0,
-        style="",
-    )
-    kw = dit_quality_kwargs(args, "a person with hands")
-    assert kw["naturalness_strength"] > 0
-    assert kw["anatomy_attention_strength"] > 0
-
-
-def test_dit_quality_kwargs_prompt_reinject():
-    from utils.generation.quality_stack import dit_quality_kwargs
-
-    args = SimpleNamespace(
-        naturalness_strength=-1.0,
-        less_ai=False,
-        human_made="none",
-        anatomy_guidance="none",
-        anatomy_attention_strength=-1.0,
-        style="",
-        prompt_early_scale=1.12,
-        prompt_reinject_every_n=4,
-        prompt_reinject_alpha=0.08,
-    )
-    kw = dit_quality_kwargs(args, "a landscape")
-    assert kw["prompt_early_scale"] == 1.12
-    assert kw["prompt_reinject_every_n"] == 4
-    assert kw["prompt_reinject_alpha"] == 0.08
-    assert kw["prompt_timestep_schedule_enabled"] is True
-
-
-def test_validate_count_in_image_three_dots():
-    from PIL import Image, ImageDraw
-    from utils.generation.precision_control import CountingValidator
-
-    im = Image.new("RGB", (256, 256), (255, 255, 255))
-    draw = ImageDraw.Draw(im)
-    for cx in (64, 128, 192):
-        draw.ellipse((cx - 14, 118, cx + 14, 146), fill=(0, 0, 0))
-    out = CountingValidator().validate_count_in_image(im, "dot", 3)
-    assert "detected_count" in out
-    assert "accuracy" in out
-    assert 0.0 <= float(out["accuracy"]) <= 1.0
-    assert int(out["expected_count"]) == 3
-
-
-def test_patch_quality_hooks_identity_when_off():
-    from models.patch_quality_hooks import apply_patch_quality_hooks
-
-    class _M:
-        pass
-
-    x = torch.randn(1, 16, 8)
-    out = apply_patch_quality_hooks(_M(), x, h_lat=8, w_lat=8, kwargs={})
-    assert torch.equal(out, x)
-
-
 def test_token_spans_char_fallback_long_word_occupies_more():
     from utils.generation.quality_stack import _token_spans_for_words
 
@@ -307,27 +199,3 @@ def test_modulate_text_for_adherence_clones_once():
     assert torch.equal(enc, orig)
     assert out.shape == enc.shape
     assert not torch.equal(out, enc)
-
-
-def test_ensure_patch_quality_modules_reused_on_apply():
-    from models.patch_quality_hooks import apply_patch_quality_hooks, ensure_patch_quality_modules
-
-    class _M:
-        num_heads = 4
-
-    m = _M()
-    hidden = 16
-    ensure_patch_quality_modules(m, hidden, num_heads=4)
-    ctrl = m._naturalness_ctrl
-    assert ctrl is not None
-    x = torch.randn(1, 16, hidden)
-    out = apply_patch_quality_hooks(
-        m,
-        x,
-        h_lat=8,
-        w_lat=8,
-        kwargs={"naturalness_strength": 0.3, "naturalness_prompt": "photoreal dslr photo"},
-    )
-    assert m._naturalness_ctrl is ctrl
-    assert out.shape == x.shape
-    assert not torch.allclose(out, x)

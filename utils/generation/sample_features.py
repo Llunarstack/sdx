@@ -1,6 +1,5 @@
-"""
-Non-UI sample.py feature helpers: frontier, auto-refine, adherence maps, sessions.
-"""
+"""``sample.py`` feature phases: frontier planners, Krea controls, attention layout, auto-refine runs,
+adherence heatmaps and character sessions."""
 
 from __future__ import annotations
 
@@ -14,28 +13,17 @@ from typing import Any
 import numpy as np
 
 __all__ = [
-    "apply_sample_feature_args",
+    "apply_sample_feature_diffusion_phase",
+    "apply_sample_feature_prompt_phase",
     "run_auto_refine_candidates",
     "run_creative_refine",
-    "score_image_heuristic",
     "build_region_fix_mask",
+    "write_fix_region_mask",
     "export_adherence_heatmap",
     "load_character_session",
     "save_character_session",
     "append_benchmark_history",
 ]
-
-
-def apply_sample_feature_args(args: Any, *, steps: int = 50) -> dict[str, Any]:
-    """Apply --frontier, --character-session, etc. Mutates ``args`` in place."""
-    extra_kw: dict[str, Any] = {}
-    extra_kw.update(_apply_character_session(args))
-    extra_kw.update(_apply_frontier_perfect(args, steps=steps))
-    extra_kw.update(_apply_frontier_creative(args, steps=steps))
-    extra_kw.update(_apply_frontier(args, steps=steps))
-    extra_kw.update(_apply_attention_layout(args, steps=steps))
-    extra_kw.update(_apply_per_region_cads(args))
-    return extra_kw
 
 
 def apply_sample_feature_prompt_phase(args: Any, *, steps: int = 50) -> None:
@@ -74,7 +62,6 @@ def apply_sample_feature_diffusion_phase(args: Any, *, steps: int = 50) -> dict[
     extra.update(_apply_frontier_creative(args, steps=steps, diffusion_only=True))
     extra.update(_apply_frontier(args, steps=steps, diffusion_only=True))
     extra.update(_apply_attention_layout(args, steps=steps))
-    extra.update(_apply_per_region_cads(args))
     return extra
 
 
@@ -87,8 +74,7 @@ def _apply_frontier_perfect(args: Any, *, steps: int, diffusion_only: bool = Fal
         return {}
 
     if perfect:
-        from frontier.perfect import analyze_perfect, perfect_sample_kwargs
-        from frontier.safety import PolicyTier
+        from frontier.perfect import PolicyTier, analyze_perfect, perfect_sample_kwargs
 
         tier_name = str(getattr(args, "safety_tier", "moderate") or "moderate").lower()
         tier = PolicyTier(tier_name)
@@ -102,9 +88,10 @@ def _apply_frontier_perfect(args: Any, *, steps: int, diffusion_only: bool = Fal
         )
         args.perfect_frontier_plan = plan
         if plan.refused:
-            raise ValueError(
-                "Prompt refused by content policy (--safety-tier). "
-                f"Reasons: {', '.join(plan.refuse_reasons) or 'prohibited combination'}"
+            from utils.safety.minor_guard import ProhibitedContentError
+
+            raise ProhibitedContentError(
+                f"Prompt refused: sexual content involving minors ({', '.join(plan.refuse_reasons)})."
             )
         kw = perfect_sample_kwargs(plan, base_negative=getattr(args, "negative_prompt", "") or "")
         args.prompt = kw.get("prompt", args.prompt)
@@ -147,7 +134,7 @@ def _apply_frontier_creative(args: Any, *, steps: int, diffusion_only: bool = Fa
         extra: dict[str, Any] = {}
         if plan.step_emphasis:
             extra["step_emphasis"] = list(plan.step_emphasis)
-        from frontier.chaos.serendipity import SerendipityInjector
+        from frontier.engine import SerendipityInjector
 
         inj = SerendipityInjector(num_steps=steps)
         curve = inj.curve(plan.serendipity_dial)
@@ -208,7 +195,7 @@ def _apply_frontier(args: Any, *, steps: int, diffusion_only: bool = False) -> d
         eng = FrontierEngine(num_steps=steps, serendipity_dial=dial)
         plan = apply_frontier_to_args(args, engine=eng)
         if getattr(args, "frontier_auto_resolve", False):
-            from frontier.logic.contradiction import ContradictionScanner
+            from frontier.engine import ContradictionScanner
 
             args.prompt = ContradictionScanner().suggest_rewrite(args.prompt or "")
     hooks = frontier_diffusion_hooks(plan)
@@ -249,7 +236,7 @@ def _apply_attention_layout(args: Any, *, steps: int) -> dict[str, Any]:
     box_spec = getattr(args, "_box_layout_spec", None)
     if box_spec is None:
         return {}
-    from frontier.attention.layout_plan import build_attention_layout_plan
+    from frontier.attention import build_attention_layout_plan
 
     frac = float(getattr(args, "box_attn_inject_frac", 0.4) or 0.4)
     strength = float(getattr(args, "box_attn_strength", 0.85) or 0.85)
@@ -261,18 +248,6 @@ def _apply_attention_layout(args: Any, *, steps: int) -> dict[str, Any]:
     )
     args._attention_layout_plan = plan
     return {"attention_layout_plan": plan}
-
-
-def _apply_per_region_cads(args: Any) -> dict[str, Any]:
-    if not getattr(args, "per_region_cads", False):
-        return {}
-    box_spec = getattr(args, "_box_layout_spec", None)
-    if box_spec is None:
-        return {}
-    from utils.generation.per_region_cads import PerRegionCADSConfig
-
-    args._per_region_cads = PerRegionCADSConfig.from_box_spec(box_spec)
-    return {}
 
 
 def load_character_session(path: str | Path) -> dict[str, Any]:
@@ -318,18 +293,6 @@ def build_region_fix_mask(
     return mask, str(target.prompt or target.name)
 
 
-def score_image_heuristic(image_rgb_u8: np.ndarray) -> float:
-    """Cheap 0–1 quality proxy (edge sharpness + exposure balance)."""
-    if image_rgb_u8.ndim != 3 or image_rgb_u8.shape[2] < 3:
-        return 0.0
-    gray = image_rgb_u8[..., :3].astype(np.float32).mean(axis=2) / 255.0
-    gx = np.abs(np.diff(gray, axis=1)).mean()
-    gy = np.abs(np.diff(gray, axis=0)).mean()
-    sharp = float((gx + gy) * 0.5)
-    exp = 1.0 - abs(float(gray.mean()) - 0.45) * 2.0
-    return max(0.0, min(1.0, 0.55 * sharp + 0.45 * max(0.0, exp)))
-
-
 @dataclass
 class AutoRefineResult:
     best_index: int
@@ -371,40 +334,34 @@ def run_auto_refine_candidates(
     prompt_variants: Sequence[str] | None = None,
 ) -> AutoRefineResult:
     """
-    Run ``sample.py`` multiple times; pick best by heuristic score.
+    Run ``sample.py`` multiple times; pick the best with the model-free ``heuristic`` ranker preset.
 
     When ``prompt_variants`` is set, each candidate uses a different prompt
     (e.g. from ``--creative-mutate``). Otherwise only seed offsets vary.
     """
     from PIL import Image
 
-    scores: list[float] = []
+    from utils.superior.inference_pipeline import CompositeRanker
+
     outputs: list[str] = []
     prompts_used: list[str] = []
-    best_i = 0
-    best_s = -1.0
-    n = max(1, int(num_candidates))
+    images: list[np.ndarray] = []
     variants = list(prompt_variants or [])
-
-    for i in range(n):
+    for i in range(max(1, int(num_candidates))):
         out = f"{out_stem}_{i}.png"
         cmd = list(sample_cmd)
         if variants:
-            idx = i % len(variants)
-            cmd = _replace_or_append_prompt(cmd, variants[idx])
-            prompts_used.append(variants[idx])
+            cmd = _replace_or_append_prompt(cmd, variants[i % len(variants)])
+            prompts_used.append(variants[i % len(variants)])
         else:
             prompts_used.append(_extract_prompt_from_cmd(cmd) or "")
-
         cmd = cmd + ["--seed", str(seed_base + i), "--out", out]
         subprocess.run(cmd, check=True)
         outputs.append(out)
-        arr = np.array(Image.open(out).convert("RGB"))
-        s = score_image_heuristic(arr)
-        scores.append(s)
-        if s > best_s:
-            best_s = s
-            best_i = i
+        images.append(np.array(Image.open(out).convert("RGB")))
+    best_i, scores = CompositeRanker("heuristic").pick_best_index(
+        images, prompt=_extract_prompt_from_cmd(sample_cmd) or "", device="cpu"
+    )
     return AutoRefineResult(best_index=best_i, scores=scores, outputs=outputs, prompts=prompts_used)
 
 

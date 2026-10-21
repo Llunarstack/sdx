@@ -7,13 +7,17 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pipelines.video.identity_lock import composite_with_mask
-from pipelines.video.mask_propagate import rasterize_box_mask
-from pipelines.video.motion_transfer import motion_template_sequence, retime_frame_list
-from pipelines.video.pose_control import pose_control_args, pose_from_rig_boxes, write_pose_control_image
-from pipelines.video.post_grade import apply_grade_to_sequence, grade_frame
-from pipelines.video.process_options import parse_process_options
-from pipelines.video.segment_retry import RetryPolicy
+from pipelines.video.motion import motion_template_sequence, rasterize_box_mask, retime_frame_list
+from pipelines.video.quality import composite_with_mask
+from pipelines.video.segment_processor import (
+    RetryPolicy,
+    apply_grade_to_sequence,
+    grade_frame,
+    parse_process_options,
+    pose_control_args,
+    pose_from_rig_boxes,
+    write_pose_control_image,
+)
 from pipelines.video.video_io import read_frame_rgb, save_frame_rgb
 
 
@@ -149,7 +153,7 @@ def test_retry_policy_defaults():
 
 def test_depth_aware_blend():
     import numpy as np
-    from pipelines.video.depth_interpolate import depth_aware_blend, depth_proxy
+    from pipelines.video.interpolate import depth_aware_blend, depth_proxy
 
     a = np.zeros((16, 16, 3), dtype=np.uint8)
     b = np.full((16, 16, 3), 200, dtype=np.uint8)
@@ -160,7 +164,7 @@ def test_depth_aware_blend():
 
 
 def test_deflicker(tmp_path: Path):
-    from pipelines.video.deflicker import apply_deflicker
+    from pipelines.video.segment_processor import apply_deflicker
 
     paths = []
     for i in range(5):
@@ -173,7 +177,7 @@ def test_deflicker(tmp_path: Path):
 
 def test_motion_beats(tmp_path: Path):
     pytest.importorskip("cv2")
-    from pipelines.video.motion_beats import detect_motion_beats
+    from pipelines.video.motion import detect_motion_beats
 
     paths = []
     for i in range(8):
@@ -188,7 +192,7 @@ def test_motion_beats(tmp_path: Path):
 
 
 def test_frame_enhance():
-    from pipelines.video.frame_enhance import enhance_frame
+    from pipelines.video.segment_processor import enhance_frame
 
     rgb = np.full((8, 8, 3), 128, dtype=np.uint8)
     out = enhance_frame(rgb, amount=0.2)
@@ -197,8 +201,8 @@ def test_frame_enhance():
 
 def test_transition_fx():
     import numpy as np
-    from pipelines.video.transition_fx import apply_transition, transition_overlap_frames_fx
     from pipelines.video.types import TransitionType
+    from pipelines.video.video_io import apply_transition, transition_overlap_frames_fx
 
     a = [np.zeros((8, 8, 3), dtype=np.uint8), np.zeros((8, 8, 3), dtype=np.uint8)]
     b = [np.full((8, 8, 3), 255, dtype=np.uint8), np.full((8, 8, 3), 255, dtype=np.uint8)]
@@ -214,7 +218,7 @@ def test_parse_process_options_new_flags():
 
 
 def test_semantic_drift():
-    from pipelines.video.semantic_drift import frame_drift_score
+    from pipelines.video.quality import frame_drift_score
 
     a = np.zeros((16, 16, 3), dtype=np.uint8)
     b = np.full((16, 16, 3), 200, dtype=np.uint8)
@@ -222,7 +226,7 @@ def test_semantic_drift():
 
 
 def test_drift_repair(tmp_path: Path):
-    from pipelines.video.drift_repair import repair_sequence_drift
+    from pipelines.video.quality import repair_sequence_drift
 
     paths = []
     for i in range(4):
@@ -235,10 +239,12 @@ def test_drift_repair(tmp_path: Path):
 
 
 def test_velocity_ease(tmp_path: Path):
-    from pipelines.video.velocity_curve import apply_velocity_ease, ease_indices
+    from pipelines.video.segment_processor import apply_velocity_ease, ease_indices
 
-    idx = ease_indices(10, 10, ease="smooth")
-    assert len(idx) == 10
+    idx = ease_indices(10, ease="smooth")
+    assert len(idx) == 10 and idx[0] == 0 and idx[-1] == 9
+    assert idx != list(range(10))
+    assert ease_indices(6, ease="hold") == [0, 0, 2, 2, 4, 4]
     paths = []
     for i in range(5):
         fp = tmp_path / f"f{i}.png"
@@ -249,7 +255,7 @@ def test_velocity_ease(tmp_path: Path):
 
 
 def test_region_motion_load_boxes(tmp_path: Path):
-    from pipelines.video.region_motion import load_rig_boxes
+    from pipelines.video.motion import load_rig_boxes
 
     rig = tmp_path / "rig.json"
     rig.write_text(
@@ -262,7 +268,7 @@ def test_region_motion_load_boxes(tmp_path: Path):
 
 
 def test_parallel_segments():
-    from pipelines.video.parallel_segments import SegmentWorkItem, run_segments_parallel
+    from pipelines.video.video_io import SegmentWorkItem, run_segments_parallel
 
     def worker(item: SegmentWorkItem):
         return [Path(f"x{item.index}")], {"ok": True}
@@ -274,7 +280,7 @@ def test_parallel_segments():
 
 
 def test_scene_preflight(tmp_path: Path):
-    from pipelines.video.scene_preflight import run_preflight
+    from pipelines.video.scene_graph import run_preflight
 
     scene = tmp_path / "s.json"
     scene.write_text(

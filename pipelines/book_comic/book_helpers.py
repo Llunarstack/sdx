@@ -214,11 +214,6 @@ def preset_for_book_accuracy(name: str) -> BookAccuracyPreset:
     )
 
 
-def book_accuracy_tier_names() -> tuple[str, ...]:
-    """Known ``--book-accuracy`` values (for docs, validators, and UIs)."""
-    return ("none", "fast", "balanced", "maximum", "production", "production_vit", "production_fidelity")
-
-
 def pick_metric_requires_vit_ckpt(metric: str) -> bool:
     """Whether ``sample.py`` needs ``--pick-vit-ckpt`` for this ``--pick-best`` mode."""
     m = str(metric or "").strip().lower()
@@ -845,7 +840,7 @@ def extend_sample_py_adherence_quality_cmd(cmd: list[str], args: Any) -> None:
     if bool(getattr(args, "no_cache", False)):
         cmd.append("--no-cache")
 
-    from utils.visual_design.argv import extend_sample_argv_visual_design
+    from utils.visual_design import extend_sample_argv_visual_design
 
     extend_sample_argv_visual_design(cmd, args)
 

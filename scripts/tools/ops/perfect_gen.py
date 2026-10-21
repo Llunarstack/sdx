@@ -48,7 +48,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pose", default="", help="Clarify answer: pose")
     p.add_argument("--place", default="", help="Clarify answer: place")
     p.add_argument("--character-sheet", default="")
-    p.add_argument("--reference-style-mode", default="instantstyle")
     p.add_argument("--no-rag", action="store_true")
     p.add_argument("--print-argv", action="store_true")
     p.add_argument("--print-interview", action="store_true", help="Print interview checklist")
@@ -87,7 +86,6 @@ def main(argv: list[str] | None = None) -> int:
         clarify_answers=answers,
         interview_answers=interview_answers,
         interview_photos=interview_photos,
-        reference_style_mode=str(args.reference_style_mode),
         run_rag=not args.no_rag,
         character_sheet=str(args.character_sheet or ""),
         user_face_refs=list(args.face_ref or []),

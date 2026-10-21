@@ -59,8 +59,8 @@ In `config/train_config.py`:
 
 ### Code
 
-- **Mask**: `models/attention.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks, block_order=...)`. Core logic: `models/ar_masks_extended.py`. Returns an (N, N) float mask with `-inf` where attention is disabled.
-- **DiT**: `models/dit_text.py` and `models/dit_text_variants.py` (`DiT_Predecessor_Text`, `DiT_Supreme_Text`) register `_ar_mask` when `num_ar_blocks > 0` and pass it into every block’s self-attention.
+- **Mask**: `models/ar_masks_extended.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks, block_order=...)`. Returns an (N, N) float mask with `-inf` where attention is disabled.
+- **DiT**: `models/dit_text.py` (`DiT_Text` and its `DiT_Predecessor_Text` / `DiT_Supreme_Text` subclasses) register `_ar_mask` when `num_ar_blocks > 0` and pass it into every block’s self-attention.
 
 ### Inspect masks
 
@@ -107,9 +107,9 @@ Start with **0** or **2**; only try **4** if you’re aiming for a very ordered 
 
 ---
 
-## Technical note: square latent grid
+## Technical note: any patch grid
 
-The AR mask is built for a **square** patch grid (e.g. 32×32 patches for 256×256 image with patch_size=2). Non-square latent sizes would require passing separate `h` and `w` into the mask builder; the current DiT path uses `p = sqrt(num_patches)` so both dimensions are equal.
+The stored `_ar_mask` covers the native square grid (e.g. 32×32 patches for 256×256 with patch_size=2). Other grids (non-square aspect ratios, hires-fix, dual-stage layout) get the same block order from `models.dit_text.grid_ar_mask(model, h, w)`, which calls `create_block_causal_mask_2d(h, w, ...)` and caches the result.
 
 ---
 
@@ -120,7 +120,7 @@ The **`ViT/`** module scores finished images. If your **generator** was trained 
 1. **Training ViT** (`python -m vit_quality.train`): **AR conditioning is on by default**. Put the same regime on each JSONL row the model should learn:
    - **`num_ar_blocks`**, **`dit_num_ar_blocks`**, or **`ar_blocks`** — integer **`0`**, **`2`**, or **`4`**. Missing or invalid → **unknown** bucket (4th one-hot).
 2. **Older ViT checkpoints** (no `use_ar_conditioning` in saved config) load as **text-only** (8-D caption features only). Use **`--no-ar-conditioning`** when training if you need weights compatible with that layout, or retrain with AR fields in the manifest.
-3. **Inference** (`python -m vit_quality.infer`, `python -m vit_quality.export_embeddings`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` / `generator_num_ar_blocks` is read (including optional nested blobs like `dit_config`) and fused with caption features. Omitted → **unknown** one-hot unless you pass **`--default-num-ar-blocks 0|2|4`** (e.g. whole manifest is from one DiT run).
+3. **Inference** (`python -m vit_quality.infer --out scores.jsonl` and/or `--out-npz embeddings.npz`): If the checkpoint has `use_ar_conditioning: true`, each row’s `num_ar_blocks` / `dit_num_ar_blocks` / `ar_blocks` / `generator_num_ar_blocks` is read (including optional nested blobs like `dit_config`) and fused with caption features. Omitted → **unknown** one-hot unless you pass **`--default-num-ar-blocks 0|2|4`** (e.g. whole manifest is from one DiT run).
 
 4. **Facebook / Meta DiT** (`facebookresearch/DiT`): vanilla checkpoints are **full bidirectional** → use **`num_ar_blocks = 0`** for ViT alignment. Only use `2`/`4` if you trained an SDX-compatible fork with the same block-causal mask API.
 
@@ -145,7 +145,7 @@ Training flag (and checkpoint field): **`ar_block_order`**.
 
 Within each macro-block, patch order stays **raster** (row-major inside the block).
 
-Implementation: `models/ar_masks_extended.py` → `create_block_causal_mask_2d(..., block_order=...)`, re-exported from `models/attention.py` as `create_block_causal_mask_2d`.
+Implementation: `models/ar_masks_extended.py` → `create_block_causal_mask_2d(..., block_order=...)`.
 
 CLI:
 
@@ -162,9 +162,7 @@ Inference must match training: `get_dit_build_kwargs` passes `ar_block_order` fr
 | Path | Role |
 |------|------|
 | [models/ar_masks_extended.py](../models/ar_masks_extended.py) | Mask construction, sparsity stats, optional mask softening helpers. |
-| [utils/architecture/ar_block_layout.py](../utils/architecture/ar_block_layout.py) | Macro-block centers, `block_visit_order`, `patch_block_map` (for tooling / future schedulers). |
 | [utils/training/ar_curriculum.py](../utils/training/ar_curriculum.py) | Schedules for ramping `num_ar_blocks` by step (optional; wire in `train.py` if you use it). |
-| [utils/generation/ar_latent_ops.py](../utils/generation/ar_latent_ops.py) | Iterate / stack / paste macro-block views on `(B,C,H,W)` latents (raster block grid). |
 | [scripts/tools/dev/ar_mask_inspect.py](../scripts/tools/dev/ar_mask_inspect.py) | CLI: mask shape, allowed-pair fraction, visit order; `--compare` raster vs zorder. |
 
 ### Runtime AR curriculum (train.py)

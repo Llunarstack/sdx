@@ -44,7 +44,7 @@ you care about — including NSFW.
 
 
 
-**RAG + uncensored VLM** (`scripts/research_image_prompt.py`):
+**RAG + uncensored VLM** (`scripts/tools/prompt/research_image_prompt.py`):
 
 
 
@@ -92,7 +92,7 @@ python setup/build_rag_corpus.py --data-root /workspace/data
 
 # Research best prompt for one image
 
-python scripts/research_image_prompt.py path/to/image.png \
+python -m scripts.tools research_image_prompt path/to/image.png \
 
   --rag-corpus /workspace/data/rag_corpus.jsonl
 
@@ -120,7 +120,7 @@ After a danbooru/e621 match, SDX fetches official tags using your **secret.txt**
 (danbooru login+api_key, e621 basic auth) — always, not anonymously.
 
 ```bash
-python scripts/profile_image_cli.py path/to/image.png
+python -m scripts.tools profile_image_cli path/to/image.png
 ```
 
 Optional `saucenao:` / `tineye:` entries in secret.txt only if you have paid API keys for higher rate limits.

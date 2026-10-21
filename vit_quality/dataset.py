@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 from utils.architecture.ar_block_conditioning import ar_conditioning_vector, parse_num_ar_blocks_from_row
-from utils.runtime.jsonutil import loads as json_loads
+from utils.runtime import json_loads
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+", flags=re.ASCII)
 
@@ -47,6 +48,9 @@ def text_feature_vector(text: str) -> torch.Tensor:
 class ViTManifestDataset(Dataset):
     """
     Manifest dataset for ViT quality + adherence heads.
+
+    ``text_featurizer`` (see ``vit_quality.text_encoder``) replaces the legacy 8-D caption
+    vector; its embeddings are computed once for all captions at construction.
     """
 
     def __init__(
@@ -56,6 +60,7 @@ class ViTManifestDataset(Dataset):
         image_size: int = 224,
         *,
         training_augment: bool = False,
+        text_featurizer: Any = None,
     ):
         self.manifest_path = Path(manifest_jsonl)
         self.image_root = Path(image_root) if image_root else None
@@ -84,6 +89,12 @@ class ViTManifestDataset(Dataset):
                 ]
             )
         self._load()
+        self.text_feat_dim = int(
+            text_featurizer.dim if text_featurizer is not None else text_feature_vector("").numel()
+        )
+        self._text_features = None
+        if text_featurizer is not None and self.samples:
+            self._text_features = text_featurizer.embed_many([str(s["caption"]) for s in self.samples]).float()
 
     def _resolve_path(self, p: str) -> Path:
         path = Path(p)
@@ -130,7 +141,7 @@ class ViTManifestDataset(Dataset):
         img = Image.open(s["image_path"]).convert("RGB")
         x = self.transform(img)
         cap = str(s["caption"])
-        tf = text_feature_vector(cap)
+        tf = self._text_features[idx] if self._text_features is not None else text_feature_vector(cap)
         quality_label = s["quality_label"]
         adherence_score = s["adherence_score"]
         ar_vec = ar_conditioning_vector(int(s["num_ar_blocks"]), dtype=torch.float32)

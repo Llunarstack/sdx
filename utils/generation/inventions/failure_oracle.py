@@ -6,14 +6,18 @@ emits a repair plan (countgate, bindlock, inpaint regions, friction, etc.).
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "FAILURE_ATLAS",
     "FailureOracleReport",
     "diagnose_failures",
     "repair_plan_from_failures",
+    "save_failure_atlas_jsonl",
 ]
 
 
@@ -84,3 +88,46 @@ def repair_plan_from_failures(report: FailureOracleReport) -> FailureOracleRepor
             repairs.append({"module": "prompt_breakdown", "action": "enable prompt_breakdown=auto"})
     report.repairs = repairs
     return report
+
+
+# (mode id, name, eval prompts that tend to trigger it)
+FAILURE_ATLAS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("count_under", "Wrong count (too few)", ("exactly four red apples on a table", "3girls standing in a row")),
+    ("count_over", "Wrong count (too many)", ("exactly two cats, no more", "a single bicycle")),
+    ("bind_color", "Attribute binding", ("red cube left of blue sphere", "green backpack on a brown dog")),
+    ("spatial_left_right", "Left/right", ("the lamp is left of the chair", "person on the right side of frame")),
+    ("negation", "Negation ignored", ("a cat with no hat", "portrait without watermark or text")),
+    ("hands", "Hand anatomy", ("close-up of hands holding a coffee cup", "counting on five fingers")),
+    ("face_far", "Distant face smear", ("crowd scene with recognizable faces", "two people talking across a room")),
+    ("glyph", "Text rendering", ('poster that says "OPEN"', "street sign reading MAIN ST")),
+    ("multi_bleed", "Character bleed", ("2girls different outfits, not twins", "boy in red, girl in blue, no swap")),
+    ("occlusion", "Occlusion", ("person behind chain-link fence", "cat partially behind a vase")),
+    ("reflection", "Reflection", ("person reflected in wet street", "mirror selfie with correct chirality")),
+    ("long_prompt", "Long prompt tail", ("masterpiece, " + ", ".join(f"detail{i}" for i in range(40)),)),
+    ("plastic", "Plastic skin", ("natural skin texture portrait, pores visible",)),
+    ("extra_limb", "Extra limbs", ("yoga pose, anatomically correct", "dancer mid-leap")),
+    ("object_fusion", "Merged objects", ("two distinct wine glasses side by side",)),
+    ("style_mud", "Style mud", ("in the style of ukiyo-e, sharp linework",)),
+    ("lighting_physics", "Lighting", ("single hard side light, long cast shadow",)),
+    ("material_metal", "Materials", ("brushed aluminum cylinder, sharp reflections",)),
+    ("transparency", "Glass/transparency", ("clear glass cup with water and straw",)),
+    ("text_small", "Small text", ("business card with tiny crisp letters",)),
+    ("rare_count", "Rare counts", ("seven candles on a cake", "eight matching chairs")),
+    ("negation_color", "Negation color", ("a car that is not red", "flowers without yellow")),
+    ("relation_stack", "Stacked relations", ("cup on book on table under lamp",)),
+    ("action_multi", "Multi-action", ("A waving while B sits reading",)),
+    ("crop_fullbody", "Full body crop", ("full body standing person, head to toes in frame",)),
+    ("background_amnesia", "BG consistency", ("detailed kitchen background, sharp cabinets",)),
+    ("cfg_burn", "CFG burn", ("soft natural colors, no oversat neon skin",)),
+)
+
+
+def save_failure_atlas_jsonl(path: str | Path) -> Path:
+    """One ``{"mode", "name", "prompt"}`` row per atlas prompt (an eval pack for failure-mode regressions)."""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("w", encoding="utf-8") as f:
+        for mode, name, prompts in FAILURE_ATLAS:
+            for prompt in prompts:
+                f.write(json.dumps({"mode": mode, "name": name, "prompt": prompt}) + "\n")
+    return p

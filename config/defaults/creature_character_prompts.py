@@ -1,22 +1,17 @@
-"""
-Prompt packs for **creatures**, **anthropomorphic / furry-style characters**, **robots & mechs**,
-and **humanoid monsters** — domains where diffusion often mixes species, melts fur into skin, or
-confuses hard-surface with flesh.
+"""Prompt packs for creatures, anthro/furry characters, robots/mechs and humanoid monsters.
 
-Use clear **species + posture + material** boundaries in training captions and at inference.
-
-**Tag-style keywords** (``HUMANOID_MONSTER_PROMPT_KEYWORDS``) overlap with vocabulary common on
-tag-based image boards (Danbooru-style ``*_tag`` conventions); use the same tokens in training
-and inference for better adherence.
+These are the domains where diffusion mixes species, melts fur into skin or confuses hard surface with
+flesh, so every line states species, posture and material boundaries. Selected by
+``utils.prompt.subject_addons.suggest_creature_prompt_addons``.
 """
 
 from __future__ import annotations
 
+from utils.safety.minor_guard import YOUTH_NEGATIVE
+
 __all__ = [
     "HUMANOID_MONSTER_PROMPT_KEYWORDS",
-    "CREATURE_CHARACTER_DOMAIN_NAMES",
     "CREATURE_CHARACTER_RECOMMENDED_PROMPTS_BY_DOMAIN",
-    "CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN",
     "CREATURE_COMMON_NEGATIVE_ADDON",
     "CREATURE_SFW_CONTEXT_POSITIVE",
     "CREATURE_SFW_NEGATIVE_ADDON",
@@ -24,29 +19,10 @@ __all__ = [
     "CREATURE_NSFW_NEGATIVE_ADDON",
     "CREATURE_CHARACTER_SFW_RECOMMENDED_PROMPTS_BY_DOMAIN",
     "CREATURE_CHARACTER_NSFW_RECOMMENDED_PROMPTS_BY_DOMAIN",
-    "CREATURE_CHARACTER_SFW_RECOMMENDED_NEGATIVE_BY_DOMAIN",
-    "CREATURE_CHARACTER_NSFW_RECOMMENDED_NEGATIVE_BY_DOMAIN",
-    "CREATURE_NSFW_KEYWORDS",
-    "CREATURES_PROMPT_TIPS",
-    "ANTHRO_FURRY_PROMPT_TIPS",
-    "ROBOTS_MECH_PROMPT_TIPS",
-    "HUMANOID_MONSTERS_PROMPT_TIPS",
-    "CREATURE_TRAINING_CAPTION_TIPS",
-    "CREATURE_SFW_SCENARIO_TIPS",
-    "CREATURE_NSFW_SCENARIO_TIPS",
-    "ANTHRO_FURRY_SFW_TIPS",
-    "ANTHRO_FURRY_NSFW_TIPS",
-    "ROBOTS_MECH_SFW_TIPS",
-    "ROBOTS_MECH_NSFW_TIPS",
-    "HUMANOID_MONSTERS_SFW_TIPS",
-    "HUMANOID_MONSTERS_NSFW_TIPS",
-    "CREATURES_SFW_TIPS",
-    "CREATURES_NSFW_TIPS",
 ]
 
-CREATURE_CHARACTER_DOMAIN_NAMES = ("creatures", "anthro_furry", "robots_mechs", "humanoid_monsters")
 
-# Substrings for tooling / ``suggest_creature_prompt_addons`` (multi-word phrases OK).
+# Danbooru-style tag vocabulary; multi-word phrases are fine.
 HUMANOID_MONSTER_PROMPT_KEYWORDS = (
     "orc",
     "ogre",
@@ -195,35 +171,13 @@ CREATURE_CHARACTER_RECOMMENDED_PROMPTS_BY_DOMAIN = {
     ],
 }
 
-CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN = {
-    "creatures": (
-        "merged species, extra limbs random, floating paws, anatomy soup, melted creature, "
-        "wrong leg count, two heads accidental, wings from wrong vertebra, scale-fur confusion"
-    ),
-    "anthro_furry": (
-        "human ears on anthro, muzzle too short for species, fur as plastic, skin-fur boundary blur, "
-        "paws as human hands by mistake, tail disconnected, duplicate facial features, species unclear"
-    ),
-    "robots_mechs": (
-        "organic skin on metal panels, melted machinery, inconsistent scale bolts, "
-        "floating armor, limb count wrong, mecha as rubber suit, wobbly hard-surface, "
-        "symmetry error on mechanical parts, human flesh where chrome should be"
-    ),
-    "humanoid_monsters": (
-        "melted horror face, merged eyes, anatomy noise, human monster indistinct, "
-        "blobs instead of muscles, random tentacles, low readability silhouette, cute by accident, "
-        "horns duplicated, wings from wrong joint, tail from spine mid-back, angel wings on demon by mistake, "
-        "extra human ears on elf, wrong ear count, merged succubus wings, floating halo, plastic horns"
-    ),
-}
 
 CREATURE_COMMON_NEGATIVE_ADDON = (
     "wrong species mix, melted anatomy, duplicate ears, floating limbs, merged fingers, "
     "inconsistent tail, plastic fur, rubber mech, flesh-metal confusion, unreadable silhouette"
 )
 
-# --- Rating-specific packs (SFW vs mature/explicit) ---
-# SFW: general-audience character art, games, books, mascots — push away from adult themes in the negative.
+# SFW: general-audience character art; the negative pushes away from adult themes and minors.
 CREATURE_SFW_CONTEXT_POSITIVE = (
     "sfw, general audience, character design, wholesome, adventure, expressive pose, "
     "costume appropriate, clear silhouette, safe for work, family friendly"
@@ -235,79 +189,20 @@ CREATURE_SFW_NEGATIVE_ADDON = (
     "wardrobe malfunction, see-through clothes, sheer fabric focus"
 )
 
-# NSFW: adult-only creative use — emphasize **coherent anatomy + species** (same topology rules as SFW).
+# NSFW: adult-only; the negative always carries YOUTH_NEGATIVE and the same topology rules as SFW.
 CREATURE_NSFW_CONTEXT_POSITIVE = (
     "adult character, mature themes, explicit anatomy coherent with species, "
     "consistent body plan, same tag vocabulary as training data, 18+, adult only"
 )
 
 CREATURE_NSFW_NEGATIVE_ADDON = (
-    "minor, underage, child, loli, shota, "
+    f"{YOUTH_NEGATIVE}, "
     "melted anatomy, fused limbs, impossible joints, duplicate torsos, merged bodies, "
     "species-anatomy mismatch, rubber skin, identity blur between characters, "
     "wrong hole topology, extra genitals, merged partners, floating hands, disembodied limbs"
 )
 
-# Substring hints for ``rating="auto"`` in tooling (subset of typical booru / prompt language).
-CREATURE_NSFW_KEYWORDS = (
-    "nsfw",
-    "nude",
-    "naked",
-    "explicit",
-    "erotic",
-    "sexual",
-    "18+",
-    "18 plus",
-    "adult only",
-    "mature rating",
-    "uncensored",
-    "nipple",
-    "nipples",
-    "areola",
-    "genital",
-    "penis",
-    "vagina",
-    "pussy",
-    "dick",
-    "cock",
-    "cum",
-    "semen",
-    "orgasm",
-    "intercourse",
-    "sex",
-    "bdsm",
-    "bondage",
-    "after sex",
-    "spread legs",
-    "on bed nude",
-    "topless",
-    "bottomless",
-    "no panties",
-    "no bra",
-    "lingerie",
-    "see-through",
-    "sheer",
-    "micro bikini",
-    "implied sex",
-    "masturbat",
-    "fingering",
-    "oral sex",
-    "fellatio",
-    "cunnilingus",
-    "paizuri",
-    "titfuck",
-    "doggy style",
-    "cowgirl position",
-    "missionary",
-    "from behind",
-    "penetration",
-    "creampie",
-    "ahegao",
-    "on all fours",
-    "straddling",
-)
-
-# Per-domain lines when you want the rating baked into the **positive** (optional prepend).
+# Per-domain positives with the rating baked in.
 CREATURE_CHARACTER_SFW_RECOMMENDED_PROMPTS_BY_DOMAIN = {
     "creatures": [
         "sfw fantasy creature, family-friendly design, readable expression, no gore",
@@ -399,169 +294,3 @@ CREATURE_CHARACTER_NSFW_RECOMMENDED_PROMPTS_BY_DOMAIN = {
         "adult eldritch humanoid explicit, wrong angles intentional, still one penetrative read",
     ],
 }
-
-CREATURE_CHARACTER_SFW_RECOMMENDED_NEGATIVE_BY_DOMAIN = {
-    "creatures": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["creatures"]
-    + ", gore, dismemberment, exposed organs, sexualized minor, provocative pose, vore",
-    "anthro_furry": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["anthro_furry"]
-    + ", nsfw, nude, sexualized minor, underwear focus, downblouse, upskirt, cameltoe",
-    "robots_mechs": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["robots_mechs"]
-    + ", gore, crushed body horror, sexualized minor, exposed wires as gore substitute",
-    "humanoid_monsters": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["humanoid_monsters"]
-    + ", extreme gore, sexualized minor, snuff, guro, entrails focus",
-}
-
-CREATURE_CHARACTER_NSFW_RECOMMENDED_NEGATIVE_BY_DOMAIN = {
-    "creatures": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["creatures"] + ", " + CREATURE_NSFW_NEGATIVE_ADDON,
-    "anthro_furry": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["anthro_furry"]
-    + ", "
-    + CREATURE_NSFW_NEGATIVE_ADDON,
-    "robots_mechs": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["robots_mechs"]
-    + ", "
-    + CREATURE_NSFW_NEGATIVE_ADDON,
-    "humanoid_monsters": CREATURE_CHARACTER_RECOMMENDED_NEGATIVE_BY_DOMAIN["humanoid_monsters"]
-    + ", "
-    + CREATURE_NSFW_NEGATIVE_ADDON,
-}
-
-CREATURES_PROMPT_TIPS = [
-    "State **leg count and posture**: 'quadruped resting', 'bipedal alien' reduces random limbs.",
-    "Name **covering**: scales vs feathers vs hide vs exoskeleton — models confuse blended words.",
-    "One **focal creature**; 'herd' or 'pack' often duplicates errors — start with one hero subject.",
-    "Add **scale cue**: 'horse-sized', 'cat-sized' helps proportions vs environment.",
-    "Symmetry: 'mirrored horns', 'paired tusks' — odd counts often render wrong.",
-    "Eyes: 'forward-facing predator eyes' vs 'side prey eyes' — fixes wrong skull read.",
-    "Teeth: 'herbivore flat molars' vs 'carnivore fangs' — reduces random dentistry.",
-]
-
-CREATURES_SFW_TIPS = [
-    "Children's media: 'rounded teeth', 'soft claws', 'big expressive eyes' — keeps tone safe.",
-    "Pet-like creatures: 'collar with tag', 'leash held by hero' — anchors scale and story.",
-    "No teeth blood: say 'clean muzzle' or 'closed mouth smile' for family art.",
-    "Sticker or emoji style: 'thick outline', 'flat colors' — reduces accidental gore.",
-    "Reference real animals for **silhouette** (rabbit vs fox vs bear) before fantasy add-ons.",
-]
-
-CREATURES_NSFW_TIPS = [
-    "Adult feral-style: still tag **adult** and avoid juvenile proportions; use heavy muscle or size cues.",
-    "Explicit mount + rider: describe **where hands and reins** go so limbs do not merge.",
-    "Multi-partner with creature: number each **face and torso** in the prompt order.",
-    "Tentacle / non-human: keep **one continuity** (same sucker size) along each limb.",
-    "After explicit, 'glowing eyes dimmed', 'exhausted pant' — optional cooldown tags for coherence.",
-]
-
-ANTHRO_FURRY_PROMPT_TIPS = [
-    "Specify **species** early: anthro fox, anthro rabbit — avoids generic dog-cat mush.",
-    "Choose **feet**: digitigrade paws vs plantigrade — mention if shoes or bare paws.",
-    "Say **no human ears** when you want only animal ears (many models add both).",
-    "Clothing: 'jacket open over chest fur', 'collar clears neck ruff' reduces neck merge artifacts.",
-    "Tail: 'tail visible behind', 'tail relaxed on ground' anchors attachment.",
-    "Color: 'red fox fur with white chest', 'grey wolf with amber eyes' — reduces wrong palette.",
-    "Hands: 'four fingers and thumb paw', 'hooved hands' — specify if non-human digits matter.",
-    "Snout length: 'short rabbit nose', 'long horse muzzle' — species read locks faster.",
-]
-
-ROBOTS_MECH_PROMPT_TIPS = [
-    "Split **materials**: brushed aluminum vs painted armor vs rubber seals — reduces plastic-flesh look.",
-    "Joints: 'ball joint shoulder', 'piston elbow' gives the model hinge vocabulary.",
-    "Scale: 'human-height android' vs 'building-sized mech' — avoid ambiguous 'robot' alone.",
-    "Face: 'screen face', 'camera lens eyes', or 'humanlike synth skin' — pick one read.",
-    "Cables and vents: small readable details beat vague 'high tech'.",
-]
-
-HUMANOID_MONSTERS_PROMPT_TIPS = [
-    "Horror: **one** distortion axis (elongated limbs, extra eyes, wrong fingers) — stacking many causes mush.",
-    "Keep **eyes count** explicit: 'two eyes', 'four eyes symmetric' if you care.",
-    "Skin: 'waxy undead', 'leathery demon', 'chitin patches' — separates from normal human skin.",
-    "Pose: 'standing contrapposto', 'crouched' — readable pose beats vague 'scary'.",
-    "Wings: state **attachment** ('wings from shoulder blades', 'back-mounted feather wings') to reduce floating wings.",
-    "Horns: **count and curve** ('two curved horns', 'single broken horn') beat vague 'demon horns'.",
-    "Tails: 'demon tail from base of spine', 'thin pointed tail' — avoids random tail origins.",
-    "Angels vs demons: use **feather vs bat wing** words explicitly so the model does not blend.",
-    "Demi-humans: 'pointed ears only', 'no human ears' for elves, tieflings, and similar.",
-    "Monster girls / *-girl tags: keep **species cues** (ears, tail, scales) plus human body plan explicit.",
-]
-
-CREATURE_TRAINING_CAPTION_TIPS = [
-    "Caption **species + body plan** every time (anthro red fox, digitigrade, two ears).",
-    "For robots, repeat **hard-surface words** in diverse scenes so metal does not drift to skin.",
-    "Pair monsters with **lighting words** (rim, underlight) so face geometry stays readable.",
-    "Negative prompts in data are rare; prefer **positive material boundaries** in captions.",
-]
-
-CREATURE_SFW_SCENARIO_TIPS = [
-    "Use **rating tags** consistently in data: `sfw`, `general` — mirrors booru / site rules.",
-    "For commissions: name **clothing layer** early so the model does not default to nude anthro.",
-    "Mascots and games: 'full body', 'turnaround-friendly', 'readable icon silhouette'.",
-    "Avoid ambiguous 'adult' (means mature tone vs age); prefer 'general audience' or '18+' explicitly.",
-    "Streaming-safe: add 'no cleavage', 'high neckline' if the base model over-sexualizes armor.",
-    "Visual novel sprite: 'waist-up', 'neutral A-pose' — reduces odd crops.",
-    "Tabletop token: top-down or isometric, creature centered, plain base.",
-]
-
-CREATURE_NSFW_SCENARIO_TIPS = [
-    "Adult-only datasets: keep **the same species tokens** as your SFW captions (anthro fox, digitigrade) plus explicit tags.",
-    "Align with your **tag schema** (e.g. danbooru-style) so train and sample use the same vocabulary.",
-    "Explicit + creature: describe **contact points and limbs** (who is where) to reduce merged-body artifacts.",
-    "Use negatives for **topology** (fused, extra limbs) more than for style; see CREATURE_NSFW_NEGATIVE_ADDON.",
-    "Tag **solo / duo / group** explicitly; crowd scenes amplify merged limbs.",
-    "Perspective: 'from side', 'three-quarter view' — fixes impossible penetration angles.",
-    "Lighting: 'rim light on sweat' vs 'flat hentai lighting' — pick one render read.",
-    "Post titles vs prompt: duplicate key tags in prompt body so T5 sees them before truncation.",
-]
-
-ANTHRO_FURRY_SFW_TIPS = [
-    "Lead with outfit: 'anthro rabbit in winter coat' before face detail.",
-    "Props anchor SFW scenes: 'holding map', 'sitting at cafe table'.",
-    "Furry community tags: `clothed`, `fully clothed` if your hub supports them.",
-    "School or academy SFW: **uniform modest**, specify age as adult student if needed.",
-    "Sports: 'sweatband', 'knee pads' — athletic not fetish unless you tag otherwise.",
-    "Sleepover SFW: pajamas onesie, plushies, popcorn — avoid lingerie wording.",
-    "Reference sheet: front side back views in prompt text or split generations.",
-]
-
-ANTHRO_FURRY_NSFW_TIPS = [
-    "State **adult** and species in one line: 'adult anthro wolf, explicit, mature body'.",
-    "Separate **muzzle from human face cues** (no second nose); mention 'only animal nose'.",
-    "Fur on **torso and limbs** with direction words reduces skin-fur mush in explicit poses.",
-    "Knot / feral anatomy: use **same terms your training set** uses; consistency beats euphemism mix.",
-    "Pairs: 'anthro A left, anthro B right' — reduces merged muzzles.",
-    "Fluids on fur: 'matte wet fur', 'clumped strands' — direction words help.",
-    "Mask or hood kink: 'hood back, ears through holes cut' — avoids flat head.",
-    "Aftercare: 'blanket over shoulders', 'tail wrapped around partner' — optional cozy tag.",
-]
-
-ROBOTS_MECH_SFW_TIPS = [
-    "Kid-friendly robot: rounded forms, expressive LED face, no body horror.",
-    "Pilot visible: 'helmet on', 'cockpit interior' clarifies scale vs mech.",
-    "Classroom tutor bot: rolling base, projector eye, chalk dust — grounded scene.",
-    "Robot pet: dog-sized quadruped bot, charging dock, LED tail wag.",
-    "Toy line aesthetic: 'action figure joints visible' — readable plastic seams.",
-]
-
-ROBOTS_MECH_NSFW_TIPS = [
-    "Android explicit: 'synthetic skin seam at neck', 'access panel closed' — boundaries readers expect.",
-    "Partial suit: which parts are **chrome vs suit fabric** avoids random flesh patches.",
-    "Oil or coolant as metaphor: 'blue drip from shoulder joint' — keep non-gory if preferred.",
-    "Voice box glow: 'speaker grille chest lit' — focal when face buried in partner.",
-    "Cable insert play: 'port at nape', 'fiber optic subtle' — one port design only.",
-    "Twin androids: 'matching serial stamp hip' — tells them apart in explicit crowd.",
-]
-
-HUMANOID_MONSTERS_SFW_TIPS = [
-    "Stylized villain: 'cartoon menace', 'disney villain silhouette' keeps blood optional.",
-    "TTRPG cover: 'monster manual style', readable at thumbnail size.",
-    "Halloween costume SFW: visible zipper, human eyes through mask holes.",
-    "Cute demon: 'small horns', 'blush', 'oversized sweater' — tone lock.",
-    "Paladin vs demon standoff: symmetrical composition, no contact, clear silhouettes.",
-]
-
-HUMANOID_MONSTERS_NSFW_TIPS = [
-    "Horror-mature: pick **gore level** explicitly; 'bloodless horror' vs 'gory' reduces random entrails.",
-    "Explicit + monster: one **primary distortion** (claws, teeth, extra arms) — avoid stacking every trope.",
-    "Bite marks: 'healing scrape' vs 'deep wound' — pick one severity.",
-    "Claws on partner skin: 'red lines, no ribbons of flesh' if you want lighter guro.",
-    "Tail use explicit: describe **prehensile curl** vs passive tail to avoid random third limb.",
-    "Wing cloak pose: 'wings wrapped around both figures' — mention overlap order (who in front).",
-    "Corruption aesthetic: 'black veins spreading from contact' — single pattern direction.",
-]

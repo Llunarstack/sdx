@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Profile one image — test the caption fusion pipeline.
 
-python scripts/profile_image_cli.py path/to/image.png
-python scripts/profile_image_cli.py path/to/image.png --json
-python scripts/profile_image_cli.py path/to/image.png --no-vlm --no-reverse
+python -m scripts.tools profile_image_cli path/to/image.png
+python -m scripts.tools profile_image_cli path/to/image.png --json
+python -m scripts.tools profile_image_cli path/to/image.png --no-vlm --no-reverse
 """
 
 from __future__ import annotations

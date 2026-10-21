@@ -15,6 +15,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +141,26 @@ def load_moodboard_paths(
     return paths
 
 
+@lru_cache(maxsize=1)
+def _clip_vision(model_id: str, device: Any) -> tuple[Any, Any]:
+    import transformers as tr
+
+    proc = tr.CLIPImageProcessor.from_pretrained(model_id)
+    model = tr.CLIPVisionModelWithProjection.from_pretrained(model_id).eval().requires_grad_(False)
+    return model.to(device), proc
+
+
+def encode_reference_image_pil(pil_image: Any, *, device: Any, model_id: str, dtype: Any) -> tuple[Any, int]:
+    """CLIP vision ``image_embeds`` ``(1, D)`` for a reference image, and ``D``."""
+    import torch
+
+    model, proc = _clip_vision(model_id, device)
+    inputs = {k: v.to(device) for k, v in proc(images=pil_image, return_tensors="pt").items()}
+    with torch.no_grad():
+        emb = model(**inputs).image_embeds
+    return emb.to(dtype=dtype), int(emb.shape[-1])
+
+
 def aggregate_style_embeddings(
     refs: Sequence[StyleReference],
     *,
@@ -150,8 +171,6 @@ def aggregate_style_embeddings(
     """Weighted-mean CLIP image embedding from multiple style references."""
     import torch
     from PIL import Image
-
-    from utils.generation.clip_reference_embed import encode_reference_image_pil
 
     if not refs:
         raise ValueError("aggregate_style_embeddings requires at least one reference")
@@ -276,11 +295,11 @@ def apply_creativity_mode_to_prompt(args: Any) -> CreativityMode:
         if "lighting" not in low:
             args.prompt = f"{prompt}, soft natural lighting"
     elif mode == CreativityMode.MEDIUM and short:
-        from utils.superior.prompt_expand import expand_prompt_heuristic
+        from utils.superior.inference_pipeline import expand_prompt_heuristic
 
         args.prompt = expand_prompt_heuristic(prompt)
     elif mode == CreativityMode.HIGH:
-        from utils.superior.prompt_expand import expand_prompt_heuristic
+        from utils.superior.inference_pipeline import expand_prompt_heuristic
 
         expanded = expand_prompt_heuristic(prompt)
         if mode == CreativityMode.HIGH and word_count < 16:
@@ -370,8 +389,6 @@ def inject_reference_conditioning(
         return
 
     from models.reference_token_projection import ReferenceTokenProjector
-
-    from utils.generation.clip_reference_embed import encode_reference_image_pil
 
     clip_id = str(getattr(args, "reference_clip_model", "") or "openai/clip-vit-large-patch14")
 

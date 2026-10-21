@@ -138,13 +138,7 @@ def critique_answers_to_fix_plan(
         if needs_fix and it.region != "full":
             regions.append(it.region)
 
-    # Dedupe preserve order
-    seen: set[str] = set()
-    plan.fix_regions = []
-    for r in regions:
-        if r not in seen:
-            seen.add(r)
-            plan.fix_regions.append(r)
+    plan.fix_regions = list(dict.fromkeys(regions))
 
     if not plan.fix_regions:
         plan.notes.append("no region fixes requested")

@@ -1,15 +1,6 @@
-"""
-Fast, dependency-light caption hygiene for JSONL manifests.
-
-This is intentionally placed under ``sdx_native`` so training and tools can
-optionally use it without pulling heavyweight dataset modules.
-
-It focuses on the *lowest-level* cleanup that is safe to apply everywhere:
-- Unicode normalization (default NFKC)
-- Zero-width stripping
-- Optional C0 control stripping
-
-See: ``sdx_native.text_hygiene.normalize_caption_for_training``.
+"""Caption hygiene for JSONL manifests (``sdx_native.text_hygiene.normalize_caption_for_training`` on the
+caption fields): Unicode normalization, zero-width and optional C0-control stripping. Lives under
+``sdx_native`` so tools can use it without importing the dataset modules.
 """
 
 from __future__ import annotations
@@ -24,15 +15,18 @@ from .text_hygiene import normalize_caption_for_training
 
 
 def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
+    """JSON-object rows of ``path``; blank, malformed and non-object lines are skipped."""
     with path.open("r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             try:
-                yield json.loads(line)
-            except Exception:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
                 continue
+            if isinstance(obj, dict):
+                yield obj
 
 
 def normalize_jsonl_caption_fields(
@@ -44,22 +38,19 @@ def normalize_jsonl_caption_fields(
     unicode_form: str = "NFKC",
     strip_controls: bool = True,
 ) -> tuple[str, str]:
-    """
-    Normalize caption-like fields in a JSONL row in-place.
+    """Normalize a row's caption and negative caption in place; returns ``(caption, negative)`` ("" if missing).
 
-    Returns ``(caption, negative)`` after normalization (empty if missing).
+    The negative comes from ``negative_caption_key`` when present, else ``negative_prompt_fallback_key``.
     """
-    caption = str(rec.get(caption_key, "") or "")
-    negative = str(rec.get(negative_caption_key, rec.get(negative_prompt_fallback_key, "") or ""))
+    caption = str(rec.get(caption_key) or "")
+    neg_key = negative_caption_key if negative_caption_key in rec else negative_prompt_fallback_key
+    negative = str(rec.get(neg_key) or "")
     if caption.strip():
         caption = normalize_caption_for_training(caption, unicode_form=unicode_form, strip_controls=strip_controls)
         rec[caption_key] = caption
     if negative.strip():
         negative = normalize_caption_for_training(negative, unicode_form=unicode_form, strip_controls=strip_controls)
-        if negative_caption_key in rec:
-            rec[negative_caption_key] = negative
-        elif negative_prompt_fallback_key in rec:
-            rec[negative_prompt_fallback_key] = negative
+        rec[neg_key] = negative
     return caption, negative
 
 

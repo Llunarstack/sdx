@@ -22,31 +22,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
-
-def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-
-def _get_caption(rec: dict[str, Any]) -> str:
-    for k in ("caption", "text", "prompt"):
-        v = rec.get(k)
-        if v is not None:
-            s = str(v).strip()
-            if s:
-                return s
-    return ""
+from data.manifest_utils import caption_from_row, iter_manifest_rows
 
 
 def _contains_any(caption_lower: str, terms: list[str]) -> tuple[bool, list[str]]:
@@ -105,8 +83,8 @@ def main() -> None:
     group_hit_counts = {name: 0 for name, _ in groups}
     term_counts: dict[str, int] = {}
 
-    for rec in _iter_jsonl(manifest_path):
-        cap = _get_caption(rec)
+    for rec in iter_manifest_rows(manifest_path):
+        cap = caption_from_row(rec)
         if not cap:
             continue
         total += 1

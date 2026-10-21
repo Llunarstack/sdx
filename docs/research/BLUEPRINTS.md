@@ -155,7 +155,7 @@ Theme IDs in [`utils/architecture/architecture_map.py`](../../utils/architecture
 | Mechanism | Role |
 | :--- | :--- |
 | **`--spectral-sfp-loss`** + [`diffusion/spectral_sfp.py`](../../diffusion/spectral_sfp.py) | **Training** loss: FFT-weighted error on pred−target in **latent** space — **not** full FNO **forward** denoising. |
-| **`--spectral-coherence-latent`** + [`spectral_latent_lowfreq_blend`](../../utils/generation/inference_research_hooks.py) | **Inference** FFT low-frequency blend on the final latent (global coherence heuristic). |
+| **`--spectral-coherence-latent`** + [`spectral_latent_lowfreq_blend`](../../utils/generation/latent_filters.py) | **Inference** FFT low-frequency blend on the final latent (global coherence heuristic). |
 | **Multi-scale inference** (hires, dual-stage) | **Process** scaling, not continuous neural-operator sampling. |
 
 **Gap:** No **sampler** that denoises **primarily** in a learned **spectral / operator** basis with **resolution-agnostic** forward pass as in research stacks.

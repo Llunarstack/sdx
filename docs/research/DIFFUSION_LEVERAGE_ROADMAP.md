@@ -40,7 +40,7 @@
 | :--- | :--- | :--- | :--- |
 | **Multi-encoder text** | T5 + CLIP-L + CLIP-bigG fusion improves adherence and style. | `train.py --text-encoder-mode triple`, fusion weights in checkpoint | Medium |
 | **Longer / structured captions** | JSONL `parts`, region captions, layout-aware training data. | `data/t2i_dataset.py`, [REGION_CAPTIONS.md](../reference/REGION_CAPTIONS.md) | Data pipeline |
-| **Native multimodal transformer** | Single stack for extra modalities (sketch, layout tensor) before DiT. | `models/native_multimodal_transformer.py`, `models/cascaded_multimodal_diffusion.py` | Medium–high |
+| **Native multimodal transformer** | Single stack for extra modalities (sketch, layout tensor) before DiT. | Not implemented (an unwired prototype was removed) | Medium–high |
 | **Reference-image conditioning** | IP-Adapter / cross-attn image tokens for **character lock** without full finetune. | Would be new adapter path on `DiT_Text` or parallel cond channel | High |
 | **Regional / compositional CFG** | Different guidance per region (subject vs background). | Not in core sampler; inference research | Research |
 | **Control paths** | Depth, edge, segmentation as extra channels (PixArt-style `control_cond_dim` hooks exist in `dit_text.py`). | `models/dit_text.py` (`control_cond_dim`), training glue | Medium |
@@ -52,7 +52,7 @@
 | Idea | Mechanism | SDX touchpoints | Effort |
 | :--- | :--- | :--- | :--- |
 | **Non-uniform timestep sampling** | Emphasize hard noise levels (high-noise, logit-normal). | `diffusion/timestep_sampling.py`, `train.py` | Low |
-| **Loss weighting** | Min-SNR, soft min-SNR, SNR-aware curriculum. | `diffusion/timestep_loss_weight.py`, [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Low |
+| **Loss weighting** | Min-SNR, soft min-SNR, SNR-aware curriculum. | `diffusion/timestep_sampling.py`, [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) | Low |
 | **v-prediction / epsilon** | Match parameterization to schedule and CFG behavior. | `--prediction-type` | Low |
 | **Auxiliary structure heads** | Side losses on **edges, depth, segmentation** for comics/layout. | New heads on DiT final layer or intermediate — **not wired** | High |
 | **Self-forcing / bootstrapping** | Train on model’s own high-quality generations (filtered). | New data loop + gating | Medium |

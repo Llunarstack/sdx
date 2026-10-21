@@ -20,7 +20,7 @@ def main() -> int:
     p.add_argument("--out", required=True)
     args = p.parse_args()
 
-    from utils.superior.model_soup import save_soup_checkpoint, soup_checkpoints
+    from utils.superior.auto_loop import save_soup_checkpoint, soup_checkpoints
 
     avg = soup_checkpoints(args.checkpoints, weights=args.weights)
     save_soup_checkpoint(avg, template_path=args.template, out_path=args.out)

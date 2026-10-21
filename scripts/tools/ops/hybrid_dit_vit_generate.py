@@ -22,7 +22,6 @@ from pathlib import Path
 
 import torch
 from PIL import Image
-from torchvision import transforms
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -188,40 +187,20 @@ def uncertainty_score(best_row: dict[str, float], second_row: dict[str, float] |
     return float(max(0.0, min(1.0, u)))
 
 
-def image_signature(path: str | Path) -> tuple[float, float, float, float, float, float]:
-    """
-    Tiny image descriptor for diversity memory: mean/std per RGB channel.
-    """
+def _signature(path: str | Path):
     import numpy as np
+    from utils.quality.variation_guard import image_signature
 
-    p = Path(path)
-    img = Image.open(p).convert("RGB").resize((32, 32), resample=Image.BILINEAR)
-    x = np.array(img, dtype=np.float32).reshape(-1, 3)
-    m = x.mean(axis=0)
-    s = x.std(axis=0)
-    return (float(m[0]), float(m[1]), float(m[2]), float(s[0]), float(s[1]), float(s[2]))
+    return image_signature(np.asarray(Image.open(path).convert("RGB")))
 
 
-def signature_novelty(
-    signature: tuple[float, float, float, float, float, float],
-    memory: Sequence[tuple[float, float, float, float, float, float]],
-) -> float:
+def signature_novelty(signature, memory: Sequence) -> float:
+    """Nearest-memory ``variation_guard`` distance scaled to [0, 1]; farther means more novel."""
+    from utils.quality.variation_guard import signature_distance
+
     if not memory:
         return 1.0
-    dists: list[float] = []
-    for m in memory:
-        dm = (
-            abs(signature[0] - m[0])
-            + abs(signature[1] - m[1])
-            + abs(signature[2] - m[2])
-            + abs(signature[3] - m[3])
-            + abs(signature[4] - m[4])
-            + abs(signature[5] - m[5])
-        ) / (6.0 * 255.0)
-        dists.append(float(dm))
-    # Use nearest-memory distance; farther means more novel.
-    nearest = min(dists) if dists else 0.0
-    return float(max(0.0, min(1.0, nearest * 3.0)))
+    return float(min(1.0, 3.0 * min(signature_distance(signature, m) for m in memory)))
 
 
 def seed_for_iteration(base_seed: int, iteration_idx: int, seed_stride: int) -> int:
@@ -288,86 +267,63 @@ def _score_candidates_with_vit(
     expected_object_hint: str,
 ) -> list[dict[str, float]]:
     import numpy as np
-    from utils.architecture.ar_block_conditioning import ar_conditioning_vector, normalize_num_ar_blocks
+    from utils.architecture.ar_block_conditioning import normalize_num_ar_blocks
+    from utils.quality.ai_look import score_oversaturation
     from utils.quality.test_time_pick import (
         score_object_count_match,
         score_ocr_match,
         score_people_count_match,
-        score_saturation_balance,
     )
-    from vit_quality.checkpoint_utils import load_vit_quality_checkpoint
-    from vit_quality.dataset import text_feature_vector
+    from vit_quality.checkpoint_utils import ViTScorer
 
-    model, _cfg = load_vit_quality_checkpoint(vit_ckpt, use_ema=bool(vit_use_ema))
-    device = torch.device(vit_device if torch.cuda.is_available() else "cpu")
-    model.to(device).eval()
-
-    image_size = int(_cfg.get("image_size", 224))
-    use_ar = bool(_cfg.get("use_ar_conditioning", False))
-    tfm = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size), interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
-    txt = text_feature_vector(str(prompt)).unsqueeze(0).to(device)
-
-    ar_vec = None
-    if use_ar:
-        ar_b = -1
-        if default_num_ar_blocks is not None:
-            ar_b = normalize_num_ar_blocks(default_num_ar_blocks)
-        ar_vec = ar_conditioning_vector(ar_b, device=device, dtype=txt.dtype).unsqueeze(0)
+    scorer = ViTScorer(vit_ckpt, vit_device, use_ema=bool(vit_use_ema))
+    num_ar_blocks = normalize_num_ar_blocks(default_num_ar_blocks)
 
     rows: list[dict[str, float]] = []
-    with torch.no_grad():
-        for p in candidate_paths:
-            if not p.is_file():
-                continue
-            img = Image.open(p).convert("RGB")
-            x = tfm(img).unsqueeze(0).to(device)
-            out = model(x, txt, ar_vec)
-            q = float(torch.sigmoid(out["quality_logit"]).item())
-            a = float(out["adherence_score"].item())
-            rgb = np.array(img, dtype=np.uint8)
-            ocr = float(score_ocr_match(rgb, expected_text)) if str(expected_text).strip() else 0.5
-            people_s = float(score_people_count_match(rgb, int(expected_people_count or 0)))
-            obj_s = float(
-                score_object_count_match(rgb, int(expected_object_count or 0), str(expected_object_hint or ""))
-            )
-            count_s = float(max(people_s, obj_s))
-            sat_s = float(score_saturation_balance(rgb))
-            fused = fuse_vit_scores(
-                q,
-                a,
-                quality_weight=vit_quality_weight,
-                adherence_weight=vit_adherence_weight,
-            )
-            rows.append(
-                {
-                    "path": str(p),
-                    "vit_quality_prob": q,
-                    "vit_adherence_score": a,
-                    "vit_fused_score": fused,
-                    "ocr_score": ocr,
-                    "count_score": count_s,
-                    "saturation_score": sat_s,
-                    "vit_consensus_score": constraint_consensus_score(
-                        quality_prob=q,
-                        adherence_score=a,
-                        ocr_score=ocr,
-                        count_score=count_s,
-                        saturation_score=sat_s,
-                        quality_weight=vit_quality_weight,
-                        adherence_weight=vit_adherence_weight,
-                        disagreement_penalty=vit_disagreement_penalty,
-                        ocr_weight=consensus_ocr_weight,
-                        count_weight=consensus_count_weight,
-                        saturation_weight=consensus_saturation_weight,
-                    ),
-                }
-            )
+    for p in candidate_paths:
+        if not p.is_file():
+            continue
+        img = Image.open(p).convert("RGB")
+        out = scorer(scorer.image_tensor(img).unsqueeze(0), str(prompt), num_ar_blocks)
+        q = float(torch.sigmoid(out["quality_logit"]).item())
+        a = float(out["adherence_score"].item())
+        rgb = np.array(img, dtype=np.uint8)
+        ocr = float(score_ocr_match(rgb, expected_text)) if str(expected_text).strip() else 0.5
+        people_s = float(score_people_count_match(rgb, int(expected_people_count or 0)))
+        obj_s = float(score_object_count_match(rgb, int(expected_object_count or 0), str(expected_object_hint or "")))
+        count_s = float(max(people_s, obj_s))
+        sat = score_oversaturation(rgb)
+        sat_s = 0.5 if sat is None else float(sat)
+        fused = fuse_vit_scores(
+            q,
+            a,
+            quality_weight=vit_quality_weight,
+            adherence_weight=vit_adherence_weight,
+        )
+        rows.append(
+            {
+                "path": str(p),
+                "vit_quality_prob": q,
+                "vit_adherence_score": a,
+                "vit_fused_score": fused,
+                "ocr_score": ocr,
+                "count_score": count_s,
+                "saturation_score": sat_s,
+                "vit_consensus_score": constraint_consensus_score(
+                    quality_prob=q,
+                    adherence_score=a,
+                    ocr_score=ocr,
+                    count_score=count_s,
+                    saturation_score=sat_s,
+                    quality_weight=vit_quality_weight,
+                    adherence_weight=vit_adherence_weight,
+                    disagreement_penalty=vit_disagreement_penalty,
+                    ocr_weight=consensus_ocr_weight,
+                    count_weight=consensus_count_weight,
+                    saturation_weight=consensus_saturation_weight,
+                ),
+            }
+        )
     rows.sort(key=lambda r: float(r["vit_consensus_score"]), reverse=True)
     return rows
 
@@ -659,7 +615,7 @@ def main() -> int:
             rr = dict(r)
             bonus = 0.0
             try:
-                sig = image_signature(str(rr["path"]))
+                sig = _signature(str(rr["path"]))
                 bonus = signature_novelty(sig, elite_memory)
             except Exception:
                 bonus = 0.0
@@ -676,7 +632,7 @@ def main() -> int:
         if best_path.is_file():
             Image.open(best_path).convert("RGB").save(out_path)
             try:
-                elite_memory.append(image_signature(best_path))
+                elite_memory.append(_signature(best_path))
                 k_mem = max(1, int(args.elite_memory_size))
                 if len(elite_memory) > k_mem:
                     elite_memory = elite_memory[-k_mem:]

@@ -13,13 +13,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from utils.agentic.clarify_pose_place import (
+from utils.agentic.gen_interview import (
     apply_clarify_answers,
+    apply_interview_answers,
     assume_pose_place_defaults,
     build_clarify_questions,
-)
-from utils.agentic.gen_interview import (
-    apply_interview_answers,
     build_gen_interview,
     format_interview_for_user,
 )
@@ -46,7 +44,6 @@ class PerfectGenConfig:
     clarify_answers: dict[str, str] = field(default_factory=dict)
     interview_answers: dict[str, str] = field(default_factory=dict)
     interview_photos: dict[str, list[str]] = field(default_factory=dict)
-    reference_style_mode: str = "instantstyle"
     reference_strength: float = 0.85
     run_rag: bool = True
     character_sheet: str = ""
@@ -54,9 +51,7 @@ class PerfectGenConfig:
     user_style_refs: list[str] = field(default_factory=list)
     extra_sample_args: list[str] = field(default_factory=list)
     invention_stack: str = "auto"
-    invention_spectra: bool = True
     invention_adaptive_steps: bool = True
-    invention_auto_spectra: bool = True
 
 
 @dataclass
@@ -101,46 +96,31 @@ def build_sample_argv(
     *,
     moodboard_paths: list[str] | None = None,
     moodboard_json: str = "",
-    reference_style_mode: str = "instantstyle",
     reference_strength: float = 0.85,
     character_sheet: str = "",
     face_refs: list[str] | None = None,
     extra: list[str] | None = None,
     invention_stack: str = "auto",
-    invention_spectra: bool = True,
     invention_adaptive_steps: bool = True,
-    invention_auto_spectra: bool = True,
 ) -> list[str]:
-    argv = ["--prompt", prompt]
+    """``sample.py`` argv (no ckpt/out): moodboard, a reference image (first style ref, else first face), sheet."""
+    from utils.generation.sample_cli_passthrough import sample_argv
+
     paths = list(moodboard_paths or [])
-    if moodboard_json:
-        argv.extend(["--moodboard-json", moodboard_json])
-    elif paths:
-        # Prefer first style ref as InstantStyle anchor; rest as moodboard list if supported.
-        argv.extend(["--reference-image", paths[0]])
-        argv.extend(["--reference-style-mode", reference_style_mode])
-        argv.extend(["--reference-strength", str(reference_strength)])
-        if len(paths) > 1:
-            argv.extend(["--moodboard-images", ",".join(paths[:8])])
     faces = [p for p in (face_refs or []) if p]
-    if faces and "--reference-image" not in argv:
-        argv.extend(["--reference-image", faces[0]])
-        argv.extend(["--reference-style-mode", reference_style_mode])
-        argv.extend(["--reference-strength", str(reference_strength)])
-    if character_sheet:
-        argv.extend(["--character-sheet", character_sheet])
+    values: dict[str, Any] = {"prompt": prompt}
+    if moodboard_json:
+        values["moodboard_json"] = moodboard_json
+    elif len(paths) > 1:
+        values["moodboard_images"] = ",".join(paths[:8])
+    ref = paths[0] if paths and not moodboard_json else (faces[0] if faces else "")
+    if ref:
+        values.update(reference_image=ref, reference_strength=reference_strength)
+    values["character_sheet"] = character_sheet
     inv = str(invention_stack or "off").strip().lower()
     if inv not in ("off", "none", "0", "false", ""):
-        argv.extend(["--invention-stack", inv])
-        if invention_spectra:
-            argv.append("--invention-spectra")
-        if invention_adaptive_steps:
-            argv.append("--invention-adaptive-steps")
-        if invention_auto_spectra:
-            argv.append("--invention-auto-spectra")
-    if extra:
-        argv.extend(list(extra))
-    return argv
+        values.update(invention_stack=inv, invention_adaptive_steps=bool(invention_adaptive_steps))
+    return sample_argv(values) + list(extra or ())
 
 
 def plan_perfect_gen(prompt: str, config: PerfectGenConfig | None = None) -> PerfectGenPlan:
@@ -153,7 +133,6 @@ def plan_perfect_gen(prompt: str, config: PerfectGenConfig | None = None) -> Per
 
     box = load_memory_box(mem_path) or MemoryBox(session_id=sid, prompt=prompt)
     box.prompt = prompt
-    box.style_mode = cfg.reference_style_mode
     if cfg.character_sheet:
         box.character_sheet = cfg.character_sheet
 
@@ -266,15 +245,12 @@ def plan_perfect_gen(prompt: str, config: PerfectGenConfig | None = None) -> Per
             enriched,
             moodboard_paths=mood_paths,
             moodboard_json=mood_json,
-            reference_style_mode=cfg.reference_style_mode,
             reference_strength=cfg.reference_strength,
             character_sheet=cfg.character_sheet or box.character_sheet,
             face_refs=face_paths,
             extra=cfg.extra_sample_args,
             invention_stack=cfg.invention_stack,
-            invention_spectra=cfg.invention_spectra,
             invention_adaptive_steps=cfg.invention_adaptive_steps,
-            invention_auto_spectra=cfg.invention_auto_spectra,
         )
         notes = list(ref_pack.notes) + list(rag_notes)
         notes.append(interview.summary)
@@ -364,15 +340,12 @@ def plan_perfect_gen(prompt: str, config: PerfectGenConfig | None = None) -> Per
         enriched,
         moodboard_paths=mood_paths,
         moodboard_json=mood_json,
-        reference_style_mode=cfg.reference_style_mode,
         reference_strength=cfg.reference_strength,
         character_sheet=cfg.character_sheet or box.character_sheet,
         face_refs=cfg.user_face_refs,
         extra=cfg.extra_sample_args,
         invention_stack=cfg.invention_stack,
-        invention_spectra=cfg.invention_spectra,
         invention_adaptive_steps=cfg.invention_adaptive_steps,
-        invention_auto_spectra=cfg.invention_auto_spectra,
     )
 
     notes = list(ref_pack.notes) + list(rag_notes)

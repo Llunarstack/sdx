@@ -45,7 +45,6 @@ def main() -> None:
     # Keep skips minimal and truthful. Live packages (modeling, superior, architecture,
     # runtime, …) are NOT archived — only skip modules with a concrete, documented reason.
     skip_prefixes = (
-        "research.agi_image.",  # experimental scaffold; optional heavy deps
         "scripts.tools.dev.strip_",  # optional git-filter-repo helpers
     )
 

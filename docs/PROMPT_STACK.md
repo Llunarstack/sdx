@@ -37,8 +37,9 @@ SDX_PROMPT_STACK_TRACE=1 python -m scripts.tools preview_prompt_stack --prompt "
 3. **Optional prefixes** — `--hard-style`, `--naturalize` / `--naturalize-deep`, `--anti-bleed`, `--diversity`, originality tokens, etc. (see `sample.py` after the prompt is assembled).
 4. **`utils.prompt.content_controls.apply_content_controls`** — Quality packs (including **`micro_detail`** texture/material), **`adherence_pack`** (standard/strict literalism), pose/view/domain, Civitai trigger banks, **one-shot** scaffolding, **anti-AI** / **human-media** / **LoRA scaffold** packs, composition guards, etc. (`--less-ai`, `--auto-content-fix`, …). Tag packs are built-in (no CSV). With **`--auto-content-fix`** (default on), long prompts can auto-pick **`standard`** / **`strict`** adherence from length + keywords. **`--uncensored-mode`** (default on) disables character-sheet safety sanitization.
 5. **Extra negatives** — Scale distortion, character/scene negatives, **multi-LoRA** `LORA_STACK_NEGATIVE` when two+ `--lora` paths.
-6. **Conflict filter** — `utils.prompt.neg_filter.filter_negative_by_positive` removes negative tokens that duplicate positive tokens (unless `--no-neg-filter`).
-7. **Encode** — T5 (or triple bundle) → `encoder_hidden_states` / CFG uncond.
+6. **Art direction + token budget** — `utils.prompt.art_direction` plans shot, lens, light and palette from your own words (`--art-direction auto|off`); `stack/stages/budget.py` rebuilds the positive as your tags, then the plan caption, then pack text that fits `--prompt-budget` tokens (default 96) and the T5 limit (300). Pack text the plan contradicts (skin/hands with nobody in frame, camera terms on a painting) is dropped; your words never are. The plan is saved as `art_direction` in `--pick-report-json`.
+7. **Conflict filter** — `utils.prompt.tags.filter_negative_by_positive` drops whole negative tags that name what you asked for (multi-word defect tags such as `bad hands` stay) unless `--no-neg-filter`.
+8. **Encode** — T5 (or triple bundle) → `encoder_hidden_states` / CFG uncond.
 
 **Debug:** if `apply_content_controls` fails, `sample.py` prints a warning; set **`SDX_DEBUG=1`** for a full traceback.
 
@@ -51,8 +52,10 @@ SDX_PROMPT_STACK_TRACE=1 python -m scripts.tools preview_prompt_stack --prompt "
 | Piece | Path | Role |
 |-------|------|------|
 | Content controls | [`utils/prompt/content_controls.py`](../utils/prompt/content_controls.py) | `apply_content_controls`, `infer_content_controls_from_prompt` |
-| Pos/neg conflict filter | [`utils/prompt/neg_filter.py`](../utils/prompt/neg_filter.py) | `filter_negative_by_positive`, `positive_token_set` |
-| Domain / anti-AI strings | [`config/defaults/prompt_domains.py`](../config/defaults/prompt_domains.py) | Defaults, `ANTI_AI_*`, `NATURAL_LOOK_*`, `LORA_STACK_NEGATIVE`, tips |
+| Art direction planner | [`utils/prompt/art_direction.py`](../utils/prompt/art_direction.py) | `plan_art_direction`, `ArtDirection.caption` / `to_dict`, `gate_tag` |
+| Token budget | [`utils/prompt/stack/stages/budget.py`](../utils/prompt/stack/stages/budget.py) | `stage_token_budget`, `fit_tags` |
+| Pos/neg conflict filter | [`utils/prompt/tags.py`](../utils/prompt/tags.py) | `filter_negative_by_positive` |
+| Domain / anti-AI strings | [`config/defaults/prompt_domains.py`](../config/defaults/prompt_domains.py) | Defaults, `ANTI_AI_*`, `NATURAL_LOOK_*`, `LORA_STACK_NEGATIVE` |
 | Sampling CLI | [`sample.py`](../sample.py) | Orchestrates the chain above |
 | Emphasis → token weights | [`utils/prompt/prompt_emphasis.py`](../utils/prompt/prompt_emphasis.py) | `( )` / `[ ]` parsing + T5 `offset_mapping` weights; **`train.py --train-prompt-emphasis`** for training–inference parity |
 | Originality injection | [`utils/prompt/originality_augment.py`](../utils/prompt/originality_augment.py) | **`sample.py --originality`** / **`train.py --train-originality-prob`** — composition tokens after subject tags |
@@ -100,4 +103,4 @@ Full list: `python sample.py --help`.
 - [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — config ↔ checkpoint ↔ sample (§13)
 - [QUALITY.md](QUALITY.md) — Civitai tips + community issue matrix
 - [scripts/tools/README.md](../scripts/tools/README.md) — `preview_generation_prompt.py`
-- [config/defaults/prompt_domains.py](../config/defaults/prompt_domains.py) — default negatives and tips
+- [config/defaults/prompt_domains.py](../config/defaults/prompt_domains.py) — default and anti-AI negatives

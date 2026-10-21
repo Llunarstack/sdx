@@ -5,6 +5,7 @@ Helpers for ``book_manifest.json`` produced by ``generate_book.py --write-book-m
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -31,56 +32,22 @@ def load_book_manifest(path: str | Path) -> dict[str, Any]:
 def manifest_project_root(manifest_path: str | Path) -> Path:
     """Directory containing manifest assets (parent of the JSON file)."""
     p = Path(manifest_path)
-    if p.is_dir():
-        return p.resolve()
-    return p.parent.resolve()
+    return (p if p.is_dir() else p.parent).resolve()
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def manifest_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Dict rows of ``manifest["entries"]`` (non-dict rows are dropped)."""
     raw = manifest.get("entries")
     if not isinstance(raw, list):
         return []
     return [e for e in raw if isinstance(e, dict)]
-
-
-def manifest_page_indices(entries: list[dict[str, Any]]) -> list[int]:
-    out: list[int] = []
-    for e in entries:
-        if e.get("kind") != "page":
-            continue
-        if "index" in e:
-            try:
-                out.append(int(e["index"]))
-            except (TypeError, ValueError):
-                pass
-    return sorted(set(out))
-
-
-def manifest_prompt_digest(
-    entries: list[dict[str, Any]],
-    *,
-    max_chars: int = 100,
-    kind: str = "page",
-) -> list[tuple[int, str]]:
-    """Return (page_index, truncated prompt) for manifest rows."""
-    rows: list[tuple[int, str]] = []
-    cover_kinds = frozenset({"cover", "front_cover", "back_cover"})
-    for e in entries:
-        ek = e.get("kind")
-        if kind == "cover" and ek not in cover_kinds:
-            continue
-        if kind != "cover" and ek != kind:
-            continue
-        try:
-            idx = int(e.get("index", -1))
-        except (TypeError, ValueError):
-            idx = -1
-        pr = str(e.get("prompt", "") or "").strip()
-        if max_chars > 0 and len(pr) > max_chars:
-            pr = pr[: max_chars - 1] + "…"
-        rows.append((idx, pr))
-    rows.sort(key=lambda t: t[0])
-    return rows
 
 
 def manifest_summary_lines(manifest: dict[str, Any]) -> list[str]:
@@ -97,14 +64,10 @@ def manifest_summary_lines(manifest: dict[str, Any]) -> list[str]:
     pb = str(manifest.get("pick_best") or "").strip()
     if pb:
         lines.append(f"pick_best={pb}")
-    sc = manifest.get("sample_candidates")
+    sc = _int_or_none(manifest.get("sample_candidates"))
     if sc is not None:
-        try:
-            lines.append(f"sample_candidates={int(sc)}")
-        except (TypeError, ValueError):
-            pass
-    pv = manifest.get("pick_vit_ckpt")
-    if pv:
+        lines.append(f"sample_candidates={sc}")
+    if manifest.get("pick_vit_ckpt"):
         lines.append("pick_vit_ckpt=yes")
     vm = manifest.get("visual_memory")
     if vm:
@@ -112,8 +75,7 @@ def manifest_summary_lines(manifest: dict[str, Any]) -> list[str]:
     ids = manifest.get("visual_memory_entity_ids")
     if isinstance(ids, list) and ids:
         lines.append(f"visual_memory_entities={len(ids)}")
-    ck = manifest.get("consistency_json")
-    if ck:
+    if manifest.get("consistency_json"):
         lines.append("consistency_json=yes")
     return lines
 
@@ -139,18 +101,12 @@ def validate_book_manifest(
     entries = manifest_entries(manifest)
     if not entries:
         warnings.append("entries list is empty")
-    seen_idx: dict[int, int] = {}
-    for e in entries:
-        if e.get("kind") != "page":
-            continue
-        try:
-            idx = int(e.get("index", -1))
-        except (TypeError, ValueError):
-            continue
-        if idx < 0:
-            continue
-        seen_idx[idx] = seen_idx.get(idx, 0) + 1
-    for idx, n in seen_idx.items():
+    page_indices = Counter(
+        idx
+        for e in entries
+        if e.get("kind") == "page" and (idx := _int_or_none(e.get("index"))) is not None and idx >= 0
+    )
+    for idx, n in page_indices.items():
         if n > 1:
             warnings.append(f"duplicate manifest page index {idx} ({n} rows)")
 
@@ -162,16 +118,8 @@ def validate_book_manifest(
             f"pick_best={pb!r} but pick_vit_ckpt missing in manifest (run may have used neutral ViT scores)"
         )
 
-    bw = manifest.get("beam_width")
-    try:
-        bw_i = int(bw or 0)
-    except (TypeError, ValueError):
-        bw_i = 0
-    sc = manifest.get("sample_candidates")
-    try:
-        sc_i = int(sc or 0)
-    except (TypeError, ValueError):
-        sc_i = 0
+    bw_i = _int_or_none(manifest.get("beam_width")) or 0
+    sc_i = _int_or_none(manifest.get("sample_candidates")) or 0
     if bw_i > 1 and sc_i > 1:
         warnings.append(f"beam_width={bw_i} with sample_candidates={sc_i} (beam is meant for num=1 branch)")
 

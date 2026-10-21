@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
-import math
 import re
+
+from frontier.imagination import ShotGrammar
 
 from .types import MasterTimeline, ShotSpec, VideoMode, VideoPlan
 
-__all__ = ["plan_video_from_prompt", "split_prompt_into_beats"]
+__all__ = ["infer_shot_type", "plan_video_from_prompt", "split_prompt_into_beats"]
+
+_SHOT_TYPES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("establishing", re.compile(r"\b(?:establishing|wide)")),
+    ("close_up", re.compile(r"\b(?:close|portrait)")),
+    ("over_shoulder", re.compile(r"\bover the shoulder|\bots\b")),
+    ("pov", re.compile(r"\bpov\b|\bpoint of view")),
+)
 
 
 def split_prompt_into_beats(prompt: str) -> list[str]:
@@ -20,22 +28,10 @@ def split_prompt_into_beats(prompt: str) -> list[str]:
     return parts or [p]
 
 
-def _infer_shot_type(chunk: str) -> tuple[str, str, str]:
-    from frontier.cinema.shot_grammar import ShotGrammar
-
-    pos, neg = ShotGrammar().fragments(chunk)
-    low = chunk.lower()
-    if "establishing" in low or "wide" in low:
-        st = "establishing"
-    elif "close" in low or "portrait" in low:
-        st = "close_up"
-    elif "over the shoulder" in low or "ots" in low:
-        st = "over_shoulder"
-    elif "pov" in low or "point of view" in low:
-        st = "pov"
-    else:
-        st = "medium"
-    return st, pos, neg
+def infer_shot_type(text: str) -> str:
+    """establishing | close_up | over_shoulder | pov | medium, from cue words in a shot prompt or camera note."""
+    low = (text or "").lower()
+    return next((name for name, cue in _SHOT_TYPES if cue.search(low)), "medium")
 
 
 def plan_video_from_prompt(
@@ -60,7 +56,8 @@ def plan_video_from_prompt(
     base = max(0.8, float(duration_sec) / n)
     shots: list[ShotSpec] = []
     for i, beat in enumerate(beats):
-        st, pos, neg = _infer_shot_type(beat)
+        st = infer_shot_type(beat)
+        pos, neg = ShotGrammar().fragments(beat)
         seg_prompt = beat
         if pos and pos.lower() not in beat.lower():
             seg_prompt = f"{beat}, {pos}"
@@ -100,8 +97,3 @@ def plan_video_from_prompt(
         global_negative="flicker, morphing faces, warped anatomy, watermark",
         metadata={"beat_count": n, "planner": "heuristic"},
     )
-
-
-def estimate_keyframe_count(duration_sec: float, fps: float, interval: int) -> int:
-    frames = max(1, int(math.ceil(duration_sec * fps)))
-    return max(2, len(range(0, frames, max(1, interval))) + 1)

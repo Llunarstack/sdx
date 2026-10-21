@@ -143,12 +143,3 @@ def ladd_generator_step(
     opt_g.step()
     stats["g_total"] = float(loss.detach().cpu())
     return stats
-
-
-def estimate_x0_from_eps(x_t: torch.Tensor, eps_hat: torch.Tensor, alphabar_t: torch.Tensor) -> torch.Tensor:
-    """
-    VP-DDMP-style x0 estimate: ``x0 = (x_t - sqrt(1-ab) * eps) / sqrt(ab)``.
-    ``alphabar_t`` shape ``(B,1,1,1)`` or broadcastable.
-    """
-    ab = alphabar_t
-    return (x_t - torch.sqrt(1.0 - ab) * eps_hat) / torch.sqrt(ab.clamp(min=1e-8))

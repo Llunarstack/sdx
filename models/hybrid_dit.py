@@ -1,12 +1,9 @@
-"""Architectures that beat isotropic DiT — drop-in extras for ``DiT_Text``.
-
-2025–2026 literature (U-ViT / UDT, SD3–Flux MMDiT, Sana Mix-FFN, Hi-DiT, DDT)
-converges on four inductive biases vanilla DiT lacks:
+"""Opt-in extras for ``DiT_Text`` / ``SuperiorViT`` adding four inductive biases isotropic DiT lacks:
 
 1. **Long encoder→decoder skips** (U-ViT, Hourglass, UDT, DDT) — high-frequency
    spatial detail that isotropic transformers forget over depth.
-2. **Joint image+text self-attention** (MMDiT) — bidirectional prompt binding
-   instead of image-only queries into frozen text keys.
+2. **Joint image+text self-attention** (MMDiT-lite) — image tokens attend over image and
+   text keys in one softmax (the text rows are not updated).
 3. **Mix-FFN** (Sana) — a depthwise conv next to the MLP so pores, edges, and
    fabric live in local neighborhoods, not only global attention.
 4. **Time-gated high-frequency residual** (Hi-DiT) — extra texture only in the
@@ -59,18 +56,14 @@ class MixFFN(nn.Module):
         nn.init.zeros_(self.fc2.weight)
         nn.init.zeros_(self.fc2.bias)
         nn.init.zeros_(self.dw.weight)
-        if self.dw.bias is not None:
-            nn.init.zeros_(self.dw.bias)
+        nn.init.zeros_(self.dw.bias)
 
     def forward(self, patches: torch.Tensor, h: int, w: int) -> torch.Tensor:
         b, n, d = patches.shape
         if n != h * w or h < 2 or w < 2:
             return patches
-        y = F.gelu(self.fc1(patches))
-        spat = y.transpose(1, 2).reshape(b, d, h, w)
-        spat = self.dw(spat)
-        y = spat.flatten(2).transpose(1, 2)
-        return patches + self.fc2(y)
+        y = F.gelu(self.fc1(patches)).transpose(1, 2).reshape(b, d, h, w)
+        return patches + self.fc2(self.dw(y).flatten(2).transpose(1, 2))
 
 
 class JointMMDiTAttention(nn.Module):
@@ -92,25 +85,18 @@ class JointMMDiTAttention(nn.Module):
         nn.init.zeros_(self.out_proj.weight)
         nn.init.zeros_(self.out_proj.bias)
 
-    def forward(
-        self,
-        patches: torch.Tensor,
-        text: torch.Tensor,
-        *,
-        use_xformers: bool = True,
-    ) -> torch.Tensor:
+    def forward(self, patches: torch.Tensor, text: torch.Tensor, *, use_xformers: bool = True) -> torch.Tensor:
+        """Joint attention over ``[patches, text]``; only the patch rows are returned (text stays frozen)."""
         n = patches.shape[1]
-        cat = torch.cat([patches, text.to(dtype=patches.dtype)], dim=1)
-        x = self.norm(cat)
-        qkv = self.qkv(x).reshape(x.shape[0], x.shape[1], 3, self.num_heads, self.head_dim)
-        q, k, v = qkv.unbind(2)
-        out = memory_efficient_attention(q, k, v, attn_mask=None, scale=self.scale, use_xformers=use_xformers)
-        out = self.out_proj(out.reshape(x.shape[0], x.shape[1], -1))
-        return patches + out[:, :n]
+        x = self.norm(torch.cat([patches, text.to(dtype=patches.dtype)], dim=1))
+        b, length, _ = x.shape
+        q, k, v = self.qkv(x).reshape(b, length, 3, self.num_heads, self.head_dim).unbind(2)
+        out = memory_efficient_attention(q, k, v, scale=self.scale, use_xformers=use_xformers)
+        return patches + self.out_proj(out[:, :n].reshape(b, n, -1))
 
 
 class TimeGatedHFResidual(nn.Module):
-    """Hi-DiT-style HF residual that only fires as noise → 0."""
+    """Hi-DiT-style depthwise HF residual gated by ``(1 - t / (T - 1))**2``: it fades in as noise -> 0."""
 
     def __init__(self, dim: int):
         super().__init__()
@@ -119,8 +105,7 @@ class TimeGatedHFResidual(nn.Module):
 
     def zero_init(self) -> None:
         nn.init.zeros_(self.dw.weight)
-        if self.dw.bias is not None:
-            nn.init.zeros_(self.dw.bias)
+        nn.init.zeros_(self.dw.bias)
 
     def forward(
         self,
@@ -143,7 +128,12 @@ class TimeGatedHFResidual(nn.Module):
 
 
 class HybridDiTExtras(nn.Module):
-    """Bundled extras attached to ``DiT_Text`` / ``SuperiorViT`` after vanilla weight init."""
+    """Bundled extras attached to ``DiT_Text`` / ``SuperiorViT`` after vanilla weight init.
+
+    Per forward: ``begin_forward()``, then ``after_block`` after every block, then ``after_all``. U-ViT skips
+    pair block ``depth - 1 - i`` with encoder block ``i`` (first ``depth // 2`` blocks); Mix-FFN runs in the
+    second half; a joint MMDiT attention follows every ``mmdit_every_n``-th block.
+    """
 
     def __init__(
         self,
@@ -196,11 +186,11 @@ class HybridDiTExtras(nn.Module):
         use_xformers: bool,
     ) -> torch.Tensor:
         patches, rest = x[:, :num_patches], x[:, num_patches:]
-        if self.uvit_skips_on and i < self.half:
-            self._enc.append(patches)
-        if self.uvit_skips_on and i >= (self.depth - self.half) and self._enc:
-            enc_idx = self.depth - 1 - i
-            if 0 <= enc_idx < len(self.skips) and enc_idx < len(self._enc):
+        if self.uvit_skips_on:
+            if i < self.half:
+                self._enc.append(patches)
+            elif i >= self.depth - self.half:
+                enc_idx = self.depth - 1 - i
                 patches = self.skips[enc_idx](patches, self._enc[enc_idx])
         if (
             self.mmdit_every_n > 0
@@ -213,9 +203,7 @@ class HybridDiTExtras(nn.Module):
             patches = self.joints[j](patches, text_emb, use_xformers=use_xformers)
         if self.mix is not None and i >= self.half:
             patches = self.mix(patches, h_patches, w_patches)
-        if rest.shape[1] == 0:
-            return patches
-        return torch.cat([patches, rest], dim=1)
+        return _join(patches, rest)
 
     def after_all(
         self,
@@ -226,33 +214,34 @@ class HybridDiTExtras(nn.Module):
         h_patches: int,
         w_patches: int,
     ) -> torch.Tensor:
+        self._enc = []  # drop the skip activations as soon as the trunk is done
         if self.hf is None:
             return x
         patches, rest = x[:, :num_patches], x[:, num_patches:]
         patches = self.hf(patches, h_patches, w_patches, t, num_timesteps=self.num_timesteps)
-        if rest.shape[1] == 0:
-            return patches
-        return torch.cat([patches, rest], dim=1)
+        return _join(patches, rest)
+
+
+def _join(patches: torch.Tensor, rest: torch.Tensor) -> torch.Tensor:
+    return patches if rest.shape[1] == 0 else torch.cat([patches, rest], dim=1)
+
+
+HYBRID_EXTRAS_DEFAULTS = {"uvit_skips": True, "hidit_hf": True, "mix_ffn": True, "mmdit_every_n": 4}
+HYBRID_DIT_DEFAULTS = {
+    **HYBRID_EXTRAS_DEFAULTS,
+    "qk_norm": True,
+    "use_rope": True,
+    "use_taca": True,
+    "use_swiglu": True,
+    "num_register_tokens": 4,
+}
 
 
 def _hybrid_dit_text(depth: int, hidden_size: int, num_heads: int, **kwargs):
     from .dit_text import DiT_Text
 
-    kwargs.setdefault("qk_norm", True)
-    kwargs.setdefault("uvit_skips", True)
-    kwargs.setdefault("hidit_hf", True)
-    kwargs.setdefault("mix_ffn", True)
-    kwargs.setdefault("mmdit_every_n", 4)
-    kwargs.setdefault("use_rope", True)
-    kwargs.setdefault("use_taca", True)
-    kwargs.setdefault("use_swiglu", True)
-    kwargs.setdefault("num_register_tokens", 4)
     return DiT_Text(
-        depth=depth,
-        hidden_size=hidden_size,
-        patch_size=2,
-        num_heads=num_heads,
-        **kwargs,
+        depth=depth, hidden_size=hidden_size, patch_size=2, num_heads=num_heads, **{**HYBRID_DIT_DEFAULTS, **kwargs}
     )
 
 
@@ -280,6 +269,8 @@ HybridDiT_models = {
 }
 
 __all__ = [
+    "HYBRID_DIT_DEFAULTS",
+    "HYBRID_EXTRAS_DEFAULTS",
     "EncoderDecoderSkip",
     "MixFFN",
     "JointMMDiTAttention",

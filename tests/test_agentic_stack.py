@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 from config.defaults.agentic_stack import AgenticStackDefaults
-from research.agi_image.planning.generation_plan import GenerationStepKind
 from utils.agentic import (
     AgentContext,
     ImageGenerationAgent,
@@ -20,6 +19,7 @@ from utils.agentic import (
     reflect_on_result,
 )
 from utils.agentic.experience import TrajectoryExperience, append_experience_memory
+from utils.agentic.planner import GenerationStepKind
 from utils.agentic.tools import AgentTool, ToolRegistry
 
 

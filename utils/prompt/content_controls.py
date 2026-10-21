@@ -1,28 +1,131 @@
-"""
-Prompt controls for harder generation targets.
+"""Content-control tag packs for harder generation targets.
 
-``apply_content_controls`` merges optional tag packs into positive/negative CSV prompts using
-shared helpers (dedupe, optional per-mode negatives).
-
-``infer_content_controls_from_prompt`` maps free text to partial kwargs via ordered keyword
+``apply_content_controls`` appends the packs a mode selects (pose, view, domain, quality, adherence, anti-AI,
+human media, LoRA scaffold, ...) to the positive and negative CSV prompts without repeats.
+``infer_content_controls_from_prompt`` picks modes from the prompt's own words through ordered keyword
 buckets; Danbooru-style comma prompts use tag-set matching for count tokens (1girl / solo / 2girls).
-
-Tag text is built into ``utils/prompt/content_control_tags_builtin.py`` (no CSV tag packs).
-SFW/NSFW scaffolding was removed; the model is treated as uncensored by default.
+Tag text lives in ``content_control_tags_builtin.BUILTIN_TAG_TABLES`` as ``{pack: {mode: [tags]}}``
+(mode ``"_"`` for flat packs).
 """
-# ruff: noqa: F405
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-from .content_control_tags import *  # noqa: F401,F403,F405
+from config.defaults._lexicon import dedupe_tags
+from config.defaults.prompt_domains import (
+    ANTI_AI_LOOK_NEGATIVE,
+    ANTI_AI_LOOK_NEGATIVE_STRONG,
+    NATURAL_LOOK_POSITIVE,
+    NATURAL_LOOK_POSITIVE_DEEP,
+)
+
+from utils.prompt.tags import append_unique, split_tags
+
+from .content_control_tags_builtin import BUILTIN_TAG_TABLES
 
 
-def _split_csv_tokens(text: str) -> list[str]:
-    from utils.prompt.fast_paths import split_tags
+def _flat(pack: str) -> list[str]:
+    return list(BUILTIN_TAG_TABLES.get(pack, {}).get("_", []))
 
-    return split_tags(text)
+
+def _modes(pack: str) -> dict[str, list[str]]:
+    return {mode: list(tags) for mode, tags in BUILTIN_TAG_TABLES.get(pack, {}).items()}
+
+
+def _dn(pack: str) -> dict[str, list[str]]:
+    """Mode pack whose "none" mode still merges (and so dedupes) the prompt."""
+    d = _modes(pack)
+    d.setdefault("none", [])
+    return d
+
+
+_BEST_MODEL_TAGS: list[str] = _flat("best_model_tags")
+
+_POSE_POSITIVE: dict[str, list[str]] = _modes("pose_positive")
+_POSE_NEGATIVE: list[str] = _flat("pose_negative_shared")
+_ANGLE_POSITIVE: dict[str, list[str]] = _modes("angle_positive")
+_ANGLE_NEGATIVE: list[str] = _flat("angle_negative_shared")
+_SEX_VIEW_POSITIVE: dict[str, list[str]] = _modes("sex_view_positive")
+_DOMAIN_POSITIVE: dict[str, list[str]] = _modes("domain_positive")
+_DOMAIN_NEGATIVE: dict[str, list[str]] = _modes("domain_negative")
+_BACKGROUND_POSITIVE: dict[str, list[str]] = _modes("background_positive")
+_BACKGROUND_NEGATIVE: dict[str, list[str]] = _modes("background_negative")
+_PEOPLE_LAYOUT_POSITIVE: dict[str, list[str]] = _modes("people_layout_positive")
+_PEOPLE_LAYOUT_NEGATIVE: dict[str, list[str]] = _modes("people_layout_negative")
+_RELATIONSHIP_POSITIVE: dict[str, list[str]] = _modes("relationship_positive")
+_RELATIONSHIP_NEGATIVE: dict[str, list[str]] = _modes("relationship_negative")
+_OBJECT_LAYOUT_POSITIVE: dict[str, list[str]] = _modes("object_layout_positive")
+_OBJECT_LAYOUT_NEGATIVE: dict[str, list[str]] = _modes("object_layout_negative")
+_HAND_POSITIVE: dict[str, list[str]] = _dn("hand_positive")
+_HAND_NEGATIVE: dict[str, list[str]] = _dn("hand_negative")
+_POSE_NATURALNESS_POSITIVE: dict[str, list[str]] = _dn("pose_naturalness_positive")
+_POSE_NATURALNESS_NEGATIVE: dict[str, list[str]] = _dn("pose_naturalness_negative")
+_TYPOGRAPHY_POSITIVE: dict[str, list[str]] = _dn("typography_positive")
+_TYPOGRAPHY_NEGATIVE: dict[str, list[str]] = _dn("typography_negative")
+
+_ONE_SHOT_POSITIVE: list[str] = _flat("one_shot_positive")
+_ONE_SHOT_NEGATIVE: list[str] = _flat("one_shot_negative")
+
+_QUALITY_PACK_POSITIVE: dict[str, list[str]] = {
+    "none": [],
+    "top": _BEST_MODEL_TAGS,
+    "one_shot": _ONE_SHOT_POSITIVE + _BEST_MODEL_TAGS,
+    **_modes("quality_pack_positive"),
+}
+_QUALITY_PACK_NEGATIVE: dict[str, list[str]] = {
+    "none": [],
+    "top": _flat("quality_pack_negative_top"),
+    "one_shot": _flat("quality_pack_negative_one_shot"),
+    **_modes("quality_pack_negative"),
+}
+
+_ADHERENCE_PACK_POSITIVE: dict[str, list[str]] = {
+    "none": [],
+    "standard": _flat("adherence_standard_positive"),
+    "strict": _flat("adherence_standard_positive") + _flat("adherence_strict_extra_positive"),
+}
+_ADHERENCE_PACK_NEGATIVE: dict[str, list[str]] = {
+    "standard": _flat("adherence_standard_negative"),
+    "strict": _flat("adherence_standard_negative") + _flat("adherence_strict_extra_negative"),
+}
+
+_LIGHTING_MODE_POSITIVE: dict[str, list[str]] = _dn("lighting_mode_positive")
+_LIGHTING_MODE_NEGATIVE: dict[str, list[str]] = _dn("lighting_mode_negative")
+_SKIN_DETAIL_POSITIVE: dict[str, list[str]] = _dn("skin_detail_positive")
+_SKIN_DETAIL_NEGATIVE: dict[str, list[str]] = _dn("skin_detail_negative")
+_BODY_PROPORTION_POSITIVE: dict[str, list[str]] = _dn("body_proportion_positive")
+_INTERACTION_INTENSITY: dict[str, list[str]] = _dn("interaction_intensity_positive")
+_CLOTHING_POSITIVE: dict[str, list[str]] = _dn("clothing_positive")
+_CLOTHING_NEGATIVE: dict[str, list[str]] = _dn("clothing_negative")
+_ADVANCED_POSE_POSITIVE: dict[str, list[str]] = _dn("advanced_pose_positive")
+_OBJECTS_INTERACTION_POSITIVE: dict[str, list[str]] = _dn("objects_interaction_positive")
+_ENVIRONMENT_DETAIL_POSITIVE: dict[str, list[str]] = _dn("environment_detail_positive")
+_STYLE_POSITIVE: dict[str, list[str]] = _modes("style_positive")
+_STYLE_NEGATIVE: dict[str, list[str]] = _modes("style_negative")
+_STYLE_LOCK_POSITIVE: list[str] = _flat("style_lock_positive")
+_STYLE_LOCK_NEGATIVE: list[str] = _flat("style_lock_negative")
+_UNWANTED_TEXT_NEGATIVE: list[str] = _flat("unwanted_text_negative")
+_COMPOSITION_POSITIVE: dict[str, list[str]] = _modes("composition_positive")
+_COMPOSITION_NEGATIVE: dict[str, list[str]] = _modes("composition_negative")
+_ARTIST_COMPOSITION_POSITIVE: dict[str, list[str]] = _dn("artist_composition_positive")
+_ARTIST_COMPOSITION_NEGATIVE: dict[str, list[str]] = _dn("artist_composition_negative")
+_PERSPECTIVE_STABILITY_POSITIVE: list[str] = _flat("perspective_stability_positive")
+_PERSPECTIVE_STABILITY_NEGATIVE: list[str] = _flat("perspective_stability_negative")
+_DUPLICATE_SUBJECT_NEGATIVE: list[str] = _flat("duplicate_subject_negative")
+_CONFLICTING_TAG_PAIRS: list[tuple[str, str]] = [
+    (a.strip(), b.strip()) for a, _, b in (r.partition("|||") for r in _flat("conflicting_tag_pairs")) if b
+]
+
+_ANTI_AI_LITE_NEGATIVE: list[str] = dedupe_tags(ANTI_AI_LOOK_NEGATIVE.split(","))
+_ANTI_AI_STRONG_NEGATIVE: list[str] = dedupe_tags(ANTI_AI_LOOK_NEGATIVE_STRONG.split(","))
+_ANTI_AI_LITE_POSITIVE: list[str] = dedupe_tags(NATURAL_LOOK_POSITIVE.split(","))
+_ANTI_AI_STRONG_POSITIVE: list[str] = dedupe_tags(NATURAL_LOOK_POSITIVE_DEEP.split(","))
+
+_HUMAN_MEDIA_POSITIVE: dict[str, list[str]] = _dn("human_media_positive")
+_HUMAN_MEDIA_NEGATIVE: dict[str, list[str]] = _dn("human_media_negative")
+_LORA_SCAFFOLD_POSITIVE: dict[str, list[str]] = _dn("lora_scaffold_positive")
+_LORA_SCAFFOLD_NEGATIVE: dict[str, list[str]] = _dn("lora_scaffold_negative")
 
 
 def _contains_any(haystack: str, needles: Iterable[str]) -> bool:
@@ -48,33 +151,22 @@ def _merge_kv_pack(
     shared_neg: Sequence[str] | None = None,
     pos_only: bool = False,
 ) -> tuple[str, str]:
-    """
-    Append tokens for `key` from pos_map; optionally append negatives from shared_neg or neg_map[key].
-    Skips unknown keys (not in pos_map). Empty pos lists are a no-op.
-    """
+    """Append ``pos_map[key]`` and the matching negatives (``shared_neg`` or ``neg_map[key]``); unknown keys skip."""
     if key not in pos_map:
         return pos, neg
-    pos = _append_unique_csv(pos, pos_map[key])
+    pos = append_unique(pos, pos_map[key])
     if pos_only:
         return pos, neg
     if shared_neg is not None:
-        neg = _append_unique_csv(neg, shared_neg)
+        neg = append_unique(neg, shared_neg)
     elif neg_map is not None:
-        neg = _append_unique_csv(neg, neg_map.get(key, []))
+        neg = append_unique(neg, neg_map.get(key, []))
     return pos, neg
 
 
-def _append_unique_csv(base_text: str, additions: Sequence[str]) -> str:
-    from utils.prompt.fast_paths import append_unique
-
-    return append_unique(base_text, additions)
-
-
 def _remove_conflicting_tags(text: str) -> str:
-    """
-    Remove obvious contradictory tag pairs by keeping the first occurrence in-order.
-    """
-    tokens = _split_csv_tokens(text)
+    """Drop the later tag of each contradictory pair."""
+    tokens = split_tags(text)
     if not tokens:
         return text
     lowered = [t.lower() for t in tokens]
@@ -106,8 +198,8 @@ _INFER_VIEW_ANGLE: tuple[tuple[tuple[str, ...], str], ...] = (
     (("low angle", "from below", "worm eye", "worm's-eye"), "low_angle"),
 )
 
+# Golden hour / sunset are a time of day, not a rim setup; utils.prompt.art_direction plans that light.
 _INFER_LIGHTING: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("golden hour", "sunset", "sunrise"), "dramatic_rim"),
     (("studio lighting", "white background", "simple background"), "studio_softbox"),
     (("overcast", "cloudy day", "soft daylight"), "natural_daylight"),
 )
@@ -339,8 +431,8 @@ def apply_content_controls(
     n = (negative_prompt or "").strip()
 
     if one_shot_boost:
-        p = _append_unique_csv(p, _ONE_SHOT_POSITIVE)
-        n = _append_unique_csv(n, _ONE_SHOT_NEGATIVE)
+        p = append_unique(p, _ONE_SHOT_POSITIVE)
+        n = append_unique(n, _ONE_SHOT_NEGATIVE)
 
     p, n = _merge_kv_pack(p, n, pose_mode, _POSE_POSITIVE, None, shared_neg=_POSE_NEGATIVE)
     p, n = _merge_kv_pack(p, n, view_angle, _ANGLE_POSITIVE, None, shared_neg=_ANGLE_NEGATIVE)
@@ -368,33 +460,33 @@ def apply_content_controls(
     p, n = _merge_kv_pack(p, n, style_mode, _STYLE_POSITIVE, _STYLE_NEGATIVE)
 
     if style_lock:
-        p = _append_unique_csv(p, _STYLE_LOCK_POSITIVE)
-        n = _append_unique_csv(n, _STYLE_LOCK_NEGATIVE)
+        p = append_unique(p, _STYLE_LOCK_POSITIVE)
+        n = append_unique(n, _STYLE_LOCK_NEGATIVE)
     elif anti_style_bleed:
-        n = _append_unique_csv(n, _STYLE_LOCK_NEGATIVE)
+        n = append_unique(n, _STYLE_LOCK_NEGATIVE)
 
     p, n = _merge_kv_pack(p, n, composition_mode, _COMPOSITION_POSITIVE, _COMPOSITION_NEGATIVE)
     p, n = _merge_kv_pack(p, n, artist_composition, _ARTIST_COMPOSITION_POSITIVE, _ARTIST_COMPOSITION_NEGATIVE)
 
     if anti_duplicate_subjects:
-        n = _append_unique_csv(n, _DUPLICATE_SUBJECT_NEGATIVE)
+        n = append_unique(n, _DUPLICATE_SUBJECT_NEGATIVE)
 
     if anti_perspective_drift:
-        p = _append_unique_csv(p, _PERSPECTIVE_STABILITY_POSITIVE)
-        n = _append_unique_csv(n, _PERSPECTIVE_STABILITY_NEGATIVE)
+        p = append_unique(p, _PERSPECTIVE_STABILITY_POSITIVE)
+        n = append_unique(n, _PERSPECTIVE_STABILITY_NEGATIVE)
 
     if anti_ai_pack == "lite":
-        p = _append_unique_csv(p, _ANTI_AI_LITE_POSITIVE)
-        n = _append_unique_csv(n, _ANTI_AI_LITE_NEGATIVE)
+        p = append_unique(p, _ANTI_AI_LITE_POSITIVE)
+        n = append_unique(n, _ANTI_AI_LITE_NEGATIVE)
     elif anti_ai_pack == "strong":
-        p = _append_unique_csv(p, _ANTI_AI_STRONG_POSITIVE)
-        n = _append_unique_csv(n, _ANTI_AI_STRONG_NEGATIVE)
+        p = append_unique(p, _ANTI_AI_STRONG_POSITIVE)
+        n = append_unique(n, _ANTI_AI_STRONG_NEGATIVE)
 
     p, n = _merge_kv_pack(p, n, human_media_mode, _HUMAN_MEDIA_POSITIVE, _HUMAN_MEDIA_NEGATIVE)
     p, n = _merge_kv_pack(p, n, lora_scaffold, _LORA_SCAFFOLD_POSITIVE, _LORA_SCAFFOLD_NEGATIVE)
 
     if not allow_text_in_image:
-        n = _append_unique_csv(n, _UNWANTED_TEXT_NEGATIVE)
+        n = append_unique(n, _UNWANTED_TEXT_NEGATIVE)
 
     if cleanup_conflicting_tags:
         p = _remove_conflicting_tags(p)

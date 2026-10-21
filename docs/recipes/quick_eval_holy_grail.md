@@ -34,7 +34,7 @@ Adjust steps, resolution, and CFG flags per `README.md` and `docs/QUALITY.md`.
 
 ## 4. Training run artifacts
 
-When training with `train.py`, the experiment directory receives reproducibility files (see `utils.generation.run_artifacts`):
+When training with `train.py`, the experiment directory receives reproducibility files:
 
 - `config.train.json` — frozen training config snapshot
 - `run_manifest.json` — command, git info, torch/CUDA versions, seed, etc.

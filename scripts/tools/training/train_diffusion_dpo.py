@@ -3,8 +3,10 @@
 Stage-2 **Diffusion-DPO** training: pairwise preferences (win/lose images + shared prompt).
 
 Loads a DiT-Text checkpoint, freezes a **reference** copy of the weights, and optimizes the
-**policy** with a DPO term built from per-sample VP diffusion losses at a **shared** timestep
-``t`` and **shared** Gaussian noise ``epsilon`` (Wallace-style coupling).
+**policy** with a DPO term built from per-sample denoising losses of the checkpoint's own objective
+(VP eps/v/x0, or rectified-flow velocity for ``flow_matching_training`` checkpoints) at a **shared**
+timestep ``t`` and **shared** noise ``epsilon`` (noise offset included) for win/lose and policy/reference
+(Wallace et al. 2023 coupling).
 
 Uses ``train.encode_text`` with ``load_text_bundle_for_training`` when the checkpoint config has
 ``text_encoder_mode`` in ``triple`` or ``penta`` (multi-CLIP fusion + T5); otherwise T5-only.
@@ -34,16 +36,19 @@ if str(_REPO_ROOT) not in sys.path:
 import torch
 from config.train_config import get_dit_build_kwargs
 from diffusion import create_diffusion
+from diffusion.flow_matching import flow_matching_per_sample_losses, shift_timestep_indices
+from diffusion.gaussian_diffusion import offset_noise
 from models import DiT_models_text
 from torch.utils.data import DataLoader
-from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+from utils.checkpoint.checkpoint_loading import finetuned_checkpoint, load_dit_text_checkpoint
 from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions, load_text_bundle_for_training
-from utils.training.dpo_advanced import (
+from utils.training.preference import (
+    PreferenceImageDataset,
+    collate_preference_batch,
     ema_update_reference,
     safeguarded_dpo_preference_loss,
     timestep_dpo_weight,
 )
-from utils.training.preference_image_dataset import PreferenceImageDataset, collate_preference_batch
 
 import train as train_mod
 
@@ -183,6 +188,8 @@ def main() -> int:
     min_snr = float(getattr(cfg, "min_snr_gamma", 5.0))
     lw = str(getattr(cfg, "loss_weighting", "min_snr"))
     lwsd = float(getattr(cfg, "loss_weighting_sigma_data", 0.5))
+    is_flow = bool(getattr(cfg, "flow_matching_training", False))
+    flow_sk = train_mod.flow_spectral_kwargs(cfg)
 
     global_step = 0
     cycler = itertools.cycle(dl)
@@ -219,68 +226,37 @@ def main() -> int:
             )
 
         t = torch.randint(0, diffusion.num_timesteps, (bsz,), device=device, dtype=torch.long)
-        noise = torch.randn_like(px_w)
+        # One draw (offset included) shared by win/lose and policy/reference: the DPO coupling.
+        noise = offset_noise(torch.randn_like(px_w), noise_off)
+        if is_flow:
+            t = shift_timestep_indices(t, diffusion.num_timesteps, train_mod.flow_shift_for_latents(cfg, px_w))
+
+        def _per_sample(model, x0):
+            if is_flow:
+                return flow_matching_per_sample_losses(
+                    model, x0, noise, diffusion.num_timesteps, mk, t_idx=t, spectral_kwargs=flow_sk
+                )
+            return diffusion.per_sample_training_losses(
+                model,
+                x0,
+                t,
+                model_kwargs=mk,
+                noise=noise,
+                refinement_prob=0.0,
+                refinement_max_t=0,
+                min_snr_gamma=min_snr,
+                loss_weighting=lw,
+                loss_weighting_sigma_data=lwsd,
+                **sk,
+            )
 
         with torch.amp.autocast(device_type=autocast_device, dtype=autocast_dtype, enabled=use_amp):
-            loss_w_p = diffusion.per_sample_training_losses(
-                policy,
-                px_w,
-                t,
-                model_kwargs=mk,
-                noise=noise,
-                refinement_prob=0.0,
-                refinement_max_t=0,
-                noise_offset=noise_off,
-                min_snr_gamma=min_snr,
-                loss_weighting=lw,
-                loss_weighting_sigma_data=lwsd,
-                **sk,
-            )
-            loss_l_p = diffusion.per_sample_training_losses(
-                policy,
-                px_l,
-                t,
-                model_kwargs=mk,
-                noise=noise,
-                refinement_prob=0.0,
-                refinement_max_t=0,
-                noise_offset=noise_off,
-                min_snr_gamma=min_snr,
-                loss_weighting=lw,
-                loss_weighting_sigma_data=lwsd,
-                **sk,
-            )
-
+            loss_w_p = _per_sample(policy, px_w)
+            loss_l_p = _per_sample(policy, px_l)
         with torch.no_grad():
             with torch.amp.autocast(device_type=autocast_device, dtype=autocast_dtype, enabled=use_amp):
-                loss_w_r = diffusion.per_sample_training_losses(
-                    ref,
-                    px_w,
-                    t,
-                    model_kwargs=mk,
-                    noise=noise,
-                    refinement_prob=0.0,
-                    refinement_max_t=0,
-                    noise_offset=noise_off,
-                    min_snr_gamma=min_snr,
-                    loss_weighting=lw,
-                    loss_weighting_sigma_data=lwsd,
-                    **sk,
-                )
-                loss_l_r = diffusion.per_sample_training_losses(
-                    ref,
-                    px_l,
-                    t,
-                    model_kwargs=mk,
-                    noise=noise,
-                    refinement_prob=0.0,
-                    refinement_max_t=0,
-                    noise_offset=noise_off,
-                    min_snr_gamma=min_snr,
-                    loss_weighting=lw,
-                    loss_weighting_sigma_data=lwsd,
-                    **sk,
-                )
+                loss_w_r = _per_sample(ref, px_w)
+                loss_l_r = _per_sample(ref, px_l)
 
         lc = float(args.dpo_logit_clip)
         tw = None
@@ -324,26 +300,10 @@ def main() -> int:
         if global_step % 50 == 0:
             print(f"step {global_step} dpo_loss={float(dpo.detach().cpu()):.6f}")
         if args.save_every > 0 and global_step % args.save_every == 0:
-            torch.save(
-                {
-                    "model": policy.state_dict(),
-                    "ema": policy.state_dict(),
-                    "config": cfg,
-                    "dpo_step": global_step,
-                },
-                args.out,
-            )
+            torch.save(finetuned_checkpoint(policy, cfg, rae_bridge, fusion_sd, dpo_step=global_step), args.out)
             print(f"checkpoint {args.out} (step {global_step})")
 
-    torch.save(
-        {
-            "model": policy.state_dict(),
-            "ema": policy.state_dict(),
-            "config": cfg,
-            "dpo_step": global_step,
-        },
-        args.out,
-    )
+    torch.save(finetuned_checkpoint(policy, cfg, rae_bridge, fusion_sd, dpo_step=global_step), args.out)
     print(f"Saved {args.out}")
     return 0
 

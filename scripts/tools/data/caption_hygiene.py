@@ -3,7 +3,7 @@
 JSONL caption QA: Unicode normalization preview, pos/neg overlap, duplicate fingerprints.
 
 Implements Python-side checks described in ``docs/NATIVE_AND_SYSTEM_LIBS.md`` (complements
-Rust ``sdx-jsonl-tools prompt-lint`` and Python ``sdx_native.jsonl_manifest_pure``).
+Rust ``sdx-jsonl-tools prompt-lint`` and ``python -m scripts.tools prompt_lint``).
 
 Usage (repo root on PYTHONPATH; ``native/_experimental/python`` for ``sdx_native``)::
 
@@ -14,46 +14,23 @@ Usage (repo root on PYTHONPATH; ``native/_experimental/python`` for ``sdx_native
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
-# Repo root
 ROOT = Path(__file__).resolve().parents[3]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-_np = ROOT / "native" / "_experimental" / "python"
-if str(_np) not in sys.path:
-    sys.path.insert(0, str(_np))
+sys.path.insert(0, str(ROOT))
+from scripts.tools._repo_bootstrap import ensure_repo_paths  # noqa: E402
+
+ensure_repo_paths()
+
+from data.manifest_utils import caption_from_row, first_str, iter_manifest_rows, negative_caption_from_row  # noqa: E402
 
 from sdx_native.text_hygiene import (  # noqa: E402
     caption_fingerprint,
-    jsonl_row_caption_keys,
     normalize_caption_for_training,
     pos_neg_token_overlap,
 )
-
-
-def _caption_from_row(row: dict[str, Any]) -> str:
-    for k in jsonl_row_caption_keys():
-        v = row.get(k)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    return ""
-
-
-def _negative_from_row(row: dict[str, Any]) -> str:
-    for k in ("negative_caption", "negative_prompt"):
-        v = row.get(k)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    return ""
-
-
-def _image_key(row: dict[str, Any]) -> str:
-    return str(row.get("image_path") or row.get("path") or row.get("image") or "")
 
 
 def main() -> int:
@@ -77,39 +54,31 @@ def main() -> int:
     lines = 0
     samples_left = int(args.normalize_samples or 0)
 
-    with path.open(encoding="utf-8", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            lines += 1
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(row, dict):
-                continue
-            cap = _caption_from_row(row)
-            neg = _negative_from_row(row)
-            ik = _image_key(row)
-            if not cap:
-                empty_captions += 1
-            if samples_left > 0 and cap:
-                norm = normalize_caption_for_training(cap)
-                print(f"--- sample {samples_left} ---")
-                print(f"before: {cap[:500]}{'...' if len(cap) > 500 else ''}")
-                print(f"after:  {norm[:500]}{'...' if len(norm) > 500 else ''}")
-                samples_left -= 1
+    for row in iter_manifest_rows(path):
+        if not isinstance(row, dict):
+            continue
+        lines += 1
+        cap = caption_from_row(row)
+        neg = negative_caption_from_row(row)
+        ik = first_str(row, ("image_path", "path", "image"))
+        if not cap:
+            empty_captions += 1
+        if samples_left > 0 and cap:
+            norm = normalize_caption_for_training(cap)
+            print(f"--- sample {samples_left} ---")
+            print(f"before: {cap[:500]}{'...' if len(cap) > 500 else ''}")
+            print(f"after:  {norm[:500]}{'...' if len(norm) > 500 else ''}")
+            samples_left -= 1
 
-            if args.report_dups and cap:
-                fp = caption_fingerprint(cap, algorithm="sha256")
-                key = ik or f"line{lines}"
-                dup_buckets[fp].append(key)
+        if args.report_dups and cap:
+            fp = caption_fingerprint(cap, algorithm="sha256")
+            key = ik or f"line{lines}"
+            dup_buckets[fp].append(key)
 
-            if args.report_overlap and cap and neg:
-                _i, _u, j = pos_neg_token_overlap(cap, neg)
-                if j >= float(args.overlap_min_jaccard) and _i > 0:
-                    overlap_rows.append((j, ik or f"line{lines}", cap[:120], neg[:120]))
+        if args.report_overlap and cap and neg:
+            _i, _u, j = pos_neg_token_overlap(cap, neg)
+            if j >= float(args.overlap_min_jaccard) and _i > 0:
+                overlap_rows.append((j, ik or f"line{lines}", cap[:120], neg[:120]))
 
     if args.empty_warn:
         print(f"rows_read={lines} empty_caption_rows={empty_captions}")

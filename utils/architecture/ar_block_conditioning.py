@@ -196,12 +196,6 @@ def default_unknown_ar_batch(batch_size: int, device, dtype=torch.float32) -> to
     return u
 
 
-def vit_text_total_dim(text_feat_dim: int, *, use_ar_conditioning: bool, ar_cond_dim: int = AR_COND_DIM) -> int:
-    """Linear input width for ViT ``text_proj`` (caption stats + optional AR one-hot)."""
-    t = int(text_feat_dim)
-    return t + (int(ar_cond_dim) if use_ar_conditioning else 0)
-
-
 def ar_bridge_summary_lines() -> str:
     """Help text for CLIs (DiT <-> ViT)."""
     return (
@@ -224,5 +218,4 @@ __all__ = [
     "parse_num_ar_blocks_from_row",
     "read_num_ar_blocks_from_checkpoint",
     "tag_manifest_row_ar",
-    "vit_text_total_dim",
 ]

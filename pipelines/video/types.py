@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 
 class VideoMode(str, Enum):
@@ -140,6 +140,13 @@ class SegmentQualityReport:
     sharpness_score: float
     passed: bool
     notes: list[str] = field(default_factory=list)
+    # Optional gated axes (1.0 = not measured / no penalty); see quality.score_segment_quality.
+    permanence_score: float = 1.0
+    artifact_score: float = 1.0
+    identity_score: float = 1.0
+    extremity_score: float = 1.0
+    physics_score: float = 1.0
+    glyph_score: float = 1.0
 
 
 @dataclass(slots=True)
@@ -150,6 +157,3 @@ class VideoPipelineResult:
     quality: list[SegmentQualityReport]
     segment_paths: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
-EditStrategy = Literal["keyframes", "full_frame", "motion_transfer"]

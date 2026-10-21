@@ -99,10 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         f'python sample.py --prompt "a cat, in the style of {args.trigger}" '
         f"--lora path/to/ckpt_lora.pt:1.0:style --lora-layers last"
     )
-    print(
-        "\nZero-shot alternative (no train): "
-        "python sample.py --reference-image STYLE.png --reference-style-mode instantstyle"
-    )
+    print("\nZero-shot alternative (no train): python sample.py --reference-image STYLE.png")
     return 0
 
 

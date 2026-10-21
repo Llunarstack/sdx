@@ -36,7 +36,6 @@ python scripts/tools/editing_phase.py \
 |-------|------|
 | Orchestrator | [`utils/generation/editing_phase.py`](../../utils/generation/editing_phase.py) |
 | CLI | [`scripts/tools/editing_phase.py`](../../scripts/tools/editing_phase.py) |
-| Roles | [`utils/generation/orchestration.py`](../../utils/generation/orchestration.py) (`editor`) |
 | Edit backend | [`utils/generation/sample_edit_runner.py`](../../utils/generation/sample_edit_runner.py) |
 
 Pairs with modern sampling defaults in [SAMPLING.md](SAMPLING.md).

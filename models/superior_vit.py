@@ -1,44 +1,157 @@
-"""
-SuperiorViT — ViT/DiT architecture that incorporates all 2024-2025 improvements
-over the original Facebook DiT:
+"""SuperiorViT: a DiT variant built from post-DiT components.
 
-  1. 2D RoPE (FLUX/SD3-style) — better spatial reasoning, resolution extrapolation
-  2. Register Tokens (DINOv2 follow-up) — cleaner attention, no artifact tokens
-  3. TACA cross-attention — fixes token imbalance + timestep-aware text alignment
-  4. Dynamic Patch Scheduling — coarse patches at high noise, fine at low noise
-  5. Linear Compressed Attention — O(N*C) global attention for long sequences
-  6. Local Window Attention — O(N*W^2) local attention with global registers
-  7. QK-Norm (RMSNorm per head) — training stability at high resolution
-  8. LayerScale — deep network stability (CaiT-style)
-  9. Jumbo Token — wide global summary token for extra capacity
- 10. AdaLN-Zero with timestep + text conditioning (DiT baseline, kept)
+  1. 2D RoPE (FLUX/SD3-style) — relative positions, resolution extrapolation
+  2. Register tokens (Darcet et al. 2023) — absorb the high-norm artifact tokens
+  3. TACA cross-attention — token-imbalance correction + timestep-aware text alignment
+  4. Dynamic patch scheduling — coarse patches at high noise, fine at low noise
+  5. QK-Norm (RMSNorm per head) — training stability at high resolution
+  6. LayerScale (CaiT) — deep network stability
+  7. Jumbo token — wide global summary token with its own per-block FFN
+  8. AdaLN-Zero with timestep + class conditioning (DiT baseline)
+  9. Optional ``HybridDiTExtras`` (U-ViT skips, MMDiT joint attention, Mix-FFN,
+     Hi-DiT HF residual) wrapped around the patch tokens only
 
-The block is modular — each feature can be toggled independently so you can
-ablate or gradually adopt improvements without breaking existing checkpoints.
+``SuperiorViTBlock`` can also swap its self-attention for ``LinearCompressedAttention`` (O(N*C)) or
+``LocalWindowAttention`` (O(N*W^2)); the full model always uses ``SelfAttentionRoPE2D``.
+
+Same call contract as ``DiT_Text``: ``model(x, t, encoder_hidden_states=..., **extra)``,
+so it trains and samples through the shared stack (``get_dit_build_kwargs``).
 """
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from timm.layers import DropPath
+from timm.models.vision_transformer import PatchEmbed
 
-from .dynamic_patch import DynamicPatchEmbed, TimestepPatchScheduler
+from .dit import FinalLayer, LabelEmbedder, LayerScale, TimestepEmbedder, modulate, xavier_init_linears
+from .hybrid_dit import HybridDiTExtras
 from .linear_attention import LinearCompressedAttention, LocalWindowAttention
-from .model_enhancements import DropPath, RMSNorm
-from .register_tokens import JumboToken, RegisterTokens
-from .rope2d import RoPE2D
+from .rope2d import RoPE2D, apply_rope2d
 from .taca import TACA
-from .vit_next_blocks import LayerScale
 
 
-def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+class TimestepPatchScheduler:
+    """Patch size per normalized timestep (1 = pure noise): coarse when noisy, fine when nearly clean.
+
+    Early steps only settle global structure, so large patches there cut FLOPs (arXiv:2602.16968).
+    """
+
+    def __init__(
+        self,
+        fine_size: int = 4,
+        base_size: int = 8,
+        coarse_size: int = 16,
+        high_thresh: float = 0.7,
+        low_thresh: float = 0.3,
+    ):
+        self.fine_size = int(fine_size)
+        self.base_size = int(base_size)
+        self.coarse_size = int(coarse_size)
+        self.high_thresh = float(high_thresh)
+        self.low_thresh = float(low_thresh)
+
+    def get_patch_size(self, t_normalized: float) -> int:
+        if t_normalized >= self.high_thresh:
+            return self.coarse_size
+        if t_normalized <= self.low_thresh:
+            return self.fine_size
+        return self.base_size
 
 
-# ---------------------------------------------------------------------------
-# AdaLN conditioning (timestep + optional class/text pooled embedding)
-# ---------------------------------------------------------------------------
+class DynamicPatchEmbed(nn.Module):
+    """Patch embedding with one conv + learned position table per supported patch size."""
+
+    def __init__(
+        self,
+        in_channels: int = 4,
+        hidden_size: int = 1152,
+        patch_sizes: tuple[int, ...] = (4, 8, 16),
+        img_size: int = 32,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.hidden_size = hidden_size
+        self.patch_sizes = tuple(patch_sizes)
+        self.img_size = img_size
+        self.projs = nn.ModuleDict(
+            {str(p): nn.Conv2d(in_channels, hidden_size, kernel_size=p, stride=p, bias=False) for p in patch_sizes}
+        )
+        self.pos_embeds = nn.ParameterDict(
+            {str(p): nn.Parameter(torch.zeros(1, (img_size // p) ** 2, hidden_size)) for p in patch_sizes}
+        )
+        for proj in self.projs.values():
+            nn.init.xavier_uniform_(proj.weight.view(proj.weight.size(0), -1))
+        for pe in self.pos_embeds.values():
+            nn.init.trunc_normal_(pe, std=0.02)
+
+    def forward(self, x: torch.Tensor, patch_size: int | None = None) -> tuple[torch.Tensor, int]:
+        """``(B, C, H, W)`` -> tokens ``(B, N, D)`` and the patch size used (nearest supported; default middle)."""
+        if patch_size is None:
+            patch_size = self.patch_sizes[len(self.patch_sizes) // 2]
+        if str(patch_size) not in self.projs:
+            patch_size = min(self.patch_sizes, key=lambda p: abs(p - patch_size))
+        tokens = self.projs[str(patch_size)](x)
+        _, d, h, w = tokens.shape
+        tokens = tokens.flatten(2).transpose(1, 2)
+        # Resample the learned table when the grid differs from init (shape, not just token count:
+        # a 16x64 grid has as many tokens as 32x32 but a different layout).
+        pe = self.pos_embeds[str(patch_size)]
+        s_init = int(math.isqrt(pe.shape[1]))
+        if (h, w) != (s_init, s_init):
+            pe = pe.reshape(1, s_init, s_init, d).permute(0, 3, 1, 2)
+            pe = F.interpolate(pe, size=(h, w), mode="bilinear", align_corners=False)
+            pe = pe.permute(0, 2, 3, 1).reshape(1, h * w, d)
+        return tokens + pe, patch_size
+
+
+class RegisterTokens(nn.Module):
+    """Learnable register tokens prepended to the sequence (Darcet et al. 2023, arXiv:2309.16588).
+
+    They absorb the global "artifact" information ViTs otherwise park in high-norm patch tokens.
+    """
+
+    def __init__(self, hidden_size: int, num_registers: int = 8, init_std: float = 0.02):
+        super().__init__()
+        self.num_registers = int(num_registers)
+        self.registers = nn.Parameter(torch.randn(1, self.num_registers, int(hidden_size)) * float(init_std))
+
+    def prepend(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.cat([self.registers.expand(x.shape[0], -1, -1), x], dim=1)
+
+
+class JumboToken(nn.Module):
+    """One wide global token with its own wider FFN (Jumbo, arXiv:2502.15021): capacity without widening patches."""
+
+    def __init__(self, hidden_size: int, jumbo_size: int = 0, ffn_expansion: int = 4):
+        super().__init__()
+        self.hidden_size = int(hidden_size)
+        self.jumbo_size = int(jumbo_size) if jumbo_size > 0 else int(hidden_size) * 2
+        self.up_proj = nn.Linear(self.hidden_size, self.jumbo_size, bias=False)
+        self.down_proj = nn.Linear(self.jumbo_size, self.hidden_size, bias=False)
+        h = self.jumbo_size * ffn_expansion
+        self.ffn = nn.Sequential(
+            nn.Linear(self.jumbo_size, h, bias=False),
+            nn.GELU(),
+            nn.Linear(h, self.jumbo_size, bias=False),
+        )
+        self.norm = nn.LayerNorm(self.jumbo_size)
+        self.token = nn.Parameter(torch.randn(1, 1, self.hidden_size) * 0.02)
+        nn.init.xavier_uniform_(self.up_proj.weight)
+        nn.init.zeros_(self.down_proj.weight)
+
+    def get_token(self, batch_size: int) -> torch.Tensor:
+        return self.token.expand(batch_size, -1, -1)
+
+    def process(self, jumbo: torch.Tensor) -> torch.Tensor:
+        """Jumbo FFN after attention: ``(B, 1, D)`` -> ``(B, 1, D)``, residual in the wide space."""
+        z = self.up_proj(jumbo)
+        z = self.norm(z + self.ffn(z))
+        return self.down_proj(z)
 
 
 class AdaLNModulation(nn.Module):
@@ -55,20 +168,13 @@ class AdaLNModulation(nn.Module):
         nn.init.zeros_(self.adaLN_modulation[-1].bias)
 
     def forward(self, x: torch.Tensor, c: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        """Returns (x_normed, shift_attn, scale_attn, gate_attn, shift_ffn, scale_ffn, gate_ffn)."""
-        params = self.adaLN_modulation(c).chunk(6, dim=-1)
-        shift_attn, scale_attn, gate_attn, shift_ffn, scale_ffn, gate_ffn = params
-        x_normed = modulate(self.norm(x), shift_attn, scale_attn)
-        return x_normed, gate_attn, shift_ffn, scale_ffn, gate_ffn
-
-
-# ---------------------------------------------------------------------------
-# Self-attention with 2D RoPE + QK-Norm
-# ---------------------------------------------------------------------------
+        """Returns (x_normed, gate_attn, shift_ffn, scale_ffn, gate_ffn)."""
+        shift_attn, scale_attn, gate_attn, shift_ffn, scale_ffn, gate_ffn = self.adaLN_modulation(c).chunk(6, dim=-1)
+        return modulate(self.norm(x), shift_attn, scale_attn), gate_attn, shift_ffn, scale_ffn, gate_ffn
 
 
 class SelfAttentionRoPE2D(nn.Module):
-    """Self-attention with 2D RoPE and optional QK-Norm."""
+    """Self-attention with 2D RoPE on the patch tokens and optional QK-Norm."""
 
     def __init__(
         self,
@@ -86,71 +192,39 @@ class SelfAttentionRoPE2D(nn.Module):
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
         self.out_proj = nn.Linear(hidden_size, hidden_size, bias=False)
 
-        self.q_norm = RMSNorm(self.head_dim) if qk_norm else None
-        self.k_norm = RMSNorm(self.head_dim) if qk_norm else None
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=1e-6) if qk_norm else None
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=1e-6) if qk_norm else None
         self.rope = RoPE2D(self.head_dim, base=rope_base)
 
         nn.init.zeros_(self.out_proj.weight)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        height: int,
-        width: int,
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        x: (B, N, D) where N = height * width (+ any prepended register/jumbo tokens).
-        height, width: spatial dims of the *patch* tokens (excluding registers).
+        x: (B, N, D) with N = prefix (register/jumbo) tokens + height * width patch tokens.
         """
         B, N, D = x.shape
-        qkv = self.qkv(x)
-        q, k, v = qkv.chunk(3, dim=-1)
-
-        q = q.reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)  # (B,H,N,D)
-        k = k.reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
-
+        q, k, v = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         if self.q_norm is not None:
             q = self.q_norm(q)
             k = self.k_norm(k)
 
-        # Apply 2D RoPE only to the patch tokens (last height*width positions)
-        n_patch = height * width
-        n_prefix = N - n_patch  # register + jumbo tokens at front
-        if n_patch > 0 and n_patch <= N:
-            q_patch = q[:, :, n_prefix:, :]
-            k_patch = k[:, :, n_prefix:, :]
-            cos, sin = self.rope.get_freqs(height, width, device=x.device, dtype=x.dtype)
-            from .rope2d import apply_rope2d
-
-            # apply_rope2d expects (B, H, N, D)
-            q_patch_rot, k_patch_rot = apply_rope2d(
-                q_patch.transpose(1, 2),  # (B, N, H, D)
-                k_patch.transpose(1, 2),
-                cos,
-                sin,
-            )
-            q[:, :, n_prefix:, :] = q_patch_rot.transpose(1, 2)
-            k[:, :, n_prefix:, :] = k_patch_rot.transpose(1, 2)
+        n_prefix = N - height * width
+        if 0 <= n_prefix < N:
+            cos, sin = self.rope.get_freqs(height, width, device=x.device, dtype=q.dtype)
+            q_rot, k_rot = apply_rope2d(q[:, :, n_prefix:], k[:, :, n_prefix:], cos, sin)
+            q = torch.cat([q[:, :, :n_prefix], q_rot], dim=2)
+            k = torch.cat([k[:, :, :n_prefix], k_rot], dim=2)
 
         out = F.scaled_dot_product_attention(q, k, v, scale=self.scale)
-        out = out.transpose(1, 2).reshape(B, N, D)
-        return self.out_proj(out)
-
-
-# ---------------------------------------------------------------------------
-# FFN (SwiGLU — better than GELU for transformers)
-# ---------------------------------------------------------------------------
+        return self.out_proj(out.transpose(1, 2).reshape(B, N, D))
 
 
 class SwiGLUFFN(nn.Module):
-    """SwiGLU feed-forward: 2/3 of standard FFN params, better performance."""
+    """SwiGLU feed-forward; the 8/3 expansion (rounded up to 64) matches a 4x GELU MLP's parameter count."""
 
     def __init__(self, hidden_size: int, expansion: float = 8 / 3):
         super().__init__()
-        inner = int(hidden_size * expansion)
-        # Round to multiple of 64 for efficiency
-        inner = (inner + 63) // 64 * 64
+        inner = (int(hidden_size * expansion) + 63) // 64 * 64
         self.gate_proj = nn.Linear(hidden_size, inner, bias=False)
         self.value_proj = nn.Linear(hidden_size, inner, bias=False)
         self.out_proj = nn.Linear(inner, hidden_size, bias=False)
@@ -160,29 +234,9 @@ class SwiGLUFFN(nn.Module):
         return self.out_proj(F.silu(self.gate_proj(x)) * self.value_proj(x))
 
 
-# ---------------------------------------------------------------------------
-# SuperiorViT Block
-# ---------------------------------------------------------------------------
-
-
 class SuperiorViTBlock(nn.Module):
-    """
-    Single transformer block with all improvements enabled by flags.
-
-    Args:
-        hidden_size: Token dimension.
-        num_heads: Attention heads.
-        cond_dim: Conditioning vector dimension (timestep + class/text pooled).
-        text_dim: Text encoder output dimension (for cross-attention).
-        use_rope2d: Enable 2D RoPE on self-attention.
-        use_taca: Enable TACA cross-attention (requires text_dim).
-        use_linear_attn: Replace self-attention with LinearCompressedAttention.
-        use_window_attn: Replace self-attention with LocalWindowAttention.
-        use_swiglu: Use SwiGLU FFN instead of GELU MLP.
-        layer_scale_init: LayerScale init value (0 = disabled).
-        drop_path: Stochastic depth probability.
-        qk_norm: QK-Norm on self-attention heads.
-    """
+    """AdaLN-Zero block: self-attention (2D RoPE, or linear / window attention), optional TACA
+    cross-attention to text (``text_dim > 0``), SwiGLU or GELU FFN, LayerScale and stochastic depth."""
 
     def __init__(
         self,
@@ -190,7 +244,6 @@ class SuperiorViTBlock(nn.Module):
         num_heads: int,
         cond_dim: int,
         text_dim: int = 0,
-        use_rope2d: bool = True,
         use_taca: bool = True,
         use_linear_attn: bool = False,
         use_window_attn: bool = False,
@@ -203,15 +256,12 @@ class SuperiorViTBlock(nn.Module):
     ):
         super().__init__()
         self.use_taca = use_taca and text_dim > 0
-        self.use_rope2d = use_rope2d
         self.use_linear_attn = use_linear_attn
         self.use_window_attn = use_window_attn
 
-        # AdaLN conditioning
         self.adaLN = AdaLNModulation(hidden_size, cond_dim)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
-        # Self-attention (choose variant)
         if use_linear_attn:
             self.attn = LinearCompressedAttention(
                 hidden_size, num_heads, context_size=linear_context_size, qk_norm=qk_norm
@@ -221,12 +271,10 @@ class SuperiorViTBlock(nn.Module):
         else:
             self.attn = SelfAttentionRoPE2D(hidden_size, num_heads, qk_norm=qk_norm)
 
-        # Cross-attention (TACA or skip)
         if self.use_taca:
             self.cross_attn = TACA(hidden_size, text_dim, num_heads, qk_norm=qk_norm)
             self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
-        # FFN
         self.ffn = (
             SwiGLUFFN(hidden_size)
             if use_swiglu
@@ -236,12 +284,8 @@ class SuperiorViTBlock(nn.Module):
                 nn.Linear(hidden_size * 4, hidden_size),
             )
         )
-
-        # LayerScale
         self.ls_attn = LayerScale(hidden_size, layer_scale_init)
         self.ls_ffn = LayerScale(hidden_size, layer_scale_init)
-
-        # Stochastic depth
         self.drop_path = DropPath(drop_path) if drop_path > 0 else nn.Identity()
 
     def forward(
@@ -253,71 +297,29 @@ class SuperiorViTBlock(nn.Module):
         text_emb: torch.Tensor | None = None,
         timestep: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """
-        Args:
-            x: (B, N, D) patch tokens (may include prepended register/jumbo tokens).
-            c: (B, cond_dim) conditioning vector.
-            height, width: spatial dims of patch tokens (excluding prefix tokens).
-            text_emb: (B, L, T) text tokens for cross-attention.
-            timestep: (B,) diffusion timestep for TACA temperature.
-        """
-        # AdaLN modulation
+        """``x``: ``(B, N, D)``, prefix (register/jumbo) tokens first, then the ``height x width`` patches;
+        ``c``: ``(B, cond_dim)``; ``timestep`` drives the TACA temperature."""
         x_normed, gate_attn, shift_ffn, scale_ffn, gate_ffn = self.adaLN(x, c)
-
-        # Self-attention
         if self.use_linear_attn or self.use_window_attn:
             attn_out = self.attn(x_normed)
         else:
             attn_out = self.attn(x_normed, height, width)
-
         x = x + self.drop_path(gate_attn.unsqueeze(1) * self.ls_attn(attn_out))
 
-        # Cross-attention (TACA)
         if self.use_taca and text_emb is not None:
-            x_cross = self.norm_cross(x)
-            x = x + self.drop_path(self.cross_attn(x_cross, text_emb, timestep))
+            x = x + self.drop_path(self.cross_attn(self.norm_cross(x), text_emb, timestep))
 
-        # FFN
         x_ffn = modulate(self.norm2(x), shift_ffn, scale_ffn)
-        x = x + self.drop_path(gate_ffn.unsqueeze(1) * self.ls_ffn(self.ffn(x_ffn)))
-
-        return x
-
-
-# ---------------------------------------------------------------------------
-# SuperiorViT — full model
-# ---------------------------------------------------------------------------
+        return x + self.drop_path(gate_ffn.unsqueeze(1) * self.ls_ffn(self.ffn(x_ffn)))
 
 
 class SuperiorViT(nn.Module):
-    """
-    Full SuperiorViT model for latent diffusion.
+    """SuperiorViT denoiser for latent diffusion.
 
-    Improvements over Facebook DiT:
-      - 2D RoPE instead of learned sinusoidal pos embed
-      - Register tokens (cleaner attention, no artifact tokens)
-      - TACA cross-attention (timestep-aware, token-imbalance corrected)
-      - Dynamic patch scheduling (coarse->fine across timesteps)
-      - SwiGLU FFN (better than GELU MLP)
-      - QK-Norm (training stability)
-      - LayerScale (deep network stability)
-      - Jumbo global token (extra capacity)
-      - AdaLN-Zero conditioning (kept from DiT)
-
-    Args:
-        input_size: Latent spatial size (e.g. 32 for 256px with 8x VAE).
-        patch_size: Base patch size.
-        in_channels: Latent channels.
-        hidden_size: Transformer hidden dim.
-        depth: Number of transformer blocks.
-        num_heads: Attention heads.
-        text_dim: Text encoder output dim (0 = class-conditional only).
-        num_classes: Number of classes (0 = text-only).
-        learn_sigma: Predict variance (doubles output channels).
-        num_registers: Number of register tokens.
-        use_jumbo: Enable jumbo global token.
-        use_dynamic_patch: Enable dynamic patch scheduling.
-        drop_path_rate: Max stochastic depth rate.
+    ``patch_size`` is the finest patch; ``use_dynamic_patch`` adds 2x and 4x patch sizes picked per step by
+    ``TimestepPatchScheduler``. ``text_dim=0`` is class-conditional only, ``num_classes=0`` text-only;
+    ``class_dropout_prob`` zeroes whole text sequences during training (CFG null condition).
+    ``uvit_skips`` / ``hidit_hf`` / ``mix_ffn`` / ``mmdit_every_n`` toggle ``HybridDiTExtras``.
     """
 
     def __init__(
@@ -331,15 +333,19 @@ class SuperiorViT(nn.Module):
         text_dim: int = 768,
         num_classes: int = 0,
         learn_sigma: bool = True,
+        class_dropout_prob: float = 0.0,
         num_registers: int = 8,
         use_jumbo: bool = True,
         use_dynamic_patch: bool = True,
         drop_path_rate: float = 0.1,
         use_swiglu: bool = True,
         use_taca: bool = True,
-        use_rope2d: bool = True,
         qk_norm: bool = True,
         layer_scale_init: float = 1e-4,
+        uvit_skips: bool = False,
+        hidit_hf: bool = False,
+        mix_ffn: bool = False,
+        mmdit_every_n: int = 0,
     ):
         super().__init__()
         self.input_size = input_size
@@ -349,70 +355,42 @@ class SuperiorViT(nn.Module):
         self.depth = depth
         self.learn_sigma = learn_sigma
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
-        self.num_registers = num_registers
+        self.class_dropout_prob = float(class_dropout_prob)
+        self.num_registers = max(0, int(num_registers))
         self.use_jumbo = use_jumbo
         self.use_dynamic_patch = use_dynamic_patch
+        self._grad_checkpointing = False
 
-        # Patch embedding
         if use_dynamic_patch:
+            patch_sizes = (patch_size, patch_size * 2, patch_size * 4)
             self.patch_embed = DynamicPatchEmbed(
                 in_channels=in_channels,
                 hidden_size=hidden_size,
-                patch_sizes=(patch_size, patch_size * 2, patch_size * 4),
+                patch_sizes=patch_sizes,
                 img_size=input_size,
             )
-            self.patch_scheduler = TimestepPatchScheduler(
-                fine_size=patch_size,
-                base_size=patch_size * 2,
-                coarse_size=patch_size * 4,
-            )
+            self.patch_scheduler = TimestepPatchScheduler(*patch_sizes)
         else:
-            from timm.models.vision_transformer import PatchEmbed
+            patch_sizes = (patch_size,)
+            self.patch_embed = PatchEmbed(input_size, patch_size, in_channels, hidden_size, strict_img_size=False)
 
-            self.patch_embed = PatchEmbed(input_size, patch_size, in_channels, hidden_size)
-
-        # Register tokens
-        if num_registers > 0:
-            self.registers = RegisterTokens(hidden_size, num_registers)
-
-        # Jumbo token
+        if self.num_registers > 0:
+            self.registers = RegisterTokens(hidden_size, self.num_registers)
         if use_jumbo:
             self.jumbo = JumboToken(hidden_size)
 
-        # Timestep embedding
-        from .dit import TimestepEmbedder
-
         self.t_embedder = TimestepEmbedder(hidden_size)
+        self.y_embedder = LabelEmbedder(num_classes, hidden_size, dropout_prob=0.1) if num_classes > 0 else None
+        self.text_proj = nn.Linear(text_dim, hidden_size, bias=False) if 0 < text_dim != hidden_size else None
 
-        # Class embedding (optional)
-        if num_classes > 0:
-            from .dit import LabelEmbedder
-
-            self.y_embedder = LabelEmbedder(num_classes, hidden_size, dropout_prob=0.1)
-        else:
-            self.y_embedder = None
-
-        # Text projection (optional)
-        if text_dim > 0 and text_dim != hidden_size:
-            self.text_proj = nn.Linear(text_dim, hidden_size, bias=False)
-        else:
-            self.text_proj = None
-
-        # Conditioning dim = hidden_size (timestep + class/text pooled)
-        cond_dim = hidden_size
-
-        # Stochastic depth schedule
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
-
-        # Transformer blocks
         self.blocks = nn.ModuleList(
             [
                 SuperiorViTBlock(
                     hidden_size=hidden_size,
                     num_heads=num_heads,
-                    cond_dim=cond_dim,
+                    cond_dim=hidden_size,
                     text_dim=hidden_size if text_dim > 0 else 0,
-                    use_rope2d=use_rope2d,
                     use_taca=use_taca,
                     use_swiglu=use_swiglu,
                     layer_scale_init=layer_scale_init,
@@ -422,114 +400,113 @@ class SuperiorViT(nn.Module):
                 for i in range(depth)
             ]
         )
-
-        # Final layer (AdaLN + linear out)
-        from .dit import FinalLayer
-
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+        # One output head per patch size so dynamic patching can unpatchify any active size.
+        self.final_layer = nn.ModuleDict({str(p): FinalLayer(hidden_size, p, self.out_channels) for p in patch_sizes})
 
         self._init_weights()
+        # Built after vanilla init so the zero-initialized extras leave base weights untouched.
+        self.hybrid = None
+        if uvit_skips or hidit_hf or mix_ffn or int(mmdit_every_n or 0) > 0:
+            self.hybrid = HybridDiTExtras(
+                hidden_size,
+                num_heads,
+                depth,
+                uvit_skips=uvit_skips,
+                hidit_hf=hidit_hf,
+                mmdit_every_n=int(mmdit_every_n or 0),
+                mix_ffn=mix_ffn,
+            )
 
     def _init_weights(self):
-        def _basic_init(module):
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-
-        self.apply(_basic_init)
-
-    def _get_num_prefix_tokens(self) -> int:
-        n = 0
-        if self.num_registers > 0:
-            n += self.num_registers
+        xavier_init_linears(self)
+        # Restore the zero-inits that make every residual branch start as identity (AdaLN-Zero).
+        for block in self.blocks:
+            nn.init.zeros_(block.adaLN.adaLN_modulation[-1].weight)
+            nn.init.zeros_(block.adaLN.adaLN_modulation[-1].bias)
+            if block.use_taca:
+                nn.init.zeros_(block.cross_attn.out_proj.weight)
+        for head in self.final_layer.values():
+            nn.init.zeros_(head.adaLN_modulation[-1].weight)
+            nn.init.zeros_(head.adaLN_modulation[-1].bias)
+            nn.init.zeros_(head.linear.weight)
+            nn.init.zeros_(head.linear.bias)
         if self.use_jumbo:
-            n += 1
-        return n
+            nn.init.zeros_(self.jumbo.down_proj.weight)
+
+    def enable_gradient_checkpointing(self) -> None:
+        self._grad_checkpointing = True
+
+    def _num_prefix_tokens(self) -> int:
+        return self.num_registers + int(self.use_jumbo)
 
     def forward(
         self,
         x: torch.Tensor,
         t: torch.Tensor,
+        encoder_hidden_states: torch.Tensor | None = None,
         y: torch.Tensor | None = None,
-        text_emb: torch.Tensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
-        """
-        Args:
-            x: (B, C, H, W) noisy latent.
-            t: (B,) diffusion timestep.
-            y: (B,) class labels (optional).
-            text_emb: (B, L, T) text encoder output (optional).
-        Returns:
-            (B, C, H, W) predicted noise / velocity.
-        """
-        B, C, H, W = x.shape
-
-        # Dynamic patch size selection
+        """``x`` ``(B, C, H, W)``, ``t`` ``(B,)``, optional text ``(B, L, text_dim)`` and labels ``(B,)`` ->
+        ``(B, out_channels, H, W)``. ``**kwargs`` are sampler/trainer extras only ``DiT_Text`` consumes."""
+        B, _, H, W = x.shape
         if self.use_dynamic_patch:
-            t_norm = (t.float() / 1000.0).clamp(0, 1)
-            # Use the median timestep for the batch to pick patch size
-            t_med = float(t_norm.median())
-            active_patch = self.patch_scheduler.get_patch_size(t_med)
-            tokens, active_patch = self.patch_embed(x, patch_size=active_patch)
+            t_med = float((t.float() / 1000.0).clamp(0, 1).median())
+            tokens, active_patch = self.patch_embed(x, patch_size=self.patch_scheduler.get_patch_size(t_med))
         else:
-            tokens = self.patch_embed(x)
-            active_patch = self.patch_size
+            tokens, active_patch = self.patch_embed(x), self.patch_size
+        h_tok, w_tok = H // active_patch, W // active_patch
+        n_patch = h_tok * w_tok
 
-        h_tok = H // active_patch
-        w_tok = W // active_patch
-
-        # Prepend jumbo token
         if self.use_jumbo:
-            jumbo_tok = self.jumbo.get_token(B)
-            tokens = torch.cat([jumbo_tok, tokens], dim=1)
-
-        # Prepend register tokens
+            tokens = torch.cat([self.jumbo.get_token(B), tokens], dim=1)
         if self.num_registers > 0:
             tokens = self.registers.prepend(tokens)
+        n_prefix = self._num_prefix_tokens()
 
-        # Conditioning vector
         c = self.t_embedder(t)
         if y is not None and self.y_embedder is not None:
             c = c + self.y_embedder(y, self.training)
+        text_emb = encoder_hidden_states
         if text_emb is not None and self.text_proj is not None:
             text_emb = self.text_proj(text_emb)
+        if text_emb is not None and self.training and self.class_dropout_prob > 0:
+            keep = torch.rand(B, 1, 1, device=text_emb.device) >= self.class_dropout_prob
+            text_emb = text_emb * keep.to(text_emb.dtype)
 
-        # Transformer blocks
-        for block in self.blocks:
-            tokens = block(tokens, c, h_tok, w_tok, text_emb=text_emb, timestep=t)
+        if self.hybrid is not None:
+            self.hybrid.begin_forward()
+        for i, block in enumerate(self.blocks):
+            if self._grad_checkpointing and self.training:
+                tokens = torch.utils.checkpoint.checkpoint(
+                    block, tokens, c, h_tok, w_tok, text_emb, t, use_reentrant=False
+                )
+            else:
+                tokens = block(tokens, c, h_tok, w_tok, text_emb=text_emb, timestep=t)
+            if self.use_jumbo:
+                j = self.num_registers
+                jumbo = tokens[:, j : j + 1]
+                tokens = torch.cat([tokens[:, :j], jumbo + self.jumbo.process(jumbo), tokens[:, j + 1 :]], dim=1)
+            if self.hybrid is not None:
+                body = self.hybrid.after_block(
+                    i,
+                    tokens[:, n_prefix:],
+                    text_emb,
+                    num_patches=n_patch,
+                    h_patches=h_tok,
+                    w_patches=w_tok,
+                    use_xformers=False,
+                )
+                tokens = torch.cat([tokens[:, :n_prefix], body], dim=1)
 
-        # Post-process jumbo token
-        if self.use_jumbo:
-            n_prefix = self.num_registers + 1  # registers + jumbo
-            jumbo_out = tokens[:, self.num_registers : self.num_registers + 1, :]
-            jumbo_out = self.jumbo.process(jumbo_out)
-            tokens = torch.cat(
-                [
-                    tokens[:, : self.num_registers, :],
-                    jumbo_out,
-                    tokens[:, n_prefix:, :],
-                ],
-                dim=1,
-            )
+        patch_tokens = tokens[:, n_prefix:]
+        if self.hybrid is not None:
+            patch_tokens = self.hybrid.after_all(patch_tokens, t, num_patches=n_patch, h_patches=h_tok, w_patches=w_tok)
 
-        # Strip prefix tokens (registers + jumbo)
-        n_prefix = self._get_num_prefix_tokens()
-        patch_tokens = tokens[:, n_prefix:, :]  # (B, h_tok*w_tok, D)
-
-        # Final layer
-        out = self.final_layer(patch_tokens, c)  # (B, N, patch_size^2 * out_channels)
-
-        # Unpatchify
         p = active_patch
+        out = self.final_layer[str(p)](patch_tokens, c)
         out = out.reshape(B, h_tok, w_tok, p, p, self.out_channels)
-        out = out.permute(0, 5, 1, 3, 2, 4).reshape(B, self.out_channels, H, W)
-        return out
-
-
-# ---------------------------------------------------------------------------
-# Model configs
-# ---------------------------------------------------------------------------
+        return out.permute(0, 5, 1, 3, 2, 4).reshape(B, self.out_channels, h_tok * p, w_tok * p)
 
 
 def SuperiorViT_XL_2(**kwargs):

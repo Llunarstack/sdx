@@ -20,6 +20,8 @@ from collections.abc import Sequence
 import torch
 import torch.nn as nn
 
+from models.lora import _extract_layer_index, layer_in_group
+
 # Default injection targets: attention projections and MLP layers, matched by
 # substring against each Linear's dotted module path. Covers the DiT blocks
 # without touching embedders/heads.
@@ -79,13 +81,13 @@ class TrainableLoRALinear(nn.Module):
             f"{base_key}.lora_up.weight": self.lora_up.detach().cpu(),
             f"{base_key}.alpha": torch.tensor(float(self.alpha)),
         }
-        if self.use_dora and self.dora_magnitude is not None:
+        if self.dora_magnitude is not None:
             out[f"{base_key}.dora_magnitude_vector"] = self.dora_magnitude.detach().cpu()
         return out
 
 
 def _iter_target_linears(model: nn.Module, targets: Sequence[str]) -> list[tuple[nn.Module, str, str, nn.Linear]]:
-    """Yield (parent_module, attr_name, dotted_path, linear) for matching Linears."""
+    """``(parent_module, attr_name, dotted_path, linear)`` for every Linear whose path contains a target."""
     found: list[tuple[nn.Module, str, str, nn.Linear]] = []
     module_by_path = dict(model.named_modules())
     for path, module in module_by_path.items():
@@ -99,6 +101,15 @@ def _iter_target_linears(model: nn.Module, targets: Sequence[str]) -> list[tuple
     return found
 
 
+def _filter_layer_group(
+    found: list[tuple[nn.Module, str, str, nn.Linear]], layer_group: str
+) -> list[tuple[nn.Module, str, str, nn.Linear]]:
+    """Keep one depth third of the blocks, with the same split ``models.lora.apply_loras`` uses at inference."""
+    known = [i for i in (_extract_layer_index(path) for _, _, path, _ in found) if i is not None]
+    lo, hi = (min(known), max(known)) if known else (0, 0)
+    return [f for f in found if layer_in_group(_extract_layer_index(f[2]), layer_group, lo, hi)]
+
+
 def inject_trainable_lora(
     model: nn.Module,
     *,
@@ -106,9 +117,11 @@ def inject_trainable_lora(
     alpha: float = 16.0,
     use_dora: bool = False,
     targets: Sequence[str] | None = None,
+    layer_group: str = "all",
 ) -> tuple[list[nn.Parameter], int]:
     """Freeze ``model`` and wrap target Linear layers with trainable adapters.
 
+    ``layer_group`` (all/first/middle/last) limits adapters to a third of block depth.
     Returns ``(trainable_params, num_layers_wrapped)``.
     """
     targets = tuple(targets) if targets is not None else DEFAULT_TARGETS
@@ -117,14 +130,10 @@ def inject_trainable_lora(
     for p in model.parameters():
         p.requires_grad = False
 
-    wrapped = 0
-    for parent, attr, path, linear in _iter_target_linears(model, targets):
-        adapter = TrainableLoRALinear(linear, rank=rank, alpha=alpha, use_dora=use_dora)
-        setattr(parent, attr, adapter)
-        wrapped += 1
-
-    trainable = [p for p in model.parameters() if p.requires_grad]
-    return trainable, wrapped
+    found = _filter_layer_group(_iter_target_linears(model, targets), str(layer_group or "all").strip().lower())
+    for parent, attr, _path, linear in found:
+        setattr(parent, attr, TrainableLoRALinear(linear, rank=rank, alpha=alpha, use_dora=use_dora))
+    return [p for p in model.parameters() if p.requires_grad], len(found)
 
 
 def lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:

@@ -2,6 +2,9 @@
 """
 **LADD-style** latent adversarial distillation (teacher MSE + optional patch discriminator).
 
+Noisy inputs follow the teacher's objective (VP ``q_sample`` or the rectified-flow interpolation), and the
+discriminator compares real clean latents with the student's one-step clean estimate.
+
 Example::
 
     python -m scripts.tools train_ladd_distill \\
@@ -27,7 +30,7 @@ from data import Text2ImageDataset, collate_t2i
 from diffusion import create_diffusion
 from models import DiT_models_text
 from torch.utils.data import DataLoader
-from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+from utils.checkpoint.checkpoint_loading import finetuned_checkpoint, load_dit_text_checkpoint
 from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions, load_text_bundle_for_training
 from utils.training.ladd_distillation import (
     LADDConfig,
@@ -50,7 +53,6 @@ def main() -> int:
     ap.add_argument("--adversarial", type=float, default=0.1)
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--max-caption-length", type=int, default=300)
-    ap.add_argument("--no-amp", action="store_true")
     args = ap.parse_args()
 
     device = args.device
@@ -93,9 +95,10 @@ def main() -> int:
         prediction_type=str(getattr(cfg, "prediction_type", "epsilon")),
     )
     diffusion._to_device(torch.device(device))
+    is_flow = bool(getattr(cfg, "flow_matching_training", False))
+    num_t = int(diffusion.num_timesteps)
     ae_type = getattr(cfg, "autoencoder_type", "kl")
     latent_scale = float(getattr(cfg, "latent_scale", 0.18215)) if ae_type == "kl" else 1.0
-    use_amp = device == "cuda" and not args.no_amp
 
     it = iter(dl)
     for step in range(1, int(args.steps) + 1):
@@ -104,8 +107,8 @@ def main() -> int:
         except StopIteration:
             it = iter(dl)
             batch = next(it)
-        imgs, prompts = batch
-        imgs = imgs.to(device)
+        imgs = batch["pixel_values"].to(device)
+        prompts = batch["captions"]
         with torch.no_grad():
             px = train_mod.encode_images_vae(imgs, vae, latent_scale)
             if rae_bridge is not None:
@@ -116,26 +119,25 @@ def main() -> int:
             text_encoder,
             device,
             max_length=int(args.max_caption_length),
-            dtype=torch.bfloat16 if use_amp else torch.float32,
+            dtype=torch.float32,
             text_bundle=text_bundle,
             train_fusion=False,
             **encode_kwargs_for_captions(prompts, text_bundle),
         )
         mk = {"encoder_hidden_states": enc}
-        t = torch.randint(0, diffusion.num_timesteps, (px.shape[0],), device=device, dtype=torch.long)
+        t = torch.randint(0, num_t, (px.shape[0],), device=device, dtype=torch.long)
         noise = torch.randn_like(px)
-        x_t = diffusion.q_sample(px, t, noise=noise)
+        if is_flow:
+            s = (t.float() / max(num_t - 1, 1)).view(-1, 1, 1, 1)
+            x_t = (1.0 - s) * px + s * noise
+        else:
+            x_t = diffusion.q_sample(px, t, noise=noise)
 
-        with torch.no_grad():
-            t_out = teacher(x_t, t, **mk)
-            if t_out.shape[1] > px.shape[1]:
-                t_out = t_out[:, : px.shape[1]]
-        s_out = student(x_t, t, **mk)
-        if s_out.shape[1] > px.shape[1]:
-            s_out = s_out[:, : px.shape[1]]
-
+        x0_fake = None
         if ladd_cfg.adversarial > 0.0:
-            ladd_discriminator_step(D, opt_d, px, s_out.detach(), cfg=ladd_cfg)
+            s_out = student(x_t, t, **mk)[:, : px.shape[1]]
+            x0_fake = x_t - s * s_out if is_flow else diffusion._predict_x0_and_noise(s_out, x_t, t)[0]
+            ladd_discriminator_step(D, opt_d, px, x0_fake.detach(), cfg=ladd_cfg)
         stats = ladd_generator_step(
             D,
             student,
@@ -144,13 +146,13 @@ def main() -> int:
             t,
             teacher,
             cfg=ladd_cfg,
-            latent_for_d=s_out if ladd_cfg.adversarial > 0.0 else None,
+            latent_for_d=x0_fake,
             **mk,
         )
         if step % 50 == 0:
             print(f"step {step} {stats}")
 
-    torch.save({"model": student.state_dict(), "ema": student.state_dict(), "config": cfg}, args.out)
+    torch.save(finetuned_checkpoint(student, cfg, rae_bridge, fusion_sd), args.out)
     print(f"Saved {args.out}")
     return 0
 

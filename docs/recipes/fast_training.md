@@ -46,7 +46,7 @@ Also enabled automatically on CUDA: TF32, cuDNN benchmark, fast SDPA backends (`
 
 T5 embeddings are cached for repeated prompts (`_t5_cache` in `sample.py`). Cond+uncond are encoded in **one** T5 forward when not using segmented layout.
 
-**Inference CFG:** `gaussian_diffusion` and `speculative_denoise` use batched cond/uncond (`utils/generation/cfg_batched.py`) — ~2× fewer DiT forwards per step when CFG is on.
+**Inference CFG:** `gaussian_diffusion` uses batched cond/uncond (`utils/generation/cfg_batched.py`) — ~2× fewer DiT forwards per step when CFG is on.
 
 **CLIP guard/monitor:** `clip_alignment.py` caches the CLIP model per process (no reload every step).
 

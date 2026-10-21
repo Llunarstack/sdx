@@ -10,12 +10,10 @@ Import via `utils.superior`.
 |--------|------|
 | `retrieval.py` | TF-IDF over JSONL facts (local RAG, no API) |
 | `auto_stack.py` | Merge retrieved facts + light quality hints into the prompt |
-| `composite_ranker.py` | Multi-metric `--pick-best superior_composite` |
+| `composite_ranker.py` | The one candidate aggregator: weight presets over `test_time_pick` terms (`superior_composite`, `online` for GRPO, `ensemble`); Borda ranking or absolute `score_one` |
 | `self_correct.py` | CLIP alignment gate + short refine pass |
-| `glyph_encoder.py` | Byte-hash sidecar for text-in-image experiments |
-| `distill.py` | LADD distillation config helpers |
 | `inference_pipeline.py` | Build `sample.py` argv for high-quality defaults |
-| *(generation)* `apg_guidance.py` | Adaptive Projected Guidance (`--apg-parallel-eta`) |
+| *(generation)* `guidance_stack.py` | Composable guidance: APG, FDG, CFG rescale, CFG-Zero★, TCFG, PAG, SLG, guidance interval |
 
 ## Quick start
 
@@ -41,7 +39,7 @@ python sample.py --ckpt results/.../best.pt \
 ## Training-side
 
 - **`python -m scripts.tools superior_dpo_loop`** — mine benchmark pairs → train Diffusion-DPO
-- **`python -m scripts.tools superior_curate`** — dedup/filter JSONL via `utils/data_quality/`
+- **`python -m scripts.tools superior_curate`** — dedup/filter JSONL via `utils/data_quality.py`
 - **`python -m scripts.tools model_soup`** — average multiple checkpoints
 - Use **`utils/training/ladd_distillation.py`** for teacher→student latent distillation (custom loop).
 - See **`scripts/tools/training/train_kd_distill.py`** for KD entry points.
@@ -95,36 +93,33 @@ Use **`--preset superior`** in ``sample.py`` for Superior Stack sampler defaults
 | Module | Role |
 |--------|------|
 | `config/defaults/superior_stack.py` | Central defaults + `FlywheelPlan` |
-| `utils/superior/flywheel.py` | Curate + align orchestration |
-| `utils/superior/ensemble.py` | Multi-checkpoint generation + global rank |
-| `utils/superior/hard_negative.py` | Mine negatives from failed cases |
-| `utils/superior/eval_report.py` | Markdown benchmark reports |
+| `utils/superior/auto_loop.py` | Curate + align orchestration |
+| `utils/superior/inference_pipeline.py` | Multi-checkpoint generation + global rank |
+| `utils/superior/auto_loop.py` | Mine negatives from failed cases |
+| `utils/superior/auto_loop.py` | Markdown benchmark reports |
 
 ## Libraries added (wave 3)
 
 | Module | Role |
 |--------|------|
-| `utils/superior/vit_mining.py` | ViT-weighted DPO pair mining |
-| `utils/superior/reward_scorer.py` | Unified ViT + heuristic reward |
-| `utils/superior/prompt_expand.py` | LLM or heuristic prompt expansion |
+| `utils/superior/auto_loop.py` | ViT-weighted DPO pair mining |
+| `utils/superior/inference_pipeline.py` | LLM or heuristic prompt expansion |
 | `utils/superior/auto_loop.py` | Python API for auto-improve loop |
 
 | Module | Role |
 |--------|------|
-| `utils/data_quality/` | Programmatic manifest curation API |
-| `utils/superior/dpo_pipeline.py` | Benchmark → DPO training orchestration |
-| `utils/superior/model_soup.py` | Checkpoint averaging |
-| `utils/superior/quality_gates.py` | Fast pre/post generation gates |
+| `utils/data_quality.py` | Programmatic manifest curation API |
+| `utils/superior/auto_loop.py` | Benchmark → DPO training orchestration |
+| `utils/superior/auto_loop.py` | Checkpoint averaging |
+| `utils/superior/inference_pipeline.py` | Fast pre/post generation gates |
 | `models/taca.py` | Fused SDPA cross-attention path |
 
 ## Wave 5 (research-backed alignment + inference)
 
 | Module | Role |
 |--------|------|
-| `utils/training/dpo_advanced.py` | Timestep DPO weights, SDPO safeguard, EMA ref |
-| `utils/superior/frequency_cfg.py` | FDG latent CFG (`--fdg-cfg-strength`) |
-| `utils/superior/feature_cache.py` | SpeCa-lite step reuse (`--feature-cache-delta`) |
-| `utils/superior/online_reward.py` | Online RL / best-of-N reward scaffold |
+| `utils/training/preference.py` | Timestep DPO weights, SDPO safeguard, EMA ref |
+| `utils/superior/caches.py` | SpeCa-lite step reuse (`--feature-cache-delta`) |
 
 **DPO trainer flags:** `--timestep-dpo-weight high_noise`, `--safeguarded-dpo 0.85`, `--ref-ema-alpha 0.01`
 
@@ -136,7 +131,7 @@ See [research/SUPERIOR_RESEARCH_2026.md](research/SUPERIOR_RESEARCH_2026.md) for
 
 | Module | Role |
 |--------|------|
-| `utils/superior/block_cache.py` | BWCache/TeaCache-lite per-block DiT reuse |
+| `utils/superior/caches.py` | BWCache/TeaCache-lite per-block DiT reuse |
 | `utils/training/flow_grpo.py` | Flow-GRPO scaffold (sample → reward → weighted update) |
 | `train_consistency_distill.py` | LCM-style consistency distillation (few-step student) |
 | `train_flow_grpo.py` | Online GRPO alignment trainer |
@@ -153,9 +148,8 @@ See [research/SUPERIOR_RESEARCH_2026.md](research/SUPERIOR_RESEARCH_2026.md) for
 
 | Module | Role |
 |--------|------|
-| `utils/superior/taylor_cache.py` | TaylorSeer block forecast (`--taylor-cache`) |
-| `utils/training/dense_grpo.py` | Step-wise dense GRPO rewards |
-| `utils/generation/rectified_cfgpp.py` | Rectified-CFG++ for flow (`--rcfgpp-tangent`) |
+| `utils/superior/caches.py` | TaylorSeer block forecast (`--taylor-cache`) |
+| `utils/training/grpo.py` | Step-wise dense GRPO rewards |
 | `sample.py --lcm-ckpt` | Few-step consistency student (4-step flow) |
 
 **Taylor + block cache:** `--block-cache-thresh 0.18 --taylor-cache --taylor-cache-order 1`

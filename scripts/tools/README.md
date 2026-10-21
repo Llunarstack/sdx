@@ -50,7 +50,7 @@ Equivalent module runs (also valid):
 | [training/mine_preference_pairs.py](training/mine_preference_pairs.py) | Convert benchmark `results.json` into DPO preference JSONL (win/lose + shared prompt), with optional hard-case boosting (`--hardcases-jsonl`, `--hardcase-extra-pairs`, `--hardcase-min-margin-scale`). |
 | [data/caption_hygiene.py](data/caption_hygiene.py) | JSONL caption QA: NFKC samples, duplicate fingerprints, pos/neg overlap (`sdx_native.text_hygiene`). |
 | [data/ar_tag_manifest.py](data/ar_tag_manifest.py) | Tag JSONL with `num_ar_blocks` / `ar_regime` from SDX DiT checkpoint (ViT alignment); see [docs/AR.md](../../docs/AR.md). |
-| [../../toolkit/README.md](../../toolkit/README.md) | **Toolkit** (repo root): `env_health`, `manifest_digest`, seeds, timers — not under `scripts/tools/`. |
+| [../../toolkit/README.md](../../toolkit/README.md) | **Toolkit** (repo root): `env_health`, `manifest_digest`, seeds — not under `scripts/tools/`. |
 
 ## See also
 

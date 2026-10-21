@@ -20,7 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.defaults.art_mediums import MEDIUM_SPECS  # noqa: E402
-from utils.lora.lora_bank import slugify_lora_key  # noqa: E402
+from utils.lora_bank import slugify_lora_key  # noqa: E402
 
 _STYLE_BUCKETS: list[tuple[str, tuple[str, ...]]] = [
     ("anime", ("anime", "manga", "cel shading", "toon shading", "1girl", "1boy", "solo")),

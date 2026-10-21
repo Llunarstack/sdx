@@ -11,7 +11,6 @@ Saves to pretrained/ (or --model-dir). Defaults are chosen to save disk space.
 - LLM: --llm (SmolLM 360M) or --llm-best (Qwen3-14B). --all includes only the default LLM (360M); add --llm-best if needed.
 
 Use --all to download the minimal recommended set: T5-XXL, 2 VAEs, SmolLM 360M (saves space).
-To free space after downloading everything, run: python scripts/download/remove_unused_models.py
 """
 
 import argparse

@@ -110,3 +110,21 @@ def test_no_target_match_reports_zero():
     solo = nn.Linear(8, 8)  # name "" has no target substring
     _, wrapped = inject_trainable_lora(solo, rank=2, alpha=2.0)
     assert wrapped == 0
+
+
+def test_layer_group_last_matches_lora_stage_buckets():
+    m = nn.Module()
+    m.blocks = nn.ModuleList([nn.ModuleDict({"attn": nn.Linear(8, 8), "mlp": nn.Linear(8, 8)}) for _ in range(9)])
+    params, n = inject_trainable_lora(m, rank=4, alpha=4.0, targets=("attn", "mlp"), layer_group="last")
+    # Depth 0..8 splits into non-overlapping thirds; "last" is blocks 6..8: 3 blocks x 2 linears.
+    assert n == 6
+    assert all(p.requires_grad for p in params)
+    assert [type(b["attn"]).__name__ for b in m.blocks] == ["Linear"] * 6 + ["TrainableLoRALinear"] * 3
+
+
+def test_layer_groups_partition_depth_like_inference_loader():
+    from models.lora import layer_in_group
+
+    for depth in (2, 9, 28):
+        groups = [[i for i in range(depth) if layer_in_group(i, g, 0, depth - 1)] for g in ("first", "middle", "last")]
+        assert sorted(sum(groups, [])) == list(range(depth)), (depth, groups)

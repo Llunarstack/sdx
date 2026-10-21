@@ -22,6 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
+from scripts.tools.seed_explorer import save_grid  # noqa: E402
+
 # Default gallery prompts — one per line, covers a range of styles/subjects.
 DEFAULT_PROMPTS = [
     "cinematic portrait of a young woman, soft window light, shallow depth of field, film grain",
@@ -70,6 +72,8 @@ def _run_sample(
         str(height),
         "--seed",
         str(seed),
+        "--device",
+        device,
         "--out",
         str(out),
     ]
@@ -78,34 +82,6 @@ def _run_sample(
         print(f"  FAILED: {result.stderr[-300:] if result.stderr else '(no stderr)'}")
         return False
     return True
-
-
-def _make_grid(images: list[Path], out: Path, cols: int = 3) -> None:
-    """Combine images into a grid and save to out."""
-    from PIL import Image
-
-    imgs = []
-    for p in images:
-        if p.exists():
-            try:
-                imgs.append(Image.open(p).convert("RGB"))
-            except Exception:
-                pass
-
-    if not imgs:
-        print("No images to grid.")
-        return
-
-    w, h = imgs[0].size
-    rows = (len(imgs) + cols - 1) // cols
-    grid = Image.new("RGB", (w * cols, h * rows), (20, 20, 20))
-    for i, img in enumerate(imgs):
-        r, c = divmod(i, cols)
-        grid.paste(img, (c * w, r * h))
-
-    out.parent.mkdir(parents=True, exist_ok=True)
-    grid.save(str(out))
-    print(f"Grid saved: {out}  ({len(imgs)} images, {cols} cols)")
 
 
 def main():
@@ -175,7 +151,7 @@ def main():
 
     if generated:
         grid_path = out_dir / "gallery_grid.png"
-        _make_grid(generated, grid_path, cols=args.cols)
+        save_grid(generated, grid_path, cols=args.cols)
         print()
         print(f"Gallery complete: {len(generated)}/{len(prompts)} images")
         print(f"Grid: {grid_path}")

@@ -1,185 +1,98 @@
-"""
-Enhanced DiT Architecture with Built-in Advanced Features
-- Precision control through spatial attention mechanisms
-- Anatomy-aware attention heads
-- Text rendering specialized layers
-- Consistency embedding systems
-"""
+"""EnhancedDiT: class-conditional DiT whose blocks add layout, anatomy, text-rendering and consistency modules,
+softmax-blended per block (legacy ``scripts/enhanced`` training stack)."""
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from timm.models.vision_transformer import PatchEmbed
 
-from .dit import DiTBlock, FinalLayer, LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed
+from .dit import DiTBlock, FinalLayer, LabelEmbedder, TimestepEmbedder, get_2d_sincos_pos_embed, unpatchify
 
 
 class SpatialControlModule(nn.Module):
-    """Spatial control module for precise object placement."""
+    """Object layout ``(B, num_objects, 4)`` boxes -> attention toward each object's slot."""
 
     def __init__(self, hidden_size: int, num_objects: int = 10):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_objects = num_objects
-
-        # Object position embeddings
         self.object_pos_embed = nn.Parameter(torch.randn(num_objects, hidden_size) * 0.02)
-
-        # Spatial relationship encoder
         self.spatial_encoder = nn.Sequential(
             nn.Linear(4, hidden_size // 2),  # x, y, w, h
             nn.GELU(),
             nn.Linear(hidden_size // 2, hidden_size),
         )
-
-        # Counting constraint layer
         self.count_constraint = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2), nn.GELU(), nn.Linear(hidden_size // 2, num_objects), nn.Sigmoid()
         )
-
-        # Spatial attention for layout control
         self.spatial_attention = nn.MultiheadAttention(hidden_size, num_heads=8, batch_first=True)
 
     def forward(self, x: torch.Tensor, spatial_layout: torch.Tensor | None = None) -> torch.Tensor:
-        """
-        Args:
-            x: Input features [B, N, D]
-            spatial_layout: Object layout tensor [B, num_objects, 4] (x, y, w, h)
-        """
-        B, N, D = x.shape
-
-        if spatial_layout is not None:
-            # Encode spatial positions
-            spatial_features = self.spatial_encoder(spatial_layout)  # [B, num_objects, D]
-
-            # Add positional embeddings
-            spatial_features = spatial_features + self.object_pos_embed.unsqueeze(0)
-
-            # Apply spatial attention to guide layout
-            x_attended, _ = self.spatial_attention(x, spatial_features, spatial_features)
-
-            # Blend with original features
-            x = x + 0.3 * x_attended
-
-            # Apply counting constraints
-            _count_weights = self.count_constraint(spatial_features.mean(dim=1))  # [B, num_objects]
-            # Use count_weights to modulate attention (implementation detail)
-
-        return x
+        """``x``: ``(B, N, D)``; ``spatial_layout``: ``(B, num_objects, 4)`` as (x, y, w, h)."""
+        if spatial_layout is None:
+            return x
+        spatial_features = self.spatial_encoder(spatial_layout) + self.object_pos_embed.unsqueeze(0)
+        # Count head gates each object's values, so slots it deems absent contribute nothing.
+        count_weights = self.count_constraint(spatial_features.mean(dim=1))
+        values = spatial_features * count_weights.unsqueeze(-1)
+        x_attended, _ = self.spatial_attention(x, spatial_features, values)
+        return x + 0.3 * x_attended
 
 
 class AnatomyAwareAttention(nn.Module):
-    """Anatomy-aware attention mechanism for better human figure generation."""
+    """Self-attention + constraint MLP residual; inside ``anatomy_mask`` an extra attention over finger slots."""
 
     def __init__(self, hidden_size: int, num_heads: int = 8):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_heads = num_heads
-        self.head_dim = hidden_size // num_heads
-
-        # Anatomy-specific attention heads
         self.anatomy_attention = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
-
-        # Body part embeddings
-        self.body_part_embeddings = nn.Parameter(
-            torch.randn(10, hidden_size) * 0.02  # head, torso, arms, legs, hands, etc.
-        )
-
-        # Anatomical constraint network
+        # Unused by forward; kept so EnhancedDiT checkpoints keep loading strictly.
+        self.body_part_embeddings = nn.Parameter(torch.randn(10, hidden_size) * 0.02)
         self.anatomy_constraint = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.GELU(),
             nn.Linear(hidden_size // 2, hidden_size),
             nn.LayerNorm(hidden_size),
         )
-
-        # Hand-specific attention (specialized for 5-finger accuracy)
         self.hand_attention = nn.MultiheadAttention(hidden_size, num_heads=4, batch_first=True)
-
-        # Finger constraint embeddings
-        self.finger_embeddings = nn.Parameter(
-            torch.randn(5, hidden_size) * 0.02  # 5 fingers
-        )
+        self.finger_embeddings = nn.Parameter(torch.randn(5, hidden_size) * 0.02)
 
     def forward(self, x: torch.Tensor, anatomy_mask: torch.Tensor | None = None) -> torch.Tensor:
-        """
-        Args:
-            x: Input features [B, N, D]
-            anatomy_mask: Mask indicating human regions [B, N]
-        """
+        """``x``: ``(B, N, D)``; ``anatomy_mask``: ``(B, M)`` region mask on a square grid (resized to ``N``)."""
         B, N, D = x.shape
-
-        # Apply anatomy-aware attention
-        x_anatomy, anatomy_weights = self.anatomy_attention(x, x, x)
-
-        # Apply anatomical constraints
-        x_constrained = self.anatomy_constraint(x_anatomy)
-
-        # Blend with original features
-        x = x + 0.4 * x_constrained
-
-        # Special handling for hand regions if mask provided
-        if anatomy_mask is not None:
-            # Identify potential hand regions (simplified)
-            hand_regions = anatomy_mask  # In practice, would be more sophisticated
-
-            # Apply hand-specific attention
-            x_hands, _ = self.hand_attention(x, x, x)
-
-            # Apply finger constraints
-            finger_features = self.finger_embeddings.unsqueeze(0).expand(B, -1, -1)
-            finger_attended, _ = self.hand_attention(x_hands, finger_features, finger_features)
-
-            # Blend hand features where mask indicates
-            # Ensure mask dimensions match
-            if hand_regions.shape[1] != N:
-                # Reshape mask to match sequence length
-                mask_size = int(np.sqrt(hand_regions.shape[1]))
-                target_size = int(np.sqrt(N))
-                if mask_size != target_size:
-                    # Interpolate mask to correct size
-                    hand_regions_2d = hand_regions.view(B, mask_size, mask_size).unsqueeze(1)
-                    hand_regions_2d = torch.nn.functional.interpolate(
-                        hand_regions_2d, size=(target_size, target_size), mode="nearest"
-                    )
-                    hand_regions = hand_regions_2d.view(B, -1)
-
-            hand_mask = hand_regions.unsqueeze(-1).expand(-1, -1, D)
-            x = torch.where(hand_mask > 0.5, x + 0.3 * finger_attended, x)
-
-        return x
+        x_anatomy, _ = self.anatomy_attention(x, x, x)
+        x = x + 0.4 * self.anatomy_constraint(x_anatomy)
+        if anatomy_mask is None:
+            return x
+        x_hands, _ = self.hand_attention(x, x, x)
+        finger_features = self.finger_embeddings.unsqueeze(0).expand(B, -1, -1)
+        finger_attended, _ = self.hand_attention(x_hands, finger_features, finger_features)
+        mask = anatomy_mask
+        if mask.shape[1] != N:
+            side, target = int(mask.shape[1] ** 0.5), int(N**0.5)
+            if side != target:
+                mask = F.interpolate(mask.view(B, 1, side, side), size=(target, target), mode="nearest").view(B, -1)
+        return torch.where(mask.unsqueeze(-1) > 0.5, x + 0.3 * finger_attended, x)
 
 
 class TextRenderingLayer(nn.Module):
-    """Specialized layer for accurate text rendering in images."""
+    """Glyph-token cross-attention: text token ids (+ typography style, + 2D positions) attended by the image."""
 
     def __init__(self, hidden_size: int, vocab_size: int = 50000):
         super().__init__()
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
-
-        # Text token embeddings
         self.text_embeddings = nn.Embedding(vocab_size, hidden_size)
-
-        # Typography style embeddings
-        self.typography_embeddings = nn.Parameter(
-            torch.randn(20, hidden_size) * 0.02  # Different typography styles
-        )
-
-        # Text positioning network
+        self.typography_embeddings = nn.Parameter(torch.randn(20, hidden_size) * 0.02)
         self.text_position_net = nn.Sequential(
-            nn.Linear(hidden_size + 2, hidden_size),  # +2 for x, y position
+            nn.Linear(hidden_size + 2, hidden_size),  # +2 for the (x, y) text position
             nn.GELU(),
             nn.Linear(hidden_size, hidden_size),
             nn.LayerNorm(hidden_size),
         )
-
-        # Character-level attention for precise text rendering
         self.char_attention = nn.MultiheadAttention(hidden_size, num_heads=8, batch_first=True)
-
-        # Text quality enhancement
         self.text_quality_net = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 2), nn.GELU(), nn.Linear(hidden_size * 2, hidden_size), nn.Dropout(0.1)
         )
@@ -191,133 +104,63 @@ class TextRenderingLayer(nn.Module):
         text_positions: torch.Tensor | None = None,
         typography_style: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """
-        Args:
-            x: Input features [B, N, D]
-            text_tokens: Text token IDs [B, max_text_len]
-            text_positions: Text positions [B, max_text_len, 2]
-            typography_style: Typography style ID [B]
-        """
+        """``text_tokens``: ``(B, L)`` ids; ``text_positions``: ``(B, L, 2)``; ``typography_style``: ``(B,)`` ids."""
         if text_tokens is None:
             return x
-
-        B, N, D = x.shape
-
-        # Embed text tokens
-        text_features = self.text_embeddings(text_tokens)  # [B, max_text_len, D]
-
-        # Add typography style
+        text_features = self.text_embeddings(text_tokens)
         if typography_style is not None:
-            style_features = self.typography_embeddings[typography_style]  # [B, D]
-            text_features = text_features + style_features.unsqueeze(1)
-
-        # Add positional information
+            text_features = text_features + self.typography_embeddings[typography_style].unsqueeze(1)
         if text_positions is not None:
-            pos_features = torch.cat([text_features, text_positions], dim=-1)
-            text_features = self.text_position_net(pos_features)
-
-        # Apply character-level attention
+            text_features = self.text_position_net(torch.cat([text_features, text_positions], dim=-1))
         text_attended, _ = self.char_attention(text_features, text_features, text_features)
-
-        # Enhance text quality
         text_enhanced = self.text_quality_net(text_attended)
-
-        # Cross-attention between image and text features
         x_text_attended, _ = self.char_attention(x, text_enhanced, text_enhanced)
-
-        # Blend text-aware features
-        x = x + 0.5 * x_text_attended
-
-        return x
+        return x + 0.5 * x_text_attended
 
 
 class ConsistencyEmbedder(nn.Module):
-    """Embedding system for character and style consistency."""
+    """Character / style id embeddings (+ learned memory rows) mixed into every token."""
 
     def __init__(self, hidden_size: int, max_characters: int = 100, max_styles: int = 50):
         super().__init__()
         self.hidden_size = hidden_size
-
-        # Character identity embeddings
         self.character_embeddings = nn.Embedding(max_characters, hidden_size)
-
-        # Style embeddings
         self.style_embeddings = nn.Embedding(max_styles, hidden_size)
-
-        # Feature consistency network
         self.consistency_net = nn.Sequential(
-            nn.Linear(hidden_size * 2, hidden_size),  # char + style
+            nn.Linear(hidden_size * 2, hidden_size),  # character + style
             nn.GELU(),
             nn.Linear(hidden_size, hidden_size),
             nn.LayerNorm(hidden_size),
         )
-
-        # Memory bank for character features
         self.character_memory = nn.Parameter(torch.randn(max_characters, hidden_size) * 0.02)
-
-        # Style memory bank
         self.style_memory = nn.Parameter(torch.randn(max_styles, hidden_size) * 0.02)
 
     def forward(
         self, x: torch.Tensor, character_id: torch.Tensor | None = None, style_id: torch.Tensor | None = None
     ) -> torch.Tensor:
-        """
-        Args:
-            x: Input features [B, N, D]
-            character_id: Character ID [B]
-            style_id: Style ID [B]
-        """
+        """``character_id`` / ``style_id``: ``(B,)`` ids; a missing one contributes zeros."""
         if character_id is None and style_id is None:
             return x
-
         B, N, D = x.shape
-        consistency_features = []
-
-        # Add character consistency
+        char = style = x.new_zeros(B, D)
         if character_id is not None:
-            char_features = self.character_embeddings(character_id)  # [B, D]
-            char_memory = self.character_memory[character_id]  # [B, D]
-            char_combined = char_features + char_memory
-            consistency_features.append(char_combined)
-        else:
-            consistency_features.append(torch.zeros(B, D, device=x.device))
-
-        # Add style consistency
+            char = self.character_embeddings(character_id) + self.character_memory[character_id]
         if style_id is not None:
-            style_features = self.style_embeddings(style_id)  # [B, D]
-            style_memory = self.style_memory[style_id]  # [B, D]
-            style_combined = style_features + style_memory
-            consistency_features.append(style_combined)
-        else:
-            consistency_features.append(torch.zeros(B, D, device=x.device))
-
-        # Combine consistency features
-        consistency_combined = torch.cat(consistency_features, dim=-1)  # [B, 2*D]
-        consistency_processed = self.consistency_net(consistency_combined)  # [B, D]
-
-        # Apply to all spatial positions
-        consistency_broadcast = consistency_processed.unsqueeze(1).expand(-1, N, -1)
-
-        # Blend with input features
-        x = x + 0.3 * consistency_broadcast
-
-        return x
+            style = self.style_embeddings(style_id) + self.style_memory[style_id]
+        consistency = self.consistency_net(torch.cat([char, style], dim=-1))
+        return x + 0.3 * consistency.unsqueeze(1).expand(-1, N, -1)
 
 
 class EnhancedDiTBlock(DiTBlock):
-    """Enhanced DiT block with advanced feature modules."""
+    """``DiTBlock`` followed by the four feature modules, mixed with softmax-normalised learned weights."""
 
     def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float = 4.0, **kwargs):
         super().__init__(hidden_size, num_heads, mlp_ratio, **kwargs)
-
-        # Add advanced feature modules
         self.spatial_control = SpatialControlModule(hidden_size)
         self.anatomy_attention = AnatomyAwareAttention(hidden_size, num_heads)
         self.text_rendering = TextRenderingLayer(hidden_size)
         self.consistency_embedder = ConsistencyEmbedder(hidden_size)
-
-        # Feature blending weights
-        self.feature_blend = nn.Parameter(torch.ones(4) * 0.25)  # Equal weights initially
+        self.feature_blend = nn.Parameter(torch.ones(4) * 0.25)
 
     def forward(
         self,
@@ -331,39 +174,18 @@ class EnhancedDiTBlock(DiTBlock):
         character_id: torch.Tensor | None = None,
         style_id: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        # Standard DiT processing
         x = super().forward(x, c)
-
-        # Apply advanced features with learned blending
-        features = []
-
-        # Spatial control
-        x_spatial = self.spatial_control(x, spatial_layout)
-        features.append(x_spatial)
-
-        # Anatomy awareness
-        x_anatomy = self.anatomy_attention(x, anatomy_mask)
-        features.append(x_anatomy)
-
-        # Text rendering
-        x_text = self.text_rendering(x, text_tokens, text_positions, typography_style)
-        features.append(x_text)
-
-        # Consistency
-        x_consistency = self.consistency_embedder(x, character_id, style_id)
-        features.append(x_consistency)
-
-        # Blend features with learned weights
-        blend_weights = F.softmax(self.feature_blend, dim=0)
-        x_enhanced = sum(w * feat for w, feat in zip(blend_weights, features))
-
-        return x_enhanced
+        features = (
+            self.spatial_control(x, spatial_layout),
+            self.anatomy_attention(x, anatomy_mask),
+            self.text_rendering(x, text_tokens, text_positions, typography_style),
+            self.consistency_embedder(x, character_id, style_id),
+        )
+        return sum(w * f for w, f in zip(F.softmax(self.feature_blend, dim=0), features))
 
 
 class EnhancedDiT(nn.Module):
-    """
-    Enhanced Diffusion Transformer with built-in advanced features.
-    """
+    """Class-conditional DiT built from ``EnhancedDiTBlock``; each feature module can be switched off."""
 
     def __init__(
         self,
@@ -377,7 +199,6 @@ class EnhancedDiT(nn.Module):
         class_dropout_prob: float = 0.1,
         num_classes: int = 1000,
         learn_sigma: bool = True,
-        # Enhanced features
         enable_spatial_control: bool = True,
         enable_anatomy_awareness: bool = True,
         enable_text_rendering: bool = True,
@@ -389,90 +210,48 @@ class EnhancedDiT(nn.Module):
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
-
-        # Enhanced feature flags
         self.enable_spatial_control = enable_spatial_control
         self.enable_anatomy_awareness = enable_anatomy_awareness
         self.enable_text_rendering = enable_text_rendering
         self.enable_consistency = enable_consistency
-
-        # Standard DiT components
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
-
         num_patches = self.x_embedder.num_patches
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
-
-        # Enhanced DiT blocks
         self.blocks = nn.ModuleList(
             [EnhancedDiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)]
         )
-
-        # Final layer — adaLN-conditioned on timestep/class embedding, matching the base DiT design.
-        # Using a plain nn.Sequential here would lose all conditioning information at the output.
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
-
-        # Initialize weights
+        self._grad_checkpointing = False
         self.initialize_weights()
 
     def enable_gradient_checkpointing(self):
-        """Enable gradient checkpointing for memory efficiency."""
-        for block in self.blocks:
-            block.gradient_checkpointing = True
-
-    def disable_gradient_checkpointing(self):
-        """Disable gradient checkpointing."""
-        for block in self.blocks:
-            block.gradient_checkpointing = False
+        self._grad_checkpointing = True
 
     def initialize_weights(self):
-        """Initialize model weights following the base DiT recipe."""
-        # Sinusoidal 2D positional embeddings (non-learned, copied from base DiT)
+        """Base DiT init: sin/cos positions, Xavier patch embed, N(0, 0.02) embeddings, adaLN-Zero + zero output."""
         pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.x_embedder.num_patches**0.5))
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
-
-        # Patch embedding — initialize like a linear layer (xavier uniform)
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)
-
-        # Label embedding table
         nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
-
-        # Timestep embedding MLP
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
-
-        # Zero-out adaLN modulation final projections (identity modulation at init)
         for block in self.blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
-
-        # Zero-out FinalLayer: adaLN modulation + output linear projection
         nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
         nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
         nn.init.constant_(self.final_layer.linear.weight, 0)
         nn.init.constant_(self.final_layer.linear.bias, 0)
-
-    def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
-        """Convert patches back to image format."""
-        c = self.out_channels
-        p = self.patch_size
-        h = w = int(x.shape[1] ** 0.5)
-        assert h * w == x.shape[1]
-
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, c))
-        x = torch.einsum("nhwpqc->nchpwq", x)
-        imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
-        return imgs
 
     def forward(
         self,
         x: torch.Tensor,
         t: torch.Tensor,
         y: torch.Tensor,
-        # Enhanced feature inputs
         spatial_layout: torch.Tensor | None = None,
         anatomy_mask: torch.Tensor | None = None,
         text_tokens: torch.Tensor | None = None,
@@ -481,58 +260,28 @@ class EnhancedDiT(nn.Module):
         character_id: torch.Tensor | None = None,
         style_id: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """
-        Forward pass with enhanced features.
-
-        Args:
-            x: Input tensor [B, C, H, W]
-            t: Timestep tensor [B]
-            y: Class labels [B]
-            spatial_layout: Object layout [B, num_objects, 4]
-            anatomy_mask: Human region mask [B, N]
-            text_tokens: Text tokens [B, max_text_len]
-            text_positions: Text positions [B, max_text_len, 2]
-            typography_style: Typography style [B]
-            character_id: Character ID [B]
-            style_id: Style ID [B]
-        """
-        # Embed patches
-        x = self.x_embedder(x) + self.pos_embed  # [B, N, D]
-
-        # Embed timestep and class
-        t = self.t_embedder(t)  # [B, D]
-        y = self.y_embedder(y, self.training)  # [B, D]
-        c = t + y  # [B, D]
-
-        # Process through enhanced blocks (gradient checkpointing honoured when enabled)
+        """``x``: ``(B, C, H, W)`` latent, ``t`` / ``y``: ``(B,)``; feature inputs are shaped as in each module."""
+        h, w = x.shape[-2] // self.patch_size, x.shape[-1] // self.patch_size
+        x = self.x_embedder(x) + self.pos_embed
+        c = self.t_embedder(t) + self.y_embedder(y, self.training)
+        block_kwargs = dict(
+            spatial_layout=spatial_layout if self.enable_spatial_control else None,
+            anatomy_mask=anatomy_mask if self.enable_anatomy_awareness else None,
+            text_tokens=text_tokens if self.enable_text_rendering else None,
+            text_positions=text_positions if self.enable_text_rendering else None,
+            typography_style=typography_style if self.enable_text_rendering else None,
+            character_id=character_id if self.enable_consistency else None,
+            style_id=style_id if self.enable_consistency else None,
+        )
+        checkpointing = self._grad_checkpointing and self.training
         for block in self.blocks:
-            block_kwargs = dict(
-                spatial_layout=spatial_layout if self.enable_spatial_control else None,
-                anatomy_mask=anatomy_mask if self.enable_anatomy_awareness else None,
-                text_tokens=text_tokens if self.enable_text_rendering else None,
-                text_positions=text_positions if self.enable_text_rendering else None,
-                typography_style=typography_style if self.enable_text_rendering else None,
-                character_id=character_id if self.enable_consistency else None,
-                style_id=style_id if self.enable_consistency else None,
-            )
-            if getattr(block, "gradient_checkpointing", False):
-                x = torch.utils.checkpoint.checkpoint(
-                    lambda _x, _c: block(_x, _c, **block_kwargs),
-                    x,
-                    c,
-                    use_reentrant=False,
-                )
+            if checkpointing:
+                x = torch.utils.checkpoint.checkpoint(block, x, c, use_reentrant=False, **block_kwargs)
             else:
                 x = block(x, c, **block_kwargs)
-
-        # Final processing — pass c so FinalLayer can apply adaLN conditioning
-        x = self.final_layer(x, c)  # [B, N, patch_size^2 * out_channels]
-        x = self.unpatchify(x)  # [B, out_channels, H, W]
-
-        return x
+        return unpatchify(self.final_layer(x, c), self.patch_size, self.out_channels, h, w)
 
 
-# Model configurations
 def EnhancedDiT_XL_2(**kwargs):
     return EnhancedDiT(depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
 

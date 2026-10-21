@@ -15,9 +15,7 @@ from .style_genome import StyleGenome
 
 InventionMode = Literal["normal", "insane", "apocalypse", "chimera", "glitch", "eldritch", "cyberpunk"]
 
-# ---------------------------------------------------------------------------
 # Named presets (instant wild identities)
-# ---------------------------------------------------------------------------
 INSANE_PRESETS: dict[str, dict[str, object]] = {
     "glitch_cathedral": {
         "name": "Glitch Cathedral",
@@ -191,17 +189,6 @@ WILD_NEGATIVE: tuple[str, ...] = (
     "watermark template",
     "low effort background void",
     "safe corporate illustration",
-)
-
-CHAOS_CLAUSE_POSITIVE: tuple[str, ...] = (
-    "visually unforgettable",
-    "deliberately uncanny",
-    "high concept art direction",
-)
-CHAOS_CLAUSE_NEGATIVE: tuple[str, ...] = (
-    "forgettable average",
-    "template AI look",
-    "boring safe composition",
 )
 
 

@@ -1,6 +1,4 @@
-"""
-Text encoder stack readiness for triple / penta training and sampling.
-"""
+"""Text encoder stack (T5 / triple / penta): local readiness and what a DiT checkpoint was trained with."""
 
 from __future__ import annotations
 
@@ -138,13 +136,35 @@ def stack_download_hint(mode: str = "penta") -> str:
     return "python scripts/download/download_models.py --t5"
 
 
+def text_encoder_mode_label(mode: str) -> str:
+    return " + ".join(catalog_for_mode(mode))
+
+
+def checkpoint_text_stack(ckpt_path: str) -> tuple[StackMode, bool]:
+    """``(text_encoder_mode, has_fusion_weights)`` of a DiT checkpoint; ``("t5", False)`` when unreadable."""
+    import torch
+
+    p = Path(str(ckpt_path).strip())
+    try:
+        ckpt = torch.load(str(p), map_location="cpu", weights_only=False) if p.is_file() else None
+    except Exception:
+        ckpt = None
+    if not isinstance(ckpt, dict):
+        return "t5", False
+    mode = str(getattr(ckpt.get("config"), "text_encoder_mode", "t5") or "t5").lower()
+    fusion = ckpt.get("text_encoder_fusion")
+    return (mode if mode in ("triple", "penta") else "t5"), isinstance(fusion, dict) and bool(fusion)  # type: ignore[return-value]
+
+
 __all__ = [
     "EncoderSlotStatus",
     "PENTA_CATALOG",
     "TRIPLE_CATALOG",
     "TextEncoderStackStatus",
     "catalog_for_mode",
+    "checkpoint_text_stack",
     "stack_download_hint",
     "stack_status",
     "stack_status_lines",
+    "text_encoder_mode_label",
 ]

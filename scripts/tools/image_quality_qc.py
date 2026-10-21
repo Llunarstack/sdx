@@ -16,27 +16,14 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-
-def _extract_image_path(row: dict) -> str:
-    for k in ("image_path", "path", "image"):
-        v = row.get(k)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    return ""
-
-
-def _resolve_path(image_path: str, manifest_path: Path, image_root: str | None) -> Path:
-    p = Path(image_path)
-    if image_root:
-        p = Path(image_root) / p
-    if not p.is_absolute():
-        p = (manifest_path.parent / p).resolve()
-    return p
+from data.manifest_utils import first_str, iter_manifest_rows, resolve_image_path  # noqa: E402
 
 
 def main() -> int:
+    import numpy as np
     from PIL import Image
-    from utils.image_quality_metrics import analyze_image_quality
+    from utils.quality.quality import rgb_to_luminance
+    from utils.quality.test_time_pick import score_edge_sharpness
 
     ap = argparse.ArgumentParser(description="Compute image sharpness/contrast for SDX JSONL manifests")
     ap.add_argument("input", type=str, help="Path to JSONL manifest")
@@ -52,65 +39,50 @@ def main() -> int:
         print(f"Not found: {inp}", file=sys.stderr)
         return 2
 
-    image_root = args.image_root.strip() or None
+    image_root = Path(args.image_root) if args.image_root.strip() else None
     results: list[dict[str, object]] = []
     fail = False
-    n = 0
     processed = 0
-    with inp.open("r", encoding="utf-8") as f:
-        for line in f:
-            n += 1
-            t = line.strip()
-            if not t:
-                continue
-            try:
-                row = json.loads(t)
-            except Exception:
-                continue
+    for row in iter_manifest_rows(inp):
+        processed += 1
+        if args.sample and processed > args.sample:
+            break
+        img_path = first_str(row, ("image_path", "path", "image"))
+        path = resolve_image_path(img_path, image_root, inp.parent)
+        if path is None:
+            continue
 
-            processed += 1
-            if args.sample and processed > args.sample:
-                break
+        try:
+            img = Image.open(path).convert("RGB")
+        except Exception:
+            continue
 
-            img_path = _extract_image_path(row)
-            if not img_path:
-                continue
+        rgb = np.asarray(img, dtype=np.uint8)
+        sharpness = float(score_edge_sharpness(rgb))
+        contrast = float(rgb_to_luminance(rgb).std())
 
-            path = _resolve_path(img_path, inp, image_root=image_root)
-            if not path.is_file():
-                continue
+        ok = True
+        reasons: list[str] = []
+        if args.min_sharpness > 0.0 and sharpness < args.min_sharpness:
+            ok = False
+            reasons.append(f"sharpness<{args.min_sharpness}")
+        if args.min_contrast > 0.0 and contrast < args.min_contrast:
+            ok = False
+            reasons.append(f"contrast<{args.min_contrast}")
 
-            try:
-                img = Image.open(path).convert("RGB")
-            except Exception:
-                continue
+        if not ok:
+            fail = True
 
-            m = analyze_image_quality(img)
-            sharpness = float(m["sharpness"])
-            contrast = float(m["contrast"])
-
-            ok = True
-            reasons: list[str] = []
-            if args.min_sharpness > 0.0 and sharpness < args.min_sharpness:
-                ok = False
-                reasons.append(f"sharpness<{args.min_sharpness}")
-            if args.min_contrast > 0.0 and contrast < args.min_contrast:
-                ok = False
-                reasons.append(f"contrast<{args.min_contrast}")
-
-            if not ok:
-                fail = True
-
-            results.append(
-                {
-                    "image_path": img_path,
-                    "resolved_path": str(path),
-                    "sharpness": sharpness,
-                    "contrast": contrast,
-                    "ok": ok,
-                    "reasons": reasons,
-                }
-            )
+        results.append(
+            {
+                "image_path": img_path,
+                "resolved_path": str(path),
+                "sharpness": sharpness,
+                "contrast": contrast,
+                "ok": ok,
+                "reasons": reasons,
+            }
+        )
 
     report = {
         "input": str(inp),
@@ -121,7 +93,6 @@ def main() -> int:
         "fail": fail,
     }
 
-    # Small console summary
     if results:
         sharp_vals = [r["sharpness"] for r in results]
         con_vals = [r["contrast"] for r in results]
@@ -139,7 +110,6 @@ def main() -> int:
 
     print(f"imageqc: count={len(results)} fail={fail}")
     if fail:
-        # Non-zero helps with dataset gating in pipelines.
         return 1
     return 0
 

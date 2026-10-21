@@ -12,7 +12,7 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from utils.runtime.plain_dict import to_plain_dict
+from utils.runtime import to_plain_dict
 
 
 def _diff_std_population(diff: torch.Tensor) -> float:

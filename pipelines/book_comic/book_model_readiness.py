@@ -11,81 +11,61 @@ from pathlib import Path
 from typing import Any
 
 from utils.architecture.ar_block_conditioning import normalize_num_ar_blocks
+from utils.generation.sample_helpers import _parse_control_spec, _parse_lora_spec
 
 from pipelines.book_comic.book_helpers import pick_metric_requires_vit_ckpt
 
+# (args attribute, CLI flag) for optional single-file inputs, checked in this order.
+_OPTIONAL_FILE_ARGS: tuple[tuple[str, str], ...] = (
+    ("control_image", "--control-image"),
+    ("reference_image", "--reference-image"),
+    ("reference_adapter_pt", "--reference-adapter-pt"),
+    ("tags_file", "--tags-file"),
+    ("character_sheet", "--character-sheet"),
+    ("visual_memory", "--visual-memory"),
+    ("consistency_json", "--consistency-json"),
+)
 
-def _first_path_from_lora_spec(spec: str) -> str:
-    s = (spec or "").strip()
-    if not s:
-        return ""
-    return s.split(":", 1)[0].strip()
+
+def _str_arg(args: Any, name: str) -> str:
+    return str(getattr(args, name, "") or "").strip()
 
 
-def _first_path_from_control_spec(spec: str) -> str:
-    s = (spec or "").strip()
-    if not s:
-        return ""
-    return s.split(":", 1)[0].strip()
+def _cli_ar_blocks(args: Any) -> int:
+    """``--pick-vit-ar-blocks`` as an int; ``0`` is a valid regime, so only ``None`` means unset."""
+    try:
+        return int(getattr(args, "pick_vit_ar_blocks", -1))
+    except (TypeError, ValueError):
+        return -1
 
 
 def collect_missing_path_errors(args: Any) -> list[str]:
-    """
-    Return fatal path issues (missing files). Intended for ``--book-preflight strict``.
-    """
+    """Return fatal path issues (missing files). Intended for ``--book-preflight strict``."""
     errors: list[str] = []
     ckpt = Path(str(getattr(args, "ckpt", "") or ""))
     if not ckpt.is_file():
         errors.append(f"--ckpt is not a file: {ckpt}")
 
-    pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
+    pv = _str_arg(args, "pick_vit_ckpt")
     if pv and not Path(pv).is_file():
         errors.append(f"--pick-vit-ckpt is not a file: {pv}")
 
-    for spec in getattr(args, "lora", None) or []:
-        p = _first_path_from_lora_spec(str(spec))
-        if p and not Path(p).is_file():
-            errors.append(f"--lora path not found ({spec!r}): {p}")
+    # Same Windows-drive-safe parsers sample.py uses ("C:\\x.safetensors:0.8" -> "C:\\x.safetensors").
+    for flag, parse, specs in (
+        ("--lora", _parse_lora_spec, getattr(args, "lora", None)),
+        ("--control", _parse_control_spec, getattr(args, "control", None)),
+    ):
+        for spec in specs or []:
+            p = parse(str(spec))[0]
+            if p and not Path(p).is_file():
+                errors.append(f"{flag} path not found ({spec!r}): {p}")
 
-    for spec in getattr(args, "control", None) or []:
-        p = _first_path_from_control_spec(str(spec))
-        if p and not Path(p).is_file():
-            errors.append(f"--control path not found ({spec!r}): {p}")
-
-    ci = str(getattr(args, "control_image", "") or "").strip()
-    if ci and not Path(ci).is_file():
-        errors.append(f"--control-image is not a file: {ci}")
-
-    rif = str(getattr(args, "reference_image", "") or "").strip()
-    if rif and not Path(rif).is_file():
-        errors.append(f"--reference-image is not a file: {rif}")
-
-    rap = str(getattr(args, "reference_adapter_pt", "") or "").strip()
-    if rap and not Path(rap).is_file():
-        errors.append(f"--reference-adapter-pt is not a file: {rap}")
-
-    tf = str(getattr(args, "tags_file", "") or "").strip()
-    if tf and not Path(tf).is_file():
-        errors.append(f"--tags-file is not a file: {tf}")
-
-    cs = str(getattr(args, "character_sheet", "") or "").strip()
-    if cs and not Path(cs).is_file():
-        errors.append(f"--character-sheet is not a file: {cs}")
-
-    vm = str(getattr(args, "visual_memory", "") or "").strip()
-    if vm and not Path(vm).is_file():
-        errors.append(f"--visual-memory is not a file: {vm}")
-
-    cj = str(getattr(args, "consistency_json", "") or "").strip()
-    if cj and not Path(cj).is_file():
-        errors.append(f"--consistency-json is not a file: {cj}")
+    for attr, flag in _OPTIONAL_FILE_ARGS:
+        value = _str_arg(args, attr)
+        if value and not Path(value).is_file():
+            errors.append(f"{flag} is not a file: {value}")
 
     return errors
-
-
-def collect_missing_path_warnings(args: Any) -> list[str]:
-    """Same as errors but phrased as warnings (``--book-preflight warn`` does not exit)."""
-    return [f"{e}" for e in collect_missing_path_errors(args)]
 
 
 def collect_dual_model_alignment_warnings(
@@ -93,29 +73,23 @@ def collect_dual_model_alignment_warnings(
     *,
     dit_ar_blocks: int = -1,
     vit_cfg: dict[str, Any] | None = None,
-    resolved_pick_best: str = "",
 ) -> list[str]:
+    """Warn when the ViT scorer config disagrees with DiT / CLI flags (AR regime, resolution).
+
+    Returns no warnings when ``--pick-vit-ckpt`` is unset.
     """
-    Warn when ViT scorer config and DiT / CLI flags disagree (AR regime, missing ViT path, etc.).
-    """
+    if not _str_arg(args, "pick_vit_ckpt"):
+        return []
+
     warnings: list[str] = []
-    pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
-
-    if not pv:
-        return warnings
-
-    cfg = vit_cfg if isinstance(vit_cfg, dict) else {}
-    use_ar = bool(cfg.get("use_ar_conditioning", False))
-    vit_img = cfg.get("image_size", 224)
+    cfg = vit_cfg or {}
     try:
-        vit_img_i = int(vit_img)
+        vit_img = int(cfg.get("image_size", 224))
     except (TypeError, ValueError):
-        vit_img_i = 224
+        vit_img = 224
+    ar_cli = _cli_ar_blocks(args)
 
-    ar_cli = int(getattr(args, "pick_vit_ar_blocks", -1) or -1)
-    from_ckpt = bool(getattr(args, "pick_vit_ar_from_ckpt", False))
-
-    if use_ar and ar_cli < 0 and not from_ckpt:
+    if cfg.get("use_ar_conditioning") and ar_cli < 0 and not getattr(args, "pick_vit_ar_from_ckpt", False):
         warnings.append(
             "ViT checkpoint uses AR conditioning, but --pick-vit-ar-blocks is unset and "
             "--pick-vit-ar-from-ckpt is off; scorer uses the unknown AR one-hot. "
@@ -132,9 +106,9 @@ def collect_dual_model_alignment_warnings(
 
     w = int(getattr(args, "width", 0) or 0)
     h = int(getattr(args, "height", 0) or 0)
-    if w > 0 and h > 0 and max(w, h) > vit_img_i * 2:
+    if w > 0 and h > 0 and max(w, h) > vit_img * 2:
         warnings.append(
-            f"Output resolution {w}x{h} is much larger than ViT training image_size={vit_img_i}; "
+            f"Output resolution {w}x{h} is much larger than ViT training image_size={vit_img}; "
             "pick-best ViT scores are computed on resized crops (still usable, less representative)."
         )
 
@@ -142,16 +116,15 @@ def collect_dual_model_alignment_warnings(
 
 
 def peek_vit_config_for_args(args: Any) -> dict[str, Any]:
-    """Load ViT config dict when ``--pick-vit-ckpt`` points at a file."""
-    pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
-    if not pv or not Path(pv).is_file():
+    """ViT config dict embedded in ``--pick-vit-ckpt`` ({} when unset, missing or unreadable)."""
+    pv = _str_arg(args, "pick_vit_ckpt")
+    if not pv:
         return {}
     try:
         from vit_quality.checkpoint_utils import peek_vit_quality_config
-
-        return peek_vit_quality_config(pv)
-    except Exception:
+    except ImportError:
         return {}
+    return peek_vit_quality_config(pv)
 
 
 def book_model_stack_snapshot(
@@ -161,8 +134,8 @@ def book_model_stack_snapshot(
     vit_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compact manifest-friendly summary of generator + ViT readiness."""
-    cfg = vit_cfg if isinstance(vit_cfg, dict) else {}
-    pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
+    cfg = vit_cfg or {}
+    pv = _str_arg(args, "pick_vit_ckpt")
     return {
         "dit_ckpt_exists": Path(str(getattr(args, "ckpt", "") or "")).is_file(),
         "dit_num_ar_blocks": int(dit_ar_blocks),
@@ -170,7 +143,7 @@ def book_model_stack_snapshot(
         "pick_vit_ckpt_exists": bool(pv) and Path(pv).is_file(),
         "vit_use_ar_conditioning": bool(cfg.get("use_ar_conditioning", False)),
         "vit_image_size": int(cfg.get("image_size", 224) or 224),
-        "pick_vit_ar_blocks_cli": int(getattr(args, "pick_vit_ar_blocks", -1) or -1),
+        "pick_vit_ar_blocks_cli": _cli_ar_blocks(args),
         "pick_vit_ar_from_ckpt": bool(getattr(args, "pick_vit_ar_from_ckpt", False)),
         "lora_count": len(getattr(args, "lora", None) or []),
         "control_stack_count": len(getattr(args, "control", None) or []),
@@ -189,30 +162,21 @@ def run_book_preflight(
 
     Pass *resolved_pick_best* when ``--pick-best auto`` was expanded by ``--book-accuracy`` presets.
 
-    Returns ``(errors, warnings)``. In strict mode, callers should exit if *errors* is non-empty.
+    Returns ``(errors, warnings)``. In strict mode, callers should exit if *errors* is non-empty;
+    in warn mode missing paths are reported as warnings instead.
     """
     m = str(mode or "warn").strip().lower()
     if m == "off":
         return [], []
 
-    vit_cfg = peek_vit_config_for_args(args)
     align_warns = collect_dual_model_alignment_warnings(
-        args,
-        dit_ar_blocks=dit_ar_blocks,
-        vit_cfg=vit_cfg,
-        resolved_pick_best=resolved_pick_best,
+        args, dit_ar_blocks=dit_ar_blocks, vit_cfg=peek_vit_config_for_args(args)
     )
     path_issues = collect_missing_path_errors(args)
+    if m != "strict":
+        return [], align_warns + path_issues
+
     pb_eff = str(resolved_pick_best or getattr(args, "pick_best", "") or "").strip().lower()
-
-    if m == "strict":
-        errors = list(path_issues)
-        pv = str(getattr(args, "pick_vit_ckpt", "") or "").strip()
-        if pick_metric_requires_vit_ckpt(pb_eff) and not pv:
-            errors.append(f"--book-preflight strict requires --pick-vit-ckpt when effective pick-best is {pb_eff!r}")
-        return errors, align_warns
-
-    # warn
-    warnings = list(align_warns)
-    warnings.extend(collect_missing_path_warnings(args))
-    return [], warnings
+    if pick_metric_requires_vit_ckpt(pb_eff) and not _str_arg(args, "pick_vit_ckpt"):
+        path_issues.append(f"--book-preflight strict requires --pick-vit-ckpt when effective pick-best is {pb_eff!r}")
+    return path_issues, align_warns

@@ -70,25 +70,6 @@ def merge_character_sheet_positives(
     return ", ".join(parts)
 
 
-def merge_character_sheet_negatives(blocks: Sequence[str]) -> str:
-    """Deduped merge of negative strings from several sheets."""
-    seen = set()
-    out: list[str] = []
-    for b in blocks:
-        if not b or not str(b).strip():
-            continue
-        for tok in str(b).split(","):
-            t = tok.strip()
-            if not t:
-                continue
-            key = t.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(t)
-    return ", ".join(out)
-
-
 def multi_sheet_extra_negatives_csv() -> str:
     """Comma-separated negatives focused on outfit/face/pose confusion (multi-sheet scenes)."""
     return ", ".join(MULTI_SUBJECT_NEGATIVE_EXTRAS)
@@ -115,6 +96,5 @@ __all__ = [
     "TRAINING_CAPTION_GUIDE",
     "default_subject_labels",
     "merge_character_sheet_positives",
-    "merge_character_sheet_negatives",
     "multi_sheet_extra_negatives_csv",
 ]

@@ -54,33 +54,25 @@ def test_resolve_square() -> None:
 def test_validate_pixels_against_dit_ok() -> None:
     class Emb:
         img_size = 64
+        patch_size = 2
 
     class M:
         x_embedder = Emb()
 
     pp.validate_pixels_against_dit(512, 512, M())
+    pp.validate_pixels_against_dit(384, 688, M())
 
 
 def test_validate_pixels_against_dit_bad() -> None:
     class Emb:
         img_size = 64
+        patch_size = 2
 
     class M:
         x_embedder = Emb()
 
     with pytest.raises(ValueError, match="latent"):
-        pp.validate_pixels_against_dit(500, 512, M())
-
-
-def test_ar_block_grid_side() -> None:
-    assert pp.ar_block_grid_side(16) == 4
-    assert pp.ar_block_grid_side(15) is None
-
-
-def test_validate_latent_matches_ar_grid() -> None:
-    pp.validate_latent_matches_ar_grid(4, 4, 16)
-    with pytest.raises(ValueError):
-        pp.validate_latent_matches_ar_grid(4, 5, 16)
+        pp.validate_pixels_against_dit(504, 512, M())
 
 
 def test_tag_manifest_pixel_perfect() -> None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from config.defaults._lexicon import merge_csv_unique
 from config.defaults.art_mediums import (
     ANATOMY_NEG_LITE,
     ANATOMY_NEG_STRONG,
@@ -49,24 +50,6 @@ _PEOPLE_HINT = re.compile(
     r"\b(person|people|man|woman|men|women|boy|girl|child|children|kid|kids|character|characters|portrait|crowd|knight|warrior|soldier|dancer|couple|family)\b",
     re.IGNORECASE,
 )
-
-
-def _merge_unique_csv(*parts: str) -> str:
-    seen: set[str] = set()
-    out: list[str] = []
-    for block in parts:
-        if not block:
-            continue
-        for chunk in block.split(","):
-            c = chunk.strip()
-            if not c:
-                continue
-            key = c.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(c)
-    return ", ".join(out)
 
 
 def detailed_scene_warrants_boost(prompt: str) -> bool:
@@ -167,7 +150,7 @@ def apply_detailed_scene_boost(
             neg_parts.append(ANATOMY_NEG_LITE)
 
     try:
-        from research.creature_character_guidance import suggest_creature_prompt_addons
+        from utils.prompt.subject_addons import suggest_creature_prompt_addons
 
         cpos, cneg = suggest_creature_prompt_addons(prompt, rating="auto")
         if cpos:
@@ -178,7 +161,7 @@ def apply_detailed_scene_boost(
         pass
 
     try:
-        from research.physics_visual_guidance import suggest_physics_prompt_addons
+        from utils.prompt.subject_addons import suggest_physics_prompt_addons
 
         ppos, pneg = suggest_physics_prompt_addons(prompt)
         if ppos:
@@ -188,8 +171,8 @@ def apply_detailed_scene_boost(
     except Exception:
         pass
 
-    pos_merged = _merge_unique_csv(*pos_parts)
-    neg_merged = _merge_unique_csv(*neg_parts)
+    pos_merged = merge_csv_unique(*pos_parts)
+    neg_merged = merge_csv_unique(*neg_parts)
 
     # Dedupe against prompt body for positives
     low = prompt.lower()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from .tokens import append_unique
+from utils.prompt.tags import append_unique
 
 
 @dataclass(frozen=True)

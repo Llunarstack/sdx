@@ -114,7 +114,7 @@ class TestDpmppVpStep:
 
 
 class TestFlowDpmpp:
-    def test_euler_then_ab2(self):
+    def test_first_step_is_euler_last_step_is_data_prediction(self):
         from diffusion.solvers import SolverState, flow_dpmpp_2m_update
 
         x = torch.zeros(1, 2, 2, 2)
@@ -129,31 +129,17 @@ class TestFlowDpmpp:
 
 
 class TestUnipc:
-    def test_predict_then_correct(self):
-        from diffusion.solvers import SolverState, vp_unipc_update
+    def test_corrector_is_trapezoid_at_order_one(self):
+        """UniC-1 averages the data predictions at both ends of the step (bh2)."""
+        from diffusion.solvers import SolverState, vp_dpmpp_update, vp_unipc_correct
 
-        B = 1
-        x = torch.randn(B, 2, 4, 4)
-        x0 = torch.randn_like(x)
+        x = torch.randn(1, 2, 4, 4)
+        m0, m1 = torch.randn_like(x), torch.randn_like(x)
         state = SolverState(max_order=3)
-        ab_c = torch.tensor([0.25])
-        ab_n = torch.tensor([0.55])
-        x_pred, state, need = vp_unipc_update(
-            x=x,
-            x0_pred=x0,
-            alpha_bar_cur=ab_c,
-            alpha_bar_next=ab_n,
-            state=state,
-            corrector_x0=None,
+        _, state = vp_dpmpp_update(x=x, x0_pred=m0, alpha_bar_cur=0.25, alpha_bar_next=0.55, state=state, order=1)
+        corrected = vp_unipc_correct(x_prev=x, x0_new=m1, alpha_bar_prev=0.25, alpha_bar_cur=0.55, state=state, order=1)
+        state_avg = SolverState(max_order=3)
+        expected, _ = vp_dpmpp_update(
+            x=x, x0_pred=0.5 * (m0 + m1), alpha_bar_cur=0.25, alpha_bar_next=0.55, state=state_avg, order=1
         )
-        assert need is True
-        x_corr, state, need2 = vp_unipc_update(
-            x=x,
-            x0_pred=x0,
-            alpha_bar_cur=ab_c,
-            alpha_bar_next=ab_n,
-            state=state,
-            corrector_x0=x0,
-        )
-        assert need2 is False
-        assert x_pred.shape == x_corr.shape
+        torch.testing.assert_close(corrected, expected)

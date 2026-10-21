@@ -85,6 +85,10 @@ def main() -> int:
         lora_scaffold_auto=False,
     )
 
+    from utils.prompt.art_direction import apply_art_direction_to_args
+
+    ns._user_prompt, ns._user_negative = args.prompt, args.negative_prompt
+    apply_art_direction_to_args(ns)
     ctx = PromptContext(positive=args.prompt, mode=StackMode.PREVIEW, args=ns)
     result = run_prompt_stack(ctx)
 

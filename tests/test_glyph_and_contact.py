@@ -1,23 +1,10 @@
 import numpy as np
-from utils.generation import glyph_canvas
+from utils.generation.edit_skills import plan_ideogram_layout
 from utils.quality import contact_shadow
 
 
-def test_render_glyph_canvas_shop_sign():
-    img = glyph_canvas.render_glyph_canvas('shop sign that says "OPEN"')
-    assert img is not None
-    assert img.size == (512, 512)
-    arr = np.asarray(img)
-    assert arr.min() < 250
-    assert np.any(arr < 200)
-
-
-def test_render_glyph_canvas_bland_prompt_returns_none():
-    assert glyph_canvas.render_glyph_canvas("sunset over mountains") is None
-
-
 def test_extract_glyph_strings_quoted_and_bracketed():
-    strings = glyph_canvas.extract_glyph_strings('poster with [text: SALE] and "50% OFF"')
+    strings = plan_ideogram_layout('poster with [text: SALE] and "50% OFF"').glyph_texts
     assert "SALE" in strings
     assert "50% OFF" in strings
 

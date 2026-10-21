@@ -1,7 +1,5 @@
 import numpy as np
 from utils.quality.scene_physics import (
-    prompt_wants_occlusion,
-    prompt_wants_reflection,
     score_occlusion,
     score_reflection,
 )
@@ -50,26 +48,6 @@ def test_score_reflection_darker_flip_beats_equal_blobs():
     reflected = _darker_flip_reflection()
     stacked = _two_bright_stacked_blobs()
     assert score_reflection(reflected) > score_reflection(stacked)
-
-
-def test_prompt_wants_occlusion():
-    assert prompt_wants_occlusion("person behind a chain-link fence") is True
-    assert prompt_wants_occlusion("looking through gaps in the railing") is True
-    assert prompt_wants_occlusion("cat hidden behind a sofa") is True
-    assert prompt_wants_occlusion("face occluded by leaves") is True
-    assert prompt_wants_occlusion("studio portrait of a red apple") is False
-    assert prompt_wants_occlusion("") is False
-
-
-def test_prompt_wants_reflection():
-    assert prompt_wants_reflection("mountain reflection in a lake") is True
-    assert prompt_wants_reflection("chrome sculpture on granite") is True
-    assert prompt_wants_reflection("chrome kettle on a wet table") is True
-    assert prompt_wants_reflection("mirror of the sky in a puddle") is True
-    assert prompt_wants_reflection("the building is reflected in water") is True
-    assert prompt_wants_reflection("hall of mirrors") is False
-    assert prompt_wants_reflection("a red apple on a desk") is False
-    assert prompt_wants_reflection("") is False
 
 
 def test_score_spatial_color_bind_prefers_correct_halves():

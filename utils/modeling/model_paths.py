@@ -196,7 +196,7 @@ def default_image_reward_path() -> str:
 
 
 def default_pickscore_path() -> str:
-    return resolve_model_path("PickScore_v1", "yuvalkirstain/PickScore_v1")
+    return resolve_model_path_require_weights("PickScore_v1", "yuvalkirstain/PickScore_v1")
 
 
 def default_grounding_dino_base_path() -> str:
@@ -606,7 +606,7 @@ def default_sam_vit_base_path() -> str:
 def default_cafe_aesthetic_path() -> str:
     return resolve_model_path_require_weights(
         "CAFE-Aesthetic",
-        "cafeai/cafe_aesthetic_classifier",
+        "cafeai/cafe_aesthetic",
     )
 
 
@@ -1237,7 +1237,7 @@ def pretrained_catalog() -> list[dict[str, str]]:
         ("OwlViT-large-patch14", "google/owlvit-large-patch14", default_owlvit_large_path()),
         ("TrOCR-base-handwritten", "microsoft/trocr-base-handwritten", default_trocr_base_handwritten_path()),
         ("SAM-ViT-Base", "facebook/sam-vit-base", default_sam_vit_base_path()),
-        ("CAFE-Aesthetic", "cafeai/cafe_aesthetic_classifier", default_cafe_aesthetic_path()),
+        ("CAFE-Aesthetic", "cafeai/cafe_aesthetic", default_cafe_aesthetic_path()),
         ("ControlNet-MLSD", "lllyasviel/sd-controlnet-mlsd", default_controlnet_mlsd_path()),
         ("ControlNet-SoftEdge", "lllyasviel/sd-controlnet-softedge", default_controlnet_softedge_path()),
         ("ControlNet-Seg", "lllyasviel/sd-controlnet-seg", default_controlnet_seg_path()),

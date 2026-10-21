@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from utils.safety.minor_guard import reasons as minor_guard_reasons
+
 
 class _PairDataset(Dataset):
     def __init__(self, pairs: list[tuple[Path, str]], size: int = 224):
@@ -65,7 +67,7 @@ def _collect_pairs(data_dir: Path | None, jsonl: Path | None) -> list[tuple[Path
             cap = txt.read_text(encoding="utf-8").strip()
             if cap:
                 pairs.append((img, cap))
-    return pairs
+    return [(img, cap) for img, cap in pairs if not minor_guard_reasons(cap, training=True)]
 
 
 def _cheap_image_embed(x: torch.Tensor, dim: int) -> torch.Tensor:

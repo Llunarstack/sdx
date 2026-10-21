@@ -12,25 +12,29 @@ from typing import Any
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
 
+def _text(spec: Mapping[str, Any], *keys: str) -> str:
+    """First truthy value among *keys*, stringified and stripped."""
+    for key in keys:
+        value = spec.get(key)
+        if value:
+            return str(value).strip()
+    return ""
+
+
 def lettering_visual_memory_fragment(lettering: Mapping[str, Any]) -> str:
     """Build a fragment from visual-memory ``lettering`` object."""
     bits: list[str] = []
-    bal = str(lettering.get("balloon_style", "") or "").strip()
-    if bal:
-        bits.append(f"consistent speech balloon style: {bal}")
-    typ = str(lettering.get("typography_mood", "") or lettering.get("font_vibe", "") or "").strip()
-    if typ:
-        bits.append(f"hand-lettered typography mood: {typ}")
-    sfx = str(lettering.get("sfx_style", "") or "").strip()
-    if sfx:
-        bits.append(f"integrated sfx lettering: {sfx}")
-    ortho = str(lettering.get("orthography", "") or lettering.get("language_lock", "") or "").strip()
-    if ortho:
-        bits.append(f"dialogue orthography lock: {ortho}")
-    tail = str(lettering.get("extra", "") or "").strip()
-    if tail:
-        bits.append(tail)
-    if bool(lettering.get("match_quoted_script", False)):
+    for template, keys in (
+        ("consistent speech balloon style: {}", ("balloon_style",)),
+        ("hand-lettered typography mood: {}", ("typography_mood", "font_vibe")),
+        ("integrated sfx lettering: {}", ("sfx_style",)),
+        ("dialogue orthography lock: {}", ("orthography", "language_lock")),
+        ("{}", ("extra",)),
+    ):
+        value = _text(lettering, *keys)
+        if value:
+            bits.append(template.format(value))
+    if lettering.get("match_quoted_script"):
         bits.append("printed dialogue must match quoted script text exactly in balloons")
     return merge_prompt_fragments(*bits)
 
@@ -42,13 +46,13 @@ def text_continuity_clause(spec: Mapping[str, Any]) -> str:
     Expected keys (all optional):
 
     - ``locked_phrases`` / ``must_include``: list[str] or semicolon str
-    - ``object_labels``: list of ``{{"id": "sword", "label": "EXCALIBUR"}}`` for prop text
+    - ``object_labels``: list of ``{"id": "sword", "label": "EXCALIBUR"}`` for prop text
     - ``chapter_motto``: recurring title fragment
-    - ``narration_caption_style``: e.g. \"italic rectangular captions top-left\"
+    - ``narration_caption_style``: e.g. "italic rectangular captions top-left"
     - ``strict_script``: if true, insist lettering matches provided wording
     """
     bits: list[str] = []
-    if bool(spec.get("strict_script", False)):
+    if spec.get("strict_script"):
         bits.append("strict script fidelity: every visible word in balloons and captions matches the writer script")
 
     raw_p = spec.get("locked_phrases") or spec.get("must_include") or spec.get("must_include_phrases")
@@ -62,11 +66,11 @@ def text_continuity_clause(spec: Mapping[str, Any]) -> str:
         tail = " (and same recurring wording elsewhere)" if len(phrases) > 12 else ""
         bits.append(f"recurring exact text on page when shown: {blob}{tail}")
 
-    motto = str(spec.get("chapter_motto", "") or "").strip()
+    motto = _text(spec, "chapter_motto")
     if motto:
         bits.append(f"chapter leitmotif text: {motto}")
 
-    cap = str(spec.get("narration_caption_style", "") or "").strip()
+    cap = _text(spec, "narration_caption_style")
     if cap:
         bits.append(f"caption box discipline: {cap}")
 
@@ -75,14 +79,14 @@ def text_continuity_clause(spec: Mapping[str, Any]) -> str:
         for o in objs:
             if not isinstance(o, dict):
                 continue
-            oid = str(o.get("id", "") or "").strip()
-            lab = str(o.get("label", "") or "").strip()
+            oid = _text(o, "id")
+            lab = _text(o, "label")
             if oid and lab:
                 bits.append(f"object {oid} always reads as printed text {lab!r} when labeled")
             elif lab:
                 bits.append(f"recurring printed label: {lab}")
 
-    ex = str(spec.get("extra", "") or "").strip()
+    ex = _text(spec, "extra")
     if ex:
         bits.append(ex)
     return merge_prompt_fragments(*bits)

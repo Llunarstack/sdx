@@ -12,16 +12,14 @@ import numpy as np
 
 
 def _detect_face_rects_bgr(bgr: np.ndarray, *, min_side: int = 48) -> list[tuple[int, int, int, int]]:
-    try:
-        import cv2
-    except ImportError:
+    from utils.quality.test_time_pick import _cv2_face_cascade
+
+    cascade = _cv2_face_cascade()
+    if cascade is None:
         return []
+    import cv2
 
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    cascade = cv2.CascadeClassifier(cascade_path)
-    if cascade.empty():
-        return []
     faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(min_side, min_side))
     if faces is None or len(faces) == 0:
         return []

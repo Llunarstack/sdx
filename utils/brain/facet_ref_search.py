@@ -20,17 +20,7 @@ class FacetRefPack:
     nsfw: bool = False
 
     def moodboard_paths(self, *, prefer: tuple[str, ...] = ("style", "subject", "attire")) -> list[str]:
-        out: list[str] = []
-        for key in prefer:
-            out.extend(self.paths.get(key) or [])
-        # Dedup preserve order
-        seen: set[str] = set()
-        uniq: list[str] = []
-        for p in out:
-            if p not in seen:
-                seen.add(p)
-                uniq.append(p)
-        return uniq
+        return list(dict.fromkeys(p for key in prefer for p in self.paths.get(key) or []))
 
 
 def gather_facet_references(

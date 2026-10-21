@@ -1,18 +1,21 @@
-"""Tests for Invention Lab modules."""
+"""Tests for the invention prompt passes, priors, oracle and self-healing plan."""
 
 from __future__ import annotations
 
-import torch
-from utils.generation.inventions.anatomon import apply_anatomon_prompts
+import json
+
 from utils.generation.inventions.bindlock import plan_bindlock
-from utils.generation.inventions.consensus_denoise import blend_consensus_latents, plan_consensus_seeds
-from utils.generation.inventions.countgate import plan_countgate
-from utils.generation.inventions.failure_oracle import diagnose_failures, repair_plan_from_failures
-from utils.generation.inventions.friction_texture import apply_friction_to_prompts, friction_noise_scale
-from utils.generation.inventions.hydra_slots import plan_hydra_slots
+from utils.generation.inventions.countgate import plan_countgate, plan_hydra_slots
+from utils.generation.inventions.failure_oracle import (
+    FAILURE_ATLAS,
+    diagnose_failures,
+    repair_plan_from_failures,
+    save_failure_atlas_jsonl,
+)
 from utils.generation.inventions.negatron import apply_negatron
-from utils.generation.inventions.spectra_routing import spectra_cfg_scale, spectra_mix_latent
+from utils.generation.inventions.priors import apply_anatomon_prompts, apply_friction_to_prompts, scene_priors
 from utils.generation.inventions.stack import apply_invention_stack
+from utils.generation.inventions.wire import adaptive_nfe, plan_self_healing
 
 
 def test_bindlock_and_countgate():
@@ -31,33 +34,44 @@ def test_negatron_strips_and_negates():
     assert "no hat" not in pos.lower()
 
 
-def test_spectra_and_friction_and_consensus():
-    assert spectra_cfg_scale(7.5, 0.1) > 7.5
-    x = torch.randn(1, 4, 8, 8)
-    y = spectra_mix_latent(x, 0.8)
-    assert y.shape == x.shape
+def test_friction_adds_texture_language():
     p, n = apply_friction_to_prompts("portrait", "")
-    assert "plastic" in n.lower() or "pore" in p.lower()
-    assert friction_noise_scale(0.9) > 0
-    a, b = plan_consensus_seeds()
-    assert a != b
-    xa = torch.randn(1, 4, 4, 4)
-    xb = xa + 0.01
-    out = blend_consensus_latents(xa, xb, progress=0.1)
-    assert out.shape == xa.shape
+    assert "pores" in p.lower() and "plastic" in n.lower()
+    assert apply_friction_to_prompts("portrait", "", strength=0.0) == ("portrait", "")
+
+
+def test_scene_priors_follow_subject_and_medium():
+    photo = " | ".join(p for p, _ in scene_priors("photo of a woman holding a cup"))
+    assert "pores" in photo and "five fingers" in photo and "lens" in photo
+    anime = " | ".join(p for p, _ in scene_priors("anime illustration of a castle at dusk"))
+    assert "pores" not in anime and "lens" not in anime and "fingers" not in anime
+    assert "z-order" in " | ".join(p for p, _ in scene_priors("a cat in front of a house"))
 
 
 def test_oracle_and_stack():
     rep = repair_plan_from_failures(diagnose_failures("three red apples left of two blue cups, no text, 1girl hands"))
     assert rep.risks
     assert rep.repairs
-    res = apply_invention_stack(
-        "four red cubes left of blue spheres, no watermark, 1girl",
-        enable="auto",
-    )
-    assert "exactly" in res.positive.lower() or "count" in res.positive.lower() or res.reports
+    res = apply_invention_stack("four red cubes left of blue spheres, no watermark, 1girl", enable="auto")
+    assert "exactly" in res.positive.lower()
+    assert res.box_layout and res.box_layout["regions"]
+    assert res.reports["priors"]
     hy = plan_hydra_slots("4 cats")
-    assert len(hy.slots) == 4
+    assert len(hy.slots) == 4 and len(hy.box_layout["regions"]) == 4
     pos, neg, ap = apply_anatomon_prompts("1girl standing, hands visible")
     assert ap.active
-    assert "finger" in neg.lower() or "anatomy" in neg.lower()
+    assert "finger" in neg.lower()
+
+
+def test_failure_atlas_jsonl(tmp_path):
+    path = save_failure_atlas_jsonl(tmp_path / "atlas.jsonl")
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == sum(len(prompts) for _, _, prompts in FAILURE_ATLAS)
+    assert {r["mode"] for r in rows} == {mode for mode, _, _ in FAILURE_ATLAS}
+
+
+def test_adaptive_nfe_and_self_heal():
+    assert adaptive_nfe("four cats left of dogs, no text, hands") > adaptive_nfe("a cat") >= 12
+    plan = plan_self_healing("2girls different outfits, no watermark")
+    assert plan.sample_argv[plan.sample_argv.index("--scheduler") + 1] == "apex"
+    assert plan.sample_argv[-2:] == ["--invention-stack", "off"]

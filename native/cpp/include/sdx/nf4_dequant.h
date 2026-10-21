@@ -1,5 +1,5 @@
 /**
- * NF4 block dequantization (float32). Table matches ``utils/quantization/nf4_codec.py``.
+ * NF4 block dequantization (float32). Level table: QLoRA NF4.
  * Packed: two 4-bit indices per byte (low nibble first code, high nibble second).
  */
 #ifndef SDX_NF4_DEQUANT_H

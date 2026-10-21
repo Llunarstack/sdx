@@ -116,9 +116,9 @@ def main() -> int:
     if args.show_native:
         import json
 
-        from utils.prompt.style_native import native_stack_status
+        from utils.prompt.style_native import style_native_status
 
-        print(json.dumps(native_stack_status(), indent=2))
+        print(json.dumps(style_native_status(), indent=2))
         return 0
 
     if args.list_presets:

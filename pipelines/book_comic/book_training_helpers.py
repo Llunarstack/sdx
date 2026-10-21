@@ -9,6 +9,7 @@ This module focuses on:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -43,126 +44,123 @@ class BookTrainPreset:
     ar_block_order: str
 
 
+_BALANCED_PRESET = BookTrainPreset(
+    model="DiT-XL/2-Text",
+    image_size=512,
+    global_batch_size=2,
+    lr=1e-4,
+    passes=2,
+    max_steps=0,
+    train_shortcomings_mitigation="auto",
+    train_shortcomings_2d=True,
+    train_art_guidance_mode="auto",
+    train_anatomy_guidance="lite",
+    train_style_guidance_mode="auto",
+    use_hierarchical_captions=True,
+    region_caption_mode="append",
+    boost_adherence_caption=True,
+    num_ar_blocks=0,
+    ar_block_order="raster",
+)
+
+_BOOK_TRAIN_PRESETS: dict[str, BookTrainPreset] = {
+    "fast": replace(_BALANCED_PRESET, model="DiT-B/2-Text", passes=1, max_steps=1000),
+    "balanced": _BALANCED_PRESET,
+    "production": replace(
+        _BALANCED_PRESET,
+        image_size=768,
+        global_batch_size=4,
+        lr=8e-5,
+        passes=4,
+        train_shortcomings_mitigation="all",
+        train_art_guidance_mode="all",
+        train_anatomy_guidance="strong",
+        train_style_guidance_mode="all",
+        num_ar_blocks=2,
+    ),
+}
+
+# Profile name -> (num_ar_blocks, ar_block_order); "auto" / unknown names force nothing.
+_BOOK_AR_PROFILES: dict[str, tuple[int, str]] = {
+    "none": (0, "raster"),
+    "layout": (2, "raster"),
+    "strong": (4, "raster"),
+    "zorder": (2, "zorder"),
+    "vit_layout": (2, "zorder"),
+    "vit_strong": (4, "zorder"),
+    "comic_snake": (2, "snake"),
+    "cinema_spiral": (4, "spiral"),
+}
+
+_AR_BLOCK_ORDERS = ("raster", "zorder", "snake", "spiral")
+
+_HUMANIZATION_LITE: dict[str, Any] = {
+    "shortcomings_mitigation": "auto",
+    "shortcomings_2d": True,
+    "art_guidance_mode": "auto",
+    "art_guidance_photography": True,
+    "anatomy_guidance": "lite",
+    "style_guidance_mode": "auto",
+    "style_guidance_artists": True,
+}
+
+_HUMANIZATION_PACKS: dict[str, dict[str, Any]] = {
+    "lite": _HUMANIZATION_LITE,
+    "balanced": {**_HUMANIZATION_LITE, "style_guidance_mode": "all"},
+    "strong": {
+        **_HUMANIZATION_LITE,
+        "shortcomings_mitigation": "all",
+        "art_guidance_mode": "all",
+        "anatomy_guidance": "strong",
+        "style_guidance_mode": "all",
+    },
+}
+
+
+def _positive_int(args: Any, name: str) -> int:
+    """``args.<name>`` as an int, with missing / None / non-positive values collapsed to 0."""
+    return max(0, int(getattr(args, name, 0) or 0))
+
+
 def preset_for_book_train(name: str) -> BookTrainPreset:
-    """Resolve ``--book-train-preset`` into concrete defaults."""
-    n = (name or "balanced").strip().lower()
-    if n == "fast":
-        return BookTrainPreset(
-            model="DiT-B/2-Text",
-            image_size=512,
-            global_batch_size=2,
-            lr=1e-4,
-            passes=1,
-            max_steps=1000,
-            train_shortcomings_mitigation="auto",
-            train_shortcomings_2d=True,
-            train_art_guidance_mode="auto",
-            train_anatomy_guidance="lite",
-            train_style_guidance_mode="auto",
-            use_hierarchical_captions=True,
-            region_caption_mode="append",
-            boost_adherence_caption=True,
-            num_ar_blocks=0,
-            ar_block_order="raster",
-        )
-    if n == "production":
-        return BookTrainPreset(
-            model="DiT-XL/2-Text",
-            image_size=768,
-            global_batch_size=4,
-            lr=8e-5,
-            passes=4,
-            max_steps=0,
-            train_shortcomings_mitigation="all",
-            train_shortcomings_2d=True,
-            train_art_guidance_mode="all",
-            train_anatomy_guidance="strong",
-            train_style_guidance_mode="all",
-            use_hierarchical_captions=True,
-            region_caption_mode="append",
-            boost_adherence_caption=True,
-            num_ar_blocks=2,
-            ar_block_order="raster",
-        )
-    # balanced
-    return BookTrainPreset(
-        model="DiT-XL/2-Text",
-        image_size=512,
-        global_batch_size=2,
-        lr=1e-4,
-        passes=2,
-        max_steps=0,
-        train_shortcomings_mitigation="auto",
-        train_shortcomings_2d=True,
-        train_art_guidance_mode="auto",
-        train_anatomy_guidance="lite",
-        train_style_guidance_mode="auto",
-        use_hierarchical_captions=True,
-        region_caption_mode="append",
-        boost_adherence_caption=True,
-        num_ar_blocks=0,
-        ar_block_order="raster",
-    )
+    """Resolve ``--book-train-preset`` into concrete defaults (unknown names -> balanced)."""
+    return _BOOK_TRAIN_PRESETS.get((name or "balanced").strip().lower(), _BALANCED_PRESET)
 
 
 def resolve_book_ar_profile(name: str) -> dict[str, Any]:
-    """
-    Resolve one-flag AR profile for training.
-    """
-    n = (name or "auto").strip().lower()
-    if n == "none":
-        return {"num_ar_blocks": 0, "ar_block_order": "raster"}
-    if n == "layout":
-        return {"num_ar_blocks": 2, "ar_block_order": "raster"}
-    if n == "strong":
-        return {"num_ar_blocks": 4, "ar_block_order": "raster"}
-    if n == "zorder":
-        return {"num_ar_blocks": 2, "ar_block_order": "zorder"}
-    if n == "vit_layout":
-        return {"num_ar_blocks": 2, "ar_block_order": "zorder"}
-    if n == "vit_strong":
-        return {"num_ar_blocks": 4, "ar_block_order": "zorder"}
-    if n == "comic_snake":
-        return {"num_ar_blocks": 2, "ar_block_order": "snake"}
-    if n == "cinema_spiral":
-        return {"num_ar_blocks": 4, "ar_block_order": "spiral"}
-    # auto/unknown: do not force anything; keep preset/default behavior.
-    return {}
+    """One-flag AR profile -> ``{"num_ar_blocks", "ar_block_order"}``; ``{}`` for auto / unknown."""
+    row = _BOOK_AR_PROFILES.get((name or "auto").strip().lower())
+    if row is None:
+        return {}
+    return {"num_ar_blocks": row[0], "ar_block_order": row[1]}
 
 
 def resolve_book_train_settings(args: Any) -> BookTrainPreset:
-    """Apply CLI overrides over ``preset_for_book_train`` defaults."""
-    base = preset_for_book_train(getattr(args, "book_train_preset", "balanced"))
+    """Apply CLI overrides over ``preset_for_book_train`` defaults.
+
+    Zero means "unset" for the numeric overrides (including ``--num-ar-blocks``): train.py, which
+    also calls this via ``training.book_train_preset``, defaults those flags to 0 and they must not
+    clobber the preset. Use ``--ar-profile none`` to force zero AR blocks.
+    """
+    overrides: dict[str, Any] = {}
     model = str(getattr(args, "model", "") or "").strip()
     if model:
-        base = replace(base, model=model)
-    image_size = int(getattr(args, "image_size", 0) or 0)
-    if image_size > 0:
-        base = replace(base, image_size=image_size)
-    gbs = int(getattr(args, "global_batch_size", 0) or 0)
-    if gbs > 0:
-        base = replace(base, global_batch_size=gbs)
+        overrides["model"] = model
+    for name in ("image_size", "global_batch_size", "passes", "max_steps"):
+        value = _positive_int(args, name)
+        if value:
+            overrides[name] = value
     lr = float(getattr(args, "lr", 0.0) or 0.0)
     if lr > 0:
-        base = replace(base, lr=lr)
-    passes = int(getattr(args, "passes", -1) or -1)
-    if passes >= 0:
-        base = replace(base, passes=passes)
-    max_steps = int(getattr(args, "max_steps", -1) or -1)
-    if max_steps >= 0:
-        base = replace(base, max_steps=max_steps)
-    ar_profile_overrides = resolve_book_ar_profile(str(getattr(args, "ar_profile", "auto") or "auto"))
-    if "num_ar_blocks" in ar_profile_overrides:
-        base = replace(base, num_ar_blocks=int(ar_profile_overrides["num_ar_blocks"]))
-    if "ar_block_order" in ar_profile_overrides:
-        base = replace(base, ar_block_order=str(ar_profile_overrides["ar_block_order"]))
-    num_ar_blocks_override = int(getattr(args, "num_ar_blocks", -1) or -1)
-    if num_ar_blocks_override in (0, 2, 4):
-        base = replace(base, num_ar_blocks=num_ar_blocks_override)
-    ar_block_order_override = str(getattr(args, "ar_block_order", "") or "").strip().lower()
-    if ar_block_order_override in ("raster", "zorder", "snake", "spiral"):
-        base = replace(base, ar_block_order=ar_block_order_override)
-    return base
+        overrides["lr"] = lr
+    overrides.update(resolve_book_ar_profile(str(getattr(args, "ar_profile", "auto") or "auto")))
+    num_ar_blocks = _positive_int(args, "num_ar_blocks")
+    if num_ar_blocks in (2, 4):
+        overrides["num_ar_blocks"] = num_ar_blocks
+    ar_block_order = str(getattr(args, "ar_block_order", "") or "").strip().lower()
+    if ar_block_order in _AR_BLOCK_ORDERS:
+        overrides["ar_block_order"] = ar_block_order
+    return replace(preset_for_book_train(getattr(args, "book_train_preset", "balanced")), **overrides)
 
 
 def build_train_command(
@@ -209,9 +207,9 @@ def build_train_command(
             "--region-caption-mode",
             settings.region_caption_mode,
             "--num-ar-blocks",
-            str(int(getattr(settings, "num_ar_blocks", 0))),
+            str(settings.num_ar_blocks),
             "--ar-block-order",
-            str(getattr(settings, "ar_block_order", "raster") or "raster"),
+            settings.ar_block_order,
         ]
     )
     if settings.train_shortcomings_2d:
@@ -224,12 +222,9 @@ def build_train_command(
     if settings.max_steps > 0:
         cmd.extend(["--max-steps", str(settings.max_steps)])
 
-    if bool(getattr(args, "dry_run", False)):
-        cmd.append("--dry-run")
-    if bool(getattr(args, "no_compile", False)):
-        cmd.append("--no-compile")
-    if bool(getattr(args, "no_xformers", False)):
-        cmd.append("--no-xformers")
+    for attr, flag in (("dry_run", "--dry-run"), ("no_compile", "--no-compile"), ("no_xformers", "--no-xformers")):
+        if getattr(args, attr, False):
+            cmd.append(flag)
     if int(getattr(args, "num_workers", -1)) >= 0:
         cmd.extend(["--num-workers", str(int(args.num_workers))])
 
@@ -244,21 +239,22 @@ def build_train_command(
     ar_curriculum_mode = str(getattr(args, "ar_curriculum_mode", "none") or "none").strip().lower()
     if ar_curriculum_mode in ("none", "step", "linear"):
         cmd.extend(["--ar-curriculum-mode", ar_curriculum_mode])
-    ar_curriculum_warmup_steps = int(getattr(args, "ar_curriculum_warmup_steps", 0) or 0)
-    if ar_curriculum_warmup_steps > 0:
-        cmd.extend(["--ar-curriculum-warmup-steps", str(ar_curriculum_warmup_steps)])
-    ar_curriculum_ramp_start = int(getattr(args, "ar_curriculum_ramp_start", 0) or 0)
-    if ar_curriculum_ramp_start > 0:
-        cmd.extend(["--ar-curriculum-ramp-start", str(ar_curriculum_ramp_start)])
-    ar_curriculum_ramp_end = int(getattr(args, "ar_curriculum_ramp_end", 0) or 0)
-    if ar_curriculum_ramp_end > 0:
-        cmd.extend(["--ar-curriculum-ramp-end", str(ar_curriculum_ramp_end)])
-    ar_curriculum_start_blocks = int(getattr(args, "ar_curriculum_start_blocks", -1) or -1)
-    if ar_curriculum_start_blocks in (0, 2, 4):
-        cmd.extend(["--ar-curriculum-start-blocks", str(ar_curriculum_start_blocks)])
-    ar_curriculum_target_blocks = int(getattr(args, "ar_curriculum_target_blocks", -1) or -1)
-    if ar_curriculum_target_blocks in (0, 2, 4):
-        cmd.extend(["--ar-curriculum-target-blocks", str(ar_curriculum_target_blocks)])
+    for attr, flag in (
+        ("ar_curriculum_warmup_steps", "--ar-curriculum-warmup-steps"),
+        ("ar_curriculum_ramp_start", "--ar-curriculum-ramp-start"),
+        ("ar_curriculum_ramp_end", "--ar-curriculum-ramp-end"),
+    ):
+        value = _positive_int(args, attr)
+        if value:
+            cmd.extend([flag, str(value)])
+    # -1 is the "unset" sentinel here; 0 is a real block count (e.g. a curriculum targeting no AR).
+    for attr, flag in (
+        ("ar_curriculum_start_blocks", "--ar-curriculum-start-blocks"),
+        ("ar_curriculum_target_blocks", "--ar-curriculum-target-blocks"),
+    ):
+        value = getattr(args, attr, None)
+        if value is not None and int(value) in (0, 2, 4):
+            cmd.extend([flag, str(int(value))])
     ar_order_mix = str(getattr(args, "ar_order_mix", "") or "").strip()
     if ar_order_mix:
         cmd.extend(["--ar-order-mix", ar_order_mix])
@@ -291,34 +287,33 @@ def run_native_manifest_preflight(
         "rust_stats_stdout": "",
         "rust_stats_stderr": "",
     }
-    if not manifest_jsonl.is_file():
+    if not out["exists"]:
         return out
 
     out["fingerprint"] = manifest_fingerprint_line(manifest_jsonl)
-
-    try:
-        r_val = run_rust_jsonl_validate(
+    _record_native_tool(
+        out,
+        "rust_validate",
+        lambda: run_rust_jsonl_validate(
             manifest_jsonl,
             min_caption_len=int(min_caption_len),
             max_caption_len=int(max_caption_len),
-        )
-        out["rust_validate_ok"] = r_val.returncode == 0
-        out["rust_validate_stdout"] = (r_val.stdout or "").strip()
-        out["rust_validate_stderr"] = (r_val.stderr or "").strip()
-    except (FileNotFoundError, OSError, ValueError) as exc:
-        out["rust_validate_ok"] = None
-        out["rust_validate_stderr"] = str(exc)
-
-    try:
-        r_stats = run_rust_jsonl_stats(manifest_jsonl)
-        out["rust_stats_ok"] = r_stats.returncode == 0
-        out["rust_stats_stdout"] = (r_stats.stdout or "").strip()
-        out["rust_stats_stderr"] = (r_stats.stderr or "").strip()
-    except (FileNotFoundError, OSError, ValueError) as exc:
-        out["rust_stats_ok"] = None
-        out["rust_stats_stderr"] = str(exc)
-
+        ),
+    )
+    _record_native_tool(out, "rust_stats", lambda: run_rust_jsonl_stats(manifest_jsonl))
     return out
+
+
+def _record_native_tool(out: dict[str, Any], key: str, run: Callable[[], Any]) -> None:
+    """Store ``<key>_ok/_stdout/_stderr``; a missing tool leaves ``_ok`` as None with the error text."""
+    try:
+        result = run()
+    except (OSError, ValueError) as exc:
+        out[f"{key}_stderr"] = str(exc)
+        return
+    out[f"{key}_ok"] = result.returncode == 0
+    out[f"{key}_stdout"] = (result.stdout or "").strip()
+    out[f"{key}_stderr"] = (result.stderr or "").strip()
 
 
 def build_hf_export_command(
@@ -338,7 +333,7 @@ def build_hf_export_command(
     shuffle_seed: int | None = None,
 ) -> list[str]:
     """Build command for ``scripts/training/hf_export_to_sdx_manifest.py``."""
-    export_py = root / "scripts" / "tr" / "hf_export_to_sdx_manifest.py"
+    export_py = root / "scripts" / "training" / "hf_export_to_sdx_manifest.py"
     cmd: list[str] = [
         python_exe,
         str(export_py),
@@ -416,39 +411,8 @@ def build_caption_normalize_command(
 
 
 def resolve_train_humanization_pack(name: str) -> dict[str, Any]:
+    """Caption-normalization defaults (``lite`` / ``balanced`` / ``strong``) that reduce synthetic artifacts.
+
+    Unknown names (including ``none``) return ``{}``.
     """
-    Higher-level normalization defaults to reduce synthetic artifacts during training.
-    """
-    n = (name or "none").strip().lower()
-    if n == "lite":
-        return {
-            "shortcomings_mitigation": "auto",
-            "shortcomings_2d": True,
-            "art_guidance_mode": "auto",
-            "art_guidance_photography": True,
-            "anatomy_guidance": "lite",
-            "style_guidance_mode": "auto",
-            "style_guidance_artists": True,
-        }
-    if n == "strong":
-        return {
-            "shortcomings_mitigation": "all",
-            "shortcomings_2d": True,
-            "art_guidance_mode": "all",
-            "art_guidance_photography": True,
-            "anatomy_guidance": "strong",
-            "style_guidance_mode": "all",
-            "style_guidance_artists": True,
-        }
-    # balanced / default
-    if n == "balanced":
-        return {
-            "shortcomings_mitigation": "auto",
-            "shortcomings_2d": True,
-            "art_guidance_mode": "auto",
-            "art_guidance_photography": True,
-            "anatomy_guidance": "lite",
-            "style_guidance_mode": "all",
-            "style_guidance_artists": True,
-        }
-    return {}
+    return dict(_HUMANIZATION_PACKS.get((name or "none").strip().lower(), {}))

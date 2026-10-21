@@ -1,53 +1,36 @@
-"""
-CUDA ``sdx_cuda_ml``: pick best style embedding row by cosine (L2-normalized dot).
-"""
+"""CUDA ``sdx_cuda_ml``: pick the best style embedding row by cosine (rows L2-normalized on the GPU first)."""
 
 from __future__ import annotations
 
 import ctypes
+import functools
 
 import numpy as np
 
-from sdx_native.cuda_l2_normalize import get_cuda_ml_lib
-from sdx_native.native_tools import cuda_ml_shared_library_path
+from sdx_native.native_tools import load_shared_library
 
 
-class CudaStylePickLib:
-    def __init__(self) -> None:
-        self._lib: ctypes.CDLL | None = None
-        p = cuda_ml_shared_library_path()
-        if p is None:
-            return
-        try:
-            lib = ctypes.CDLL(str(p))
-        except OSError:
-            return
-        if not hasattr(lib, "sdx_cuda_style_pick_best_f32_host"):
-            return
-        lib.sdx_cuda_style_pick_best_f32_host.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_void_p,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.POINTER(ctypes.c_int),
-            ctypes.POINTER(ctypes.c_float),
-        ]
-        lib.sdx_cuda_style_pick_best_f32_host.restype = ctypes.c_int
-        self._lib = lib
-
-    @property
-    def available(self) -> bool:
-        return self._lib is not None
+@functools.cache
+def _lib() -> ctypes.CDLL | None:
+    lib = load_shared_library("sdx_cuda_ml")
+    if lib is None or not hasattr(lib, "sdx_cuda_style_pick_best_f32_host"):
+        return None
+    lib.sdx_cuda_l2_normalize_rows_f32_host.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_float]
+    lib.sdx_cuda_l2_normalize_rows_f32_host.restype = ctypes.c_int
+    lib.sdx_cuda_style_pick_best_f32_host.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_float),
+    ]
+    lib.sdx_cuda_style_pick_best_f32_host.restype = ctypes.c_int
+    return lib
 
 
-_PICK_LIB: CudaStylePickLib | None = None
-
-
-def get_cuda_style_pick_lib() -> CudaStylePickLib:
-    global _PICK_LIB
-    if _PICK_LIB is None:
-        _PICK_LIB = CudaStylePickLib()
-    return _PICK_LIB
+def available() -> bool:
+    return _lib() is not None
 
 
 def maybe_pick_best_style_embedding(
@@ -56,50 +39,27 @@ def maybe_pick_best_style_embedding(
     *,
     eps: float = 1e-8,
 ) -> tuple[int, float] | None:
-    """
-    ``query`` shape (dim,), ``candidates`` (n, dim). Normalizes rows on GPU path when available.
-    Returns (best_index, cosine_score) or None.
-    """
-    if query.ndim != 1 or candidates.ndim != 2:
+    """``query`` (dim,), ``candidates`` (n, dim) -> ``(best_index, cosine)``; ``None`` when unavailable."""
+    lib = _lib()
+    if lib is None or query.ndim != 1 or candidates.ndim != 2 or query.shape[0] != candidates.shape[1]:
         return None
-    q = np.asarray(query, dtype=np.float32).reshape(1, -1).copy()
-    c = np.asarray(candidates, dtype=np.float32).copy()
-    if q.shape[1] != c.shape[1]:
-        return None
-
-    ml = get_cuda_ml_lib()
-    pick = get_cuda_style_pick_lib()
-    if ml.available:
-        try:
-            ml.l2_normalize_rows_inplace(q, eps=eps)
-            ml.l2_normalize_rows_inplace(c, eps=eps)
-        except Exception:
-            pass
-
-    if not pick.available:
-        return _numpy_pick(q[0], c)
-
+    # Owned C-order copies: the kernel normalizes them in place and reads rows contiguously.
+    q = np.array(query, dtype=np.float32, order="C").reshape(1, -1)
+    c = np.array(candidates, dtype=np.float32, order="C")
+    for m in (q, c):
+        rc = lib.sdx_cuda_l2_normalize_rows_f32_host(m.ctypes.data_as(ctypes.c_void_p), m.shape[0], m.shape[1], eps)
+        if rc != 0:
+            return None
     out_i = ctypes.c_int(-1)
     out_s = ctypes.c_float(0.0)
-    rc = pick._lib.sdx_cuda_style_pick_best_f32_host(
+    rc = lib.sdx_cuda_style_pick_best_f32_host(
         q.ctypes.data_as(ctypes.c_void_p),
         c.ctypes.data_as(ctypes.c_void_p),
-        ctypes.c_int(int(c.shape[0])),
-        ctypes.c_int(int(c.shape[1])),
+        c.shape[0],
+        c.shape[1],
         ctypes.byref(out_i),
         ctypes.byref(out_s),
     )
     if rc != 0:
-        return _numpy_pick(q[0], c)
+        return None
     return int(out_i.value), float(out_s.value)
-
-
-def _numpy_pick(query: np.ndarray, candidates: np.ndarray) -> tuple[int, float]:
-    qn = query / (np.linalg.norm(query) + 1e-8)
-    cn = candidates / (np.linalg.norm(candidates, axis=1, keepdims=True) + 1e-8)
-    scores = cn @ qn
-    idx = int(np.argmax(scores))
-    return idx, float(scores[idx])
-
-
-__all__ = ["get_cuda_style_pick_lib", "maybe_pick_best_style_embedding"]

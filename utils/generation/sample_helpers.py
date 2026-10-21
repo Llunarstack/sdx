@@ -1,16 +1,20 @@
-"""Helpers for sample.py generation path (extracted from sample.py)."""
+"""Shared helpers for the ``sample.py`` phases: spec parsing, text encoding, checkpoint loading, latent renoise."""
 
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+from diffusion.schedules import sd3_resolution_shift, time_shift, vp_shifted_timestep
 
-from utils.runtime.jsonutil import loads as json_loads
+from utils.modeling.text_encoder_bundle import encode_text as encode_text  # the sample path's guarded encoder
+from utils.runtime import json_loads
+
+# Child runs (auto-refine candidates, OCR repair) go through the entry script, which sets up sys.path.
+SAMPLE_PY = Path(__file__).resolve().parents[2] / "sample.py"
 
 
 def _maybe_rae_to_dit(z: torch.Tensor, ae_type: str, rae_bridge) -> torch.Tensor:
@@ -28,9 +32,11 @@ def load_model_from_ckpt(ckpt_path, device="cuda"):
     return load_sampler_checkpoint(ckpt_path, device=device, reject_enhanced=True, verbose=True)
 
 
-# T5 encoding cache (IMPROVEMENTS 3.2): key = (prompt, negative, style), value = (cond, uncond, style_emb or None)
+# Per-process text-embedding cache: (prompt, negative, style, layout, t5 hash) -> (cond, uncond, style_emb).
 _t5_cache = {}
-_T5_CACHE_MAX = 32  # limit entries to avoid unbounded memory
+_T5_CACHE_MAX = 32
+# T5 sequence length every prompt is padded/truncated to (CLIP pooled captions stop at 77).
+TEXT_MAX_TOKENS = 300
 
 
 def _parse_scale_csv(value: str) -> list[Any]:
@@ -214,26 +220,34 @@ def _parse_control_spec(
     return s, ctype, cscale
 
 
-def _resize_control_tensor(ctrl: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
-    """Resize control tensor preserving 4D (B,C,H,W) or 5D (B,K,C,H,W) layout."""
-    if ctrl.ndim == 4:
-        return torch.nn.functional.interpolate(
-            ctrl,
-            size=(target_h, target_w),
-            mode="bilinear",
-            align_corners=False,
-        )
-    if ctrl.ndim == 5:
-        b, k, c, h, w = ctrl.shape
-        flat = ctrl.reshape(b * k, c, h, w)
-        out = torch.nn.functional.interpolate(
-            flat,
-            size=(target_h, target_w),
-            mode="bilinear",
-            align_corners=False,
-        )
-        return out.view(b, k, c, target_h, target_w)
-    raise ValueError(f"Unsupported control tensor shape: {tuple(ctrl.shape)}")
+def renoise_for_grid(
+    diffusion,
+    x0: torch.Tensor,
+    latent_h: int,
+    latent_w: int,
+    strength: float,
+    *,
+    native_latent_hw: tuple[int, int],
+    flow: bool,
+) -> tuple[torch.Tensor, int]:
+    """Bicubic-upscale a clean latent to ``latent_h x latent_w`` and forward-noise it; returns ``(x_t, t_start)``.
+
+    ``strength`` (0-1) is the noise level at the native grid. A larger grid starts from its SD3-shifted
+    equivalent (Esser et al. 2024: ``alpha = sqrt(tokens / native tokens)``; flow ``time_shift``, VP
+    ``vp_shifted_timestep``), because the same noise level destroys less structure on more pixels.
+    """
+    x_up = torch.nn.functional.interpolate(x0.float(), size=(latent_h, latent_w), mode="bicubic", align_corners=False)
+    x_up = x_up.to(dtype=x0.dtype)
+    a = sd3_resolution_shift(latent_h * latent_w, native_latent_hw[0] * native_latent_hw[1])
+    t_last = int(diffusion.num_timesteps) - 1
+    noise = torch.randn_like(x_up)
+    if flow:
+        t0 = min(max(1, round(float(time_shift(float(strength), a)) * t_last)), t_last)
+        return (1.0 - t0 / t_last) * x_up + (t0 / t_last) * noise, t0
+    ac = diffusion.alpha_cumprod.detach().cpu().numpy()
+    t0 = min(max(1, vp_shifted_timestep(ac, round(float(strength) * t_last), a)), t_last)
+    t_batch = torch.full((x_up.shape[0],), t0, device=x_up.device, dtype=torch.long)
+    return diffusion.q_sample(x_up, t_batch, noise=noise), t0
 
 
 def _apply_gender_swap(prompt: str) -> str:
@@ -302,13 +316,6 @@ def _build_size_tokens(anatomy_scales: list[Any], object_scales: list[Any], scen
     for s in scene_scales:
         tokens.append(scene_map[s])
     return ", ".join([t for t in tokens if t])
-
-
-SCALE_DISTORTION_NEGATIVE = (
-    # Keep scaling requests “shape-like” without drifting into warped outputs.
-    "deformed, warped anatomy, stretched anatomy, bad proportions, misproportioned, wrong scale, "
-    "extra limbs, fused limbs, melted, distorted"
-)
 
 
 def _parse_expected_texts(raw: str) -> list[Any]:
@@ -403,54 +410,6 @@ def _refine_gate_score(
     return score, details
 
 
-SHEET_FUTA_REPLACEMENT = "androgynous presentation"
-SHEET_SAFE_WARN_PREFIX = "Character sheet safety sanitizer:"
-
-
-def _normalize_list_or_str(v) -> list[Any]:
-    """Accept either a string or list[str] and return list[str]."""
-    if v is None:
-        return []
-    if isinstance(v, str):
-        if not v.strip():
-            return []
-        return [v.strip()]
-    if isinstance(v, list):
-        out = []
-        for x in v:
-            if isinstance(x, str) and x.strip():
-                out.append(x.strip())
-        return out
-    return []
-
-
-def _sanitize_character_prompt_tokens(
-    tokens: list[Any], negative_tokens: list[Any], *, uncensored_mode: bool = False
-) -> tuple[list[Any], list[Any]]:
-    """
-    Prevent explicitly sexual tokens from being injected.
-    If user includes "futa" or similar, we replace with androgynous presentation.
-    """
-    if uncensored_mode:
-        return tokens, negative_tokens
-    banned_direct = ["futa", "trap"]
-    lowered = [t.lower() for t in tokens]
-    swapped = False
-    for i, t in enumerate(tokens):
-        tl = lowered[i]
-        if any(b in tl for b in banned_direct):
-            tokens[i] = SHEET_FUTA_REPLACEMENT
-            swapped = True
-    if swapped:
-        # Add a mild negative to reduce explicit outcomes.
-        negative_tokens.extend(["explicit genital content"])
-        # Keep warning concise; don't spam if this is called repeatedly.
-        print(
-            f"{SHEET_SAFE_WARN_PREFIX} Replaced explicit gender term with '{SHEET_FUTA_REPLACEMENT}'.", file=sys.stderr
-        )
-    return tokens, negative_tokens
-
-
 def _load_character_sheet(
     sheet_path: str, *, uncensored_mode: bool = False, character_strength: float = 1.0
 ) -> tuple[str, str]:
@@ -472,60 +431,8 @@ def _load_character_sheet(
 
     from utils.consistency.character_customization import build_character_prompt_additions
 
-    pos, neg = build_character_prompt_additions(
+    return build_character_prompt_additions(
         data,
         uncensored_mode=uncensored_mode,
         character_strength=character_strength,
     )
-    return pos, neg
-
-
-def _apply_character_gender_presentation(tokens: list[Any], gender_presentation: str) -> list[Any]:
-    gp = (gender_presentation or "").strip().lower()
-    if gp in {"", "auto"}:
-        return tokens
-    if gp == "androgynous":
-        tokens.append("androgynous presentation")
-    elif gp == "male":
-        tokens.append("male-presenting")
-    elif gp == "female":
-        tokens.append("female-presenting")
-    return tokens
-
-
-@torch.inference_mode()
-def encode_text(
-    captions,
-    tokenizer,
-    text_encoder,
-    device,
-    max_length=300,
-    dtype=torch.float32,
-    text_bundle=None,
-    clip_captions=None,
-    long_clip_captions=None,
-    segment_texts=None,
-):
-    if text_bundle is not None:
-        return text_bundle.encode(
-            captions,
-            device,
-            max_length=max_length,
-            dtype=dtype,
-            train_fusion=False,
-            clip_captions=clip_captions,
-            long_clip_captions=long_clip_captions,
-            segment_texts=segment_texts,
-        )
-    if segment_texts is not None:
-        from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
-
-        return encode_t5_segment_concat(
-            segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
-        )
-    nbc = device.type == "cuda"
-    tok = tokenizer(captions, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt")
-    input_ids = tok.input_ids.to(device, non_blocking=nbc)
-    attention_mask = tok.attention_mask.to(device, non_blocking=nbc)
-    out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
-    return out.last_hidden_state.to(dtype)

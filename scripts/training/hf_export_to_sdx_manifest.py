@@ -43,6 +43,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from data.manifest_utils import manifest_row_text  # noqa: E402
+from utils.safety.minor_guard import reasons as minor_guard_reasons  # noqa: E402
+
 
 def _to_pil(image_val: Any):
     """HF Image feature, PIL, numpy, or dict with bytes."""
@@ -178,7 +181,7 @@ def _save_sample(
     skip_reencode: bool = False,
 ) -> str | None:
     cap = _caption_from_row(row, caption_field, tag_join)
-    if not cap:
+    if not cap or minor_guard_reasons(f"{cap}, {manifest_row_text(row)}", training=True):
         return None
     image_val = row.get(image_field)
     ipath = img_dir / f"{stem}.{img_ext}"

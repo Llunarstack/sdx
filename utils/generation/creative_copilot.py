@@ -1,10 +1,10 @@
 """Creative Co-Pilot — 4-step *Decompose and Apply* style pipeline.
 
 Modular (not a single LoRA): inspiration → style text+features → structure
-control → InstantStyle / moodboard fusion into ``sample.py``.
+control → moodboard fusion into ``sample.py``.
 
 Weight-safe: VLMs, depth nets, and dense encoders are optional; PIL canny and
-CLIP InstantStyle always work when references exist.
+the CLIP moodboard always work when references exist.
 """
 
 from __future__ import annotations
@@ -38,11 +38,8 @@ class CopilotConfig:
     use_vlm: bool = True
     extract_control: bool = True
     control_prefer: str = "canny"  # canny | depth | softedge
-    reference_style_mode: str = "instantstyle"
-    reference_strength: float = 0.85
     moodboard_strength: float = 1.0
     device: str = "cuda"
-    content_prompt: str = "a photo"
 
 
 @dataclass(slots=True)
@@ -287,44 +284,27 @@ def build_sample_argv(
     extra: Sequence[str] | None = None,
     config: CopilotConfig | None = None,
 ) -> list[str]:
+    from utils.generation.sample_cli_passthrough import sample_argv
+
     cfg = config or CopilotConfig()
-    cmd = [
+    values: dict[str, Any] = {
+        "ckpt": str(ckpt),
+        "prompt": plan.fused_prompt or plan.goal_prompt,
+        "out": str(out),
+        "device": str(device),
+    }
+    if plan.moodboard_json:
+        values.update(moodboard_json=plan.moodboard_json, moodboard_strength=cfg.moodboard_strength)
+    elif plan.moodboard_paths:
+        values.update(moodboard_images=",".join(plan.moodboard_paths), moodboard_strength=cfg.moodboard_strength)
+    if plan.control_image:
+        values.update(control_image=plan.control_image, control_type=plan.control_type or None)
+    return [
         sys.executable,
         str(Path(__file__).resolve().parents[2] / "sample.py"),
-        "--ckpt",
-        str(ckpt),
-        "--prompt",
-        plan.fused_prompt or plan.goal_prompt,
-        "--out",
-        str(out),
-        "--device",
-        str(device),
-        "--reference-style-mode",
-        str(cfg.reference_style_mode),
-        "--reference-strength",
-        str(cfg.reference_strength),
-        "--reference-content-prompt",
-        str(cfg.content_prompt),
+        *sample_argv(values),
+        *(extra or ()),
     ]
-    if plan.moodboard_json:
-        cmd.extend(["--moodboard-json", plan.moodboard_json, "--moodboard-strength", str(cfg.moodboard_strength)])
-    elif plan.moodboard_paths:
-        cmd.extend(
-            [
-                "--moodboard-images",
-                ",".join(plan.moodboard_paths),
-                "--moodboard-strength",
-                str(cfg.moodboard_strength),
-            ]
-        )
-    if plan.control_image:
-        cmd.extend(["--control-image", plan.control_image])
-        if plan.control_type:
-            # Native DiT control uses the map as-is; type is informational in argv if supported.
-            cmd.extend(["--control-type", plan.control_type])
-    if extra:
-        cmd.extend(list(extra))
-    return cmd
 
 
 def run_creative_copilot(
@@ -343,7 +323,7 @@ def run_creative_copilot(
     """
     Run the 4-step Decompose-and-Apply stack.
 
-    If ``execute`` and ``ckpt`` are set, shells out to ``sample.py`` with InstantStyle fusion.
+    If ``execute`` and ``ckpt`` are set, shells out to ``sample.py`` with moodboard fusion.
     """
     cfg = config or CopilotConfig()
     work = Path(work_dir)

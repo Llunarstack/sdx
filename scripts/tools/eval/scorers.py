@@ -18,6 +18,9 @@ from __future__ import annotations
 import re
 
 import numpy as np
+from utils.quality.scene_physics import occlusion_score as occlusion_score
+from utils.quality.scene_physics import reflection_score as reflection_score
+from utils.quality.scene_physics import spatial_bind_score as spatial_bind_score
 
 # --- CLIP adherence ---------------------------------------------------------
 
@@ -261,45 +264,6 @@ def text_score(image_path: str, expected_text: str) -> tuple[float | None, dict]
         return None, {"engine": engine}
     score = 1.0 if want in have else _lcs_ratio(want, have)
     return score, {"engine": engine, "expected": expected_text, "ocr": got.strip()[:80]}
-
-
-# --- Scene physics (optional; utils.quality.scene_physics may not exist yet) -
-
-
-def occlusion_score(image_path: str) -> tuple[float | None, dict]:
-    """Cheap occlusion plausibility. None when scene_physics is not importable."""
-    try:
-        from utils.quality.scene_physics import occlusion_score as _score
-    except Exception as e:
-        return None, {"error": f"{type(e).__name__}: {e}"}
-    try:
-        return _score(image_path)
-    except Exception as e:
-        return None, {"error": f"{type(e).__name__}: {e}"}
-
-
-def reflection_score(image_path: str) -> tuple[float | None, dict]:
-    """Cheap reflection plausibility. None when scene_physics is not importable."""
-    try:
-        from utils.quality.scene_physics import reflection_score as _score
-    except Exception as e:
-        return None, {"error": f"{type(e).__name__}: {e}"}
-    try:
-        return _score(image_path)
-    except Exception as e:
-        return None, {"error": f"{type(e).__name__}: {e}"}
-
-
-def spatial_bind_score(image_path: str, prompt: str) -> tuple[float | None, dict]:
-    """Left/right color placement. None when no parseable color pair or import fails."""
-    try:
-        from utils.quality.scene_physics import spatial_bind_score as _score
-    except Exception as e:
-        return None, {"error": f"{type(e).__name__}: {e}"}
-    try:
-        return _score(image_path, prompt)
-    except Exception as e:
-        return None, {"error": f"{type(e).__name__}: {e}"}
 
 
 def _lcs_ratio(a: str, b: str) -> float:

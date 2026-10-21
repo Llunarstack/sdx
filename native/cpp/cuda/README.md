@@ -7,7 +7,7 @@ All optional GPU code lives **here**, built by CMake from `native/cpp` with `-DS
 | `sdx_cuda_hwc_to_chw` | `hwc_to_chw.cu` | uint8 HWC → float NCHW |
 | `sdx_cuda_ml` | `l2_normalize_rows.cu`, `style_pick_best.cu` | L2-normalize rows; pick best cosine vs query embedding |
 | `sdx_cuda_flow_matching` | `flow_matching_velocity.cu` | `v = ε - x₀` (rectified-flow target) |
-| `sdx_cuda_nf4` | `nf4_dequant.cu` | NF4 block dequant (matches `utils/quantization/nf4_codec.py`) |
+| `sdx_cuda_nf4` | `nf4_dequant.cu` | NF4 block dequant (QLoRA level table) |
 | `sdx_cuda_sdpa_online` | `sdpa_online_softmax.cu` | Multi-head SDPA, head_dim=64, online softmax |
 | `sdx_cuda_rmsnorm` | `rmsnorm_rows.cu` | Row-wise RMSNorm (float32) |
 | `sdx_cuda_rope` | `rope_apply.cu` | In-place interleaved RoPE on Q/K |
@@ -30,6 +30,6 @@ Or from repo root: `.\scripts\tools\native\build_native.ps1`
 
 ## Python
 
-`sdx_native.cuda_hwc_to_chw`, `cuda_l2_normalize`, `cuda_style_pick_native`, `flow_matching_velocity_native`, `nf4_dequant_native`, `sdpa_online_native`, `rmsnorm_native`, `rope_apply_native`, `silu_gate_native`, etc.
+Bound from `sdx_native`: `cuda_style_pick_native` (`sdx_cuda_ml`), `image_metrics_native` (`sdx_cuda_image_metrics`), `gaussian_blur_native` (`sdx_cuda_gaussian_blur`). The other kernels have no Python caller; load them with `sdx_native.native_tools.load_shared_library(name)`.
 
 Training should stay on **PyTorch**; these are optional fast paths and experiments.

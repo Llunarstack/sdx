@@ -11,7 +11,6 @@ This does **not** implement external models; it documents **where** related idea
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 
@@ -129,7 +128,7 @@ THEMES: tuple[ThemeMapping, ...] = (
         "Multi-stage designer→verifier pipeline",
         ParityStatus.IMPLEMENTED,
         "orchestrate_pipeline.py, pick-best, orchestration roles.",
-        ("scripts/tools/ops/orchestrate_pipeline.py", "utils/generation/orchestration.py"),
+        ("scripts/tools/ops/orchestrate_pipeline.py", "utils/agentic/roles.py"),
         ("--num", "--pick-best"),
     ),
     ThemeMapping(
@@ -145,8 +144,8 @@ THEMES: tuple[ThemeMapping, ...] = (
         "workflow_structural_coherence",
         "Multi-view / structural coherence (industry stacks)",
         ParityStatus.NOT_IN_REPO,
-        "No built-in 3D/pose engine; use data, control paths, character_lock, resolution tooling.",
-        ("docs/LANDSCAPE_2026.md", "utils/consistency/character_lock.py"),
+        "No built-in 3D/pose engine; use data, control paths, character sheets, resolution tooling.",
+        ("docs/LANDSCAPE_2026.md", "utils/consistency/character_customization.py"),
         (),
     ),
     ThemeMapping(
@@ -198,7 +197,7 @@ THEMES: tuple[ThemeMapping, ...] = (
             "models/dit_text.py",
             "models/reference_token_projection.py",
             "sample.py",
-            "utils/generation/clip_reference_embed.py",
+            "utils/generation/krea_controls.py",
         ),
         (
             "--reference-image",
@@ -227,7 +226,7 @@ THEMES: tuple[ThemeMapping, ...] = (
         (
             "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
             "sample.py",
-            "utils/generation/inference_research_hooks.py",
+            "utils/generation/latent_filters.py",
             "models/dit_text.py",
         ),
         ("--dual-stage-layout", "--num-ar-blocks", "--ssm-every-n"),
@@ -253,7 +252,7 @@ THEMES: tuple[ThemeMapping, ...] = (
         (
             "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
             "diffusion/spectral_sfp.py",
-            "utils/generation/inference_research_hooks.py",
+            "utils/generation/latent_filters.py",
             "docs/MODERN_DIFFUSION.md",
         ),
         ("--spectral-sfp-loss", "--spectral-coherence-latent"),
@@ -266,9 +265,9 @@ THEMES: tuple[ThemeMapping, ...] = (
         (
             "docs/NEXTGEN_SUPERMODEL_ARCHITECTURE.md",
             "scripts/tools/training/train_diffusion_dpo.py",
-            "utils/training/diffusion_dpo_loss.py",
-            "utils/training/preference_jsonl.py",
-            "utils/training/preference_image_dataset.py",
+            "utils/training/preference.py",
+            "utils/training/preference.py",
+            "utils/training/preference.py",
             "diffusion/gaussian_diffusion.py",
         ),
         (),
@@ -325,14 +324,6 @@ THEMES: tuple[ThemeMapping, ...] = (
         ),
         ("--ot-noise-pair-reg", "--ot-noise-pair-mode", "--flow-matching-training"),
     ),
-    ThemeMapping(
-        "speculative_cfg_denoise",
-        "Speculative draft CFG (two forwards, optional blend when predictions agree)",
-        ParityStatus.PARTIAL,
-        "Same-backbone draft+full CFG in GaussianDiffusion.sample_loop via utils/generation/speculative_denoise.py.",
-        ("utils/generation/speculative_denoise.py", "diffusion/gaussian_diffusion.py", "sample.py"),
-        ("--speculative-draft-cfg-scale", "--speculative-close-thresh", "--speculative-blend"),
-    ),
     # --- Prompt-accuracy blueprint (docs/BLUEPRINTS.md) ---
     ThemeMapping(
         "geometric_latent_split_blueprint",
@@ -342,7 +333,7 @@ THEMES: tuple[ThemeMapping, ...] = (
         (
             "docs/BLUEPRINTS.md",
             "sample.py",
-            "utils/generation/inference_research_hooks.py",
+            "utils/generation/latent_filters.py",
         ),
         ("--dual-stage-layout", "--domain-prior-latent"),
     ),
@@ -371,7 +362,7 @@ THEMES: tuple[ThemeMapping, ...] = (
         (
             "docs/BLUEPRINTS.md",
             "diffusion/spectral_sfp.py",
-            "utils/generation/inference_research_hooks.py",
+            "utils/generation/latent_filters.py",
             "docs/MODERN_DIFFUSION.md",
         ),
         ("--spectral-sfp-loss", "--spectral-coherence-latent"),
@@ -386,11 +377,6 @@ def theme_by_id(theme_id: str) -> ThemeMapping | None:
         if t.theme_id == tid:
             return t
     return None
-
-
-def iter_themes() -> Iterator[ThemeMapping]:
-    """Yield all theme mappings in stable order."""
-    yield from THEMES
 
 
 def themes_as_dict() -> list[dict[str, object]]:

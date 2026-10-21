@@ -5,14 +5,48 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
 
 from config.defaults.agentic_stack import AgenticStackDefaults
-from research.agi_image.planning.generation_plan import (
-    GenerationPlan,
-    GenerationStep,
-    GenerationStepKind,
-    StopConditions,
-)
+
+
+class GenerationStepKind(str, Enum):
+    refine_prompt = "refine_prompt"
+    diffusion_sample = "diffusion_sample"
+    inpaint_region = "inpaint_region"
+    verify_visual = "verify_visual"
+    verify_text_ocr = "verify_text_ocr"
+    critique_revise = "critique_revise"
+    semantic_segment = "semantic_segment"
+    knowledge_retrieval = "knowledge_retrieval"
+
+
+@dataclass(slots=True)
+class GenerationStep:
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    kind: GenerationStepKind = GenerationStepKind.diffusion_sample
+    description: str = ""
+    deps: list[str] = field(default_factory=list)
+    kwargs: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class GenerationPlan:
+    """DAG of steps (``deps`` hold step ids); the agent walks ``steps`` in order."""
+
+    goal_id: str
+    steps: list[GenerationStep] = field(default_factory=list)
+
+    def add(self, step: GenerationStep) -> GenerationStep:
+        self.steps.append(step)
+        return step
+
+
+@dataclass(slots=True)
+class StopConditions:
+    max_outer_loops: int = 4
 
 
 def plan_from_prompt(
@@ -221,11 +255,16 @@ def build_default_plan(
 
 def default_stop_conditions(defaults: AgenticStackDefaults | None = None) -> StopConditions:
     d = defaults or AgenticStackDefaults()
-    return StopConditions(
-        max_outer_loops=d.max_reflect_loops,
-        min_clip_alignment=d.min_clip_accept,
-        patience_no_gain=2,
-    )
+    return StopConditions(max_outer_loops=d.max_reflect_loops)
 
 
-__all__ = ["build_default_plan", "default_stop_conditions", "plan_from_prompt", "plan_visual_brain"]
+__all__ = [
+    "GenerationPlan",
+    "GenerationStep",
+    "GenerationStepKind",
+    "StopConditions",
+    "build_default_plan",
+    "default_stop_conditions",
+    "plan_from_prompt",
+    "plan_visual_brain",
+]

@@ -20,7 +20,6 @@ from .style_genome_chaos import (
     preset_genome,
 )
 from .style_inventor import StyleInventor
-from .style_memory import StyleGenomeBank, StyleGenomeRecord
 
 
 @dataclass
@@ -271,33 +270,11 @@ class StyleExplorePlanner:
         )
 
 
-def record_explore_winner(
-    genome: StyleGenome,
-    *,
-    score: float,
-    prompt: str,
-    pick_metric: str = "",
-    image_path: str = "",
-    bank_path: Path | None = None,
-) -> None:
-    bank = StyleGenomeBank(bank_path)
-    bank.append(
-        StyleGenomeRecord(
-            genome=genome,
-            score=score,
-            prompt=prompt,
-            pick_metric=pick_metric,
-            image_path=image_path,
-        )
-    )
-
-
 __all__ = [
     "ExploreCandidate",
     "ExplorePlan",
     "StyleExplorePlanner",
     "compile_genome_pair",
     "list_insane_presets",
-    "record_explore_winner",
     "resolve_style_genome_for_args",
 ]

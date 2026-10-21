@@ -2,8 +2,10 @@
 """
 **Flow-GRPO** online alignment: sample → reward → group-relative weighted fine-tune.
 
-Uses ``OnlineRewardModel`` for terminal rewards and ``grpo_weighted_loss`` on VP
-denoising surrogate loss. Practical single-GPU scaffold inspired by Flow-GRPO (NeurIPS 2025).
+Rollouts use Flow-GRPO's SDE (flow checkpoints) or ancestral DDIM (VP), rewards come from
+``CompositeRanker('online').score_one``, and the update is reward-weighted regression of the checkpoint's own
+denoising objective (velocity for flow, eps/v/x0 for VP) over each rollout group, plus a KL-style anchor to the
+reference model. Practical single-GPU scaffold inspired by Flow-GRPO (NeurIPS 2025).
 
 Example::
 
@@ -28,48 +30,56 @@ import torch
 from config.train_config import get_dit_build_kwargs
 from diffusion import create_diffusion
 from models import DiT_models_text
-from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+from utils.checkpoint.checkpoint_loading import finetuned_checkpoint, load_dit_text_checkpoint
 from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions, load_text_bundle_for_training
-from utils.superior.online_reward import OnlineRewardConfig, OnlineRewardModel
-from utils.training.branch_grpo import (
-    BranchGRPOConfig,
-    branch_relative_advantages,
-    branch_rollout_flow_samples,
-    enumerate_branch_paths,
-)
-from utils.training.dense_grpo import (
-    DenseGRPOConfig,
-    flow_fraction_from_t_index,
-    score_latent_reward,
-    short_ode_refine_x0,
-    step_advantages_from_gains,
-)
-from utils.training.flash_grpo import (
-    iso_temporal_group_advantages,
-    rectify_policy_gradient,
-    sample_iso_temporal_index,
-)
+from utils.safety.minor_guard import reasons
+from utils.superior.inference_pipeline import CompositeRanker
 from utils.training.flow_grpo import (
     FlowGRPOConfig,
+    SRPOConfig,
     decode_latent_to_rgb_uint8,
     group_relative_advantages,
     grpo_weighted_loss,
     reference_kl_penalty,
     rollout_flow_sample,
+    semantic_relative_reward,
+    timestep_reward_mask,
 )
-from utils.training.grpo_guard import GRPOGuardConfig, grpo_guard_weighted_loss
-from utils.training.turning_point_grpo import TurningPointGRPOConfig, tp_grpo_step_weights
+from utils.training.grpo import (
+    BranchGRPOConfig,
+    DenseGRPOConfig,
+    GRPOGuardConfig,
+    TurningPointGRPOConfig,
+    branch_relative_advantages,
+    branch_rollout_flow_samples,
+    enumerate_branch_paths,
+    flow_fraction_from_t_index,
+    grpo_guard_weighted_loss,
+    iso_temporal_group_advantages,
+    rectify_policy_gradient,
+    sample_iso_temporal_index,
+    score_latent_reward,
+    short_ode_refine_x0,
+    step_advantages_from_gains,
+    tp_grpo_step_weights,
+)
 
 import train as train_mod
 
 
 def _load_prompts(path: str) -> list[str]:
     p = Path(path)
+    prompts = [path]
     if p.is_file():
         lines = [ln.strip() for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
         if lines:
-            return lines
-    return [path]
+            prompts = lines
+    kept = [prompt for prompt in prompts if not reasons(prompt, training=True)]
+    if len(kept) < len(prompts):
+        print(f"train_flow_grpo: dropped {len(prompts) - len(kept)} prompt(s) involving minors.", file=sys.stderr)
+    if not kept:
+        raise ValueError("No GRPO prompts left after the minor-safety filter.")
+    return kept
 
 
 def main() -> int:
@@ -107,6 +117,13 @@ def main() -> int:
         action="store_true",
         help="GRPO-Guard: ratio-norm advantages + timestep gradient reweight (arXiv:2510.22319).",
     )
+    ap.add_argument(
+        "--srpo",
+        action="store_true",
+        help="SRPO realism: add a semantic-relative reward (natural vs waxy AI-look control phrases) and mask "
+        "updates on late (near-clean) timesteps, where reward tuning over-polishes skin.",
+    )
+    ap.add_argument("--srpo-weight", type=float, default=1.0, help="Scale of the SRPO relative reward term.")
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--no-amp", action="store_true")
     args = ap.parse_args()
@@ -138,6 +155,16 @@ def main() -> int:
         prediction_type=str(getattr(cfg, "prediction_type", "epsilon")),
     )
     diffusion._to_device(torch.device(device))
+    is_flow = bool(getattr(cfg, "flow_matching_training", False))
+    num_t = int(diffusion.num_timesteps)
+
+    def _noisy_and_target(z: torch.Tensor, t: torch.Tensor, noise: torch.Tensor):
+        """``x_t`` and the regression target of the objective this checkpoint was trained with."""
+        if is_flow:
+            s = flow_fraction_from_t_index(t, num_t).view(-1, *([1] * (z.dim() - 1)))
+            return (1.0 - s) * z + s * noise, noise - z
+        return diffusion.q_sample(z, t, noise=noise), diffusion.training_target(z, noise, t)
+
     ae_type = getattr(cfg, "autoencoder_type", "kl")
     latent_scale = float(getattr(cfg, "latent_scale", 0.18215)) if ae_type == "kl" else 1.0
     image_size = int(getattr(cfg, "image_size", 256))
@@ -145,13 +172,19 @@ def main() -> int:
     in_ch = int(getattr(cfg, "in_channels", 4))
     shape = (1, in_ch, latent_h, latent_h)
 
-    reward_model = OnlineRewardModel(
-        OnlineRewardConfig(
-            vit_ckpt=str(args.vit_ckpt or ""),
-            device=device,
-            vit_weight=0.4 if str(args.vit_ckpt or "").strip() else 0.0,
-        )
-    )
+    ranker = CompositeRanker("online")
+
+    srpo_cfg = SRPOConfig()
+
+    def _score(rgb, text: str) -> float:
+        return ranker.score_one(rgb, prompt=text, device=str(device), vit_ckpt=str(args.vit_ckpt or ""))
+
+    def reward(rgb, prompt: str) -> float:
+        r = _score(rgb, prompt)
+        if args.srpo:
+            r += float(args.srpo_weight) * semantic_relative_reward(_score, rgb, prompt, config=srpo_cfg)
+        return r
+
     grpo_cfg = FlowGRPOConfig(
         num_samples=int(args.num_samples),
         denoise_steps=int(args.rollout_steps),
@@ -163,19 +196,24 @@ def main() -> int:
 
     for global_step in range(1, int(args.steps) + 1):
         prompt = prompts[(global_step - 1) % len(prompts)]
-        enc = train_mod.encode_text(
-            [prompt],
-            tokenizer,
-            text_encoder,
-            device,
-            max_length=300,
-            dtype=torch.bfloat16 if use_amp else torch.float32,
-            text_bundle=text_bundle,
-            train_fusion=False,
-            **encode_kwargs_for_captions([prompt], text_bundle),
-        )
+
+        def _enc(text: str) -> torch.Tensor:
+            return train_mod.encode_text(
+                [text],
+                tokenizer,
+                text_encoder,
+                device,
+                max_length=300,
+                dtype=torch.float32,  # rollouts run the fp32 policy outside autocast
+                text_bundle=text_bundle,
+                train_fusion=False,
+                **encode_kwargs_for_captions([text], text_bundle),
+            )
+
+        enc = _enc(prompt)
         mk_c = {"encoder_hidden_states": enc}
-        mk_u = {"encoder_hidden_states": torch.zeros_like(enc)}
+        # The uncond the model was trained on with caption dropout (and that sample.py uses): the empty prompt.
+        mk_u = {"encoder_hidden_states": _enc("")}
 
         rewards: list[float] = []
         latents: list[torch.Tensor] = []
@@ -191,6 +229,8 @@ def main() -> int:
                 steps=grpo_cfg.denoise_steps,
                 device=device,
                 sde_noise_scale=grpo_cfg.sde_noise_scale,
+                flow=is_flow,
+                flow_shift=float(getattr(cfg, "flow_shift", 1.0) or 1.0),
             )
 
         if bool(getattr(args, "branch_grpo", False)):
@@ -206,7 +246,7 @@ def main() -> int:
                 rgb = decode_latent_to_rgb_uint8(
                     z, vae, latent_scale=latent_scale, ae_type=ae_type, rae_bridge=rae_bridge
                 )
-                rewards.append(reward_model.score_one(rgb, prompt=prompt))
+                rewards.append(reward(rgb, prompt))
                 latents.append(z.detach())
         else:
             for _ in range(grpo_cfg.num_samples):
@@ -215,7 +255,7 @@ def main() -> int:
                 rgb = decode_latent_to_rgb_uint8(
                     z, vae, latent_scale=latent_scale, ae_type=ae_type, rae_bridge=rae_bridge
                 )
-                rewards.append(reward_model.score_one(rgb, prompt=prompt))
+                rewards.append(reward(rgb, prompt))
                 latents.append(z.detach())
 
         reward_t = torch.tensor(rewards, device=device)
@@ -238,13 +278,11 @@ def main() -> int:
                 reward_t = torch.tensor(rewards, device=device)
             adv = branch_relative_advantages(reward_t, [str(i) for i in range(len(rewards))])
         dense_cfg = DenseGRPOConfig(ode_refine_steps=int(args.dense_ode_steps))
-        tp_weights: list[float] | None = None
         if bool(getattr(args, "tp_grpo", False)) and bool(getattr(args, "dense_grpo", False)):
             step_tables: list[list[float]] = []
             for z in latents:
-                t_d = torch.randint(0, diffusion.num_timesteps, (1,), device=device, dtype=torch.long)
-                noise_d = torch.randn_like(z)
-                x_t_d = diffusion.q_sample(z, t_d, noise=noise_d)
+                t_d = torch.randint(0, num_t, (1,), device=device, dtype=torch.long)
+                x_t_d, _ = _noisy_and_target(z, t_d, torch.randn_like(z))
                 row: list[float] = []
                 with torch.no_grad():
                     for _ in range(max(1, dense_cfg.ode_refine_steps)):
@@ -255,30 +293,31 @@ def main() -> int:
                             t_d,
                             model_kwargs=mk_c,
                             steps=1,
+                            flow=is_flow,
                         )
                         row.append(
                             score_latent_reward(
                                 x0_hat,
                                 prompt,
                                 vae=vae,
-                                score_fn=reward_model.score_one,
+                                score_fn=reward,
                                 latent_scale=latent_scale,
                                 ae_type=ae_type,
                                 rae_bridge=rae_bridge,
                             )
                         )
                 step_tables.append(row if row else [float(rewards[len(step_tables)])])
-            flat_tp: list[float] = []
-            for traj, term in zip(step_tables, rewards):
-                flat_tp.extend(tp_grpo_step_weights(traj, float(term), config=TurningPointGRPOConfig()))
-            adv = group_relative_advantages(torch.tensor(flat_tp, device=device))
-            tp_weights = flat_tp
+            # One advantage per rollout: its TP-GRPO return (incremental + turning-point step rewards).
+            returns = [
+                sum(tp_grpo_step_weights(traj, float(term), config=TurningPointGRPOConfig()))
+                for traj, term in zip(step_tables, rewards)
+            ]
+            adv = group_relative_advantages(torch.tensor(returns, device=device))
         elif bool(getattr(args, "dense_grpo", False)):
             gains: list[float] = []
             for z in latents:
-                t_d = torch.randint(0, diffusion.num_timesteps, (1,), device=device, dtype=torch.long)
-                noise_d = torch.randn_like(z)
-                x_t_d = diffusion.q_sample(z, t_d, noise=noise_d)
+                t_d = torch.randint(0, num_t, (1,), device=device, dtype=torch.long)
+                x_t_d, _ = _noisy_and_target(z, t_d, torch.randn_like(z))
                 with torch.no_grad():
                     x0_hat = short_ode_refine_x0(
                         policy,
@@ -287,61 +326,55 @@ def main() -> int:
                         t_d,
                         model_kwargs=mk_c,
                         steps=dense_cfg.ode_refine_steps,
+                        flow=is_flow,
                     )
                     gains.append(
                         score_latent_reward(
                             x0_hat,
                             prompt,
                             vae=vae,
-                            score_fn=reward_model.score_one,
+                            score_fn=reward,
                             latent_scale=latent_scale,
                             ae_type=ae_type,
                             rae_bridge=rae_bridge,
                         )
                     )
             adv = step_advantages_from_gains(gains).to(device)
-        if tp_weights is not None and len(tp_weights) == len(latents):
-            adv = adv[: len(latents)]
+        # One forward over the whole group: the advantage weights are normalised across it.
+        z = torch.cat(latents, dim=0)
+        g = z.shape[0]
+        adv = adv.reshape(-1)[:g].to(device)
+        if shared_t is not None:
+            t = shared_t.reshape(1).expand(g).to(device)
+        else:
+            t = torch.randint(0, num_t, (g,), device=device, dtype=torch.long)
+        x_t, target = _noisy_and_target(z, t, torch.randn_like(z))
+        mk_g = {"encoder_hidden_states": enc.expand(g, -1, -1)}
         opt.zero_grad(set_to_none=True)
-        total = policy.new_zeros(())
-        for i, z in enumerate(latents):
-            t = torch.randint(0, diffusion.num_timesteps, (1,), device=device, dtype=torch.long)
-            noise = torch.randn_like(z)
-            x_t = diffusion.q_sample(z, t, noise=noise)
-            with torch.amp.autocast(device_type="cuda" if device == "cuda" else "cpu", enabled=use_amp):
-                pred_p = policy(x_t, t, **mk_c)
-                if pred_p.shape[1] > x_t.shape[1]:
-                    pred_p = pred_p[:, : x_t.shape[1]]
-                with torch.no_grad():
-                    pred_r = ref(x_t, t, **mk_c)
-                    if pred_r.shape[1] > x_t.shape[1]:
-                        pred_r = pred_r[:, : x_t.shape[1]]
-                per = (pred_p - noise).pow(2).mean(dim=(1, 2, 3))
-                if bool(getattr(args, "flash_grpo", False)) and shared_t is not None:
-                    tf = flow_fraction_from_t_index(shared_t, diffusion.num_timesteps)
-                    per = rectify_policy_gradient(per, tf)
-                if bool(getattr(args, "grpo_guard", False)):
-                    t_frac = flow_fraction_from_t_index(t, diffusion.num_timesteps)
-                    step_loss = grpo_guard_weighted_loss(
-                        per,
-                        adv[i : i + 1],
-                        torch.tensor([t_frac], device=device),
-                        config=GRPOGuardConfig(),
-                    ) + reference_kl_penalty(pred_p, pred_r, coef=grpo_cfg.kl_coef)
-                else:
-                    step_loss = grpo_weighted_loss(per, adv[i : i + 1]) + reference_kl_penalty(
-                        pred_p, pred_r, coef=grpo_cfg.kl_coef
-                    )
-            total = total + step_loss
-        (total / max(len(latents), 1)).backward()
+        with torch.amp.autocast(device_type="cuda" if device == "cuda" else "cpu", enabled=use_amp):
+            pred_p = policy(x_t, t, **mk_g)[:, : z.shape[1]]
+            with torch.no_grad():
+                pred_r = ref(x_t, t, **mk_g)[:, : z.shape[1]]
+            per = (pred_p.float() - target.float()).pow(2).flatten(1).mean(dim=1)
+            t_frac = flow_fraction_from_t_index(t, num_t)
+            if args.srpo:
+                # t_frac is the noise fraction; the mask takes the clean-side trajectory fraction.
+                per = per * timestep_reward_mask(1.0 - t_frac, cutoff=srpo_cfg.late_timestep_cutoff)
+            if bool(getattr(args, "flash_grpo", False)):
+                per = rectify_policy_gradient(per, t_frac)
+            if bool(getattr(args, "grpo_guard", False)):
+                loss = grpo_guard_weighted_loss(per, adv, t_frac, config=GRPOGuardConfig())
+            else:
+                loss = grpo_weighted_loss(
+                    per, adv, clip=grpo_cfg.advantage_clip, temperature=grpo_cfg.reward_temperature
+                )
+            loss = loss + reference_kl_penalty(pred_p, pred_r, coef=grpo_cfg.kl_coef)
+        loss.backward()
         opt.step()
         if global_step % 10 == 0:
             print(f"step {global_step} mean_reward={sum(rewards) / len(rewards):.4f} adv={adv.tolist()}")
 
-    torch.save(
-        {"model": policy.state_dict(), "ema": policy.state_dict(), "config": cfg, "grpo_step": int(args.steps)},
-        args.out,
-    )
+    torch.save(finetuned_checkpoint(policy, cfg, rae_bridge, fusion_sd, grpo_step=int(args.steps)), args.out)
     print(f"Saved {args.out}")
     return 0
 

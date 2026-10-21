@@ -1,6 +1,6 @@
 """Photoshop-like edit skills + Ideogram-style text/layout plan for stills.
 
-Turns user intents (fix face, change outfit, add text, outpaint) into
+Turns user intents (fix face, change outfit, add text, identity reference) into
 sample.py / edit_inpaint argv without a full layer editor UI.
 """
 
@@ -10,6 +10,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+
+from utils.generation.sample_cli_passthrough import sample_argv
 
 __all__ = [
     "EditSkill",
@@ -21,12 +23,8 @@ __all__ = [
 
 SkillKind = Literal[
     "inpaint_region",
-    "img2img",
-    "outpaint",
     "glyph_text",
-    "palette_lock",
     "identity_lock",
-    "corpus_ref",
 ]
 
 
@@ -80,7 +78,6 @@ def plan_edit_skills(
     prompt: str = "",
     fix_regions: list[str] | None = None,
     change_outfit: str = "",
-    outpaint: bool = False,
     glyph_text: str = "",
     identity_ref: str = "",
     work_dir: str | Path = "",
@@ -91,6 +88,7 @@ def plan_edit_skills(
     work = Path(work_dir or "outputs/edit_skills")
     work.mkdir(parents=True, exist_ok=True)
     plan = EditSkillPlan()
+    argv_values: dict[str, Any] = {}
     regions = list(fix_regions or [])
     if change_outfit:
         regions.append("clothing")
@@ -122,33 +120,20 @@ def plan_edit_skills(
             plan.skills.append(skill)
         if plan.skills:
             s0 = plan.skills[0]
-            plan.sample_argv = [
-                "--init-image",
-                init_image,
-                "--mask",
-                s0.mask_path,
-                "--prompt",
-                s0.prompt,
-                "--strength",
-                str(s0.strength),
-                "--inpaint-mode",
-                "mdm",
-            ]
+            argv_values.update(
+                init_image=init_image, mask=s0.mask_path, prompt=s0.prompt, strength=s0.strength, inpaint_mode="mdm"
+            )
             plan.notes.append(f"primary inpaint region={primary}")
-
-    if outpaint and init_image:
-        plan.skills.append(EditSkill(kind="outpaint", init_image=init_image, prompt=prompt, strength=0.55))
-        plan.notes.append("outpaint: use compose_outpaint_canvas + img2img (see latent_edit_helpers)")
 
     if glyph_text:
         plan.skills.append(EditSkill(kind="glyph_text", prompt=glyph_text, extra={"text": glyph_text}))
-        plan.sample_argv.extend(["--text-in-image", glyph_text, "--glyph-canvas"])
-        plan.notes.append("ideogram-style glyph/text flags appended")
+        argv_values.update(text_in_image=True, expected_text=glyph_text)
 
     if identity_ref:
         plan.skills.append(EditSkill(kind="identity_lock", init_image=identity_ref))
-        plan.sample_argv.extend(["--reference-image", identity_ref, "--reference-style-mode", "instantstyle"])
+        argv_values["reference_image"] = identity_ref
 
+    plan.sample_argv = sample_argv(argv_values)
     (work / "edit_plan.json").write_text(json.dumps(plan.to_dict(), indent=2), encoding="utf-8")
     return plan
 
@@ -160,19 +145,11 @@ def plan_ideogram_layout(
     palette_hex: list[str] | None = None,
     layout: str = "poster",  # poster | social | logo
 ) -> IdeogramPlan:
-    """Compile Ideogram-like text + layout argv from prompt + explicit strings."""
-    from utils.generation.glyph_canvas import extract_glyph_strings
+    """Compile Ideogram-like text + layout argv from prompt + explicit strings (the box layout is the caller's to save)."""
+    from utils.generation.text_rendering import TextRenderingEngine
 
-    glyphs = list(texts or [])
-    if not glyphs:
-        try:
-            from utils.generation.glyph_canvas import extract_glyph_strings
-
-            glyphs = list(extract_glyph_strings(prompt) or [])
-        except Exception:
-            import re
-
-            glyphs = re.findall(r'"([^"]+)"', prompt) or re.findall(r"'([^']+)'", prompt)
+    found = TextRenderingEngine().extract_text_requirements(prompt or "")["text_content"]
+    glyphs = list(texts or []) or [s.strip() for s in found if s.strip()]
 
     brief: dict[str, Any] = {
         "intent": layout,
@@ -186,13 +163,7 @@ def plan_ideogram_layout(
         regions.append({"id": f"text_{i}", "prompt": f'text "{t}"', "box": [0.1, y0, 0.9, y0 + 0.14]})
     box = {"mode": "typography", "regions": regions, "global_prompt": prompt} if regions else None
 
-    argv = ["--prompt", prompt, "--text-in-image", "1"]
-    if glyphs:
-        argv.extend(["--glyph-canvas"])
-    if palette_hex:
-        argv.extend(["--palette-lock", ",".join(palette_hex)])
-
-    # Persist brief for --design-brief consumers
+    argv = sample_argv({"prompt": prompt, "text_in_image": True, "expected_text": ",".join(glyphs)})
     return IdeogramPlan(
         prompt=prompt,
         glyph_texts=glyphs,

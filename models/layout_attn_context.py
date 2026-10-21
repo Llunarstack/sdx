@@ -1,7 +1,7 @@
-"""Thread-local layout attention state for Dense Diffusion soft-masks.
+"""Context-local Dense Diffusion layout state (a ``ContextVar``).
 
-Set once per denoise step from ``sample_loop``; ``CrossAttention`` reads it so we
-do not need to plumb kwargs through every DiTBlock.
+``set_layout_attn`` activates it around a model call (see ``diffusion.gaussian_diffusion``); ``CrossAttention``
+and ``TACA`` read it through ``layout_cross_attn_bias``, so no kwarg has to be plumbed through every block.
 """
 
 from __future__ import annotations
@@ -41,8 +41,18 @@ def clear_layout_attn() -> None:
     _layout_attn_ctx.set(None)
 
 
-def get_layout_attn() -> dict[str, Any] | None:
-    return _layout_attn_ctx.get()
+def layout_cross_attn_bias(
+    batch: int, n_query: int, n_text: int, *, device: torch.device, dtype: torch.dtype
+) -> torch.Tensor | None:
+    """Additive ``(B, 1, N, L)`` cross-attention bias for the active layout step, else ``None``."""
+    ctx = _layout_attn_ctx.get()
+    if ctx is None:
+        return None
+    from frontier.attention import bias_cross_attention
+
+    zeros = torch.zeros(batch, 1, n_query, n_text, device=device, dtype=dtype)
+    bias = bias_cross_attention(zeros, **ctx)
+    return None if bias is zeros else bias
 
 
-__all__ = ["set_layout_attn", "clear_layout_attn", "get_layout_attn"]
+__all__ = ["set_layout_attn", "clear_layout_attn", "layout_cross_attn_bias"]

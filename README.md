@@ -28,7 +28,7 @@
 
 **SDX** is an open research framework for building **your own** text-to-image and text/image-to-video systems. It is not a hosted model, not an API wrapper, and not a scoreboard of someone else's weights.
 
-You own the training loop, the sampling stack, the layout controls, the video director, the quality critics, and the feedback-to-DPO RSI loop — end to end, on your hardware.
+You own the training loop, the sampling stack, the layout controls, the video director, the quality critics, and a self-improving art loop (RSI) — end to end, on your hardware.
 
 ```
 your data  →  train.py  →  checkpoint  →  sample.py / video studio  →  images & clips
@@ -217,7 +217,7 @@ Deeper strategy + weakness→fix map: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPET
 
 One **scene JSON** → retrieve → keyframe edit → motion → polish → stitch.
 
-- **VIDEOMAX:** one-flag identity / permanence / physics / occlusion / shot-chain consistency
+- **VIDEOMAX:** `edit.video_quality: max` — strong keyframe sampling, per-medium motion grammar, segment gates + retry
 - **Studio:** engine router (realistic / anime / voxel / …), director mode, character & world bibles
 - **Controls:** elements, motion brush, FLF2V, storyboard cuts
 - **Continuity:** eyeline, props, light motivation, thumbnail rehearsal
@@ -233,7 +233,7 @@ python -m scripts.tools video_generate --scene examples/scene_studio.example.jso
 <details>
 <summary><strong>Frontier research</strong> — frontier/</summary>
 
-80+ experimental modules: layout, guidance, narrative, realism, cinema, fusion. Browse the registry:
+Prompt-side planners for layout, narrative, realism, cinema and fusion. Browse the registry:
 
 ```python
 from frontier.registry import list_ideas
@@ -287,10 +287,9 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 
 | Area | Highlights |
 |------|------------|
-| **VIDEOMAX** | One-flag consistency: identity, permanence, physics, occlusion, shot chain |
-| **Invention Lab** | artwave / maxwave / videowave; stacks union (no clobber) |
-| **Ops packs** | ALPHACUT, GAMEASSETS, PHOTOOPS, STYLECAST |
-| **RSI feedback** | feedback like/dislike/pair to DPO; --log-feedback; rsi_loop |
+| **VIDEOMAX** | `video_quality: max`: strong keyframe sampling, per-medium motion grammar, segment gates + retry |
+| **Invention stack** | `--invention-stack auto`: oracle-picked prompt passes (count, binding, negation, anatomy, anti-plastic) + subject/medium-gated scene priors ([docs](docs/research/INVENTION_STACK.md)) |
+| **RSI** | `rsi_loop`: the model paints art, judges it, trains on its own best-vs-worst pairs (plus your thumbs) and keeps a checkpoint only if held-out art scores rise |
 | **Quality policy** | Compete soft-defaults, CFG-Zero, pick-best num sync |
 | **Tests** | **1700+** pytest cases |
 

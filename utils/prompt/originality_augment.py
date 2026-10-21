@@ -1,9 +1,7 @@
-"""
-Inject **originality / novelty** phrases into prompts (same rules as ``sample.py --originality``).
+"""Inject **originality / novelty** phrases into prompts (``sample.py --originality``).
 
 Used at **inference** and optionally during **training** (``--train-originality-prob``) so the model
-sees compositional variety tokens, not only at sample time. Token list:
-``config.defaults.prompt_domains.ORIGINALITY_POSITIVE_TOKENS``.
+sees compositional variety tokens, not only at sample time.
 """
 
 from __future__ import annotations
@@ -11,19 +9,57 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from data.caption_utils import (
+    AGE_TAGS,
+    ANATOMY_FRAMING_TAGS,
+    BODY_PART_TAGS,
+    BUILD_BODY_TAGS,
+    HEIGHT_TAGS,
+    SUBJECT_PREFIXES,
+)
+
 if TYPE_CHECKING:
     import numpy as np
 
-__all__ = ["inject_originality_tokens", "default_originality_tokens"]
+__all__ = ["ORIGINALITY_POSITIVE_TOKENS", "inject_originality_tokens"]
 
-
-def default_originality_tokens() -> list[str]:
-    try:
-        from config.defaults.prompt_domains import ORIGINALITY_POSITIVE_TOKENS
-
-        return list(ORIGINALITY_POSITIVE_TOKENS)
-    except ImportError:
-        return []
+ORIGINALITY_POSITIVE_TOKENS: tuple[str, ...] = (
+    "unique composition",
+    "original concept",
+    "fresh perspective",
+    "unexpected details",
+    "distinctive lighting",
+    "novel scene",
+    "inventive composition",
+    "creative accidents",
+    "new idea",
+    "rare details",
+    "unusual angle",
+    "dynamic framing",
+    "asymmetric balance",
+    "bold color story",
+    "muted palette twist",
+    "dramatic rim light",
+    "soft volumetric light",
+    "cinematic depth",
+    "environmental storytelling",
+    "foreground interest",
+    "layered depth",
+    "tactile materials",
+    "hand-crafted look",
+    "non-stock pose",
+    "candid moment",
+    "slice of life",
+    "dreamlike twist",
+    "subtle surreal touch",
+    "editorial fashion vibe",
+    "fine art photography",
+    "concept art energy",
+    "indie aesthetic",
+    "one-of-a-kind mood",
+    "surprising negative space",
+    "rhythm in shapes",
+)
 
 
 def inject_originality_tokens(
@@ -42,20 +78,8 @@ def inject_originality_tokens(
     if not (prompt and prompt.strip()) or strength <= 0:
         return prompt
 
-    pool = list(tokens) if tokens is not None else default_originality_tokens()
+    pool = list(tokens) if tokens is not None else list(ORIGINALITY_POSITIVE_TOKENS)
     if not pool:
-        return prompt
-
-    try:
-        from data.caption_utils import (
-            AGE_TAGS,
-            ANATOMY_FRAMING_TAGS,
-            BODY_PART_TAGS,
-            BUILD_BODY_TAGS,
-            HEIGHT_TAGS,
-            SUBJECT_PREFIXES,
-        )
-    except ImportError:
         return prompt
 
     k = 1 + int(round(strength * 3))

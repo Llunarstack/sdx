@@ -17,12 +17,21 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from diffusion import create_diffusion
 from models.enhanced_dit import EnhancedDiT_models
-from utils.architecture.enhanced_utils import (
-    SimpleAnatomyValidator,
-    SimpleConsistencyManager,
-    SimpleSceneComposer,
-    SimpleTextEngine,
-)
+
+
+def _scene_boxes(n: int, layout_type: str) -> list[tuple[float, float, float, float]]:
+    """``(x, y, w, h)`` per object for the spatial-control input (grid / circle / balanced)."""
+    boxes = []
+    for i in range(n):
+        if layout_type == "grid":
+            x, y = (i % 3) * 0.3 + 0.1, (i // 3) * 0.3 + 0.1
+        elif layout_type == "circle":
+            angle = (i / n) * 2 * np.pi
+            x, y = 0.5 + 0.3 * np.cos(angle), 0.5 + 0.3 * np.sin(angle)
+        else:
+            x, y = 0.2 + (i / max(1, n - 1)) * 0.6, 0.3 + 0.4 * np.random.random()
+        boxes.append((float(x), float(y), 0.1, 0.1))
+    return boxes
 
 
 def load_enhanced_model(checkpoint_path: str, device: str = "cuda"):
@@ -58,29 +67,14 @@ def prepare_enhanced_inputs(prompt: str, args, device: str = "cuda"):
     enhanced_inputs = {}
 
     # Initialize feature processors
-    text_engine = SimpleTextEngine()
-    scene_composer = SimpleSceneComposer()
-    _anatomy_validator = SimpleAnatomyValidator()
-    _consistency_manager = SimpleConsistencyManager()
-
     # Process spatial control
     if args.enable_spatial_control:
         # Extract objects from prompt
         objects = extract_objects_from_prompt(prompt)
         if objects:
-            scene_objects = scene_composer.create_scene_layout(
-                objects[:10],  # Max 10 objects
-                layout_type=args.layout_type,
-                constraints=args.spatial_constraints.split(",") if args.spatial_constraints else [],
-            )
-
-            # Convert to tensor
             spatial_layout = torch.zeros(1, 10, 4, device=device)
-            for i, obj in enumerate(scene_objects):
-                if i < 10:
-                    spatial_layout[0, i] = torch.tensor(
-                        [obj.position[0], obj.position[1], obj.size[0], obj.size[1]], device=device
-                    )
+            for i, box in enumerate(_scene_boxes(len(objects[:10]), args.layout_type)):
+                spatial_layout[0, i] = torch.tensor(box, device=device)
 
             enhanced_inputs["spatial_layout"] = spatial_layout
 
@@ -98,10 +92,8 @@ def prepare_enhanced_inputs(prompt: str, args, device: str = "cuda"):
 
     # Process text rendering
     if args.enable_text_rendering:
-        text_info = text_engine.extract_text_requirements(prompt)
-        if text_info["has_text"] or args.text_content:
-            # Prepare text tokens
-            text_content = args.text_content.split(",") if args.text_content else text_info.get("text_content", [])
+        if args.text_content:
+            text_content = args.text_content.split(",")
             if text_content:
                 # Simple tokenization (would use actual tokenizer)
                 text_tokens = torch.zeros(1, 50, dtype=torch.long, device=device)
@@ -256,7 +248,6 @@ def main():
     parser.add_argument(
         "--layout-type", type=str, default="balanced", choices=["grid", "circle", "line", "pyramid", "balanced"]
     )
-    parser.add_argument("--spatial-constraints", type=str, default="", help="Comma-separated spatial constraints")
 
     # Text rendering parameters
     parser.add_argument("--text-content", type=str, default="", help="Comma-separated text content to render")

@@ -6,9 +6,11 @@ import re
 
 import numpy as np
 
+from utils.quality.human_likeness import _as_rgb
+from utils.quality.quality import pearson
+from utils.quality.quality import rgb_to_luminance as _gray
+
 __all__ = [
-    "prompt_wants_occlusion",
-    "prompt_wants_reflection",
     "score_occlusion",
     "score_reflection",
     "score_spatial_color_bind",
@@ -17,21 +19,6 @@ __all__ = [
     "spatial_bind_score",
 ]
 
-_OCCLUSION_KEYS = (
-    "behind",
-    "through",
-    "fence",
-    "gaps",
-    "hidden behind",
-    "occlud",
-)
-
-_REFLECTION_KEYS = (
-    "reflection",
-    "reflected",
-)
-
-_CHROME_SURFACES = ("granite", "water", "puddle", "table")
 
 _COLOR_RGB: dict[str, np.ndarray] = {
     "red": np.array([0.78, 0.12, 0.12], dtype=np.float32),
@@ -63,40 +50,6 @@ _LEFT_RIGHT_BIND = re.compile(
     rf"\b({_COLOR_ALT})\b.{{0,48}}?\bon\s+the\s+left\b.{{0,80}}?\b({_COLOR_ALT})\b.{{0,48}}?\bon\s+the\s+right\b",
     re.I | re.S,
 )
-
-
-def prompt_wants_occlusion(prompt: str) -> bool:
-    """True when the prompt implies a foreground occluder (fence, glass, gaps)."""
-    text = (prompt or "").lower()
-    if not text:
-        return False
-    return any(k in text for k in _OCCLUSION_KEYS)
-
-
-def prompt_wants_reflection(prompt: str) -> bool:
-    """True for table/water/chrome reflections, not a hall-of-mirrors prompt alone."""
-    text = (prompt or "").lower()
-    if not text:
-        return False
-    if any(k in text for k in _REFLECTION_KEYS):
-        return True
-    if "mirror of" in text:
-        return True
-    if "chrome" in text and any(s in text for s in _CHROME_SURFACES):
-        return True
-    return False
-
-
-def _as_rgb(rgb: np.ndarray) -> np.ndarray | None:
-    arr = np.asarray(rgb)
-    if arr.ndim != 3 or arr.shape[0] < 4 or arr.shape[1] < 4 or arr.shape[2] < 3:
-        return None
-    return arr[..., :3]
-
-
-def _gray(rgb: np.ndarray) -> np.ndarray:
-    ch = rgb.astype(np.float32, copy=False)
-    return 0.299 * ch[..., 0] + 0.587 * ch[..., 1] + 0.114 * ch[..., 2]
 
 
 def _sobel_abs(gray: np.ndarray) -> np.ndarray:
@@ -134,19 +87,6 @@ def score_occlusion(rgb: np.ndarray) -> float:
     return float(np.clip(0.42 * fill + 0.38 * aniso + 0.20 * energy, 0.0, 1.0))
 
 
-def _pearson(a: np.ndarray, b: np.ndarray) -> float:
-    x = np.asarray(a, dtype=np.float64).ravel()
-    y = np.asarray(b, dtype=np.float64).ravel()
-    if x.size < 2 or y.size != x.size:
-        return 0.0
-    x = x - x.mean()
-    y = y - y.mean()
-    denom = float(np.sqrt(np.dot(x, x) * np.dot(y, y)))
-    if denom < 1e-8:
-        return 0.0
-    return float(np.clip(np.dot(x, y) / denom, -1.0, 1.0))
-
-
 def score_reflection(rgb: np.ndarray) -> float:
     """Lower half resembles a vertically flipped, darker version of upper half
     (table/water reflection) rather than a second identical object.
@@ -166,7 +106,7 @@ def score_reflection(rgb: np.ndarray) -> float:
     lower = gray[half : half + half]
     flipped = upper[::-1]
     # Pearson is cosine of mean-centered vectors (scale + shift invariant).
-    corr = max(0.0, _pearson(flipped, lower))
+    corr = max(0.0, pearson(flipped, lower))
     upper_m = float(upper.mean())
     lower_m = float(lower.mean())
     if lower_m >= 0.95 * upper_m:

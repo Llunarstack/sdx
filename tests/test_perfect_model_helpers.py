@@ -7,8 +7,7 @@ import torch
 
 
 def test_region_masks_and_bias():
-    from frontier.attention.dense_diffusion import bias_cross_attention, region_masks_from_boxes
-    from frontier.attention.layout_plan import AttentionLayoutPlan
+    from frontier.attention import AttentionLayoutPlan, bias_cross_attention, region_masks_from_boxes
 
     masks = region_masks_from_boxes(((0.0, 0.0, 0.5, 0.5), (0.5, 0.5, 1.0, 1.0)), latent_h=8, latent_w=8)
     assert masks.shape == (2, 1, 8, 8)
@@ -34,8 +33,7 @@ def test_region_masks_and_bias():
 
 def test_bias_pools_latent_masks_to_patch_grid():
     """Latent 8x8 masks vs 4x4 patch tokens must pool spatially (not flat-crop)."""
-    from frontier.attention.dense_diffusion import bias_cross_attention, region_masks_from_boxes
-    from frontier.attention.layout_plan import AttentionLayoutPlan
+    from frontier.attention import AttentionLayoutPlan, bias_cross_attention, region_masks_from_boxes
 
     # Region A: top-left quarter of 8x8 latent; region B: bottom-right quarter.
     masks = region_masks_from_boxes(((0.0, 0.0, 0.5, 0.5), (0.5, 0.5, 1.0, 1.0)), latent_h=8, latent_w=8)
@@ -66,8 +64,7 @@ def test_bias_pools_latent_masks_to_patch_grid():
 
 
 def test_layout_attn_context_cross_attention():
-    from frontier.attention.dense_diffusion import region_masks_from_boxes
-    from frontier.attention.layout_plan import AttentionLayoutPlan
+    from frontier.attention import AttentionLayoutPlan, region_masks_from_boxes
     from models.dit_text import CrossAttention
     from models.layout_attn_context import clear_layout_attn, set_layout_attn
 
@@ -89,20 +86,7 @@ def test_layout_attn_context_cross_attention():
         clear_layout_attn()
 
 
-def test_persistent_glyph_projector():
-    from utils.generation.quality_stack import get_persistent_glyph_projector, inject_glyph_residual
-
-    p1 = get_persistent_glyph_projector(32, 64, device=torch.device("cpu"), dtype=torch.float32)
-    p2 = get_persistent_glyph_projector(32, 64, device=torch.device("cpu"), dtype=torch.float32)
-    assert p1 is p2
-    enc = torch.randn(1, 16, 64)
-    out = inject_glyph_residual(enc, 'sign says "OPEN"', strength=0.2, texts=["OPEN"])
-    assert out.shape == enc.shape
-    assert not torch.allclose(out, enc)
-
-
-def test_hand_and_count_helpers():
-    from utils.quality.count_binder_eval import analyze_prompt_counts, score_count_bind_match
+def test_hand_structure_score_in_unit_range():
     from utils.quality.hand_verifier import score_hand_structure
 
     img = np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8)
@@ -113,10 +97,6 @@ def test_hand_and_count_helpers():
     ).astype(np.uint8)
     s = score_hand_structure(img)
     assert 0.0 <= s <= 1.0
-    report = analyze_prompt_counts("exactly three red birds on a fence")
-    assert report.expected_counts or report.expected_subjects >= 1
-    soft = score_count_bind_match(img, "exactly three red birds", estimated_people=3)
-    assert 0.0 <= soft <= 1.0
 
 
 def test_frontier_consume_sanitize_and_emphasis():
@@ -156,12 +136,11 @@ def test_frontier_consume_sanitize_and_emphasis():
 
 
 def test_layout_attn_on_qk_norm():
-    from frontier.attention.dense_diffusion import region_masks_from_boxes
-    from frontier.attention.layout_plan import AttentionLayoutPlan
-    from models.dit_text_variants import CrossAttentionQKNorm
+    from frontier.attention import AttentionLayoutPlan, region_masks_from_boxes
+    from models.dit_text import CrossAttention
     from models.layout_attn_context import clear_layout_attn, set_layout_attn
 
-    attn = CrossAttentionQKNorm(hidden_size=32, num_heads=4, text_dim=32)
+    attn = CrossAttention(hidden_size=32, num_heads=4, text_dim=32, qk_norm=True, qk_norm_eps=1e-6)
     x = torch.randn(1, 16, 32)
     text = torch.randn(1, 8, 32)
     plan = AttentionLayoutPlan(

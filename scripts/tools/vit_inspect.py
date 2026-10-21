@@ -23,12 +23,12 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Inspect ViT quality checkpoint (params + config).")
     p.add_argument("ckpt", type=str, help="Path to ViT best.pt / last.pt")
     p.add_argument("--json", action="store_true", help="Print config as JSON")
-    p.add_argument("--tree", action="store_true", help="Print module tree (see utils/nn_inspect.py)")
+    p.add_argument("--tree", action="store_true", help="Print module tree (see utils/modeling/model_viz.py)")
     p.add_argument("--tree-depth", type=int, default=3)
     p.add_argument("--use-ema", action="store_true", help="Load EMA weights if present")
     args = p.parse_args()
 
-    from utils.modeling.nn_inspect import format_module_tree
+    from utils.modeling.model_viz import format_module_tree
     from vit_quality.checkpoint_utils import load_vit_quality_checkpoint, vit_model_parameter_report
 
     path = Path(args.ckpt)

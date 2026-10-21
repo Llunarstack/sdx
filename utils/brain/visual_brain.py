@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +23,7 @@ import numpy as np
 from config.defaults.agentic_stack import AgenticStackDefaults
 from PIL import Image
 
+from utils.agentic.tools import sample_cmd
 from utils.modeling.model_paths import repo_root as _sdx_repo_root
 
 from .image_search import download_search_hits, search_reference_images
@@ -97,7 +97,7 @@ class VisualBrain:
         user_prompt = str(prompt).strip()
         trace: dict[str, Any] = {"goal": user_prompt, "steps": []}
 
-        # --- 1. Gather references (user + web search) ---
+        # Gather references (user + web search)
         ref_paths: list[str] = [str(p) for p in (reference_images or []) if str(p).strip()]
         search_dir = work / "search"
         if cfg.web_search and user_prompt and not dry_run:
@@ -110,7 +110,7 @@ class VisualBrain:
                     if h.local_path:
                         ref_paths.append(h.local_path)
 
-        # --- 2. Understand all references ---
+        # Understand all references
         understandings = []
         if ref_paths and not dry_run:
             understandings = understand_images(
@@ -131,7 +131,7 @@ class VisualBrain:
                 }
             )
 
-        # --- 3. Dissect parts from prompt ---
+        # Dissect parts from prompt
         dissection_facts: list[str] = []
         init_image = ""
         inpaint_mask = ""
@@ -162,18 +162,18 @@ class VisualBrain:
             except Exception as exc:
                 trace["steps"].append({"dissect_error": str(exc)})
 
-        # --- 4. Local RAG facts ---
+        # Local RAG facts
         rag_facts: list[str] = []
         if local_rag_jsonl and Path(local_rag_jsonl).is_file():
             try:
-                from utils.superior.retrieval import build_tfidf_index_from_jsonl
+                from utils.superior.inference_pipeline import build_tfidf_index_from_jsonl
 
                 idx = build_tfidf_index_from_jsonl(local_rag_jsonl)
                 rag_facts = idx.retrieve(user_prompt, top_k=self.defaults.rag_top_k)
             except Exception:
                 pass
 
-        # --- 5. Creative RAG enrichment ---
+        # Creative RAG enrichment
         creative_enriched = ""
         creative_reasoning = ""
         creative_neg = ""
@@ -222,13 +222,28 @@ class VisualBrain:
                 trace_path=str(work / "brain_trace.json"),
             )
 
-        # --- 6. Generate + verify + edit loop ---
+        # Generate + verify + edit loop
         out_path = Path(out)
         if not out_path.is_absolute():
             out_path = work / out_path
         gen_prompt = brief.build_generation_prompt()
         metrics: dict[str, float] = {}
         accepted = False
+
+        def base_cmd(out_file: Path) -> list[str]:
+            return sample_cmd(
+                self.repo_root,
+                ckpt=ckpt,
+                prompt=gen_prompt,
+                out=out_file,
+                device=device,
+                num=cfg.num_candidates,
+                pick_metric=cfg.pick_metric,
+                negative_prompt=brief.negative_prompt,
+                expected_text=expected_text,
+                vit_ckpt=vit_ckpt,
+                local_rag_jsonl=local_rag_jsonl,
+            )
 
         for loop in range(max(1, cfg.max_edit_loops)):
             extra = self._sample_args_from_brief(
@@ -238,21 +253,8 @@ class VisualBrain:
                 inpaint_mask=inpaint_mask,
                 loop=loop,
             )
-            suffix = "" if loop == 0 else f"_edit{loop}"
-            cmd = self._build_sample_cmd(
-                ckpt=ckpt,
-                prompt=gen_prompt,
-                out_path=out_path,
-                suffix=suffix,
-                device=device,
-                negative_prompt=brief.negative_prompt,
-                expected_text=expected_text,
-                vit_ckpt=vit_ckpt,
-                local_rag_jsonl=local_rag_jsonl,
-                extra_args=extra,
-            )
-            rc = subprocess.run(cmd, cwd=str(self.repo_root), check=False).returncode
-            cand = out_path if suffix == "" else out_path.with_name(out_path.stem + suffix + out_path.suffix)
+            cand = out_path if loop == 0 else out_path.with_name(f"{out_path.stem}_edit{loop}{out_path.suffix}")
+            rc = subprocess.run([*base_cmd(cand), *extra], cwd=str(self.repo_root), check=False).returncode
             if rc != 0 or not cand.is_file():
                 trace["steps"].append({"generate_fail": {"loop": loop, "rc": rc}})
                 continue
@@ -271,21 +273,9 @@ class VisualBrain:
 
             # Edit pass: OCR fix or inpaint refine
             if expected_text and float(metrics.get("ocr_match", 0.0) or 0.0) < 0.65:
-                extra_edit = ["--ocr-fix", "--expected-text", expected_text]
-                cmd2 = self._build_sample_cmd(
-                    ckpt=ckpt,
-                    prompt=gen_prompt,
-                    out_path=cand,
-                    suffix=f"_ocrfix{loop}",
-                    device=device,
-                    negative_prompt=brief.negative_prompt,
-                    expected_text=expected_text,
-                    vit_ckpt=vit_ckpt,
-                    local_rag_jsonl=local_rag_jsonl,
-                    extra_args=extra + extra_edit + ["--init-image", str(cand), "--strength", "0.35"],
-                )
-                subprocess.run(cmd2, cwd=str(self.repo_root), check=False)
-                fix_path = cand.with_name(cand.stem + f"_ocrfix{loop}" + cand.suffix)
+                fix_path = cand.with_name(f"{cand.stem}_ocrfix{loop}{cand.suffix}")
+                fix = ["--ocr-fix", "--init-image", str(cand), "--strength", "0.35"]
+                subprocess.run([*base_cmd(fix_path), *extra, *fix], cwd=str(self.repo_root), check=False)
                 if fix_path.is_file():
                     cand = fix_path
                     metrics = self._verify_image(
@@ -347,51 +337,6 @@ class VisualBrain:
         args.extend(["--human-made", "standard"])
         return args
 
-    def _build_sample_cmd(
-        self,
-        *,
-        ckpt: str,
-        prompt: str,
-        out_path: Path,
-        suffix: str,
-        device: str,
-        negative_prompt: str,
-        expected_text: str,
-        vit_ckpt: str,
-        local_rag_jsonl: str,
-        extra_args: list[str],
-    ) -> list[str]:
-        cfg = self.config
-        out = out_path if not suffix else out_path.with_name(out_path.stem + suffix + out_path.suffix)
-        cmd = [
-            sys.executable,
-            str(self.repo_root / "sample.py"),
-            "--ckpt",
-            ckpt,
-            "--prompt",
-            prompt,
-            "--out",
-            str(out),
-            "--device",
-            device,
-            "--num",
-            str(cfg.num_candidates),
-            "--pick-best",
-            cfg.pick_metric,
-            "--preset",
-            "superior",
-        ]
-        if negative_prompt:
-            cmd.extend(["--negative-prompt", negative_prompt])
-        if expected_text:
-            cmd.extend(["--expected-text", expected_text])
-        if vit_ckpt:
-            cmd.extend(["--pick-vit-ckpt", vit_ckpt])
-        if local_rag_jsonl:
-            cmd.extend(["--local-rag-jsonl", local_rag_jsonl])
-        cmd.extend(extra_args)
-        return cmd
-
     def _verify_image(
         self,
         path: Path,
@@ -401,23 +346,10 @@ class VisualBrain:
         device: str,
         vit_ckpt: str,
     ) -> dict[str, float]:
-        arr = np.array(Image.open(path).convert("RGB"), dtype=np.uint8)
-        from utils.quality import test_time_pick as ttp
-        from utils.superior.composite_ranker import CompositeRanker
+        from utils.superior.inference_pipeline import verify_metrics
 
-        ranker = CompositeRanker()
-        scores = ranker.score_images([arr], prompt=prompt, device=device, vit_ckpt=vit_ckpt or "")
-        clip = ttp.score_clip_similarity([arr], prompt, device=device)
-        metrics: dict[str, float] = {
-            "composite": float(scores[0]),
-            "clip": float(clip[0]) if clip else 0.0,
-            "sharpness": float(ttp.score_edge_sharpness(arr)),
-            "aesthetic": float(ttp.score_aesthetic_proxy(arr)),
-        }
-        if expected_text:
-            ocr_scores = ttp.score_ocr_match([arr], expected_text)
-            metrics["ocr_match"] = float(ocr_scores[0]) if ocr_scores else 0.0
-        return metrics
+        arr = np.array(Image.open(path).convert("RGB"), dtype=np.uint8)
+        return verify_metrics(arr, prompt, device=device, vit_ckpt=vit_ckpt or "", expected_text=expected_text)
 
 
 __all__ = ["VisualBrain", "VisualBrainConfig", "VisualBrainResult"]

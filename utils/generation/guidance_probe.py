@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 import torch
 
-from utils.superior.cfg_rejection import CFGRejectionTracker, pick_best_candidate_index
+from utils.superior.caches import CFGRejectionTracker, pick_best_candidate_index
 
 
 @dataclass

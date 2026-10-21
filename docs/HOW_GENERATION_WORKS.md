@@ -83,7 +83,7 @@ flowchart TB
     end
 
     subgraph post["Post-process & save"]
-        RESIZE["Resize to --width / --height"]
+        RESIZE["Fit to --width / --height (patch rounding or capped canvas)"]
         SHARP["Optional: sharpen, contrast"]
         SAVE["Save PNG (and optional grid)"]
         TO_RGB --> RESIZE --> SHARP --> SAVE
@@ -178,7 +178,7 @@ Prompt (+ optional negative, style, control)
     → Optional post (sharpen, contrast, resize) → save PNG
 ```
 
-- **Latent space:** We never diffuse pixels. We diffuse **VAE latents** (e.g. 4×32×32 for 256×256). The DiT sees and predicts in this space; the VAE turns the final latent into an image.
+- **Latent space:** We never diffuse pixels. We diffuse **VAE latents** (e.g. 4×32×32 for 256×256). The DiT sees and predicts in this space; the VAE turns the final latent into an image. The latent grid follows `--width`/`--height` (any aspect ratio, whole patches; see `diffusion.pixel_perfect.sampling_canvas_hw`).
 - **Denoising:** The model was trained to predict **noise** (or **velocity**, if `prediction_type="v"`) given noisy latent + timestep + text. At inference we run that many times, step by step, from high noise down to zero.
 
 ---
@@ -213,7 +213,7 @@ These embeddings are passed as `encoder_hidden_states` (and negative as `encoder
 - **GaussianDiffusion** is created with the same `num_timesteps`, `beta_schedule`, and `prediction_type` as in training (e.g. 1000 steps, linear, epsilon).
 - It knows how to:
   - **Add noise:** `q_sample(x0, t)` → `x_t` (forward diffusion).
-  - **One denoise step:** `p_step(model, x_t, t, model_kwargs)` (DDPM) or the DDIM-style **step_with_pred** used in the loop.
+  - **One denoise step:** `p_step(model, x_t, t, model_kwargs)` (DDPM); the loop steps with the solvers in `diffusion/solvers/` (DDIM: `_ddim_step`).
   - **Predict x0 from model output:** `_predict_x0_and_noise(model_out, x_t, t)` so we can compute the next `x_{t-1}` (or next DDIM state).
 
 ---
@@ -239,7 +239,7 @@ These embeddings are passed as `encoder_hidden_states` (and negative as `encoder
 
 For each call `model(x, t, encoder_hidden_states=..., ...)`:
 
-1. **Patchify:** `x` is latent `(B, 4, H, W)`. It’s split into patches (e.g. 2×2) and linearly embedded → sequence of tokens plus 2D sin/cos position encoding.
+1. **Patchify:** `x` is latent `(B, 4, H, W)` with any `H`, `W` divisible by the patch. It’s split into patches (e.g. 2×2) and linearly embedded → sequence of tokens plus 2D sin/cos position encoding (the stored table at the native grid, PixArt-α interpolated positions elsewhere; axial 2D RoPE instead with `use_rope`).
 2. **Timestep:** `t` is embedded (e.g. MLP + sin/cos) → `t_emb`.
 3. **Text:** `encoder_hidden_states` (B, L, 4096) is projected to the model’s hidden size (e.g. 1152) via `text_embedder` → `text_emb`. If a negative prompt is used for CFG, that’s handled in `sample_loop` by two separate forward passes; inside the DiT we only see one conditioning at a time.
 4. **Blocks:** A stack of transformer blocks. Each block:
@@ -257,7 +257,7 @@ So at every step the DiT is answering: “Given this noisy latent, this timestep
 - **Unscale:** `x_0 = x_0 / latent_scale` (e.g. 0.18215).
 - **VAE decode:** `image = vae.decode(x_0).sample` → `(1, 3, H_img, W_img)` in [-1, 1].
 - **To uint8:** `(image * 0.5 + 0.5).clamp(0, 1)` → permute to HWC → multiply by 255, round, uint8.
-- Optional: resize to `--width`/`--height`, then **sharpen** and **contrast** (e.g. `utils/quality`) and save as PNG.
+- Optional: fit to `--width`/`--height` (only patch rounding or a capped canvas differs), then **sharpen** and **contrast** (e.g. `utils/quality`) and save as PNG.
 
 ---
 
@@ -284,8 +284,8 @@ If the model was trained with **`num_ar_blocks` > 0**, then during **every** den
 
 **Code:**
 
-- **Mask:** `models/attention.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks)`. Builds an (N, N) mask with `-inf` where attention is disabled.
-- **DiT:** In `models/dit_text.py` and `models/dit_text_variants.py`, when `num_ar_blocks > 0` we set `num_patches = (latent_size // patch_size) ** 2`, `p = int(sqrt(num_patches))`, and register `self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)`. That buffer is passed as `attn_mask` into every block’s self-attention (see the `for i, block in enumerate(self.blocks): ... block(x, c, text_emb, attn_mask=attn_mask, ...)` loop).
+- **Mask:** `models/ar_masks_extended.py` → `create_block_causal_mask_2d(h, w, num_ar_blocks)`. Builds an (N, N) mask with `-inf` where attention is disabled.
+- **DiT:** In `models/dit_text.py` (all DiT-Text / P / Supreme models), when `num_ar_blocks > 0` the native grid's mask is registered as `self._ar_mask = create_block_causal_mask_2d(p, p, num_ar_blocks)`; `grid_ar_mask(model, h, w)` returns it, or builds (and caches) the same block order for any other patch grid. That mask is passed as `attn_mask` into every block’s self-attention.
 - **SelfAttention** in `models/attention.py` takes that mask and uses it in `memory_efficient_attention(..., attn_mask=attn_mask)` or SDPA so that causal positions get `-inf` and are ignored.
 
 So AR does **not** change the diffusion loop or text encoding; it only restricts **which spatial positions can see which** inside the DiT at each step. Full details: [docs/AR.md](AR.md).
@@ -313,12 +313,12 @@ The following are **adapted into our codebase** so they work with our config, tr
 
 | Our file | Ported from | What it does |
 |----------|--------------|--------------|
-| **diffusion/respace.py** | DiT | `space_timesteps(num_timesteps, "ddim50" or "10,15,20")` for flexible inference timesteps. |
+| **diffusion/schedules.py** | DiT | `space_timesteps(num_timesteps, "ddim50" or "10,15,20")` for flexible inference timesteps. |
 | **diffusion/sampling_utils.py** | ControlNet | `norm_thresholding`, `spatial_norm_thresholding` for x0 dynamic thresholding. |
-| **diffusion/losses/loss_weighting.py** | generative-models | `get_loss_weight(alpha, "unit" \| "edm" \| "v" \| "eps")` for alternative timestep loss weights. |
-| **models/pixart_blocks.py** | PixArt-alpha/sigma | `SizeEmbedder` for (h, w) conditioning; optional building block for multi-res. |
+| **diffusion/timestep_sampling.py** | Min-SNR (Hang et al. 2023), EDM | `get_timestep_loss_weight(name, ..., prediction_type=)`: min_snr / min_snr_soft / edm / v / eps / unit, defined on the x0 error and converted to the eps/v/x0 target. |
+| **models/dit_text.py** (`SizeEmbedder`) | PixArt-alpha/sigma | (h, w) size conditioning, enabled by `size_embed_dim > 0`. |
 
-**Config / usage:** Respace: set `timestep_respacing="ddim50"` or `"10,15,20"`. Dynamic threshold: `sample_loop(..., dynamic_threshold_type="norm" or "spatial_norm", dynamic_threshold_value=1.0)` or `--dynamic-threshold-*` in sample.py. Loss weighting: `TrainConfig.loss_weighting="edm"` (or unit/v/eps) and `--loss-weighting` in train.py. SizeEmbedder: import from `models.pixart_blocks` when adding variable-resolution conditioning.
+**Config / usage:** Respace: set `timestep_respacing="ddim50"` or `"10,15,20"`. Dynamic threshold: `sample_loop(..., dynamic_threshold_type="norm" or "spatial_norm", dynamic_threshold_value=1.0)` or `--dynamic-threshold-*` in sample.py. Loss weighting: `TrainConfig.loss_weighting="edm"` (or unit/v/eps) and `--loss-weighting` in train.py. SizeEmbedder: `--size-embed-dim` (lives in `models/dit_text.py`).
 
 ---
 
@@ -449,7 +449,7 @@ Download T5 + VAE + LLMs: `python scripts/download/download_models.py --all` →
 
 1. Add the field to **TrainConfig** in `config/train_config.py`.
 2. Add it to **get_dit_build_kwargs()** in the same file (with a getattr default).
-3. Use it in **DiT constructor** in `models/dit_text.py` (and `models/dit_text_variants.py` if applicable).
+3. Use it in the **DiT_Text constructor** in `models/dit_text.py` (DiT-P / Supreme inherit it).
 4. Add CLI arg in **train.py** and pass into TrainConfig (if training-time only, that’s enough).
 5. For inference: **sample.py** / **inference.py** already get it from checkpoint config via get_dit_build_kwargs; add any new CLI (e.g. `--creativity`) and pass into model_kwargs.
 

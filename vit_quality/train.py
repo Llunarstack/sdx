@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import argparse
-import random
 import sys
-import textwrap
 from pathlib import Path
 
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -15,30 +12,53 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from utils.runtime.jsonutil import dumps as json_dumps
-from utils.runtime.plain_dict import to_plain_dict as _config_to_plain_dict
+from utils.runtime import json_dumps
+from utils.runtime import to_plain_dict as _config_to_plain_dict
+
+_BACKBONE_HELP = """Suggested --model-name values (timm):
+  vit_small_patch16_224                 fast baseline, less capacity
+  vit_base_patch16_224                  default speed/quality tradeoff
+  vit_large_patch16_224                 stronger ViT, more VRAM
+  vit_base_patch16_reg4_dinov2.lvd142m  register tokens (DINOv2-style)
+  vit_base_patch16_clipl.laion2b        CLIP-pretrained backbone (check --image-size)
+  swin_small_patch4_window7_224         hierarchical attention, local texture
+"""
 
 
-def seed_all(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+class ModelEMA:
+    """EMA of the floating-point state-dict entries."""
+
+    def __init__(self, model: torch.nn.Module, decay: float = 0.999):
+        self.decay = float(decay)
+        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items() if v.dtype.is_floating_point}
+
+    @torch.no_grad()
+    def update(self, model: torch.nn.Module) -> None:
+        for k, v in model.state_dict().items():
+            if k in self.shadow:
+                self.shadow[k].mul_(self.decay).add_(v.detach(), alpha=1.0 - self.decay)
+
+    @torch.no_grad()
+    def copy_to(self, model: torch.nn.Module) -> None:
+        for k, v in model.state_dict().items():
+            if k in self.shadow:
+                v.copy_(self.shadow[k])
+
+    def state_dict(self) -> dict[str, torch.Tensor]:
+        return {k: v.clone() for k, v in self.shadow.items()}
 
 
 def main() -> int:
-    from vit_quality.backbone_presets import describe_presets_for_help
-    from vit_quality.config import ViTConfig
+    from toolkit.training.seed_utils import seed_everything
+
     from vit_quality.dataset import ViTManifestDataset, collate_vit_batch
-    from vit_quality.ema import ModelEMA
-    from vit_quality.losses import binary_focal_loss_with_logits, pairwise_ranking_loss
-    from vit_quality.model import build_vit_model
+    from vit_quality.model import ViTConfig, binary_focal_loss_with_logits, build_vit_model, pairwise_ranking_loss
+    from vit_quality.text_encoder import DEFAULT_CLIP_MODEL_ID, build_text_featurizer
 
     p = argparse.ArgumentParser(
         description="Train ViT quality+adherence model on SDX manifest",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent(describe_presets_for_help()),
+        epilog=_BACKBONE_HELP,
     )
     p.add_argument("--manifest-jsonl", required=True)
     p.add_argument("--image-root", default="")
@@ -48,7 +68,7 @@ def main() -> int:
     p.add_argument(
         "--model-name",
         default="vit_base_patch16_224",
-        help="timm backbone for ViTQualityAdherenceModel (see vit_quality/backbone_presets.py).",
+        help="timm backbone for ViTQualityAdherenceModel (see the list below).",
     )
     p.add_argument("--no-pretrained", action="store_true")
     p.add_argument("--lr", type=float, default=3e-4)
@@ -104,6 +124,13 @@ def main() -> int:
         default="",
         help='Optional JSON object for timm.create_model kwargs (advanced), e.g. {"qk_norm": true}',
     )
+    p.add_argument(
+        "--text-embed-mode",
+        choices=("handcrafted", "clip"),
+        default="handcrafted",
+        help="Caption features for the adherence head: legacy 8-D stats or frozen CLIP text embeddings.",
+    )
+    p.add_argument("--text-encoder-model-id", default=DEFAULT_CLIP_MODEL_ID, help="CLIP id for --text-embed-mode clip")
     p.add_argument("--device", default="cuda")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out-dir", default="vit_runs")
@@ -144,15 +171,20 @@ def main() -> int:
         seed=args.seed,
         out_dir=args.out_dir,
         use_ar_conditioning=not args.no_ar_conditioning,
+        text_embed_mode=args.text_embed_mode,
+        text_encoder_model_id=args.text_encoder_model_id,
     )
-    seed_all(cfg.seed)
+    seed_everything(cfg.seed)
 
     device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
+    featurizer = build_text_featurizer(cfg.text_embed_mode, cfg.text_encoder_model_id, device)
+    cfg.text_feat_dim = int(featurizer.dim)
     ds = ViTManifestDataset(
         cfg.manifest_jsonl,
         image_root=cfg.image_root,
         image_size=cfg.image_size,
         training_augment=cfg.training_augment,
+        text_featurizer=featurizer,
     )
     if len(ds) == 0:
         print("Dataset is empty after filtering valid rows.", file=sys.stderr)

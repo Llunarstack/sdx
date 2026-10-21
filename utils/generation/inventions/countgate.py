@@ -1,8 +1,8 @@
-"""COUNTGATE — Discrete count binding prior for multi-object prompts.
+"""COUNTGATE and HYDRA-SLOTS: discrete count binding for multi-object prompts.
 
-Problem: "four cats" often yields 2–3 or 5+. COUNTGATE extracts counts,
-injects hard count tags + separation positives, and builds a soft grid prior
-hint (for box layout / regional CFG).
+"four cats" often yields 2-3 or 5+. COUNTGATE extracts counts, injects count tags plus separation
+positives and builds a grid box prior; HYDRA-SLOTS turns the primary count into one regional-CFG slot
+per instance (own prompt shard, non-overlapping box) without trained slot attention.
 """
 
 from __future__ import annotations
@@ -11,7 +11,16 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-__all__ = ["CountSpec", "CountGatePlan", "plan_countgate", "apply_countgate_prompts", "count_grid_boxes"]
+__all__ = [
+    "CountGatePlan",
+    "CountSpec",
+    "HydraSlot",
+    "HydraSlotPlan",
+    "apply_countgate_prompts",
+    "count_grid_boxes",
+    "plan_countgate",
+    "plan_hydra_slots",
+]
 
 _WORD_COUNTS = {
     "one": 1,
@@ -143,3 +152,46 @@ def apply_countgate_prompts(positive: str, negative: str = "", plan: CountGatePl
     if plan.negative_addon:
         neg = f"{neg}, {plan.negative_addon}".strip(", ")
     return pos.strip(", "), neg.strip(", ")
+
+
+@dataclass
+class HydraSlot:
+    slot_id: str
+    prompt: str
+    box: list[float]
+
+
+@dataclass
+class HydraSlotPlan:
+    slots: list[HydraSlot] = field(default_factory=list)
+    global_prompt: str = ""
+    box_layout: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def plan_hydra_slots(prompt: str, *, max_slots: int = 6) -> HydraSlotPlan:
+    cg = plan_countgate(prompt)
+    if not cg.specs:
+        return HydraSlotPlan(global_prompt=prompt)
+    primary = max(cg.specs, key=lambda s: s.n)
+    n, noun = min(int(primary.n), int(max_slots)), primary.noun
+    if n < 2:
+        return HydraSlotPlan(global_prompt=prompt)
+    boxes = cg.boxes or count_grid_boxes(n)
+    slots = [
+        HydraSlot(
+            slot_id=f"{noun}_{i + 1}",
+            prompt=f"distinct {noun} instance {i + 1}, unique pose, unique silhouette",
+            box=list(boxes[i] if i < len(boxes) else [0.1, 0.1, 0.9, 0.9]),
+        )
+        for i in range(n)
+    ]
+    layout = {
+        "mode": "hydra_slots",
+        "anti_bleed": True,
+        "global_prompt": prompt,
+        "regions": [{"id": s.slot_id, "prompt": s.prompt, "box": s.box} for s in slots],
+    }
+    return HydraSlotPlan(slots=slots, global_prompt=prompt, box_layout=layout)

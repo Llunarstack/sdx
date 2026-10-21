@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.agentic.post_gen_critique import build_post_gen_critique, critique_answers_to_fix_plan
-from utils.agentic.progressive_interview import (
+from utils.agentic.gen_interview import (
     answer_interview_item,
     next_interview_item,
     skip_interview_item,
     start_progressive_interview,
 )
-from utils.generation.agentic_stills import plan_agentic_stills
-from utils.generation.draft_thumbs import plan_draft_thumbnails, promote_draft_to_final
-from utils.generation.print_intent import default_ref_policy, resolve_print_intent
+from utils.agentic.post_gen_critique import build_post_gen_critique, critique_answers_to_fix_plan
+from utils.generation.agentic_stills import (
+    plan_agentic_stills,
+    plan_draft_thumbnails,
+    promote_draft_to_final,
+    resolve_print_intent,
+)
 from utils.generation.user_taste import (
     UserTaste,
     apply_taste_quiz_answers,
@@ -82,13 +85,10 @@ def test_taste_quiz_and_apply(tmp_path: Path):
     assert path.is_file()
 
 
-def test_print_intent_and_ref_policy():
+def test_print_intent():
     intent = resolve_print_intent("phone")
     assert intent is not None
     assert intent.height > intent.width
-    pol = default_ref_policy(nsfw=True, web_consent=True, uploads={"style": ["a.png"]})
-    assert pol.mode_for("style") == "upload"
-    assert pol.mode_for("subject") == "search"
 
 
 def test_plan_agentic_stills_offline(tmp_path: Path):

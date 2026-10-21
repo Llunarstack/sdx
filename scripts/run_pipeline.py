@@ -40,6 +40,7 @@ import shlex
 import subprocess
 import sys
 import time
+import traceback
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -96,7 +97,7 @@ def _is_windows() -> bool:
     return platform.system().lower() == "windows"
 
 
-def _load_env_defaults(root: Path) -> None:
+def load_env_defaults(root: Path) -> None:
     """Apply ``runpod/env.defaults`` without overwriting existing env vars."""
     path = root / "runpod" / "env.defaults"
     if not path.is_file():
@@ -165,13 +166,14 @@ def _py(args: list[str], *, timeout: int | None = None) -> str:
     return _run_cmd([sys.executable, *args], timeout=timeout)
 
 
-def _run_step(
+def run_step(
     report: PipelineReport,
     name: str,
     fn: Callable[[], str | None],
     *,
     skip: bool = False,
     detail: str = "",
+    show_traceback: bool = False,
 ) -> bool:
     if skip:
         report.add(name, "SKIP", detail=detail or "flagged skip")
@@ -183,6 +185,8 @@ def _run_step(
         return True
     except Exception as e:
         report.add(name, "FAIL", seconds=time.perf_counter() - t0, detail=str(e))
+        if show_traceback:
+            traceback.print_exc()
         return False
 
 
@@ -212,13 +216,13 @@ def _step_verify() -> None:
             if not shutil.which(bin_name):
                 print(f"  WARN: {bin_name} not on PATH")
     else:
-        _run_cmd(["bash", str(ROOT / "runpod" / "verify_env.sh")], timeout=300)
+        _run_cmd(["bash", str(ROOT / "runpod" / "lib" / "verify_env.sh")], timeout=300)
 
 
 def _step_smoke(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     smoke_root = paths["smoke_data"] if args.smoke_data_root is None else Path(args.smoke_data_root)
     cmd = [
-        "scripts/integration_smoke.py",
+        "scripts/tools/dev/integration_smoke.py",
         "--data-root",
         str(smoke_root),
         "--secrets",
@@ -531,6 +535,9 @@ def _resolve_steps(args: argparse.Namespace) -> list[tuple[str, bool]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from utils.terminal import configure_stdio_for_console
+
+    configure_stdio_for_console()
     p = argparse.ArgumentParser(
         description="Run the full SDX pipeline in order (setup → smoke → download → train).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -587,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = p.parse_args(argv)
 
-    _load_env_defaults(ROOT)
+    load_env_defaults(ROOT)
     os.environ.setdefault("SDX_ROOT", str(ROOT))
     paths = _paths()
 
@@ -616,7 +623,7 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     for name, skip in planned:
-        if not _run_step(report, name, handlers[name], skip=skip):
+        if not run_step(report, name, handlers[name], skip=skip):
             break
 
     print()

@@ -67,9 +67,9 @@
 
 **Why it’s compelling:** “Quality” is **subjective** and **multi-objective**; pairwise feedback matches how humans judge images.
 
-**SDX today:** Standard **supervised** diffusion in **`train.py`**. Stage-2 **Diffusion-DPO** runner: **`scripts/tools/training/train_diffusion_dpo.py`** (frozen ref DiT, shared `t` + noise, **`dpo_preference_loss`** on per-sample VP losses). Helpers: **`utils/training/diffusion_dpo_loss.py`**, **`preference_jsonl.py`**, **`preference_image_dataset.py`**. **`GaussianDiffusion.per_sample_training_losses`** supports the DPO term.
+**SDX today:** Standard **supervised** diffusion in **`train.py`**. Stage-2 **Diffusion-DPO** runner: **`scripts/tools/training/train_diffusion_dpo.py`** (frozen ref DiT, shared `t` + noise, **`safeguarded_dpo_preference_loss`** on per-sample VP losses). Helpers: **`utils/training/preference.py`**, **`preference_jsonl.py`**, **`preference_image_dataset.py`**. **`GaussianDiffusion.per_sample_training_losses`** supports the DPO term.
 
-**Gap:** Optional **triple-encoder** / CLIP-bundle path in the DPO script; **EMA-specific** reference checkpoints; full paper-faithful variants (e.g. multiple noise draws).
+**Gap:** Optional **triple-encoder** / CLIP-bundle path in the DPO script; full paper-faithful variants (e.g. multiple noise draws).
 
 ---
 

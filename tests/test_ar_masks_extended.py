@@ -1,8 +1,7 @@
 """Tests for extended AR macro-block traversal orders."""
 
 import torch
-from models.ar_masks_extended import create_block_causal_mask_2d
-from utils.architecture.ar_block_layout import block_visit_order
+from models.ar_masks_extended import block_visit_order, create_block_causal_mask_2d
 
 
 def test_block_visit_order_supports_new_orders():

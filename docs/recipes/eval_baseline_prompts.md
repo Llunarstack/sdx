@@ -16,11 +16,10 @@ Arguments after `--` are forwarded to `sample.py`.
 ## Load in Python
 
 ```python
-from pathlib import Path
-from utils.generation.eval_prompt_pack import load_eval_prompt_records
+from examples.run_baseline_eval import load_eval_prompts
 
-for r in load_eval_prompt_records(Path("examples/eval_prompts_baseline.json")):
-    print(r.id, "->", r.prompt[:60], "...")
+for eid, prompt in load_eval_prompts("examples/eval_prompts_baseline.json"):
+    print(eid, "->", prompt[:60], "...")
 ```
 
 ## Docs

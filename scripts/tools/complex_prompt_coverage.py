@@ -1,20 +1,13 @@
 """
 Complex prompt coverage analysis for training manifests.
 
-This helps you verify that your captions include the "hard to learn" ingredients:
-- styles and "hard vibe" words (weird/strange/surreal)
-- NSFW descriptors (detected, but suggestions are generic by default)
-- clothes and wardrobe details
-- anatomy details beyond the basic person descriptor list
-- weapons/props
-- food
-- text-in-image
-- foreground/background framing
-- fine details / textures / particles
+Checks that captions include the "hard to learn" ingredients (styles and weird/surreal vibes, NSFW
+descriptors, wardrobe, anatomy details, weapons/props, food, text-in-image, foreground/background
+framing, fine textures). ``prompt_gap_scout`` reuses the same categories for a single prompt.
 
 Usage:
-  python -m scripts.tools.complex_prompt_coverage --manifest manifest.jsonl --out report.json
-  python -m scripts.tools.complex_prompt_coverage --manifest manifest.jsonl --thresholds "clothes:0.25,weapons:0.05"
+  python -m scripts.tools complex_prompt_coverage --manifest manifest.jsonl --out report.json
+  python -m scripts.tools complex_prompt_coverage --manifest manifest.jsonl --thresholds "clothes_wardrobe:0.25"
 
 Manifest format:
   JSONL rows with one of: `caption`, `text`, `prompt`
@@ -25,55 +18,332 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
-from collections.abc import Iterable
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+
+from data.manifest_utils import caption_from_row, iter_manifest_rows
+from utils.prompt.prompt_i18n import generic_suggestion
+
+# NSFW detection is token-based so it matches the dataset's own vocabulary; its suggestion stays generic.
+CATEGORIES: dict[str, list[str]] = {
+    "nsfw_descriptors": [
+        "nsfw",
+        "adult",
+        "erotic",
+        "explicit",
+        "porn",
+        "nude",
+        "lingerie",
+        "underwear",
+        "swimsuit",
+        "bare",
+        "revealing",
+    ],
+    "weird_strange": [
+        "surreal",
+        "abstract",
+        "bizarre",
+        "uncanny",
+        "weird",
+        "strange",
+        "impossible",
+        "glitch",
+        "cyberpunk",
+        "horror",
+        "creepy",
+        "grotesque",
+        "eldritch",
+        "non-euclidean",
+    ],
+    "clothes_wardrobe": [
+        "dress",
+        "coat",
+        "jacket",
+        "shirt",
+        "t-shirt",
+        "hoodie",
+        "sweater",
+        "uniform",
+        "armor",
+        "gloves",
+        "boots",
+        "scarf",
+        "belt",
+        "cape",
+        "cloak",
+        "robe",
+        "kimono",
+        "suit",
+        "skirt",
+        "leggings",
+        "leotard",
+        "lingerie",
+        "underwear",
+        "swimsuit",
+        "corset",
+        "tactical vest",
+    ],
+    "anatomy_details": [
+        "tattoo",
+        "scar",
+        "freckles",
+        "piercing",
+        "mole",
+        "beauty mark",
+        "bandage",
+        "wounds",
+        "bruise",
+        "veins",
+        "muscle",
+        "body hair",
+    ],
+    "weapons_props": [
+        "sword",
+        "gun",
+        "rifle",
+        "pistol",
+        "knife",
+        "blade",
+        "bow",
+        "arrow",
+        "staff",
+        "hammer",
+        "axe",
+        "spear",
+        "katana",
+        "revolver",
+        "crossbow",
+        "grenade",
+        "blaster",
+        "laser",
+        "trident",
+        "wand",
+    ],
+    "food_drink": [
+        "pizza",
+        "ramen",
+        "sushi",
+        "burger",
+        "taco",
+        "steak",
+        "soup",
+        "salad",
+        "sandwich",
+        "cake",
+        "pie",
+        "dessert",
+        "chocolate",
+        "coffee",
+        "tea",
+        "noodles",
+        "dumplings",
+        "bread",
+        "cheese",
+        "spaghetti",
+    ],
+    "text_in_image": [
+        "legible text",
+        "clear text",
+        "readable text",
+        "correct spelling",
+        "sign",
+        "signage",
+        "label",
+        "lettering",
+        "words",
+        "caption",
+        "text that says",
+        "sign that says",
+    ],
+    "foreground_framing": [
+        "foreground",
+        "in the foreground",
+        "foreground bokeh",
+        "near the camera",
+        "closest",
+        "close-up foreground",
+    ],
+    "background_framing": [
+        "background",
+        "in the background",
+        "distant background",
+        "far background",
+        "backdrop",
+        "sky",
+        "horizon",
+    ],
+    "fine_details": [
+        "intricate",
+        "ornate",
+        "embroidery",
+        "stitched",
+        "seams",
+        "texture",
+        "textured",
+        "fabric",
+        "weathered",
+        "rust",
+        "scuffed",
+        "steam",
+        "smoke",
+        "fog",
+        "dust",
+        "particles",
+        "micro details",
+        "depth of field",
+        "bokeh",
+    ],
+    "hands_fingers": ["hands", "correct hands", "five fingers", "hand focus", "visible hands"],
+    "pose_actions": [
+        "pose",
+        "stance",
+        "standing",
+        "walking",
+        "running",
+        "dancing",
+        "crouching",
+        "kneeling",
+        "sitting",
+        "lying",
+        "lying down",
+        "holding",
+        "gripping",
+        "grabbing",
+        "wielding",
+        "carrying",
+        "aiming",
+        "shooting",
+        "swinging",
+        "attacking",
+        "casting",
+        "eating",
+        "drinking",
+    ],
+    "character_scene": [
+        "group",
+        "crowd",
+        "team",
+        "duo",
+        "multiple people",
+        "room full of people",
+        "many people",
+        "several people",
+        "gathering",
+        "audience",
+        "multiple characters",
+    ],
+    "clothes_materials": [
+        "leather",
+        "silk",
+        "latex",
+        "denim",
+        "wool",
+        "cotton",
+        "chainmail",
+        "lace",
+        "metallic",
+        "ribbon",
+        "feather",
+        "fur",
+        "plaid",
+        "stitched",
+        "sewn",
+    ],
+    "art_styles": [
+        "anime",
+        "manga",
+        "manhwa",
+        "illustration",
+        "digital painting",
+        "oil painting",
+        "watercolor",
+        "cel shading",
+        "comic",
+        "cartoon",
+        "cinematic",
+        "baroque",
+        "gothic",
+        "cyberpunk",
+        "steampunk",
+        "noir",
+        "retro",
+        "grainy film",
+        "photography",
+        "macro",
+    ],
+}
+
+SUGGESTIONS_EN: dict[str, str] = {
+    "nsfw_descriptors": "If you want NSFW behavior, keep your NSFW descriptors consistent across the dataset and include them early in captions.",
+    "weird_strange": "Add more surreal/weird descriptors so the model learns non-standard visuals consistently.",
+    "clothes_wardrobe": "Add wardrobe/clothing details (garments, materials, accessories) so outfits are stable.",
+    "anatomy_details": "Add anatomy micro-details (tattoos/scars/freckles/piercings) for higher consistency and specificity.",
+    "weapons_props": "Add explicit weapon/prop words and (ideally) action verbs like 'holding' / 'gripping'.",
+    "food_drink": "Add explicit food/drink words and eating/serving context if relevant.",
+    "text_in_image": "If you need text in-image, include explicit 'legible/clear readable text' wording and spelling cues.",
+    "foreground_framing": "Add foreground framing cues (foreground bokeh, nearby objects) early in captions.",
+    "background_framing": "Add background framing cues (detailed background, backdrop, sky/horizon) early in captions.",
+    "fine_details": "Add texture/detail descriptors (intricate, stitched, weathered, particles, micro details).",
+    "hands_fingers": "If hands fail, add 'correct hands', 'five fingers', and 'hand focus' consistently.",
+    "pose_actions": "Add explicit pose/action wording (standing/walking + holding/gripping/carrying verbs) so scenes don’t collapse.",
+    "character_scene": "If you want multi-character scenes, include crowd/group words consistently (group/crowd/team/room full of people).",
+    "clothes_materials": "Add clothing material terms (leather/silk/latex/denim/wool/cotton) so outfits are stable.",
+    "art_styles": "Add explicit art-style tokens (anime/manga/manhwa/oil painting/cyberpunk/noir/etc.) early in captions.",
+}
 
 
-def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-
-def _get_caption(rec: dict[str, Any]) -> str:
-    for k in ("caption", "text", "prompt"):
-        v = rec.get(k)
-        if v is not None:
-            s = str(v).strip()
-            if s:
-                return s
-    return ""
-
-
-def _term_present(caption_lower: str, term: str) -> bool:
-    """
-    Basic term matcher:
-    - multi-word terms: substring match
-    - single-word terms: word-ish boundary match to reduce false positives
-    """
+def term_present(caption_lower: str, term: str) -> bool:
+    """Multi-word terms match as substrings; single words need word-ish boundaries."""
     t = term.strip().lower()
     if not t:
         return False
     if " " in t:
         return t in caption_lower
-    esc = re.escape(t)
-    return re.search(rf"(?<![a-z0-9_]){esc}(?![a-z0-9_])", caption_lower) is not None
+    return re.search(rf"(?<![a-z0-9_]){re.escape(t)}(?![a-z0-9_])", caption_lower) is not None
 
 
-def _frac(n: int, total: int) -> float:
-    return n / total if total else 0.0
+def _json_categories(path_str: str, what: str) -> dict:
+    p = Path(path_str)
+    if not p.exists():
+        raise SystemExit(f"Not found: {p}")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    cats = data.get("categories", data)
+    if not isinstance(cats, dict):
+        raise SystemExit(f'{what} must be {{"categories": {{...}}}} or a category mapping.')
+    return cats
+
+
+def load_custom_categories(path_str: str) -> dict[str, list[str]]:
+    """``{"categories": {name: {"terms": [...]}}}`` (or the bare mapping) -> ``{name: terms}``."""
+    out: dict[str, list[str]] = {}
+    for name, spec in _json_categories(path_str, "custom-categories-json").items():
+        terms = spec.get("terms") if isinstance(spec, dict) else None
+        if isinstance(terms, list) and all(isinstance(x, str) for x in terms):
+            out[str(name)] = terms
+    return out
+
+
+def suggestion_picker(lang: str, suggestions_json: str, categories: dict[str, list[str]]) -> Callable[[str], str]:
+    """Per-category hint: ``--suggestions-json`` entry for ``lang``, else built-in English, else a localized template."""
+    custom: dict[str, dict[str, str]] = {}
+    if suggestions_json:
+        for cat, spec in _json_categories(suggestions_json, "suggestions-json").items():
+            if isinstance(spec, dict):
+                custom[str(cat)] = {str(k).lower(): v for k, v in spec.items() if isinstance(v, str)}
+    norm = (lang or "en").strip().lower()
+
+    def pick(category: str) -> str:
+        hit = custom.get(category, {}).get(norm)
+        if hit:
+            return hit
+        if norm in ("en", "eng", "english"):
+            return SUGGESTIONS_EN.get(category, "")
+        return generic_suggestion(category, categories.get(category, []), norm)
+
+    return pick
 
 
 def _parse_thresholds(thresholds_str: str) -> dict[str, float]:
-    # Format: cat:0.1,cat2:0.3
     out: dict[str, float] = {}
     if not thresholds_str.strip():
         return out
@@ -87,24 +357,6 @@ def _parse_thresholds(thresholds_str: str) -> dict[str, float]:
             out[k] = float(v.strip())
         except ValueError:
             continue
-    return out
-
-
-def _load_custom_categories(custom_path: str) -> dict[str, dict[str, Any]]:
-    p = Path(custom_path)
-    if not p.exists():
-        raise SystemExit(f"Custom categories file not found: {p}")
-    data = json.loads(p.read_text(encoding="utf-8"))
-    cats = data.get("categories", data)  # allow either wrapper or direct mapping
-    if not isinstance(cats, dict):
-        raise SystemExit('custom-categories-json must be {"categories": {name: {terms:[...]}}} or {name: {...}}')
-    out: dict[str, dict[str, Any]] = {}
-    for name, spec in cats.items():
-        if not isinstance(spec, dict):
-            continue
-        terms = spec.get("terms", [])
-        if isinstance(terms, list) and all(isinstance(x, str) for x in terms):
-            out[str(name)] = {"terms": terms}
     return out
 
 
@@ -129,7 +381,7 @@ def main() -> None:
         "--thresholds",
         type=str,
         default="",
-        help='Optional thresholds like "clothes:0.25,weapons:0.05". Only these categories are FAIL-checked.',
+        help='Optional thresholds like "clothes_wardrobe:0.25,weapons_props:0.05"; only these categories are FAIL-checked.',
     )
     ap.add_argument("--min-rows", type=int, default=0, help="Stop after scanning N rows (0 = all)")
     ap.add_argument(
@@ -140,440 +392,63 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    repo_root = Path(__file__).resolve().parents[2]
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
-
-    from utils.prompt.prompt_i18n import generic_suggestion
-
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():
         raise SystemExit(f"Not found: {manifest_path}")
 
-    # Built-in categories.
-    # Notes:
-    # - NSFW detection is token-based (so it will match your dataset's chosen vocab).
-    # - Suggestions for NSFW remain generic unless you include your own categories.
-    built_in: dict[str, dict[str, Any]] = {
-        "nsfw_descriptors": {
-            "terms": [
-                "nsfw",
-                "adult",
-                "erotic",
-                "explicit",
-                "porn",
-                "nude",
-                "lingerie",
-                "underwear",
-                "swimsuit",
-                "bare",
-                "revealing",
-            ]
-        },
-        "weird_strange": {
-            "terms": [
-                "surreal",
-                "abstract",
-                "bizarre",
-                "uncanny",
-                "weird",
-                "strange",
-                "impossible",
-                "glitch",
-                "cyberpunk",
-                "horror",
-                "creepy",
-                "grotesque",
-                "eldritch",
-                "non-euclidean",
-            ]
-        },
-        "clothes_wardrobe": {
-            "terms": [
-                "dress",
-                "coat",
-                "jacket",
-                "shirt",
-                "t-shirt",
-                "hoodie",
-                "sweater",
-                "uniform",
-                "armor",
-                "gloves",
-                "boots",
-                "scarf",
-                "belt",
-                "cape",
-                "cloak",
-                "robe",
-                "kimono",
-                "suit",
-                "skirt",
-                "leggings",
-                "leotard",
-                "lingerie",
-                "underwear",
-                "swimsuit",
-                "corset",
-                "tactical vest",
-            ]
-        },
-        "anatomy_details": {
-            "terms": [
-                "tattoo",
-                "scar",
-                "freckles",
-                "piercing",
-                "mole",
-                "beauty mark",
-                "bandage",
-                "wounds",
-                "bruise",
-                "veins",
-                "muscle",
-                "body hair",
-            ]
-        },
-        "weapons_props": {
-            "terms": [
-                "sword",
-                "gun",
-                "rifle",
-                "pistol",
-                "knife",
-                "blade",
-                "bow",
-                "arrow",
-                "staff",
-                "hammer",
-                "axe",
-                "spear",
-                "katana",
-                "revolver",
-                "crossbow",
-                "grenade",
-                "blaster",
-                "laser",
-                "trident",
-                "wand",
-            ]
-        },
-        "food_drink": {
-            "terms": [
-                "pizza",
-                "ramen",
-                "sushi",
-                "burger",
-                "taco",
-                "steak",
-                "soup",
-                "salad",
-                "sandwich",
-                "cake",
-                "pie",
-                "dessert",
-                "chocolate",
-                "coffee",
-                "tea",
-                "noodles",
-                "dumplings",
-                "bread",
-                "cheese",
-                "spaghetti",
-            ]
-        },
-        "text_in_image": {
-            "terms": [
-                "legible text",
-                "clear text",
-                "readable text",
-                "correct spelling",
-                "sign",
-                "signage",
-                "label",
-                "lettering",
-                "words",
-                "caption",
-                "text that says",
-                "sign that says",
-            ]
-        },
-        "foreground_framing": {
-            "terms": [
-                "foreground",
-                "in the foreground",
-                "foreground bokeh",
-                "near the camera",
-                "closest",
-                "close-up foreground",
-            ]
-        },
-        "background_framing": {
-            "terms": [
-                "background",
-                "in the background",
-                "distant background",
-                "far background",
-                "backdrop",
-                "sky",
-                "horizon",
-            ]
-        },
-        "fine_details": {
-            "terms": [
-                "intricate",
-                "ornate",
-                "embroidery",
-                "stitched",
-                "seams",
-                "texture",
-                "textured",
-                "fabric",
-                "weathered",
-                "rust",
-                "scuffed",
-                "steam",
-                "smoke",
-                "fog",
-                "dust",
-                "particles",
-                "micro details",
-                "depth of field",
-                "bokeh",
-            ]
-        },
-        "hands_fingers": {
-            "terms": ["hands", "correct hands", "five fingers", "hand focus", "visible hands"],
-        },
-        "pose_actions": {
-            "terms": [
-                "pose",
-                "stance",
-                "standing",
-                "walking",
-                "running",
-                "dancing",
-                "crouching",
-                "kneeling",
-                "sitting",
-                "lying",
-                "lying down",
-                "holding",
-                "gripping",
-                "grabbing",
-                "wielding",
-                "carrying",
-                "aiming",
-                "shooting",
-                "swinging",
-                "attacking",
-                "casting",
-                "eating",
-                "drinking",
-            ],
-        },
-        "character_scene": {
-            "terms": [
-                "group",
-                "crowd",
-                "team",
-                "duo",
-                "multiple people",
-                "room full of people",
-                "many people",
-                "several people",
-                "gathering",
-                "audience",
-                "multiple characters",
-            ],
-        },
-        "clothes_materials": {
-            "terms": [
-                "leather",
-                "silk",
-                "latex",
-                "denim",
-                "wool",
-                "cotton",
-                "chainmail",
-                "lace",
-                "metallic",
-                "ribbon",
-                "feather",
-                "fur",
-                "plaid",
-                "stitched",
-                "sewn",
-            ],
-        },
-        "art_styles": {
-            "terms": [
-                "anime",
-                "manga",
-                "manhwa",
-                "illustration",
-                "digital painting",
-                "oil painting",
-                "watercolor",
-                "cel shading",
-                "comic",
-                "cartoon",
-                "cinematic",
-                "baroque",
-                "gothic",
-                "cyberpunk",
-                "steampunk",
-                "noir",
-                "retro",
-                "grainy film",
-                "photography",
-                "macro",
-            ],
-        },
-    }
-
+    categories = dict(CATEGORIES)
     if args.custom_categories_json:
-        custom = _load_custom_categories(args.custom_categories_json)
-        for name, spec in custom.items():
-            built_in[name] = {"terms": list(spec.get("terms", []))}
-
-    categories = built_in
-
+        categories.update(load_custom_categories(args.custom_categories_json))
     thresholds = _parse_thresholds(args.thresholds)
 
-    counts: dict[str, int] = {k: 0 for k in categories.keys()}
+    counts: dict[str, int] = dict.fromkeys(categories, 0)
     total = 0
-
-    for rec in _iter_jsonl(manifest_path):
-        cap = _get_caption(rec)
+    for rec in iter_manifest_rows(manifest_path):
+        cap = caption_from_row(rec)
         if not cap:
             continue
         total += 1
         cap_lower = cap.lower()
-        for name, spec in categories.items():
-            for t in spec.get("terms", []):
-                if _term_present(cap_lower, t):
-                    counts[name] += 1
-                    break
+        for name, terms in categories.items():
+            if any(term_present(cap_lower, t) for t in terms):
+                counts[name] += 1
         if args.min_rows and total >= args.min_rows:
             break
-
     if total == 0:
         raise SystemExit("No captions found in manifest.")
 
-    fractions: dict[str, float] = {k: _frac(counts[k], total) for k in categories.keys()}
-
-    # Human suggestions language.
-    sug_en: dict[str, str] = {
-        "nsfw_descriptors": "If you want NSFW behavior, keep your NSFW descriptors consistent across the dataset and include them early in captions.",
-        "weird_strange": "Add more surreal/weird descriptors so the model learns non-standard visuals consistently.",
-        "clothes_wardrobe": "Add wardrobe/clothing details (garments, materials, accessories) so outfits are stable.",
-        "anatomy_details": "Add anatomy micro-details (tattoos/scars/freckles/piercings) for higher consistency and specificity.",
-        "weapons_props": "Add explicit weapon/prop words and (ideally) action verbs like 'holding' / 'gripping'.",
-        "food_drink": "Add explicit food/drink words and eating/serving context if relevant.",
-        "text_in_image": "If you need text in-image, include explicit 'legible/clear readable text' wording and spelling cues.",
-        "foreground_framing": "Add foreground framing cues (foreground bokeh, nearby objects) early in captions.",
-        "background_framing": "Add background framing cues (detailed background, backdrop, sky/horizon) early in captions.",
-        "fine_details": "Add texture/detail descriptors (intricate, stitched, weathered, particles, micro details).",
-        "hands_fingers": "If hands fail, add 'correct hands', 'five fingers', and 'hand focus' consistently.",
-        "pose_actions": "Add explicit pose/action wording (standing/walking + holding/gripping/carrying verbs) so scenes don’t collapse.",
-        "character_scene": "If you want multi-character scenes, include crowd/group words consistently (group/crowd/team/room full of people).",
-        "clothes_materials": "Add clothing material terms (leather/silk/latexamples/denim/wool/cotton) so outfits are stable.",
-        "art_styles": "Add explicit art-style tokens (anime/manga/manhwa/oil painting/cyberpunk/noir/etc.) early in captions.",
-    }
-
-    lang = str(args.lang or "en").strip()
-
-    def _load_suggestions(path_str: str) -> dict[str, dict[str, str]]:
-        p = Path(path_str)
-        if not p.exists():
-            raise SystemExit(f"Not found: {p}")
-        data = json.loads(p.read_text(encoding="utf-8"))
-        cats = data.get("categories", data)
-        if not isinstance(cats, dict):
-            raise SystemExit('suggestions-json must be {"categories": {...}} or {...category...} structure.')
-        out: dict[str, dict[str, str]] = {}
-        for cat, spec in cats.items():
-            if isinstance(spec, dict):
-                out[str(cat)] = {str(k): str(v) for k, v in spec.items() if isinstance(v, str)}
-        return out
-
-    custom_suggestions: dict[str, dict[str, str]] = {}
-    if args.suggestions_json:
-        custom_suggestions = _load_suggestions(args.suggestions_json)
-
-    normalized_lang = lang.lower()
-    is_en = normalized_lang in ("en", "eng", "english")
-
-    # Choose best available suggestion per category.
-    def _pick_suggestion(category_name: str) -> str:
-        if custom_suggestions:
-            by_lang = custom_suggestions.get(category_name, {})
-            # exact key first, then lowercase key match
-            if lang in by_lang:
-                return by_lang[lang]
-            for k, v in by_lang.items():
-                if str(k).lower() == normalized_lang:
-                    return v
-        if is_en:
-            return sug_en.get(category_name, "")
-        # unknown language: use localized generic template
-        examples = categories.get(category_name, {}).get("terms", [])
-        return generic_suggestion(category_name, examples, normalized_lang)
-
-    # Print + optional FAIL gate.
+    fractions = {k: counts[k] / total for k in categories}
     failed: list[str] = []
     for name, frac in sorted(fractions.items(), key=lambda kv: kv[1]):
-        cnt = counts[name]
         mark = ""
         if name in thresholds and frac < thresholds[name]:
             failed.append(name)
             mark = "  <-- FAIL"
-        print(f"- {name}: {frac:.3f} ({cnt}/{total}){mark}")
+        print(f"- {name}: {frac:.3f} ({counts[name]}/{total}){mark}")
 
+    report = {
+        "manifest": str(manifest_path),
+        "rows_scanned": total,
+        "counts": counts,
+        "fractions": fractions,
+        "thresholds": thresholds,
+    }
     if failed:
         print("\nFAIL categories:", ", ".join(failed))
+        pick = suggestion_picker(args.lang, args.suggestions_json, categories)
         for name in failed:
-            msg = _pick_suggestion(name)
+            msg = pick(name)
             if msg:
                 print("-", msg)
-        if args.out:
-            out_path = Path(args.out)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(
-                json.dumps(
-                    {
-                        "manifest": str(manifest_path),
-                        "rows_scanned": total,
-                        "counts": counts,
-                        "fractions": fractions,
-                        "thresholds": thresholds,
-                        "failed": failed,
-                        "suggestions_lang": lang,
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-        raise SystemExit(2)
-
-    print("\nPASS: coverage computed (and thresholds passed, if provided).")
+        report |= {"failed": failed, "suggestions_lang": args.lang}
+    else:
+        print("\nPASS: coverage computed (and thresholds passed, if provided).")
     if args.out:
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(
-                {
-                    "manifest": str(manifest_path),
-                    "rows_scanned": total,
-                    "counts": counts,
-                    "fractions": fractions,
-                    "thresholds": thresholds,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    if failed:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

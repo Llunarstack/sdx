@@ -18,16 +18,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import IO, Any, Literal
-
-MultiInstancePreset = Literal[
-    "none",
-    "distinct_objects",
-    "stacked_media",
-    "turnaround_sheet",
-    "panel_strip",
-    "group_portrait",
-]
+from typing import IO, Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +181,6 @@ def print_multi_instance_hints(preset_key: str, *, stream: IO[str] | None = None
 
 __all__ = [
     "MultiInstanceAugment",
-    "MultiInstancePreset",
     "apply_multi_instance_preset",
     "describe_limitation_short",
     "multi_instance_auto_settings",

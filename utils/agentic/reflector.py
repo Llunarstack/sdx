@@ -4,9 +4,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from research.agi_image.schemas.agent_messages import VerificationVerdict
+
+@dataclass(slots=True)
+class VerificationVerdict:
+    source: str
+    iteration: int
+    acceptance: bool
+    summary: str = ""
+    suggestion: str | None = None
+    metrics: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -156,4 +164,4 @@ def reflect_on_result_llm(
         return base
 
 
-__all__ = ["ReflectionOutcome", "reflect_on_result", "reflect_on_result_llm"]
+__all__ = ["ReflectionOutcome", "VerificationVerdict", "reflect_on_result", "reflect_on_result_llm"]

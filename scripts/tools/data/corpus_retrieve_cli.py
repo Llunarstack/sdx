@@ -2,8 +2,8 @@
 """Build / query a training-corpus retrieval index (board-scale JSONL).
 
 Examples:
-  python -m scripts.tools build_corpus_index --jsonl data/danbooru.jsonl --out data/corpus_index.jsonl
-  python -m scripts.tools corpus_retrieve --index data/corpus_index.jsonl --prompt "1girl, catgirl, eipril"
+  python -m scripts.tools corpus_retrieve build --jsonl data/danbooru.jsonl --out data/corpus_index.jsonl
+  python -m scripts.tools corpus_retrieve query --index data/corpus_index.jsonl --prompt "1girl, catgirl, eipril"
 """
 
 from __future__ import annotations

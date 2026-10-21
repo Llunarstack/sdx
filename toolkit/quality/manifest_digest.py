@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quick JSONL manifest stats without loading images (stdlib + optional Rust).
+Quick JSONL manifest stats without loading images (stdlib; ``--rust-stats`` appends ``sdx-jsonl-tools stats``).
 
 Usage:
   python -m toolkit.quality.manifest_digest path/to/manifest.jsonl
@@ -18,14 +18,16 @@ from pathlib import Path
 from typing import Any
 
 
-def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> dict[str, Any]:
-    n = 0
-    key_counts: Counter[str] = Counter()
-    caption_keys = ("caption", "text", "prompt")
-    has_image = 0
-    has_caption = 0
-    sample_paths: list[str] = []
+def _first_str(row: dict, keys: tuple[str, ...]) -> str:
+    return next((row[k].strip() for k in keys if isinstance(row.get(k), str) and row[k].strip()), "")
 
+
+def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> dict[str, Any]:
+    """Row / key / image / caption counts, JSON parse errors and caption-length percentiles."""
+    n = parse_errors = has_image = has_caption = 0
+    key_counts: Counter[str] = Counter()
+    cap_lens: list[int] = []
+    sample_paths: list[str] = []
     with path.open(encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -35,31 +37,38 @@ def digest_jsonl(path: Path, *, max_key_samples: int = 12) -> dict[str, Any]:
             try:
                 row = json.loads(line)
             except json.JSONDecodeError:
+                parse_errors += 1
                 continue
             if not isinstance(row, dict):
+                parse_errors += 1
                 continue
-            for k in row.keys():
-                key_counts[k] += 1
-            ip = row.get("image_path") or row.get("path") or row.get("image")
-            if isinstance(ip, str) and ip.strip():
+            key_counts.update(row.keys())
+            ip = _first_str(row, ("image_path", "path", "image"))
+            if ip:
                 has_image += 1
                 if len(sample_paths) < 3:
-                    sample_paths.append(ip.strip()[:120])
-            cap = None
-            for ck in caption_keys:
-                if ck in row and isinstance(row[ck], str):
-                    cap = row[ck]
-                    break
-            if cap and cap.strip():
+                    sample_paths.append(ip[:120])
+            cap = _first_str(row, ("caption", "text", "prompt"))
+            if cap:
                 has_caption += 1
+                cap_lens.append(len(cap))
+    cap_lens.sort()
 
-    top_keys = [k for k, _ in key_counts.most_common(max_key_samples)]
+    def pct(q: float) -> int:
+        return cap_lens[min(len(cap_lens) - 1, int((len(cap_lens) - 1) * q + 0.5))]  # round half up, as in Rust stats
+
     return {
         "path": str(path.resolve()),
         "lines_read": n,
+        "json_parse_errors": parse_errors,
         "rows_with_image_field": has_image,
         "rows_with_caption_like": has_caption,
-        "distinct_keys_top": top_keys,
+        "caption_len_chars": (
+            {"min": cap_lens[0], "p50": pct(0.5), "p90": pct(0.9), "p99": pct(0.99), "max": cap_lens[-1]}
+            if cap_lens
+            else {}
+        ),
+        "distinct_keys_top": [k for k, _ in key_counts.most_common(max_key_samples)],
         "sample_image_paths": sample_paths,
     }
 
@@ -95,15 +104,15 @@ def main() -> int:
     d = digest_jsonl(path)
     if args.rust_stats:
         d["rust_stats_stdout"] = try_rust_stats(path)
-
     if args.json_out:
         print(json.dumps(d, indent=2))
         return 0
 
     print(f"=== manifest_digest: {d['path']} ===")
-    print(f"lines_read: {d['lines_read']}")
-    print(f"rows_with_image_field: {d['rows_with_image_field']}")
-    print(f"rows_with_caption_like: {d['rows_with_caption_like']}")
+    for key in ("lines_read", "json_parse_errors", "rows_with_image_field", "rows_with_caption_like"):
+        print(f"{key}: {d[key]}")
+    if d["caption_len_chars"]:
+        print("caption_len_chars: " + " ".join(f"{k}={v}" for k, v in d["caption_len_chars"].items()))
     print(f"top_keys: {d['distinct_keys_top']}")
     if d["sample_image_paths"]:
         print("sample paths:", d["sample_image_paths"])

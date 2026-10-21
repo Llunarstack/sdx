@@ -37,7 +37,7 @@ ruff check .
    ```bash
    pip install basedpyright
    OUT=/tmp/basedpyright.json
-   python -m basedpyright --outputjson native/_experimental/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py utils/generation/eval_prompt_pack.py examples/run_baseline_eval.py utils/terminal.py training/train_cli_parser.py utils/generation/sample_cli_parser.py utils/generation/sample_helpers.py > "$OUT" || true
+   python -m basedpyright --outputjson native/_experimental/python/sdx_native/native_tools.py diffusion/schedules.py examples/run_baseline_eval.py utils/terminal.py training/train_cli_parser.py utils/generation/sample_cli_parser.py utils/generation/sample_helpers.py > "$OUT" || true
    python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; sys.exit(1 if int(s.get('errorCount',0)) else 0)" "$OUT"
    ```
 

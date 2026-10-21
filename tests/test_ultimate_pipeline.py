@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from utils.caption.wd_tagger import merge_wd_tags_into_caption, merge_wd_tags_into_row
-from utils.lora.lora_bank import LoRABank, LoRAEntry, resolve_lora_specs_from_prompt, slugify_lora_key
+from utils.lora_bank import LoRABank, LoRAEntry, resolve_lora_specs_from_prompt, slugify_lora_key
 
 
 def test_merge_wd_tags_preserves_identity():

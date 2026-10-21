@@ -1,6 +1,6 @@
 /**
  * Per-sample percentile clamp on a float32 tensor (B, row_len).
- * Matches dynamic_percentile_clamp() in diffusion/sampling/latent_refiner.py.
+ * Per-row clamp to the abs-quantile bound (at least floor), then divide by it.
  */
 #ifndef SDX_PERCENTILE_CLAMP_H
 #define SDX_PERCENTILE_CLAMP_H

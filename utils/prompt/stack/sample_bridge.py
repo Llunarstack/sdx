@@ -39,12 +39,14 @@ def apply_sample_prompt_stack(
     character_negative_additions: str = "",
     scene_negative_additions: str = "",
     apply_scale_distortion: bool = False,
+    tokenizer: Any = None,
+    max_tokens: int = 0,
 ) -> tuple[str, str]:
     """
-    Run the unified prompt stack for ``sample.py`` (guidance → negative → controls → finalize).
+    Run the unified prompt stack for ``sample.py`` (guidance -> negative -> controls -> budget -> finalize).
 
-    Replaces the former inline block (~300 lines). Mutates *args* where legacy code did
-    (``args.prompt``, ``human_media_mode``, photo post fields, etc.).
+    Mutates *args* (``args.prompt``, ``human_media_mode``, photo post fields, etc.). *tokenizer* and
+    *max_tokens* describe the text encoder so the budget stage counts real tokens.
     """
     artifacts = PromptArtifacts(
         layout_negative=str(getattr(args, "_prompt_layout_negative", "") or "").strip(),
@@ -72,6 +74,8 @@ def apply_sample_prompt_stack(
         args=args,
         artifacts=artifacts,
         apply_scale_distortion_negative=apply_scale_distortion,
+        tokenizer=tokenizer,
+        max_tokens=int(max_tokens or 0),
     )
 
     try:

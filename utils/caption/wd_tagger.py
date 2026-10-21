@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import csv
 import os
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +32,8 @@ __all__ = [
 ]
 
 _IDENTITY_CATEGORIES = frozenset({"artist", "copyright", "character", "meta", "rating"})
+# selected_tags.csv stores Danbooru category ids; 9 is the tagger's rating head.
+_CATEGORY_NAMES = {"0": "general", "1": "artist", "3": "copyright", "4": "character", "5": "meta", "9": "rating"}
 _DEFAULT_THRESHOLD = 0.35
 _DEFAULT_MAX_TAGS = 48
 _MODEL_INPUT_SIZE = 448
@@ -50,10 +51,6 @@ class WDTag:
     name: str
     category: str
     score: float
-
-
-def _slug_tag(name: str) -> str:
-    return re.sub(r"\s+", "_", name.strip().lower())
 
 
 def merge_wd_tags_into_caption(
@@ -150,48 +147,53 @@ class WDTagger:
             for row in reader:
                 name = (row.get("name") or row.get("tag") or "").strip()
                 cat = (row.get("category") or "general").strip().lower()
+                cat = _CATEGORY_NAMES.get(cat, cat)
                 if name:
                     self._tag_names.append(name)
                     self._tag_categories.append(cat)
 
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         self._session = ort.InferenceSession(str(onnx_path), providers=providers)
-        self._input_name = self._session.get_inputs()[0].name
+        inp = self._session.get_inputs()[0]
+        self._input_name = inp.name
+        self._input_size = inp.shape[1] if isinstance(inp.shape[1], int) else _MODEL_INPUT_SIZE
+
+    @property
+    def tag_names(self) -> list[str]:
+        self._ensure_loaded()
+        return list(self._tag_names)
 
     @staticmethod
     def _preprocess(image: Image.Image, size: int) -> np.ndarray:
-        image = image.convert("RGB")
+        """SmilingWolf's tagger input: alpha over white, white-padded square, bicubic, BGR NHWC in [0, 255]."""
+        image = image.convert("RGBA")
         w, h = image.size
         if w == 0 or h == 0:
             raise ValueError("empty image")
-        scale = size / max(w, h)
-        nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
-        image = image.resize((nw, nh), Image.Resampling.LANCZOS)
-        canvas = Image.new("RGB", (size, size), (255, 255, 255))
-        canvas.paste(image, ((size - nw) // 2, (size - nh) // 2))
-        arr = np.asarray(canvas, dtype=np.float32) / 255.0
-        arr = (arr - 0.5) / 0.5
-        arr = arr.transpose(2, 0, 1)
-        return np.expand_dims(arr, axis=0)
+        canvas = Image.new("RGBA", image.size, (255, 255, 255, 255))
+        canvas.alpha_composite(image)
+        side = max(w, h)
+        square = Image.new("RGB", (side, side), (255, 255, 255))
+        square.paste(canvas.convert("RGB"), ((side - w) // 2, (side - h) // 2))
+        if side != size:
+            square = square.resize((size, size), Image.Resampling.BICUBIC)
+        arr = np.asarray(square, dtype=np.float32)[:, :, ::-1]
+        return np.ascontiguousarray(arr[None])
 
-    def predict(self, image_path: str | os.PathLike[str]) -> list[WDTag]:
+    def scores(self, image_path: str | os.PathLike[str]) -> list[WDTag]:
+        """Every tag with its probability, highest first (no threshold or category filter)."""
         self._ensure_loaded()
         assert np is not None and Image is not None
-        img = Image.open(image_path)
-        batch = self._preprocess(img, _MODEL_INPUT_SIZE)
-        out = self._session.run(None, {self._input_name: batch})[0]
-        probs = 1.0 / (1.0 + np.exp(-out[0]))
-        tags: list[WDTag] = []
-        for i, score in enumerate(probs):
-            if score < self.threshold:
-                continue
-            name = self._tag_names[i] if i < len(self._tag_names) else str(i)
-            cat = self._tag_categories[i] if i < len(self._tag_categories) else "general"
-            if cat in _IDENTITY_CATEGORIES:
-                continue
-            tags.append(WDTag(name=name, category=cat, score=float(score)))
+        with Image.open(image_path) as img:
+            batch = self._preprocess(img, self._input_size)
+        probs = self._session.run(None, {self._input_name: batch})[0][0]  # the graph ends in a sigmoid
+        tags = [
+            WDTag(name=n, category=c, score=float(p)) for n, c, p in zip(self._tag_names, self._tag_categories, probs)
+        ]
         tags.sort(key=lambda t: t.score, reverse=True)
-        return tags[: self.max_tags]
+        return tags
 
-    def predict_names(self, image_path: str | os.PathLike[str]) -> list[str]:
-        return [t.name for t in self.predict(image_path)]
+    def select(self, tags: Sequence[WDTag]) -> list[WDTag]:
+        """Caption tags: above ``threshold``, no identity/rating tags, at most ``max_tags``."""
+        kept = [t for t in tags if t.score >= self.threshold and t.category not in _IDENTITY_CATEGORIES]
+        return kept[: self.max_tags]

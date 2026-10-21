@@ -1,128 +1,60 @@
-# VIDEOMAX — fix AI video failure modes
+# Video quality presets and VIDEOMAX
 
-**Idea:** closed video APIs still morph faces, drop props, flip physics, and jump
-cuts. SDX already had the repair primitives — they were underwired. VIDEOMAX
-turns them all on in one flag, then **routes repairs per medium** so realistic,
-anime, cartoon, VFX, stop-motion, and game looks each get the right temporal rules.
+The video pipeline is retrieve → keyframe `sample.py` edit → interpolate → temporal filters → stitch. Its
+quality knobs live in the scene JSON `edit` block. Presets fill those knobs for you. The code is in
+[`pipelines/video/segment_processor.py`](../../pipelines/video/segment_processor.py) and
+[`pipelines/video/motion_grammar.py`](../../pipelines/video/motion_grammar.py).
 
-## What it fixes
+## Presets: `edit.video_quality`
 
-| Failure | Repair |
-|--------|--------|
-| Identity / face drift | `identity_bind` + `identity_lock` + cross-keyframe identity |
-| Objects vanishing | `permanence_repair` + **count_bind repair** (not score-only) |
-| Hand / limb morph | `extremity_lock` |
-| Logo / text melt | `glyph_lock` (auto on product cues) |
-| Floating feet | `contact_ground` (off for anime/cartoon holds) |
-| Impossible motion | `physics_gate` + **physics_repair** (off for cel / surreal) |
-| Flicker / shimmer | `deflicker` + `hf_deshimmer` + `flow_consistency` |
-| Prompt drift | `prompt_ground` + adherence gates + **invention** stack on keyframes |
-| Occlusion pops | `occlusion_resolve` (on by default in VIDEOMAX) |
-| Shot-to-shot jumps | **shot_chain** (last→first + cut harmonize) |
-| Wrong medium feel | **style_router** + motion grammar + animation principles |
-| Neural path skip | superiority stack now runs **after** VideoDiT decode |
-| Style clobbering wave-5 | invention stacks **union** (`videowave` + style `artwave`/`maxwave`) |
-| Occlusion gate ignored | `min_occlusion` passed into segment quality scoring |
-| Physics teleport | `physics_repair` center-jump blend (not score-only) |
+| Value | What it sets |
+|-------|--------------|
+| `none` (default) | Nothing; your `edit` values are used as written. |
+| `lite` | Segment retry on. |
+| `standard` | Keyframes: 2 candidates + `--pick-best combo_vit`, `--boost-quality`, `--anti-perspective-drift`. Motion-beat keyframes, depth interpolation, flow consistency, deflicker, retry. |
+| `strong` | Keyframes: 3 candidates, quality pack `top`, adherence pack, `--human-made standard`, holy-grail, dual-stage layout, `--less-ai`, `--naturalize`. Stronger deflicker and temporal smoothing, identity lock, drift repair, 3 retries, permanence / artifact gates. |
+| `max` (or `"videomax": true`) | `strong`, plus camera stabilization, extremity gate, and the motion grammar for the prompt's medium. |
 
-## Styles (auto from prompt, or `--motion-grammar`)
+## Motion grammars: `edit.motion_grammar`
 
-| Style | Temporal feel | VIDEOMAX dials |
-|-------|---------------|----------------|
-| `realistic` / `film` | 24fps shutter, grounded physics | permanent, contact, physics, strong deflicker |
-| `anime_2d` | on-twos, holds, smear frames | soft permanence, no physics gate, weak deflicker |
-| `cartoon` / `spider_verse` | squash/stretch, frame-rate chatter | secondary track, keep intentional pops |
-| `pixar_3d` | appealing arcs, soft contact | identity + physics + permanence |
-| `vfx` | plate continuity, FX birth/death | highest permanence / physics / occlusion |
-| `product` | turntable, locked logo | glyph_lock, ruthless permanence |
-| `stop_motion` / `lego` | thumb-jitter cadence | keep jitter, no hf_deshimmer |
-| `pixel_art` / `low_poly` / `voxel` | sparse KF, game timing | gameassets inventions |
-| `vector` | motion-graphics easing | glyph_lock, clean holds |
-| `dream_logic` / `hybrid` | morph-tolerant / mixed media | soft or layered continuity |
+Each medium needs different temporal rules. Weak deflicker keeps anime line chatter and stop-motion jitter.
+Pixel art must not blend across its grid. Product shots need strict permanence and glyph gates. A grammar
+sets keyframe spacing, edit strength, temporal alpha and smoothing, deflicker strength, velocity easing
+(eased or holds on twos), the default color grade, and the segment quality gates (permanence, artifact,
+identity, physics, glyph).
 
-## Quick start
+Grammars: `realistic`, `film`, `product`, `vfx`, `cgi`, `pixar_3d`, `anime_2d`, `cartoon`, `spider_verse`,
+`stop_motion`, `pixel_art`, `low_poly`, `vector`, `dream_logic`, `hybrid`.
 
-```bash
-# Full consistency stack (auto-detects medium from prompt)
-python -m scripts.tools video_generate \
-  --scene examples/scene.example.json \
-  --ckpt results/run/best.pt \
-  --videomax \
-  --out runs/video/out.mp4
-
-# Force anime timing + repairs
-python -m scripts.tools video_generate \
-  --prompt "sakuga chase, cel shaded anime" \
-  --videomax --motion-grammar anime_2d --ckpt …
-
-# Force VFX plate rules
-python -m scripts.tools video_generate \
-  --prompt "explosion compositing plate" \
-  --video-quality max --motion-grammar vfx --ckpt …
-
-# Scene JSON
-# "edit": { "videomax": true, "motion_grammar": "cartoon" }
-```
-
-## Modes + uploads + timed control
-
-| Mode | What it does |
-|------|----------------|
-| `t2v` | Text → retrieve/synth → keyframe edit → stitch |
-| `i2v` | Still + optional motion clip → animate |
-| `i2i` | Still drives keyframe inits (img2img video) |
-| `v2v` | Your video plate + prompt restyle (motion preserved) |
-| `cgi` | `--motion-grammar cgi` / style cues — feature CGI lookdev dials |
-
-**HF foundations (scaffold):** VACE (`Wan2.1-VACE-*`) for edit/control, `SkyReels-V3-V2V` for dedicated V2V, `Wan2.1-FLF2V` for first–last-frame, `Wan2.2-Animate-*` for character animate, `LivePortrait` for face reenactment. Download with `python scripts/download/download_video_models.py --edit`. See [PRETRAINED_RECOMMENDED.md](../reference/PRETRAINED_RECOMMENDED.md).
-
-**Invention Lab wave 5 (VIDEOWAVE):** 200 inventions (#406–605) covering temporal flicker, identity drift, physics, camera, edit/V2V, **adult NSFW↔SFW** (ADULTGATE), lip-sync, style grammar, and critics. Enable with `--invention-stack videowave` (VIDEOMAX defaults to `videowave,artwave`). Docs: [INVENTION_VIDEO.md](../research/INVENTION_VIDEO.md).
-
-### Attach uploads (paths, not a cloud upload server)
-
-```bash
-python -m scripts.tools video_generate \
-  --mode v2v --motion-clip plate.mp4 \
-  --ref hero.png:identity --ref look.png:style \
-  --prompt "cgi neon alley" --motion-grammar cgi --videomax --ckpt …
-```
-
-Scene JSON: `references` / `edit.multimodal_refs` with roles
-`identity|style|motion|product|scene|voice|…`. See
-[`examples/scene_director_media.example.json`](../../examples/scene_director_media.example.json).
-
-### Timed concurrent events
+- `motion_grammar: "auto"` (default): with `max`, the grammar is picked from cues in the scene prompt.
+  Otherwise no grammar is applied.
+- Any other value applies that grammar, with or without a preset.
 
 ```json
-"events": [
-  {"at_sec": 2.0, "until_sec": 3.5, "effect": "explosion", "concurrent": true},
-  {"at_sec": 2.0, "camera": "whip pan", "concurrent": true},
-  {"at_sec": 4.0, "prompt": "rain", "shot_id": "close"}
-]
+"edit": { "video_quality": "max", "motion_grammar": "anime_2d" }
 ```
 
-Events inject into keyframe prompts at the matching clock so multiple things
-can happen at once; `shot_id` scopes to a shot.
+## Segment gates and retry
 
-## Code map
+`score_segment_quality` always measures temporal consistency and sharpness. Each extra axis (permanence,
+artifact, identity, extremity, physics, glyph) is measured only when its `min_*` floor is above 0. A segment
+that fails a gate is re-run, up to `max_retries` times.
 
-| Piece | Path |
-|-------|------|
-| Planner | [`pipelines/video/videomax.py`](../../pipelines/video/videomax.py) |
-| Style router | [`pipelines/video/style_router.py`](../../pipelines/video/style_router.py) |
-| Motion grammar | [`pipelines/video/motion_grammar.py`](../../pipelines/video/motion_grammar.py) |
-| Animation principles | `animation_principles.py` |
-| Style engines | `style_engines.py` |
-| Physics repair | [`pipelines/video/physics_repair.py`](../../pipelines/video/physics_repair.py) |
-| Superior orchestrator | `superior_pass.py` (count + physics repair) |
-| Shot chain | `shot_chain.py` wired in `pipeline._run_assignments` |
-| Options | `ProcessOptions.videomax` / `motion_grammar` / `*_repair` |
+## Per-shot overrides
 
-## Honest limits
+Frontier blocks (tension curve, camera empathy, chromatic arc, parallax budget, stinger frames, …) can
+override `edit` values for a single shot, for example `post_grade` or `camera_stabilize`. These per-shot
+values win over the scene `edit` block and its preset.
 
-VIDEOMAX is a **retrieve + keyframe + interpolate + repair** stack (plus optional
-neural VideoDiT). It does not invent a pretrained Sora competitor overnight —
-it makes the existing SDX path enforce consistency harder than typical APIs, and
-routes those fixes so anime does not get live-action physics and VFX does not
-get cartoon holds. True end-to-end temporal DiT quality still needs trained
-video weights + VAE.
+## Modes
+
+| `mode` | Input |
+|--------|-------|
+| `t2v` | Prompt; clips come from the local library, catalog or Pexels. |
+| `i2v` | `anchor_image`, plus an optional motion clip. |
+| `v2v` | `motion_clip` is your plate; each shot restyles the next window of it. |
+
+## Limits
+
+Keyframes are SDX image edits, and the motion between them comes from the reference footage. Temporal
+quality is therefore bounded by that footage and by interpolation. No video model is trained here.

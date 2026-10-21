@@ -27,7 +27,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.caption.api_keys import reverse_search_enabled  # noqa: E402
 from utils.caption.image_profiler import profile_from_manifest_row  # noqa: E402
 from utils.caption.prompt_research import PromptResearchResult, research_prompt_for_image  # noqa: E402
 
@@ -86,7 +85,7 @@ def enrich_manifest(
     tmp = out.with_suffix(out.suffix + ".tmp")
     written = 0
 
-    reverse_on = use_reverse and reverse_search_enabled(use_saucenao=use_saucenao, use_tineye=use_tineye)
+    reverse_on = use_reverse and (use_saucenao or use_tineye)
     corpus = Path(rag_corpus) if rag_corpus and Path(rag_corpus).is_file() else None
     if use_prompt_research:
         workers = 1  # VLM + LLM are GPU-serial; parallel workers OOM the pod

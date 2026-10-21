@@ -6,11 +6,11 @@ All paths are relative to the **repository root**. Prefer running scripts with `
 
 | Directory | Contents |
 |-----------|----------|
-| **`download/`** | `download_models.py`, `download_llm.py`, prune/remove helpers |
+| **`download/`** | `download_models.py`, `download_llm.py`, `download_hf_scaffold.py`, `download_revolutionary_stack.py` |
 | **`setup/`** | `clone_repos.ps1` / `.sh` — clones reference repos into `external/` |
 | **`training/`** | HF export, precompute latents, download-and-train helpers |
 | **`tools/`** | Canonical ops CLI — `python -m scripts.tools <cmd>` — see [tools/README.md](tools/README.md) |
-| **`enhanced/`** | Optional **EnhancedDiT** train / sample / setup |
+| **`enhanced/`** | Optional **EnhancedDiT** train / sample / random-init checkpoint |
 
 ## Main CLI
 
@@ -18,10 +18,6 @@ All paths are relative to the **repository root**. Prefer running scripts with `
 |---------|---------|
 | **`python -m scripts.tools`** | Dataset, config, checkpoints, prompt preview, quality ops |
 | **`python scripts/run_pipeline.py`** | Full RunPod-style pipeline orchestrator |
-
-## Compatibility stubs (prefer `scripts.tools`)
-
-Thin redirects remain at `scripts/cascade_generate.py`, `prompt_compose.py`, `profile_image_cli.py`, `research_image_prompt.py`, `integration_smoke.py`.
 
 ## See also
 

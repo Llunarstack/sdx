@@ -21,11 +21,8 @@ python -m ruff check .
 
 OUT=/tmp/basedpyright.json
 python -m basedpyright --outputjson \
-  native/_experimental/python/sdx_native/diffusion_sigma_fast.py \
-  utils/generation/run_artifacts.py \
-  diffusion/snr_utils.py \
-  utils/generation/inference_stages.py \
-  utils/generation/eval_prompt_pack.py \
+  native/_experimental/python/sdx_native/native_tools.py \
+  diffusion/schedules.py \
   examples/run_baseline_eval.py \
   utils/terminal.py \
   training/train_cli_parser.py \

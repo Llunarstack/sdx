@@ -1,8 +1,8 @@
-"""Artist name registry built from scraped booru manifests.
+"""``@artist`` mentions and the artist name registry built from scraped booru manifests.
 
-Resolves ``@AnyArtist`` mentions to the exact tag spelling the model saw in
-training (danbooru / e621 / rule34 artist tags). Works for every artist present
-in your downloaded dataset — not a fixed allowlist.
+Resolves ``@AnyArtist`` (``@Kantoku``, ``@artist:hiten_(hitenkei)``, ``@'some artist'``) to the exact tag
+spelling the model saw in training (danbooru / e621 / rule34 artist tags), for every artist in your
+downloaded dataset; unknown names still normalize to booru caption form. Strength 1.3 -> ``(kantoku:1.30)``.
 """
 
 from __future__ import annotations
@@ -13,10 +13,6 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from .artist_tag import normalize_artist_tag
-
-_ALIAS_SEP = re.compile(r"[\s_]+")
 
 
 @dataclass
@@ -167,3 +163,74 @@ def build_from_manifests(manifest_paths: Iterable[str | os.PathLike[str]]) -> Ar
             for a in artists:
                 reg.add(str(a), count=1)
     return reg
+
+
+# Unicode letters/digits for international artist names (pixiv, etc.).
+_ARTIST_BODY = r"[\w\-.()]+"
+_ARTIST_EXPLICIT_RE = re.compile(
+    rf"@artist:(?:'([^']+)'|\"([^\"]+)\"|({_ARTIST_BODY}))",
+    re.UNICODE,
+)
+_ARTIST_RE = re.compile(
+    rf"@(?:'([^']+)'|\"([^\"]+)\"|({_ARTIST_BODY}))",
+    re.UNICODE,
+)
+
+
+def normalize_artist_tag(name: str) -> str:
+    """Lowercase, underscores->spaces, collapse whitespace (danbooru caption form)."""
+    tag = name.strip().lower().replace("_", " ")
+    return re.sub(r"\s+", " ", tag).strip()
+
+
+def _resolve_name(raw: str, registry) -> str:
+    if registry is not None:
+        return registry.resolve(raw)
+    return normalize_artist_tag(raw)
+
+
+def expand_artist_mentions(
+    prompt: str,
+    *,
+    strength: float = 1.0,
+    registry=None,
+) -> tuple[str, list[str]]:
+    """Replace ``@artist`` mentions with trained artist tags.
+
+    Returns ``(expanded_prompt, artists)``. Pass an :class:`ArtistRegistry` (or
+    use ``get_registry()``) to resolve aliases from scraped data.
+    """
+    if not prompt or "@" not in prompt:
+        return prompt, []
+
+    if registry is None:
+        try:
+            registry = get_registry()
+        except Exception:
+            registry = None
+
+    artists: list[str] = []
+
+    def _wrap(tag: str) -> str:
+        artists.append(tag)
+        if abs(strength - 1.0) > 1e-3:
+            return f"({tag}:{strength:.2f})"
+        return tag
+
+    def _sub_explicit(m: re.Match) -> str:
+        raw = m.group(1) or m.group(2) or m.group(3) or ""
+        tag = _resolve_name(raw, registry)
+        return _wrap(tag) if tag else m.group(0)
+
+    def _sub(m: re.Match) -> str:
+        raw = m.group(1) or m.group(2) or m.group(3) or ""
+        if raw.lower() == "artist":
+            return m.group(0)
+        tag = _resolve_name(raw, registry)
+        if not tag:
+            return m.group(0)
+        return _wrap(tag)
+
+    expanded = _ARTIST_EXPLICIT_RE.sub(_sub_explicit, prompt)
+    expanded = _ARTIST_RE.sub(_sub, expanded)
+    return expanded, artists

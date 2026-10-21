@@ -2,19 +2,8 @@
 
 from __future__ import annotations
 
-from config.defaults import prompt_domains
-from config.defaults.creature_character_prompts import (
-    CREATURE_CHARACTER_DOMAIN_NAMES,
-    HUMANOID_MONSTER_PROMPT_KEYWORDS,
-)
-from models.complex_prompt_handler import PromptComplexityAnalyzer
-from research.creature_character_guidance import suggest_creature_prompt_addons
-
-
-def test_merged_creature_domains() -> None:
-    for key in CREATURE_CHARACTER_DOMAIN_NAMES:
-        assert key in prompt_domains.RECOMMENDED_PROMPTS_BY_DOMAIN
-        assert key in prompt_domains.RECOMMENDED_NEGATIVE_BY_DOMAIN
+from config.defaults.creature_character_prompts import HUMANOID_MONSTER_PROMPT_KEYWORDS
+from utils.prompt.subject_addons import suggest_creature_prompt_addons
 
 
 def test_suggest_creature_anthro() -> None:
@@ -51,14 +40,6 @@ def test_suggest_creature_nsfw_rating() -> None:
     pos, neg = suggest_creature_prompt_addons("anthro cat, detailed", rating="nsfw")
     assert "adult" in pos.lower() or "mature" in pos.lower()
     assert "melted anatomy" in neg.lower() or "fused limbs" in neg.lower()
-
-
-def test_complexity_analyzer_creature_mode() -> None:
-    an = PromptComplexityAnalyzer()
-    p = an.analyze("anthro dragon knight, detailed, masterpiece")
-    assert p.is_creature_character_heavy is True
-    assert p.dominant_mode == "creature"
-    assert "anthro" in p.creature_tags or "dragon" in p.creature_tags
 
 
 def test_humanoid_keyword_tuple_covers_succubus() -> None:

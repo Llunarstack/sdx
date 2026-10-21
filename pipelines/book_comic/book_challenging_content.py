@@ -2,7 +2,7 @@
 Prompt fragments for **hard** sequential-art cases: mature-rated narrative fidelity (when NSFW
 stack is enabled), surreal or non-human designs, crowds, reflections, and extreme perspective.
 
-These strings are **craft / rendering** guidance for uncensored sequential-art runs.
+These strings are craft / rendering guidance only.
 """
 
 from __future__ import annotations
@@ -12,10 +12,7 @@ from typing import Any
 
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
-# ---------------------------------------------------------------------------
-# Per-tag fragments (visual_memory ``challenge_tags`` or consistency JSON)
-# ---------------------------------------------------------------------------
-
+# Keyed by visual_memory ``challenge_tags`` / consistency JSON tag names.
 CHALLENGE_TAG_FRAGMENTS: dict[str, str] = {
     "mature_narrative_fidelity": (
         "mature-rated scenes follow the writer brief without arbitrary modesty drift, "
@@ -55,51 +52,49 @@ CHALLENGE_TAG_FRAGMENTS: dict[str, str] = {
     ),
 }
 
-CHALLENGE_PACK_CHOICES = frozenset(
-    {
-        "none",
-        "mature_coherence",
-        "surreal_weird",
-        "technical_hard",
-        "horror_mood",
-        "crowd_hands",
-        "max",
-    }
-)
 
-# Positive lines merged per pack (excluding mature line unless allowed).
-_PACK_POSITIVE_CORE: dict[str, str] = {
-    "mature_coherence": CHALLENGE_TAG_FRAGMENTS["mature_narrative_fidelity"],
-    "surreal_weird": merge_prompt_fragments(
-        CHALLENGE_TAG_FRAGMENTS["surreal_weird"],
-        CHALLENGE_TAG_FRAGMENTS["non_human_morph"],
-    ),
-    "technical_hard": merge_prompt_fragments(
-        CHALLENGE_TAG_FRAGMENTS["extreme_perspective"],
-        CHALLENGE_TAG_FRAGMENTS["reflections_glass"],
-        CHALLENGE_TAG_FRAGMENTS["technical_materials"],
-    ),
-    "horror_mood": CHALLENGE_TAG_FRAGMENTS["horror_mood"],
-    "crowd_hands": merge_prompt_fragments(
-        CHALLENGE_TAG_FRAGMENTS["crowd_scale"],
-        CHALLENGE_TAG_FRAGMENTS["hands_heavy"],
-    ),
-    "max": merge_prompt_fragments(
-        CHALLENGE_TAG_FRAGMENTS["surreal_weird"],
-        CHALLENGE_TAG_FRAGMENTS["non_human_morph"],
-        CHALLENGE_TAG_FRAGMENTS["extreme_perspective"],
-        CHALLENGE_TAG_FRAGMENTS["crowd_scale"],
-        CHALLENGE_TAG_FRAGMENTS["hands_heavy"],
-        CHALLENGE_TAG_FRAGMENTS["reflections_glass"],
-        CHALLENGE_TAG_FRAGMENTS["technical_materials"],
-        CHALLENGE_TAG_FRAGMENTS["horror_mood"],
+def _tags(*keys: str) -> str:
+    return merge_prompt_fragments(*(CHALLENGE_TAG_FRAGMENTS[k] for k in keys))
+
+
+_PACK_POSITIVE: dict[str, str] = {
+    "mature_coherence": _tags("mature_narrative_fidelity"),
+    "surreal_weird": _tags("surreal_weird", "non_human_morph"),
+    "technical_hard": _tags("extreme_perspective", "reflections_glass", "technical_materials"),
+    "horror_mood": _tags("horror_mood"),
+    "crowd_hands": _tags("crowd_scale", "hands_heavy"),
+    "max": _tags(
+        "mature_narrative_fidelity",
+        "surreal_weird",
+        "non_human_morph",
+        "extreme_perspective",
+        "crowd_scale",
+        "hands_heavy",
+        "reflections_glass",
+        "technical_materials",
+        "horror_mood",
     ),
 }
+
+CHALLENGE_PACK_CHOICES = frozenset({"none", *_PACK_POSITIVE})
 
 CHALLENGE_NEGATIVE_ADDON = (
     "random unexplained censor bars, lens censorship blur, arbitrary black voids over anatomy, "
     "sanitized rewrite of the written scene, sudden modesty costume insertion"
 )
+
+
+def _pack_name(pack: str | None) -> str:
+    return str(pack or "none").strip().lower()
+
+
+def _tag_list(raw: Any) -> list[str]:
+    """Accept a comma-separated string or a list of tag names."""
+    if isinstance(raw, str):
+        return raw.split(",")
+    if isinstance(raw, list):
+        return [str(t) for t in raw]
+    return []
 
 
 def merge_challenge_tags(tags: Sequence[str]) -> str:
@@ -114,36 +109,13 @@ def merge_challenge_tags(tags: Sequence[str]) -> str:
 
 
 def challenge_pack_positive(pack: str) -> str:
-    """Resolve a named challenge pack to a positive prompt block."""
-    name = str(pack or "none").strip().lower()
-    if name == "none" or name not in CHALLENGE_PACK_CHOICES:
-        return ""
-    if name == "mature_coherence":
-        return _PACK_POSITIVE_CORE["mature_coherence"]
-    if name == "max":
-        parts: list[str] = [_PACK_POSITIVE_CORE["mature_coherence"]]
-        parts.append(
-            merge_prompt_fragments(
-                CHALLENGE_TAG_FRAGMENTS["surreal_weird"],
-                CHALLENGE_TAG_FRAGMENTS["non_human_morph"],
-                CHALLENGE_TAG_FRAGMENTS["extreme_perspective"],
-                CHALLENGE_TAG_FRAGMENTS["crowd_scale"],
-                CHALLENGE_TAG_FRAGMENTS["hands_heavy"],
-                CHALLENGE_TAG_FRAGMENTS["reflections_glass"],
-                CHALLENGE_TAG_FRAGMENTS["technical_materials"],
-                CHALLENGE_TAG_FRAGMENTS["horror_mood"],
-            )
-        )
-        return merge_prompt_fragments(*parts)
-    return _PACK_POSITIVE_CORE.get(name, "")
+    """Resolve a named challenge pack to a positive prompt block ("" for none/unknown)."""
+    return _PACK_POSITIVE.get(_pack_name(pack), "")
 
 
 def challenge_pack_negative(pack: str) -> str:
-    """Optional negative fragment; only non-none packs."""
-    name = str(pack or "none").strip().lower()
-    if name == "none" or name not in CHALLENGE_PACK_CHOICES:
-        return ""
-    return CHALLENGE_NEGATIVE_ADDON
+    """Negative fragment for any real pack; "" for none/unknown."""
+    return CHALLENGE_NEGATIVE_ADDON if _pack_name(pack) in _PACK_POSITIVE else ""
 
 
 def challenging_content_from_mapping(block: Mapping[str, Any]) -> str:
@@ -156,17 +128,9 @@ def challenging_content_from_mapping(block: Mapping[str, Any]) -> str:
     """
     if not block:
         return ""
-    pack = str(block.get("pack", "none") or "none").strip().lower()
     extra = str(block.get("extra", "") or "").strip()
-    tags_raw = block.get("tags") or block.get("challenge_tags") or []
-    tags: list[str] = []
-    if isinstance(tags_raw, str) and tags_raw.strip():
-        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
-    elif isinstance(tags_raw, list):
-        tags = [str(t).strip() for t in tags_raw if str(t).strip()]
-    tag_frag = merge_challenge_tags(tags)
-    pack_frag = challenge_pack_positive(pack)
-    return merge_prompt_fragments(pack_frag, tag_frag, extra)
+    tags = _tag_list(block.get("tags") or block.get("challenge_tags"))
+    return merge_prompt_fragments(challenge_pack_positive(block.get("pack")), merge_challenge_tags(tags), extra)
 
 
 def visual_memory_challenge_clause(root: Mapping[str, Any]) -> str:
@@ -177,25 +141,19 @@ def visual_memory_challenge_clause(root: Mapping[str, Any]) -> str:
     - ``challenge_tags`` / ``challenge_tag``: list or comma string of tag keys
     - ``challenging_content``: object passed to :func:`challenging_content_from_mapping`
     - ``weird_character_notes`` / ``unusual_character_notes``: freeform string
+
+    The mature-fidelity fragment is always included (once).
     """
     bits: list[str] = []
     ch = root.get("challenging_content")
     if isinstance(ch, dict):
         bits.append(challenging_content_from_mapping(ch))
-    bp = str(root.get("book_challenge_pack", "") or "").strip().lower()
-    if bp and bp != "none":
-        bits.append(challenge_pack_positive(bp))
-    raw_tags = root.get("challenge_tags") or root.get("challenge_tag")
-    if isinstance(raw_tags, str) and raw_tags.strip():
-        tag_list = [t.strip() for t in raw_tags.split(",") if t.strip()]
-        bits.append(merge_challenge_tags(tag_list))
-    elif isinstance(raw_tags, list):
-        bits.append(merge_challenge_tags([str(t) for t in raw_tags]))
+    bits.append(challenge_pack_positive(root.get("book_challenge_pack")))
+    bits.append(merge_challenge_tags(_tag_list(root.get("challenge_tags") or root.get("challenge_tag"))))
 
-    mature_only = merge_challenge_tags(["mature_narrative_fidelity"])
-    existing = merge_prompt_fragments(*bits)
-    if mature_only and mature_only.lower() not in existing.lower():
-        bits.append(mature_only)
+    mature = CHALLENGE_TAG_FRAGMENTS["mature_narrative_fidelity"]
+    if mature.lower() not in merge_prompt_fragments(*bits).lower():
+        bits.append(mature)
 
     for key in ("weird_character_notes", "unusual_character_notes"):
         w = str(root.get(key, "") or "").strip()

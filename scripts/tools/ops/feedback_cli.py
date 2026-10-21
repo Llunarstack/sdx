@@ -156,8 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"Wrote {n} pairs → {args.out}")
         print(
-            "Next: python -m scripts.tools rsi_loop --pairs "
-            f"{args.out} --base-ckpt <ckpt>   # or preference_flywheel / train_diffusion_dpo",
+            f"Next: python -m scripts.tools train_diffusion_dpo --ckpt <ckpt> --preference-jsonl {args.out}\n"
+            "  or let rsi_loop mix your feedback into self-improvement rounds automatically.",
             file=sys.stderr,
         )
         return 0 if n else 2

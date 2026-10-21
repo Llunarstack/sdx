@@ -179,24 +179,6 @@ class ProgressBar:
         print()  # New line
 
 
-def calculate_model_flops(model: torch.nn.Module, input_shape: tuple) -> int:
-    """Estimate FLOPs for model forward pass (rough approximation)."""
-    # Very rough FLOP estimation for transformer models
-    # This is a simplified calculation and may not be accurate
-    batch_size, seq_len, hidden_dim = input_shape
-
-    # Attention: O(seq_len^2 * hidden_dim) per layer
-    # FFN: O(seq_len * hidden_dim * ffn_dim) per layer
-    # Rough estimate assuming ~24 layers and 4x FFN expansion
-
-    attention_flops = seq_len * seq_len * hidden_dim * 24
-    ffn_flops = seq_len * hidden_dim * (hidden_dim * 4) * 24
-
-    total_flops = (attention_flops + ffn_flops) * batch_size
-
-    return total_flops
-
-
 def log_system_info():
     """Log system information for debugging."""
     info = {

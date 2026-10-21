@@ -1,5 +1,5 @@
 """
-Unicode and structure hygiene for tr/inference captions (stdlib + optional xxhash).
+Unicode and structure hygiene for training/inference captions (stdlib + optional xxhash).
 
 Implements the Python side of ``docs/NATIVE_AND_SYSTEM_LIBS.md`` (NFKC normalization,
 zero-width stripping, dedupe fingerprints). Kept under ``sdx_native`` so it does not
@@ -34,29 +34,21 @@ def normalize_caption_for_training(
     unicode_form: str = "NFKC",
     strip_controls: bool = True,
 ) -> str:
-    """
-    Normalize a comma-separated caption for training or lint:
+    """Unicode-normalize (default NFKC), strip zero-width characters and optionally C0 controls, then trim
+    each comma segment, drop empty ones and rejoin with ``", "``.
 
-    - ``unicodedata.normalize`` (default **NFKC**)
-    - Strip zero-width characters
-    - Optionally strip C0 controls
-    - Trim each comma segment; drop empties; rejoin with ``, ``
+    Normalization runs before the comma split so a full-width comma (U+FF0C) becomes a separator too, which
+    keeps the function idempotent.
     """
     if not (caption or "").strip():
         return (caption or "").strip()
     form = (unicode_form or "NFKC").upper()
     if form not in ("NFC", "NFD", "NFKC", "NFKD"):
         form = "NFKC"
-
-    parts: list[str] = []
-    for segment in caption.split(","):
-        s = segment
-        if strip_controls:
-            s = strip_c0_controls(s)
-        s = strip_zwsp(unicodedata.normalize(form, s)).strip()
-        if s:
-            parts.append(s)
-    return ", ".join(parts)
+    if strip_controls:
+        caption = strip_c0_controls(caption)
+    caption = strip_zwsp(unicodedata.normalize(form, caption))
+    return ", ".join(s for s in (seg.strip() for seg in caption.split(",")) if s)
 
 
 def caption_fingerprint(
@@ -80,7 +72,7 @@ def caption_fingerprint(
             return xxhash.xxh64(data).hexdigest()
         except ImportError:
             if algo == "xxhash":
-                raise ImportError("algorithm='xxhash' requires: pip install xxhash")
+                raise ImportError("algorithm='xxhash' requires: pip install xxhash") from None
     return hashlib.sha256(data).hexdigest()
 
 
@@ -89,28 +81,14 @@ def _token_set(text: str) -> set[str]:
 
 
 def pos_neg_token_overlap(positive: str, negative: str) -> tuple[int, int, float]:
-    """
-    Tokens in both positive and negative (case-insensitive).
-    Returns ``(overlap_count, union_count, jaccard)``.
-    """
-    p = _token_set(positive)
-    n = _token_set(negative)
-    if not p and not n:
-        return 0, 0, 0.0
-    inter = p & n
-    union = p | n
-    j = len(inter) / len(union) if union else 0.0
-    return len(inter), len(union), j
-
-
-def jsonl_row_caption_keys() -> tuple[str, ...]:
-    """Field names for caption text in a manifest dict."""
-    return ("caption", "text", "prompt")
+    """Comma tokens shared by ``positive`` and ``negative`` (case-insensitive): ``(overlap, union, jaccard)``."""
+    p, n = _token_set(positive), _token_set(negative)
+    inter, union = p & n, p | n
+    return len(inter), len(union), (len(inter) / len(union) if union else 0.0)
 
 
 __all__ = [
     "caption_fingerprint",
-    "jsonl_row_caption_keys",
     "normalize_caption_for_training",
     "pos_neg_token_overlap",
     "strip_c0_controls",

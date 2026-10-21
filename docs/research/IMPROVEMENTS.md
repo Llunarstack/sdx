@@ -27,19 +27,19 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 
 - **Idea:** Train on multiple resolutions or aspect ratios (e.g. 256², 512×256, 256×512) instead of a single square. Improves composition and “native” non-square generation.
 - **How others do it:** SDXL uses resolution buckets; FLUX/Kontext use fixed preferred resolutions per aspect. We currently have a single `--image-size`.
-- **Coded (partial):** `train.py --resolution-buckets` — comma-separated squares (`256,384,512`) or explicit `HxW` (`512x768,256x512`). Uses [`ResolutionBucketBatchSampler`](../../data/bucket_batch_sampler.py) so each batch is one shape. **Constraints:** single GPU only (no DDP); `--val-split` must be 0; latent cache disabled for bucket runs. Prefer `--size-embed-dim` > 0 when training multiple sizes.
+- **Coded (partial):** `train.py --resolution-buckets` — comma-separated squares (`256,384,512`) or explicit `HxW` (`512x768,256x512`). Each image goes to the bucket nearest its aspect ratio (largest it fills without upscaling), so portraits are not cover-cropped into landscape frames; [`ResolutionBucketBatchSampler`](../../data/bucket_batch_sampler.py) keeps each batch one shape. **Constraints:** single GPU only (no DDP); `--val-split` must be 0; latent cache disabled for bucket runs. Prefer `--size-embed-dim` > 0 when training multiple sizes.
 - **Future:** DDP-aware bucketing; optional multi-scale without buckets (padding) — not implemented.
 
 ### 1.2 Smarter crop strategy — **coded**
 
 - **Idea:** Center crop can cut off important content; random crop can miss the subject. “Largest center crop” that fits the short side, or “face/subject-aware” crop (if metadata exists), often gives better training signal.
-- **Coded:** `--crop-mode center|random|largest_center` in `train.py`; `data/t2i_dataset.py` uses `_center_crop`, `_random_crop`, or `_largest_center_crop` (resize to cover then center crop).
+- **Coded:** `--crop-mode center|random|largest_center` in `train.py`; `data/t2i_dataset.py` crops with `_cover_crop` (resize to cover, then a centre crop; `random` picks one offset shared by image, mask, control and init).
 
 ### 1.3 Caption dropout schedule (curriculum) — **coded**
 
 - **Idea:** Start with higher caption dropout so the model learns structure first; reduce dropout over time so it learns prompt adherence later. Reduces overfitting to captions early.
 - **We have:** Fixed `caption_dropout_prob`. Curriculum for **caption length** exists (`curriculum_caption_steps`).
-- **Coded:** `--caption-dropout-schedule 0,0.2,10000,0.05` (comma-sep pairs step,prob); linear interpolation. When set, model uses 0 built-in dropout and we apply scheduled dropout in the loop.
+- **Coded:** `--caption-dropout-schedule 0,0.2,10000,0.05` (comma-sep pairs step,prob); linear interpolation. Dropout is always per sample in the training loop (caption -> empty prompt before encoding, matching the CFG uncond at inference); `--caption-dropout-prob` is the constant used when no schedule is set.
 
 ### 1.4 V-prediction as default or option
 
@@ -96,7 +96,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 ### 2.6 Prompt adherence for complex, NSFW, weird prompts — **coded**
 
 - **Idea:** Improve quality and adherence for long/complex prompts, mature content, and surreal/abstract/weird prompts without censoring.
-- **Coded:** (a) **config/defaults/prompt_domains.py**: `COMPLEX_PROMPT_TIPS`, `CHALLENGING_PROMPT_TIPS`, and `RECOMMENDED_PROMPTS_BY_DOMAIN` entries for "complex" and "challenging"; (b) **data/caption_utils.py**: domain tags "complex" and "challenging" (surreal, abstract, detailed, etc.) so `boost_domain_tags` reinforces them; `QUALITY_PREFIX` and `prepend_quality_if_short()` for short captions; (c) **sample.py**: `--boost-quality` (prepend "masterpiece, best quality"), long-prompt token count warning (>250 tokens); (d) **docs/QUALITY.md** (*Civitai-style* section): sections “Complex and long prompts” and “Challenging content (NSFW, surreal, abstract, weird)” with tips and no-censorship guidance.
+- **Coded:** (a) (b) **data/caption_utils.py**: domain tags "complex" and "challenging" (surreal, abstract, detailed, etc.) so `boost_domain_tags` reinforces them; `QUALITY_PREFIX` and `prepend_quality_if_short()` for short captions; (c) **sample.py**: `--boost-quality` (prepend "masterpiece, best quality"), long-prompt token count warning (>250 tokens); (d) **docs/QUALITY.md** (*Civitai-style* section): sections “Complex and long prompts” and “Challenging content (NSFW, surreal, abstract, weird)” with tips and no-censorship guidance.
 
 ---
 
@@ -134,7 +134,7 @@ Ideas to make SDX better—quality gains, modern replacements for old techniques
 ### 3.5 Latent size conditioning + patch channel gate — **coded (DiT-Text)**
 
 - **Idea (PixArt-style):** Encode latent grid height/width into the timestep conditioning vector so the denoiser knows absolute scale (helps multi-res finetunes and resolution extrapolation).
-- **Coded:** `TrainConfig.size_embed_dim` + `--size-embed-dim`; `SizeEmbedder` in `models/pixart_blocks.py` wired in `models/dit_text.py`. Training and `sample.py` pass `size_embed` `(B,2)` = latent `H,W` when `size_embed_dim > 0`. If `size_embed_dim > 0` but `size_embed` is omitted, the model infers `(H,W)` from the input latent tensor.
+- **Coded:** `TrainConfig.size_embed_dim` + `--size-embed-dim`; `SizeEmbedder` in `models/dit_text.py`. Training and `sample.py` pass `size_embed` `(B,2)` = latent `H,W` when `size_embed_dim > 0`. If `size_embed_dim > 0` but `size_embed` is omitted, the model infers `(H,W)` from the input latent tensor.
 - **Idea (lightweight quality):** A channel-wise gate on patch tokens (SE-style) with **zero-init last layer** so training starts from identity and can learn calibration.
 - **Coded:** `patch_se` / `--patch-se` and `patch_se_reduction` / `--patch-se-reduction` on `TrainConfig`; `ZeroInitPatchChannelGate` after patch/control fusion in `DiT_Text`.
 
@@ -232,7 +232,7 @@ Ideas that are uncommon or absent in mainstream DiT/SD/FLUX pipelines—worth ex
 ### 8.7 “Creativity” or diversity knob (temperature by region or step)
 
 - **Idea:** A single scalar (or per-step schedule) that controls how much the model **deviates** from the mode—e.g. higher noise in the sampler, or a learned “diversity” embedding that shifts the distribution. Lets users ask for “safe, on-prompt” vs “weirder, more varied” without changing the prompt. Partially overlaps CFG; explicit “creativity” parameter is rare.
-- **Coded:** `creativity_embed_dim` + per-batch random `creativity` in training; **`--creativity-jitter-std`** widens the training scalar; **`--creativity-jitter`** at sample (esp. `--num` > 1). **`--originality`** / **`--train-originality-prob`** inject `ORIGINALITY_POSITIVE_TOKENS` ([`config/defaults/prompt_domains.py`](../../config/defaults/prompt_domains.py)) via [`utils/prompt/originality_augment.py`](../../utils/prompt/originality_augment.py).
+- **Coded:** `creativity_embed_dim` + per-batch random `creativity` in training; **`--creativity-jitter-std`** widens the training scalar; **`--creativity-jitter`** at sample (esp. `--num` > 1). **`--originality`** / **`--train-originality-prob`** inject `ORIGINALITY_POSITIVE_TOKENS` from [`utils/prompt/originality_augment.py`](../../utils/prompt/originality_augment.py).
 - **Add (future):** Per-step creativity schedule; regional diversity without prompt edits.
 
 ### 8.8 Learning from rejection (negative signal from user feedback)
@@ -395,7 +395,7 @@ High-signal directions that are **not all implemented** but are **actionable** a
 
 ## 12. Industry alignment (2026): authenticity, systems, resolution, text, grounding
 
-**Context:** Image generation is increasingly **production infrastructure**—precision, grounding, and “real” outputs matter as much as aesthetics. See **[LANDSCAPE_2026.md](LANDSCAPE_2026.md)** for the full narrative and **named pipeline roles** in **[utils/generation/orchestration.py](../../utils/generation/orchestration.py)**.
+**Context:** Image generation is increasingly **production infrastructure**—precision, grounding, and “real” outputs matter as much as aesthetics. See **[LANDSCAPE_2026.md](LANDSCAPE_2026.md)** for the full narrative and **named pipeline roles** in **[utils/agentic/roles.py](../../utils/agentic/roles.py)**.
 
 | Trend | What leading stacks emphasize | SDX hooks today | Good contributions |
 |-------|------------------------------|-----------------|-------------------|

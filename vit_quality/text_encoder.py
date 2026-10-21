@@ -11,8 +11,8 @@ Design goals:
   * **Back-compatible.** ``mode="handcrafted"`` reproduces the exact 8-D vector,
     so existing checkpoints (which stored ``text_feat_dim=8``) load and score
     identically. New training opts in with ``mode="clip"``.
-  * **Single source of truth.** Every consumer (train / infer / test_time_pick /
-    export_embeddings) builds its featurizer from the checkpoint config via
+  * **Single source of truth.** Every consumer (train / infer / export_embeddings /
+    vit_mining) builds its featurizer from the checkpoint config via
     :func:`featurizer_from_config`, so the training-time and inference-time text
     pathways can never silently diverge.
   * **Graceful.** If ``transformers`` or the CLIP weights are unavailable, the

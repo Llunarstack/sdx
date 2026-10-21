@@ -29,7 +29,7 @@ native/
 | **Rust** `rust/sdx-jsonl-tools` | JSONL: **stats**, **validate**, **prompt-lint**, **`image-paths`**, **`dup-image-paths`**, **`file-fnv`**, **`caption-len-buckets`**. |
 | **Rust** `rust/sdx-noise-schedule` | CLI: **linear** / **cosine** VP-DDPM schedule tables (CSV) for analysis vs `diffusion/`. |
 | **Rust** `rust/sdx-image-metrics` | CLI: **stats** (mean luma, clip ratio, Laplacian variance) and **count-blobs** connected components for quick count heuristics. |
-| **Rust** `rust/sdx-prompt-ops` | cdylib: **caption merge/dedupe**, **pos/neg filter**, **style Jaccard**, **FNV fingerprint**, **multi-axis merge** (`prompt_ops_native`, `style_ops_native`). |
+| **Rust** `rust/sdx-prompt-ops` | cdylib: **caption merge/dedupe**, **pos/neg filter**, **style Jaccard**, **FNV fingerprint**, **multi-axis merge** (Python binds the style Jaccard via `style_ops_native`). |
 | **Rust** `rust/sdx-diffusion-math` | cdylib: **alpha_cumprod**, **SNR**, beta schedules (`sdx_native.diffusion_math_native`). |
 | **Zig** `zig/sdx-linecrc` | Streaming **FNV-1a 64-bit** fingerprint over file bytes (manifest change detection). |
 | **Zig** `zig/sdx-pathstat` | Given a **newline-separated path list**, print `path<TAB>size_bytes<TAB>ok|missing` (fast file-exists + size audit; pair with Rust `image-paths`). |
@@ -58,7 +58,7 @@ cargo build --release
 
 cd native/rust/sdx-prompt-ops
 cargo build --release
-# Python: sdx_native.prompt_ops_native.get_prompt_ops_lib().available
+# Python: sdx_native.style_ops_native.available()
 
 cd native/rust/sdx-diffusion-math
 cargo build --release
@@ -66,11 +66,11 @@ cargo build --release
 
 ### Zig (0.13+)
 ```bash
-cd native/zig/sdx-linecrc
+cd native/_experimental/zig/sdx-linecrc
 zig build -Doptimize=ReleaseFast
 # zig-out/bin/sdx-linecrc (or .exe)
 
-cd native/zig/sdx-pathstat
+cd native/_experimental/zig/sdx-pathstat
 zig build -Doptimize=ReleaseFast
 # zig-out/bin/sdx-pathstat — stat paths from a file list
 ```
@@ -94,8 +94,8 @@ go build -o sdx-manifest .
 
 ### Python JSONL stat / prompt-lint (no install)
 ```bash
-python -m sdx_native.jsonl_manifest_pure stat data/manifest.jsonl
-python -m sdx_native.jsonl_manifest_pure promptlint data/manifest.jsonl
+python -m toolkit.quality.manifest_digest data/manifest.jsonl
+python -m scripts.tools prompt_lint data/manifest.jsonl
 ```
 
 ### One-shot native build (C++ + optional CUDA + Rust)
@@ -131,14 +131,14 @@ native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools dup-image-paths data/
 
 ### Example: Zig fingerprint (pipe or file)
 ```bash
-native/zig/sdx-linecrc/zig-out/bin/sdx-linecrc --file data/manifest.jsonl
+native/_experimental/zig/sdx-linecrc/zig-out/bin/sdx-linecrc --file data/manifest.jsonl
 type data\manifest.jsonl | native\zig\sdx-linecrc\zig-out\bin\sdx-linecrc.exe
 ```
 
 ### Example: path list → sizes (Zig `sdx-pathstat`)
 ```bash
 native/rust/sdx-jsonl-tools/target/release/sdx-jsonl-tools image-paths data/manifest.jsonl > paths.txt
-native/zig/sdx-pathstat/zig-out/bin/sdx-pathstat --file paths.txt
+native/_experimental/zig/sdx-pathstat/zig-out/bin/sdx-pathstat --file paths.txt
 ```
 
 ### Example: C ABI from Python (`ctypes`)
@@ -172,16 +172,15 @@ python -m scripts.tools explore_styles --show-native
 
 ### Style native Python API
 ```python
-from utils.prompt.style_native import native_stack_status, pick_best_embedding_index
+from utils.prompt.style_native import pick_best_embedding_index, style_native_status
 ```
 
 ## Python integration (repo root on `PYTHONPATH`)
 
 | Location | Role |
 |----------|------|
-| **`native/_experimental/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `text_hygiene.py`, `native_tools.py` (ctypes, CLI discovery, FNV, merge). |
-| **`utils/native/__init__.py`** | Unified shim (adds `native/_experimental/python` to `sys.path`) and re-exports `sdx_native` helpers. |
-| **`utils/nt.py`** | Stable alias: `from utils.nt import …` re-exports `utils.native`. |
+| **`native/_experimental/python/sdx_native/`** | **Source of truth:** `latent_geometry.py`, `text_hygiene.py`, `native_tools.py` (CLI + shared-library discovery, `load_shared_library`, FNV, merge). |
+| **`utils/native.py`** | Lazy shim: adds `native/_experimental/python` to `sys.path` and resolves a fixed set of `sdx_native` helpers on first use. |
 | **`pyproject.toml`** | Pytest **`pythonpath`** includes `native/_experimental/python` so `import sdx_native` works in tests. |
 
 **Wired scripts**

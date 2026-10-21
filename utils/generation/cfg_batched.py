@@ -1,4 +1,4 @@
-"""Batched classifier-free guidance (one model forward for cond + uncond)."""
+"""Batched classifier-free guidance: cond, uncond and PAG branches in one model forward."""
 
 from __future__ import annotations
 
@@ -6,71 +6,17 @@ from typing import Any
 
 import torch
 
-from utils.generation.guidance_session import GuidanceSession
-from utils.generation.guidance_stack import SpectralGuidanceEMA, combine_guided_prediction
+from utils.generation.guidance_stack import GuidanceConfig, GuidanceState, combine_guided_prediction
 
 
-def merge_cfg_model_kwargs(
-    model_kwargs_cond: dict[str, Any],
-    model_kwargs_uncond: dict[str, Any],
-) -> dict[str, Any]:
-    """Stack cond/uncond tensor kwargs along batch dim (2×B)."""
+def merge_cfg_model_kwargs(*parts: dict[str, Any]) -> dict[str, Any]:
+    """Concatenate per-branch tensor kwargs along the batch dim; non-tensors come from the first part."""
+    first = parts[0]
     merged: dict[str, Any] = {}
-    for k, v_cond in model_kwargs_cond.items():
-        v_uncond = model_kwargs_uncond.get(k, v_cond)
-        if isinstance(v_cond, torch.Tensor) and isinstance(v_uncond, torch.Tensor):
-            merged[k] = torch.cat([v_cond, v_uncond], dim=0)
-        else:
-            merged[k] = v_cond
+    for k, v0 in first.items():
+        vals = [p.get(k, v0) for p in parts]
+        merged[k] = torch.cat(vals, dim=0) if all(isinstance(v, torch.Tensor) for v in vals) else v0
     return merged
-
-
-def combine_cfg_outputs(
-    out_cond: torch.Tensor,
-    out_uncond: torch.Tensor,
-    x: torch.Tensor,
-    *,
-    cfg_scale: float,
-    cfg_rescale: float = 0.0,
-    zeresfdg_strength: float = 0.0,
-    fdg_strength: float = 0.0,
-    fdg_cutoff_frac: float = 0.15,
-    apg_parallel_eta: float = -1.0,
-    rcfgpp_tangent: float = 0.0,
-    cfg_zero_star: bool = False,
-    cfg_pp_lambda: float = 0.0,
-    tcfg_damping: float = 0.0,
-    cfg_skip_early_frac: float = 0.0,
-    cfg_skip_late_frac: float = 0.0,
-    sample_step: int = 0,
-    total_steps: int = 1,
-    cfg_zero_init_frac: float = 0.04,
-    spectral_ema: SpectralGuidanceEMA | None = None,
-    guidance_session: GuidanceSession | None = None,
-) -> torch.Tensor:
-    """Apply guidance stack to cond/uncond predictions."""
-    return combine_guided_prediction(
-        out_cond,
-        out_uncond,
-        x,
-        cfg_scale=cfg_scale,
-        cfg_rescale=cfg_rescale,
-        zeresfdg_strength=zeresfdg_strength,
-        fdg_strength=fdg_strength,
-        fdg_cutoff_frac=fdg_cutoff_frac,
-        apg_parallel_eta=apg_parallel_eta,
-        rcfgpp_tangent=rcfgpp_tangent,
-        cfg_zero_star=cfg_zero_star,
-        cfg_pp_lambda=cfg_pp_lambda,
-        tcfg_damping=tcfg_damping,
-        cfg_skip_early_frac=cfg_skip_early_frac,
-        cfg_skip_late_frac=cfg_skip_late_frac,
-        sample_step=sample_step,
-        total_steps=total_steps,
-        cfg_zero_init_frac=cfg_zero_init_frac,
-        spectral_ema=spectral_ema,
-        guidance_session=guidance_session,
-    )
 
 
 def batched_cfg_forward(
@@ -79,92 +25,86 @@ def batched_cfg_forward(
     t_batch: torch.Tensor,
     *,
     model_kwargs_cond: dict[str, Any],
-    model_kwargs_uncond: dict[str, Any],
+    model_kwargs_uncond: dict[str, Any] | None,
     cfg_scale: float,
-    cfg_rescale: float = 0.0,
-    zeresfdg_strength: float = 0.0,
-    fdg_strength: float = 0.0,
-    fdg_cutoff_frac: float = 0.15,
-    apg_parallel_eta: float = -1.0,
-    block_cache: Any = None,
-    rcfgpp_tangent: float = 0.0,
-    cfg_zero_star: bool = False,
-    cfg_pp_lambda: float = 0.0,
-    tcfg_damping: float = 0.0,
-    cfg_skip_early_frac: float = 0.0,
-    cfg_skip_late_frac: float = 0.0,
-    sample_step: int = 0,
+    guidance: GuidanceConfig | None = None,
+    state: GuidanceState | None = None,
+    x0_affine: tuple[Any, Any] | None = None,
+    sigma: float | None = None,
+    step: int = 0,
     total_steps: int = 1,
-    cfg_zero_init_frac: float = 0.04,
-    spectral_ema: SpectralGuidanceEMA | None = None,
-    guidance_session: GuidanceSession | None = None,
-    slg_scale: float = 0.0,
-    slg_skip_blocks: tuple[int, ...] = (),
-    slg_active: bool = True,
+    flow: bool = False,
+    block_cache: Any = None,
     guidance_probe: Any = None,
     dbc_separate_cfg: bool = True,
+    amp: bool = False,
+    autocast_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
-    """Single ``model`` forward for CFG (same math as two sequential forwards)."""
-    x2 = torch.cat([x, x], dim=0)
-    t2 = torch.cat([t_batch, t_batch], dim=0)
-    kwargs = merge_cfg_model_kwargs(model_kwargs_cond, model_kwargs_uncond)
-    model_kw = dict(kwargs)
-    if block_cache is not None:
-        model_kw["dbc_separate_cfg"] = bool(dbc_separate_cfg)
-        out = model(x2, t2, block_cache=block_cache, **model_kw)
-    else:
-        out = model(x2, t2, **model_kw)
-    if out.shape[1] > x.shape[1]:
-        out = out[:, : x.shape[1]]
-    out_cond, out_uncond = out.chunk(2, dim=0)
-    if guidance_probe is not None:
-        guidance_probe.note(out_cond, out_uncond, step=int(sample_step))
-    if float(slg_scale) > 0.0 and slg_skip_blocks and bool(slg_active):
-        from utils.generation.slg_guidance import slg_combine
+    """Guided prediction from one batched forward (same math as separate per-branch forwards).
 
-        skip_kw = dict(model_kwargs_cond)
-        if block_cache is not None:
-            skip_kw["dbc_separate_cfg"] = bool(dbc_separate_cfg)
-        out_skip = model(x, t_batch, skip_blocks=slg_skip_blocks, block_cache=block_cache, **skip_kw)
-        if out_skip.shape[1] > x.shape[1]:
-            out_skip = out_skip[:, : x.shape[1]]
-        return slg_combine(
-            out_cond,
-            out_uncond,
-            out_skip,
-            cfg_scale=float(cfg_scale),
-            slg_scale=float(slg_scale),
-            cfg_rescale=float(cfg_rescale),
+    Skip-layer guidance needs its own forward because it drops whole blocks. Outside the guidance
+    interval the uncond branch is skipped, except with a block cache, whose cached residuals need a
+    fixed batch layout. ``amp`` runs the forwards under CUDA autocast (``autocast_dtype``, default
+    bf16 when supported, else fp16) and returns ``x.dtype``; ignored off-GPU.
+    """
+    g = guidance or GuidanceConfig()
+    if g.zero_init_active(step, total_steps, flow=flow):
+        return torch.zeros_like(x)
+    amp_dtype = None
+    if amp and x.is_cuda:
+        amp_dtype = autocast_dtype or (torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16)
+
+    def _forward(xb: torch.Tensor, tb: torch.Tensor, **kw: Any) -> torch.Tensor:
+        if amp_dtype is None:
+            out = model(xb, tb, **kw)
+        else:
+            with torch.autocast("cuda", dtype=amp_dtype):
+                out = model(xb, tb, **kw).to(x.dtype)
+        return out[:, : x.shape[1]]
+
+    in_interval = g.cfg_active(sigma)
+    run_uncond = float(cfg_scale) != 1.0 and bool(model_kwargs_uncond) and (in_interval or block_cache is not None)
+    pag_in_batch = g.pag and block_cache is None
+    parts = [model_kwargs_cond]
+    if run_uncond:
+        parts.append(model_kwargs_uncond)
+    if pag_in_batch:
+        parts.append(model_kwargs_cond)
+    n = len(parts)
+    kw = merge_cfg_model_kwargs(*parts)
+    if pag_in_batch:
+        kw.update(pag_blocks=g.pag_blocks, pag_from=(n - 1) * x.shape[0])
+    if block_cache is not None:
+        kw.update(block_cache=block_cache, dbc_separate_cfg=bool(dbc_separate_cfg))
+    out = _forward(torch.cat([x] * n), torch.cat([t_batch] * n), **kw)
+    chunks = out.chunk(n, dim=0)
+    out_cond = chunks[0]
+    out_uncond = chunks[1] if run_uncond else None
+    if guidance_probe is not None and out_uncond is not None:
+        guidance_probe.note(out_cond, out_uncond, step=int(step))
+    if not in_interval:
+        out_uncond = None
+
+    perturbed: list[tuple[float, torch.Tensor]] = []
+    if g.pag:
+        out_pag = (
+            chunks[-1]
+            if pag_in_batch
+            else _forward(x, t_batch, pag_blocks=g.pag_blocks, pag_from=0, **model_kwargs_cond)
         )
-    return combine_cfg_outputs(
+        perturbed.append((g.pag_scale, out_pag))
+    if g.slg_active(step, total_steps):
+        perturbed.append((g.slg_scale, _forward(x, t_batch, skip_blocks=g.slg_blocks, **model_kwargs_cond)))
+    return combine_guided_prediction(
         out_cond,
         out_uncond,
         x,
-        cfg_scale=cfg_scale,
-        cfg_rescale=cfg_rescale,
-        zeresfdg_strength=zeresfdg_strength,
-        fdg_strength=fdg_strength,
-        fdg_cutoff_frac=fdg_cutoff_frac,
-        apg_parallel_eta=apg_parallel_eta,
-        rcfgpp_tangent=rcfgpp_tangent,
-        cfg_zero_star=cfg_zero_star,
-        cfg_pp_lambda=cfg_pp_lambda,
-        tcfg_damping=tcfg_damping,
-        cfg_skip_early_frac=cfg_skip_early_frac,
-        cfg_skip_late_frac=cfg_skip_late_frac,
-        sample_step=sample_step,
-        total_steps=total_steps,
-        cfg_zero_init_frac=cfg_zero_init_frac,
-        spectral_ema=spectral_ema,
-        guidance_session=guidance_session,
+        cfg_scale=float(cfg_scale),
+        config=g,
+        x0_affine=x0_affine,
+        perturbed=perturbed,
+        state=state,
     )
 
 
-__all__ = [
-    "GuidanceSession",
-    "SpectralGuidanceEMA",
-    "batched_cfg_forward",
-    "combine_cfg_outputs",
-    "combine_guided_prediction",
-    "merge_cfg_model_kwargs",
-]
+__all__ = ["batched_cfg_forward", "merge_cfg_model_kwargs"]

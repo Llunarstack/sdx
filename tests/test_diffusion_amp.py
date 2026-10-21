@@ -38,8 +38,6 @@ class _TinyCfgModel(nn.Module):
 def test_sample_loop_inference_amp_default_false():
     sig = inspect.signature(GaussianDiffusion.sample_loop)
     assert sig.parameters["inference_amp"].default is False
-    flow_sig = inspect.signature(GaussianDiffusion._sample_loop_flow_matching)
-    assert flow_sig.parameters["inference_amp"].default is False
 
 
 def test_sample_loop_amp_off_cpu():

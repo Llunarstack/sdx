@@ -1,22 +1,23 @@
-# Taxonomy + prompt fragments for common generative image failure modes.
-# Spec aligns with docs/COMMON_SHORTCOMINGS_AI_IMAGES.md.
-# Wired: sample.py --shortcomings-mitigation, train.py / Text2ImageDataset, caption_utils, normalize_captions.
+"""Taxonomy of common generative-image failure modes with prompt/negative fragments that counter them.
+
+Consumed by the PromptStack guidance stage (``sample.py --shortcomings-mitigation`` and the training
+caption path via ``TrainConfig.train_shortcomings_mitigation``).
+"""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
+
+from ._lexicon import compile_keywords, matches, merge_csv_unique
 
 __all__ = [
     "MitigationMode",
     "ShortcomingSpec",
     "SHORTCOMING_SPECS",
-    "SHORTCOMING_IDS",
     "spec_by_id",
     "detect_shortcoming_ids",
-    "merge_csv_unique",
     "mitigation_fragments",
 ]
 
@@ -30,18 +31,6 @@ class ShortcomingSpec:
     positive_hints: str
     negative_hints: str
     is_2d_style: bool = False
-
-
-def _word_re(term: str) -> re.Pattern:
-    return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
-
-
-def _matches(prompt_lower: str, patterns: Sequence[re.Pattern]) -> bool:
-    return any(p.search(prompt_lower) for p in patterns)
-
-
-def _compile_keywords(keywords: tuple[str, ...]) -> tuple[re.Pattern, ...]:
-    return tuple(_word_re(k) for k in keywords)
 
 
 # Order matters for stable merge of hints (photoreal + digital + CG, then stylized 2D-specific).
@@ -187,7 +176,7 @@ SHORTCOMING_SPECS: tuple[ShortcomingSpec, ...] = (
         positive_hints="believable hard-surface contact, consistent material response, readable form",
         negative_hints="melting mesh, fused geometry, swimming textures, impossible topology",
     ),
-    # --- Digital painting / illustration / games / UI (not cel-anime; those stay under is_2d_style) ---
+    # Digital painting / illustration / games / UI (cel-anime lives in the is_2d_style specs below).
     ShortcomingSpec(
         id="digital_painting",
         keywords=(
@@ -310,7 +299,7 @@ SHORTCOMING_SPECS: tuple[ShortcomingSpec, ...] = (
             "muddy albedo, random noise mud, swimming hand-painted detail, inconsistent brush scale across UV shells"
         ),
     ),
-    # --- Stylized 2D packs (only when include_2d_pack or style keywords match in auto+2d) ---
+    # Stylized 2D specs: only considered when the caller enables the 2D pack.
     ShortcomingSpec(
         id="style_drift_2d",
         keywords=("anime", "manga", "cel shaded", "cel-shaded", "visual novel", "light novel", "gacha"),
@@ -363,10 +352,8 @@ SHORTCOMING_SPECS: tuple[ShortcomingSpec, ...] = (
 )
 
 _SHORTCOMING_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
-    s.id: _compile_keywords(s.keywords) for s in SHORTCOMING_SPECS
+    s.id: compile_keywords(s.keywords) for s in SHORTCOMING_SPECS
 }
-
-SHORTCOMING_IDS: tuple[str, ...] = tuple(s.id for s in SHORTCOMING_SPECS)
 
 
 def spec_by_id(sid: str) -> ShortcomingSpec:
@@ -376,53 +363,15 @@ def spec_by_id(sid: str) -> ShortcomingSpec:
     raise KeyError(sid)
 
 
-def merge_csv_unique(*chunks: str) -> str:
-    """Join comma-separated hint strings with de-duplication (order preserved)."""
-    seen = set()
-    out: list[str] = []
-    for chunk in chunks:
-        if not chunk or not str(chunk).strip():
-            continue
-        for part in str(chunk).split(","):
-            p = part.strip()
-            if not p:
-                continue
-            key = p.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(p)
-    return ", ".join(out)
+def _eligible(include_2d: bool) -> list[ShortcomingSpec]:
+    return [s for s in SHORTCOMING_SPECS if include_2d or not s.is_2d_style]
 
 
 def detect_shortcoming_ids(prompt: str, *, include_2d: bool) -> tuple[str, ...]:
-    """Return ids whose keywords match ``prompt`` (word-boundary)."""
+    """Ids whose keywords match ``prompt`` (word-boundary, case-insensitive)."""
     if not prompt or not prompt.strip():
         return ()
-    pl = prompt  # patterns use IGNORECASE
-    matched: list[str] = []
-    for spec in SHORTCOMING_SPECS:
-        if spec.is_2d_style and not include_2d:
-            continue
-        if _matches(pl, _SHORTCOMING_PATTERNS[spec.id]):
-            matched.append(spec.id)
-    return tuple(matched)
-
-
-def _specs_for_mode(
-    prompt: str,
-    mode: MitigationMode,
-    *,
-    include_2d_pack: bool,
-) -> list[ShortcomingSpec]:
-    if mode == "none":
-        return []
-    if mode == "all":
-        return [s for s in SHORTCOMING_SPECS if include_2d_pack or not s.is_2d_style]
-    if mode == "auto":
-        ids = detect_shortcoming_ids(prompt, include_2d=include_2d_pack)
-        return [spec_by_id(i) for i in ids]
-    return []
+    return tuple(s.id for s in _eligible(include_2d) if matches(prompt, _SHORTCOMING_PATTERNS[s.id]))
 
 
 def mitigation_fragments(
@@ -431,13 +380,16 @@ def mitigation_fragments(
     *,
     include_2d_pack: bool,
 ) -> tuple[str, str]:
-    """
-    Build extra positive and negative prompt fragments.
+    """``(positive_suffix, negative_suffix)`` for ``mode``; both empty for ``"none"`` or no match.
 
-    Returns:
-        (positive_suffix, negative_suffix) — may be empty strings.
+    ``"auto"`` uses only the specs whose keywords appear in ``prompt``; ``"all"`` uses every eligible spec.
     """
-    specs = _specs_for_mode(prompt, mode, include_2d_pack=include_2d_pack)
+    if mode == "all":
+        specs = _eligible(include_2d_pack)
+    elif mode == "auto":
+        specs = [spec_by_id(i) for i in detect_shortcoming_ids(prompt, include_2d=include_2d_pack)]
+    else:
+        return "", ""
     if not specs:
         return "", ""
     pos = merge_csv_unique(*(s.positive_hints for s in specs))

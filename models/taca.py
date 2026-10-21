@@ -1,37 +1,23 @@
-"""
-Temperature-Adjusted Cross-modal Attention (TACA).
+"""Temperature-Adjusted Cross-modal Attention (TACA, arXiv:2506.07986).
 
-Fixes two known MM-DiT issues (arxiv 2506.07986):
-  1. Cross-modal attention suppression from token imbalance (many image tokens vs few text tokens).
-  2. Lack of timestep-aware attention weighting — early steps need coarse structure,
-     late steps need fine text alignment.
-
-Drop-in replacement for the cross-attention in DiTTextBlock / MM-DiT blocks.
+Addresses two MM-DiT issues: text attention is suppressed by token imbalance (many image tokens, few text
+tokens), and attention ignores the timestep although early steps need coarse structure and late steps fine
+text alignment. Drop-in cross-attention for ``DiTBlockText`` and ``SuperiorViTBlock``.
 """
 
 from __future__ import annotations
 
-import math
-
 import torch
 import torch.nn as nn
 
-from .model_enhancements import RMSNorm
+from .attention import memory_efficient_attention
+from .dit import timestep_embedding
+from .layout_attn_context import layout_cross_attn_bias
 
 
 class TACA(nn.Module):
-    """
-    Temperature-Adjusted Cross-modal Attention.
-
-    Args:
-        hidden_size: Image token dimension.
-        text_dim: Text token dimension.
-        num_heads: Number of attention heads.
-        max_timesteps: Maximum diffusion timestep (for sinusoidal embedding).
-        base_temp: Baseline softmax temperature (default 1.0).
-        temp_range: How much temperature can vary across timesteps (additive).
-        qk_norm: Apply RMSNorm to Q and K per head (SD3.5-style stability).
-    """
+    """Cross-attention whose logits are scaled by a learned per-head imbalance factor and divided by a
+    timestep-dependent temperature ``base_temp + temp_range * tanh(MLP(t))`` (clamped to >= 0.1)."""
 
     def __init__(
         self,
@@ -56,21 +42,18 @@ class TACA(nn.Module):
         self.v_proj = nn.Linear(text_dim, hidden_size, bias=False)
         self.out_proj = nn.Linear(hidden_size, hidden_size, bias=False)
 
-        self.q_norm = RMSNorm(self.head_dim) if qk_norm else None
-        self.k_norm = RMSNorm(self.head_dim) if qk_norm else None
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=1e-6) if qk_norm else None
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=1e-6) if qk_norm else None
 
-        # Timestep-conditioned temperature: small MLP from sinusoidal embedding -> scalar delta
         t_emb_dim = 64
         self.t_embed = nn.Sequential(
             nn.Linear(t_emb_dim, t_emb_dim * 2),
             nn.SiLU(),
             nn.Linear(t_emb_dim * 2, 1),
-            nn.Tanh(),  # output in (-1, 1), scaled by temp_range
+            nn.Tanh(),
         )
         self._t_emb_dim = t_emb_dim
         self._max_t = max_timesteps
-
-        # Token imbalance correction: learnable per-head scale applied to cross-modal logits
         self.imbalance_scale = nn.Parameter(torch.ones(1, num_heads, 1, 1))
 
         nn.init.xavier_uniform_(self.q_proj.weight)
@@ -78,68 +61,53 @@ class TACA(nn.Module):
         nn.init.xavier_uniform_(self.v_proj.weight)
         nn.init.zeros_(self.out_proj.weight)
 
-    # ------------------------------------------------------------------
-    def _sinusoidal_t(self, t: torch.Tensor) -> torch.Tensor:
-        """t: (B,) int or float -> (B, t_emb_dim)."""
-        d = self._t_emb_dim
-        half = d // 2
-        device = t.device
-        freqs = torch.exp(-math.log(self._max_t) * torch.arange(half, device=device, dtype=torch.float32) / half)
-        args = t.float().unsqueeze(1) * freqs.unsqueeze(0)  # (B, half)
-        return torch.cat([args.cos(), args.sin()], dim=-1)  # (B, d)
-
-    # ------------------------------------------------------------------
     def forward(
         self,
         x: torch.Tensor,
         text_emb: torch.Tensor,
         timestep: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            x: Image tokens (B, N, D).
-            text_emb: Text tokens (B, L, T).
-            timestep: Diffusion timestep (B,) int/float. If None, uses base_temp.
-        Returns:
-            (B, N, D) updated image tokens.
+        *,
+        use_xformers: bool = True,
+        return_weights: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        """Image tokens ``(B, N, D)`` attend to text ``(B, L, text_dim)``; ``timestep=None`` uses ``base_temp``.
+
+        ``return_weights`` also returns the ``(B, heads, N, L)`` attention probabilities.
         """
         B, N, D = x.shape
-        _, L, _ = text_emb.shape
-
+        L = text_emb.shape[1]
         q = self.q_proj(x).reshape(B, N, self.num_heads, self.head_dim)
         k = self.k_proj(text_emb).reshape(B, L, self.num_heads, self.head_dim)
         v = self.v_proj(text_emb).reshape(B, L, self.num_heads, self.head_dim)
-
         if self.q_norm is not None:
             q = self.q_norm(q)
             k = self.k_norm(k)
 
-        # (B, H, N, D) and (B, H, L, D)
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        # Temperature + imbalance as Q/K prescale (same softmax math, fused SDPA path)
         if timestep is not None:
-            t_emb = self._sinusoidal_t(timestep)
-            delta = self.t_embed(t_emb) * self.temp_range
-            temp = (self.base_temp + delta).clamp(min=0.1).view(B, 1, 1, 1, 1)
+            t = timestep.expand(B) if timestep.numel() == 1 else timestep
+            t_emb = timestep_embedding(t, self._t_emb_dim, max_period=self._max_t)
+            delta = self.t_embed(t_emb.to(self.t_embed[0].weight.dtype)) * self.temp_range
+            temp = (self.base_temp + delta).clamp(min=0.1).view(B, 1, 1, 1)
         else:
-            temp = torch.tensor(self.base_temp, device=x.device, dtype=x.dtype).view(1, 1, 1, 1, 1)
-        fac = (self.imbalance_scale.view(1, self.num_heads, 1, 1) / temp.clamp(min=1e-4)).sqrt()
-        q = q * fac.unsqueeze(-1)
-        k = k * fac.unsqueeze(-1)
+            temp = x.new_full((1, 1, 1, 1), self.base_temp)
+        # Temperature and per-head imbalance scale the logits; folding sqrt into both Q and K
+        # keeps the fused SDPA kernel. Layout here is (B, N, H, D).
+        fac = (self.imbalance_scale.view(1, 1, self.num_heads, 1).clamp(min=1e-4) / temp).sqrt().to(q.dtype)
+        q = q * fac
+        k = k * fac
 
-        from .attention import memory_efficient_attention
-
+        bias = layout_cross_attn_bias(B, N, L, device=x.device, dtype=q.dtype)
+        if return_weights:
+            logits = (q.transpose(1, 2) @ k.permute(0, 2, 3, 1)) * self.scale
+            if bias is not None:
+                logits = logits + bias
+            weights = logits.softmax(dim=-1)
+            out = (weights @ v.transpose(1, 2)).transpose(1, 2).reshape(B, N, D)
+            return self.out_proj(out), weights
         out = memory_efficient_attention(
-            q.transpose(1, 2),
-            k.transpose(1, 2),
-            v.transpose(1, 2),
-            scale=self.scale,
+            q, k, v, attn_mask=bias, scale=self.scale, use_xformers=use_xformers and bias is None
         )
-        out = out.reshape(B, N, D)
-        return self.out_proj(out)
+        return self.out_proj(out.reshape(B, N, D))
 
 
 __all__ = ["TACA"]

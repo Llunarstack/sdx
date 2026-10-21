@@ -41,7 +41,7 @@
 | [guides/HARDWARE.md](guides/HARDWARE.md) | VRAM, storage, latent cache |
 | [guides/BOOK_COMIC_TECH.md](guides/BOOK_COMIC_TECH.md) | Sequential art + `generate_book` |
 | [guides/REPRODUCIBILITY.md](guides/REPRODUCIBILITY.md) | `--seed`, `--deterministic` |
-| [guides/INTEGRATION.md](guides/INTEGRATION.md) | Data cleaning, spatial DSL |
+| [guides/INTEGRATION.md](guides/INTEGRATION.md) | Quality tooling, spatial DSL |
 | [guides/IMAGE_CAPTIONING.md](guides/IMAGE_CAPTIONING.md) | Captioning tooling |
 | [guides/SAMPLING.md](guides/SAMPLING.md) | Solvers and sampling schedules |
 

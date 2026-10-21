@@ -106,7 +106,7 @@ See `examples/scene_tier1.example.json` and `examples/scene_i2v_control.example.
 
 ## Flow (under the hood)
 
-1. **Plan** — split prompt into shots (`shot_planner.py`, uses `frontier/cinema/shot_grammar`)
+1. **Plan** — split prompt into shots (`shot_planner.py`, uses `frontier/imagination.py`)
 2. **Retrieve** — rank local clips, `data/video_catalog.json`, optional Pexels (`PEXELS_API_KEY`)
 3. **Extract** — ffmpeg/OpenCV frame extraction
 4. **Edit keyframes** — `sample.py` img2img on every Nth frame
@@ -135,7 +135,8 @@ See `examples/scene_tier1.example.json` and `examples/scene_i2v_control.example.
 
 ### Edit block (scene JSON)
 
-Tune the engine without touching Python:
+Tune the engine without touching Python. `"video_quality": "lite" | "standard" | "strong" | "max"` and
+`"motion_grammar"` fill these for you; see [docs/guides/VIDEOMAX.md](../../docs/guides/VIDEOMAX.md).
 
 ```json
 "edit": {

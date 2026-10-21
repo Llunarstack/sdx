@@ -9,11 +9,19 @@ the hub when weights are needed.
 from __future__ import annotations
 
 import os
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from utils.modeling.model_paths import model_dir, repo_root
+from utils.modeling.model_paths import (
+    default_codeformer_path,
+    default_gfpgan_path,
+    default_realesrgan_path,
+    default_swinir_classical_path,
+    model_dir,
+    repo_root,
+)
 
 # Small files only — no weight checkpoints.
 # Include both root-level (`*.json`) and nested (`**/*.json`) patterns:
@@ -179,7 +187,7 @@ HF_SCAFFOLD_REGISTRY: tuple[HFModelEntry, ...] = (
     _entry("PerceptCLIP_IQA", "PerceptCLIP/PerceptCLIP_IQA", "reward"),
     _entry("LAION-Aesthetic-v2", "camenduru/improved-aesthetic-predictor", "reward"),
     _entry("OneAlign", "Q-Future/OneAlign", "reward"),
-    _entry("CAFE-Aesthetic", "cafeai/cafe_aesthetic_classifier", "reward"),
+    _entry("CAFE-Aesthetic", "cafeai/cafe_aesthetic", "reward"),
     _entry("MUSIQ", "chengaz/MUSIQ", "reward"),
     _entry("CLIP-IQA", "djghosh/aesthetics-scorer", "reward"),
     # Vision encoders (alignment / REPA experiments)
@@ -274,10 +282,6 @@ def scaffold_registry() -> list[HFModelEntry]:
     return list(HF_SCAFFOLD_REGISTRY)
 
 
-def scaffold_by_role(role: str) -> list[HFModelEntry]:
-    return [e for e in HF_SCAFFOLD_REGISTRY if e.role == role]
-
-
 def has_local_weights(local_dir: str | Path) -> bool:
     p = Path(local_dir)
     if not p.is_dir():
@@ -363,15 +367,44 @@ def resolve_entries(
     return entries
 
 
+# Post-process models (name -> local path resolver) reported by eval summaries.
+UPSCALE_MODELS = {"Real-ESRGAN": default_realesrgan_path, "SwinIR-classical-x2": default_swinir_classical_path}
+FACE_RESTORE_MODELS = {"CodeFormer": default_codeformer_path, "GFPGAN": default_gfpgan_path}
+
+
+def role_counts() -> dict[str, int]:
+    return dict(sorted(Counter(e.role for e in HF_SCAFFOLD_REGISTRY).items()))
+
+
+def registry_summary() -> dict[str, object]:
+    """Registry size, per-role counts and how many entries have a local folder / real weights."""
+    exists = weights = 0
+    for e in HF_SCAFFOLD_REGISTRY:
+        fp = model_dir() / e.name
+        if fp.is_dir() and any(fp.iterdir()):
+            exists += 1
+            weights += has_local_weights(fp)
+    return {
+        "total_registry": len(HF_SCAFFOLD_REGISTRY),
+        "role_counts": role_counts(),
+        "local_folders": exists,
+        "with_weights": weights,
+        "config_only": exists - weights,
+    }
+
+
 __all__ = [
     "CONFIG_ONLY_ALLOW",
     "CONFIG_ONLY_IGNORE",
+    "FACE_RESTORE_MODELS",
     "HFModelEntry",
     "HF_SCAFFOLD_REGISTRY",
+    "UPSCALE_MODELS",
     "download_scaffold_batch",
     "download_scaffold_entry",
     "has_local_weights",
+    "registry_summary",
     "resolve_entries",
-    "scaffold_by_role",
+    "role_counts",
     "scaffold_registry",
 ]

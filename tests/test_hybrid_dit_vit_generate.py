@@ -168,7 +168,12 @@ def test_uncertainty_score_tracks_confidence() -> None:
 
 
 def test_signature_novelty_increases_with_distance() -> None:
-    mem = [(10.0, 10.0, 10.0, 5.0, 5.0, 5.0)]
-    near = (12.0, 11.0, 10.0, 5.0, 5.0, 5.0)
-    far = (220.0, 210.0, 215.0, 70.0, 68.0, 72.0)
-    assert signature_novelty(far, mem) > signature_novelty(near, mem)
+    import numpy as np
+    from utils.quality.variation_guard import image_signature
+
+    def sig(rgb):
+        return image_signature(np.full((32, 32, 3), rgb, dtype=np.uint8))
+
+    mem = [sig((10, 10, 10))]
+    assert signature_novelty(sig((220, 210, 215)), mem) > signature_novelty(sig((12, 11, 10)), mem)
+    assert signature_novelty(sig((12, 11, 10)), []) == 1.0

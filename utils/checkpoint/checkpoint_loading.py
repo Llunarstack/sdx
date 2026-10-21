@@ -34,22 +34,37 @@ def load_dit_text_checkpoint(
 
     model_builder = DiT_models_text.get(model_name) or DiT_models_text["DiT-XL/2-Text"]
     model = model_builder(**get_dit_build_kwargs(config, class_dropout_prob=0.0))
-    model_state_dict = checkpoint_data.get("ema") or checkpoint_data.get("model")
-    model.load_state_dict(model_state_dict, strict=True)
+    use_ema = bool(checkpoint_data.get("ema"))
+    model.load_state_dict(checkpoint_data["ema"] if use_ema else checkpoint_data.get("model"), strict=True)
     model = model.to(device).eval()
 
+    def _aux(key: str):
+        """The EMA copy of an auxiliary module trained with the DiT (paired with EMA weights), else its live state."""
+        return (checkpoint_data.get(f"ema_{key}") if use_ema else None) or checkpoint_data.get(key)
+
     rae_bridge = None
-    rae_bridge_state_dict = checkpoint_data.get("rae_latent_bridge")
+    rae_bridge_state_dict = _aux("rae_latent_bridge")
     if isinstance(rae_bridge_state_dict, dict) and rae_bridge_state_dict.get("to_dit.weight") is not None:
         rae_channels = int(rae_bridge_state_dict["to_dit.weight"].shape[1])
         rae_bridge = RAELatentBridge(rae_channels, 4)
         rae_bridge.load_state_dict(rae_bridge_state_dict, strict=True)
         rae_bridge = rae_bridge.to(device).eval()
 
-    fusion_state_dict = checkpoint_data.get("text_encoder_fusion")
+    fusion_state_dict = _aux("text_encoder_fusion")
     if not isinstance(fusion_state_dict, dict):
         fusion_state_dict = None
     return model, config, rae_bridge, str(model_name), fusion_state_dict
+
+
+def finetuned_checkpoint(model, config, rae_bridge=None, fusion_sd: dict | None = None, **extra) -> dict:
+    """Checkpoint of a model fine-tuned from :func:`load_dit_text_checkpoint` output (weights double as ``ema``),
+    keeping the RAE bridge and text-encoder fusion it was loaded with so inference still finds them."""
+    ckpt = {"model": model.state_dict(), "ema": model.state_dict(), "config": config, **extra}
+    if rae_bridge is not None:
+        ckpt["rae_latent_bridge"] = rae_bridge.state_dict()
+    if fusion_sd:
+        ckpt["text_encoder_fusion"] = fusion_sd
+    return ckpt
 
 
 def load_sampler_checkpoint(

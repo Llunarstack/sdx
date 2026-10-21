@@ -10,10 +10,37 @@ Usage (repo root):
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import platform
 import sys
 from typing import Any
+
+# Optional packages worth knowing about in a bug report (see toolkit/extras/requirements-suggested.txt).
+_OPTIONAL_MODULES = (
+    "timm",
+    "xformers",
+    "diffusers",
+    "transformers",
+    "xxhash",
+    "rich",
+    "humanize",
+    "orjson",
+    "psutil",
+    "scipy",
+    "cv2",
+    "wandb",
+    "tensorboard",
+)
+
+
+def _version(mod_name: str) -> str | None:
+    if importlib.util.find_spec(mod_name) is None:
+        return None
+    try:
+        return str(getattr(__import__(mod_name), "__version__", "installed"))
+    except Exception as e:
+        return f"import failed: {e}"
 
 
 def collect_env() -> dict[str, Any]:
@@ -31,43 +58,20 @@ def collect_env() -> dict[str, Any]:
             out["cuda_device"] = torch.cuda.get_device_name(0)
             out["cuda_version"] = getattr(torch.version, "cuda", None)
         out["cudnn_version"] = str(torch.backends.cudnn.version()) if torch.backends.cudnn.is_available() else None
-        if isinstance(out["torch"], str) and "+cpu" in out["torch"] and not out["cuda_available"]:
+        if "+cpu" in str(out["torch"]) and not out["cuda_available"]:
             out["cuda_wheel_hint"] = (
                 "pip install --force-reinstall -r requirements-cuda128.txt  # GPU: replace CPU torch (+cu128)"
             )
     except ImportError:
         out["torch"] = None
 
-    # Optional stack
-    for mod, label in (
-        ("timm", "timm"),
-        ("xformers", "xformers"),
-        ("diffusers", "diffusers"),
-        ("transformers", "transformers"),
-    ):
-        try:
-            m = __import__(mod)
-            out[label] = getattr(m, "__version__", "installed")
-        except ImportError:
-            out[label] = None
-
-    try:
-        import triton
-
-        out["triton"] = getattr(triton, "__version__", "installed")
-    except ImportError:
-        out["triton"] = None
+    out["triton"] = _version("triton")
+    if out["triton"] is None:
         if sys.platform == "win32":
             out["triton_hint"] = "pip install triton-windows  # xformers expects import triton on Windows"
         elif sys.platform == "linux":
             out["triton_hint"] = "pip install triton  # optional; many CUDA stacks bundle it with torch"
-
-    try:
-        from toolkit.libs.optional_imports import describe_optional_libs
-
-        out["optional_libs"] = describe_optional_libs()
-    except Exception:
-        out["optional_libs"] = {}
+    out["optional_libs"] = {m: _version(m) for m in _OPTIONAL_MODULES}
 
     try:
         from utils.native import native_stack_status
@@ -75,7 +79,6 @@ def collect_env() -> dict[str, Any]:
         out["sdx_native"] = native_stack_status()
     except Exception as e:
         out["sdx_native"] = {"error": str(e)}
-
     return out
 
 
@@ -89,7 +92,7 @@ def main() -> int:
         return 0
     print("=== SDX env_health ===")
     for k, v in data.items():
-        if k == "sdx_native" and isinstance(v, dict):
+        if isinstance(v, dict):
             print(f"{k}:")
             for sk, sv in v.items():
                 print(f"  {sk}: {sv}")

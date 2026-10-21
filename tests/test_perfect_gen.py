@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from utils.agentic.clarify_pose_place import (
+from utils.agentic.gen_interview import (
     apply_clarify_answers,
     assume_pose_place_defaults,
     build_clarify_questions,

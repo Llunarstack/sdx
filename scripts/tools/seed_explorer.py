@@ -2,10 +2,10 @@
 Seed explorer: quickly scout diverse seeds for a prompt.
 
 Usage:
-    python -m scripts.tools.seed_explorer --ckpt results/.../best.pt --prompt "..." --preset sdxl --rows 2 --cols 4
+    python -m scripts.tools seed_explorer --ckpt results/.../best.pt --prompt "..." --preset sdxl --rows 2 --cols 4
 
 This:
-- Calls sample.main() programmatically with different seeds.
+- Runs sample.py once per seed.
 - Saves N images and a grid, plus seeds.json with used seeds.
 """
 
@@ -20,20 +20,26 @@ from pathlib import Path
 from PIL import Image
 
 
-def _make_grid(images: list[Path], rows: int, cols: int, out_path: Path) -> None:
-    pil_images = [Image.open(p).convert("RGB") for p in images]
+def save_grid(images: list[Path], out_path: Path, *, cols: int, rows: int | None = None) -> None:
+    """Paste readable images row-major into a ``cols``-wide grid (cell size of the first image)."""
+    pil_images = []
+    for p in images:
+        try:
+            pil_images.append(Image.open(p).convert("RGB"))
+        except OSError:
+            continue
     if not pil_images:
+        print("No images to grid.")
         return
+    rows = rows or -(-len(pil_images) // cols)
     w, h = pil_images[0].size
-    grid = Image.new("RGB", (cols * w, rows * h))
-    for idx, img in enumerate(pil_images):
+    grid = Image.new("RGB", (cols * w, rows * h), (20, 20, 20))
+    for idx, img in enumerate(pil_images[: rows * cols]):
         r, c = divmod(idx, cols)
-        if r >= rows:
-            break
         grid.paste(img, (c * w, r * h))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     grid.save(out_path)
-    print(f"Saved grid: {out_path}")
+    print(f"Saved grid: {out_path} ({len(pil_images)} images)")
 
 
 def main() -> None:
@@ -84,7 +90,7 @@ def main() -> None:
 
     # Save grid and seeds.json
     grid_path = out_dir / "grid.png"
-    _make_grid(img_paths, args.rows, args.cols, grid_path)
+    save_grid(img_paths, grid_path, cols=args.cols, rows=args.rows)
     (out_dir / "seeds.json").write_text(json.dumps({"seeds": seeds}, indent=2), encoding="utf-8")
     print(f"Saved seeds: {out_dir / 'seeds.json'}")
 

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sys
 
+from utils.prompt.tags import append_csv
+
 from ..context import PromptContext, StackMode
-from ..tokens import append_csv
 
 
 def stage_post_enrich(ctx: PromptContext) -> None:
@@ -77,10 +78,16 @@ def stage_neg_filter(ctx: PromptContext) -> None:
     if args is not None and getattr(args, "no_neg_filter", False):
         ctx.trace.append("neg_filter:skipped")
         return
-    from utils.prompt.fast_paths import filter_negative_by_positive
+    from utils.prompt.tags import filter_negative_by_positive
 
+    # Conflicts are judged against what was asked for (the user's words and the art-direction plan),
+    # not pack text: an anti-AI positive mentioning skin must not cancel the "plastic skin" negative.
+    asked = str(getattr(args, "_user_prompt", "") or "") if args is not None else ""
+    ad = getattr(args, "_art_direction", None) if args is not None else None
+    if asked and ad is not None:
+        asked = f"{asked}, {ad.caption()}"
     raw = ctx.negative
-    filtered = filter_negative_by_positive(ctx.positive, raw)
+    filtered = filter_negative_by_positive(asked or ctx.positive, raw)
     if not filtered.strip():
         filtered = " "
     if filtered != raw:

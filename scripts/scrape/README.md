@@ -7,9 +7,14 @@ consumes directly.
 ## Safety (mandatory)
 
 `safety.py` hard-blocks CSAM-adjacent tags (loli/shota/cub/underage/etc.) on
-**every** post before download. It cannot be disabled from the CLI. This is a
-legal requirement when scraping these sites — do not remove it. The run summary
-reports how many posts were blocked and by which tags.
+**every** post before download, and also screens each tag with the training rule of
+`utils/safety/minor_guard.py` (spelling variants such as `oppai_loli`, `l0li`, `teen`).
+Posts with no tags cannot be screened and are dropped (`<untagged>` in the summary).
+Booru tags can omit youth tags, so `setup/tag_manifest_wd.py` also drops rows whose
+WD-tagger tags trip the same rule.
+It cannot be disabled from the CLI. This is a legal requirement when scraping these
+sites — do not remove it. The run summary reports how many posts were blocked and by
+which tags.
 
 ## Credentials
 

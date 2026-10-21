@@ -21,12 +21,11 @@ from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import Any
 
+from pipelines.book_comic.book_challenging_content import challenging_content_from_mapping
+from pipelines.book_comic.book_text_continuity import text_continuity_clause
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
-# ---------------------------------------------------------------------------
-# Negative add-ons (append to your base negative; keep lexicon negatives too)
-# ---------------------------------------------------------------------------
-
+# Negative add-ons are appended to the base negative (lexicon negatives stay).
 CONSISTENCY_NEGATIVE_LIGHT = (
     "different face in every panel, random hair color change, outfit changes mid-page, "
     "morphing vehicle silhouette, prop redesign each panel, duplicate clones of same character"
@@ -58,17 +57,11 @@ def character_appearance_clause(
     extra: str = "",
 ) -> str:
     """Stable visual tokens for one recurring cast member."""
-    bits: list[str] = []
-    if (label or "").strip():
-        bits.append(f"recurring character {label.strip()}")
-    else:
-        bits.append("same recurring protagonist")
-    for part in (age_vibe, build, face, skin, hair, eyes, signature_items, extra):
-        s = (part or "").strip()
-        if s:
-            bits.append(s)
-    bits.append(CHARACTER_SILHOUETTE_HINT)
-    return merge_prompt_fragments(*bits)
+    label = (label or "").strip()
+    head = f"recurring character {label}" if label else "same recurring protagonist"
+    return merge_prompt_fragments(
+        head, age_vibe, build, face, skin, hair, eyes, signature_items, extra, CHARACTER_SILHOUETTE_HINT
+    )
 
 
 def costume_lock_clause(outfit: str) -> str:
@@ -114,28 +107,27 @@ def setting_continuity_clause(
     loc = (location or "").strip()
     if not loc:
         return ""
-    bits = [f"continuous setting: {loc}"]
-    for part in (time_of_day, weather, era, architecture_style):
-        s = (part or "").strip()
-        if s:
-            bits.append(s)
-    bits.append("consistent background geography and props in environment")
-    return merge_prompt_fragments(*bits)
+    return merge_prompt_fragments(
+        f"continuous setting: {loc}",
+        time_of_day,
+        weather,
+        era,
+        architecture_style,
+        "consistent background geography and props in environment",
+    )
 
 
 def palette_lighting_clause(*, palette: str = "", lighting: str = "") -> str:
     """Color script + light direction (reduces drift when inpaint chain is weak)."""
-    bits: list[str] = []
-    p = (palette or "").strip()
-    lighting_s = (lighting or "").strip()
-    if p:
-        bits.append(f"locked color palette: {p}")
-    if lighting_s:
-        bits.append(f"consistent lighting: {lighting_s}")
-    if not bits:
+    palette = (palette or "").strip()
+    lighting = (lighting or "").strip()
+    if not (palette or lighting):
         return ""
-    bits.append("same color grading across panels")
-    return merge_prompt_fragments(*bits)
+    return merge_prompt_fragments(
+        f"locked color palette: {palette}" if palette else "",
+        f"consistent lighting: {lighting}" if lighting else "",
+        "same color grading across panels",
+    )
 
 
 def lettering_hard_clause(
@@ -168,55 +160,43 @@ def creature_or_mascot_clause(description: str, *, species_lock: str = "") -> st
     return f"{head}, consistent anatomy and markings across appearances"
 
 
-def merge_consistency_positive(*fragments: str) -> str:
-    """Join non-empty consistency fragments (comma-separated)."""
-    return merge_prompt_fragments(*fragments)
-
-
 def consistency_negative_addon(level: str) -> str:
-    lv = (level or "none").lower().strip()
-    if lv == "light":
-        return CONSISTENCY_NEGATIVE_LIGHT
-    if lv == "strong":
-        return CONSISTENCY_NEGATIVE_STRONG
-    return ""
+    """Negative add-on for ``light`` / ``strong``; "" otherwise."""
+    lv = (level or "").lower().strip()
+    return {"light": CONSISTENCY_NEGATIVE_LIGHT, "strong": CONSISTENCY_NEGATIVE_STRONG}.get(lv, "")
 
-
-# ---------------------------------------------------------------------------
-# JSON + CLI merge (spec consumed by generate_book)
-# ---------------------------------------------------------------------------
 
 _CHAR_KEYS = frozenset({"label", "hair", "eyes", "skin", "build", "face", "signature_items", "age_vibe", "extra"})
 
 
 def load_consistency_json(path: Path) -> dict[str, Any]:
-    raw = path.read_text(encoding="utf-8")
-    data = json.loads(raw)
+    data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("consistency JSON root must be an object")
     return data
 
 
+def _field(d: Mapping[str, Any], key: str) -> str:
+    """``d[key]`` as stripped text; missing / null / empty -> "" (never the literal text None)."""
+    return str(d.get(key) or "").strip()
+
+
 def _character_from_mapping(d: Mapping[str, Any]) -> str:
-    kw = {k: str(v).strip() for k, v in d.items() if k in _CHAR_KEYS and str(v).strip()}
-    return character_appearance_clause(**kw)  # type: ignore[arg-type]
+    return character_appearance_clause(**{k: _field(d, k) for k in _CHAR_KEYS if k in d})
 
 
 def _props_from_spec_value(props: Any) -> list[str]:
+    """Prop clauses from a ``;``-separated string or a list of strings / ``{description, label}`` dicts."""
+    if isinstance(props, str):
+        props = props.split(";")
+    if not isinstance(props, list):
+        return []
     out: list[str] = []
-    if isinstance(props, list):
-        for p in props:
-            if isinstance(p, str) and p.strip():
-                out.append(object_prop_clause(p.strip()))
-            elif isinstance(p, dict):
-                desc = str(p.get("description", "")).strip()
-                if desc:
-                    out.append(object_prop_clause(desc, codename=str(p.get("label", "") or "")))
-    elif isinstance(props, str) and props.strip():
-        for seg in props.split(";"):
-            s = seg.strip()
-            if s:
-                out.append(object_prop_clause(s))
+    for p in props:
+        if isinstance(p, str):
+            out.append(object_prop_clause(p))
+        elif isinstance(p, dict):
+            out.append(object_prop_clause(_field(p, "description"), codename=_field(p, "label")))
     return out
 
 
@@ -238,7 +218,7 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
 
     veh = spec.get("vehicle")
     if isinstance(veh, dict):
-        desc = str(veh.get("description", "")).strip()
+        desc = _field(veh, "description")
         if desc:
             fragments.append(vehicle_clause(desc, interior=bool(veh.get("interior"))))
     elif isinstance(veh, str) and veh.strip():
@@ -246,15 +226,15 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
 
     st = spec.get("setting")
     if isinstance(st, dict):
-        loc = str(st.get("location", "")).strip()
+        loc = _field(st, "location")
         if loc:
             fragments.append(
                 setting_continuity_clause(
                     loc,
-                    time_of_day=str(st.get("time_of_day", "") or ""),
-                    weather=str(st.get("weather", "") or ""),
-                    era=str(st.get("era", "") or ""),
-                    architecture_style=str(st.get("architecture_style", "") or ""),
+                    time_of_day=_field(st, "time_of_day"),
+                    weather=_field(st, "weather"),
+                    era=_field(st, "era"),
+                    architecture_style=_field(st, "architecture_style"),
                 )
             )
     elif isinstance(st, str) and st.strip():
@@ -262,33 +242,26 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
 
     mascot = spec.get("creature") or spec.get("mascot") or spec.get("pet")
     if isinstance(mascot, dict):
-        desc = str(mascot.get("description", "")).strip()
+        desc = _field(mascot, "description")
         if desc:
-            fragments.append(creature_or_mascot_clause(desc, species_lock=str(mascot.get("species", "") or "")))
+            fragments.append(creature_or_mascot_clause(desc, species_lock=_field(mascot, "species")))
     elif isinstance(mascot, str) and mascot.strip():
         fragments.append(creature_or_mascot_clause(mascot))
 
     pl = spec.get("palette_lighting")
     if isinstance(pl, dict):
-        frag = palette_lighting_clause(
-            palette=str(pl.get("palette", "") or ""),
-            lighting=str(pl.get("lighting", "") or ""),
-        )
-        if frag:
-            fragments.append(frag)
+        fragments.append(palette_lighting_clause(palette=_field(pl, "palette"), lighting=_field(pl, "lighting")))
 
     let = spec.get("lettering")
     if isinstance(let, dict):
         fragments.append(
             lettering_hard_clause(
-                language=str(let.get("language", "") or ""),
+                language=_field(let, "language"),
                 all_caps_dialogue=bool(let.get("all_caps_dialogue", False)),
                 emphasize_quotes=bool(let.get("emphasize_quotes", True)),
             )
         )
-        ex = str(let.get("extra", "")).strip()
-        if ex:
-            fragments.append(ex)
+        fragments.append(_field(let, "extra"))
     elif spec.get("lettering_hard") is True:
         fragments.append(lettering_hard_clause())
 
@@ -298,19 +271,11 @@ def positive_block_from_mapping(spec: Mapping[str, Any]) -> str:
 
     tc = spec.get("text_continuity")
     if isinstance(tc, dict):
-        from pipelines.book_comic.book_text_continuity import text_continuity_clause
+        fragments.append(text_continuity_clause(tc))
 
-        tfrag = text_continuity_clause(tc)
-        if tfrag:
-            fragments.append(tfrag)
-
-    ch = spec.get("challenging_content")
-    if isinstance(ch, dict):
-        from pipelines.book_comic.book_challenging_content import challenging_content_from_mapping
-
-        cfrag = challenging_content_from_mapping(ch)
-        if cfrag:
-            fragments.append(cfrag)
+    challenge = spec.get("challenging_content")
+    if isinstance(challenge, dict):
+        fragments.append(challenging_content_from_mapping(challenge))
 
     return merge_prompt_fragments(*fragments)
 
@@ -331,28 +296,22 @@ def overlay_cli_on_spec(spec: MutableMapping[str, Any], args: Any) -> None:
     def _s(name: str) -> str:
         return str(getattr(args, name, "") or "").strip()
 
-    if _s("consistency_character"):
-        spec["character"] = _s("consistency_character")
-    if _s("consistency_costume"):
-        spec["costume"] = _s("consistency_costume")
+    for key in ("character", "costume", "vehicle", "setting", "creature"):
+        value = _s(f"consistency_{key}")
+        if value:
+            spec[key] = value
     props = _s("consistency_props")
     if props:
         spec["props"] = [p.strip() for p in props.split(";") if p.strip()]
-    if _s("consistency_vehicle"):
-        spec["vehicle"] = _s("consistency_vehicle")
-    if _s("consistency_setting"):
-        spec["setting"] = _s("consistency_setting")
-    if _s("consistency_creature"):
-        spec["creature"] = _s("consistency_creature")
     pal = _s("consistency_palette")
     lig = _s("consistency_lighting")
     if pal or lig:
         existing = spec.get("palette_lighting")
-        ep = str(existing.get("palette", "")).strip() if isinstance(existing, dict) else ""
-        el = str(existing.get("lighting", "")).strip() if isinstance(existing, dict) else ""
+        if not isinstance(existing, dict):
+            existing = {}
         spec["palette_lighting"] = {
-            "palette": pal or ep,
-            "lighting": lig or el,
+            "palette": pal or _field(existing, "palette"),
+            "lighting": lig or _field(existing, "lighting"),
         }
     vx = _s("consistency_visual_extra")
     if vx:

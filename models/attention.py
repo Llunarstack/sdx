@@ -1,14 +1,23 @@
-# Memory-efficient attention: xformers with fallback to PyTorch SDPA or manual.
-# Supports causal/block-causal masks for AR.
+"""Attention primitives: xformers / SDPA memory_efficient_attention (optional SLA linear blend), the DiT
+self-attention (QK-norm, 2D RoPE, KV pooling, PAG identity rows) and the SSM token mixer."""
+
+import warnings
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .linear_attention import hybrid_attention_fraction
 from .moe import MoEProjection
+from .rope2d import RoPE2D, apply_rope2d
 
-_XFORMERS_AVAILABLE = False
-_XFORMERS_DISABLED = False  # set after first runtime failure (version/CUDA mismatch)
+try:
+    import xformers.ops as xops
+
+    _XFORMERS_AVAILABLE = True
+except ImportError:
+    _XFORMERS_AVAILABLE = False
+_XFORMERS_DISABLED = False  # set after the first runtime failure (version/CUDA mismatch)
 _LINEAR_ATTN_FRAC: float = 0.0
 
 
@@ -16,18 +25,6 @@ def set_linear_attention_fraction(frac: float) -> None:
     """Global blend for SLA-style linear attention in ``memory_efficient_attention``."""
     global _LINEAR_ATTN_FRAC
     _LINEAR_ATTN_FRAC = float(max(0.0, min(1.0, frac)))
-
-
-def get_linear_attention_fraction() -> float:
-    return float(_LINEAR_ATTN_FRAC)
-
-
-try:
-    import xformers.ops as xops
-
-    _XFORMERS_AVAILABLE = True
-except ImportError:
-    pass
 
 
 def memory_efficient_attention(
@@ -39,123 +36,36 @@ def memory_efficient_attention(
     use_xformers: bool = True,
     linear_attn_frac: float | None = None,
 ) -> torch.Tensor:
+    """Attention on ``(B, N, H, D)`` tensors, returning ``(B, N, H, D)``; other ranks go straight to SDPA.
+
+    ``attn_mask``: additive ``(N, N)`` / ``(B, N, N)`` tensor or an xformers ``AttentionBias``. Unmasked CUDA
+    calls blend in linear attention when a linear fraction is set; xformers is tried before SDPA.
     """
-    q, k, v: (B, N, H, D) or (B, H, N, D). Returns (B, N, H, D).
-    attn_mask: optional (N, N) or (B, N, N) or xformers.AttentionBias (e.g. BlockDiagonalCausalMask).
-    """
-    # Normalize to (B, N, H, D) for consistency
     if q.dim() != 4:
         return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, scale=scale)
-    B, N, H, D = q.shape
     if scale is None:
-        scale = D**-0.5
+        scale = q.shape[-1] ** -0.5
 
     lf = float(linear_attn_frac) if linear_attn_frac is not None else _LINEAR_ATTN_FRAC
     if lf > 0.0 and attn_mask is None and q.is_cuda:
-        from utils.superior.linear_attention import hybrid_attention_fraction
+        out = hybrid_attention_fraction(
+            q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2), linear_frac=lf, scale=scale
+        )
+        return out.transpose(1, 2)
 
-        qh = q.transpose(1, 2)
-        kh = k.transpose(1, 2)
-        vh = v.transpose(1, 2)
-        out_h = hybrid_attention_fraction(qh, kh, vh, linear_frac=lf, scale=scale)
-        return out_h.transpose(1, 2)
-
+    # Tensor masks go to SDPA, which broadcasts them; xformers wants an aligned, full (B, H, N, N) bias and a
+    # failure here would disable it for every later (unmasked) call too.
     global _XFORMERS_DISABLED
-    if use_xformers and _XFORMERS_AVAILABLE and not _XFORMERS_DISABLED and q.is_cuda:
+    if use_xformers and _XFORMERS_AVAILABLE and not _XFORMERS_DISABLED and q.is_cuda and not torch.is_tensor(attn_mask):
         try:
-            # xformers wants (B, N, H, D)
-            out = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attn_mask,
-                scale=scale,
-            )
-            return out
-        except Exception:
+            return xops.memory_efficient_attention(q, k, v, attn_bias=attn_mask, scale=scale)
+        except Exception as exc:  # any xformers failure: fall back to SDPA for the rest of the run
             _XFORMERS_DISABLED = True
+            warnings.warn(f"xformers attention failed ({exc!r}); using PyTorch SDPA.", RuntimeWarning, stacklevel=2)
 
-    # Fallback: (B, N, H, D) -> (B, H, N, D) for PyTorch SDPA
     q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
     out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, scale=scale)
     return out.transpose(1, 2)
-
-
-def _apply_rope_1d(x: torch.Tensor, positions: torch.Tensor, base: float = 10000.0) -> torch.Tensor:
-    """
-    Apply 1D RoPE on last-dim of q/k.
-    x: (B, N, H, D), positions: (N,) integer.
-    """
-    D = x.shape[-1]
-    D_even = D - (D % 2)
-    if D_even <= 0:
-        return x
-
-    x_even = x[..., 0:D_even:2]
-    x_odd = x[..., 1:D_even:2]
-    dim_half = D_even // 2
-
-    positions = positions.to(device=x.device, dtype=x_even.dtype)
-    idx = torch.arange(dim_half, device=x.device, dtype=x_even.dtype)
-    inv_freq = torch.pow(torch.tensor(base, device=x.device, dtype=x_even.dtype), -2.0 * idx / max(1, D_even))
-
-    angles = positions[:, None] * inv_freq[None, :]  # (N, dim_half)
-    cos = torch.cos(angles)[None, :, None, :]  # (1, N, 1, dim_half)
-    sin = torch.sin(angles)[None, :, None, :]
-
-    out_even = x_even * cos - x_odd * sin
-    out_odd = x_even * sin + x_odd * cos
-
-    out = torch.zeros_like(x)
-    out[..., 0:D_even:2] = out_even
-    out[..., 1:D_even:2] = out_odd
-    if D_even < D:
-        out[..., D_even:] = x[..., D_even:]
-    return out
-
-
-def create_block_causal_mask(num_patches_per_side: int, num_ar_blocks: int) -> torch.Tensor | None:
-    """
-    Create block-causal mask for AR: patch grid is divided into num_ar_blocks x num_ar_blocks
-    blocks; block i can only attend to blocks 0..i (causal within and across blocks).
-    num_patches_per_side = sqrt(num_patches). Returns (N, N) float mask, -inf where masked.
-    """
-    if num_ar_blocks <= 0:
-        return None
-    N = num_patches_per_side * num_patches_per_side
-    # Block index for each patch: row and col in block grid
-    p = num_patches_per_side
-    b = num_ar_blocks
-    block_h = (p + b - 1) // b
-    mask = torch.zeros(N, N, dtype=torch.float32)
-    for i in range(N):
-        ri, ci = i // p, i % p
-        bi = (ri // block_h) * b + (ci * b // p) if p >= b else (ri * b // p) * b + (ci * b // p)
-        bi = min(bi, b * b - 1)
-        for j in range(N):
-            rj, cj = j // p, j % p
-            bj = (rj // block_h) * b + (cj * b // p) if p >= b else (rj * b // p) * b + (cj * b // p)
-            bj = min(bj, b * b - 1)
-            if bj > bi:
-                mask[i, j] = float("-inf")
-    return mask
-
-
-def create_block_causal_mask_2d(
-    h: int,
-    w: int,
-    num_ar_blocks: int,
-    block_order: str = "raster",
-) -> torch.Tensor:
-    """
-    h, w = patches per side. num_ar_blocks = blocks per dim (e.g. 2 -> 2x2 grid).
-    block_order: ``raster`` (default), ``zorder`` (Morton), ``snake``, or ``spiral``.
-    See ``models/ar_masks_extended.py``.
-    Returns (N, N) mask: -inf where not allowed.
-    """
-    from .ar_masks_extended import create_block_causal_mask_2d as _create_ar_mask_2d
-
-    return _create_ar_mask_2d(h, w, num_ar_blocks, block_order=block_order)
 
 
 class SelfAttention(nn.Module):
@@ -173,6 +83,7 @@ class SelfAttention(nn.Module):
         rope_base: float = 10000.0,
         kv_merge_factor: int = 1,
         qk_norm: bool = False,
+        qk_norm_eps: float | None = None,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -181,19 +92,16 @@ class SelfAttention(nn.Module):
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size)
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.moe_out_proj = None
-        if moe_num_experts and int(moe_num_experts) > 0:
-            self.moe_out_proj = MoEProjection(
-                hidden_size,
-                num_experts=int(moe_num_experts),
-                top_k=int(moe_top_k),
-            )
+        if moe_num_experts > 0:
+            self.moe_out_proj = MoEProjection(hidden_size, num_experts=int(moe_num_experts), top_k=int(moe_top_k))
         self.dropout = nn.Dropout(dropout)
         self.use_rope = bool(use_rope)
         self.rope_base = float(rope_base)
+        self.rope = RoPE2D(self.head_dim, base=self.rope_base) if self.use_rope else None
         self.kv_merge_factor = int(kv_merge_factor)
-        # QK-norm (SD3.5-style): normalise Q and K before attention for training stability.
-        self.q_norm = nn.RMSNorm(self.head_dim) if qk_norm else None
-        self.k_norm = nn.RMSNorm(self.head_dim) if qk_norm else None
+        # QK-norm (SD3.5-style): per-head RMSNorm on Q and K for training stability.
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
 
     def forward(
         self,
@@ -204,60 +112,71 @@ class SelfAttention(nn.Module):
         router_override=None,
         report_aux_loss: bool = False,
         num_patch_tokens: int | None = None,
+        identity_from: int | None = None,
+        grid_hw: tuple[int, int] | None = None,
     ) -> torch.Tensor:
+        """``identity_from=i``: batch rows ``i:`` use an identity attention map, so their output is the
+        value projection (Perturbed-Attention Guidance, Ahn et al. 2024).
+
+        ``grid_hw``: patch rows/cols of the first ``rows*cols`` tokens (any trailing tokens are registers).
+        Needed by ``use_rope`` (axial 2D RoPE, FLUX/SD3 layout) and by ``kv_merge_factor`` pooling; without
+        it a square patch grid of ``num_patch_tokens`` is assumed.
+        """
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
         q, k, v = qkv.unbind(2)
-
-        # QK-norm: normalise per head before attention (SD3.5-style stability).
+        v_tokens = v
         if self.q_norm is not None:
             q = self.q_norm(q)
         if self.k_norm is not None:
             k = self.k_norm(k)
 
-        # Hierarchical Patch Merging 2.0: kv pooling for keys/values only.
-        # This keeps query resolution intact but reduces KV length for attention.
-        if self.kv_merge_factor and int(self.kv_merge_factor) > 1:
+        if grid_hw is None and num_patch_tokens:
+            side = int(round(int(num_patch_tokens) ** 0.5))
+            grid_hw = (side, side) if side * side == int(num_patch_tokens) else None
+
+        # Rotate before KV pooling so each pooled key averages keys that carry their true positions.
+        if self.use_rope:
+            if grid_hw is None:
+                raise ValueError("use_rope needs grid_hw (patch rows, cols) for 2D RoPE.")
+            n_rot = int(grid_hw[0]) * int(grid_hw[1])
+            cos, sin = self.rope.get_freqs(int(grid_hw[0]), int(grid_hw[1]), device=x.device)
+            q_rot, k_rot = apply_rope2d(q[:, :n_rot], k[:, :n_rot], cos, sin, input_format="BNHD")
+            q = torch.cat([q_rot, q[:, n_rot:]], dim=1)
+            k = torch.cat([k_rot, k[:, n_rot:]], dim=1)
+
+        # KV pooling: keys/values are mean-pooled over the patch grid; queries keep full resolution.
+        if self.kv_merge_factor > 1:
             if attn_mask is not None:
                 raise ValueError("kv_merge_factor>1 is not supported with attn_mask in this implementation.")
-            if num_patch_tokens is None:
-                raise ValueError("kv_merge_factor>1 requires num_patch_tokens.")
+            if grid_hw is None:
+                raise ValueError("kv_merge_factor>1 requires grid_hw or a square num_patch_tokens.")
             f = int(self.kv_merge_factor)
-            N_patch = int(num_patch_tokens)
+            gh, gw = int(grid_hw[0]), int(grid_hw[1])
+            N_patch = gh * gw
             if N_patch <= 0 or N_patch > N:
-                raise ValueError(f"Invalid num_patch_tokens={N_patch} for N={N}.")
-            p = int(round(N_patch**0.5))
-            if p * p != N_patch:
-                raise ValueError(f"num_patch_tokens={N_patch} is not a perfect square.")
-            if p % f != 0:
-                raise ValueError(f"kv_merge_factor={f} must divide num_patches_per_side={p}.")
-            N_reg = N - N_patch
+                raise ValueError(f"Invalid patch grid {gh}x{gw} for N={N}.")
 
-            # Pool patch tokens into a coarser grid: (B, p, p, H, D) -> (B, p/f, p/f, H, D)
-            k_patch = k[:, :N_patch].reshape(B, p, p, self.num_heads, self.head_dim)
-            v_patch = v[:, :N_patch].reshape(B, p, p, self.num_heads, self.head_dim)
-            k_patch = k_patch.reshape(B, p // f, f, p // f, f, self.num_heads, self.head_dim).mean(dim=(2, 4))
-            v_patch = v_patch.reshape(B, p // f, f, p // f, f, self.num_heads, self.head_dim).mean(dim=(2, 4))
-            k_patch = k_patch.reshape(B, (p // f) * (p // f), self.num_heads, self.head_dim)
-            v_patch = v_patch.reshape(B, (p // f) * (p // f), self.num_heads, self.head_dim)
+            def _pool(t: torch.Tensor) -> torch.Tensor:
+                # f x f mean pool over the patch grid; edge windows of a non-divisible grid average what they cover.
+                g = t[:, :N_patch].reshape(B, gh, gw, C).permute(0, 3, 1, 2)
+                g = F.avg_pool2d(g, f, f, ceil_mode=True)
+                return g.flatten(2).transpose(1, 2).reshape(B, -1, self.num_heads, self.head_dim)
 
-            if N_reg > 0:
-                k_reg = k[:, N_patch:]
-                v_reg = v[:, N_patch:]
-                k = torch.cat([k_patch, k_reg], dim=1)
-                v = torch.cat([v_patch, v_reg], dim=1)
-            else:
-                k = k_patch
-                v = v_patch
+            k = torch.cat([_pool(k), k[:, N_patch:]], dim=1)
+            v = torch.cat([_pool(v), v[:, N_patch:]], dim=1)
 
-        # RoPE: apply 1D rotary embeddings to self-attention q/k by token index.
-        if self.use_rope:
-            pos_q = torch.arange(N, device=x.device, dtype=torch.long)
-            q = _apply_rope_1d(q, pos_q, base=self.rope_base)
-            pos_k = torch.arange(k.shape[1], device=x.device, dtype=torch.long)
-            k = _apply_rope_1d(k, pos_k, base=self.rope_base)
-
-        out = memory_efficient_attention(q, k, v, attn_mask=attn_mask, scale=self.scale, use_xformers=use_xformers)
+        if identity_from is None:
+            out = memory_efficient_attention(q, k, v, attn_mask=attn_mask, scale=self.scale, use_xformers=use_xformers)
+        else:
+            p = int(identity_from)
+            out = v_tokens
+            if p > 0:
+                mask = attn_mask[:p] if torch.is_tensor(attn_mask) and attn_mask.dim() == 3 else attn_mask
+                attended = memory_efficient_attention(
+                    q[:p], k[:p], v[:p], attn_mask=mask, scale=self.scale, use_xformers=use_xformers
+                )
+                out = torch.cat([attended, v_tokens[p:]], dim=0)
         out = out.reshape(B, N, C)
         if self.moe_out_proj is not None:
             out = self.moe_out_proj(
@@ -272,48 +191,28 @@ class SelfAttention(nn.Module):
 
 
 class SSMTokenMixer(nn.Module):
-    """
-    Lightweight SSM-ish token mixer (drop-in replacement for self-attention output).
+    """Depthwise-conv token mixer, an O(N) stand-in for self-attention in hybrid SSM-Transformer stacks.
 
-    Complexity is close to O(N) for the mixing operation (depthwise conv over token axis).
-    This is NOT full Mamba, but it provides the same integration point in DiT blocks so
-    you can explore "hybrid SSM-Transformer" behavior without extra dependencies.
+    Not Mamba: one depthwise conv along the token axis between two projections. It ignores attention masks
+    (so block-AR masking does not apply) and accepts ``SelfAttention``'s keyword arguments only to stay
+    call-compatible inside DiT blocks.
     """
 
     def __init__(self, hidden_size: int, *, kernel_size: int = 7, dropout: float = 0.0):
         super().__init__()
-        kernel_size = int(kernel_size)
-        kernel_size = max(3, kernel_size | 1)  # force odd >= 3
-        self.kernel_size = kernel_size
+        self.kernel_size = max(3, int(kernel_size) | 1)  # odd, >= 3
         self.in_proj = nn.Linear(hidden_size, hidden_size)
-        # Depthwise conv over token sequence length N (B, C, N).
         self.dwconv = nn.Conv1d(
             hidden_size,
             hidden_size,
             kernel_size=self.kernel_size,
             padding=self.kernel_size // 2,
             groups=hidden_size,
-            bias=True,
         )
         self.act = nn.GELU()
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        attn_mask: torch.Tensor | None = None,
-        use_xformers: bool = True,
-        routing_context: torch.Tensor | None = None,
-        router_override=None,
-        report_aux_loss: bool = False,
-        num_patch_tokens: int | None = None,
-    ) -> torch.Tensor:
-        # x: (B, N, C)
-        y = self.in_proj(x)
-        y = y.transpose(1, 2)  # (B, C, N)
-        y = self.dwconv(y)
-        y = y.transpose(1, 2)  # (B, N, C)
-        y = self.act(y)
-        y = self.out_proj(y)
-        return self.dropout(y)
+    def forward(self, x: torch.Tensor, **_attention_kwargs) -> torch.Tensor:
+        y = self.dwconv(self.in_proj(x).transpose(1, 2)).transpose(1, 2)
+        return self.dropout(self.out_proj(self.act(y)))

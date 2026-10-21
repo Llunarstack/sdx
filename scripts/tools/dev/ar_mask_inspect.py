@@ -26,8 +26,7 @@ def main() -> int:
     ap.add_argument("--compare", action="store_true", help="Also print zorder if order=raster (or vice versa)")
     args = ap.parse_args()
 
-    from models.ar_masks_extended import ar_mask_sparsity_stats, create_block_causal_mask_2d
-    from utils.architecture.ar_block_layout import block_visit_order
+    from models.ar_masks_extended import ar_mask_sparsity_stats, block_visit_order, create_block_causal_mask_2d
 
     if args.blocks <= 0:
         print("num_ar_blocks<=0: full attention (no mask).")

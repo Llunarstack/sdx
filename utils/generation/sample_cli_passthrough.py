@@ -1,231 +1,290 @@
-"""
-Forward ``sample.py`` CLI flags from an argparse namespace into a subprocess argv list.
+"""``sample.py`` argv from argparse values (keyed by dest), and the flag set an OCR repair re-run inherits.
 
-Used by OCR repair re-invocation so new flags do not require duplicating 200+ lines in ``sample.py``.
+Building argv from dests through the real parser means a renamed or removed flag fails here, at build time,
+instead of as an "unrecognized arguments" error inside a subprocess.
 """
 
 from __future__ import annotations
 
+import argparse
+from collections.abc import Mapping
+from functools import lru_cache
 from typing import Any
+
+__all__ = ["REPAIR_DESTS", "append_sample_repair_passthrough", "sample_argv"]
+
+# Generation settings the OCR repair re-run (``--ocr-fix``) must share with the parent run. The caller sets
+# prompt/seed/steps/solver/CFG and the inpaint knobs itself; prompt-rewriting features (invention stack,
+# cast, corpus, explore-styles, ...) are absent because the repair receives the already-rewritten prompt.
+REPAIR_DESTS: tuple[str, ...] = (
+    # canvas
+    "width",
+    "height",
+    "resize_mode",
+    "resize_saliency_face_bias",
+    "vae_tiling",
+    "deterministic",
+    "no_cache",
+    "inference_amp",
+    # sampler / guidance
+    "dynamic_threshold_percentile",
+    "dynamic_threshold_type",
+    "dynamic_threshold_value",
+    "eta",
+    "sde_band",
+    "eps_scale",
+    "eps_scale_k",
+    "flow_matching_sample",
+    "force_vp_sample",
+    "flow_solver",
+    "flow_schedule",
+    "flow_karras_rho",
+    "flow_shift",
+    "guidance_schedule",
+    "guidance_schedule_linear_start",
+    "guidance_schedule_linear_end",
+    "guidance_schedule_cosine_min",
+    "guidance_schedule_cosine_max",
+    "fdg_low",
+    "fdg_high",
+    "apg_parallel_eta",
+    "apg_norm_threshold",
+    "apg_momentum_beta",
+    "cfg_zero_star",
+    "cfg_zero_init_frac",
+    "cfg_interval",
+    "tcfg_damping",
+    "slg_scale",
+    "slg_skip_blocks",
+    "pag_scale",
+    "pag_blocks",
+    "sag_blur_sigma",
+    "sag_scale",
+    "volatile_cfg_boost",
+    "volatile_cfg_quantile",
+    "volatile_cfg_window",
+    "dual_stage_layout",
+    "dual_stage_div",
+    "dual_layout_steps",
+    "dual_detail_steps",
+    "dual_detail_strength",
+    "clip_guard_threshold",
+    "clip_guard_model",
+    "clip_guard_t_frac",
+    "clip_guard_steps",
+    "clip_monitor_every",
+    "clip_monitor_threshold",
+    "clip_monitor_cfg_boost",
+    "clip_monitor_rewind",
+    "domain_prior_latent",
+    "spectral_coherence_latent",
+    "spectral_coherence_cutoff",
+    "refine",
+    "no_refine",
+    "refine_t",
+    "restart_cycles",
+    "restart_steps",
+    "refine_gate",
+    "refine_gate_threshold",
+    "hires_fix",
+    "hires_scale",
+    "hires_steps",
+    "hires_strength",
+    "hires_cfg_scale",
+    # adapters / control / holy grail
+    "style",
+    "style_strength",
+    "auto_style_from_prompt",
+    "tags",
+    "tags_file",
+    "control_image",
+    "control",
+    "control_type",
+    "control_scale",
+    "control_guidance_start",
+    "control_guidance_end",
+    "control_guidance_decay",
+    "lora",
+    "no_lora_normalize_scales",
+    "lora_max_total_scale",
+    "lora_default_role",
+    "lora_role_budgets",
+    "lora_stage_policy",
+    "lora_layers",
+    "lora_role_stage_weights",
+    "lora_trigger",
+    "lora_scaffold",
+    "lora_scaffold_auto",
+    "reference_image",
+    "reference_strength",
+    "reference_tokens",
+    "reference_clip_model",
+    "reference_adapter_pt",
+    "holy_grail",
+    "holy_grail_cfg_early_ratio",
+    "holy_grail_cfg_late_ratio",
+    "holy_grail_control_mult",
+    "holy_grail_adapter_mult",
+    "holy_grail_no_frontload_control",
+    "holy_grail_late_adapter_boost",
+    "holy_grail_cads_strength",
+    "holy_grail_cads_min_strength",
+    "holy_grail_cads_power",
+    "holy_grail_unsharp_sigma",
+    "holy_grail_unsharp_amount",
+    "holy_grail_clamp_quantile",
+    "holy_grail_clamp_floor",
+    # prompt packs and modes
+    "no_neg_filter",
+    "gender_swap",
+    "anatomy_scale",
+    "object_scale",
+    "scene_scale",
+    "character_sheet",
+    "label_multi_character_sheets",
+    "character_prompt_extra",
+    "character_negative_extra",
+    "character_strength",
+    "prompt_layout",
+    "box_layout",
+    "box_layout_mode",
+    "t5_layout_encode",
+    "scene_blueprint",
+    "scene_blueprint_strength",
+    "uncensored_mode",
+    "clothing_mode",
+    "background_mode",
+    "people_layout",
+    "relationship_mode",
+    "object_layout",
+    "artist_composition",
+    "hand_mode",
+    "pose_naturalness",
+    "typography_mode",
+    "quality_pack",
+    "adherence_pack",
+    "lighting_mode",
+    "skin_detail_mode",
+    "style_mode",
+    "style_lock",
+    "anti_style_bleed",
+    "preset",
+    "op_mode",
+    "holy_grail_preset",
+    "hard_style",
+    "boost_quality",
+    "no_quality_defaults",
+    "auto_expected_text",
+    "auto_constraint_boost",
+    "visual_design_preset",
+    "visual_design_domain",
+    "visual_design_intensity",
+    "visual_design_negative_pack",
+    "anti_bleed",
+    "diversity",
+    "anti_artifacts",
+    "strong_watermark",
+    "shortcomings_mitigation",
+    "shortcomings_2d",
+    "art_guidance_mode",
+    "no_art_guidance_photography",
+    "anatomy_guidance",
+    "style_guidance_mode",
+    "style_guidance_artists",
+    "auto_content_fix",
+    "one_shot_boost",
+    # finish
+    "sharpen",
+    "contrast",
+    "saturation",
+    "clarity",
+    "tone_punch",
+    "chroma_smooth",
+    "polish",
+    "finishing_preset",
+    "naturalize",
+    "naturalize_grain",
+    "naturalize_deep",
+    "less_ai",
+    "human_made",
+    "human_made_strength",
+    "anti_ai_pack",
+    "human_media_mode",
+    "photo_realism_pack",
+    "photo_color_grade",
+    "photo_lighting_technique",
+    "photo_filter",
+    "photo_grain_style",
+    "photo_realism_strength",
+    "auto_photo_realism",
+    "photo_postprocess",
+    "photo_post_strength",
+    "realism_autopilot",
+    "camera_isp",
+    "camera_iso",
+    "camera_jpeg_quality",
+    "save_16bit",
+    "face_enhance",
+    "face_enhance_sharpen",
+    "face_enhance_contrast",
+    "face_enhance_padding",
+    "face_enhance_max",
+    "post_reference_image",
+    "post_reference_alpha",
+    "face_restore_shell",
+)
+
+
+@lru_cache(maxsize=1)
+def _parser() -> argparse.ArgumentParser:
+    from utils.generation.sample_cli_parser import build_sample_parser
+
+    return build_sample_parser()
+
+
+@lru_cache(maxsize=1)
+def _actions_by_dest() -> dict[str, list[argparse.Action]]:
+    out: dict[str, list[argparse.Action]] = {}
+    for a in _parser()._actions:
+        if a.option_strings and not isinstance(a, argparse._HelpAction):
+            out.setdefault(a.dest, []).append(a)
+    return out
+
+
+def _encode(dest: str, value: Any) -> list[str]:
+    for action in _actions_by_dest()[dest]:
+        flags = action.option_strings
+        if isinstance(action, argparse.BooleanOptionalAction):
+            return [flags[0] if value else next(f for f in flags if f.startswith("--no-"))]
+        if isinstance(action, argparse._StoreConstAction):
+            if action.const == value:
+                return [flags[0]]
+            continue
+        if isinstance(value, (list, tuple)):
+            return [flags[0], *map(str, value)]
+        return [flags[0], str(value)]
+    raise ValueError(f"no sample.py flag sets {dest}={value!r}")
+
+
+def sample_argv(values: Mapping[str, Any]) -> list[str]:
+    """``sample.py`` argv for each value that differs from its parser default (keys are argparse dests).
+
+    Raises ``KeyError`` for a dest ``sample.py`` does not define.
+    """
+    argv: list[str] = []
+    for dest, value in values.items():
+        if dest not in _actions_by_dest():
+            raise KeyError(f"sample.py has no option for dest {dest!r}")
+        default = _parser().get_default(dest)
+        if value is None or value == default:
+            continue
+        if isinstance(value, (list, tuple)) and list(value) == list(default or []):
+            continue
+        argv.extend(_encode(dest, value))
+    return argv
 
 
 def append_sample_repair_passthrough(cmd: list[str], args: Any) -> None:
-    """Append generation knobs from *args* that should match the parent ``sample.py`` run."""
-    if int(getattr(args, "width", 0) or 0) > 0:
-        cmd.extend(["--width", str(int(getattr(args, "width", 0) or 0))])
-    if int(getattr(args, "height", 0) or 0) > 0:
-        cmd.extend(["--height", str(int(getattr(args, "height", 0) or 0))])
-    _rm = str(getattr(args, "resize_mode", "stretch") or "stretch").lower()
-    if _rm in ("stretch", "center_crop", "saliency_crop"):
-        cmd.extend(["--resize-mode", _rm])
-    if float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0) > 0:
-        cmd.extend(["--resize-saliency-face-bias", str(float(getattr(args, "resize_saliency_face_bias", 0.0) or 0.0))])
-
-    if (
-        getattr(args, "dynamic_threshold_type", "percentile") != "percentile"
-        or getattr(args, "dynamic_threshold_value", 0.0) > 0.0
-        or getattr(args, "dynamic_threshold_percentile", 0.0) > 0.0
-    ):
-        cmd.extend(
-            [
-                "--dynamic-threshold-percentile",
-                str(getattr(args, "dynamic_threshold_percentile", 0.0)),
-                "--dynamic-threshold-type",
-                getattr(args, "dynamic_threshold_type", "percentile"),
-                "--dynamic-threshold-value",
-                str(getattr(args, "dynamic_threshold_value", 0.0)),
-            ]
-        )
-    if getattr(args, "vae_tiling", False):
-        cmd.append("--vae-tiling")
-    if getattr(args, "deterministic", False):
-        cmd.append("--deterministic")
-    if getattr(args, "no_cache", False):
-        cmd.append("--no-cache")
-    if getattr(args, "no_refine", False):
-        cmd.append("--no-refine")
-    if getattr(args, "refine_t", None) is not None:
-        cmd.extend(["--refine-t", str(getattr(args, "refine_t", 50))])
-    if str(getattr(args, "refine_gate", "off") or "off").lower() in ("off", "auto"):
-        cmd.extend(["--refine-gate", str(getattr(args, "refine_gate", "off"))])
-    if getattr(args, "refine_gate_threshold", None) is not None:
-        cmd.extend(["--refine-gate-threshold", str(getattr(args, "refine_gate_threshold", 0.62))])
-    if getattr(args, "no_neg_filter", False):
-        cmd.append("--no-neg-filter")
+    """Append the parent run's :data:`REPAIR_DESTS` settings (non-default only) to a repair ``sample.py`` argv."""
+    cmd.extend(sample_argv({d: getattr(args, d) for d in REPAIR_DESTS if hasattr(args, d)}))
     cmd.append("--text-in-image")
-
-    if getattr(args, "gender_swap", False):
-        cmd.append("--gender-swap")
-    if getattr(args, "anatomy_scale", ""):
-        cmd.extend(["--anatomy-scale", str(args.anatomy_scale)])
-    if getattr(args, "object_scale", ""):
-        cmd.extend(["--object-scale", str(args.object_scale)])
-    if getattr(args, "scene_scale", ""):
-        cmd.extend(["--scene-scale", str(args.scene_scale)])
-    for flag, name, default in (
-        ("--photo-realism-pack", "photo_realism_pack", "none"),
-        ("--photo-color-grade", "photo_color_grade", "none"),
-        ("--photo-lighting-technique", "photo_lighting_technique", "none"),
-        ("--photo-filter", "photo_filter", "none"),
-        ("--photo-grain-style", "photo_grain_style", "none"),
-    ):
-        val = str(getattr(args, name, default) or default)
-        if val != default:
-            cmd.extend([flag, val])
-    if float(getattr(args, "photo_realism_strength", 1.0) or 1.0) != 1.0:
-        cmd.extend(["--photo-realism-strength", str(args.photo_realism_strength)])
-    if not bool(getattr(args, "auto_photo_realism", True)):
-        cmd.append("--no-auto-photo-realism")
-    if not bool(getattr(args, "photo_postprocess", True)):
-        cmd.append("--no-photo-postprocess")
-    if float(getattr(args, "photo_post_strength", 0.6) or 0.6) != 0.6:
-        cmd.extend(["--photo-post-strength", str(args.photo_post_strength)])
-    if not bool(getattr(args, "realism_autopilot", True)):
-        cmd.append("--no-realism-autopilot")
-    if getattr(args, "character_sheet", ""):
-        cmd.extend(["--character-sheet", str(args.character_sheet)])
-    if getattr(args, "label_multi_character_sheets", False):
-        cmd.append("--label-multi-character-sheets")
-    if getattr(args, "character_prompt_extra", ""):
-        cmd.extend(["--character-prompt-extra", str(args.character_prompt_extra)])
-    if getattr(args, "character_negative_extra", ""):
-        cmd.extend(["--character-negative-extra", str(args.character_negative_extra)])
-    if getattr(args, "prompt_layout", ""):
-        cmd.extend(["--prompt-layout", str(args.prompt_layout)])
-    if getattr(args, "box_layout", ""):
-        cmd.extend(["--box-layout", str(args.box_layout)])
-    if str(getattr(args, "box_layout_mode", "regional_cfg") or "regional_cfg").lower() != "regional_cfg":
-        cmd.extend(["--box-layout-mode", str(args.box_layout_mode)])
-    if str(getattr(args, "t5_layout_encode", "auto") or "auto").lower() != "auto":
-        cmd.extend(["--t5-layout-encode", str(args.t5_layout_encode)])
-    if getattr(args, "scene_blueprint", ""):
-        cmd.extend(["--scene-blueprint", str(args.scene_blueprint)])
-    if float(getattr(args, "scene_blueprint_strength", 1.0)) != 1.0:
-        cmd.extend(["--scene-blueprint-strength", str(args.scene_blueprint_strength)])
-    if float(getattr(args, "character_strength", 1.0)) != 1.0:
-        cmd.extend(["--character-strength", str(args.character_strength)])
-    if bool(getattr(args, "uncensored_mode", False)):
-        cmd.append("--uncensored-mode")
-    for flag, attr in (
-        ("--clothing-mode", "clothing_mode"),
-        ("--background-mode", "background_mode"),
-        ("--people-layout", "people_layout"),
-        ("--relationship-mode", "relationship_mode"),
-        ("--object-layout", "object_layout"),
-        ("--artist-composition", "artist_composition"),
-        ("--hand-mode", "hand_mode"),
-        ("--pose-naturalness", "pose_naturalness"),
-        ("--typography-mode", "typography_mode"),
-        ("--quality-pack", "quality_pack"),
-        ("--adherence-pack", "adherence_pack"),
-        ("--lighting-mode", "lighting_mode"),
-        ("--skin-detail-mode", "skin_detail_mode"),
-        ("--style-mode", "style_mode"),
-    ):
-        val = str(getattr(args, attr, "none") or "none")
-        if val != "none":
-            cmd.extend([flag, val])
-    if bool(getattr(args, "style_lock", False)):
-        cmd.append("--style-lock")
-    if bool(getattr(args, "anti_style_bleed", False)):
-        cmd.append("--anti-style-bleed")
-    if getattr(args, "preset", None):
-        cmd.extend(["--preset", str(args.preset)])
-    if getattr(args, "op_mode", None):
-        cmd.extend(["--op-mode", str(args.op_mode)])
-    if getattr(args, "holy_grail_preset", None):
-        cmd.extend(["--holy-grail-preset", str(args.holy_grail_preset)])
-    if getattr(args, "hard_style", None):
-        cmd.extend(["--hard-style", str(args.hard_style)])
-    if getattr(args, "boost_quality", False):
-        cmd.append("--boost-quality")
-
-    try:
-        from pipelines.book_comic import book_helpers
-
-        book_helpers.extend_sample_py_adapter_control_cmd(cmd, args)
-        book_helpers.extend_sample_py_sdx_enhance_cmd(cmd, args)
-        book_helpers.extend_sample_py_adherence_quality_cmd(cmd, args)
-    except ImportError:
-        _append_adapter_control_fallback(cmd, args)
-
-    if getattr(args, "naturalize", False):
-        cmd.append("--naturalize")
-        cmd.extend(["--naturalize-grain", str(getattr(args, "naturalize_grain", 0.015))])
-    if getattr(args, "naturalize_deep", False):
-        cmd.append("--naturalize-deep")
-    if getattr(args, "face_enhance", False):
-        cmd.append("--face-enhance")
-        cmd.extend(["--face-enhance-sharpen", str(getattr(args, "face_enhance_sharpen", 0.35))])
-        cmd.extend(["--face-enhance-contrast", str(getattr(args, "face_enhance_contrast", 1.04))])
-        cmd.extend(["--face-enhance-padding", str(getattr(args, "face_enhance_padding", 0.25))])
-        cmd.extend(["--face-enhance-max", str(getattr(args, "face_enhance_max", 4))])
-    pri = str(getattr(args, "post_reference_image", "") or "").strip()
-    if pri:
-        cmd.extend(["--post-reference-image", pri])
-        cmd.extend(["--post-reference-alpha", str(float(getattr(args, "post_reference_alpha", 0.0) or 0.0))])
-    frsh = str(getattr(args, "face_restore_shell", "") or "").strip()
-    if frsh:
-        cmd.extend(["--face-restore-shell", frsh])
-    if float(getattr(args, "sag_blur_sigma", 0.0) or 0.0) > 0 and float(getattr(args, "sag_scale", 0.0) or 0.0) > 0:
-        cmd.extend(["--sag-blur-sigma", str(getattr(args, "sag_blur_sigma", 0.0))])
-        cmd.extend(["--sag-scale", str(getattr(args, "sag_scale", 0.0))])
-    if getattr(args, "less_ai", False):
-        cmd.append("--less-ai")
-    _hm = str(getattr(args, "human_made", "none") or "none").lower()
-    if _hm not in ("none", "off", "0", ""):
-        cmd.extend(["--human-made", _hm])
-        _hms = float(getattr(args, "human_made_strength", -1.0) or -1.0)
-        if _hms >= 0.0:
-            cmd.extend(["--human-made-strength", str(_hms)])
-    if str(getattr(args, "anti_ai_pack", "none") or "none") != "none":
-        cmd.extend(["--anti-ai-pack", str(args.anti_ai_pack)])
-    if str(getattr(args, "human_media_mode", "none") or "none") != "none":
-        cmd.extend(["--human-media", str(args.human_media_mode)])
-    if getattr(args, "anti_bleed", False):
-        cmd.append("--anti-bleed")
-    if getattr(args, "diversity", False):
-        cmd.append("--diversity")
-    if getattr(args, "anti_artifacts", False):
-        cmd.append("--anti-artifacts")
-    if getattr(args, "strong_watermark", False):
-        cmd.append("--strong-watermark")
-    _rsm = str(getattr(args, "shortcomings_mitigation", "none") or "none").lower()
-    if _rsm in ("auto", "all"):
-        cmd.extend(["--shortcomings-mitigation", _rsm])
-    if getattr(args, "shortcomings_2d", False):
-        cmd.append("--shortcomings-2d")
-    _rag = str(getattr(args, "art_guidance_mode", "none") or "none").lower()
-    if _rag in ("auto", "all"):
-        cmd.extend(["--art-guidance-mode", _rag])
-    if getattr(args, "no_art_guidance_photography", False):
-        cmd.append("--no-art-guidance-photography")
-    _anat = str(getattr(args, "anatomy_guidance", "none") or "none").lower()
-    if _anat in ("lite", "strong"):
-        cmd.extend(["--anatomy-guidance", _anat])
-    _sg = str(getattr(args, "style_guidance_mode", "none") or "none").lower()
-    if _sg in ("auto", "all"):
-        cmd.extend(["--style-guidance-mode", _sg])
-    if not bool(getattr(args, "style_guidance_artists", True)):
-        cmd.append("--no-style-guidance-artists")
-    if not getattr(args, "auto_content_fix", True):
-        cmd.append("--no-auto-content-fix")
-    if not getattr(args, "one_shot_boost", True):
-        cmd.append("--no-one-shot-boost")
-
-
-def _append_adapter_control_fallback(cmd: list[str], args: Any) -> None:
-    """Minimal adapter/control forward when book_helpers is unavailable."""
-    if getattr(args, "style", ""):
-        cmd.extend(["--style", str(args.style)])
-        cmd.extend(["--style-strength", str(getattr(args, "style_strength", 0.7))])
-    if getattr(args, "control_image", ""):
-        cmd.extend(["--control-image", str(args.control_image)])
-        cmd.extend(["--control-type", str(getattr(args, "control_type", "auto"))])
-        cmd.extend(["--control-scale", str(getattr(args, "control_scale", 0.85))])
-    if getattr(args, "control", None):
-        cmd.extend(["--control"] + [str(x) for x in getattr(args, "control", [])])
-    if getattr(args, "lora", None):
-        cmd.extend(["--lora"] + [str(x) for x in getattr(args, "lora", [])])
-    if bool(getattr(args, "holy_grail", False)):
-        cmd.append("--holy-grail")

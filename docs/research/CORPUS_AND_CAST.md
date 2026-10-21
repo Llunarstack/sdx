@@ -53,7 +53,7 @@ Compiles:
 - Box layout regions for regional CFG / layout attention
 - Optional per-character sheets + face refs
 
-Code: `utils/generation/multi_char_cast.py` (+ existing sheets / InstantStyle / `models/multi_character.py` for future trained isolation).
+Code: `utils/generation/multi_char_cast.py` (+ existing sheets / InstantStyle).
 
 ## Ideogram-like text & layout
 

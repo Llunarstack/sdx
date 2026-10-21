@@ -15,19 +15,8 @@ from torch.utils.data import Dataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-
-def center_crop(pil_image, image_size: int):
-    w, h = pil_image.size
-    while min(w, h) >= 2 * image_size:
-        pil_image = pil_image.resize((w // 2, h // 2), resample=Image.BOX)
-        w, h = pil_image.size
-    scale = image_size / min(w, h)
-    pil_image = pil_image.resize((round(w * scale), round(h * scale)), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    crop_y = (h - image_size) // 2
-    crop_x = (w - image_size) // 2
-    return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
+from data.manifest_utils import first_str, iter_manifest_rows, resolve_image_path  # noqa: E402
+from data.t2i_dataset import center_crop  # noqa: E402
 
 
 class ImagePaths(Dataset):
@@ -38,17 +27,8 @@ class ImagePaths(Dataset):
         self.out_dir = out_dir
         self.paths: list[str] = []
         if self.data_path.suffix.lower() == ".jsonl":
-            import json
-
-            with open(self.data_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    d = json.loads(line)
-                    p = d.get("image_path") or d.get("path") or d.get("image")
-                    if p:
-                        self.paths.append(str(p))
+            rows = iter_manifest_rows(self.data_path)
+            self.paths = [p for p in (first_str(r, ("image_path", "path", "image")) for r in rows) if p]
         else:
             for subdir in self.data_path.iterdir():
                 if not subdir.is_dir():
@@ -60,18 +40,8 @@ class ImagePaths(Dataset):
                         self.paths.append(str(p))
 
     def _resolve(self, rel: str) -> Path:
-        p = Path(rel)
-        if p.is_file():
-            return p.resolve()
-        if self.data_root is not None:
-            cand = (self.data_root / p).resolve()
-            if cand.is_file():
-                return cand
-        if self.data_path.suffix.lower() == ".jsonl":
-            cand = (self.data_path.parent / p).resolve()
-            if cand.is_file():
-                return cand
-        return p.resolve()
+        manifest_dir = self.data_path.parent if self.data_path.suffix.lower() == ".jsonl" else None
+        return (resolve_image_path(rel, self.data_root, manifest_dir) or Path(rel)).resolve()
 
     def __len__(self):
         return len(self.paths)

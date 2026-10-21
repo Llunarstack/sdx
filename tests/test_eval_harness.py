@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 from scripts.tools.eval import scorers
-from scripts.tools.eval.prompt_suite import CATEGORIES, SUITE, items_by_category, suite_as_manifest_rows
+from scripts.tools.eval.prompt_suite import CATEGORIES, SUITE, suite_as_manifest_rows
 from scripts.tools.eval.run_eval import evaluate
 
 
@@ -92,8 +92,8 @@ def test_runner_aggregates():
         pytest.skip("CLIP weights unavailable")
     with tempfile.TemporaryDirectory() as td:
         # Build images for one count item and one long-adherence item.
-        count_item = items_by_category("count")[0]
-        long_item = items_by_category("long_adherence")[0]
+        count_item = next(s for s in SUITE if s.category == "count")
+        long_item = next(s for s in SUITE if s.category == "long_adherence")
         cimg = Path(td) / "c.png"
         _discs(cimg, count_item.expected_count)
         limg = Path(td) / "l.png"

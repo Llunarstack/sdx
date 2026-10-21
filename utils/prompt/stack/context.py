@@ -49,6 +49,9 @@ class PromptContext:
     # Post-stack hints (sample.py encoding)
     t5_positive_hint: str = ""
     apply_scale_distortion_negative: bool = False
+    # Text encoder the prompt is fitted to (token budget stage); 0 = sample_helpers.TEXT_MAX_TOKENS.
+    tokenizer: Any = None
+    max_tokens: int = 0
 
 
 @dataclass

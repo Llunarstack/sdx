@@ -32,7 +32,7 @@ def main() -> int:
     args = p.parse_args()
 
     import torch
-    from diffusion.flow_matching import flow_matching_per_sample_losses_v2
+    from diffusion.flow_matching import flow_matching_per_sample_losses
     from models.permanent_video_dit import permanence_consistency_loss
     from pipelines.video.neural_sample import load_video_dit
 
@@ -59,12 +59,13 @@ def main() -> int:
         opt.zero_grad(set_to_none=True)
         eps = torch.randn_like(x0)
         # Pooled context in model_kwargs for VideoDiT(context=...)
-        loss = flow_matching_per_sample_losses_v2(
+        loss = flow_matching_per_sample_losses(
             model,
             x0,
             eps,
             1000,
             {"context": context},
+            logit_normal=True,
             shift=3.0,
         ).mean()
         if permanent and float(args.permanence_weight) > 0:

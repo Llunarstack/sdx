@@ -1,6 +1,9 @@
-# ControlNet-style conditioning: control image -> spatial features injected into DiT.
-# Keeps structure (edges/depth/pose/layout) without overpowering text/style.
+"""ControlNet-style conditioning: a control image (edges/depth/pose/layout) becomes spatial features added to
+the DiT patch tokens, keeping structure without overpowering text/style."""
+
 from __future__ import annotations
+
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -40,230 +43,104 @@ _CONTROL_TYPE_ALIASES = {
     "sketch": "scribble",
     "normal": "normal",
     "normalmap": "normal",
+    "normals": "normal",
+    "normals_map": "normal",
     "hed": "hed",
     "softedge": "hed",
     "soft_edge": "hed",
-    "normals": "normal",
-    "normals_map": "normal",
 }
 _CONTROL_TYPE_TO_ID = {n: i for i, n in enumerate(CONTROL_TYPE_NAMES)}
 
+# Substring -> type for file paths; first match wins.
+_PATH_HINTS = (
+    ("pose", "pose"),
+    ("canny", "canny"),
+    ("edge", "canny"),
+    ("depth", "depth"),
+    ("midas", "depth"),
+    ("zoe", "depth"),
+    ("lineart", "lineart"),
+    ("scribble", "scribble"),
+    ("seg", "seg"),
+    ("normal", "normal"),
+    ("hed", "hed"),
+)
+
 
 def normalize_control_type_name(value: str) -> str:
-    s = str(value or "").strip().lower()
-    return _CONTROL_TYPE_ALIASES.get(s, "unknown")
+    return _CONTROL_TYPE_ALIASES.get(str(value or "").strip().lower(), "unknown")
 
 
 def control_type_to_id(value) -> int:
-    if value is None:
-        return _CONTROL_TYPE_TO_ID["unknown"]
     if isinstance(value, int):
-        return int(max(0, min(len(CONTROL_TYPE_NAMES) - 1, value)))
-    s = normalize_control_type_name(str(value))
-    return _CONTROL_TYPE_TO_ID.get(s, 0)
+        return max(0, min(len(CONTROL_TYPE_NAMES) - 1, value))
+    return _CONTROL_TYPE_TO_ID[normalize_control_type_name(value)]
 
 
 def infer_control_type_from_path(path: str) -> str:
-    s = str(path or "").strip().lower()
-    if not s:
-        return "unknown"
-    for key, norm in (
-        ("openpose", "pose"),
-        ("pose", "pose"),
-        ("canny", "canny"),
-        ("edge", "canny"),
-        ("depth", "depth"),
-        ("midas", "depth"),
-        ("zoe", "depth"),
-        ("lineart", "lineart"),
-        ("scribble", "scribble"),
-        ("seg", "seg"),
-        ("segment", "seg"),
-        ("normal", "normal"),
-        ("hed", "hed"),
-    ):
-        if key in s:
-            return norm
-    return "unknown"
+    s = str(path or "").lower()
+    return next((norm for key, norm in _PATH_HINTS if key in s), "unknown")
 
 
-def _expand_control_type_ids(control_type, *, batch_size: int, device: torch.device) -> torch.Tensor | None:
-    if control_type is None:
-        return None
-    if torch.is_tensor(control_type):
-        ids = control_type.to(device=device, dtype=torch.long)
-        if ids.ndim == 0:
-            ids = ids.view(1)
-    elif isinstance(control_type, (list, tuple)):
-        ids = torch.tensor([control_type_to_id(x) for x in control_type], device=device, dtype=torch.long)
-    else:
-        ids = torch.tensor([control_type_to_id(control_type)], device=device, dtype=torch.long)
-    if ids.shape[0] == 1 and batch_size > 1:
-        ids = ids.expand(batch_size)
-    if ids.shape[0] != batch_size:
-        raise ValueError(f"control_type batch mismatch: got {ids.shape[0]}, expected {batch_size}")
-    return ids.clamp_min(0)
+def _as_tensor(value, convert: Callable, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    if torch.is_tensor(value):
+        return value.to(device=device, dtype=dtype)
+    if isinstance(value, (list, tuple)):
+        return torch.tensor([convert(v) for v in value], device=device, dtype=dtype)
+    return torch.tensor(convert(value), device=device, dtype=dtype)
 
 
-def _expand_control_scale_tensor(
-    control_scale,
-    *,
-    batch_size: int,
-    num_controls: int,
-    device: torch.device,
-    dtype: torch.dtype,
-) -> torch.Tensor:
-    if torch.is_tensor(control_scale):
-        cs = control_scale.to(device=device, dtype=dtype)
-    elif isinstance(control_scale, (list, tuple)):
-        cs = torch.tensor([float(x) for x in control_scale], device=device, dtype=dtype)
-    else:
-        cs = torch.tensor(float(control_scale), device=device, dtype=dtype)
+def _broadcast_per_control(t: torch.Tensor, *, batch_size: int, num_controls: int, name: str) -> torch.Tensor:
+    """Broadcast a scalar, ``[K]``, ``[B]``, ``[B*K]``, ``[1, K]``, ``[B, 1]`` or ``[B, K]`` value to ``(B, K)``.
 
-    if cs.ndim == 0:
-        cs = cs.view(1, 1).expand(batch_size, num_controls)
-    elif cs.ndim == 1:
-        if cs.shape[0] == num_controls:
-            cs = cs.view(1, num_controls).expand(batch_size, num_controls)
-        elif cs.shape[0] == batch_size:
-            cs = cs.view(batch_size, 1).expand(batch_size, num_controls)
-        elif cs.shape[0] == batch_size * num_controls:
-            cs = cs.view(batch_size, num_controls)
-        elif cs.shape[0] == 1:
-            cs = cs.view(1, 1).expand(batch_size, num_controls)
-        else:
-            raise ValueError(
-                f"control_scale length {cs.shape[0]} not compatible with batch={batch_size}, controls={num_controls}"
-            )
-    elif cs.ndim == 2:
-        if cs.shape == (batch_size, num_controls):
-            pass
-        elif cs.shape == (1, num_controls):
-            cs = cs.expand(batch_size, num_controls)
-        elif cs.shape == (batch_size, 1):
-            cs = cs.expand(batch_size, num_controls)
-        else:
-            raise ValueError(
-                f"control_scale shape {tuple(cs.shape)} not compatible with batch={batch_size}, controls={num_controls}"
-            )
-    else:
-        raise ValueError(f"Unsupported control_scale ndim={cs.ndim}")
-    return cs.clamp_min(0.0)
-
-
-def _expand_control_type_stack(
-    control_type,
-    *,
-    batch_size: int,
-    num_controls: int,
-    device: torch.device,
-) -> torch.Tensor | None:
-    if control_type is None:
-        return None
-    if torch.is_tensor(control_type):
-        ids = control_type.to(device=device, dtype=torch.long)
-    elif isinstance(control_type, (list, tuple)):
-        ids = torch.tensor([control_type_to_id(x) for x in control_type], device=device, dtype=torch.long)
-    else:
-        ids = torch.tensor([control_type_to_id(control_type)], device=device, dtype=torch.long)
-
-    if ids.ndim == 0:
-        ids = ids.view(1, 1).expand(batch_size, num_controls)
-    elif ids.ndim == 1:
-        if ids.shape[0] == num_controls:
-            ids = ids.view(1, num_controls).expand(batch_size, num_controls)
-        elif ids.shape[0] == batch_size:
-            ids = ids.view(batch_size, 1).expand(batch_size, num_controls)
-        elif ids.shape[0] == batch_size * num_controls:
-            ids = ids.view(batch_size, num_controls)
-        elif ids.shape[0] == 1:
-            ids = ids.view(1, 1).expand(batch_size, num_controls)
-        else:
-            raise ValueError(
-                f"control_type length {ids.shape[0]} not compatible with batch={batch_size}, controls={num_controls}"
-            )
-    elif ids.ndim == 2:
-        if ids.shape == (batch_size, num_controls):
-            pass
-        elif ids.shape == (1, num_controls):
-            ids = ids.expand(batch_size, num_controls)
-        elif ids.shape == (batch_size, 1):
-            ids = ids.expand(batch_size, num_controls)
-        else:
-            raise ValueError(
-                f"control_type shape {tuple(ids.shape)} not compatible with batch={batch_size}, controls={num_controls}"
-            )
-    else:
-        raise ValueError(f"Unsupported control_type ndim={ids.ndim}")
-    return ids
+    A 1-D value whose length equals both ``B`` and ``K`` is read as per-control.
+    """
+    b, k = batch_size, num_controls
+    if t.ndim == 0:
+        t = t.view(1, 1)
+    elif t.ndim == 1:
+        n = t.shape[0]
+        if n == k:
+            t = t.view(1, k)
+        elif n == b:
+            t = t.view(b, 1)
+        elif n == b * k:
+            t = t.view(b, k)
+        elif n == 1:
+            t = t.view(1, 1)
+    if t.ndim != 2 or t.shape[0] not in (1, b) or t.shape[1] not in (1, k):
+        raise ValueError(f"{name} shape {tuple(t.shape)} not compatible with batch={b}, controls={k}")
+    return t.expand(b, k)
 
 
 def _ensure_channels(control_image: torch.Tensor, in_channels: int) -> torch.Tensor:
-    """Convert control channels to expected encoder channels."""
+    """Crop extra channels or repeat the last one to reach ``in_channels``."""
     if control_image.ndim != 4:
         raise ValueError(f"control_image must be 4D (B,C,H,W), got {tuple(control_image.shape)}")
     c = int(control_image.shape[1])
-    if c == in_channels:
-        return control_image
-    if in_channels == 3 and c == 1:
-        return control_image.repeat(1, 3, 1, 1)
-    if c > in_channels:
-        return control_image[:, :in_channels, ...]
-    # c < in_channels: repeat last channel(s) to fill.
-    rep = in_channels - c
-    extra = control_image[:, -1:, ...].repeat(1, rep, 1, 1)
+    if c >= in_channels:
+        return control_image[:, :in_channels]
+    extra = control_image[:, -1:].repeat(1, in_channels - c, 1, 1)
     return torch.cat([control_image, extra], dim=1)
 
 
-def inject_control_tokens(
-    x_tokens: torch.Tensor,
-    control_feat: torch.Tensor,
-    *,
-    control_scale: torch.Tensor | float,
-    patch_tokens: int,
-) -> torch.Tensor:
+def inject_control_tokens(x_tokens: torch.Tensor, control_feat: torch.Tensor, *, patch_tokens: int) -> torch.Tensor:
+    """Add control features to the first ``patch_tokens`` tokens; register tokens after them are untouched.
+
+    A token-count mismatch (variable latent size) is resolved by linear interpolation along the token axis.
     """
-    Inject control features into first `patch_tokens` tokens only.
-    This preserves register/non-patch tokens while applying robust token-count matching.
-    """
-    if patch_tokens <= 0:
-        return x_tokens
     p = min(int(patch_tokens), int(x_tokens.shape[1]))
     if p <= 0:
         return x_tokens
-
-    x_patch = x_tokens[:, :p, :]
-    x_tail = x_tokens[:, p:, :]
     cfeat = control_feat
-
     if cfeat.shape[1] != p:
-        # Token-count mismatch can happen with variable latent size; interpolate token axis.
-        cfeat = cfeat.transpose(1, 2)  # (B, D, N)
-        cfeat = F.interpolate(cfeat, size=p, mode="linear", align_corners=False)
-        cfeat = cfeat.transpose(1, 2)  # (B, p, D)
-
-    if torch.is_tensor(control_scale):
-        cs = control_scale.to(device=x_tokens.device, dtype=x_tokens.dtype)
-        if cs.ndim == 0:
-            cs = cs.view(1, 1, 1)
-        elif cs.ndim == 1:
-            cs = cs.view(-1, 1, 1)
-        elif cs.ndim == 2:
-            cs = cs.view(cs.shape[0], cs.shape[1], 1)
-    else:
-        cs = torch.tensor(float(control_scale), device=x_tokens.device, dtype=x_tokens.dtype).view(1, 1, 1)
-
-    x_patch = x_patch + cs * cfeat.to(dtype=x_patch.dtype)
-    if x_tail.numel() == 0:
-        return x_patch
-    return torch.cat([x_patch, x_tail], dim=1)
+        cfeat = F.interpolate(cfeat.transpose(1, 2), size=p, mode="linear", align_corners=False).transpose(1, 2)
+    x_patch = x_tokens[:, :p] + cfeat.to(dtype=x_tokens.dtype)
+    return torch.cat([x_patch, x_tokens[:, p:]], dim=1)
 
 
 class ControlNetEncoder(nn.Module):
-    """
-    Encodes a control image to DiT-space control tokens (B, N, D).
-    Supports dynamic target spatial sizes to match variable latent shapes.
-    """
+    """Patchify a control image into DiT-space tokens ``(B, N, D)``, resized to any latent grid."""
 
     def __init__(
         self,
@@ -289,37 +166,28 @@ class ControlNetEncoder(nn.Module):
         target_hw: tuple[int, int] | None = None,
         control_type=None,
     ) -> torch.Tensor:
-        """
-        control_image: (B, C, H, W), C may be 1/3+ (will be adapted to encoder in_channels).
-        target_hw: latent-space H/W before patchify; when set, control map resizes to this,
-        then gets patchified with this encoder's patch size.
-        Returns (B, N, hidden_size), N=(H/p)*(W/p).
+        """``control_image``: ``(B, C, H, W)`` with any C (adapted to ``in_channels``).
+
+        ``target_hw`` is the latent H/W before patchify (default ``control_size`` square); the map is resized to
+        it, rounded down to a multiple of the patch size.
         """
         if not torch.is_floating_point(control_image):
             control_image = control_image.float()
         control_image = _ensure_channels(control_image, self.in_channels)
 
-        if target_hw is not None:
-            th, tw = int(target_hw[0]), int(target_hw[1])
-        else:
-            th, tw = self.control_size, self.control_size
-
-        # Ensure divisible by patch size so token grid is stable.
-        th = max(self.patch_size, (th // self.patch_size) * self.patch_size)
-        tw = max(self.patch_size, (tw // self.patch_size) * self.patch_size)
-
-        h, w = int(control_image.shape[2]), int(control_image.shape[3])
-        if h != th or w != tw:
+        th, tw = target_hw if target_hw is not None else (self.control_size, self.control_size)
+        p = self.patch_size
+        th = max(p, (int(th) // p) * p)
+        tw = max(p, (int(tw) // p) * p)
+        if tuple(control_image.shape[2:]) != (th, tw):
             control_image = F.interpolate(control_image, size=(th, tw), mode="bilinear", align_corners=False)
 
-        x = self.proj(control_image)
-        x = x.flatten(2).transpose(1, 2)
-        x = self.norm(x)
-        if self.type_embed is not None:
-            ids = _expand_control_type_ids(control_type, batch_size=x.shape[0], device=x.device)
-            if ids is not None:
-                ids = ids.clamp_max(self.num_control_types - 1)
-                x = x + self.type_embed(ids).unsqueeze(1).to(dtype=x.dtype)
+        x = self.norm(self.proj(control_image).flatten(2).transpose(1, 2))
+        if self.type_embed is not None and control_type is not None:
+            ids = _as_tensor(control_type, control_type_to_id, device=x.device, dtype=torch.long)
+            ids = _broadcast_per_control(ids, batch_size=x.shape[0], num_controls=1, name="control_type")[:, 0]
+            ids = ids.clamp(0, self.num_control_types - 1)
+            x = x + self.type_embed(ids).unsqueeze(1).to(dtype=x.dtype)
         return x
 
 
@@ -331,39 +199,23 @@ def encode_control_stack(
     control_type=None,
     control_scale=1.0,
 ) -> torch.Tensor:
-    """
-    Encode single or stacked controls into one fused token tensor (B, N, D).
-    control_image: (B,C,H,W) or (B,K,C,H,W)
-    control_type/control_scale may be scalar, [K], [B], [B,K], or tensors of same shapes.
+    """Encode one ``(B, C, H, W)`` or K stacked ``(B, K, C, H, W)`` controls into fused tokens ``(B, N, D)``.
+
+    ``control_type`` / ``control_scale`` may be a scalar, ``[K]``, ``[B]``, ``[B*K]`` or ``[B, K]``; negative
+    scales are clamped to zero.
     """
     if control_image.ndim == 4:
-        b = int(control_image.shape[0])
-        feat = encoder(control_image, target_hw=target_hw, control_type=control_type)
-        sc = _expand_control_scale_tensor(
-            control_scale,
-            batch_size=b,
-            num_controls=1,
-            device=feat.device,
-            dtype=feat.dtype,
-        )
-        return feat * sc[:, 0].view(b, 1, 1)
-
-    if control_image.ndim != 5:
+        control_image = control_image.unsqueeze(1)
+    elif control_image.ndim != 5:
         raise ValueError(f"control_image must be 4D or 5D, got shape={tuple(control_image.shape)}")
 
-    b, k, c, h, w = control_image.shape
-    flat = control_image.reshape(b * k, c, h, w)
-    type_ids = _expand_control_type_stack(control_type, batch_size=b, num_controls=k, device=control_image.device)
-    type_flat = type_ids.reshape(b * k) if type_ids is not None else None
-    feat_flat = encoder(flat, target_hw=target_hw, control_type=type_flat)
-    d = int(feat_flat.shape[-1])
-    feat = feat_flat.view(b, k, -1, d)
-    sc = _expand_control_scale_tensor(
-        control_scale,
-        batch_size=b,
-        num_controls=k,
-        device=feat.device,
-        dtype=feat.dtype,
-    ).view(b, k, 1, 1)
-    fused = (feat * sc).sum(dim=1)
-    return fused
+    b, k = int(control_image.shape[0]), int(control_image.shape[1])
+    type_flat = None
+    if control_type is not None:
+        type_ids = _as_tensor(control_type, control_type_to_id, device=control_image.device, dtype=torch.long)
+        type_flat = _broadcast_per_control(type_ids, batch_size=b, num_controls=k, name="control_type").reshape(-1)
+    feat = encoder(control_image.flatten(0, 1), target_hw=target_hw, control_type=type_flat)
+    feat = feat.view(b, k, *feat.shape[1:])
+    scale = _as_tensor(control_scale, float, device=feat.device, dtype=feat.dtype)
+    scale = _broadcast_per_control(scale, batch_size=b, num_controls=k, name="control_scale").clamp_min(0.0)
+    return (feat * scale.view(b, k, 1, 1)).sum(dim=1)

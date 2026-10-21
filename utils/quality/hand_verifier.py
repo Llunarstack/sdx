@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from utils.quality.quality import rgb_to_luminance
+
 
 def score_hand_structure(rgb_uint8: np.ndarray) -> float:
     """
@@ -20,7 +22,7 @@ def score_hand_structure(rgb_uint8: np.ndarray) -> float:
     arr = np.asarray(rgb_uint8, dtype=np.float32)
     if arr.ndim != 3 or arr.shape[0] < 8 or arr.shape[1] < 8:
         return 0.5
-    gray = 0.299 * arr[..., 0] + 0.587 * arr[..., 1] + 0.114 * arr[..., 2]
+    gray = rgb_to_luminance(arr)
     h, w = gray.shape
     # Sobel-ish
     gx = np.zeros_like(gray)

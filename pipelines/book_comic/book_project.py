@@ -18,6 +18,7 @@ Legacy ``cover/cover.png`` is still written when requested for older tooling.
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,19 @@ BOOK_JSON = "book.json"
 COVERS_DIR = "covers"
 PAGES_DIR = "pages"
 LEGACY_COVER_DIR = "cover"
+
+_BOOK_TOP_KEYS = frozenset(
+    {
+        "version",
+        "updated_at",
+        "title",
+        "ckpt",
+        "book_type",
+        "model_note",
+        "layout",
+        "entries",
+    }
+)
 
 
 @dataclass
@@ -97,6 +111,7 @@ class BookProject:
         self.entries.append(dict(entry))
 
     def rel(self, path: Path) -> str:
+        """POSIX path relative to the project root (bare file name if outside it)."""
         try:
             return path.resolve().relative_to(self.root.resolve()).as_posix()
         except ValueError:
@@ -129,42 +144,6 @@ class BookProject:
         """Copy front cover to ``cover/cover.png`` for older scripts."""
         if not front.is_file():
             return
-        legacy_dir = self.root / LEGACY_COVER_DIR
-        legacy_dir.mkdir(exist_ok=True)
-        legacy = legacy_dir / "cover.png"
-        legacy.write_bytes(front.read_bytes())
-
-    def validate_artifacts(self) -> tuple[list[str], list[str]]:
-        """Return (errors, warnings) for missing cover/page files on disk."""
-        from pipelines.book_comic.book_manifest_utils import validate_book_manifest
-
-        return validate_book_manifest(
-            self.to_dict(),
-            project_root=self.root,
-            check_files=True,
-        )
-
-    def export_book_manifest(self) -> dict[str, Any]:
-        """Shape compatible with ``book_manifest.json`` validators."""
-        return {
-            "ckpt": self.ckpt,
-            "book_type": self.book_type,
-            "title": self.title,
-            "book_project": str(self.root),
-            "entries": self.entries,
-            **{k: v for k, v in self.extra.items() if k != "entries"},
-        }
-
-
-_BOOK_TOP_KEYS = frozenset(
-    {
-        "version",
-        "updated_at",
-        "title",
-        "ckpt",
-        "book_type",
-        "model_note",
-        "layout",
-        "entries",
-    }
-)
+        legacy = self.legacy_cover_path()
+        legacy.parent.mkdir(exist_ok=True)
+        shutil.copyfile(front, legacy)

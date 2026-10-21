@@ -6,12 +6,7 @@ from pathlib import Path
 
 import torch
 from config.train_config import TrainConfig
-
-
-class ConfigValidationError(Exception):
-    """Configuration validation error."""
-
-    pass
+from diffusion.schedules import ZTSNR_SUFFIX
 
 
 def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> list[str]:
@@ -220,9 +215,15 @@ def validate_train_config(cfg: TrainConfig, *, require_cuda: bool = True) -> lis
         errors.append(f"prediction_type must be epsilon | v | x0; got {pred_t!r}")
 
     beta = str(getattr(cfg, "beta_schedule", "linear") or "").lower().strip()
-    if beta not in ("linear", "cosine", "sigmoid", "squaredcos_cap_v2"):
+    ztsnr = beta.endswith(ZTSNR_SUFFIX)
+    if beta.removesuffix(ZTSNR_SUFFIX) not in ("linear", "cosine", "sigmoid", "squaredcos_cap_v2"):
         warnings.append(
             f"Unusual beta_schedule {beta!r}; supported in-repo: linear, cosine, sigmoid, squaredcos_cap_v2"
+        )
+    if ztsnr and pred_t == "epsilon" and not bool(getattr(cfg, "flow_matching_training", False)):
+        errors.append(
+            "zero terminal SNR needs --prediction-type v (or x0): epsilon prediction is undefined at SNR 0 "
+            "(Lin et al. 2024)."
         )
 
     buckets = getattr(cfg, "resolution_buckets", None)
@@ -303,81 +304,3 @@ def estimate_memory_usage(cfg: TrainConfig) -> dict:
         "total_estimated_gb": total_estimated,
         "recommended_vram_gb": total_estimated * 1.3,  # 30% buffer
     }
-
-
-def suggest_optimizations(cfg: TrainConfig, available_vram_gb: float | None = None) -> list[str]:
-    """Suggest configuration optimizations based on available resources."""
-    suggestions = []
-
-    memory_est = estimate_memory_usage(cfg)
-
-    if available_vram_gb and memory_est["total_estimated_gb"] > available_vram_gb:
-        suggestions.append(
-            f"Estimated memory usage ({memory_est['total_estimated_gb']:.1f}GB) exceeds available VRAM ({available_vram_gb}GB)"
-        )
-        suggestions.append("Consider: reducing global_batch_size, enabling grad_checkpointing, using smaller model")
-
-    # Performance suggestions
-    if not cfg.use_xformers:
-        suggestions.append("Enable use_xformers for better memory efficiency")
-
-    if not cfg.use_compile:
-        suggestions.append("Enable use_compile for faster training (PyTorch 2.0+)")
-
-    if cfg.num_workers < 4:
-        suggestions.append("Consider increasing num_workers for faster data loading")
-
-    # Training efficiency
-    if cfg.grad_accum_steps == 1 and cfg.global_batch_size < 128:
-        suggestions.append("Consider using gradient accumulation to increase effective batch size")
-
-    if cfg.lr_warmup_steps < 100:
-        suggestions.append("Consider longer warmup for stable training")
-
-    return suggestions
-
-
-def validate_inference_args(args) -> list[str]:
-    """
-    Validate inference-style arguments (e.g. ``sample.py`` namespace).
-
-    Width/height ``0`` means “use model native size” (same as CLI defaults).
-    """
-    issues = []
-
-    ckpt = getattr(args, "ckpt", None)
-    if ckpt:
-        if not Path(str(ckpt)).exists():
-            issues.append(f"ERROR: Checkpoint not found: {ckpt}")
-
-    w = int(getattr(args, "width", 0) or 0)
-    h = int(getattr(args, "height", 0) or 0)
-    if w > 0 and h > 0:
-        if w % 8 != 0 or h % 8 != 0:
-            issues.append("WARNING: Width and height should be multiples of 8 for VAE alignment")
-    elif (w > 0) ^ (h > 0):
-        issues.append("WARNING: Set both --width and --height or leave both 0 for model native resolution")
-
-    steps = int(getattr(args, "steps", 0) or 0)
-    if steps <= 0:
-        issues.append("ERROR: Number of steps must be positive")
-
-    cfg_scale = float(getattr(args, "cfg_scale", 7.5) or 7.5)
-    if cfg_scale < 1.0:
-        issues.append("WARNING: CFG scale < 1.0 may produce poor results")
-
-    if cfg_scale > 20.0:
-        issues.append("WARNING: Very high CFG scale may cause artifacts")
-
-    cm = int(getattr(args, "clip_monitor_every", 0) or 0)
-    if cm < 0:
-        issues.append("ERROR: --clip-monitor-every must be >= 0")
-    if cm > 0:
-        if float(getattr(args, "clip_monitor_cfg_boost", 0.0) or 0.0) <= 0.0:
-            issues.append("WARNING: --clip-monitor-every > 0 but --clip-monitor-cfg-boost is 0 (monitor has no effect)")
-
-    sc = float(getattr(args, "spectral_coherence_latent", 0.0) or 0.0)
-    if sc < 0.0 or sc > 1.0:
-        issues.append("WARNING: --spectral-coherence-latent is usually in [0, 1]")
-
-    return issues

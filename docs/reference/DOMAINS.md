@@ -5,8 +5,8 @@ Many models struggle with **3D-rendered** looks, **photorealistic** images, **in
 ## How we handle them
 
 1. **Hard-style boosting** — 3D, photorealistic, and style-mix tags are boosted **first** (stronger than general domains) so the model anchors on the right look. See `data/caption_utils.py`: `HARD_STYLE_TAGS`, `boost_hard_style_tags`. Training applies this before quality/domain boosts.
-2. **Domain tag boosting** — When your training captions (or inference prompts) contain tags like `interior design`, `exterior`, the data pipeline also **repeats them** via `DOMAIN_TAGS`, `boost_domain_tags`.
-3. **Recommended prompts and negatives** — `config/defaults/prompt_domains.py` lists `HARD_STYLE_RECOMMENDED_PROMPTS`, `HARD_STYLE_NEGATIVES`, and `RECOMMENDED_PROMPTS_BY_DOMAIN` per domain. At inference use `--hard-style 3d | realistic | 3d_realistic | style_mix` to prepend the right tags (and set `--negative-prompt` from `HARD_STYLE_NEGATIVES` for best results).
+2. **Domain tag boosting** — When your training captions (or inference prompts) contain tags like `interior design`, `exterior`, the data pipeline moves them to the **front** of the caption (once, deduplicated) via `DOMAIN_TAGS`, `boost_domain_tags`.
+3. **Recommended prefixes** — `config/defaults/prompt_domains.py` lists `HARD_STYLE_RECOMMENDED_PROMPTS`. At inference use `--hard-style 3d | realistic | 3d_realistic | style_mix` to prepend the right tags, with a matching `--negative-prompt` (table below).
 
 ## Training data
 
@@ -19,7 +19,7 @@ The pipeline automatically boosts these when present, so the model gets a strong
 
 ## Inference
 
-**Hard styles (3D, realistic, style mixes):** Use `--hard-style 3d | realistic | 3d_realistic | style_mix` to prepend recommended tags. Optionally set `--negative-prompt` from `config/defaults/prompt_domains.py` → `HARD_STYLE_NEGATIVES`.
+**Hard styles (3D, realistic, style mixes):** Use `--hard-style 3d | realistic | 3d_realistic | style_mix` to prepend recommended tags. Optionally add the matching `--negative-prompt` below.
 
 | Hard style   | Example (prepended by --hard-style)                    | Example negative |
 |--------------|--------------------------------------------------------|------------------|
@@ -28,14 +28,14 @@ The pipeline automatically boosts these when present, so the model gets a strong
 | **3d_realistic** | `3d render, photorealistic, octane render, natural lighting, masterpiece` | flat, wrong lighting, plastic look |
 | **style_mix** | `2.5d, semi-realistic, masterpiece, best quality, detailed` | blurry, incoherent style, messy |
 
-**Other domains (interior, exterior):** Use the same tags in your prompt and the suggested negatives from `RECOMMENDED_NEGATIVE_BY_DOMAIN`:
+**Other domains (interior, exterior):** Use the same tags in your prompt and negatives like these:
 
 | Domain    | Example prompt prefix                                      | Example negative |
 |-----------|------------------------------------------------------------|------------------|
 | **Interior**  | `interior design, indoor, room, modern interior, masterpiece` | empty room, distorted perspective, blurry |
 | **Exterior**  | `exterior, outdoor, architecture, building, masterpiece`   | flat, wrong perspective, blurry |
 
-Full lists: `config/defaults/prompt_domains.py` → `HARD_STYLE_RECOMMENDED_PROMPTS`, `HARD_STYLE_NEGATIVES`, `RECOMMENDED_PROMPTS_BY_DOMAIN`. **Style mixing and LoRAs:** see `STYLE_MIX_TIPS` and `LORA_MIX_TIPS` in the same file.
+Full prefix lists: `config/defaults/prompt_domains.py` → `HARD_STYLE_RECOMMENDED_PROMPTS`. **Style mixing and LoRAs:** see [QUALITY.md](../QUALITY.md).
 
 ## Other hard areas
 

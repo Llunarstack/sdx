@@ -15,6 +15,34 @@ import numpy as np
 from PIL import Image
 
 
+def sample_cmd(
+    repo_root: Path,
+    *,
+    ckpt: str,
+    prompt: str,
+    out: Path,
+    device: str,
+    num: int,
+    pick_metric: str,
+    negative_prompt: str = "",
+    expected_text: str = "",
+    vit_ckpt: str = "",
+    local_rag_jsonl: str = "",
+) -> list[str]:
+    """``sample.py`` argv shared by the agent tools and the Visual Brain (superior preset, best-of-N)."""
+    cmd = [sys.executable, str(repo_root / "sample.py"), "--ckpt", str(ckpt), "--prompt", prompt, "--out", str(out)]
+    cmd += ["--device", device, "--num", str(num), "--pick-best", pick_metric, "--preset", "superior"]
+    for flag, value in (
+        ("--negative-prompt", negative_prompt),
+        ("--expected-text", expected_text),
+        ("--pick-vit-ckpt", vit_ckpt),
+        ("--local-rag-jsonl", local_rag_jsonl),
+    ):
+        if str(value or "").strip():
+            cmd += [flag, str(value)]
+    return cmd
+
+
 class AgentTool(str, Enum):
     rag_retrieve = "rag_retrieve"
     web_search = "web_search"
@@ -99,7 +127,7 @@ class ToolRegistry:
         path = str(getattr(self.ctx, "local_rag_jsonl", "") or "").strip()
         if not path:
             return ToolResult(AgentTool.rag_retrieve, ok=True, message="no rag corpus")
-        from utils.superior.retrieval import build_tfidf_index_from_jsonl
+        from utils.superior.inference_pipeline import build_tfidf_index_from_jsonl
 
         idx = build_tfidf_index_from_jsonl(path)
         facts = idx.retrieve(self.session["prompt"], top_k=self.rag_top_k)
@@ -209,7 +237,7 @@ class ToolRegistry:
     def _expand_prompt(self, **_: Any) -> ToolResult:
         if not self.expand_prompt:
             return ToolResult(AgentTool.expand_prompt, ok=True, message="skipped")
-        from utils.superior.prompt_expand import expand_prompt_heuristic
+        from utils.superior.inference_pipeline import expand_prompt_heuristic
 
         before = self.session["prompt"]
         self.session["prompt"] = expand_prompt_heuristic(before)
@@ -225,38 +253,23 @@ class ToolRegistry:
         if bool(getattr(self.ctx, "dry_run", False)):
             self.session["last_out"] = str(out)
             return ToolResult(AgentTool.generate, ok=True, message="dry_run", data={"out": str(out)})
-        cmd = [
-            sys.executable,
-            str(self.repo_root / "sample.py"),
-            "--ckpt",
-            str(self.ctx.ckpt),
-            "--prompt",
-            self.session["prompt"],
-            "--out",
-            str(out),
-            "--device",
-            str(getattr(self.ctx, "device", "cuda")),
-            "--num",
-            str(self.num_candidates),
-            "--pick-best",
-            self.pick_metric,
-            "--preset",
-            "superior",
-        ]
-        if self.session.get("negative_prompt"):
-            cmd.extend(["--negative-prompt", str(self.session["negative_prompt"])])
-        if str(getattr(self.ctx, "local_rag_jsonl", "") or "").strip():
-            cmd.extend(["--local-rag-jsonl", str(self.ctx.local_rag_jsonl)])
+        cmd = sample_cmd(
+            self.repo_root,
+            ckpt=str(self.ctx.ckpt),
+            prompt=self.session["prompt"],
+            out=out,
+            device=str(getattr(self.ctx, "device", "cuda")),
+            num=self.num_candidates,
+            pick_metric=self.pick_metric,
+            negative_prompt=str(self.session.get("negative_prompt") or ""),
+            expected_text=str(getattr(self.ctx, "expected_text", "") or ""),
+            vit_ckpt=str(getattr(self.ctx, "vit_ckpt", "") or ""),
+            local_rag_jsonl=str(getattr(self.ctx, "local_rag_jsonl", "") or ""),
+        )
         if self.self_correct:
             cmd.append("--superior-self-correct")
         if self.expand_prompt:
             cmd.append("--expand-prompt")
-        vit = str(getattr(self.ctx, "vit_ckpt", "") or "").strip()
-        if vit:
-            cmd.extend(["--pick-vit-ckpt", vit])
-        exp = str(getattr(self.ctx, "expected_text", "") or "").strip()
-        if exp:
-            cmd.extend(["--expected-text", exp])
         refs = self.session.get("reference_paths") or []
         if refs:
             cmd.extend(["--dissect-refs", ",".join(str(r) for r in refs)])
@@ -281,25 +294,15 @@ class ToolRegistry:
         out = self.session.get("last_out", "")
         if not out or not Path(out).is_file():
             return ToolResult(AgentTool.verify, ok=False, message="no image to verify")
-        arr = np.array(Image.open(out).convert("RGB"), dtype=np.uint8)
-        from utils.superior.composite_ranker import CompositeRanker
+        from utils.superior.inference_pipeline import verify_metrics
 
-        ranker = CompositeRanker()
-        vit = str(getattr(self.ctx, "vit_ckpt", "") or "").strip()
-        scores = ranker.score_images([arr], prompt=self.session["prompt"], device=str(self.ctx.device), vit_ckpt=vit)
-        from utils.quality import test_time_pick as ttp
-
-        clip = ttp.score_clip_similarity([arr], self.session["prompt"], device=str(self.ctx.device))
-        metrics = {
-            "composite": float(scores[0]),
-            "clip": float(clip[0]) if clip else 0.0,
-            "sharpness": float(ttp.score_edge_sharpness(arr)),
-            "aesthetic": float(ttp.score_aesthetic_proxy(arr)),
-        }
-        exp = str(getattr(self.ctx, "expected_text", "") or "").strip()
-        if exp:
-            ocr = ttp.score_ocr_match([arr], exp)
-            metrics["ocr_match"] = float(ocr[0]) if ocr else 0.0
+        metrics = verify_metrics(
+            np.array(Image.open(out).convert("RGB"), dtype=np.uint8),
+            self.session["prompt"],
+            device=str(self.ctx.device),
+            vit_ckpt=str(getattr(self.ctx, "vit_ckpt", "") or "").strip(),
+            expected_text=str(getattr(self.ctx, "expected_text", "") or "").strip(),
+        )
         self.session["metrics"] = metrics
         return ToolResult(AgentTool.verify, ok=True, data=metrics)
 
@@ -343,11 +346,7 @@ class ToolRegistry:
         if bool(getattr(self.ctx, "dry_run", False)):
             return ToolResult(AgentTool.benchmark, ok=True, message="dry_run")
         work = Path(getattr(self.ctx, "work_dir", "agentic_run")) / "benchmark"
-        cmd = [
-            sys.executable,
-            "-m",
-            "scripts.tools",
-            "benchmark_suite",
+        argv = [
             "--ckpt",
             str(self.ctx.ckpt),
             "--out-dir",
@@ -359,31 +358,26 @@ class ToolRegistry:
             "--pick-best",
             self.pick_metric,
         ]
-        rc = subprocess.run(cmd, cwd=str(self.repo_root), check=False).returncode
+        from utils.superior.auto_loop import run_tool
+
+        rc = run_tool("benchmark_suite", argv, repo_root=self.repo_root)
         return ToolResult(AgentTool.benchmark, ok=rc == 0, data={"out_dir": str(work)})
 
     def _flywheel(self, **_: Any) -> ToolResult:
         if bool(getattr(self.ctx, "dry_run", False)):
             return ToolResult(AgentTool.flywheel, ok=True, message="dry_run")
         work = Path(getattr(self.ctx, "work_dir", "agentic_run")) / "flywheel"
-        cmd = [
-            sys.executable,
-            "-m",
-            "scripts.tools",
-            "run_flywheel",
-            "--base-ckpt",
-            str(self.ctx.ckpt),
-            "--work-dir",
-            str(work),
-        ]
+        argv = ["--base-ckpt", str(self.ctx.ckpt), "--work-dir", str(work)]
         rag = str(getattr(self.ctx, "local_rag_jsonl", "") or "").strip()
         if rag:
-            cmd.extend(["--local-rag-jsonl", rag])
+            argv.extend(["--local-rag-jsonl", rag])
         vit = str(getattr(self.ctx, "vit_ckpt", "") or "").strip()
         if vit:
-            cmd.extend(["--vit-ckpt", vit])
-        rc = subprocess.run(cmd, cwd=str(self.repo_root), check=False).returncode
+            argv.extend(["--vit-ckpt", vit])
+        from utils.superior.auto_loop import run_tool
+
+        rc = run_tool("run_flywheel", argv, repo_root=self.repo_root)
         return ToolResult(AgentTool.flywheel, ok=rc == 0, data={"work_dir": str(work)})
 
 
-__all__ = ["AgentTool", "ToolRegistry", "ToolResult"]
+__all__ = ["AgentTool", "ToolRegistry", "ToolResult", "sample_cmd"]

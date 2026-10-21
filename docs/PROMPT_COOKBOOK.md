@@ -111,7 +111,7 @@ python sample.py \
   --out fullbody.png
 ```
 
-Tips (from `FULL_BODY_AND_TWO_HEAD_TIPS`):
+Tips:
 - Describe lower body explicitly: `standing, long dress, legs, shoes`.
 - Use portrait aspect for full body; 1:1 for head/shoulder.
 

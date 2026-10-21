@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import torch
-from utils.modeling.text_encoder_bundle import (
-    PentaTextFusion,
-    TripleTextFusion,
-    load_fusion_from_state_dict,
-)
+from utils.modeling.text_encoder_bundle import PentaTextFusion, TripleTextFusion
 
 
 def test_triple_fusion_appends_two_tokens():
@@ -30,19 +26,3 @@ def test_penta_fusion_appends_four_tokens():
     out = fusion(t5, clip_l, clip_bg, clip_h, clip_long)
     assert out.shape == (2, 20, 4096)
     assert fusion.extra_token_count == 4
-
-
-def test_load_fusion_from_state_dict_detects_penta():
-    fusion = PentaTextFusion(64, 96, 128, 64, out_dim=32)
-    sd = fusion.state_dict()
-    loaded = load_fusion_from_state_dict(sd, torch.device("cpu"))
-    assert isinstance(loaded, PentaTextFusion)
-    assert loaded.extra_token_count == 4
-
-
-def test_load_fusion_from_state_dict_detects_triple():
-    fusion = TripleTextFusion(64, 96, out_dim=32)
-    sd = fusion.state_dict()
-    loaded = load_fusion_from_state_dict(sd, torch.device("cpu"))
-    assert isinstance(loaded, TripleTextFusion)
-    assert loaded.extra_token_count == 2

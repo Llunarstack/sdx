@@ -6,7 +6,7 @@ How recent diffusion alignment and inference papers map to SDX modules. This is 
 
 | Idea | Paper / trend | SDX module |
 |------|---------------|------------|
-| Timestep-aware DPO weighting | Rethinking DPO in Diffusion (AAAI 2026 oral) | `utils/training/dpo_advanced.py` → `--timestep-dpo-weight high_noise` |
+| Timestep-aware DPO weighting | Rethinking DPO in Diffusion (AAAI 2026 oral) | `utils/training/preference.py` → `--timestep-dpo-weight high_noise` |
 | Safeguarded / SDPO loser scaling | Diffusion-SDPO | `safeguarded_dpo_preference_loss` → `--safeguarded-dpo 0.85` |
 | Dynamic reference (EMA ref) | Online DPO variants | `ema_update_reference` → `--ref-ema-alpha 0.01` |
 | Preference mining + ViT | Internal benchmark flywheel | `vit_mining.py`, `hard_negative.py` |
@@ -16,11 +16,10 @@ How recent diffusion alignment and inference papers map to SDX modules. This is 
 
 | Idea | Paper / trend | SDX module |
 |------|---------------|------------|
-| Frequency-decoupled guidance (FDG) | FDG for CFG halos | `frequency_cfg.py` → `--fdg-cfg-strength 0.65` |
+| Composable guidance stack | APG, FDG, CFG rescale, CFG-Zero★, TCFG, PAG, SLG and the guidance interval compose | `guidance_stack.py` (see below) |
 | Feature / step caching | SpeCa, TeaCache | `feature_cache.py` → `--feature-cache-delta 0.012` |
 | Batched CFG | Standard throughput win | `cfg_batched.py` |
-| Speculative CFG draft | Draft+verify | `speculative_denoise.py` |
-| Multi-metric best-of-N | Test-time scaling | `composite_ranker.py`, `online_reward.py` |
+| Multi-metric best-of-N | Test-time scaling | `composite_ranker.py` over `test_time_pick` terms (incl. `ai_look.py`, `art_critic.py`) |
 | Self-correction refine | Align-and-refine loops | `self_correct.py` |
 | Block-wise DiT cache | BWCache, TeaCache | `block_cache.py` → `--block-cache-thresh` |
 | Consistency / LCM distill | Latent Consistency Models | `train_consistency_distill.py` |
@@ -28,24 +27,22 @@ How recent diffusion alignment and inference papers map to SDX modules. This is 
 | LADD adversarial distill | Flux Schnell family | `train_ladd_distill.py` |
 | TaylorSeer block forecast | ICCV 2025 cache-and-forecast | `taylor_cache.py` → `--taylor-cache` |
 | DenseGRPO step rewards | 2026 dense alignment | `dense_grpo.py` → `--dense-grpo` |
-| Rectified-CFG++ | Flow CFG stabilization | `rectified_cfgpp.py` → `--rcfgpp-tangent` |
-| Adaptive Projected Guidance (APG) | ICLR 2025 — drop parallel CFG oversaturation | `apg_guidance.py` → `--apg-parallel-eta 0` |
+| Adaptive Projected Guidance (APG) | Sadat et al., ICLR 2025 | `--apg-parallel-eta 0 --apg-momentum-beta -0.5 [--apg-norm-threshold r]` |
 | Flash-GRPO | Iso-temporal grouping + grad rectification | `flash_grpo.py` → `--flash-grpo` |
 | BranchGRPO | Tree branching rollouts | `branch_grpo.py` → `--branch-grpo` |
-| ZeResFDG (CADE 2.5) | FDG + zero-projection + energy rescale | `zeresfdg.py` → `--zeresfdg-strength 1` |
-| CFG-Zero★ | Flow CFG optimized scale + zero-init | `cfg_zero_star.py` → `--cfg-zero-star` |
-| QSilk micrograin | Latent quantile clamp + detail gate | `micrograin_stabilizer.py` → `--qsilk-micrograin 0.12` |
+| Frequency-decoupled guidance (FDG) | Sadat et al. 2025, Laplacian split | `--fdg-low 0.6 --fdg-high 1.3` |
+| CFG-Zero★ | Fan et al. 2025; zero-init on flow only | `--cfg-zero-star` |
+| QSilk micrograin | Latent quantile clamp + detail gate | `latent_filters.py` → `--qsilk-micrograin 0.12` |
 | TurningPoint-GRPO | Step incremental + turning-point credit | `turning_point_grpo.py` → `--tp-grpo` |
 | DyDiT dynamic width | Timestep-wise width scaling | `dynamic_dit.py` → `--dynamic-dit-width` |
-| SLA linear attention | Marginal-block linear attn scaffold | `linear_attention.py` → `--linear-attn-fraction 0.25` |
-| APG momentum | Cross-step reverse momentum | `--apg-momentum-beta 0.2` + `--apg-parallel-eta 0` |
+| SLA linear attention | Softmax/linear blend (elu+1 kernel) | `models/linear_attention.py` → `--linear-attn-fraction 0.25` |
 | LCM few-step student | Consistency distill inference | `--lcm-ckpt` + `train_consistency_distill` |
-| CFG++ | Manifold-constrained CFG (ICLR 2025) | `cfg_pp.py` → `--cfg-pp-lambda 0.55` |
-| Interval CFG | Skip CFG early/late denoise | `cfg_interval.py` → `--cfg-skip-early-frac 0.15` |
+| Guidance interval | Kynkäänniemi et al. 2024, keyed on noise level | `--cfg-interval 0.28,5.42` |
 | CFG-Rejection | Early-path filter for best-of-N | `cfg_rejection.py` |
 | GRPO-Guard | Ratio-norm + timestep reweight | `grpo_guard.py` → `--grpo-guard` |
-| TCFG | Tangential damping CFG (CVPR 2025) | `tcfg.py` → `--tcfg-damping 0.9` |
-| SLG | Skip Layer Guidance (SD3.5) | `slg_guidance.py` → `--slg-scale 2.8` |
+| TCFG | Kwon et al. 2025, SVD of [cond; uncond] | `--tcfg-damping 1` |
+| SLG | Skip Layer Guidance (SD3.5) | `--slg-scale 2.8` |
+| PAG | Perturbed-Attention Guidance (Ahn et al. 2024) | `--pag-scale 3` (batched with the CFG forward) |
 | DBCache CFG split | Cache-DiT cond-only fingerprint | `--dbc-separate-cfg` + block cache |
 | CFG-Rejection rerank | Early CFG gap multi-sample order | `--cfg-rejection-rerank` |
 
@@ -68,14 +65,12 @@ No wrapper replaces **pretraining scale**, **proprietary data**, or **frontier V
 ```bash
 python sample.py --ckpt ... --preset superior --num 4 \
   --pick-best superior_composite \
-  --zeresfdg-strength 1 --cfg-rescale 0.7 \
+  --apg-parallel-eta 0 --fdg-low 0.6 --fdg-high 1.3 --cfg-rescale 0.3 \
   --cfg-zero-star --qsilk-micrograin 0.1 \
   --local-rag-jsonl datasets/facts.jsonl --superior-self-correct
 ```
 
-**Guidance priority** (first match wins): interval skip → `--cfg-zero-star` → `--zeresfdg-strength` → `--cfg-pp-lambda` → `--tcfg-damping` → `--fdg-cfg-strength` → `--apg-parallel-eta` → `--rcfgpp-tangent` → standard CFG. **SLG** (`--slg-scale`) replaces the stack with CFG+skip-layer shift when active in `[slg_start, slg_stop]` progress.
-
-For flow-matching checkpoints, add `--cfg-zero-star` (and ensure `flow_matching_sample` is on). ZeResFDG replaces separate FDG+APG for most SD/SDXL-style runs.
+**Guidance composition** (`utils/generation/guidance_stack.py`): every enabled technique runs, in this order. TCFG and the CFG-Zero★ scale adjust the uncond branch in the model's output space; both branches map to x0; APG (momentum, norm cap, projection) runs per FDG band; PAG and SLG add `s*(cond - perturbed)`; CFG rescale (Lin et al.) runs last. Outside the `--cfg-interval` sigma band the uncond forward is skipped. CFG-Zero★ zero-init applies to flow-matching checkpoints only.
 
 DPO stage after benchmark:
 

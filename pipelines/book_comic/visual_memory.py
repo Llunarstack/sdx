@@ -9,13 +9,14 @@ This is **prompt + metadata** memory (text the diffusion stack sees). Pair with
 JSON format (``version`` = 1):
 
 - ``book_style``: ``manga`` | ``webtoon`` | ``graphic_novel`` | ``comic_us`` | ``illustration`` | ``other``
-- ``global_*``: strings merged into every page (camera, rendering, negative hints as positives)
-- ``entities``: map id -> character / prop / vehicle / setting records
+- ``global_*``: strings merged into every page (camera, rendering, color script, continuity)
+- ``entities``: map id -> character / prop / vehicle / setting records (a list of ``{"id": ...}`` also works)
 - ``page_overrides`` on each entity: patches active for ``from_page``..``to_page`` (inclusive, 0-based)
 - ``page_patches``: run-level extras for page ranges (wardrobe arc, weather, etc.)
+- ``extra_prompt_all_pages``: appended to every interior page (not the cover)
 - ``cover``: optional block for cover-only prompt fragments
 - ``lettering``: balloon/typography/sfx/orthography locks (see ``book_text_continuity``)
-- ``style_mix``: ``{{"preset": "manga_comic", "secondary": "comic_us"}}`` hybrid idiom fusion
+- ``style_mix``: ``{"preset": "manga_comic", "secondary": "comic_us"}`` hybrid idiom fusion
 - ``user_style_anchor``: freeform user aesthetic repeated every page (combines with book pipeline style)
 - ``content_rating``: optional ``mature`` / ``unrestricted`` / ``adult`` / ``nsfw`` (unlocks mature narrative-fidelity hints when paired with pipeline NSFW)
 - ``book_challenge_pack``: same names as ``--book-challenge-pack`` in ``generate_book.py``
@@ -34,6 +35,8 @@ from pathlib import Path
 from typing import Any
 
 from pipelines.book_comic.book_challenging_content import visual_memory_challenge_clause
+from pipelines.book_comic.book_style_fusion import fusion_from_cli
+from pipelines.book_comic.book_text_continuity import lettering_visual_memory_fragment
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
 MEMORY_VERSION = 1
@@ -61,7 +64,6 @@ BOOK_STYLE_HINTS: dict[str, str] = {
     "other": "",
 }
 
-
 ENTITY_KIND_LABEL = {
     "character": "recurring character",
     "prop": "recurring prop/object",
@@ -69,6 +71,28 @@ ENTITY_KIND_LABEL = {
     "vehicle": "recurring vehicle",
     "setting": "recurring setting element",
 }
+
+_STRUCTURE_LABELS = {
+    "proportions": "body proportions",
+    "head_to_body_ratio": "head-to-body ratio",
+    "height_class": "relative height",
+    "default_viewing_angle": "preferred camera / viewing angle",
+    "scale_notes": "scale vs other cast",
+    "silhouette": "silhouette read",
+    "pose_language": "typical pose language",
+}
+
+_GLOBAL_KEYS = ("global_camera_language", "global_rendering", "global_color_script", "global_continuity")
+
+
+def _text(value: Any) -> str:
+    """Stripped string form of a JSON value; ``None`` becomes ``""`` rather than ``"None"``."""
+    return "" if value is None else str(value).strip()
+
+
+def _labelled(label: str, value: Any) -> str:
+    s = _text(value)
+    return f"{label}: {s}" if s else ""
 
 
 def _deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[str, Any]:
@@ -90,123 +114,65 @@ def _normalize_entities(root: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
         for item in raw:
             if not isinstance(item, dict):
                 continue
-            eid = str(item.get("id", "")).strip()
-            if not eid:
-                continue
-            body = {k: v for k, v in item.items() if k != "id"}
-            out[eid] = body
+            eid = _text(item.get("id"))
+            if eid:
+                out[eid] = {k: v for k, v in item.items() if k != "id"}
         return out
     return {}
 
 
 def _structure_clause(structure: Mapping[str, Any]) -> str:
-    if not structure:
-        return ""
-    parts: list[str] = []
-    mapping = {
-        "proportions": "body proportions",
-        "head_to_body_ratio": "head-to-body ratio",
-        "height_class": "relative height",
-        "default_viewing_angle": "preferred camera / viewing angle",
-        "scale_notes": "scale vs other cast",
-        "silhouette": "silhouette read",
-        "pose_language": "typical pose language",
-    }
-    for key, label in mapping.items():
-        val = structure.get(key)
-        s = str(val).strip() if val is not None else ""
-        if s:
-            parts.append(f"{label}: {s}")
-    extra = str(structure.get("extra", "")).strip()
-    if extra:
-        parts.append(extra)
-    if not parts:
-        return ""
-    return "structured design lock: " + "; ".join(parts)
+    parts = [_labelled(label, structure.get(key)) for key, label in _STRUCTURE_LABELS.items()]
+    parts.append(_text(structure.get("extra")))
+    parts = [p for p in parts if p]
+    return "structured design lock: " + "; ".join(parts) if parts else ""
 
 
 def _entity_prompt(eid: str, data: Mapping[str, Any]) -> str:
-    kind = str(data.get("kind", "character") or "character").lower().strip()
+    kind = _text(data.get("kind") or "character").lower()
     head = ENTITY_KIND_LABEL.get(kind, ENTITY_KIND_LABEL["character"])
-    name = str(data.get("display_name", "") or eid).strip()
-    label = f'{head} "{name}" (id {eid})'
-    bits: list[str] = [label]
-
-    look = str(data.get("canonical_look", "")).strip()
-    if look:
-        bits.append(f"established look: {look}")
-
-    st = data.get("structure")
-    if isinstance(st, dict):
-        sc = _structure_clause(st)
-        if sc:
-            bits.append(sc)
-
-    line = str(data.get("line_and_rendering", "")).strip()
-    if line:
-        bits.append(f"line/rendering: {line}")
-
-    costume = str(data.get("costume_lock", "")).strip()
-    if costume:
-        bits.append(f"locked wardrobe: {costume}")
-
-    sig = str(data.get("signature_props", "")).strip()
-    if sig:
-        bits.append(f"signature items: {sig}")
-
-    notes = str(data.get("notes", "")).strip()
-    if notes:
-        bits.append(notes)
-
-    return merge_prompt_fragments(*bits)
+    name = _text(data.get("display_name") or eid)
+    structure = data.get("structure")
+    return merge_prompt_fragments(
+        f'{head} "{name}" (id {eid})',
+        _labelled("established look", data.get("canonical_look")),
+        _structure_clause(structure) if isinstance(structure, dict) else "",
+        _labelled("line/rendering", data.get("line_and_rendering")),
+        _labelled("locked wardrobe", data.get("costume_lock")),
+        _labelled("signature items", data.get("signature_props")),
+        _text(data.get("notes")),
+    )
 
 
 def _page_window(ov: Mapping[str, Any]) -> tuple[int, int] | None:
+    """Inclusive ``(lo, hi)`` page range of an override; ``None`` when ``from_page`` is unparseable."""
     try:
         lo = int(ov.get("from_page", 0))
     except (TypeError, ValueError):
         return None
-    hi_raw = ov.get("to_page", lo)
     try:
-        hi = int(hi_raw)
+        hi = int(ov.get("to_page", lo))
     except (TypeError, ValueError):
         hi = lo
-    if hi < lo:
-        lo, hi = hi, lo
-    return lo, hi
-
-
-def _applies(page_index: int, lo: int, hi: int) -> bool:
-    return lo <= page_index <= hi
+    return (lo, hi) if lo <= hi else (hi, lo)
 
 
 def _merge_entity_for_page(base_entity: Mapping[str, Any], page_index: int) -> dict[str, Any]:
+    """Apply every override covering *page_index*, earliest ``from_page`` first so later arcs win."""
     ent = copy.deepcopy(dict(base_entity))
     overrides = ent.get("page_overrides")
     if not isinstance(overrides, list):
         return ent
-    ordered = []
+    active: list[tuple[int, dict[str, Any]]] = []
     for ov in overrides:
-        if not isinstance(ov, dict):
-            continue
-        w = _page_window(ov)
-        if w is None:
-            continue
-        lo, hi = w
-        if _applies(page_index, lo, hi):
-            ordered.append((lo, ov))
-    ordered.sort(key=lambda t: t[0])
-    for _, ov in ordered:
+        window = _page_window(ov) if isinstance(ov, dict) else None
+        if window is not None and window[0] <= page_index <= window[1]:
+            active.append((window[0], ov))
+    active.sort(key=lambda t: t[0])
+    for _, ov in active:
         patch = ov.get("patch")
         if isinstance(patch, dict):
             ent = _deep_merge(ent, patch)
-    return ent
-
-
-def _merge_entity_for_cover(base_entity: Mapping[str, Any]) -> dict[str, Any]:
-    """Cover: canonical design only (no page_overrides)."""
-    ent = copy.deepcopy(dict(base_entity))
-    ent.pop("page_overrides", None)
     return ent
 
 
@@ -219,8 +185,7 @@ class BookVisualMemory:
 
     @classmethod
     def load(cls, path: str | Path) -> BookVisualMemory:
-        p = Path(path)
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("visual memory JSON root must be an object")
         ver = int(raw.get("version", MEMORY_VERSION))
@@ -237,7 +202,7 @@ class BookVisualMemory:
         p.write_text(json.dumps(self.root, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     def entity_ids(self) -> list[str]:
-        return sorted(self.entities.keys())
+        return sorted(self.entities)
 
     def effective_entity(self, entity_id: str, page_index: int) -> dict[str, Any]:
         if entity_id not in self.entities:
@@ -252,23 +217,19 @@ class BookVisualMemory:
         to_page: int | None = None,
         patch: Mapping[str, Any] | None = None,
     ) -> None:
-        """
-        Append a page-range patch (user \"remember this change from page N\").
+        """Remember a design change from *from_page* (to *to_page*, inclusive) onward.
 
-        *patch* is deep-merged into the entity for prompts on pages in range.
+        *patch* is deep-merged into the entity for prompts on pages in range; an unknown
+        *entity_id* is created as a character.
         """
-        if entity_id not in self.entities:
-            self.entities[entity_id] = {"kind": "character", "display_name": entity_id}
-        ent = self.entities[entity_id]
-        lst = ent.get("page_overrides")
-        if not isinstance(lst, list):
-            lst = []
-            ent["page_overrides"] = lst
-        hi = int(to_page if to_page is not None else from_page)
-        lst.append(
+        ent = self.entities.setdefault(entity_id, {"kind": "character", "display_name": entity_id})
+        overrides = ent.get("page_overrides")
+        if not isinstance(overrides, list):
+            overrides = ent["page_overrides"] = []
+        overrides.append(
             {
                 "from_page": int(from_page),
-                "to_page": hi,
+                "to_page": int(from_page if to_page is None else to_page),
                 "patch": dict(patch or {}),
             }
         )
@@ -286,49 +247,32 @@ class BookVisualMemory:
             return
         patches = self.root.get("page_patches")
         if not isinstance(patches, list):
-            patches = []
-            self.root["page_patches"] = patches
-        hi = int(to_page if to_page is not None else from_page)
-        patches.append({"from_page": int(from_page), "to_page": hi, "extra_prompt": s})
+            patches = self.root["page_patches"] = []
+        patches.append(
+            {"from_page": int(from_page), "to_page": int(from_page if to_page is None else to_page), "extra_prompt": s}
+        )
 
     def _global_fragment(self) -> str:
-        style = str(self.root.get("book_style", "manga") or "manga").lower().strip()
+        style = _text(self.root.get("book_style") or "manga").lower()
         hint = BOOK_STYLE_HINTS.get(style, "")
-        bits: list[str] = []
-        if hint:
-            bits.append(f"book visual language ({style}): {hint}")
-        for key in (
-            "global_camera_language",
-            "global_rendering",
-            "global_color_script",
-            "global_continuity",
-        ):
-            s = str(self.root.get(key, "") or "").strip()
-            if s:
-                bits.append(s)
-        return merge_prompt_fragments(*bits)
+        return merge_prompt_fragments(
+            f"book visual language ({style}): {hint}" if hint else "",
+            *(_text(self.root.get(key)) for key in _GLOBAL_KEYS),
+        )
 
     def _lettering_fragment(self) -> str:
         letter = self.root.get("lettering")
-        if isinstance(letter, dict):
-            from pipelines.book_comic.book_text_continuity import lettering_visual_memory_fragment
-
-            return lettering_visual_memory_fragment(letter)
-        return ""
+        return lettering_visual_memory_fragment(letter) if isinstance(letter, dict) else ""
 
     def _style_mix_fragment(self) -> str:
         sm = self.root.get("style_mix")
         if not isinstance(sm, dict):
             return ""
-        preset = str(sm.get("preset", "") or "").strip()
-        sec = str(sm.get("secondary", "") or "").strip()
-        from pipelines.book_comic.book_style_fusion import fusion_from_cli
-
-        prim = str(self.root.get("book_style", "manga") or "manga")
-        return fusion_from_cli(preset=preset, secondary=sec, primary_book_style=prim)
-
-    def _user_style_anchor_fragment(self) -> str:
-        return str(self.root.get("user_style_anchor", "") or "").strip()
+        return fusion_from_cli(
+            preset=_text(sm.get("preset")),
+            secondary=_text(sm.get("secondary")),
+            primary_book_style=str(self.root.get("book_style") or "manga"),
+        )
 
     def _page_patch_fragments(self, page_index: int) -> str:
         patches = self.root.get("page_patches")
@@ -336,68 +280,47 @@ class BookVisualMemory:
             return ""
         frags: list[str] = []
         for p in patches:
-            if not isinstance(p, dict):
-                continue
-            w = _page_window(p)
-            if w is None:
-                continue
-            lo, hi = w
-            if not _applies(page_index, lo, hi):
-                continue
-            ex = str(p.get("extra_prompt", "")).strip()
-            if ex:
-                frags.append(ex)
+            window = _page_window(p) if isinstance(p, dict) else None
+            if window is not None and window[0] <= page_index <= window[1]:
+                frags.append(_text(p.get("extra_prompt")))
         return merge_prompt_fragments(*frags)
 
-    def _entities_fragment_for_page(self, page_index: int, *, for_cover: bool) -> str:
-        if not self.entities:
-            return ""
+    def _entities_fragment(self, page_index: int | None) -> str:
+        """Entity prompts for *page_index*; ``None`` means the cover (canonical design, no overrides)."""
         parts: list[str] = []
-        for eid in sorted(self.entities.keys()):
+        for eid in sorted(self.entities):
             base = self.entities[eid]
-            merged = _merge_entity_for_cover(base) if for_cover else _merge_entity_for_page(base, page_index)
+            if page_index is None:
+                merged = {k: v for k, v in base.items() if k != "page_overrides"}
+            else:
+                merged = _merge_entity_for_page(base, page_index)
             parts.append(_entity_prompt(eid, merged))
         return merge_prompt_fragments(*parts)
 
-    def prompt_fragment_for_cover(self) -> str:
-        bits: list[str] = []
-        cov = self.root.get("cover")
-        if isinstance(cov, dict):
-            ex = str(cov.get("extra_prompt", "")).strip()
-            if ex:
-                bits.append(ex)
-            tr = str(cov.get("entity_treatment", "")).strip()
-            if tr:
-                bits.append(tr)
-        g = self._global_fragment()
-        ent = self._entities_fragment_for_page(0, for_cover=True)
-        ch = visual_memory_challenge_clause(self.root)
+    def _compose(self, entities: str, *tail: str) -> str:
         return merge_prompt_fragments(
-            g,
-            ent,
-            ch,
+            self._global_fragment(),
+            entities,
+            visual_memory_challenge_clause(self.root),
             self._lettering_fragment(),
             self._style_mix_fragment(),
-            self._user_style_anchor_fragment(),
-            *bits,
+            _text(self.root.get("user_style_anchor")),
+            *tail,
         )
+
+    def prompt_fragment_for_cover(self) -> str:
+        cov = self.root.get("cover")
+        cover_bits = (
+            (_text(cov.get("extra_prompt")), _text(cov.get("entity_treatment"))) if isinstance(cov, dict) else ()
+        )
+        return self._compose(self._entities_fragment(None), *cover_bits)
 
     def prompt_fragment_for_page(self, page_index: int) -> str:
         """0-based page index; merges globals, entities (with overrides), and run page patches."""
-        g = self._global_fragment()
-        ent = self._entities_fragment_for_page(page_index, for_cover=False)
-        pp = self._page_patch_fragments(page_index)
-        tail = str(self.root.get("extra_prompt_all_pages", "")).strip()
-        ch = visual_memory_challenge_clause(self.root)
-        return merge_prompt_fragments(
-            g,
-            ent,
-            ch,
-            self._lettering_fragment(),
-            self._style_mix_fragment(),
-            self._user_style_anchor_fragment(),
-            pp,
-            tail,
+        return self._compose(
+            self._entities_fragment(page_index),
+            self._page_patch_fragments(page_index),
+            _text(self.root.get("extra_prompt_all_pages")),
         )
 
 

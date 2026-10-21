@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Research the best diffusion prompt for an image (VLM + local RAG, no SauceNAO).
 
-python scripts/research_image_prompt.py path/to/image.png
-python scripts/research_image_prompt.py path/to/image.png --rag-corpus D:\\Development\\sdx-data\\rag_corpus.jsonl
-python scripts/research_image_prompt.py path/to/image.png --seed "1girl, fantasy" --json
+python -m scripts.tools research_image_prompt path/to/image.png
+python -m scripts.tools research_image_prompt path/to/image.png --rag-corpus D:\\Development\\sdx-data\\rag_corpus.jsonl
+python -m scripts.tools research_image_prompt path/to/image.png --seed "1girl, fantasy" --json
 """
 
 from __future__ import annotations

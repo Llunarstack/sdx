@@ -27,18 +27,13 @@ These are **optional**; Python paths work without them. They help **data quality
 | `sdx-linecrc` | Zig | Streaming **FNV-1a** over manifest bytes — cache keys, “did the dataset change?” |
 | `sdx-pathstat` | Zig | Fast **path → size / missing** for image lists from Rust **image-paths** |
 | `libsdx_latent` | C++ | **Latent grid / patch-token math** (C ABI) — consistent geometry with `dit_variant_compare`, ctypes |
-| `sdx_line_stats` | C++ | **Byte + newline count** for huge manifests (no JSON parse); `sdx_native.line_stats_native` |
-| `sdx_cuda_hwc_to_chw` | CUDA/C++ | Optional HWC→NCHW float kernel (`-DSDX_BUILD_CUDA=ON`); `sdx_native.cuda_hwc_to_chw` |
-| `sdx_cuda_flow_matching` | CUDA/C++ | Optional elementwise flow target `v = ε − x₀`; `sdx_native.flow_matching_velocity_native` |
-| `sdx_cuda_nf4` | CUDA/C++ | NF4 block dequant (pairs with `utils/quantization/nf4_codec.py`); `sdx_native.nf4_dequant_native` |
-| `sdx_cuda_sdpa_online` | CUDA/C++ | Online-softmax SDPA, head_dim **64** (research kernel); `sdx_native.sdpa_online_native` |
 | Mojo `native/mojo` | Mojo + Python | Optional **Modular** kernels / `mojopy` CLI launcher |
 | `sdx-manifest` | Go | **JSONL merge** + dedupe by image key |
-| `sdx_native.jsonl_manifest_pure` | Python | Zero-build manifest **stats** + **prompt-lint** (replaces former Node `*.mjs`) |
+| `toolkit.quality.manifest_digest` / `scripts.tools prompt_lint` | Python | Zero-build manifest **stats** / **prompt-lint** fallbacks for the Rust tools |
 
-**Python bridge:** `native/_experimental/python/sdx_native/` → shims under `utils/native/` ([native/_experimental/python/README.md](../native/_experimental/python/README.md)).
+**Python bridge:** `native/_experimental/python/sdx_native/` → the lazy shim `utils/native.py` ([native/_experimental/python/README.md](../native/_experimental/python/README.md)).
 
-**Wiring:** `scripts/tools/data/data_quality.py` (MD5 dedup tries `sdx_native.native_tools.maybe_rust_file_md5_hex` first; `--no-native-md5` forces Python-only), `manifest_paths.py`, `jsonl_merge.py`, `op_preflight.py`, etc. ([native/README.md § Python integration](../native/README.md#python-integration-repo-root-on-pythonpath)).
+**Wiring:** `scripts/tools/data/data_quality.py` (MD5 dedup tries Rust `file-md5` via `sdx_native.native_tools.file_md5_hex` first; `--no-native-md5` forces Python-only), `manifest_paths.py`, `jsonl_merge.py`, `op_preflight.py`, etc. ([native/README.md § Python integration](../native/README.md#python-integration-repo-root-on-pythonpath)).
 
 ---
 
@@ -71,16 +66,15 @@ These are **optional**; Python paths work without them. They help **data quality
 | **Aho–Corasick / `aho-corasick` (Rust)** | Many keyword triggers (like `infer_content_controls` ideas) | Fast offline lint of huge JSONL |
 | **xxHash / BLAKE3** | Per-caption or per-row fingerprints | Dedup near-dupe captions |
 
-**SDX Python side:** `data/caption_utils.py`, `data/vector_index_sampler.py` (in-memory / optional **Qdrant** similarity sampling), `utils/prompt/content_controls.py`, `utils/prompt/neg_filter.py`, `utils/training/ladd_distillation.py` (LADD-style distillation + latent D stubs), `utils/quantization/nf4_codec.py` (NF4 quant/dequant core), `scripts/tools/preview_generation_prompt.py` — native tools complement these with **bulk** JSONL checks, not replacement for model conditioning.
+**SDX Python side:** `data/caption_utils.py`, `utils/prompt/content_controls.py`, `utils/training/ladd_distillation.py` (LADD-style distillation + latent D stubs), `scripts/tools/preview_generation_prompt.py` — native tools complement these with **bulk** JSONL checks, not replacement for model conditioning.
 
 **Implemented in-repo (Python, stdlib + optional xxhash):**
 
 | Module / tool | Role |
 |----------------|------|
 | [`native/_experimental/python/sdx_native/text_hygiene.py`](../native/_experimental/python/sdx_native/text_hygiene.py) | **NFKC** normalization, zero-width strip, comma-segment trim, **SHA256** or **xxhash** caption fingerprints, pos/neg token overlap helper |
-| [`native/_experimental/python/sdx_native/caption_csv_fast.py`](../native/_experimental/python/sdx_native/caption_csv_fast.py) | Fast comma-caption split/merge/dedupe (Python; used by `utils.prompt.fast_paths`) |
-| [`native/rust/sdx-prompt-ops`](../native/rust/sdx-prompt-ops/) | Rust cdylib: caption merge + pos/neg filter (`sdx_native.prompt_ops_native`) |
-| [`utils/prompt/fast_paths.py`](../utils/prompt/fast_paths.py) | Single import for prompt hot paths (Rust when built, else optimized Python) |
+| [`native/rust/sdx-prompt-ops`](../native/rust/sdx-prompt-ops/) | Rust cdylib: token Jaccard for style-genome overlap (`sdx_native.style_ops_native`) |
+| [`utils/prompt/tags.py`](../utils/prompt/tags.py) | Prompt comma-tag split/merge/dedupe and the pos/neg conflict filter (pure Python) |
 | [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py) | JSONL CLI: `--report-dups`, `--report-overlap`, `--normalize-samples` |
 | Training | `train.py --caption-unicode-normalize` → `TrainConfig.caption_unicode_normalize` → `Text2ImageDataset(caption_unicode_normalize=True)` |
 

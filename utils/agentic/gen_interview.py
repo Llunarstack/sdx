@@ -1,7 +1,7 @@
-"""Pre-generate interview: ask questions *and* request photos/refs.
+"""Pre-generate interview: questions, photo/ref requests, pose/place defaults, one-at-a-time flow.
 
-Turns a thin prompt into a structured checklist the user (or UI) can answer
-before sampling — pose/place text, face photos, outfit shots, style boards, etc.
+Turns a thin prompt into a structured checklist the user (or UI) can answer before sampling:
+pose/place text, face photos, outfit shots, style boards. Skipped pose/place get imagination defaults.
 """
 
 from __future__ import annotations
@@ -12,11 +12,20 @@ from typing import Any, Literal
 from utils.prompt.facet_decompose import PromptFacets, decompose_prompt_facets
 
 __all__ = [
-    "InterviewItem",
+    "ClarifyResult",
     "GenInterview",
-    "build_gen_interview",
+    "InterviewItem",
+    "ProgressiveState",
+    "answer_interview_item",
+    "apply_clarify_answers",
     "apply_interview_answers",
+    "assume_pose_place_defaults",
+    "build_clarify_questions",
+    "build_gen_interview",
     "format_interview_for_user",
+    "next_interview_item",
+    "skip_interview_item",
+    "start_progressive_interview",
 ]
 
 Priority = Literal["required", "recommended", "optional"]
@@ -379,3 +388,165 @@ def format_interview_for_user(interview: GenInterview, *, include_optional: bool
             lines.append(f"      photos: {', '.join(it.photo_paths)}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+_DEFAULT_POSE = "standing, looking at viewer, full body"
+_DEFAULT_PLACE_LIGHT = "simple studio, soft lighting, plain background"
+_DEFAULT_PLACE_DARK = "simple dark room, soft rim light, plain background"
+
+
+@dataclass(slots=True)
+class ClarifyResult:
+    questions: list[str] = field(default_factory=list)
+    needs_user: bool = False
+    assumed: dict[str, str] = field(default_factory=dict)
+    enriched_prompt: str = ""
+    notes: str = ""
+
+
+def build_clarify_questions(facets: PromptFacets | str) -> ClarifyResult:
+    """Return 1–2 clarifying questions when pose/place are absent."""
+    if isinstance(facets, str):
+        facets = decompose_prompt_facets(facets)
+    out = ClarifyResult()
+    if "pose" in facets.missing:
+        out.questions.append(
+            "Pose missing — standing, sitting, or something else? "
+            "(e.g. standing looking at viewer / sitting crossed legs)"
+        )
+    if "place" in facets.missing:
+        out.questions.append(
+            "Place/background missing — where is the character? (e.g. bedroom / white studio / outdoor night city)"
+        )
+    out.needs_user = bool(out.questions)
+    return out
+
+
+def assume_pose_place_defaults(
+    facets: PromptFacets | str,
+    *,
+    prefer_dark_room: bool | None = None,
+) -> ClarifyResult:
+    """Fill missing pose/place with imagination defaults (handwritten diagram)."""
+    if isinstance(facets, str):
+        facets = decompose_prompt_facets(facets)
+    out = ClarifyResult()
+    dark = prefer_dark_room
+    if dark is None:
+        # Heuristic: dark clothing / lingerie → soft dark room; else light studio.
+        blob = " ".join(facets.attire + facets.subject).lower()
+        dark = any(k in blob for k in ("black", "dark", "lingerie", "night"))
+    if "pose" in facets.missing:
+        out.assumed["pose"] = _DEFAULT_POSE
+    if "place" in facets.missing:
+        out.assumed["place"] = _DEFAULT_PLACE_DARK if dark else _DEFAULT_PLACE_LIGHT
+    out.enriched_prompt = apply_clarify_answers(facets.raw, out.assumed)
+    out.notes = "assumed defaults for missing pose/place"
+    return out
+
+
+def apply_clarify_answers(prompt: str, answers: dict[str, str]) -> str:
+    """Append user or assumed pose/place (and optional style) to the prompt."""
+    base = str(prompt or "").strip().rstrip(",")
+    bits: list[str] = []
+    for key in ("pose", "place", "style"):
+        val = str(answers.get(key) or "").strip()
+        if val and val.lower() not in base.lower():
+            bits.append(val)
+    if not bits:
+        return base
+    sep = ", " if "," in base or not base else " "
+    return f"{base}{sep}{', '.join(bits)}".strip()
+
+
+_YOU_DECIDE = frozenset({"", "skip", "you decide", "your choice", "default", "idc", "whatever"})
+
+
+@dataclass
+class ProgressiveState:
+    interview: GenInterview
+    cursor: int = 0
+    answers: dict[str, str] = field(default_factory=dict)
+    photos: dict[str, list[str]] = field(default_factory=dict)
+    skipped: list[str] = field(default_factory=list)
+    done: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cursor": self.cursor,
+            "answers": dict(self.answers),
+            "photos": {k: list(v) for k, v in self.photos.items()},
+            "skipped": list(self.skipped),
+            "done": self.done,
+            "interview": self.interview.to_dict(),
+        }
+
+
+def next_interview_item(
+    state: ProgressiveState,
+    *,
+    include_optional: bool = False,
+) -> InterviewItem | None:
+    """Return the next unanswered required/recommended item (or optional if requested)."""
+    pending = state.interview.pending(include_optional=include_optional)
+    # Also skip items already answered via state.answers/photos
+    for it in pending:
+        if it.id in state.answers or it.id in state.photos or it.id in state.skipped:
+            continue
+        if it.answer or it.photo_paths:
+            continue
+        return it
+    state.done = True
+    return None
+
+
+def answer_interview_item(
+    state: ProgressiveState,
+    item_id: str,
+    *,
+    text: str = "",
+    photos: list[str] | None = None,
+) -> ProgressiveState:
+    raw = str(text or "").strip()
+    if raw.lower() in _YOU_DECIDE and not photos:
+        return skip_interview_item(state, item_id)
+    if raw:
+        state.answers[item_id] = raw
+        for it in state.interview.items:
+            if it.id == item_id:
+                it.answer = raw
+                break
+    if photos:
+        state.photos[item_id] = [str(p) for p in photos if p]
+        for it in state.interview.items:
+            if it.id == item_id:
+                it.photo_paths = list(state.photos[item_id])
+                break
+    state.cursor += 1
+    return state
+
+
+def skip_interview_item(state: ProgressiveState, item_id: str) -> ProgressiveState:
+    """Mark item skipped; pose/place get imagination defaults when applicable."""
+    state.skipped.append(item_id)
+    for it in state.interview.items:
+        if it.id != item_id:
+            continue
+        if it.id == "pose":
+            state.answers["pose"] = it.answer = _DEFAULT_POSE
+        elif it.id == "place":
+            state.answers["place"] = it.answer = _DEFAULT_PLACE_LIGHT
+        elif it.kind == "confirm":
+            state.answers[item_id] = "yes"
+            it.answer = "yes"
+        else:
+            it.answer = "you decide"
+            state.answers[item_id] = "you decide"
+        break
+    state.cursor += 1
+    return state
+
+
+def start_progressive_interview(prompt: str, **kwargs: Any) -> ProgressiveState:
+    interview = build_gen_interview(prompt, **kwargs)
+    return ProgressiveState(interview=interview)

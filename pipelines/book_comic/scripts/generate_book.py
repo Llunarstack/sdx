@@ -116,21 +116,6 @@ def _parse_expected_texts(raw: str) -> list[str]:
     return [p for p in parts if p]
 
 
-def _load_prompts_from_file(path: Path) -> list[str]:
-    """
-    Backward-compatible: returns only prompts.
-    For per-page expected text overrides, see _load_prompts_with_expected_from_file().
-    """
-    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    prompts: list[str] = []
-    for ln in lines:
-        ln = ln.strip()
-        if not ln:
-            continue
-        prompts.append(ln.split("|||", 1)[0].strip())
-    return prompts
-
-
 def _load_prompts_with_expected_from_file(path: Path) -> list[tuple[str, str]]:
     """
     Supports lines of the form:
@@ -668,29 +653,12 @@ def main() -> None:
         default=0,
         help="How many images to draw per page before pick-best (0 = use --book-accuracy preset).",
     )
+    from utils.quality.test_time_pick import PICK_METRICS
+
     parser.add_argument(
         "--pick-best",
         default="auto",
-        choices=[
-            "auto",
-            "none",
-            "clip",
-            "edge",
-            "ocr",
-            "vit",
-            "aesthetic",
-            "combo",
-            "combo_vit",
-            "combo_vit_hq",
-            "combo_vit_realism",
-            "combo_count_vit",
-            "combo_exposure",
-            "combo_structural",
-            "combo_hq",
-            "combo_count",
-            "combo_realism",
-            "aesthetic_realism",
-        ],
+        choices=list(PICK_METRICS),
         help=(
             "Forwarded to sample.py --pick-best (ViT metrics need --pick-vit-ckpt). "
             "See utils/quality/test_time_pick.py."
@@ -1501,7 +1469,7 @@ def main() -> None:
         help="sample.py literal prompt adherence scaffolding (long complex prompts).",
     )
     try:
-        from utils.visual_design.compose import visual_design_cli_domain_choices as _vdd_choices_book
+        from utils.visual_design import visual_design_cli_domain_choices as _vdd_choices_book
     except ImportError:
 
         def _vdd_choices_book():
@@ -1544,7 +1512,7 @@ def main() -> None:
         help="Forwarded to sample.py: merge domain-specific negatives.",
     )
     try:
-        from utils.visual_design.presets import preset_ids as _book_vdp_ids
+        from utils.visual_design import preset_ids as _book_vdp_ids
 
         _book_preset_choices = ("",) + tuple(_book_vdp_ids())
     except ImportError:
@@ -1555,7 +1523,7 @@ def main() -> None:
         default="",
         choices=list(_book_preset_choices),
         dest="visual_design_preset",
-        help="Forwarded to sample.py: named pack (see utils.visual_design.presets).",
+        help="Forwarded to sample.py: named pack (see utils.visual_design.VISUAL_DESIGN_PRESETS).",
     )
     parser.add_argument(
         "--clip-guard-threshold",

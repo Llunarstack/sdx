@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
             argv_list.extend(["--character-sheet", ",".join(compiled.sheet_paths)])
             argv_list.append("--label-multi-character-sheets")
         for fr in compiled.face_refs[:1]:
-            argv_list.extend(["--reference-image", fr, "--reference-style-mode", "instantstyle"])
+            argv_list.extend(["--reference-image", fr])
         out["sample_argv"] = argv_list
         print(f"cast: {len(scene.members)} characters")
         print(f"prompt: {compiled.positive[:200]}...")
@@ -63,13 +63,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         brief_path = work / "design_brief.json"
         brief_path.write_text(json.dumps(ideo.design_brief, indent=2), encoding="utf-8")
-        if ideo.box_layout:
-            (work / "glyph_box_layout.json").write_text(json.dumps(ideo.box_layout, indent=2), encoding="utf-8")
         out["ideogram"] = ideo.to_dict()
         out["design_brief_path"] = str(brief_path)
         base_argv = list(out.get("sample_argv") or ideo.sample_argv)
-        if "--design-brief" not in base_argv:
-            base_argv.extend(["--design-brief", str(brief_path)])
+        if ideo.box_layout and "--box-layout" not in base_argv:
+            glyph_box = work / "glyph_box_layout.json"
+            glyph_box.write_text(json.dumps(ideo.box_layout, indent=2), encoding="utf-8")
+            base_argv.extend(["--box-layout", str(glyph_box)])
         out["sample_argv"] = base_argv
 
     if args.edit_image:

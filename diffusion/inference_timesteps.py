@@ -1,12 +1,9 @@
 """
-Pluggable **inference timestep** (index) schedules for VP diffusion.
+Inference timestep (index) schedules for VP diffusion.
 
-Schedules return integer indices in [0, num_train_timesteps), **strictly decreasing**
-(noisy → clean). They compose with any ``num_inference_steps`` and any update **solver**
-(see ``GaussianDiffusion.sample_loop(..., solver=...)``).
-
-Schedules only choose *which* discrete training timesteps to visit; they do not change
-the noise schedule or the model.
+A schedule returns strictly decreasing (noisy -> clean) integer indices in ``[0, num_train_timesteps)``.
+It only picks which training timesteps to visit, so it composes with any step count and any solver
+(``GaussianDiffusion.sample_loop(..., solver=...)``).
 """
 
 from __future__ import annotations
@@ -23,92 +20,78 @@ __all__ = [
 ]
 
 _INDICES_PREFIX = "indices:"
+_KARRAS_RHO_DEFAULT = 7.0
+# Schedules whose shape is warped by ``karras_rho``.
+_RHO_SCHEDULES = frozenset({"karras_rho", "apex"})
+
+EDM_SIGMA_MIN = 0.002
+EDM_SIGMA_MAX = 80.0
 
 
 def parse_indices_timestep_schedule(name: str) -> np.ndarray | None:
-    """
-    Explicit VP timestep **indices** (high-noise → low-noise).
+    """Explicit indices ``indices:999,800,...,0`` (noisy -> clean), or ``None`` for any other name.
 
-    Syntax: ``indices:999,800,600,...,0`` (commas optional spaces). Overrides registered
-    names and avoids clashes with comma-based **training** timestep_respacing strings.
+    The prefix avoids clashing with the comma-separated training ``timestep_respacing`` strings.
     """
     raw = str(name).strip()
-    low = raw.lower()
-    if not low.startswith(_INDICES_PREFIX):
+    if not raw.lower().startswith(_INDICES_PREFIX):
         return None
     body = raw[len(_INDICES_PREFIX) :].strip()
-    if not body:
-        return None
     parts = [p.strip() for p in body.split(",") if p.strip()]
     if not parts:
         return None
     try:
-        vals = [int(float(p)) for p in parts]
+        return np.asarray([int(float(p)) for p in parts], dtype=np.int64)
     except ValueError:
         raise ValueError(f"indices: schedule contains non-integers: {body!r}") from None
-    return np.asarray(vals, dtype=np.int64)
 
 
 def _enforce_strict_descending(idx: np.ndarray, num_train: int) -> np.ndarray:
+    """Clip to the index range and force strict descent, dropping steps once 0 is reached."""
     idx = np.clip(np.asarray(idx, dtype=np.int64), 0, num_train - 1)
     if idx.size == 0:
         return np.array([num_train - 1, 0], dtype=np.int64)
-    out: list[int] = [int(idx[0])]
-    for j in range(1, len(idx)):
-        v = int(idx[j])
-        if v >= out[-1]:
-            v = out[-1] - 1
-        out.append(max(v, 0))
-    dedup: list[int] = [out[0]]
-    for v in out[1:]:
-        if v < dedup[-1]:
-            dedup.append(v)
-    return np.array(dedup, dtype=np.int64)
+    out = [int(idx[0])]
+    for v in idx[1:]:
+        v = min(int(v), out[-1] - 1)
+        if v < 0:
+            break
+        out.append(v)
+    return np.array(out, dtype=np.int64)
 
 
 def _resample_length_numpy(desc: np.ndarray, target_len: int, num_train: int) -> np.ndarray:
-    """Interpolate a descending index path to ``target_len`` points (pure NumPy reference)."""
-    if target_len <= 0:
-        return np.array([0], dtype=np.int64)
+    """Resample a descending index path to ``target_len > 0`` points."""
     d = _enforce_strict_descending(desc, num_train)
-    if d.size >= target_len:
-        if d.size == target_len:
-            return d
-        pos = np.linspace(0, d.size - 1, target_len)
-        idx = np.round(pos).astype(np.int64)
-        return _enforce_strict_descending(d[idx], num_train)
+    if d.size == target_len:
+        return d
+    if d.size > target_len:
+        pos = np.round(np.linspace(0, d.size - 1, target_len)).astype(np.int64)
+        return _enforce_strict_descending(d[pos], num_train)
     if d.size == 1:
-        return (
-            np.linspace(num_train - 1, 0, target_len, dtype=np.int64)
-            if target_len > 1
-            else np.array([num_train - 1], dtype=np.int64)
-        )
-    old_x = np.linspace(0.0, 1.0, d.size)
-    new_x = np.linspace(0.0, 1.0, target_len)
-    vals = np.interp(new_x, old_x, d.astype(np.float64))
-    rounded = np.round(vals).astype(np.int64)
-    return _enforce_strict_descending(rounded, num_train)
+        return np.linspace(num_train - 1, 0, target_len, dtype=np.int64)
+    vals = np.interp(np.linspace(0.0, 1.0, target_len), np.linspace(0.0, 1.0, d.size), d.astype(np.float64))
+    return _enforce_strict_descending(np.round(vals).astype(np.int64), num_train)
 
 
 def _resample_length(desc: np.ndarray, target_len: int, num_train: int) -> np.ndarray:
-    """Prefer native finalization when ``sdx_inference_timesteps`` is built; else NumPy."""
+    """Use the optional native ``sdx_inference_timesteps`` finalizer when built, else NumPy."""
     if target_len <= 0:
         return np.array([0], dtype=np.int64)
     try:
         from sdx_native.inference_timesteps_native import finalize_inference_timesteps_native
-
+    except ImportError:
+        pass
+    else:
         got = finalize_inference_timesteps_native(desc, target_len, num_train)
         if got is not None:
             return got
-    except ImportError:
-        pass
     return _resample_length_numpy(desc, target_len, num_train)
 
 
-ScheduleFn = Callable[[int, int, np.ndarray], np.ndarray]
+ScheduleFn = Callable[..., np.ndarray]
 
 INFERENCE_TIMESTEP_SCHEDULES: dict[str, ScheduleFn] = {}
-_KARRAS_RHO_DEFAULT = 7.0
 
 
 def register_timestep_schedule(name: str):
@@ -117,6 +100,16 @@ def register_timestep_schedule(name: str):
         return fn
 
     return deco
+
+
+def _log_snr(alpha_cumprod: np.ndarray) -> np.ndarray:
+    ac = np.clip(np.asarray(alpha_cumprod, dtype=np.float64), 1e-9, 1.0 - 1e-9)
+    return np.log(ac) - np.log(1.0 - ac)
+
+
+def _nearest_indices(values: np.ndarray, targets: np.ndarray) -> np.ndarray:
+    """Index of the entry of ``values`` closest to each target (first on ties)."""
+    return np.abs(values[None, :] - np.asarray(targets)[:, None]).argmin(axis=1).astype(np.int64)
 
 
 @register_timestep_schedule("ddim")
@@ -130,111 +123,65 @@ def _schedule_euler(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -
     return np.linspace(0, num_train - 1, num_infer, dtype=np.int64)[::-1]
 
 
-def _schedule_karras_rho_with_rho(
+def karras_sigmas(sigma_max: float, sigma_min: float, n: int, rho: float = _KARRAS_RHO_DEFAULT) -> np.ndarray:
+    """Karras et al. 2022 (EDM, Eq. 5): ``n`` noise levels from ``sigma_max`` to ``sigma_min``, uniform in sigma**(1/rho)."""
+    ramp = np.linspace(0.0, 1.0, max(1, int(n)))
+    hi, lo = float(sigma_max) ** (1.0 / rho), float(sigma_min) ** (1.0 / rho)
+    return (hi + ramp * (lo - hi)) ** rho
+
+
+@register_timestep_schedule("karras_rho")
+def _schedule_karras_rho(
     num_train: int, num_infer: int, alpha_cumprod: np.ndarray, rho: float = _KARRAS_RHO_DEFAULT
 ) -> np.ndarray:
-    """ρ spacing in sigma space (σ = sqrt((1-ᾱ)/ᾱ)); denser steps where σ changes quickly."""
-    ac = np.asarray(alpha_cumprod, dtype=np.float64)
-    ac = np.clip(ac, 1e-9, 1.0 - 1e-9)
-    sig = np.sqrt((1.0 - ac) / ac)
+    """EDM rho-spacing in sigma = sqrt((1-abar)/abar), each level snapped to the nearest training index (log-sigma)."""
     if num_infer <= 1:
         return np.array([num_train - 1], dtype=np.int64)
-    rho = float(rho)
-    ramp = np.linspace(0.0, 1.0, num_infer) ** rho
-    sig_max = float(sig[-1])
-    sig_min = float(sig[0])
-    if sig_max <= sig_min + 1e-12:
-        return _schedule_euler(num_train, num_infer, alpha_cumprod)
-    sig_t = sig_max * (sig_min / sig_max) ** ramp
-    return np.array([int(np.argmin(np.abs(sig - s))) for s in sig_t], dtype=np.int64)
+    ac = np.clip(np.asarray(alpha_cumprod, dtype=np.float64), 1e-12, 1.0 - 1e-12)
+    log_sig = 0.5 * (np.log1p(-ac) - np.log(ac))
+    target = karras_sigmas(np.exp(log_sig[-1]), np.exp(log_sig[0]), num_infer, rho=float(rho))
+    return np.round(np.interp(np.log(target), log_sig, np.arange(num_train))).astype(np.int64)
 
 
 @register_timestep_schedule("snr_uniform")
 def _schedule_snr_uniform(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
-    """Approximately uniform spacing in log-SNR (log ᾱ - log(1-ᾱ))."""
-    ac = np.asarray(alpha_cumprod, dtype=np.float64)
-    ac = np.clip(ac, 1e-9, 1.0 - 1e-9)
-    logsnr = np.log(ac) - np.log(1.0 - ac)
+    """Approximately uniform spacing in log-SNR."""
     if num_infer <= 1:
         return np.array([num_train - 1], dtype=np.int64)
-    u = np.linspace(float(logsnr[-1]), float(logsnr[0]), num_infer)
-    return np.array([int(np.argmin(np.abs(logsnr - ui))) for ui in u], dtype=np.int64)
+    logsnr = _log_snr(alpha_cumprod)
+    return _nearest_indices(logsnr, np.linspace(logsnr[-1], logsnr[0], num_infer))
 
 
 @register_timestep_schedule("quad_cosine")
 def _schedule_quad_cosine(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
-    """More visits near extreme noise and near clean (smooth U in continuous time)."""
+    """Denser near pure noise and near clean (cosine-warped uniform grid)."""
     if num_infer <= 1:
         return np.array([num_train - 1], dtype=np.int64)
-    u = np.linspace(0.0, 1.0, num_infer)
-    w = 0.5 - 0.5 * np.cos(np.pi * u)
-    t_float = w * (num_train - 1)
-    return np.round(t_float).astype(np.int64)[::-1]
+    w = 0.5 - 0.5 * np.cos(np.pi * np.linspace(0.0, 1.0, num_infer))
+    return np.round(w * (num_train - 1)).astype(np.int64)[::-1]
 
 
-def _ays_progress_knots(variant: str) -> np.ndarray:
-    """Normalized progress 0 (noise) → 1 (clean) for Align-Your-Steps style grids."""
+def ays_progress_knots(variant: str) -> np.ndarray:
+    """Normalized progress 0 (noise) -> 1 (clean) for Align-Your-Steps style grids."""
     if variant == "ays_dit":
-        # SDX DiT / T5: denser mid-SNR (hardest denoising band).
-        return np.array(
-            [
-                0.0,
-                0.04,
-                0.10,
-                0.18,
-                0.28,
-                0.38,
-                0.48,
-                0.58,
-                0.68,
-                0.78,
-                0.88,
-                0.94,
-                0.98,
-                1.0,
-            ],
-            dtype=np.float64,
-        )
-    # Classic AYS-inspired (SDXL-like) progressive density.
-    return np.array(
-        [0.0, 0.05, 0.12, 0.22, 0.35, 0.50, 0.65, 0.78, 0.88, 0.94, 0.98, 1.0],
-        dtype=np.float64,
-    )
+        # Denser in the mid-SNR band, the hardest denoising region for the DiT.
+        knots = [0.0, 0.04, 0.10, 0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88, 0.94, 0.98, 1.0]
+    else:
+        knots = [0.0, 0.05, 0.12, 0.22, 0.35, 0.50, 0.65, 0.78, 0.88, 0.94, 0.98, 1.0]
+    return np.array(knots, dtype=np.float64)
 
 
-def _schedule_ays_family(
-    num_train: int,
-    num_infer: int,
-    alpha_cumprod: np.ndarray,
-    *,
-    variant: str = "ays",
-) -> np.ndarray:
-    """
-    Align-Your-Steps style index schedule via log-SNR interpolation.
-
-    Knots define progress in [0,1]; we place those on the log-SNR path of ᾱ,
-    then resample to ``num_infer`` descending discrete timesteps.
-    """
+def _schedule_ays_family(num_train: int, num_infer: int, alpha_cumprod: np.ndarray, *, variant: str) -> np.ndarray:
+    """Place the AYS progress knots on the log-SNR path and snap ``num_infer`` resampled points to indices."""
     if num_infer <= 1:
         return np.array([num_train - 1], dtype=np.int64)
-    ac = np.asarray(alpha_cumprod, dtype=np.float64)
-    ac = np.clip(ac, 1e-9, 1.0 - 1e-9)
-    logsnr = np.log(ac) - np.log(1.0 - ac)
-    # t=0 clean → high logsnr; t=T-1 noisy → low logsnr
-    ls_clean = float(logsnr[0])
-    ls_noise = float(logsnr[-1])
-    knots = _ays_progress_knots(variant)
-    # progress 0 = noise (low logsnr), 1 = clean (high logsnr)
+    logsnr = _log_snr(alpha_cumprod)
+    ls_clean, ls_noise = float(logsnr[0]), float(logsnr[-1])
+    knots = ays_progress_knots(variant)
     target_ls = ls_noise + knots * (ls_clean - ls_noise)
-    # Resample knots to num_infer points along the knot curve
-    knot_x = np.linspace(0.0, 1.0, len(knots))
-    u = np.linspace(0.0, 1.0, num_infer)
-    target = np.interp(u, knot_x, target_ls)
-    idx = np.array([int(np.argmin(np.abs(logsnr - ti))) for ti in target], dtype=np.int64)
-    # Ensure high→low (noise→clean): first should be near T-1
-    if idx[0] < idx[-1]:
-        idx = idx[::-1].copy()
-    return idx
+    target = np.interp(np.linspace(0.0, 1.0, num_infer), np.linspace(0.0, 1.0, len(knots)), target_ls)
+    idx = _nearest_indices(logsnr, target)
+    return idx[::-1].copy() if idx[0] < idx[-1] else idx
 
 
 @register_timestep_schedule("ays")
@@ -247,39 +194,43 @@ def _schedule_ays_dit(num_train: int, num_infer: int, alpha_cumprod: np.ndarray)
     return _schedule_ays_family(num_train, num_infer, alpha_cumprod, variant="ays_dit")
 
 
+@register_timestep_schedule("apex")
+def _schedule_apex(
+    num_train: int, num_infer: int, alpha_cumprod: np.ndarray, rho: float = _KARRAS_RHO_DEFAULT
+) -> np.ndarray:
+    """APEX three-phase density on the lambda path (see ``diffusion.solvers.apex``)."""
+    from diffusion.solvers.apex import build_apex_vp_indices
+
+    return build_apex_vp_indices(num_train, num_infer, alpha_cumprod, rho=rho)
+
+
 def build_inference_timesteps(
     name: str,
     num_train_timesteps: int,
     num_inference_steps: int,
     alpha_cumprod: np.ndarray,
     *,
-    karras_rho: float = 7.0,
+    karras_rho: float = _KARRAS_RHO_DEFAULT,
 ) -> np.ndarray:
-    """
-    :param name: registered schedule key (e.g. ``ddim``, ``karras_rho``); or ``indices:...``.
-    :param alpha_cumprod: (T,) training ᾱ (numpy).
-    :return: (num_inference_steps,) int64 indices, high → low.
-    """
-    key_full = str(name).strip()
-    explicit = parse_indices_timestep_schedule(key_full)
-    if explicit is not None:
-        clipped = np.clip(explicit.astype(np.int64), 0, int(num_train_timesteps) - 1)
-        raw = clipped
-        return _resample_length(raw, num_inference_steps, num_train_timesteps)
+    """``(num_inference_steps,)`` int64 indices, noisy -> clean, for a registered schedule or ``indices:...``.
 
-    key = key_full.lower().strip()
-    known = sorted(set(INFERENCE_TIMESTEP_SCHEDULES.keys()) | {"karras_rho"})
-    if key == "karras_rho":
-        raw = _schedule_karras_rho_with_rho(
-            num_train_timesteps, num_inference_steps, alpha_cumprod, rho=float(karras_rho)
-        )
-    elif key in INFERENCE_TIMESTEP_SCHEDULES:
-        fn = INFERENCE_TIMESTEP_SCHEDULES[key]
-        raw = fn(num_train_timesteps, num_inference_steps, alpha_cumprod)
+    ``karras_rho`` warps the ``karras_rho`` and ``apex`` schedules.
+    """
+    explicit = parse_indices_timestep_schedule(name)
+    if explicit is not None:
+        clipped = np.clip(explicit, 0, int(num_train_timesteps) - 1)
+        return _resample_length(clipped, num_inference_steps, num_train_timesteps)
+
+    key = str(name).strip().lower()
+    fn = INFERENCE_TIMESTEP_SCHEDULES.get(key)
+    if fn is None:
+        raise ValueError(f"Unknown timestep schedule {name!r}. Choose one of: {', '.join(list_timestep_schedules())}")
+    if key in _RHO_SCHEDULES:
+        raw = fn(num_train_timesteps, num_inference_steps, alpha_cumprod, rho=float(karras_rho))
     else:
-        raise ValueError(f"Unknown timestep schedule {name!r}. Choose one of: {', '.join(known)}")
+        raw = fn(num_train_timesteps, num_inference_steps, alpha_cumprod)
     return _resample_length(raw, num_inference_steps, num_train_timesteps)
 
 
 def list_timestep_schedules() -> list[str]:
-    return sorted(set(INFERENCE_TIMESTEP_SCHEDULES.keys()) | {"karras_rho"})
+    return sorted(INFERENCE_TIMESTEP_SCHEDULES)

@@ -15,10 +15,6 @@ import sys
 from pathlib import Path
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
 def main() -> int:
     p = argparse.ArgumentParser(description="Validate book_manifest.json structure and flag weak configs.")
     p.add_argument(
@@ -38,10 +34,9 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    root = _repo_root()
-    rs = str(root)
-    if rs not in sys.path:
-        sys.path.insert(0, rs)
+    from scripts.tools._repo_bootstrap import ensure_repo_paths
+
+    ensure_repo_paths()
 
     from pipelines.book_comic.book_manifest_utils import (
         load_book_manifest,

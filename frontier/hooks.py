@@ -1,8 +1,4 @@
-"""
-Wire frontier plans into the production sampling stack.
-
-Safe to import from ``sample.py`` — no heavy model weights.
-"""
+"""Wire frontier plans into the production sampling stack (light import: no model weights)."""
 
 from __future__ import annotations
 
@@ -17,32 +13,20 @@ def apply_frontier_to_args(
     prompt: str | None = None,
     engine: FrontierEngine | None = None,
 ) -> FrontierPlan:
-    """
-    Mutate an argparse namespace (or similar) with frontier-derived fields.
-
-    Sets ``prompt``, ``negative_prompt``, and attaches ``frontier_plan`` on ``args``.
-    """
+    """Set ``prompt``, ``negative_prompt``, ``frontier_plan`` and ``frontier_risk_score`` on an argparse namespace."""
     eng = engine or FrontierEngine()
-    p = prompt if prompt is not None else getattr(args, "prompt", "") or ""
-    plan = eng.analyze(p)
+    plan = eng.analyze(prompt if prompt is not None else getattr(args, "prompt", "") or "")
     kw = eng.sample_kwargs(plan, base_negative=getattr(args, "negative_prompt", "") or "")
-
-    if kw.get("prompt"):
+    if kw["prompt"]:
         args.prompt = kw["prompt"]
-    if kw.get("negative_prompt") is not None:
-        args.negative_prompt = kw["negative_prompt"]
+    args.negative_prompt = kw["negative_prompt"]
     args.frontier_plan = plan
-    args.frontier_risk_score = kw.get("frontier_risk_score", 0.0)
+    args.frontier_risk_score = kw["frontier_risk_score"]
     return plan
 
 
 def frontier_diffusion_hooks(plan: FrontierPlan) -> dict[str, Any]:
-    """
-    Extra kwargs for ``gaussian_diffusion`` sample loops (optional).
-
-    Consumers can multiply per-step noise by ``serendipity_scales[step]`` and
-    ``entropy_per_step[step]`` when present.
-    """
+    """Per-step curves for the sample loop: ``serendipity_scales``, ``entropy_per_step``, ``step_emphasis``."""
     out: dict[str, Any] = {}
     if plan.serendipity is not None:
         out["serendipity_scales"] = list(plan.serendipity.scales)

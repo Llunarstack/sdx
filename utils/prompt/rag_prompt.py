@@ -10,7 +10,7 @@ retrieval (vector DB, HTTP, filesystem) and pass ``facts`` here.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -72,11 +72,6 @@ def load_facts_from_jsonl(
             if len(out) >= max_entries:
                 break
     return out
-
-
-def facts_from_mapping(items: Iterable[dict[str, Any]], *, text_key: str = "text") -> list[str]:
-    """Extract ``text_key`` from each dict in ``items``."""
-    return [str(d[text_key]).strip() for d in items if text_key in d and str(d.get(text_key, "")).strip()]
 
 
 def _append_if_text(out: list[str], seen: set, value: Any, *, max_item_chars: int = 280) -> None:
@@ -206,8 +201,7 @@ def retrieve_facts_for_query_local(
     *,
     top_k: int = 8,
 ) -> list[str]:
-    """TF-IDF retrieval from a JSONL corpus (see ``utils.superior.retrieval``)."""
-    from utils.superior.retrieval import build_tfidf_index_from_jsonl, retrieve_facts_for_query
+    """TF-IDF retrieval from a JSONL corpus (see ``utils.superior.inference_pipeline``)."""
+    from utils.superior.inference_pipeline import build_tfidf_index_from_jsonl
 
-    index = build_tfidf_index_from_jsonl(corpus_path)
-    return retrieve_facts_for_query(query, index, top_k=top_k)
+    return build_tfidf_index_from_jsonl(corpus_path).query(query, top_k=top_k)

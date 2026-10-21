@@ -11,6 +11,8 @@ import argparse
 def build_sample_parser() -> argparse.ArgumentParser:
     """Build the sample.py CLI parser. Kept import-light so ``--help``
     works without importing the heavy GPU stack (test_cli_entrypoints.py)."""
+    from utils.quality.test_time_pick import PICK_METRICS
+
     parser = argparse.ArgumentParser(
         description="Generate image: prompt, negative prompt, steps, width, height, CFG, and scheduler."
     )
@@ -25,15 +27,29 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--num", type=int, default=1, help="Number of images to generate (batch); saved as out_0.png, out_1.png, ..."
     )
+    parser.add_argument(
+        "--jobs-jsonl",
+        type=str,
+        default="",
+        help='Load the model once, then run one generation per line {"prompt", "seed", "out"} (used by rsi_loop).',
+    )
     parser.add_argument("--steps", type=int, default=50, help="Number of inference steps")
-    parser.add_argument("--width", type=int, default=0, help="Output width (0 = use model image_size)")
-    parser.add_argument("--height", type=int, default=0, help="Output height (0 = use model image_size)")
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=0,
+        help="Output width (0 = model image_size, or the --init-image size). Sampling runs on a latent grid with "
+        "this aspect ratio: the requested size snapped to whole DiT patches when its area is within 2x of the "
+        "native square, else the native pixel area (then --hires-fix or a resize reaches the size).",
+    )
+    parser.add_argument("--height", type=int, default=0, help="Output height (see --width).")
     parser.add_argument(
         "--resize-mode",
         type=str,
         default="stretch",
         choices=["stretch", "center_crop", "saliency_crop"],
-        help="When --width/--height differ from model native: stretch (default), center crop+resize, or saliency crop+resize.",
+        help="Final fit from the sampled canvas to --width/--height (only patch rounding or a capped canvas "
+        "differs): stretch (default), center crop+resize, or saliency crop+resize.",
     )
     parser.add_argument(
         "--resize-saliency-face-bias",
@@ -377,15 +393,6 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Boost midtone separation (0.0-0.25) for more visual depth.",
     )
     parser.add_argument(
-        "--asymmetry",
-        type=float,
-        default=0.0,
-        help=(
-            "Introduce subtle organic asymmetry to break AI's perfect bilateral symmetry "
-            "(uncanny valley fix). 0.1-0.35 is subliminal; above 0.5 becomes visible."
-        ),
-    )
-    parser.add_argument(
         "--lost-found-edges",
         type=float,
         default=0.0,
@@ -395,31 +402,50 @@ def build_sample_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--sss",
-        type=float,
-        default=0.0,
-        help=(
-            "Simulate subsurface scattering for skin/wax/translucent materials. "
-            "0.15-0.35 for subtle skin; 0.5-0.7 for wax/candle. Needs scipy."
-        ),
-    )
-    parser.add_argument(
-        "--sss-radius",
-        type=float,
-        default=3.0,
-        help="SSS blur radius in pixels (2-6 typical; default 3.0).",
-    )
-    parser.add_argument(
         "--chromatic-aberration",
         type=float,
         default=0.0,
-        help="Subtle lens chromatic aberration (0.1-0.3 is natural; adds lens character).",
+        help=(
+            "Lateral chromatic aberration, radial and zero at the centre (0-1; 1 = ~3 px at the corners of 1024 px). "
+            "Overrides the capture-finish lens; applied alone in linear light when no finish runs."
+        ),
     )
     parser.add_argument(
         "--vignette",
         type=float,
         default=0.0,
-        help="Radial vignette strength (0.15-0.4 is natural; frames the composition).",
+        help=(
+            "Share of cos^4 natural vignetting kept (0-1). Overrides the capture-finish lens; "
+            "applied alone in linear light when no finish runs."
+        ),
+    )
+    parser.add_argument(
+        "--camera-isp",
+        type=str,
+        default="auto",
+        choices=["auto", "none", "phone", "dslr", "compact", "film"],
+        help=(
+            "Capture finish after best-of-N: linear-light lens + Poisson-Gaussian sensor + Bayer/demosaic + camera ISP "
+            "+ JPEG 4:2:0, or a film emulsion. auto = route by prompt medium (photo -> camera, film cues -> film, "
+            "anime/illustration/painting/3D -> none) when --naturalize/--human-made/--photo-grain-style is on."
+        ),
+    )
+    parser.add_argument(
+        "--camera-iso",
+        type=int,
+        default=0,
+        help="Capture-finish ISO (0 = from the prompt: explicit 'ISO 800', low-light and indoor cues).",
+    )
+    parser.add_argument(
+        "--camera-jpeg-quality",
+        type=int,
+        default=0,
+        help="Camera JPEG quality for the capture finish (0 = preset: phone 88, compact 90, DSLR 95).",
+    )
+    parser.add_argument(
+        "--save-16bit",
+        action="store_true",
+        help="Write 16-bit PNG/TIFF from the float pipeline (skips the camera JPEG stage).",
     )
     parser.add_argument(
         "--micro-detail",
@@ -498,16 +524,27 @@ def build_sample_parser() -> argparse.ArgumentParser:
         default="",
         help="Save cross-attention weights to path (e.g. attn.pt) for explanation/heatmap",
     )
-    parser.add_argument("--no-refine", action="store_true", help="Disable refinement pass (raw/imperfect look, faster)")
     parser.add_argument(
-        "--refine-t", type=int, default=50, help="Refinement noise level t (small t fixes imperfections; e.g. 50)"
+        "--refine",
+        choices=("off", "restart"),
+        default="off",
+        help="Post-sample refinement: restart = Restart sampling (Xu et al. 2023): renoise the result to "
+        "--refine-t and re-solve with the same sampler, --restart-cycles times.",
+    )
+    parser.add_argument("--no-refine", action="store_true", help="Force refinement off (overrides --refine).")
+    parser.add_argument(
+        "--refine-t", type=int, default=200, help="Restart noise level t_max (training timestep index; default 200)."
+    )
+    parser.add_argument("--restart-cycles", type=int, default=2, help="Restart cycles K for --refine restart.")
+    parser.add_argument(
+        "--restart-steps", type=int, default=6, help="Solver steps per restart cycle (minimum 4; default 6)."
     )
     parser.add_argument(
         "--refine-gate",
         type=str,
         default="off",
         choices=["off", "auto"],
-        help="Run refinement only when quick quality score is below threshold.",
+        help="With --refine restart: refine only when a quick quality score is below threshold.",
     )
     parser.add_argument(
         "--refine-gate-threshold",
@@ -518,14 +555,15 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--hires-fix",
         action="store_true",
-        help="After main sample: bicubic upscale latent then short denoise (A1111-style). Best with SD KL VAE; "
-        "needs variable-res DiT or size_embed. Skipped for RAE, img2img, from-z, inpaint.",
+        help="Compose at the native pixel area (requested aspect ratio), then bicubic-upscale the latent to "
+        "--width/--height (or --hires-scale) and re-denoise from --hires-strength, shifted for the larger grid "
+        "(SD3 resolution shift). VP and flow. Skipped for RAE, img2img, from-z, inpaint.",
     )
     parser.add_argument(
         "--hires-scale",
         type=float,
         default=1.5,
-        help="When --hires-fix and no --width/--height: target side = round(image_size * this).",
+        help="When --hires-fix and no --width/--height: target = sampled canvas * this (aspect kept).",
     )
     parser.add_argument(
         "--hires-steps",
@@ -537,7 +575,8 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--hires-strength",
         type=float,
         default=0.35,
-        help="Noise level 0–1 for hires pass (forward noise from upscaled latent); ~0.3–0.5 typical.",
+        help="Noise level 0–1 for the hires pass at native resolution; the larger grid gets the SD3-shifted "
+        "equivalent. ~0.3–0.5 typical.",
     )
     parser.add_argument(
         "--hires-cfg-scale",
@@ -549,7 +588,8 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--dynamic-threshold-percentile",
         type=float,
         default=0.0,
-        help="If > 0, clamp x0 to this percentile (e.g. 99.5); use with --dynamic-threshold-type percentile",
+        help="If > 0, Imagen dynamic thresholding of x0 at this |x0| percentile (e.g. 99.5): clip to "
+        "s = max(percentile, data range) and rescale onto the data range (see --dynamic-threshold-value).",
     )
     parser.add_argument(
         "--dynamic-threshold-type",
@@ -562,7 +602,8 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--dynamic-threshold-value",
         type=float,
         default=0.0,
-        help="For norm/spatial_norm: min norm (e.g. 1.0); ignored for percentile",
+        help="percentile: data range (default 1, Imagen's pixel range; set the latent range, e.g. 4, for VAE "
+        "latents or the latent turns grey). norm/spatial_norm: min norm (e.g. 1.0).",
     )
     parser.add_argument(
         "--cfg-scale",
@@ -571,7 +612,11 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Classifier-free guidance scale (lower 3-5 = softer, 7-10 = stronger; use with --cfg-rescale if oversaturated)",
     )
     parser.add_argument(
-        "--cfg-rescale", type=float, default=0.0, help="ComfyUI-style CFG rescale to reduce oversaturation (e.g. 0.7)"
+        "--cfg-rescale",
+        type=float,
+        default=0.0,
+        help="CFG rescale phi (Lin et al. 2024): pull the guided x0 toward the per-sample std of the "
+        "conditional x0 to undo overexposure at high CFG. 0=off, 0.7=paper value at CFG ~7.5.",
     )
     # AdaGen (adaptive sampling) early-exit: stop when latent deltas get small.
     parser.add_argument(
@@ -591,11 +636,6 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ada-exit-min-steps", type=int, default=5, help="Minimum sampling steps before early-exit is allowed."
     )
-    # PBFM-style guidance (lightweight edge/high-pass drift in latent update)
-    parser.add_argument(
-        "--pbfm-edge-boost", type=float, default=0.0, help="PBFM heuristic: add high-pass drift to x0_pred (0=off)."
-    )
-    parser.add_argument("--pbfm-edge-kernel", type=int, default=3, help="PBFM high-pass kernel size (odd >=3).")
     parser.add_argument(
         "--reference-image",
         type=str,
@@ -715,13 +755,14 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dual-stage-layout",
         action="store_true",
-        help="Layout-first: denoise at lower latent res, upscale, then short high-res pass (KL VAE, no img2img/inpaint).",
+        help="Layout-first: denoise at a 1/--dual-stage-div grid, upscale, then a detail pass at the canvas "
+        "(KL VAE, no img2img/inpaint; VP and flow).",
     )
     parser.add_argument(
         "--dual-stage-div",
         type=int,
         default=2,
-        help="Latent side divisor for layout stage (2 => half spatial resolution).",
+        help="Grid side divisor for the layout stage (2 => half spatial resolution, rounded to whole patches).",
     )
     parser.add_argument("--dual-layout-steps", type=int, default=24, help="Denoising steps for coarse layout stage.")
     parser.add_argument("--dual-detail-steps", type=int, default=20, help="Denoising steps after latent upscale.")
@@ -777,24 +818,6 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "Applies x = (1-s)*x + s*x_prev (0–1). Try 0.15–0.4. Costs no extra forwards.",
     )
     parser.add_argument(
-        "--speculative-draft-cfg-scale",
-        type=float,
-        default=0.0,
-        help="Experimental: two CFG forwards (draft at this scale, then full). 0=off. Needs classifier-free uncond kwargs.",
-    )
-    parser.add_argument(
-        "--speculative-close-thresh",
-        type=float,
-        default=0.0,
-        help="If >0: when mean |full_pred - draft_pred| is below this, blend toward draft (see --speculative-blend).",
-    )
-    parser.add_argument(
-        "--speculative-blend",
-        type=float,
-        default=0.35,
-        help="Blend weight toward draft when close (0–1). Only used when --speculative-close-thresh > 0.",
-    )
-    parser.add_argument(
         "--flow-matching-sample",
         action="store_true",
         help="Rectified-flow sampler (matches --flow-matching-training). Auto-on if checkpoint was flow-trained.",
@@ -809,20 +832,29 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="dpmpp_2m",
         metavar="NAME",
-        help="Flow ODE solver: euler | heun | midpoint | dpmpp_2m (aliases: rk2, dpm++_2m, …).",
+        help="Flow solver: euler | heun | midpoint | dpmpp_2m | dpmpp_2m_sde (stochastic, see --eta / --sde-band) "
+        "| apex (aliases: rk2, dpm++_2m, …).",
     )
     parser.add_argument(
         "--flow-schedule",
         type=str,
         default="ays",
         metavar="NAME",
-        help="Continuous flow time grid: linear | karras | ays | ays_dit (default: ays).",
+        help="Continuous flow time grid: linear | karras (EDM rho-spacing in s/(1-s)) | ays | ays_dit | apex "
+        "(default: ays).",
     )
     parser.add_argument(
         "--flow-karras-rho",
         type=float,
         default=7.0,
         help="Rho for --flow-schedule karras (default 7).",
+    )
+    parser.add_argument(
+        "--flow-shift",
+        type=float,
+        default=None,
+        help="SD3 timestep shift of the flow grid at the model's native resolution (default: the checkpoint's "
+        "flow_shift, else 1). Other grids scale it by sqrt(tokens / native tokens).",
     )
     parser.add_argument(
         "--domain-prior-latent",
@@ -834,7 +866,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--spectral-coherence-latent",
         type=float,
         default=0.0,
-        help="FFT low-frequency blend on final latent before decode (0=off; try 0.05–0.2). See inference_research_hooks.spectral_latent_lowfreq_blend.",
+        help="FFT low-frequency blend on final latent before decode (0=off; try 0.05–0.2). See latent_filters.spectral_latent_lowfreq_blend.",
     )
     parser.add_argument(
         "--spectral-coherence-cutoff",
@@ -847,34 +879,16 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--pick-best",
         type=str,
         default="none",
-        choices=[
-            "auto",
-            "none",
-            "clip",
-            "edge",
-            "ocr",
-            "vit",
-            "aesthetic",
-            "combo",
-            "combo_vit",
-            "combo_vit_hq",
-            "combo_vit_realism",
-            "combo_count_vit",
-            "combo_exposure",
-            "combo_structural",
-            "combo_hq",
-            "combo_count",
-            "combo_realism",
-            "aesthetic_realism",
-            "superior_composite",
-        ],
-        help="With --num > 1, score candidates; see IMPROVEMENTS.md. Includes aesthetic, aesthetic_realism, combo_vit_*, superior_composite.",
+        choices=list(PICK_METRICS),
+        help="With --num > 1, score candidates before the capture finish and keep the best (weighted Borda "
+        "count over the metric's terms; utils/quality/test_time_pick.METRIC_WEIGHTS). combo_natural = AI-look "
+        "critic, combo_art = composition/exposure/harmony critic, superior_composite adds local reward models.",
     )
     parser.add_argument(
         "--local-rag-jsonl",
         type=str,
         default="",
-        help="JSONL corpus for local TF-IDF RAG (utils/superior/retrieval.py); merges top facts into prompt before encode.",
+        help="JSONL corpus for local TF-IDF RAG (utils/superior/inference_pipeline.py); merges top facts into prompt before encode.",
     )
     parser.add_argument(
         "--local-rag-top-k",
@@ -885,24 +899,26 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--superior-self-correct",
         action="store_true",
-        help="After sampling, CLIP-gate a short refine pass when alignment score is low (see utils/superior/self_correct.py).",
+        help="After sampling, CLIP-gate a short refine pass when alignment score is low (see utils/superior/inference_pipeline.py).",
     )
     parser.add_argument(
         "--expand-prompt",
         action="store_true",
-        help="Heuristic prompt expansion before encode (utils/superior/prompt_expand.py).",
+        help="Heuristic prompt expansion before encode (utils/superior/inference_pipeline.py).",
     )
     parser.add_argument(
-        "--fdg-cfg-strength",
+        "--fdg-low",
         type=float,
-        default=0.0,
-        help="Frequency-decoupled CFG blend (0=standard CFG, 1=full FDG; see utils/superior/frequency_cfg.py).",
+        default=1.0,
+        help="Frequency-decoupled guidance (Sadat et al. 2025): low-frequency guidance weight as a fraction of "
+        "(cfg_scale - 1), on a Laplacian split. Below 1 keeps colour/composition from oversaturating. 1=plain CFG.",
     )
     parser.add_argument(
-        "--fdg-cutoff-frac",
+        "--fdg-high",
         type=float,
-        default=0.15,
-        help="Radial FFT cutoff for --fdg-cfg-strength (low vs high freq split).",
+        default=1.0,
+        help="FDG high-frequency guidance weight as a fraction of (cfg_scale - 1). Above --fdg-low sharpens detail "
+        "(paper's SDXL setting w_low=5, w_high=10). 1=plain CFG.",
     )
     parser.add_argument(
         "--feature-cache-delta",
@@ -940,34 +956,29 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Taylor expansion order for --taylor-cache (0=reuse, 1=linear forecast).",
     )
     parser.add_argument(
-        "--rcfgpp-tangent",
-        type=float,
-        default=0.0,
-        help="Rectified-CFG++ tangent norm cap on flow/CFG delta (0=off, 0.85 typical).",
-    )
-    parser.add_argument(
         "--apg-parallel-eta",
         type=float,
         default=-1.0,
-        help="Adaptive Projected Guidance: parallel component weight (0=remove oversaturation, 1=CFG). "
-        "<0 disables. Mutually preferred over --rcfgpp-tangent when both set; FDG takes priority if --fdg-cfg-strength>0.",
+        help="Adaptive Projected Guidance (Sadat et al., ICLR 2025): weight of the guidance component parallel "
+        "to the conditional x0 (0=paper, removes oversaturation; 1=CFG direction). <0 disables APG.",
     )
     parser.add_argument(
-        "--zeresfdg-strength",
+        "--apg-norm-threshold",
         type=float,
         default=0.0,
-        help="ZeResFDG unified guidance (FDG+zero-projection+energy rescale). 0=off, 1=full (CADE 2.5).",
+        help="APG per-sample L2 cap r on the x0-space guidance update (0=off).",
     )
     parser.add_argument(
         "--cfg-zero-star",
         action="store_true",
-        help="CFG-Zero* for flow matching: optimized scale + zero-init early steps (arXiv:2503.18886).",
+        help="CFG-Zero* (Fan et al. 2025): scale the uncond prediction by <c,u>/||u||^2; flow models also "
+        "predict zero velocity for the first --cfg-zero-init-frac of steps.",
     )
     parser.add_argument(
         "--cfg-zero-init-frac",
         type=float,
         default=0.04,
-        help="Fraction of ODE steps to zero when --cfg-zero-star (default 4%%).",
+        help="CFG-Zero* zero-init: fraction of flow ODE steps that predict zero velocity (0=off; ignored for VP).",
     )
     parser.add_argument(
         "--internal-guidance-block",
@@ -1011,25 +1022,15 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--apg-momentum-beta",
         type=float,
         default=0.0,
-        help="APG reverse momentum across steps (0=off, 0.2 typical; needs --apg-parallel-eta>=0).",
+        help="APG momentum beta accumulated before projection (paper: -0.5, reverse momentum; 0=off). "
+        "Needs --apg-parallel-eta>=0.",
     )
     parser.add_argument(
-        "--cfg-pp-lambda",
-        type=float,
-        default=0.0,
-        help="CFG++ manifold guidance strength in [0,1] (0=off, 0.55 typical; ICLR 2025).",
-    )
-    parser.add_argument(
-        "--cfg-skip-early-frac",
-        type=float,
-        default=0.0,
-        help="Skip CFG for first fraction of denoise steps (e.g. 0.15).",
-    )
-    parser.add_argument(
-        "--cfg-skip-late-frac",
-        type=float,
-        default=0.0,
-        help="Skip CFG for last fraction of denoise steps (e.g. 0.1).",
+        "--cfg-interval",
+        type=str,
+        default="",
+        help="Guidance interval (Kynkaanniemi et al. 2024): apply CFG only for noise levels sigma in (LO, HI], "
+        "given as 'LO,HI' in EDM sigma (VP sqrt((1-abar)/abar), flow s/(1-s)). Paper SD-XL value: 0.28,5.42.",
     )
     parser.add_argument(
         "--linear-attn-fraction",
@@ -1041,19 +1042,34 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--tcfg-damping",
         type=float,
         default=0.0,
-        help="TCFG tangential damping on uncond branch (0=off, 1=full; CVPR 2025).",
+        help="TCFG (Kwon et al. 2025): fraction of the uncond prediction's second singular component "
+        "(of [cond; uncond]) to remove. 0=off, 1=paper.",
     )
     parser.add_argument(
         "--slg-scale",
         type=float,
         default=0.0,
-        help="Skip Layer Guidance scale (0=off, 2.8 typical; extra cond forward).",
+        help="Skip Layer Guidance scale (SD3.5): adds s*(cond - cond_with_blocks_skipped) during the first "
+        "~30%% of steps. 0=off, 2.8 typical; one extra cond forward.",
     )
     parser.add_argument(
         "--slg-skip-blocks",
         type=str,
         default="auto",
         help="Block indices to skip for SLG (comma list or auto).",
+    )
+    parser.add_argument(
+        "--pag-scale",
+        type=float,
+        default=0.0,
+        help="Perturbed-Attention Guidance (Ahn et al. 2024): adds s*(cond - cond_with_identity_self_attention). "
+        "0=off, ~3 typical; lets CFG run lower. Batched with the CFG forward (DiT_Text only).",
+    )
+    parser.add_argument(
+        "--pag-blocks",
+        type=str,
+        default="auto",
+        help="DiT block indices whose self-attention is replaced by identity for PAG (comma list or auto=middle).",
     )
     parser.add_argument(
         "--cfg-rejection-rerank",
@@ -1257,15 +1273,39 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="dpmpp_2m",
         metavar="NAME",
-        help="VP ODE solver: ddim | heun | dpmpp_2m | dpmpp_3m | unipc "
-        "(aliases: dpm++_2m, uni_pc, …). Recommended: dpmpp_2m.",
+        help="VP solver: ddim | heun | dpmpp_2m | dpmpp_2m_sde (stochastic) | dpmpp_3m | unipc | apex | "
+        "apex_adaptive (aliases: dpm++_2m, uni_pc, …). Recommended: dpmpp_2m, or dpmpp_2m_sde for more texture.",
+    )
+    parser.add_argument(
+        "--inference-amp",
+        choices=("auto", "off", "fp16", "bf16"),
+        default="auto",
+        help="Mixed-precision denoiser forwards on CUDA (latents stay fp32). auto = bf16 when "
+        "torch.cuda.is_bf16_supported() else fp16; always off on CPU.",
     )
     parser.add_argument(
         "--eta",
         type=float,
-        default=0.0,
-        help="DDIM stochasticity η (0=deterministic). Multistep DPM++/UniPC stay deterministic.",
+        default=None,
+        help="Noise re-injection η for ddim / heun / dpmpp_2m_sde (default 0, or 1 for dpmpp_2m_sde). "
+        "Other solvers are ODEs and reject η > 0.",
     )
+    parser.add_argument(
+        "--sde-band",
+        type=str,
+        default=None,
+        metavar="LO,HI",
+        help="Inject solver noise only at EDM noise levels sigma in [LO, HI] (VP sqrt((1-abar)/abar), flow "
+        "s/(1-s); e.g. 0.11,2.3 is flow s in [0.1, 0.7]). Default: every step.",
+    )
+    parser.add_argument(
+        "--eps-scale",
+        type=float,
+        default=1.0,
+        help="Epsilon scaling against exposure bias (Ning et al., ICLR 2024): divide the noise prediction by "
+        "lambda_t = eps_scale + eps_scale_k * t. 1.0 = off; papers use ~1.001-1.005.",
+    )
+    parser.add_argument("--eps-scale-k", type=float, default=0.0, help="Slope k of lambda_t for --eps-scale.")
     parser.add_argument(
         "--guidance-schedule",
         "--cfg-schedule",
@@ -1307,7 +1347,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--karras-rho",
         type=float,
         default=7.0,
-        help="Exponent ρ for karras_rho schedule only (larger → more emphasis in very noisy σ region).",
+        help="Exponent ρ for the karras_rho schedule (EDM; larger → more steps at low noise).",
     )
     parser.add_argument(
         "--no-neg-filter",
@@ -1429,7 +1469,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
     )
     _vdd_choices = None  # filled lazily to avoid importing visual_design during --help snapshots
     try:
-        from utils.visual_design.compose import visual_design_cli_domain_choices
+        from utils.visual_design import visual_design_cli_domain_choices
 
         _vdd_choices = visual_design_cli_domain_choices()
     except ImportError:
@@ -1473,7 +1513,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Merge domain negatives into the effective negative prompt (requires --visual-design-domain / auto-hit).",
     )
     try:
-        from utils.visual_design.presets import preset_ids as _visual_design_preset_ids
+        from utils.visual_design import preset_ids as _visual_design_preset_ids
 
         _vdp_help_extra = f"Known ids: {', '.join(_visual_design_preset_ids())}."
     except ImportError:
@@ -1483,7 +1523,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="",
         help=(
-            "Shortcut: set domain + intensity (and optional prompt prefix) via utils.visual_design.presets. "
+            "Shortcut: set domain + intensity via utils.visual_design.VISUAL_DESIGN_PRESETS. "
             "Overrides --visual-design-domain / --visual-design-intensity when non-empty. "
             f"{_vdp_help_extra}"
         ),
@@ -1587,13 +1627,13 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--naturalize",
         action="store_true",
-        help="Reduce AI look: add anti-plastic/oversmooth negative, optional natural-look prompt prefix, and subtle film grain + micro-contrast post-process",
+        help="Reduce AI look: anti-plastic/oversmooth negative, natural-look prompt prefix, and the medium-routed capture finish (see --camera-isp)",
     )
     parser.add_argument(
         "--naturalize-grain",
         type=float,
         default=0.015,
-        help="Film grain amount when --naturalize (0=off, 0.01-0.03 typical)",
+        help="With --naturalize: 0 = prompt changes only (no capture finish); >0 enables it (noise level comes from the camera/film model)",
     )
     parser.add_argument(
         "--naturalize-deep",
@@ -1610,7 +1650,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="none",
         choices=["none", "lite", "standard", "strong"],
-        help="Human-made polish: anti-AI prompts + speckle/plastic/halo cleanup post-process.",
+        help="Human-made polish: anti-AI prompts, halo cleanup + value structure, and the medium-routed capture finish.",
     )
     parser.add_argument(
         "--human-made-strength",
@@ -1684,7 +1724,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="none",
         choices=["none", "fine_35mm", "medium_35mm", "heavy_16mm", "clean_digital"],
-        help="Photography grain-style cue.",
+        help="Photography grain-style cue; film styles route the capture finish to the film emulsion model.",
     )
     parser.add_argument(
         "--photo-realism-strength",
@@ -1696,7 +1736,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--photo-postprocess",
         dest="photo_postprocess",
         action="store_true",
-        help="Apply photography-focused post process (grade/filter/grain) based on selected photo controls (default: on).",
+        help="Apply photography-focused post process (grade/filter; grain style drives the capture finish) (default: on).",
     )
     parser.add_argument(
         "--no-photo-postprocess",
@@ -2063,6 +2103,36 @@ def build_sample_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--art-direction",
+        type=str,
+        default="auto",
+        choices=["auto", "off"],
+        help=(
+            "Plan shot, lens, lighting and palette from the prompt (utils.prompt.art_direction); the decided "
+            "fields go right after your text and the plan is saved as art_direction in --pick-report-json."
+        ),
+    )
+    parser.add_argument(
+        "--prompt-budget",
+        type=int,
+        default=96,
+        metavar="TOKENS",
+        help=(
+            "Max text-encoder tokens the prompt stack may add after your own words (art direction first, then "
+            "packs in stage order). -1 fills up to the encoder limit. Your words are never dropped."
+        ),
+    )
+    parser.add_argument(
+        "--negative-budget",
+        type=int,
+        default=160,
+        metavar="TOKENS",
+        help=(
+            "Max text-encoder tokens of default and pack negatives kept after your own --negative-prompt "
+            "(default negative first). -1 fills up to the encoder limit."
+        ),
+    )
+    parser.add_argument(
         "--invent-styles",
         type=int,
         default=0,
@@ -2245,22 +2315,25 @@ def build_sample_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--uncensored-mode",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Disable character-sheet safety sanitization and avoid anti-explicit negative injections. (enabled by default)",
+        help="Disable character-sheet safety sanitization and avoid anti-explicit negative injections "
+        "(default on; --no-uncensored-mode restores them).",
     )
+    from config.defaults.model_presets import OP_MODES, PRESETS
+
     parser.add_argument(
         "--preset",
         type=str,
         default=None,
-        choices=["sdxl", "flux", "anime", "zit"],
+        choices=list(PRESETS),
         help="Apply a sampler preset (soft defaults) from config.defaults.model_presets",
     )
     parser.add_argument(
         "--op-mode",
         type=str,
         default=None,
-        choices=["portrait", "fullbody", "anime_char"],
+        choices=list(OP_MODES),
         help="High-level OP mode (applied after preset)",
     )
     try:
@@ -2292,6 +2365,12 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "text_only only merges layout into the global T5 prompt.",
     )
     parser.add_argument(
+        "--no-quality-defaults",
+        action="store_true",
+        help="Skip the prompt-routed quality policy (config/defaults/quality_policy.py): no soft-filled guidance, "
+        "anti-AI packs, pick-best, OCR repair or frontier subject; only the flags you pass apply.",
+    )
+    parser.add_argument(
         "--frontier", action="store_true", help="Enable frontier research hooks (serendipity, witness POV)."
     )
     parser.add_argument(
@@ -2317,7 +2396,8 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         choices=("off", "moderate", "strict"),
         default="moderate",
-        help="Content policy tier when --frontier-perfect (moderate=steer/refuse high-risk prompts).",
+        help="Adult-NSFW steering with --frontier-perfect: off, moderate (steer sexual prompts without an adult cue), "
+        "strict (steer all sexual prompts). The minor-sexualization block always runs and cannot be disabled.",
     )
     parser.add_argument(
         "--frontier-creative",
@@ -2418,4 +2498,39 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "Triple mode + layout: CLIP-L and CLIP-bigG use a labeled compact caption (same string for both); "
         "T5 uses blocks/segmented/flat per this flag. Use flat if you rely on (word)/[word] emphasis.",
     )
+    parser.add_argument(
+        "--invention-stack",
+        type=str,
+        default="off",
+        help="Invention Lab prompt/repair stack: off | auto | all | comma list of modules "
+        "(utils/generation/inventions/stack.py).",
+    )
+    parser.add_argument(
+        "--invention-adaptive-steps",
+        action="store_true",
+        help="Let the invention stack set --steps from prompt difficulty (adaptive NFE).",
+    )
+    parser.add_argument(
+        "--invention-self-heal",
+        action="store_true",
+        help="Also write the oracle -> stack -> critique self-healing plan (self_healing_plan.json).",
+    )
+    parser.add_argument(
+        "--cast-json",
+        type=str,
+        default="",
+        help="Multi-character cast JSON: ownership phrases, anti-blend negatives, box layout, sheets "
+        "(utils/generation/multi_char_cast.py; see docs/research/CORPUS_AND_CAST.md).",
+    )
+    parser.add_argument(
+        "--corpus-jsonl",
+        type=str,
+        default="",
+        help="Training-corpus JSONL: retrieve nearest captions into the prompt and images as moodboard refs.",
+    )
+    parser.add_argument("--corpus-top-k", type=int, default=4, help="Corpus hits retrieved with --corpus-jsonl.")
+    parser.add_argument(
+        "--corpus-source", type=str, default="", help="Only keep corpus hits from this source (e.g. danbooru)."
+    )
+    parser.add_argument("--corpus-root", type=str, default="", help="Root for relative image paths in --corpus-jsonl.")
     return parser

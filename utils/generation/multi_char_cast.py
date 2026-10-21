@@ -14,9 +14,9 @@ from typing import Any
 from utils.prompt.multi_subject import (
     MULTI_SUBJECT_NEGATIVE_EXTRAS,
     MULTI_SUBJECT_POSITIVE_EXTRAS,
-    merge_character_sheet_negatives,
     merge_character_sheet_positives,
 )
+from utils.prompt.tags import merge_csv_unique
 
 __all__ = [
     "CastMember",
@@ -227,7 +227,7 @@ def compile_cast_scene(scene: CastScene, *, base_prompt: str = "") -> CastCompil
         others_outfits = [o.outfit for o in scene.members if o.id != m.id and o.outfit]
         for oo in others_outfits[:2]:
             neg_bits.append(f"{m.id} wearing {oo}")
-    negative = merge_character_sheet_negatives(neg_bits)
+    negative = merge_csv_unique(*neg_bits)
 
     # Box layout for regional CFG / layout attn
     boxes = _default_bboxes(n)

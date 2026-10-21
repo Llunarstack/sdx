@@ -4,8 +4,7 @@ SDX **Agentic Stack** — autonomous plan → tool → verify → reflect → ev
 Inspired by GenEvolve (tool-orchestrated trajectories), VisionCreator UTPC
 (Understand / Think / Plan / Create), and VisionCreator-R1 Act–Reflect–Think–Act.
 
-Operational layer on top of ``utils/superior/`` and ``sample.py``. Research schemas
-live in ``research/agi_image/``.
+Operational layer on top of ``utils/superior/`` and ``sample.py``.
 """
 
 from __future__ import annotations

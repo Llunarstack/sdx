@@ -12,12 +12,11 @@ import textwrap
 import uuid
 from pathlib import Path
 
-from utils.modeling.model_paths import default_qwen_path, repo_root
+from utils.modeling.model_paths import default_qwen_path
 
 from .style_genome import StyleGenome, is_genome_novel_enough
 from .style_genome_chaos import InventionMode, apply_chaos_level, invent_insane_batch
 
-_PRETRAINED_ROOT = repo_root() / "pretrained"
 # Resolved at import time so local Qwen3-14B (or legacy Qwen2.5) folders win.
 _QWEN_PATH = Path(default_qwen_path())
 
@@ -261,7 +260,6 @@ class StyleInventor:
         creativity_level: float = 0.75,
         seed: int = 42,
         max_catalog_overlap: float = 0.55,
-        bank_boost: bool = True,
         invention_mode: InventionMode = "normal",
         chaos_level: float = 0.0,
     ) -> list[StyleGenome]:
@@ -320,18 +318,6 @@ class StyleInventor:
         if chaos > 0.01:
             chaos_rng = random.Random(seed + 9001)
             genomes = [apply_chaos_level(g, chaos, rng=chaos_rng) for g in genomes]
-
-        if bank_boost:
-            try:
-                from .style_memory import StyleGenomeBank
-
-                for g in StyleGenomeBank().top_genomes(k=2):
-                    if len(genomes) >= n + 1:
-                        break
-                    if g.id not in {x.id for x in genomes}:
-                        genomes.append(g)
-            except Exception:
-                pass
 
         # Filter near-duplicate catalog styles; dedupe by signature
         filtered: list[StyleGenome] = []

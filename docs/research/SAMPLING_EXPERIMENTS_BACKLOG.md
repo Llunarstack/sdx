@@ -1,8 +1,8 @@
 # Sampling experiments backlog
 
 Concrete **grids** to run when you change samplers, CFG, or flow settings. Pair with
-[`examples/eval_prompts_baseline.json`(../../examples/eval_prompts_baseline.json) and
-[`utils/generation/eval_prompt_pack.py`](../../utils/generation/eval_prompt_pack.py).
+[`examples/eval_prompts_baseline.json`](../../examples/eval_prompts_baseline.json) and
+[`examples/run_baseline_eval.py`](../../examples/run_baseline_eval.py).
 
 ## Grid A — CFG vs rescale (VP / DDIM-style)
 

@@ -28,18 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-
-def _resolve_image(data_root: Path, row: dict) -> Path | None:
-    rel = row.get("image_path") or row.get("path") or ""
-    if not rel:
-        return None
-    p = Path(rel)
-    if p.is_file():
-        return p
-    full = data_root / p
-    if full.is_file():
-        return full
-    return None
+from data.manifest_utils import resolve_image_path  # noqa: E402
 
 
 def _extract_one(
@@ -49,7 +38,7 @@ def _extract_one(
     control_type: str,
     controls_dir: Path,
 ) -> dict | None:
-    img = _resolve_image(data_root, row)
+    img = resolve_image_path(row.get("image_path") or row.get("path") or "", data_root)
     if img is None:
         return None
     md5 = row.get("md5") or img.stem.split("_f")[0]

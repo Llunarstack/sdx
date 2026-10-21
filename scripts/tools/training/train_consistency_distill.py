@@ -2,8 +2,8 @@
 """
 **Consistency distillation** (LCM-style) for SDX DiT using ``ConsistencyFlowLoss``.
 
-Distills a student DiT from a frozen teacher so the student matches teacher predictions
-across adjacent flow timesteps — enables fewer-step inference.
+Distills a student DiT from a rectified-flow teacher (``--flow-matching-training`` checkpoint) so the student's
+velocity matches the EMA teacher's across adjacent flow timesteps, which enables fewer-step inference.
 
 Example::
 
@@ -27,10 +27,10 @@ if str(_REPO_ROOT) not in sys.path:
 import torch
 from config.train_config import get_dit_build_kwargs
 from data import Text2ImageDataset, collate_t2i
-from diffusion.flow_rectified import ConsistencyFlowLoss, LogitNormalTimeSampler
+from diffusion.flow_matching import ConsistencyFlowLoss
 from models import DiT_models_text
 from torch.utils.data import DataLoader
-from utils.checkpoint.checkpoint_loading import load_dit_text_checkpoint
+from utils.checkpoint.checkpoint_loading import finetuned_checkpoint, load_dit_text_checkpoint
 from utils.modeling.multi_encoder_encode import encode_kwargs_for_captions, load_text_bundle_for_training
 
 import train as train_mod
@@ -59,6 +59,9 @@ def main() -> int:
     teacher, cfg, rae_bridge, _, fusion_sd = load_dit_text_checkpoint(
         args.teacher_ckpt, device=device, reject_enhanced=True
     )
+    if not bool(getattr(cfg, "flow_matching_training", False)):
+        print("Consistency distillation needs a --flow-matching-training teacher checkpoint.", file=sys.stderr)
+        return 1
     teacher.eval()
     for p in teacher.parameters():
         p.requires_grad = False
@@ -80,9 +83,9 @@ def main() -> int:
     cf = ConsistencyFlowLoss(
         teacher_ema,
         student,
-        time_sampler=LogitNormalTimeSampler(),
         consistency_weight=float(args.consistency_weight),
         ema_decay=float(args.ema_decay),
+        num_timesteps=int(getattr(cfg, "num_timesteps", 1000)),
     )
 
     tokenizer, text_encoder, vae = train_mod.get_t5_and_vae(device, cfg)
@@ -108,8 +111,8 @@ def main() -> int:
         except StopIteration:
             it = iter(dl)
             batch = next(it)
-        imgs, prompts = batch
-        imgs = imgs.to(device)
+        imgs = batch["pixel_values"].to(device)
+        prompts = batch["captions"]
         with torch.no_grad():
             px = train_mod.encode_images_vae(imgs, vae, latent_scale)
             if rae_bridge is not None:
@@ -137,7 +140,7 @@ def main() -> int:
         if step % 50 == 0:
             print(f"step {step} consistency_loss={float(loss.detach().cpu()):.6f}")
 
-    torch.save({"model": student.state_dict(), "ema": student.state_dict(), "config": cfg}, args.out)
+    torch.save(finetuned_checkpoint(student, cfg, rae_bridge, fusion_sd), args.out)
     print(f"Saved {args.out}")
     return 0
 

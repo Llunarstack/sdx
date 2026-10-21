@@ -7,15 +7,19 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from ._lexicon import alias_patterns, compile_keywords, expand_aliases, matches, merge_csv_unique, word_re
+
 __all__ = [
     "GuidanceMode",
     "AnatomyGuidanceMode",
     "MediumSpec",
     "MEDIUM_SPECS",
-    "MEDIUM_IDS",
     "detect_medium_ids",
-    "merge_csv_unique",
     "guidance_fragments",
+    "MEDIUM_FAMILIES",
+    "MediumProfile",
+    "detect_all_mediums",
+    "detect_medium",
 ]
 
 GuidanceMode = Literal["none", "auto", "all"]
@@ -29,18 +33,6 @@ class MediumSpec:
     positive_hints: str
     negative_hints: str
     is_photography: bool = False
-
-
-def _word_re(term: str) -> re.Pattern:
-    return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
-
-
-def _compile_keywords(keywords: tuple[str, ...]) -> tuple[re.Pattern, ...]:
-    return tuple(_word_re(k) for k in keywords)
-
-
-def _matches(prompt: str, patterns: Sequence[re.Pattern]) -> bool:
-    return any(p.search(prompt) for p in patterns)
 
 
 MEDIUM_ALIAS_TERMS: dict[str, tuple[str, ...]] = {
@@ -61,47 +53,11 @@ MEDIUM_ALIAS_TERMS: dict[str, tuple[str, ...]] = {
     "miniature diorama photo": ("miniature photo", "diorama photography", "tabletop diorama shot"),
 }
 
-_MEDIUM_ALIAS_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
-    (re.compile(rf"\b{re.escape(alias)}\b", re.IGNORECASE), canonical)
-    for canonical, aliases in MEDIUM_ALIAS_TERMS.items()
-    for alias in aliases
-)
-
-
-def _expand_medium_aliases(prompt: str) -> str:
-    p = str(prompt or "").strip()
-    if not p:
-        return p
-    found: list[str] = []
-    for pat, canonical in _MEDIUM_ALIAS_PATTERNS:
-        if pat.search(p):
-            found.append(canonical)
-    if not found:
-        return p
-    extras = ", ".join(sorted(set(found)))
-    return f"{p}, {extras}"
-
-
-def merge_csv_unique(*chunks: str) -> str:
-    seen = set()
-    out: list[str] = []
-    for chunk in chunks:
-        if not chunk or not str(chunk).strip():
-            continue
-        for part in str(chunk).split(","):
-            p = part.strip()
-            if not p:
-                continue
-            k = p.lower()
-            if k in seen:
-                continue
-            seen.add(k)
-            out.append(p)
-    return ", ".join(out)
+_MEDIUM_ALIAS_PATTERNS = alias_patterns(MEDIUM_ALIAS_TERMS)
 
 
 MEDIUM_SPECS: tuple[MediumSpec, ...] = (
-    # --- Traditional ---
+    # Traditional
     MediumSpec(
         id="oil_painting",
         keywords=("oil painting", "oil paint", "impasto", "alla prima", "canvas oil"),
@@ -144,7 +100,7 @@ MEDIUM_SPECS: tuple[MediumSpec, ...] = (
         positive_hints="intentional brush-pressure rhythm, controlled dilution transitions, elegant negative-space composition",
         negative_hints="muddy gray soup, chaotic stroke thickness, accidental blot artifacts",
     ),
-    # --- Digital art ---
+    # Digital art
     MediumSpec(
         id="digital_painting",
         keywords=("digital painting", "digital art", "photoshop", "procreate", "clip studio", "krita", "paintover"),
@@ -193,7 +149,7 @@ MEDIUM_SPECS: tuple[MediumSpec, ...] = (
         positive_hints="strong composition intent, iterative design readability, coherent mood and color continuity",
         negative_hints="generic concept mush, unfocused detail clutter, conflicting scene language",
     ),
-    # --- 3D / render-focused ---
+    # 3D / render-focused
     MediumSpec(
         id="hard_surface_3d",
         keywords=("hard surface", "mecha 3d", "mechanical design", "sci-fi machinery", "cad render"),
@@ -224,7 +180,116 @@ MEDIUM_SPECS: tuple[MediumSpec, ...] = (
         positive_hints="material-true clay surface response, believable handcrafted asymmetry, coherent glaze behavior",
         negative_hints="plastic synthetic surface, impossible glaze reflections, uniform machine-perfect form",
     ),
-    # --- Photography / realism ---
+    # Craft, print and art-movement mediums
+    MediumSpec(
+        id="spray_paint_street",
+        keywords=("spray paint", "graffiti", "street art", "aerosol mural", "stencil art"),
+        positive_hints="cap pressure variation, overspray halo, layered stencil alignment, concrete wall tooth",
+        negative_hints="gaussian smear tags, incoherent drip physics, floating letters",
+    ),
+    MediumSpec(
+        id="encaustic_wax",
+        keywords=("encaustic", "hot wax painting", "wax medium"),
+        positive_hints="molten wax texture, translucent wax layers, scraped reveal marks",
+        negative_hints="plastic resin look, uniform gloss, digital gradient wax",
+    ),
+    MediumSpec(
+        id="linocut_woodblock",
+        keywords=("linocut", "woodblock print", "woodcut", "block print", "ukiyo-e print"),
+        positive_hints="bold carved negative space, ink transfer pressure, registration charm",
+        negative_hints="blurry print, random hatch without block logic",
+    ),
+    MediumSpec(
+        id="stained_glass",
+        keywords=("stained glass", "lead came", "glass mosaic window"),
+        positive_hints="luminous transmitted color, lead line rhythm, cathedral light scatter",
+        negative_hints="flat color without transmission, random polygon soup",
+    ),
+    MediumSpec(
+        id="mosaic_tile",
+        keywords=("mosaic", "tile mosaic", "byzantine mosaic", "tesserae"),
+        positive_hints="consistent tessera scale, grout rhythm, material chip variation",
+        negative_hints="noise texture pretending to be tiles, scale drift",
+    ),
+    MediumSpec(
+        id="colored_pencil",
+        keywords=("colored pencil", "polychromos", "prismacolor", "wax pencil"),
+        positive_hints="directional pencil stroke, wax bloom, paper grain interaction",
+        negative_hints="airbrush skin, digital smooth without tooth",
+    ),
+    MediumSpec(
+        id="marker_copic",
+        keywords=("copic marker", "alcohol marker", "marker illustration", "marker render"),
+        positive_hints="streak-free blender transitions where intended, chisel tip stroke read, clean cap lines",
+        negative_hints="muddy marker bleed everywhere, uncontrolled bleed",
+    ),
+    MediumSpec(
+        id="scratchboard",
+        keywords=("scratchboard", "scratch art", "white on black scratch"),
+        positive_hints="sharp scratch highlight direction, engraved texture rhythm",
+        negative_hints="random white noise scratches",
+    ),
+    MediumSpec(
+        id="batik_fabric",
+        keywords=("batik", "wax resist fabric", "tie dye", "shibori"),
+        positive_hints="wax resist crackle, dye penetration boundaries, fabric fold dye pooling",
+        negative_hints="flat procedural pattern, no fabric fold logic",
+    ),
+    MediumSpec(
+        id="collage_mixed",
+        keywords=("collage", "mixed media collage", "paper collage", "photomontage"),
+        positive_hints="cut paper edge shadow, scale consistency, glue seam logic",
+        negative_hints="floating clipart, scale mismatch chaos",
+    ),
+    MediumSpec(
+        id="impressionist",
+        keywords=("impressionist", "impressionism", "plein air", "monet style", "broken color"),
+        positive_hints="broken color strokes, optical mixing, atmospheric perspective color shift",
+        negative_hints="muddy overblend, uniform brush size everywhere",
+    ),
+    MediumSpec(
+        id="expressionist",
+        keywords=("expressionist", "expressionism", "bold gestural paint", "die brücke"),
+        positive_hints="emotive stroke direction, exaggerated color temperature, raw mark energy",
+        negative_hints="random glitch strokes without emotional axis",
+    ),
+    MediumSpec(
+        id="baroque_oil",
+        keywords=("baroque painting", "caravaggio", "chiaroscuro oil", "old master oil"),
+        positive_hints="dramatic chiaroscuro, tenebrism, glazing depth, historical varnish warmth",
+        negative_hints="flat comic shading, modern HDR on old master",
+    ),
+    MediumSpec(
+        id="art_nouveau",
+        keywords=("art nouveau", "mucha", "decorative illustration", "ornate floral border"),
+        positive_hints="elegant contour rhythm, decorative flat pattern harmony, hair and fabric flow lines",
+        negative_hints="generic fantasy portrait without decorative grammar",
+    ),
+    MediumSpec(
+        id="ukiyo_e",
+        keywords=("ukiyo-e", "japanese woodblock", "hokusai", "kuniyoshi"),
+        positive_hints="flat plane separation, bold outline, limited palette, wave and cloud motifs",
+        negative_hints="western shading on ukiyo-e, gradient mush",
+    ),
+    MediumSpec(
+        id="airbrush_80s",
+        keywords=("airbrush illustration", "80s airbrush", "fantasy airbrush"),
+        positive_hints="controlled airbrush soft focus, chrome highlight discipline, retro gradient skies",
+        negative_hints="modern AI plastic skin, random lens flare",
+    ),
+    MediumSpec(
+        id="risograph",
+        keywords=("risograph", "riso print", "duotone print"),
+        positive_hints="misregistration charm, limited ink layer overlap, grainy halftone",
+        negative_hints="full CMYK smooth print, no layer logic",
+    ),
+    MediumSpec(
+        id="chalk_mural",
+        keywords=("chalk mural", "sidewalk chalk", "pastel chalk mural"),
+        positive_hints="chalk dust at edges, pavement tooth, temporary mural scale",
+        negative_hints="digital chalk filter noise",
+    ),
+    # Photography / realism
     MediumSpec(
         id="portrait_photo",
         keywords=("portrait photo", "headshot", "studio portrait", "fashion portrait", "beauty photo"),
@@ -296,11 +361,10 @@ MEDIUM_SPECS: tuple[MediumSpec, ...] = (
     ),
 )
 
-MEDIUM_IDS: tuple[str, ...] = tuple(s.id for s in MEDIUM_SPECS)
-_MEDIUM_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {s.id: _compile_keywords(s.keywords) for s in MEDIUM_SPECS}
+_MEDIUM_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {s.id: compile_keywords(s.keywords) for s in MEDIUM_SPECS}
 
 _PERSON_PATTERNS: tuple[re.Pattern, ...] = tuple(
-    _word_re(k)
+    word_re(k)
     for k in (
         "person",
         "people",
@@ -370,64 +434,56 @@ PHOTO_COLOR_GRADE_NEG = (
 )
 
 
-def _color_render_fragments(spec_ids: Sequence[str]) -> tuple[str, str]:
-    """
-    Add medium-aware color theory / shading / rendering guidance.
-    """
-    ids = set(spec_ids)
-    pos_parts: list[str] = [COLOR_THEORY_CORE_POS]
-    neg_parts: list[str] = [COLOR_THEORY_CORE_NEG]
+_TRADITIONAL_IDS = frozenset(
+    {"oil_painting", "watercolor", "gouache_acrylic", "pastel_crayon", "tempera_fresco", "ink_wash_calligraphy"}
+)
+_DIGITAL_2D_IDS = frozenset(
+    {"digital_painting", "concept_matte", "vector_flat", "pixel_art", "anime_digital_render", "matte_concept_dev"}
+)
+_RENDER_3D_IDS = frozenset({"hard_surface_3d", "archviz_3d", "toon_3d", "stylized_game_texture"})
 
-    has_3d = bool(ids & {"hard_surface_3d", "archviz_3d", "toon_3d", "stylized_game_texture"})
-    has_photo = any(i.endswith("_photo") or "photo" in i for i in ids)
-    has_traditional = bool(
-        ids
-        & {"oil_painting", "watercolor", "gouache_acrylic", "pastel_crayon", "tempera_fresco", "ink_wash_calligraphy"}
-    )
-    has_digital_2d = bool(
-        ids
-        & {"digital_painting", "concept_matte", "vector_flat", "pixel_art", "anime_digital_render", "matte_concept_dev"}
-    )
 
-    if has_traditional:
-        pos_parts.append(TRADITIONAL_COLOR_MIX_POS)
-        neg_parts.append(TRADITIONAL_COLOR_MIX_NEG)
-    if has_digital_2d:
-        pos_parts.append(DIGITAL_2D_RENDER_POS)
-        neg_parts.append(DIGITAL_2D_RENDER_NEG)
-    if has_3d:
-        pos_parts.append(RENDER_3D_PBR_POS)
-        neg_parts.append(RENDER_3D_PBR_NEG)
-    if has_photo:
-        pos_parts.append(PHOTO_COLOR_GRADE_POS)
-        neg_parts.append(PHOTO_COLOR_GRADE_NEG)
-
+def _color_render_fragments(specs: Sequence[MediumSpec]) -> tuple[str, str]:
+    """Core color-theory pack plus the color/shading pack of every medium family present."""
+    ids = {s.id for s in specs}
+    pos_parts = [COLOR_THEORY_CORE_POS]
+    neg_parts = [COLOR_THEORY_CORE_NEG]
+    for present, pos, neg in (
+        (ids & _TRADITIONAL_IDS, TRADITIONAL_COLOR_MIX_POS, TRADITIONAL_COLOR_MIX_NEG),
+        (ids & _DIGITAL_2D_IDS, DIGITAL_2D_RENDER_POS, DIGITAL_2D_RENDER_NEG),
+        (ids & _RENDER_3D_IDS, RENDER_3D_PBR_POS, RENDER_3D_PBR_NEG),
+        (any(s.is_photography for s in specs), PHOTO_COLOR_GRADE_POS, PHOTO_COLOR_GRADE_NEG),
+    ):
+        if present:
+            pos_parts.append(pos)
+            neg_parts.append(neg)
     return merge_csv_unique(*pos_parts), merge_csv_unique(*neg_parts)
 
 
-def detect_medium_ids(prompt: str, *, include_photography: bool) -> tuple[str, ...]:
+def _eligible(include_photography: bool) -> list[MediumSpec]:
+    return [s for s in MEDIUM_SPECS if include_photography or not s.is_photography]
+
+
+def _detect_specs(prompt: str, include_photography: bool) -> list[MediumSpec]:
     if not prompt or not prompt.strip():
-        return ()
-    prompt = _expand_medium_aliases(prompt)
-    out: list[str] = []
-    for spec in MEDIUM_SPECS:
-        if spec.is_photography and not include_photography:
-            continue
-        if _matches(prompt, _MEDIUM_PATTERNS[spec.id]):
-            out.append(spec.id)
-    return tuple(out)
+        return []
+    prompt = expand_aliases(prompt, _MEDIUM_ALIAS_PATTERNS)
+    return [s for s in _eligible(include_photography) if matches(prompt, _MEDIUM_PATTERNS[s.id])]
+
+
+def detect_medium_ids(prompt: str, *, include_photography: bool) -> tuple[str, ...]:
+    """Ids of the mediums named in ``prompt`` (word-boundary keywords, aliases folded to canonical terms)."""
+    return tuple(s.id for s in _detect_specs(prompt, include_photography))
 
 
 def _anatomy_fragments(prompt: str, mode: AnatomyGuidanceMode) -> tuple[str, str]:
+    """Anatomy packs only when the prompt has a person; a landscape gets no hands or joints text."""
     m = (mode or "none").lower()
-    if m == "none":
+    if m == "none" or not matches(prompt, _PERSON_PATTERNS):
         return "", ""
     if m == "strong":
         return ANATOMY_POS_STRONG, ANATOMY_NEG_STRONG
-    # lite: only if people are present
-    if _matches(prompt, _PERSON_PATTERNS):
-        return ANATOMY_POS_LITE, ANATOMY_NEG_LITE
-    return "", ""
+    return ANATOMY_POS_LITE, ANATOMY_NEG_LITE
 
 
 def guidance_fragments(
@@ -437,18 +493,69 @@ def guidance_fragments(
     include_photography: bool,
     anatomy_mode: AnatomyGuidanceMode = "none",
 ) -> tuple[str, str]:
+    """``(positive, negative)`` medium hints + color/shading packs + optional anatomy pack.
+
+    ``mode="all"`` uses every eligible medium, any other value except ``"none"`` detects them from ``prompt``.
+    """
     m = (mode or "none").lower()
     if m == "none":
         return _anatomy_fragments(prompt, anatomy_mode)
-    if m == "all":
-        specs = [s for s in MEDIUM_SPECS if include_photography or not s.is_photography]
-    else:
-        specs = [s for s in MEDIUM_SPECS if s.id in detect_medium_ids(prompt, include_photography=include_photography)]
-    spec_ids = tuple(s.id for s in specs)
-    pos = merge_csv_unique(*(s.positive_hints for s in specs))
-    neg = merge_csv_unique(*(s.negative_hints for s in specs))
-    cpos, cneg = _color_render_fragments(spec_ids)
-    pos = merge_csv_unique(pos, cpos)
-    neg = merge_csv_unique(neg, cneg)
+    specs = _eligible(include_photography) if m == "all" else _detect_specs(prompt, include_photography)
+    cpos, cneg = _color_render_fragments(specs)
     apos, aneg = _anatomy_fragments(prompt, anatomy_mode)
-    return merge_csv_unique(pos, apos), merge_csv_unique(neg, aneg)
+    pos = merge_csv_unique(*(s.positive_hints for s in specs), cpos, apos)
+    neg = merge_csv_unique(*(s.negative_hints for s in specs), cneg, aneg)
+    return pos, neg
+
+
+# Coarse medium families used to route finishing and token-space naturalness.
+MEDIUM_FAMILIES = ("generic", "photo", "2d", "traditional", "3d")
+
+
+@dataclass(slots=True)
+class MediumProfile:
+    """Detected or user-specified medium for naturalness routing."""
+
+    name: str = "unknown"
+    family: str = "generic"
+
+
+_FAMILY_RULES: tuple[tuple[str, str, re.Pattern[str]], ...] = tuple(
+    (name, family, re.compile(rf"\b(?:{pattern})\b"))
+    for name, family, pattern in (
+        ("pixel_art", "2d", r"pixel ?art|pixelated|sprite ?sheet|8-bit|16-bit"),
+        ("vector", "2d", r"vector(?: art| illustration| graphic)?|flat (?:design|illustration|vector)|svg"),
+        ("anime", "2d", r"anime|manga|cel[- ]shad\w*|visual novel|chibi|webtoon|1girl|1boy"),
+        ("photograph", "photo", r"photo\w*|dslr|raw photo|film still|polaroid|35mm|bokeh|analog film|kodak \w+"),
+        ("watercolor", "traditional", r"watercolou?r|gouache"),
+        ("oil_painting", "traditional", r"oil (?:painting|paint|on canvas)|acrylic|impasto"),
+        (
+            "ink",
+            "traditional",
+            r"ink (?:drawing|wash)|pen and ink|crosshatch\w*|etching|woodcut|linocut|lithograph|sumi-e",
+        ),
+        ("drawing", "traditional", r"pastel|charcoal|pencil|graphite|sketch\w*"),
+        (
+            "3d_render",
+            "3d",
+            r"3d render|octane|blender|unreal engine|cinema ?4d|v-?ray|cgi|claymation|voxel|low[- ]poly",
+        ),
+        (
+            "illustration",
+            "2d",
+            r"illustration|cartoon|comic|concept art|digital (?:painting|art)|storybook|matte painting|painterly",
+        ),
+        ("painting", "traditional", r"painting|painted"),
+    )
+)
+
+
+def detect_all_mediums(prompt: str) -> list[MediumProfile]:
+    """Every medium the prompt names, most specific rule first (mixed media yields several)."""
+    text = (prompt or "").lower()
+    return [MediumProfile(name, family) for name, family, rx in _FAMILY_RULES if rx.search(text)]
+
+
+def detect_medium(prompt: str) -> MediumProfile:
+    found = detect_all_mediums(prompt)
+    return found[0] if found else MediumProfile()

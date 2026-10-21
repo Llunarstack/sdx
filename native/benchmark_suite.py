@@ -1,225 +1,132 @@
 #!/usr/bin/env python3
-"""
-Cross-language performance benchmark suite for SDX native kernels.
+"""Time a few vector kernels in NumPy and in the Rust ``sdx_native`` PyO3 extension (``native/rust``).
 
-Measures and compares performance across Rust, C++, Go, Mojo, and Julia implementations.
-Run: python benchmark_suite.py
+Run: ``python native/benchmark_suite.py [data_size]``; the markdown report goes to
+``native/BENCHMARK_RESULTS.md``. Without the built extension only the NumPy baseline is timed.
 """
+
+from __future__ import annotations
 
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+REPORT_PATH = Path(__file__).with_name("BENCHMARK_RESULTS.md")
+ITERATIONS = 100
+WARMUP = 10
 
+
+@dataclass
 class BenchmarkResult:
-    def __init__(self, name: str, language: str, operation: str, elapsed_ms: float, speedup: float = 1.0):
-        self.name = name
-        self.language = language
-        self.operation = operation
-        self.elapsed_ms = elapsed_ms
-        self.speedup = speedup
+    language: str
+    operation: str
+    elapsed_ms: float
+    speedup: float = 1.0
 
-    def __repr__(self):
+    def __str__(self) -> str:
         return f"{self.language:8} | {self.operation:20} | {self.elapsed_ms:8.3f}ms | {self.speedup:6.2f}x"
 
 
-class NativeKernelBenchmark:
-    def __init__(self, data_size: int = 10240):
-        self.data_size = data_size
-        self.results: list[BenchmarkResult] = []
-        self.baseline_times = {}
-
-    def benchmark_numpy(self, name: str, operation: str, func: Callable, iterations: int = 100) -> float:
-        """Benchmark NumPy baseline implementation."""
-        times = []
-        for _ in range(iterations):
-            start = time.perf_counter()
-            func()
-            end = time.perf_counter()
-            times.append((end - start) * 1000)  # Convert to ms
-
-        avg_time = np.mean(times[10:])  # Ignore first 10 for warmup
-        self.baseline_times[f"{operation}"] = avg_time
-
-        result = BenchmarkResult(name, "NumPy", operation, avg_time, 1.0)
-        self.results.append(result)
-        print(f"✓ {result}")
-
-        return avg_time
-
-    def benchmark_rust(self, operation: str, baseline_ms: float) -> None:
-        """Benchmark Rust implementation."""
-        try:
-            import sdx_native  # Assumes PyO3 bindings installed
-
-            data = np.random.randn(self.data_size).astype(np.float32)
-
-            if operation == "Quantization":
-                start = time.perf_counter()
-                for _ in range(100):
-                    sdx_native.quantize_int8(data, 127.0)
-                elapsed = (time.perf_counter() - start) * 10  # Convert to ms
-            elif operation == "Softmax":
-                start = time.perf_counter()
-                for _ in range(100):
-                    sdx_native.softmax_fast(data)
-                elapsed = (time.perf_counter() - start) * 10
-            elif operation == "Variance":
-                start = time.perf_counter()
-                for _ in range(100):
-                    sdx_native.variance(data)
-                elapsed = (time.perf_counter() - start) * 10
-            else:
-                return
-
-            speedup = baseline_ms / elapsed if elapsed > 0 else 1.0
-            result = BenchmarkResult("rust", "Rust", operation, elapsed, speedup)
-            self.results.append(result)
-            print(f"✓ {result}")
-
-        except ImportError:
-            print("⊘ Rust: sdx_native not available (install with: cd native/rust && maturin develop)")
-
-    def benchmark_python_baseline(self) -> None:
-        """Establish NumPy baseline for all operations."""
-        print("\n" + "=" * 80)
-        print("BASELINE: NumPy (Pure Python)")
-        print("=" * 80 + "\n")
-
-        data = np.random.randn(self.data_size).astype(np.float32)
-
-        # Quantization baseline
-        self.benchmark_numpy(
-            "numpy_quantize", "Quantization", lambda: np.clip(data * 127.0, -128, 127).astype(np.int8), 100
-        )
-
-        # Softmax baseline
-        def softmax_numpy(x):
-            exp_x = np.exp(x - np.max(x))
-            return exp_x / np.sum(exp_x)
-
-        self.benchmark_numpy("numpy_softmax", "Softmax", lambda: softmax_numpy(data), 100)
-
-        # Variance baseline
-        self.benchmark_numpy("numpy_variance", "Variance", lambda: np.var(data), 100)
-
-        # GELU baseline
-        def gelu_numpy(x):
-            cdf = 0.5 * (1.0 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * np.power(x, 3))))
-            return x * cdf
-
-        self.benchmark_numpy("numpy_gelu", "GELU", lambda: gelu_numpy(data), 50)
-
-        # Dot product baseline
-        self.benchmark_numpy("numpy_dot", "Dot Product", lambda: np.dot(data, data), 100)
-
-    def benchmark_all(self) -> None:
-        """Run full benchmark suite."""
-        print("\n" + "=" * 80)
-        print("NATIVE IMPLEMENTATIONS: Performance Comparison")
-        print("=" * 80 + "\n")
-
-        for operation, baseline_ms in self.baseline_times.items():
-            print(f"\n{operation} (Baseline: {baseline_ms:.3f}ms)")
-            print("-" * 80)
-
-            # Benchmark each implementation
-            self.benchmark_rust(operation, baseline_ms)
-
-            # TODO: Add C++ CUDA, Go, Mojo, Julia benchmarking
-
-    def print_summary(self) -> None:
-        """Print comprehensive benchmark summary."""
-        print("\n" + "=" * 80)
-        print("SUMMARY: Speedup Comparison")
-        print("=" * 80 + "\n")
-
-        # Group results by operation
-        operations = {}
-        for result in self.results:
-            if result.operation not in operations:
-                operations[result.operation] = []
-            operations[result.operation].append(result)
-
-        # Print summary table
-        print(f"{'Operation':<20} {'NumPy':<10} {'Rust':<10} {'C++':<10} {'Go':<10} {'Mojo':<10} {'Julia':<10}")
-        print("-" * 90)
-
-        for op_name, results in operations.items():
-            row = [op_name]
-            for lang in ["NumPy", "Rust", "C++", "Go", "Mojo", "Julia"]:
-                lang_result = next((r for r in results if r.language == lang), None)
-                if lang_result:
-                    row.append(f"{lang_result.speedup:.2f}x")
-                else:
-                    row.append("-")
-
-            print(f"{row[0]:<20} {row[1]:<10} {row[2]:<10} {row[3]:<10} {row[4]:<10} {row[5]:<10} {row[6]:<10}")
-
-        # Calculate average speedups
-        print("\nAverage Speedup by Language:")
-        print("-" * 40)
-
-        for lang in ["Rust", "C++", "Go", "Mojo", "Julia"]:
-            lang_results = [r for r in self.results if r.language == lang]
-            if lang_results:
-                avg_speedup = np.mean([r.speedup for r in lang_results])
-                print(f"{lang:<10}: {avg_speedup:.2f}x")
-
-    def generate_report(self) -> str:
-        """Generate markdown benchmark report."""
-        report = "# SDX Native Kernels Benchmark Report\n\n"
-        report += "## Configuration\n"
-        report += f"- Data Size: {self.data_size:,} elements\n"
-        report += "- Iterations: 100\n\n"
-
-        report += "## Results by Operation\n\n"
-
-        operations = {}
-        for result in self.results:
-            if result.operation not in operations:
-                operations[result.operation] = []
-            operations[result.operation].append(result)
-
-        for op_name, results in operations.items():
-            report += f"### {op_name}\n\n"
-            report += "| Language | Time (ms) | Speedup |\n"
-            report += "|----------|-----------|----------|\n"
-            for result in results:
-                report += f"| {result.language} | {result.elapsed_ms:.3f} | {result.speedup:.2f}x |\n"
-            report += "\n"
-
-        return report
-
-    def run(self) -> None:
-        """Run complete benchmark suite."""
-        print("\n" + "=" * 80)
-        print("SDX Native Kernels Benchmark Suite")
-        print("=" * 80)
-
-        self.benchmark_python_baseline()
-        self.benchmark_all()
-        self.print_summary()
-
-        # Save report
-        report = self.generate_report()
-        report_path = Path("native/BENCHMARK_RESULTS.md")
-        report_path.write_text(report)
-        print(f"\n✓ Report saved to {report_path}")
+def time_ms(func: Callable[[], object], iterations: int = ITERATIONS, warmup: int = WARMUP) -> float:
+    """Mean wall time per call in milliseconds, after ``warmup`` untimed calls."""
+    for _ in range(warmup):
+        func()
+    start = time.perf_counter()
+    for _ in range(iterations):
+        func()
+    return (time.perf_counter() - start) * 1000.0 / iterations
 
 
-def main():
-    """Main entry point."""
-    if len(sys.argv) > 1:
-        data_size = int(sys.argv[1])
-    else:
-        data_size = 10240
+def _softmax(x: np.ndarray) -> np.ndarray:
+    e = np.exp(x - x.max())
+    return e / e.sum()
 
-    benchmark = NativeKernelBenchmark(data_size=data_size)
-    benchmark.run()
+
+def _gelu(x: np.ndarray) -> np.ndarray:
+    return 0.5 * x * (1.0 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x**3)))
+
+
+def numpy_ops(data: np.ndarray) -> dict[str, Callable[[], object]]:
+    return {
+        "Quantization": lambda: np.clip(data * 127.0, -128, 127).astype(np.int8),
+        "Softmax": lambda: _softmax(data),
+        "Variance": lambda: np.var(data),
+        "GELU": lambda: _gelu(data),
+        "Dot Product": lambda: np.dot(data, data),
+    }
+
+
+def rust_ops(data: np.ndarray) -> dict[str, Callable[[], object]]:
+    """Rust counterparts of ``numpy_ops``, or ``{}`` when the extension is not built.
+
+    The pure-Python helper package ``native/_experimental/python/sdx_native`` shares the import name, so the
+    extension is recognised by its ``py_*`` functions.
+    """
+    try:
+        import sdx_native
+    except ImportError:
+        return {}
+    if not hasattr(sdx_native, "py_variance"):
+        return {}
+    return {
+        "Quantization": lambda: sdx_native.py_quantize_int8(data, 127.0),
+        "Softmax": lambda: sdx_native.py_softmax_fast(data),
+        "Variance": lambda: sdx_native.py_variance(data),
+        "GELU": lambda: sdx_native.py_gelu_batch(data),
+        "Dot Product": lambda: sdx_native.py_dot_product(data, data),
+    }
+
+
+def run_benchmarks(data_size: int) -> list[BenchmarkResult]:
+    data = np.random.randn(data_size).astype(np.float32)
+    rust = rust_ops(data)
+    if not rust:
+        print("skip Rust: sdx_native extension not built (cd native/rust && maturin develop)")
+    results: list[BenchmarkResult] = []
+    for operation, func in numpy_ops(data).items():
+        baseline = time_ms(func)
+        results.append(BenchmarkResult("NumPy", operation, baseline))
+        print(results[-1])
+        if operation in rust:
+            elapsed = time_ms(rust[operation])
+            results.append(BenchmarkResult("Rust", operation, elapsed, baseline / elapsed if elapsed > 0 else 1.0))
+            print(results[-1])
+    return results
+
+
+def render_report(results: list[BenchmarkResult], data_size: int) -> str:
+    lines = [
+        "# SDX Native Kernels Benchmark Report",
+        "",
+        "## Configuration",
+        f"- Data Size: {data_size:,} elements",
+        f"- Iterations: {ITERATIONS} (after {WARMUP} warm-up calls)",
+        "",
+        "## Results by Operation",
+        "",
+    ]
+    for operation in dict.fromkeys(r.operation for r in results):
+        lines += [f"### {operation}", "", "| Language | Time (ms) | Speedup |", "|----------|-----------|---------|"]
+        lines += [
+            f"| {r.language} | {r.elapsed_ms:.3f} | {r.speedup:.2f}x |" for r in results if r.operation == operation
+        ]
+        lines.append("")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = sys.argv[1:] if argv is None else argv
+    data_size = int(args[0]) if args else 10240
+    results = run_benchmarks(data_size)
+    rust_speedups = [r.speedup for r in results if r.language == "Rust"]
+    if rust_speedups:
+        print(f"\nAverage Rust speedup: {np.mean(rust_speedups):.2f}x")
+    REPORT_PATH.write_text(render_report(results, data_size), encoding="utf-8")
+    print(f"Report saved to {REPORT_PATH}")
 
 
 if __name__ == "__main__":

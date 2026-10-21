@@ -1,16 +1,19 @@
 """
-Mini-batch **optimal-transport-style** coupling between Gaussian noise and data latents.
+Minibatch optimal-transport coupling between data latents and Gaussian noise (OT-CFM: Tong et al. 2023,
+"Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport"; Pooladian et al. 2023).
 
-Uses cost ``C_ij = ||vec(x0_i) - vec(eps_j)||^2`` and either **Sinkhorn** (soft ``P @ eps``)
-or **Hungarian** (hard permutation). Intended as an experimental analogue of OT-coupled
-rectified-flow training (see ``docs/BLUEPRINTS.md``).
+Cost ``C_ij = ||x0_i - eps_j||^2``. The noise rows are only **permuted**, never mixed, so the batch still holds the
+same i.i.d. N(0, I) draws; pairing each latent with a nearby draw straightens the paths the model has to learn.
 
-This does **not** implement full rectified-flow objectives; it only reshapes which noise
-vectors are paired with which latents inside a VP-DDPM training step.
+- ``hungarian``: exact OT permutation (scipy ``linear_sum_assignment``).
+- ``soft``: entropic OT plan from log-domain Sinkhorn (``reg`` in units of the batch cost std), then a permutation
+  sampled from it row by row without replacement (``reg ~ 0.05`` is close to the exact assignment, ``reg >~ 1`` near
+  random).
 """
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 import torch
@@ -18,24 +21,33 @@ import torch
 PairMode = Literal["soft", "hungarian"]
 
 
-def sinkhorn_plan(cost: torch.Tensor, *, reg: float, n_iters: int) -> torch.Tensor:
+def sinkhorn_log_plan(cost: torch.Tensor, *, reg: float, n_iters: int) -> torch.Tensor:
+    """Log of the entropic OT plan with uniform marginals (rows and columns each sum to ``1/B``).
+
+    Log-domain updates (Peyre & Cuturi 2019, Sec. 4.4) so ``cost / reg`` in the thousands does not underflow.
     """
-    Balanced optimal transport plan P (B, B) from Sinkhorn scaling.
-    ``cost`` (B, B) non-negative; rows/columns sum to approximately 1/B each (uniform marginals).
-    """
-    B = cost.shape[0]
-    if B < 2:
-        return torch.eye(B, device=cost.device, dtype=cost.dtype)
-    r = max(float(reg), 1e-8)
-    K = torch.exp(-cost / r)
-    a = torch.ones(B, device=cost.device, dtype=cost.dtype) / B
-    b = torch.ones(B, device=cost.device, dtype=cost.dtype) / B
-    u = torch.ones(B, device=cost.device, dtype=cost.dtype) / B
-    v = torch.ones(B, device=cost.device, dtype=cost.dtype) / B
+    b = cost.shape[0]
+    log_k = -cost.double() / max(float(reg), 1e-12)
+    log_marginal = torch.full((b,), -math.log(b), dtype=torch.float64, device=cost.device)
+    f = torch.zeros_like(log_marginal)
+    g = torch.zeros_like(log_marginal)
     for _ in range(max(1, int(n_iters))):
-        u = a / (K @ v).clamp(min=1e-12)
-        v = b / (K.T @ u).clamp(min=1e-12)
-    return u[:, None] * K * v[None, :]
+        f = log_marginal - torch.logsumexp(log_k + g[None, :], dim=1)
+        g = log_marginal - torch.logsumexp(log_k + f[:, None], dim=0)
+    return log_k + f[:, None] + g[None, :]
+
+
+def sample_permutation_from_plan(log_plan: torch.Tensor, generator: torch.Generator | None = None) -> torch.Tensor:
+    """Column index per row, each column used once: rows in random order draw from their plan row over free columns."""
+    b = log_plan.shape[0]
+    free = torch.ones(b, dtype=torch.bool, device=log_plan.device)
+    perm = torch.empty(b, dtype=torch.long, device=log_plan.device)
+    for i in torch.randperm(b, generator=generator).tolist():
+        logits = log_plan[i].masked_fill(~free, float("-inf"))
+        j = int(torch.multinomial(torch.softmax(logits, dim=0).float().cpu(), 1, generator=generator))
+        perm[i] = j
+        free[j] = False
+    return perm
 
 
 def pair_noise_to_latents(
@@ -46,37 +58,26 @@ def pair_noise_to_latents(
     n_iters: int = 40,
     mode: PairMode = "soft",
 ) -> torch.Tensor:
-    """
-    Return noise tensor same shape as ``noise``, coupled to ``latents`` along batch dim.
-
-    - ``soft``: ``P @ noise_flat`` with Sinkhorn P from cost between latents and noise.
-    - ``hungarian``: permute noise rows to minimize sum of paired costs (needs scipy).
-    """
+    """Return ``noise`` with its batch rows permuted so row ``i`` is paired with ``latents[i]`` by (entropic) OT."""
     if latents.shape != noise.shape:
         raise ValueError("latents and noise must have the same shape")
-    B = latents.shape[0]
-    if B < 2 or reg <= 0.0:
+    b = latents.shape[0]
+    if b < 2 or reg <= 0.0:
         return noise
-    lf = latents.reshape(B, -1).to(dtype=torch.float32)
-    nf = noise.reshape(B, -1).to(dtype=torch.float32)
-    C = torch.cdist(lf, nf, p=2) ** 2
+    cost = torch.cdist(latents.reshape(b, -1).float(), noise.reshape(b, -1).float()) ** 2
     if mode == "soft":
-        P = sinkhorn_plan(C, reg=reg, n_iters=n_iters)
-        mixed = (P @ nf).to(dtype=noise.dtype)
-        return mixed.view_as(noise)
+        # ``reg`` is in units of the cost spread (std), so its meaning does not depend on latent size.
+        cost = (cost - cost.mean()) / cost.std().clamp(min=1e-12)
+        perm = sample_permutation_from_plan(sinkhorn_log_plan(cost, reg=reg, n_iters=n_iters))
+        return noise[perm]
     if mode == "hungarian":
-        try:
-            from scipy.optimize import linear_sum_assignment
-        except ImportError:
-            return noise
-        c = C.detach().float().cpu().numpy()
-        r_ind, c_ind = linear_sum_assignment(c)
-        ri = torch.as_tensor(r_ind, device=noise.device, dtype=torch.long)
-        ci = torch.as_tensor(c_ind, device=noise.device, dtype=torch.long)
-        out = torch.zeros_like(noise)
-        out[ri] = noise[ci]
-        return out
+        from scipy.optimize import linear_sum_assignment
+
+        rows, cols = linear_sum_assignment(cost.detach().cpu().numpy())
+        perm = torch.empty(b, dtype=torch.long, device=noise.device)
+        perm[torch.as_tensor(rows, device=noise.device)] = torch.as_tensor(cols, device=noise.device)
+        return noise[perm]
     raise ValueError(f"Unknown mode {mode!r}")
 
 
-__all__ = ["pair_noise_to_latents", "sinkhorn_plan"]
+__all__ = ["pair_noise_to_latents", "sample_permutation_from_plan", "sinkhorn_log_plan"]

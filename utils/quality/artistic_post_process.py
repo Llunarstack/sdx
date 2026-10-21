@@ -1,20 +1,9 @@
 """
-Artistic post-processing: compositional director, value structure, intentional asymmetry,
-lost-and-found edges, and subsurface scattering simulation.
+Artistic post-processing: value structure, compositional director, lost-and-found edges,
+micro-detail. All deterministic sRGB passes; strength 0 is a no-op and dtype is preserved.
 
-These address the specific AI image generation failures described in the AGI roadmap:
-- Center-weighted bias / "horror vacui" (fills every space)
-- Flat value structure (no light/dark discipline)
-- Uncanny valley symmetry (faces too perfect)
-- Plastic/synthetic look (no subsurface scattering simulation)
-- Hard uniform edges (no "lost and found" variation)
-
-All functions operate on (H, W, 3) uint8 numpy arrays and return the same.
-All are optional post-processing passes — strength=0 is always a no-op.
-
-Usage in sample.py:
-    from utils.quality.artistic_post_process import apply_artistic_pipeline
-    img_np = apply_artistic_pipeline(img_np, cfg)
+Lens effects (vignette, chromatic aberration) and capture texture live in
+``utils.quality.camera_isp`` and run in linear light.
 """
 
 from __future__ import annotations
@@ -23,57 +12,25 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
+from utils.quality.quality import rgb_to_luminance as _rgb_to_lum
 
 
 @dataclass(slots=True)
 class ArtisticPostConfig:
     """All artistic post-processing knobs in one place."""
 
-    # Compositional director
     composition_mode: str = "none"  # "none"|"rule_of_thirds"|"golden_ratio"|"dynamic_symmetry"
-    composition_strength: float = 0.0  # 0-1: how strongly to nudge toward the composition guide
+    composition_strength: float = 0.0
 
-    # Value structure (light/dark discipline)
-    value_structure: bool = False  # enforce value hierarchy
-    value_shadow_lift: float = 0.0  # 0-0.15: lift shadows slightly (reduces crush)
-    value_highlight_roll: float = 0.0  # 0-0.15: roll off highlights (reduces blow-out)
-    value_midtone_contrast: float = 0.0  # 0-0.3: boost midtone separation
+    value_structure: bool = False
+    value_shadow_lift: float = 0.0  # 0-0.15
+    value_highlight_roll: float = 0.0  # 0-0.15
+    value_midtone_contrast: float = 0.0  # 0-0.3
 
-    # Intentional asymmetry (anti-uncanny-valley)
-    asymmetry_strength: float = 0.0  # 0-1: how much to break perfect symmetry
-    asymmetry_seed: int | None = None
-
-    # Lost-and-found edges (vary edge sharpness)
-    lost_found_strength: float = 0.0  # 0-1: how much to soften some edges
+    lost_found_strength: float = 0.0  # 0-1
     lost_found_seed: int | None = None
 
-    # Subsurface scattering simulation (skin/wax/translucent materials)
-    sss_strength: float = 0.0  # 0-1: SSS simulation strength
-    sss_radius: float = 3.0  # blur radius for SSS approximation
-    sss_color: tuple[float, float, float] = (1.0, 0.6, 0.4)  # warm skin scatter color
-
-    # Vignette (compositional framing)
-    vignette_strength: float = 0.0  # 0-1
-    vignette_softness: float = 0.5  # 0-1: how soft the falloff is
-
-    # Chromatic aberration (lens character)
-    chromatic_aberration: float = 0.0  # 0-1: pixel shift amount
-
-    # Micro-detail recovery (sharpens fine texture without halos)
     micro_detail: float = 0.0  # 0-1
-
-
-# ---------------------------------------------------------------------------
-# Value structure
-# ---------------------------------------------------------------------------
-
-
-def _rgb_to_lum(img: np.ndarray) -> np.ndarray:
-    """(H,W,3) float -> (H,W) luminance."""
-    return img[..., 0] * 0.299 + img[..., 1] * 0.587 + img[..., 2] * 0.114
 
 
 def apply_value_structure(
@@ -128,11 +85,6 @@ def apply_value_structure(
     out = np.clip(img * scale, 0.0, 255.0)
 
     return out.astype(np.uint8) if is_uint else out
-
-
-# ---------------------------------------------------------------------------
-# Compositional director
-# ---------------------------------------------------------------------------
 
 
 def _rule_of_thirds_map(h: int, w: int) -> np.ndarray:
@@ -230,105 +182,6 @@ def apply_compositional_director(
     return out.astype(np.uint8) if is_uint else out
 
 
-# ---------------------------------------------------------------------------
-# Intentional asymmetry (anti-uncanny-valley)
-# ---------------------------------------------------------------------------
-
-
-def apply_intentional_asymmetry(
-    image: np.ndarray,
-    strength: float = 0.3,
-    seed: int | None = None,
-) -> np.ndarray:
-    """
-    Introduce subtle, natural asymmetry to break the AI's tendency toward
-    perfect bilateral symmetry (which reads as uncanny/artificial).
-
-    Method:
-    - Apply a very slight, smooth spatial warp using a low-frequency noise field
-    - The warp is asymmetric: left/right halves get slightly different treatment
-    - Magnitude is kept small enough to be subliminal (not visible as distortion)
-
-    strength: 0-1 (0.1-0.4 is the sweet spot; above 0.6 becomes visible)
-    """
-    if strength <= 0:
-        return image
-
-    try:
-        from PIL import Image as _PIL
-        from scipy.ndimage import map_coordinates
-    except ImportError:
-        return image
-
-    rng = np.random.default_rng(seed)
-    is_uint = image.dtype == np.uint8
-    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    h, w = img.shape[:2]
-    s = float(min(1.0, max(0.0, strength)))
-
-    # Generate smooth low-frequency displacement field
-    # Use a small noise grid then upsample — ensures smooth, organic warping
-    grid_h, grid_w = max(4, h // 16), max(4, w // 16)
-    noise_y = rng.normal(0, 1, (grid_h, grid_w)).astype(np.float32)
-    noise_x = rng.normal(0, 1, (grid_h, grid_w)).astype(np.float32)
-
-    # Upsample to full resolution
-    noise_y_full = (
-        np.array(
-            _PIL.fromarray(((noise_y - noise_y.min()) / (np.ptp(noise_y) + 1e-8) * 255).astype(np.uint8)).resize(
-                (w, h), _PIL.BILINEAR
-            ),
-            dtype=np.float32,
-        )
-        / 255.0
-        * 2.0
-        - 1.0
-    )  # [-1, 1]
-    noise_x_full = (
-        np.array(
-            _PIL.fromarray(((noise_x - noise_x.min()) / (np.ptp(noise_x) + 1e-8) * 255).astype(np.uint8)).resize(
-                (w, h), _PIL.BILINEAR
-            ),
-            dtype=np.float32,
-        )
-        / 255.0
-        * 2.0
-        - 1.0
-    )
-
-    # Scale displacement: max ~2-4 pixels at strength=1
-    max_disp = s * 3.0
-    dy = noise_y_full * max_disp
-    dx = noise_x_full * max_disp
-
-    # Make it asymmetric: apply stronger warp to one half
-    # This is the key — symmetric warp would cancel out and look natural but not break symmetry
-    half_w = w // 2
-    asymmetry_mask = np.ones((h, w), dtype=np.float32)
-    asymmetry_mask[:, :half_w] *= 0.4  # left half: weaker warp
-    asymmetry_mask[:, half_w:] *= 1.0  # right half: stronger warp
-    dy *= asymmetry_mask
-    dx *= asymmetry_mask
-
-    # Build coordinate maps
-    rows, cols = np.mgrid[0:h, 0:w].astype(np.float32)
-    map_rows = np.clip(rows + dy, 0, h - 1)
-    map_cols = np.clip(cols + dx, 0, w - 1)
-
-    # Apply warp to each channel
-    out = np.zeros_like(img)
-    for c in range(3):
-        out[..., c] = map_coordinates(img[..., c], [map_rows, map_cols], order=1, mode="reflect")
-
-    out = np.clip(out, 0.0, 255.0)
-    return out.astype(np.uint8) if is_uint else out
-
-
-# ---------------------------------------------------------------------------
-# Lost-and-found edges
-# ---------------------------------------------------------------------------
-
-
 def apply_lost_and_found_edges(
     image: np.ndarray,
     strength: float = 0.3,
@@ -402,146 +255,6 @@ def apply_lost_and_found_edges(
     return out.astype(np.uint8) if is_uint else out
 
 
-# ---------------------------------------------------------------------------
-# Subsurface scattering simulation
-# ---------------------------------------------------------------------------
-
-
-def apply_sss_simulation(
-    image: np.ndarray,
-    strength: float = 0.3,
-    radius: float = 3.0,
-    scatter_color: tuple[float, float, float] = (1.0, 0.6, 0.4),
-) -> np.ndarray:
-    """
-    Simulate subsurface scattering for skin/wax/translucent materials.
-
-    Real SSS: light enters a semi-translucent surface, scatters internally,
-    and exits at a different point with a warm color shift (for skin: red/orange).
-
-    Approximation:
-    - Detect bright regions (likely lit skin/translucent areas)
-    - Apply a colored blur to simulate scattered light bleeding
-    - Blend back with the original at the specified strength
-    - The result: edges of lit areas get a warm color bleed, shadows stay cool
-
-    strength: 0-1 (0.15-0.4 for subtle skin; 0.5-0.8 for wax/candle)
-    radius: blur radius in pixels (2-6 typical)
-    scatter_color: RGB multiplier for the scattered light (warm for skin)
-    """
-    if strength <= 0:
-        return image
-
-    try:
-        from scipy.ndimage import gaussian_filter
-    except ImportError:
-        return image
-
-    is_uint = image.dtype == np.uint8
-    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    s = float(min(1.0, max(0.0, strength)))
-    r = float(max(0.5, radius))
-
-    # Detect bright/lit regions (likely skin or translucent material)
-    lum = _rgb_to_lum(img) / 255.0
-    lit_mask = np.clip((lum - 0.3) / 0.5, 0.0, 1.0)  # bright areas
-
-    # Create scatter layer: blurred version with warm color tint
-    sc = np.array(scatter_color, dtype=np.float32)
-    sc = sc / (sc.max() + 1e-8)  # normalize
-
-    scatter = gaussian_filter(img, sigma=(r, r, 0))
-    # Apply warm color tint to scatter
-    scatter_tinted = scatter * sc[np.newaxis, np.newaxis, :]
-
-    # Only apply SSS in lit regions (shadows don't scatter outward)
-    mask = lit_mask[..., np.newaxis]
-    out = img + s * mask * (scatter_tinted - img) * 0.4
-
-    out = np.clip(out, 0.0, 255.0)
-    return out.astype(np.uint8) if is_uint else out
-
-
-# ---------------------------------------------------------------------------
-# Vignette
-# ---------------------------------------------------------------------------
-
-
-def apply_vignette(
-    image: np.ndarray,
-    strength: float = 0.3,
-    softness: float = 0.5,
-) -> np.ndarray:
-    """
-    Radial vignette: darken edges to draw the eye toward the center/subject.
-    strength: 0-1 (0.15-0.4 is natural; above 0.6 is dramatic)
-    softness: 0-1 (0=hard edge, 1=very gradual)
-    """
-    if strength <= 0:
-        return image
-
-    is_uint = image.dtype == np.uint8
-    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    h, w = img.shape[:2]
-    s = float(min(1.0, max(0.0, strength)))
-    soft = float(min(1.0, max(0.05, softness)))
-
-    yy = np.linspace(-1, 1, h)
-    xx = np.linspace(-1, 1, w)
-    gx, gy = np.meshgrid(xx, yy)
-    r = np.sqrt(gx**2 + gy**2)
-
-    # Smooth falloff controlled by softness
-    sigma = 0.3 + soft * 0.7
-    vig = 1.0 - s * np.clip(r / (sigma * 1.5), 0.0, 1.0) ** 2
-
-    out = np.clip(img * vig[..., np.newaxis], 0.0, 255.0)
-    return out.astype(np.uint8) if is_uint else out
-
-
-# ---------------------------------------------------------------------------
-# Chromatic aberration (lens character)
-# ---------------------------------------------------------------------------
-
-
-def apply_chromatic_aberration(
-    image: np.ndarray,
-    strength: float = 0.2,
-) -> np.ndarray:
-    """
-    Subtle chromatic aberration: shift R and B channels slightly outward from center.
-    Adds lens character and breaks the "too perfect" digital look.
-    strength: 0-1 (0.1-0.3 is subtle; above 0.5 is obvious)
-    """
-    if strength <= 0:
-        return image
-
-    is_uint = image.dtype == np.uint8
-    img = np.clip(np.asarray(image, dtype=np.float32), 0.0, 255.0)
-    h, w = img.shape[:2]
-    s = float(min(1.0, max(0.0, strength)))
-
-    # Pixel shift amount (max ~3px at strength=1)
-    shift = int(round(s * 3))
-    if shift == 0:
-        return image
-
-    out = img.copy()
-
-    # Shift red channel outward (toward top-left)
-    out[shift:, shift:, 0] = img[: h - shift, : w - shift, 0]
-    # Shift blue channel outward (toward bottom-right)
-    out[: h - shift, : w - shift, 2] = img[shift:, shift:, 2]
-    # Green stays centered
-
-    return out.astype(np.uint8) if is_uint else out
-
-
-# ---------------------------------------------------------------------------
-# Micro-detail recovery
-# ---------------------------------------------------------------------------
-
-
 def apply_micro_detail(
     image: np.ndarray,
     strength: float = 0.3,
@@ -576,31 +289,12 @@ def apply_micro_detail(
     return out.astype(np.uint8) if is_uint else out
 
 
-# ---------------------------------------------------------------------------
-# Full pipeline
-# ---------------------------------------------------------------------------
-
-
 def apply_artistic_pipeline(
     image: np.ndarray,
     cfg: ArtisticPostConfig,
 ) -> np.ndarray:
-    """
-    Apply the full artistic post-processing pipeline in the correct order.
-
-    Order matters:
-    1. Value structure (sets the tonal foundation)
-    2. Compositional director (nudges visual weight)
-    3. SSS simulation (adds material depth)
-    4. Lost-and-found edges (varies edge quality)
-    5. Intentional asymmetry (breaks perfect symmetry)
-    6. Micro-detail (recovers fine texture)
-    7. Chromatic aberration (adds lens character)
-    8. Vignette (frames the composition)
-    """
+    """Value structure -> compositional director -> lost-and-found edges -> micro-detail."""
     out = image
-
-    # 1. Value structure
     if (
         cfg.value_structure
         or cfg.value_shadow_lift > 0
@@ -613,40 +307,12 @@ def apply_artistic_pipeline(
             highlight_roll=cfg.value_highlight_roll,
             midtone_contrast=cfg.value_midtone_contrast,
         )
-
-    # 2. Compositional director
     if cfg.composition_mode != "none" and cfg.composition_strength > 0:
         out = apply_compositional_director(out, cfg.composition_mode, cfg.composition_strength)
-
-    # 3. SSS simulation
-    if cfg.sss_strength > 0:
-        out = apply_sss_simulation(
-            out,
-            strength=cfg.sss_strength,
-            radius=cfg.sss_radius,
-            scatter_color=cfg.sss_color,
-        )
-
-    # 4. Lost-and-found edges
     if cfg.lost_found_strength > 0:
         out = apply_lost_and_found_edges(out, cfg.lost_found_strength, cfg.lost_found_seed)
-
-    # 5. Intentional asymmetry
-    if cfg.asymmetry_strength > 0:
-        out = apply_intentional_asymmetry(out, cfg.asymmetry_strength, cfg.asymmetry_seed)
-
-    # 6. Micro-detail
     if cfg.micro_detail > 0:
         out = apply_micro_detail(out, cfg.micro_detail)
-
-    # 7. Chromatic aberration
-    if cfg.chromatic_aberration > 0:
-        out = apply_chromatic_aberration(out, cfg.chromatic_aberration)
-
-    # 8. Vignette
-    if cfg.vignette_strength > 0:
-        out = apply_vignette(out, cfg.vignette_strength, cfg.vignette_softness)
-
     return out
 
 
@@ -655,10 +321,6 @@ __all__ = [
     "apply_artistic_pipeline",
     "apply_value_structure",
     "apply_compositional_director",
-    "apply_intentional_asymmetry",
     "apply_lost_and_found_edges",
-    "apply_sss_simulation",
-    "apply_vignette",
-    "apply_chromatic_aberration",
     "apply_micro_detail",
 ]

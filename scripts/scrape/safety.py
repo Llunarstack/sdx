@@ -9,12 +9,16 @@ Defense in depth:
   1. ``blocked_query_tags()`` negates these tags in the API query where the
      site's tag budget allows (first-line filter).
   2. ``is_allowed()`` re-checks the returned post's own tag list (authoritative;
-     catches anything the query missed, e.g. danbooru's 2-tag anon limit).
+     catches anything the query missed, e.g. danbooru's 2-tag anon limit). Each tag
+     is matched exactly against the blocklist and also screened by the training rule
+     of :mod:`utils.safety.minor_guard` (catches ``oppai_loli``, ``l0li``, ``teen``...).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
+
+from utils.safety.minor_guard import normalize, reasons
 
 # Exact-match tokens (boorus tokenize tags precisely, so exact match avoids
 # substring false positives like "cuba"/"incubator" while staying unbypassable
@@ -56,7 +60,7 @@ _BLOCKED_SUBSTRINGS: tuple[str, ...] = ("lolicon", "shotacon", "toddlercon")
 
 
 def normalize_tag(tag: str) -> str:
-    return tag.strip().lower().replace(" ", "_")
+    return normalize(tag).replace(" ", "_")
 
 
 def blocked_query_tags() -> list[str]:
@@ -71,7 +75,7 @@ def blocking_tags(tags: Iterable[str]) -> list[str]:
         t = normalize_tag(raw)
         if not t:
             continue
-        if t in _BLOCKED_TAGS or any(sub in t for sub in _BLOCKED_SUBSTRINGS):
+        if t in _BLOCKED_TAGS or any(sub in t for sub in _BLOCKED_SUBSTRINGS) or reasons(t, training=True):
             hits.append(t)
     return hits
 

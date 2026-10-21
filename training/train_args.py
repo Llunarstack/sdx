@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from config.train_config import TrainConfig
+from diffusion.schedules import ZTSNR_SUFFIX
 from utils.modeling.model_paths import default_t5_path
 
 
@@ -48,6 +49,14 @@ def parse_mdm_mask_schedule(s: str | None):
     for index in range(0, len(values), 2):
         schedule.append((int(float(values[index])), float(values[index + 1])))
     return schedule if schedule else None
+
+
+def with_zero_terminal_snr(beta_schedule: str, enabled: bool) -> str:
+    """``--zero-terminal-snr`` as the ``_ztsnr`` schedule suffix, so every consumer of ``cfg.beta_schedule`` (sampling,
+    DPO, GRPO, distillation) rebuilds the same rescaled schedule from the checkpoint."""
+    if enabled and not beta_schedule.endswith(ZTSNR_SUFFIX):
+        return beta_schedule + ZTSNR_SUFFIX
+    return beta_schedule
 
 
 def build_train_config_from_args(args) -> TrainConfig:
@@ -137,7 +146,6 @@ def build_train_config_from_args(args) -> TrainConfig:
         if (getattr(args, "curriculum_difficulty_steps", None) and str(args.curriculum_difficulty_steps).strip())
         else None,
         curriculum_difficulty_easy_first=not getattr(args, "no_difficulty_easy_first", False),
-        rule_loss_weight=args.rule_loss_weight,
         repa_weight=args.repa_weight,
         repa_encoder_model=args.repa_encoder_model,
         repa_out_dim=args.repa_out_dim,
@@ -155,7 +163,7 @@ def build_train_config_from_args(args) -> TrainConfig:
         drop_path_rate=float(getattr(args, "drop_path_rate", 0.0)),
         layerscale_init=float(getattr(args, "layerscale_init", 0.0)),
         qk_norm=bool(getattr(args, "qk_norm", False)),
-        beta_schedule=args.beta_schedule,
+        beta_schedule=with_zero_terminal_snr(args.beta_schedule, bool(getattr(args, "zero_terminal_snr", False))),
         prediction_type=args.prediction_type,
         noise_offset=args.noise_offset,
         min_snr_gamma=args.min_snr_gamma,
@@ -169,6 +177,7 @@ def build_train_config_from_args(args) -> TrainConfig:
         ot_noise_pair_iters=int(getattr(args, "ot_noise_pair_iters", 40)),
         ot_noise_pair_mode=str(getattr(args, "ot_noise_pair_mode", "soft")),
         flow_matching_training=bool(getattr(args, "flow_matching_training", False)),
+        flow_shift=float(getattr(args, "flow_shift", 1.0)),
         bridge_aux_weight=float(getattr(args, "bridge_aux_weight", 0.0)),
         bridge_aux_lambda=float(getattr(args, "bridge_aux_lambda", 0.2)),
         timestep_sample_mode=getattr(args, "timestep_sample_mode", "uniform"),
@@ -187,7 +196,9 @@ def build_train_config_from_args(args) -> TrainConfig:
         torch_cpu_num_threads=int(getattr(args, "cpu_threads", 0) or 0),
         torch_cpu_num_interop_threads=int(getattr(args, "cpu_interop_threads", 0) or 0),
         latent_cache_dir=args.latent_cache_dir,
+        caption_dropout_prob=float(getattr(args, "caption_dropout_prob", 0.1)),
         caption_dropout_schedule=parse_caption_dropout_schedule(getattr(args, "caption_dropout_schedule", None)),
+        ema_decay=float(getattr(args, "ema_decay", 0.9999)),
         crop_mode=getattr(args, "crop_mode", "center"),
         region_caption_mode=getattr(args, "region_caption_mode", "append"),
         region_layout_tag=getattr(args, "region_layout_tag", "[layout]"),

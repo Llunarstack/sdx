@@ -161,32 +161,16 @@ def _apply_reverse_hit(hit, *, characters, copyrights, artists, sources, confide
                 copyrights.append(part)
     if hit.author and not artists:
         artists.append(hit.author)
-    if hit.site == "danbooru" and hit.site_id:
-        try:
-            from utils.caption.danbooru_lookup import fetch_danbooru_post
+    if hit.site in ("danbooru", "e621") and hit.site_id:
+        from utils.caption.reverse_search import fetch_booru_post
 
-            db = fetch_danbooru_post(hit.site_id)
-            if db:
-                sources.append(f"danbooru_api:{hit.site_id}")
-                confidence = max(confidence, 0.98)
-                characters.extend(db.character_tags)
-                copyrights.extend(db.copyright_tags)
-                artists.extend(db.artist_tags)
-        except Exception:
-            pass
-    elif hit.site == "e621" and hit.site_id:
-        try:
-            from utils.caption.e621_lookup import fetch_e621_post
-
-            e6 = fetch_e621_post(hit.site_id)
-            if e6:
-                sources.append(f"e621_api:{hit.site_id}")
-                confidence = max(confidence, 0.98)
-                characters.extend(e6.character_tags)
-                copyrights.extend(e6.copyright_tags)
-                artists.extend(e6.artist_tags)
-        except Exception:
-            pass
+        post = fetch_booru_post(hit.site, hit.site_id)
+        if post:
+            sources.append(f"{hit.site}_api:{hit.site_id}")
+            confidence = max(confidence, 0.98)
+            characters.extend(post.character_tags)
+            copyrights.extend(post.copyright_tags)
+            artists.extend(post.artist_tags)
     return confidence
 
 

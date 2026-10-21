@@ -24,55 +24,16 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 # Project imports
 from config.train_config import TrainConfig
-from data.enhanced_dataset import EnhancedT2IDataset, collate_enhanced_batch
+from data.enhanced_dataset import EnhancedT2IDataset, collate_enhanced
 from diffusion.gaussian_diffusion import create_diffusion
 from models.enhanced_dit import EnhancedDiT_models
 from training.enhanced_trainer import create_enhanced_trainer
-from utils.training.error_handling import setup_logging
-from utils.training.metrics import MetricsTracker, TrainingMetrics
+from utils.training.error_handling import log_gpu_memory, setup_logging
+from utils.training.metrics import MetricsTracker, ProgressBar, TrainingMetrics
 
 # Enable TF32 on Ampere+ for speed
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
-
-def log_gpu_memory(logger, prefix=""):
-    """Log GPU memory usage."""
-    if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**3
-        reserved = torch.cuda.memory_reserved() / 1024**3
-        logger.info(f"{prefix}GPU Memory - Allocated: {allocated:.2f}GB, Reserved: {reserved:.2f}GB")
-
-
-class ProgressBar:
-    """Simple progress bar for training."""
-
-    def __init__(self, total_steps, description="Training"):
-        self.total_steps = total_steps
-        self.description = description
-        self.current_step = 0
-
-    def update(self, step, loss, lr, extra_info=None):
-        """Update progress bar."""
-        self.current_step = step
-        progress = step / self.total_steps * 100
-
-        info_str = (
-            f"{self.description}: {progress:.1f}% | Step {step}/{self.total_steps} | Loss: {loss:.4f} | LR: {lr:.2e}"
-        )
-
-        if extra_info:
-            extra_str = " | ".join([f"{k}: {v}" for k, v in extra_info.items()])
-            info_str += f" | {extra_str}"
-
-        print(f"\r{info_str}", end="", flush=True)
-
-        if step % 100 == 0:  # New line every 100 steps
-            print()
-
-    def close(self):
-        """Close progress bar."""
-        print()  # New line
 
 
 def get_enhanced_config():
@@ -244,7 +205,7 @@ def main():
         num_workers=cfg.num_workers,
         pin_memory=True,
         drop_last=True,
-        collate_fn=collate_enhanced_batch,
+        collate_fn=collate_enhanced,
     )
 
     logger.info(f"Dataset contains {len(dataset):,} images")

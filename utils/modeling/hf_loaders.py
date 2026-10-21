@@ -29,7 +29,6 @@ from utils.modeling.model_paths import (
     default_depth_anything_v2_large_path,
     default_depth_anything_v2_small_path,
     default_dpt_large_path,
-    default_eva02_clip_l14_path,
     default_florence2_base_path,
     default_florence2_large_path,
     default_git_base_coco_path,
@@ -44,7 +43,6 @@ from utils.modeling.model_paths import (
     default_llava_v16_mistral_7b_path,
     default_marigold_depth_path,
     default_marigold_normals_path,
-    default_mobileclip_s2_path,
     default_moondream2_path,
     default_musiq_path,
     default_nsfw_detector_path,
@@ -503,34 +501,6 @@ def score_image_reward(rgb_uint8: np.ndarray, prompt: str, *, device: str = "cud
         return None
 
 
-def score_eva02_clip(rgb_uint8: np.ndarray, prompt: str, *, device: str = "cuda") -> float | None:
-    model_id = default_eva02_clip_l14_path()
-    if not _has_weights_at(model_id) and "/" not in model_id:
-        return None
-
-    def _load() -> tuple[Any, Any]:
-        from transformers import AutoModel, AutoProcessor
-
-        proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        model = AutoModel.from_pretrained(model_id, trust_remote_code=True).to(device).eval()
-        return proc, model
-
-    try:
-        proc, model = _CACHE.get_or_load("eva02_clip", _load)
-        import torch
-        from PIL import Image
-
-        pil = Image.fromarray(rgb_uint8)
-        inputs = proc(text=[prompt], images=[pil], return_tensors="pt", padding=True)
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            logits = model(**inputs).logits_per_image
-        score = float(logits.item())
-        return float(torch.sigmoid(torch.tensor(score / 10.0)).item())
-    except Exception:
-        return None
-
-
 def caption_git(path: str, *, device: str = "cuda", variant: str = "base") -> str:
     model_id = default_git_large_coco_path() if variant == "large" else default_git_base_coco_path()
     cache_key = f"git_{variant}"
@@ -899,34 +869,6 @@ def score_watermark_probability(rgb_uint8: np.ndarray, *, device: str = "cuda") 
         probs = torch.softmax(logits, dim=-1)
         idx = 1 if probs.shape[-1] > 1 else 0
         return float(probs[0, idx].item())
-    except Exception:
-        return None
-
-
-def score_mobileclip(rgb_uint8: np.ndarray, prompt: str, *, device: str = "cuda") -> float | None:
-    model_id = default_mobileclip_s2_path()
-    if not _has_weights_at(model_id) and "/" not in model_id:
-        return None
-
-    def _load() -> tuple[Any, Any]:
-        from transformers import AutoModel, AutoProcessor
-
-        proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        model = AutoModel.from_pretrained(model_id, trust_remote_code=True).to(device).eval()
-        return proc, model
-
-    try:
-        proc, model = _CACHE.get_or_load("mobileclip", _load)
-        import torch
-        from PIL import Image
-
-        pil = Image.fromarray(rgb_uint8)
-        inputs = proc(text=[prompt], images=[pil], return_tensors="pt", padding=True)
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            logits = model(**inputs).logits_per_image
-        score = float(logits.item())
-        return float(torch.sigmoid(torch.tensor(score / 10.0)).item())
     except Exception:
         return None
 
@@ -1351,7 +1293,6 @@ __all__ = [
     "score_cafe_aesthetic",
     "score_clip_h14",
     "score_clip_iqa",
-    "score_eva02_clip",
     "score_hpsv2",
     "score_image_reward",
     "score_musiq",
@@ -1361,5 +1302,4 @@ __all__ = [
     "score_pickscore",
     "score_siglip2",
     "score_watermark_probability",
-    "score_mobileclip",
 ]

@@ -27,6 +27,10 @@ def main() -> int:
     p.add_argument("--device", type=str, default="cuda")
     args = p.parse_args()
 
+    from utils.safety.minor_guard import is_sexual, require_allowed, require_image_allowed
+
+    require_allowed(args.prompt)
+
     try:
         import torch
         from diffusers import StableCascadeDecoderPipeline, StableCascadePriorPipeline
@@ -60,6 +64,7 @@ def main() -> int:
         guidance_scale=0.0,
         output_type="pil",
     ).images[0]
+    require_image_allowed(decoder_output, sexual=is_sexual(prompt))
     decoder_output.save(args.out)
     print(f"Saved: {args.out}")
     return 0

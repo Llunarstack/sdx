@@ -9,7 +9,7 @@ import argparse
 import json
 from pathlib import Path
 
-from utils.modeling.hf_index import role_counts, summary
+from utils.modeling.hf_scaffold import registry_summary, role_counts
 from utils.modeling.model_paths import pretrained_catalog, verify_gen_searcher_8b_local
 
 
@@ -89,7 +89,7 @@ def main() -> int:
         return 0
 
     if args.summary:
-        s = summary()
+        s = registry_summary()
         print(
             f"HF registry: total={s['total_registry']} local={s['local_folders']} weights={s['with_weights']} config_only={s['config_only']}"
         )

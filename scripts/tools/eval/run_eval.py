@@ -28,8 +28,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from utils.runtime.jsonutil import dumps as json_dumps  # noqa: E402
-from utils.runtime.jsonutil import loads as json_loads  # noqa: E402
+from utils.runtime import json_dumps, json_loads  # noqa: E402
 
 from scripts.tools.eval import scorers  # noqa: E402
 from scripts.tools.eval.prompt_suite import (  # noqa: E402

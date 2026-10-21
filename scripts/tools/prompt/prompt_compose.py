@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Preview composed prompts without running sample.py.
 
-python scripts/prompt_compose.py "@wlop +character: 1girl, silver hair +car: red sports car"
+python -m scripts.tools prompt_compose "@wlop +character: 1girl, silver hair +car: red sports car"
 """
 
 from __future__ import annotations

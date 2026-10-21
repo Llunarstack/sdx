@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Creative Co-Pilot — Decompose and Apply (inspiration → style → control → InstantStyle).
+"""Creative Co-Pilot — Decompose and Apply (inspiration → style → control → moodboard).
 
 Example::
 
@@ -55,13 +55,6 @@ def main() -> int:
         choices=["canny", "depth", "softedge", "hed"],
         help="Preferred control map (depth needs local Depth-Anything / Marigold).",
     )
-    ap.add_argument(
-        "--reference-style-mode",
-        default="instantstyle",
-        choices=["instantstyle", "style", "late", "full", "style_mid", "ip-adapter"],
-    )
-    ap.add_argument("--reference-strength", type=float, default=0.85)
-    ap.add_argument("--content-prompt", default="a photo", help="CLIP content to subtract (InstantStyle).")
     ap.add_argument("--dry-run", action="store_true", help="Plan only; no search download / VLM / sample.")
     ap.add_argument(
         "--execute",
@@ -83,9 +76,6 @@ def main() -> int:
         use_vlm=not bool(args.no_vlm),
         extract_control=not bool(args.no_control),
         control_prefer=str(args.control_prefer),
-        reference_style_mode=str(args.reference_style_mode),
-        reference_strength=float(args.reference_strength),
-        content_prompt=str(args.content_prompt),
         device=str(args.device),
     )
 

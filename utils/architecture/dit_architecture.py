@@ -115,15 +115,6 @@ def instantiate_enhanced_dit(
     return EnhancedDiT_models[model_name](**kw)
 
 
-def list_dit_text_variant_names() -> list[str]:
-    """Text-conditioned DiT + Predecessor + Supreme (excludes EnhancedDiT class-label models)."""
-    return sorted(k for k in DiT_models_text.keys() if k not in EnhancedDiT_models)
-
-
-def list_enhanced_dit_variant_names() -> list[str]:
-    return sorted(EnhancedDiT_models.keys())
-
-
 def list_all_dit_registry_names() -> list[str]:
     """Every name in ``DiT_models_text`` (includes EnhancedDiT-*)."""
     return sorted(DiT_models_text.keys())

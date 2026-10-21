@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from utils.prompt.tags import append_csv
+
 from ..context import PromptContext, StackMode
-from ..tokens import append_csv
 
 
 def stage_negative_bootstrap(ctx: PromptContext) -> None:
@@ -30,8 +31,12 @@ def stage_negative_bootstrap(ctx: PromptContext) -> None:
         ANTI_AI_LOOK_NEGATIVE_STRONG = ANTI_AI_LOOK_NEGATIVE
 
     user_neg = ""
+    staged_neg = ""
     if args is not None:
-        user_neg = (getattr(args, "negative_prompt", None) or "").strip()
+        staged_neg = (getattr(args, "negative_prompt", None) or "").strip()
+        # sample.py records the user's own negative; policy packs appended to args.negative_prompt since
+        # then are additions on top of the default negative, not a replacement for it.
+        user_neg = str(getattr(args, "_user_negative", staged_neg) or "").strip()
 
     if user_neg:
         negative = user_neg
@@ -47,6 +52,9 @@ def stage_negative_bootstrap(ctx: PromptContext) -> None:
         else:
             negative = DEFAULT_NEGATIVE_PROMPT
             ctx.trace.append("negative:default")
+    if staged_neg and staged_neg != user_neg:
+        negative = append_csv(negative, staged_neg)
+        ctx.trace.append("negative:staged_args")
 
     for frag, label in (
         (art.layout_negative, "layout"),

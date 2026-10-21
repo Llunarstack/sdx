@@ -13,11 +13,9 @@ python -m toolkit.quality.manifest_digest data/manifest.jsonl
 
 | Path | Purpose |
 |------|---------|
-| [`training/env_health.py`](training/env_health.py) | GPU/CUDA/torch/cuDNN + optional deps (`timm`, `xformers`, `sdx_native`) — paste into bug reports |
+| [`training/env_health.py`](training/env_health.py) | GPU/CUDA/torch/cuDNN, optional packages and `sdx_native` builds; paste into bug reports |
 | [`training/seed_utils.py`](training/seed_utils.py) | `seed_everything()` for reproducible runs |
 | [`quality/manifest_digest.py`](quality/manifest_digest.py) | Fast JSONL line count, key histogram, optional Rust `sdx-jsonl-tools stats` |
-| [`qol/timing.py`](qol/timing.py) | `StepTimer`, `@timed` for step/sec logging |
-| [`libs/optional_imports.py`](libs/optional_imports.py) | `describe_optional_libs()` for install hints |
 | [`extras/requirements-suggested.txt`](extras/requirements-suggested.txt) | **Commented** optional pip packages (xxhash, rich, humanize, …) |
 
 ---

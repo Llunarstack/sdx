@@ -19,6 +19,8 @@ from typing import Any
 import numpy as np
 from PIL import Image
 from utils.quality import test_time_pick as ttp
+from utils.quality.ai_look import ai_look_score, score_oversaturation
+from utils.quality.art_critic import score_art
 
 
 @dataclass(slots=True)
@@ -254,6 +256,9 @@ def _composite_score(case: PromptCase, metrics: dict[str, float]) -> float:
         vals.append(float(np.clip(metrics.get("ocr_match", 0.0), 0.0, 1.0)))
     if int(case.expected_count) > 0:
         vals.append(float(np.clip(metrics.get("count_match", 0.0), 0.0, 1.0)))
+    for key in ("natural", "art"):
+        if key in metrics:
+            vals.append(float(np.clip(metrics[key], 0.0, 1.0)))
     if "clip_similarity" in metrics:
         # CLIP logits are unbounded; squash to [0,1].
         x = float(metrics["clip_similarity"])
@@ -267,10 +272,13 @@ def _score_image(
     case: PromptCase, image_path: Path, *, include_clip: bool, clip_model: str, device: str
 ) -> dict[str, float]:
     arr = np.array(Image.open(image_path).convert("RGB"), dtype=np.uint8)
+    sat = score_oversaturation(arr)
     out: dict[str, float] = {
         "edge_sharpness": float(ttp.score_edge_sharpness(arr)),
         "exposure_balance": float(ttp.score_exposure_balance(arr)),
-        "saturation_balance": float(ttp.score_saturation_balance(arr)),
+        "saturation_balance": 0.5 if sat is None else float(sat),
+        "natural": ai_look_score(arr, case.prompt).natural,
+        "art": score_art(arr, prompt=case.prompt).score,
     }
     if case.expected_text.strip():
         out["ocr_match"] = float(ttp.score_ocr_match(arr, case.expected_text))
@@ -360,7 +368,7 @@ def _write_preference_jsonl(
     device: str = "cuda",
 ) -> int:
     if vit_mine and vit_ckpt.strip():
-        from utils.superior.vit_mining import ViTMineConfig, mine_vit_preference_pairs
+        from utils.superior.auto_loop import ViTMineConfig, mine_vit_preference_pairs
 
         pairs = mine_vit_preference_pairs(
             rows,
@@ -405,6 +413,8 @@ def _failure_tags(case: PromptCase, metrics: dict[str, float], *, threshold: flo
     edge_norm = float(np.clip(float(metrics.get("edge_sharpness", 0.0) or 0.0) / 400.0, 0.0, 1.0))
     if edge_norm < 0.35:
         tags.append("blur")
+    if float(metrics.get("natural", 1.0)) < 0.5:
+        tags.append("ai_look")
     return tags
 
 
@@ -429,6 +439,7 @@ def _write_hardcases_jsonl(
             "exposure_balance": float(r.get("exposure_balance", 0.0) or 0.0),
             "saturation_balance": float(r.get("saturation_balance", 0.0) or 0.0),
             "edge_sharpness": float(r.get("edge_sharpness", 0.0) or 0.0),
+            "natural": float(r.get("natural", 1.0)),
         }
         tags = _failure_tags(case, metrics, threshold=float(threshold))
         if not tags:
@@ -556,14 +567,9 @@ def main() -> None:
     for ckpt_s in checkpoints:
         ckpt = Path(ckpt_s)
         tag = ckpt.stem
-        from utils.modeling.ckpt_text_stack import (
-            fusion_present_in_checkpoint,
-            text_encoder_mode_from_checkpoint,
-            text_encoder_mode_label,
-        )
+        from utils.modeling.text_encoder_stack import checkpoint_text_stack, text_encoder_mode_label
 
-        te_mode = text_encoder_mode_from_checkpoint(str(ckpt))
-        te_fusion = fusion_present_in_checkpoint(str(ckpt))
+        te_mode, te_fusion = checkpoint_text_stack(str(ckpt))
         print(
             f"[benchmark_suite] checkpoint {tag}: text_encoder_mode={te_mode} "
             f"({text_encoder_mode_label(te_mode)}), fusion_weights={te_fusion}"
@@ -585,7 +591,7 @@ def main() -> None:
                     device=str(args.device),
                 )
                 if bool(args.vit_score) and str(args.pick_vit_ckpt or "").strip():
-                    from utils.superior.vit_mining import blended_reward, score_image_vit
+                    from utils.superior.auto_loop import blended_reward, score_image_vit
 
                     _q, vit_r = score_image_vit(
                         out_png,

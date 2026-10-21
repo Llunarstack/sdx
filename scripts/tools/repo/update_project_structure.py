@@ -34,6 +34,9 @@ SKIP_DIRS: set[str] = {
     "htmlcov",
     ".eggs",
     "integration_smoke",  # gitignored scraped-data smoke fixtures (thousands of images)
+    "outputs",  # gitignored run artifacts
+    "results",  # gitignored checkpoints
+    "pretrained",  # gitignored model downloads
 }
 
 # Skip by default (large / generated / optional parallel trees)

@@ -29,6 +29,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from config.defaults._lexicon import dedupe_tags
+
+from utils.prompt.tags import str_list
+
 __all__ = [
     "CompiledPromptLayout",
     "DEFAULT_PRESET_ORDER",
@@ -60,7 +64,6 @@ T5_SECTION_LABELS: dict[str, str] = {
     "color_script": "COLOR",
 }
 
-SectionValue = str | Sequence[str] | None
 
 # Order of section names in the final prompt (only non-empty sections are emitted).
 PRESET_SECTION_ORDER: dict[str, tuple[str, ...]] = {
@@ -138,33 +141,8 @@ class CompiledPromptLayout:
         return "\n".join(lines)
 
 
-def _as_str_list(value: SectionValue) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        s = value.strip()
-        return [s] if s else []
-    out: list[str] = []
-    for x in value:
-        if isinstance(x, str) and x.strip():
-            out.append(x.strip())
-    return out
-
-
-def _dedupe_csv(tokens: Sequence[str]) -> list[str]:
-    seen = set()
-    out: list[str] = []
-    for t in tokens:
-        k = t.lower().strip()
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        out.append(t.strip())
-    return out
-
-
 def _join_csv(tokens: Sequence[str]) -> str:
-    return ", ".join(_dedupe_csv(list(tokens)))
+    return ", ".join(dedupe_tags(list(tokens)))
 
 
 def _compile_subjects(
@@ -187,7 +165,7 @@ def _compile_subjects(
         elif isinstance(item, Mapping):
             m = dict(item)
             label = str(m.get("label", m.get("id", "")) or "").strip()
-            toks = _as_str_list(m.get("tokens", m.get("positive", m.get("appearance", []))))
+            toks = str_list(m.get("tokens", m.get("positive", m.get("appearance", []))))
             if not toks:
                 continue
             body = _join_csv(toks)
@@ -197,7 +175,7 @@ def _compile_subjects(
                 chunks.append(f"{label}: {body}")
             else:
                 chunks.append(body)
-            neg_out.extend(_as_str_list(m.get("negative", m.get("avoid", []))))
+            neg_out.extend(str_list(m.get("negative", m.get("avoid", []))))
         else:
             continue
     return _join_csv(chunks)
@@ -218,7 +196,7 @@ def _section_strings(data: Mapping[str, Any], subject_neg_out: list[str]) -> dic
         "style",
         "color_script",
     ):
-        out[key] = _join_csv(_as_str_list(data.get(key)))
+        out[key] = _join_csv(str_list(data.get(key)))
     wrap = bool(data.get("wrap_subject_labels", True))
     subj = _compile_subjects(data.get("subjects"), wrap_labels=wrap, neg_out=subject_neg_out)
     out["subjects"] = subj
@@ -257,7 +235,7 @@ def compile_prompt_layout(data: Mapping[str, Any]) -> CompiledPromptLayout:
 
     positive = ", ".join(pos_parts).strip()
 
-    negative = _join_csv(subj_neg_tokens + _as_str_list(data.get("negative")))
+    negative = _join_csv(subj_neg_tokens + str_list(data.get("negative")))
 
     return CompiledPromptLayout(
         positive=positive,

@@ -1,16 +1,9 @@
-"""
-PermanentVideoDiT — STDiT + **slot memory** for object permanence.
+"""PermanentVideoDiT: ``VideoDiT`` plus slot memory for object permanence.
 
-Public video APIs denoise a spacetime volume with no discrete entity state.
-We add K learnable *slots* that:
-
-1. Cross-attend to each frame's patch tokens (read what's there),
-2. Attend across time among themselves (entity memory),
-3. Write back into every frame (force persistence),
-
-so disappearing props must fight an explicit memory bank — not just hope
-temporal attention remembers them. Trains with an optional permanence loss
-that penalizes slot-feature collapse across adjacent frames.
+K learnable slots read each frame's patch tokens (cross-attention), write back into that frame, and attend
+across time among themselves, so an object that leaves the view keeps an explicit memory entry instead of
+relying on temporal attention alone. ``permanence_consistency_loss`` penalizes slot features that jump
+between adjacent frames.
 """
 
 from __future__ import annotations
@@ -22,18 +15,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from .video_dit import (
-    VideoDiT,
-    _modulate,
-    timestep_embedding,
-)
+from .video_dit import VideoDiT
 
 __all__ = [
     "SlotMemoryBank",
     "IdentityTokenBank",
     "PermanentVideoDiT",
     "permanence_consistency_loss",
-    "identity_consistency_loss",
     "PermanentVideoDiT_S_2",
     "PermanentVideoDiT_B_2",
     "PermanentVideoDiT_models",
@@ -41,7 +29,7 @@ __all__ = [
 
 
 class SlotMemoryBank(nn.Module):
-    """Discrete entity memory shared across the clip."""
+    """Discrete entity memory carried frame by frame through the clip."""
 
     def __init__(self, dim: int, num_slots: int = 8, num_heads: int = 4) -> None:
         super().__init__()
@@ -55,44 +43,30 @@ class SlotMemoryBank(nn.Module):
         self.norm_w = nn.LayerNorm(dim)
 
     def forward(self, tokens: Tensor) -> tuple[Tensor, Tensor]:
-        """
-        ``tokens``: (B, T, N, D)
-        Returns updated tokens and slot states (B, T, K, D).
-        """
-        b, t, n, d = tokens.shape
+        """``tokens`` ``(B, T, N, D)`` -> updated tokens and temporally attended slot states ``(B, T, K, D)``."""
+        b, t, _, d = tokens.shape
         slots = self.slots[None].expand(b, -1, -1)  # (B, K, D)
         slot_traj: list[Tensor] = []
         out_frames: list[Tensor] = []
         for ti in range(t):
-            frame = tokens[:, ti]  # (B, N, D)
-            # Read: slots query frame patches
-            s_norm = self.norm_s(slots)
-            read_out, _ = self.read(s_norm, self.norm_q(frame), frame, need_weights=False)
+            frame = tokens[:, ti]
+            # Read: slots query the frame's patches; write: patches query the updated slots.
+            read_out, _ = self.read(self.norm_s(slots), self.norm_q(frame), frame, need_weights=False)
             slots = slots + read_out
             slot_traj.append(slots)
-            # Write: patches query slots
             w_out, _ = self.write(self.norm_w(frame), self.norm_s(slots), slots, need_weights=False)
             out_frames.append(frame + w_out)
-        # Temporal bind slots across time
-        stacked = torch.stack(slot_traj, dim=1)  # (B, T, K, D)
-        bt = b * self.num_slots
-        st = stacked.permute(0, 2, 1, 3).reshape(bt, t, d)  # (B*K, T, D)
-        st2, _ = self.temporal(st, st, st, need_weights=False)
-        st = st + st2
+        # Each slot attends over its own trajectory; the per-frame mean of the result is a light residual.
+        st = torch.stack(slot_traj, dim=2).reshape(b * self.num_slots, t, d)
+        st = st + self.temporal(st, st, st, need_weights=False)[0]
         stacked = st.reshape(b, self.num_slots, t, d).permute(0, 2, 1, 3)
-        # Re-write with temporally-smoothed slots (last pass blend)
-        tokens_out = torch.stack(out_frames, dim=1)
-        # Light residual from final slot mean
-        slot_mean = stacked.mean(dim=2, keepdim=True)  # (B, T, 1, D)
-        tokens_out = tokens_out + 0.15 * slot_mean
+        tokens_out = torch.stack(out_frames, dim=1) + 0.15 * stacked.mean(dim=2, keepdim=True)
         return tokens_out, stacked
 
 
 class IdentityTokenBank(nn.Module):
-    """
-    Phantom / VACE-inspired identity pathway: reference tokens live outside the
-    denoise latent and inject additive hints every frame (Element Binding in DiT).
-    """
+    """Phantom / VACE-style identity pathway: reference tokens outside the denoised latent that every frame
+    cross-attends to (zero-initialized output projection)."""
 
     def __init__(self, dim: int, num_tokens: int = 4, num_heads: int = 4) -> None:
         super().__init__()
@@ -105,17 +79,12 @@ class IdentityTokenBank(nn.Module):
         nn.init.zeros_(self.proj.bias)
 
     def forward(self, tokens: Tensor, identity: Tensor | None = None) -> Tensor:
-        """
-        ``tokens``: (B, T, N, D)
-        ``identity``: optional (B, L, D) external refs; else learnable bank.
-        """
+        """``tokens`` ``(B, T, N, D)``; ``identity``: external refs ``(B, L, D)`` / ``(B, D)``, else the learned bank."""
         b, t, n, d = tokens.shape
         if identity is None:
             id_tok = self.tokens[None].expand(b, -1, -1)
         else:
-            id_tok = identity
-            if id_tok.ndim == 2:
-                id_tok = id_tok.unsqueeze(1)
+            id_tok = identity.unsqueeze(1) if identity.ndim == 2 else identity
         bt = b * t
         flat = tokens.reshape(bt, n, d)
         id_rep = id_tok.unsqueeze(1).expand(b, t, -1, d).reshape(bt, id_tok.shape[1], d)
@@ -167,84 +136,29 @@ class PermanentVideoDiT(VideoDiT):
         first_frame_latent: Tensor | None = None,
         return_slots: bool = False,
     ) -> Tensor | tuple[Tensor, Tensor]:
-        b, c, frames, h, w = x.shape
-        p = self.patch_size
-        if first_frame_latent is not None:
-            x = x.clone()
-            x[:, :, 0] = first_frame_latent
-        tokens = self.patch_embed(x.reshape(b * frames, c, h, w))
-        _, d, hp, wp = tokens.shape
-        n = hp * wp
-        tokens = tokens.flatten(2).transpose(1, 2).reshape(b, frames, n, d)
-        spatial_pos, temporal_pos = self._pos(frames, n, x.device)
-        tokens = tokens + spatial_pos[None, None] + temporal_pos[None, :, None]
-
-        cond = self.t_embed(timestep_embedding(t, d))
-        ctx_tokens = None
-        if context is not None and self.context_proj is not None:
-            if context.ndim == 3:
-                pooled = context.mean(dim=1)
-                ctx_tokens = self.context_proj(context)
-            else:
-                pooled = context
-            cond = cond + self.context_proj(pooled)
-
-        # Bind identity before blocks (Phantom-style parallel pathway)
+        tokens, cond, ctx_tokens, (hp, wp) = self._embed(x, t, context, first_frame_latent)
         tokens = self.id_bank(tokens, identity=identity)
-
         slot_states = None
         bank_i = 0
         for bi, block in enumerate(self.blocks):
-            tokens = block(tokens, cond, causal_temporal=causal_temporal)
-            if ctx_tokens is not None and self.context_cross is not None and self.context_norm is not None:
-                bt = b * frames
-                flat = tokens.reshape(bt, n, d)
-                ctx_rep = ctx_tokens.unsqueeze(1).expand(b, frames, -1, d).reshape(bt, ctx_tokens.shape[1], d)
-                attn_out, _ = self.context_cross(self.context_norm(flat), ctx_rep, ctx_rep, need_weights=False)
-                tokens = (flat + attn_out).reshape(b, frames, n, d)
+            tokens = self._attend_context(block(tokens, cond, causal_temporal=causal_temporal), ctx_tokens)
             if (bi + 1) % self.permanence_every == 0 and bank_i < len(self.slot_banks):
                 tokens, slot_states = self.slot_banks[bank_i](tokens)
                 bank_i += 1
-
-        sh, sc = self.ada_out(cond).view(b, 2, 1, 1, d).unbind(dim=1)
-        tokens = _modulate(self.norm_out(tokens), sh, sc)
-        out = self.proj_out(tokens)
-        out = out.reshape(b, frames, hp, wp, p, p, c)
-        out = out.permute(0, 6, 1, 2, 4, 3, 5).reshape(b, c, frames, hp * p, wp * p)
-        if return_slots:
-            if slot_states is None:
-                slot_states = torch.zeros(b, frames, self.num_slots, d, device=x.device)
-            return out, slot_states
-        return out
+        out = self._unpatchify(tokens, cond, hp, wp)
+        if not return_slots:
+            return out
+        if slot_states is None:
+            b, frames, _, d = tokens.shape
+            slot_states = tokens.new_zeros(b, frames, self.num_slots, d)
+        return out, slot_states
 
 
 def permanence_consistency_loss(slot_states: Tensor) -> Tensor:
-    """
-    Penalize abrupt slot feature jumps between adjacent frames.
-
-    ``slot_states``: (B, T, K, D). Returns scalar.
-    """
+    """Mean ``1 - cos`` between each slot's features in adjacent frames; ``slot_states`` is ``(B, T, K, D)``."""
     if slot_states.shape[1] < 2:
         return slot_states.new_zeros(())
-    a = F.normalize(slot_states[:, 1:], dim=-1)
-    b = F.normalize(slot_states[:, :-1], dim=-1)
-    # 1 - cosine similarity → want small
-    cos = (a * b).sum(dim=-1)
-    return (1.0 - cos).mean()
-
-
-def identity_consistency_loss(frame_tokens: Tensor) -> Tensor:
-    """
-    Penalize subject-band token drift across adjacent frames.
-
-    ``frame_tokens``: (B, T, N, D) — use mean-pooled tokens as identity proxy.
-    """
-    if frame_tokens.shape[1] < 2:
-        return frame_tokens.new_zeros(())
-    pooled = frame_tokens.mean(dim=2)  # (B, T, D)
-    a = F.normalize(pooled[:, 1:], dim=-1)
-    b = F.normalize(pooled[:, :-1], dim=-1)
-    return (1.0 - (a * b).sum(dim=-1)).mean()
+    return (1.0 - F.cosine_similarity(slot_states[:, 1:], slot_states[:, :-1], dim=-1, eps=1e-12)).mean()
 
 
 def PermanentVideoDiT_S_2(**kwargs) -> PermanentVideoDiT:

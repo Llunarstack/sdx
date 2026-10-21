@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.lora.lora_bank import LoRABank, LoRAEntry, slugify_lora_key  # noqa: E402
+from utils.lora_bank import LoRABank, LoRAEntry, slugify_lora_key  # noqa: E402
 
 _LORA_SUFFIXES = ("_lora.pt", "_lora.safetensors", ".safetensors", ".pt")
 

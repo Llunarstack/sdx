@@ -10,6 +10,7 @@ Fusion weights are saved in checkpoints as ``text_encoder_fusion``.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
@@ -24,8 +25,111 @@ from utils.modeling.model_paths import (
     default_longclip_l_path,
     default_t5_path,
 )
-from utils.modeling.t5_segmented_encode import encode_t5_segment_concat
-from utils.runtime.jsonutil import loads as json_loads
+from utils.runtime import json_loads
+from utils.safety.minor_guard import require_encodable
+
+
+def encode_t5_segment_concat(
+    segment_texts: Sequence[str],
+    tokenizer,
+    text_encoder: torch.nn.Module,
+    device: torch.device,
+    max_length: int = 300,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """
+    ``--t5-layout-encode segmented``: tokenize each segment, join the ids, pad/truncate, one frozen T5 forward.
+
+    Section boundaries survive better than in one long comma-joined string. Returns ``(1, max_length, hidden)``.
+    """
+    pieces: list[torch.Tensor] = []
+    for s in segment_texts:
+        st = (s or "").strip()
+        if not st:
+            continue
+        t = tokenizer(
+            st,
+            add_special_tokens=True,
+            return_attention_mask=False,
+            return_tensors="pt",
+        )
+        ids = t["input_ids"][0]
+        pieces.append(ids)
+    pad_id = tokenizer.pad_token_id
+    if pad_id is None:
+        pad_id = 0
+    if not pieces:
+        tok = tokenizer(
+            "",
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        input_ids = tok.input_ids.to(device)
+        attn = tok.attention_mask.to(device)
+        with torch.no_grad():
+            out = text_encoder(input_ids=input_ids, attention_mask=attn)
+        return out.last_hidden_state.to(dtype)
+
+    full = torch.cat(pieces, dim=0)
+    if full.numel() > max_length:
+        full = full[:max_length]
+    seq_len = int(full.numel())
+    if seq_len < max_length:
+        pad = torch.full((max_length - seq_len,), int(pad_id), dtype=full.dtype)
+        full = torch.cat([full, pad], dim=0)
+    input_ids = full.unsqueeze(0).to(device)
+    attention_mask = torch.zeros(1, max_length, dtype=torch.long, device=device)
+    attention_mask[0, :seq_len] = 1
+    with torch.no_grad():
+        out = text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+    return out.last_hidden_state.to(dtype)
+
+
+def encode_text(
+    captions,
+    tokenizer,
+    text_encoder,
+    device,
+    max_length: int = 300,
+    dtype: torch.dtype = torch.float32,
+    text_bundle: TextEncoderBundle | None = None,
+    train_fusion: bool = False,
+    clip_captions=None,
+    long_clip_captions=None,
+    segment_texts=None,
+) -> torch.Tensor:
+    """Encode captions to ``(B, L, text_dim)``; triple / penta bundles append fused CLIP tokens.
+
+    Shared by ``train.py`` and ``sample.py``; every caption is screened by ``require_encodable`` first.
+    """
+    require_encodable(captions, clip_captions, long_clip_captions, segment_texts)
+    device = torch.device(device)
+    if text_bundle is not None:
+        return text_bundle.encode(
+            captions,
+            device,
+            max_length=max_length,
+            dtype=dtype,
+            train_fusion=train_fusion,
+            clip_captions=clip_captions,
+            long_clip_captions=long_clip_captions,
+            segment_texts=segment_texts,
+        )
+    if segment_texts is not None:
+        return encode_t5_segment_concat(
+            segment_texts, tokenizer, text_encoder, device, max_length=max_length, dtype=dtype
+        )
+    nbc = device.type == "cuda"
+    tok = tokenizer(captions, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt")
+    with torch.no_grad():
+        out = text_encoder(
+            input_ids=tok.input_ids.to(device, non_blocking=nbc),
+            attention_mask=tok.attention_mask.to(device, non_blocking=nbc),
+        )
+    return out.last_hidden_state.to(dtype)
+
 
 FusionModule = Union["TripleTextFusion", "PentaTextFusion"]
 
@@ -207,11 +311,13 @@ class TextEncoderBundle:
                 )
             return self._t5_hidden(captions, device, max_length, dtype)
 
+        # no_grad, not inference_mode: these frozen outputs feed trainable modules (fusion, DiT), and autograd cannot
+        # save inference tensors for its backward.
         if self.mode not in ("triple", "penta") or self.fusion is None:
-            with torch.inference_mode():
+            with torch.no_grad():
                 return _t5_out()
 
-        with torch.inference_mode():
+        with torch.no_grad():
             t5_hidden = _t5_out()
             clip_l_pooled = self._clip_pooled(self.clip_text_l, self.clip_tokenizer_l, clip_src, device, dtype)
             clip_bg_pooled = self._clip_pooled(self.clip_text_bg, self.clip_tokenizer_bg, clip_src, device, dtype)
@@ -219,7 +325,7 @@ class TextEncoderBundle:
         if self.mode == "triple":
             fused = self.fusion(t5_hidden, clip_l_pooled, clip_bg_pooled)
         else:
-            with torch.inference_mode():
+            with torch.no_grad():
                 clip_h_pooled = self._clip_pooled(self.clip_text_h, self.clip_tokenizer_h, clip_src, device, dtype)
                 long_max = min(int(getattr(self.clip_tokenizer_long, "model_max_length", 248) or 248), 248)
                 clip_long_pooled = self._clip_pooled(
@@ -243,21 +349,6 @@ def attach_fusion_weights(bundle: TextEncoderBundle, fusion_sd: dict) -> None:
         raise ValueError("bundle has no fusion module")
     bundle.fusion.load_state_dict(fusion_sd)
     bundle.fusion.eval()
-
-
-def load_fusion_from_state_dict(sd: dict, device: torch.device) -> FusionModule:
-    """Rebuild TripleTextFusion or PentaTextFusion from a checkpoint state dict."""
-    proj_l_weight = sd["proj_l.weight"]
-    clip_l_dim, out_dim = int(proj_l_weight.shape[1]), int(proj_l_weight.shape[0])
-    clip_bg_dim = int(sd["proj_bg.weight"].shape[1])
-    if "proj_long.weight" in sd:
-        clip_h_dim = int(sd["proj_h.weight"].shape[1])
-        clip_long_dim = int(sd["proj_long.weight"].shape[1])
-        fusion_model = PentaTextFusion(clip_l_dim, clip_bg_dim, clip_h_dim, clip_long_dim, out_dim=out_dim)
-    else:
-        fusion_model = TripleTextFusion(clip_l_dim, clip_bg_dim, out_dim=out_dim)
-    fusion_model.load_state_dict(sd)
-    return fusion_model.to(device).eval()
 
 
 def _load_frozen_clip_pair(transformers_lib, path: str, device: torch.device):

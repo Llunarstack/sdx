@@ -48,7 +48,7 @@ CATEGORIES: dict[str, str] = {
 
 
 SUITE: tuple[SuiteItem, ...] = (
-    # --- long_adherence -----------------------------------------------------
+    # long_adherence
     SuiteItem(
         "long_01",
         "A weathered lighthouse keeper in a yellow raincoat stands on wet black "
@@ -65,7 +65,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "long_adherence",
         note="Staircase-right and windows-left must both hold.",
     ),
-    # --- relation -----------------------------------------------------------
+    # relation
     SuiteItem(
         "rel_01",
         "A red cube to the left of a blue sphere, with a green pyramid behind both",
@@ -78,11 +78,11 @@ SUITE: tuple[SuiteItem, ...] = (
         "relation",
         note="Vertical stacking order.",
     ),
-    # --- count --------------------------------------------------------------
+    # count
     SuiteItem("count_01", "Exactly three red apples on a white plate", "count", expected_count=3),
     SuiteItem("count_02", "Five yellow rubber ducks in a row on a bathtub edge", "count", expected_count=5),
     SuiteItem("count_03", "A single lit candle in a dark room", "count", expected_count=1),
-    # --- text_render --------------------------------------------------------
+    # text_render
     SuiteItem(
         "text_01",
         'A vintage enamel shop sign that reads "OPEN" in bold serif letters',
@@ -95,7 +95,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "text_render",
         expected_text="HELLO",
     ),
-    # --- anatomy ------------------------------------------------------------
+    # anatomy
     SuiteItem(
         "anat_01",
         "Close-up of two hands carefully tying a shoelace, five fingers each",
@@ -108,7 +108,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "anatomy",
         note="Small/far faces and bodies stay coherent.",
     ),
-    # --- negation -----------------------------------------------------------
+    # negation
     SuiteItem(
         "neg_01",
         "A dining table set for breakfast, without any coffee or mugs",
@@ -121,7 +121,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "negation",
         note="People/boats must be ABSENT.",
     ),
-    # --- style_control ------------------------------------------------------
+    # style_control
     SuiteItem(
         "style_01",
         "A mountain landscape in flat 2-color risograph print style, coarse grain",
@@ -134,7 +134,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "style_control",
         note="Blueprint palette and line quality.",
     ),
-    # --- contact ------------------------------------------------------------
+    # contact
     SuiteItem(
         "contact_01",
         "A woman standing on wet pavement at night, shoes planted on the ground, "
@@ -148,7 +148,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "contact",
         note="Mug base flush with table; no gap underneath.",
     ),
-    # --- bind ---------------------------------------------------------------
+    # bind
     SuiteItem(
         "bind_01",
         "A woman in a red dress on the left and a man in a blue suit on the right, colors must not swap",
@@ -161,7 +161,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "bind",
         note="Blue collar on dog; green bell on cat — no attribute swap.",
     ),
-    # --- occlusion ----------------------------------------------------------
+    # occlusion
     SuiteItem(
         "occlude_01",
         "A person standing behind a chain-link fence, face and jacket visible through "
@@ -175,7 +175,7 @@ SUITE: tuple[SuiteItem, ...] = (
         "occlusion",
         note="Apple and glass remain distinct; glass occludes in front.",
     ),
-    # --- reflection ---------------------------------------------------------
+    # reflection
     SuiteItem(
         "reflect_01",
         "A chrome kettle on black granite, a sharp reflection of the kettle in the stone, not a second kettle",
@@ -205,12 +205,6 @@ SUITE: tuple[SuiteItem, ...] = (
 )
 
 
-def items_by_category(category: str | None = None) -> list[SuiteItem]:
-    if category is None:
-        return list(SUITE)
-    return [s for s in SUITE if s.category == category]
-
-
 def suite_as_manifest_rows() -> list[dict]:
     """Emit the suite as JSONL-ready rows (id, prompt, category, expectations)."""
     rows = []
@@ -231,6 +225,5 @@ __all__ = [
     "SUITE_VERSION",
     "CATEGORIES",
     "SuiteItem",
-    "items_by_category",
     "suite_as_manifest_rows",
 ]

@@ -1,6 +1,4 @@
-"""
-Defaults for the **Agentic Stack** (``utils/agentic/``).
-"""
+"""Defaults for the agentic generate/reflect loop in ``utils/agentic`` and ``utils/brain``."""
 
 from __future__ import annotations
 
@@ -19,17 +17,13 @@ class AgenticStackDefaults:
     min_clip_accept: float = 0.22
     qwen_path: str = ""
     trajectory_variants: int = 3
-    evolve_iterations: int = 2
-    superior_preset: str = "superior"
     extra_sample_args: list[str] = field(
         default_factory=lambda: [
-            "--zeresfdg-strength",
-            "1",
+            "--apg-parallel-eta",
+            "0",
             "--cfg-zero-star",
             "--qsilk-micrograin",
             "0.1",
-            "--cfg-rescale",
-            "0.7",
             "--human-made",
             "standard",
         ]

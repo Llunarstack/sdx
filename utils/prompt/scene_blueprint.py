@@ -10,38 +10,13 @@ negative prompt additions. For classical composition scaffolding at inference, u
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from utils.runtime.jsonutil import loads as json_loads
+from config.defaults._lexicon import dedupe_tags
 
-
-def _as_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        v = value.strip()
-        return [v] if v else []
-    if isinstance(value, list):
-        out: list[str] = []
-        for x in value:
-            if isinstance(x, str) and x.strip():
-                out.append(x.strip())
-        return out
-    return []
-
-
-def _dedupe(tokens: Iterable[str]) -> list[str]:
-    seen = set()
-    out: list[str] = []
-    for t in tokens:
-        key = t.lower().strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        out.append(t.strip())
-    return out
+from utils.prompt.tags import str_list
+from utils.runtime import json_loads
 
 
 def _actor_tokens(actor: dict[str, Any], index: int) -> tuple[list[str], list[str]]:
@@ -69,9 +44,9 @@ def _actor_tokens(actor: dict[str, Any], index: int) -> tuple[list[str], list[st
         "style",
         "locks",
     ):
-        pos.extend(_as_list(actor.get(k)))
+        pos.extend(str_list(actor.get(k)))
 
-    neg.extend(_as_list(actor.get("avoid")))
+    neg.extend(str_list(actor.get("avoid")))
     return pos, neg
 
 
@@ -87,7 +62,7 @@ def _relation_tokens(rel: dict[str, Any]) -> tuple[list[str], list[str]]:
         if detail:
             base = f"{base}, {detail}"
         pos.append(base)
-    neg.extend(_as_list(rel.get("avoid")))
+    neg.extend(str_list(rel.get("avoid")))
     return pos, neg
 
 
@@ -109,9 +84,9 @@ def _compile_blueprint_dict(data: dict[str, Any], strength: float = 1.0) -> tupl
         "constraints",
         "quality",
     ):
-        pos.extend(_as_list(data.get(key)))
+        pos.extend(str_list(data.get(key)))
 
-    neg.extend(_as_list(data.get("avoid")))
+    neg.extend(str_list(data.get("avoid")))
 
     # Actors
     for i, actor in enumerate(data.get("actors", []) or []):
@@ -148,11 +123,11 @@ def _compile_blueprint_dict(data: dict[str, Any], strength: float = 1.0) -> tupl
     # Strength controls how many high-signal scene controls we duplicate with emphasis.
     s = max(0.5, min(float(strength), 2.0))
     if s > 1.0:
-        for tag in _as_list(data.get("constraints"))[:6]:
+        for tag in str_list(data.get("constraints"))[:6]:
             pos.append(f"({tag})")
 
-    pos = _dedupe(pos)
-    neg = _dedupe(neg)
+    pos = dedupe_tags(pos)
+    neg = dedupe_tags(neg)
     return ", ".join(pos), ", ".join(neg)
 
 

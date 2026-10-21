@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from data.caption_truncate import truncate_caption_at_comma_boundary
+from data.caption_utils import truncate_caption_at_comma_boundary
 
 
 def test_truncate_keeps_whole_tags():

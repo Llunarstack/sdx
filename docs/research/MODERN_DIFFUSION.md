@@ -59,7 +59,10 @@ Treat SFP as an **experimental** knob; ablate against plain MSE on your data bef
 | CFG rescale / dynamic threshold | `sample.py` | High-CFG friendly. |
 | Cosine **beta** schedule | `--beta-schedule cosine` | Alternative noise schedule (not the same as “cosmap” loss weighting in SD3). |
 | **Sigmoid** / **squaredcos_cap_v2** schedules | `--beta-schedule sigmoid` or `squaredcos_cap_v2` | See `diffusion/schedules.py` (diffusers-style squared cosine + smooth sigmoid ramp). |
-| **Soft min-SNR** loss weight | `--loss-weighting min_snr_soft` | Smooth `gamma/(snr+gamma)` weight (see `diffusion/timestep_loss_weight.py`); alternative to hard `min_snr`. |
+| **Soft min-SNR** loss weight | `--loss-weighting min_snr_soft` | Smooth `gamma/(snr+gamma)` weight (see `diffusion/timestep_sampling.py`); alternative to hard `min_snr`. All weightings are defined on the x0 error and converted per `--prediction-type`. |
+| **Zero terminal SNR** (Lin et al. 2024) | `--zero-terminal-snr` (schedule suffix `_ztsnr`) | Rescales any beta schedule so `abar_T = 0`; needs v or x0 prediction. Sampling starts at `t = T-1` (`euler` spacing). |
+| **SD3 flow recipe** | `--flow-matching-training --timestep-sample-mode logit_normal --flow-shift S` | Logit-normal flow time plus the resolution shift `S * sqrt(tokens / native tokens)` per bucket, mirrored by `sample.py`. |
+| **Noise offset** (Guttenberg 2023) | `--noise-offset 0.05` | Per-channel constant added to the training noise and regressed as part of the target. |
 | **Spectral SFP loss (prototype)** | `--spectral-sfp-loss` | FFT-weighted loss on pred−target; timestep-dependent radial weights (`diffusion/spectral_sfp.py`). See **SFP** subsection above. |
 
 ---

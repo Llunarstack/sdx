@@ -55,7 +55,7 @@ out/my_volume/
 - **`config/defaults/ai_image_shortcomings.py`** — wired through `generate_book.py` to sample.py (`--shortcomings-mitigation`, `--shortcomings-2d`) for photoreal, digital art, CG, and optional 2D-anime mitigation packs.
 - **`config/defaults/art_mediums.py`** — wired through `generate_book.py` to sample.py (`--art-guidance-mode`, `--anatomy-guidance`) for artist-medium + anatomy/proportion guidance.
 - **`config/defaults/style_guidance.py`** — wired through `generate_book.py` to sample.py (`--style-guidance-mode`) for anime/comic/editorial/concept/game/photo style-language guidance.
-- **`utils/quality/quality.py`** — optional post-pass: sharpen + naturalize (film grain / micro-contrast) after each PNG.
+- **`utils/quality/quality.py`** — optional post-pass: sharpen + naturalize (density-space film grain / micro-contrast) after each PNG.
 - **`sample.py`** — `--boost-quality`, `--subject-first`, `--save-prompt`, `--cfg-scale` / `--cfg-rescale`, `--vae-tiling`, `--text-in-image`.
 
 Recommended starting point:

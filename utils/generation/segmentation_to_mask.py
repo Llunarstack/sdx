@@ -169,6 +169,20 @@ def _mask_from_sam_output(raw: object, fallback: Image.Image, w: int, h: int) ->
     return fallback
 
 
+def mask_for_box(pil_rgb: Image.Image, box: BBox) -> tuple[Image.Image, bool]:
+    """``L`` mask for ``box``: SAM2-refined when SAM2 is installed, else the filled box. Returns (mask, sam_used)."""
+    assert np is not None
+    w, h = pil_rgb.size
+    bbox_mask = _bbox_to_mask((w, h), box)
+    sam = _load_sam2()
+    if sam is None:
+        return bbox_mask, False
+    try:
+        return _mask_from_sam_output(sam(pil_rgb, input_boxes=[list(box)]), bbox_mask, w, h), True
+    except Exception:
+        return bbox_mask, False
+
+
 def detect_box_for_phrase(
     pil_rgb: Image.Image,
     phrase: str,
@@ -237,7 +251,6 @@ def build_segmentation_mask_for_edit(
         return SegmentationMaskResult(mask=mask, bbox=None, mode="heuristic_subject_default", notes="models disabled")
 
     box, score = detect_box_for_phrase(pil, phrase, threshold=gdino_threshold)
-    bbox_mask: Image.Image | None = None
     if box is None and fallback_region:
         mask = heuristic_inpaint_mask(w, h, fallback_region, feather_radius=max(0.0, float(feather_radius)))
         return SegmentationMaskResult(
@@ -251,23 +264,9 @@ def build_segmentation_mask_for_edit(
         mask = heuristic_inpaint_mask(w, h, "subject", feather_radius=max(0.0, float(feather_radius)))
         return SegmentationMaskResult(mask=mask, bbox=None, mode="heuristic_subject_default", notes="gdino_miss")
 
-    assert np is not None
-    bbox_mask = _bbox_to_mask((w, h), box)
-    sam = _load_sam2()
-    if sam is not None:
-        try:
-            sam_out = sam(pil, input_boxes=[list(box)])
-            mask = _mask_from_sam_output(sam_out, bbox_mask, w, h)
-            mode = "gdino_plus_sam2"
-            notes = f"score={score:.3f}"
-        except Exception:
-            mask = bbox_mask
-            mode = "gdino_bbox_only"
-            notes = f"sam_fallback score={score:.3f}"
-    else:
-        mask = bbox_mask
-        mode = "gdino_bbox_only"
-        notes = f"score={score:.3f}"
+    mask, sam_used = mask_for_box(pil, box)
+    mode = "gdino_plus_sam2" if sam_used else "gdino_bbox_only"
+    notes = f"score={score:.3f}"
 
     if feather_radius and feather_radius > 0:
         mask = mask.filter(ImageFilter.GaussianBlur(radius=float(feather_radius)))
@@ -282,5 +281,6 @@ __all__ = [
     "SegmentationMaskResult",
     "build_segmentation_mask_for_edit",
     "detect_box_for_phrase",
+    "mask_for_box",
     "phrase_to_fallback_region",
 ]

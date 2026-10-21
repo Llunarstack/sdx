@@ -17,8 +17,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .artist_registry import ArtistRegistry, get_registry
-from .artist_tag import expand_artist_mentions
+from config.defaults._lexicon import merge_csv_unique
+
+from .artist_registry import ArtistRegistry, expand_artist_mentions, get_registry
 
 # ``+category: traits`` or ``+category traits`` — category names are case-insensitive.
 _BLOCK_RE = re.compile(
@@ -94,19 +95,6 @@ def _split_traits(text: str) -> list[str]:
     return parts
 
 
-def _merge_unique_csv(*chunks: str) -> str:
-    seen: set[str] = set()
-    out: list[str] = []
-    for chunk in chunks:
-        for tok in [t.strip() for t in chunk.split(",") if t.strip()]:
-            key = tok.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(tok)
-    return ", ".join(out)
-
-
 def parse_blocks(prompt: str) -> tuple[str, dict[str, list[str]]]:
     """Return ``(remainder, {category: [traits...]})``."""
     blocks: dict[str, list[str]] = {}
@@ -152,19 +140,9 @@ def compose_prompt(
         anchors = list(_CATEGORY_ANCHORS.get(cat, []))
         trait_str = ", ".join(traits)
         if anchors:
-            segments.append(_merge_unique_csv(", ".join(anchors), trait_str))
+            segments.append(merge_csv_unique(", ".join(anchors), trait_str))
         else:
             segments.append(trait_str)
 
-    positive = _merge_unique_csv(*segments)
+    positive = merge_csv_unique(*segments)
     return ComposedPrompt(positive=positive, artists=artists, blocks=blocks, base_text=base)
-
-
-def compose_prompt_text(
-    prompt: str,
-    *,
-    artist_strength: float = 1.0,
-    artist_index: str | None = None,
-) -> str:
-    """Convenience: return only the composed positive prompt string."""
-    return compose_prompt(prompt, artist_strength=artist_strength, artist_index=artist_index).positive

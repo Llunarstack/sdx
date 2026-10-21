@@ -10,4 +10,3 @@ Roadmaps and industry notes — **not required** for day-to-day train/sample wor
 
 Supporting notes: [BLUEPRINTS.md](BLUEPRINTS.md), [DIFFUSION_LEVERAGE_ROADMAP.md](DIFFUSION_LEVERAGE_ROADMAP.md), [IMAGE_QUALITY_LEVERS_2026.md](IMAGE_QUALITY_LEVERS_2026.md), [INSPIRATION.md](INSPIRATION.md), [NEXTGEN_SUPERMODEL_ARCHITECTURE.md](NEXTGEN_SUPERMODEL_ARCHITECTURE.md).
 
-Code prototypes live under the Python package [`research/`](../../research/) (`agi_image`, creature/physics guidance, `visual_quality`).

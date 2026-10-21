@@ -5,7 +5,6 @@ cast mention checks, and optional warning strings (T5 / CLIP context is finite).
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -38,20 +37,18 @@ def composed_prompt_length_report(
         "oc_block": len((oc_block or "").strip()),
         "user_prompt": len((user_prompt or "").strip()),
     }
-    parts["total_chars"] = sum(parts[k] for k in parts if k != "total_chars")
-    parts["approx_tokens"] = approximate_token_estimate(
-        ", ".join(
-            (
-                narration_prefix,
-                consistency_block,
-                panel_hint,
-                rolling_context,
-                visual_memory_fragment,
-                oc_block,
-                user_prompt,
-            )
-        )
+    parts["total_chars"] = sum(parts.values())
+    blocks = (
+        narration_prefix,
+        consistency_block,
+        panel_hint,
+        rolling_context,
+        visual_memory_fragment,
+        oc_block,
+        user_prompt,
     )
+    # Join only non-empty blocks so empty slots do not inflate the estimate with ", " separators.
+    parts["approx_tokens"] = approximate_token_estimate(", ".join(b.strip() for b in blocks if b and b.strip()))
     return parts
 
 
@@ -71,71 +68,13 @@ class CastMentionResult:
         return f"this page should visibly include: {names}{tail}"
 
 
-_WORD_BOUNDARY_RE = re.compile(r"[\s,.;:!?|(){}\[\]\"']+")
-
-
 def find_cast_mentions(page_prompt: str, cast_names: Sequence[str]) -> CastMentionResult:
-    """
-    Heuristic: cast name is "mentioned" if it appears as a substring (case-insensitive),
-    or as a whole token for single-word names.
-    """
+    """Heuristic: a cast name is "mentioned" if it appears as a case-insensitive substring."""
     text = (page_prompt or "").lower()
-    found: list[str] = []
-    missing: list[str] = []
+    found: set[str] = set()
+    missing: set[str] = set()
     for raw in cast_names:
         name = str(raw).strip()
-        if not name:
-            continue
-        low = name.lower()
-        if low in text:
-            found.append(name)
-            continue
-        if " " not in name.strip():
-            tokens = set(_WORD_BOUNDARY_RE.split(text))
-            if low in tokens:
-                found.append(name)
-                continue
-        missing.append(name)
-    return CastMentionResult(found=sorted(set(found)), missing=sorted(set(missing)))
-
-
-def strip_duplicate_prompt_phrases(text: str) -> str:
-    """
-    Remove repeated comma-separated segments (case-insensitive), keeping first occurrence.
-    Helps when merging many blocks that repeat the same quality tags.
-    """
-    s = (text or "").strip()
-    if not s:
-        return ""
-    parts = [p.strip() for p in s.split(",") if p.strip()]
-    seen: set[str] = set()
-    out: list[str] = []
-    for p in parts:
-        key = p.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(p)
-    return ", ".join(out)
-
-
-def panel_layout_hint(
-    *,
-    panels: int = 1,
-    layout: str = "",
-    reading_order: str = "left-to-right",
-) -> str:
-    """Positive tokens for multi-panel pages (comic / manga grids)."""
-    bits: list[str] = []
-    n = max(1, int(panels))
-    if n == 1:
-        bits.append("single clear focal illustration")
-    else:
-        bits.append(f"multi-panel page with {n} distinct panels")
-    lv = (layout or "").strip().lower()
-    if lv in ("grid", "strip", "splash", "inset", "tier", "webtoon_column"):
-        bits.append(f"layout style: {lv.replace('_', ' ')}")
-    ro = (reading_order or "").strip().lower()
-    if ro and ro != "none":
-        bits.append(f"panel reading order {ro}")
-    return ", ".join(bits)
+        if name:
+            (found if name.lower() in text else missing).add(name)
+    return CastMentionResult(found=sorted(found), missing=sorted(missing))

@@ -276,9 +276,6 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-difficulty-easy-first", action="store_true", help="If set, late steps prefer easy (default: early=easy)"
     )
-    parser.add_argument(
-        "--rule-loss-weight", type=float, default=0.0, help="Constitutional/rule auxiliary loss weight (0=off)"
-    )
     parser.add_argument("--repa-weight", type=float, default=0.0, help="REPA auxiliary loss weight (0=off)")
     parser.add_argument(
         "--repa-encoder-model",
@@ -397,20 +394,38 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         choices=["linear", "cosine", "sigmoid", "squaredcos_cap_v2"],
     )
     parser.add_argument(
+        "--zero-terminal-snr",
+        action="store_true",
+        help="Rescale the beta schedule to zero terminal SNR (Lin et al. 2024): the last step is pure noise, so "
+        "the model can make true blacks/whites and very dark or bright images. Requires --prediction-type v (or x0) "
+        "and a sampler schedule that starts at t=T-1 (e.g. euler/karras_rho, not the leading 'ddim' spacing).",
+    )
+    parser.add_argument(
         "--prediction-type",
         type=str,
         default="epsilon",
         choices=["epsilon", "v", "x0"],
         help="epsilon=noise, v=velocity (SD2-style), x0=direct clean latent (train+sample must match)",
     )
-    parser.add_argument("--noise-offset", type=float, default=0.0, help="SD-style noise offset (e.g. 0.1)")
-    parser.add_argument("--min-snr-gamma", type=float, default=5.0, help="Min-SNR loss weighting (0=off)")
+    parser.add_argument(
+        "--noise-offset",
+        type=float,
+        default=0.0,
+        help="Per-channel noise offset (e.g. 0.05-0.1): lets the model shift overall brightness/colour; VP and flow.",
+    )
+    parser.add_argument(
+        "--min-snr-gamma",
+        type=float,
+        default=5.0,
+        help="Min-SNR gamma (Hang et al. 2023), converted to the --prediction-type target (0=off)",
+    )
     parser.add_argument(
         "--loss-weighting",
         type=str,
         default="min_snr",
         choices=["min_snr", "min_snr_soft", "unit", "edm", "v", "eps"],
-        help="Timestep loss weight: min_snr | min_snr_soft (smooth) | unit | edm | v | eps",
+        help="Timestep loss weight (defined on the x0 error, converted to the prediction target): "
+        "min_snr | min_snr_soft (smooth) | unit | edm | v | eps",
     )
     parser.add_argument(
         "--loss-weighting-sigma-data", type=float, default=0.5, help="Sigma_data for loss_weighting=edm"
@@ -418,8 +433,8 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--spectral-sfp-loss",
         action="store_true",
-        help="Frequency-weighted FFT loss (prototype): emphasize low freqs at high t, high freqs at low t. "
-        "VP-DDPM only; not used with MDM masked loss.",
+        help="Frequency-weighted FFT loss: emphasize low freqs at high t, high freqs at low t (same scale as MSE). "
+        "VP and flow matching; not used with MDM masked loss.",
     )
     parser.add_argument(
         "--spectral-sfp-low-sigma",
@@ -443,7 +458,8 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--ot-noise-pair-reg",
         type=float,
         default=0.0,
-        help="Sinkhorn OT coupling between batch latents and Gaussian noise (0=off; try 0.03-0.1). Experimental.",
+        help="Minibatch OT pairing of latents and noise rows (0=off). For soft mode the entropic regulariser in units "
+        "of the batch cost std: 0.05 ~ exact OT, >=1 ~ random pairing.",
     )
     parser.add_argument(
         "--ot-noise-pair-iters",
@@ -456,12 +472,21 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="soft",
         choices=["soft", "hungarian"],
-        help="soft = P @ noise (GPU); hungarian = min-cost permutation (CPU scipy).",
+        help="soft = permutation sampled from the Sinkhorn plan; hungarian = exact min-cost permutation (scipy).",
     )
     parser.add_argument(
         "--flow-matching-training",
         action="store_true",
-        help="Train with rectified-flow-style velocity loss (incompatible with MDM masked training; not VP sample_loop-compatible).",
+        help="Train with the rectified-flow velocity loss (sample with --flow-matching-sample). Honors "
+        "--timestep-sample-mode (logit_normal = SD3), --flow-shift, --noise-offset and --spectral-sfp-loss. "
+        "Incompatible with MDM masked training.",
+    )
+    parser.add_argument(
+        "--flow-shift",
+        type=float,
+        default=1.0,
+        help="SD3 timestep shift for flow training at the native --image-size grid; other resolution buckets scale "
+        "it by sqrt(tokens / native tokens). Stored in the checkpoint and reused by sample.py (e.g. 3.0 at 1024px).",
     )
     parser.add_argument(
         "--bridge-aux-weight",
@@ -480,7 +505,8 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="uniform",
         choices=["uniform", "logit_normal", "high_noise", "low_noise"],
-        help="Training t distribution: uniform | logit_normal (SD3-style) | high_noise (Beta->large t) | low_noise (Beta->small t)",
+        help="Training t distribution (VP and flow): uniform | logit_normal (SD3-style) | high_noise (Beta->large t) "
+        "| low_noise (Beta->small t)",
     )
     parser.add_argument(
         "--timestep-logit-mean",
@@ -551,6 +577,18 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         "--latent-cache-dir", type=str, default=None, help="Use precomputed latents for faster training"
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--caption-dropout-prob",
+        type=float,
+        default=0.1,
+        help="Per-sample probability of replacing the caption by the empty prompt (the CFG uncond).",
+    )
+    parser.add_argument(
+        "--ema-decay",
+        type=float,
+        default=0.9999,
+        help="EMA decay cap; the decay warms up as min(cap, (1+n)/(10+n)) over optimizer steps n.",
+    )
     parser.add_argument(
         "--caption-dropout-schedule",
         type=str,

@@ -7,13 +7,12 @@ into prompt / negative / style-conditioning strings for SDX.
 
 from __future__ import annotations
 
-import json
 import re
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from utils.prompt.fast_paths import merge_fragments
+from utils.prompt.tags import merge_csv_unique
 
 
 @dataclass
@@ -53,7 +52,7 @@ class StyleGenome:
         base = (base_prompt or "").strip()
         extras = ", ".join(self.axis_tokens())
         if extras:
-            return merge_fragments(base, extras)
+            return merge_csv_unique(base, extras)
         return base
 
     def compile_negative(self, base_negative: str) -> str:
@@ -64,7 +63,7 @@ class StyleGenome:
         if self.anti_clone:
             chunks.append(", ".join(self.anti_clone))
         if chunks:
-            return merge_fragments(neg, ", ".join(chunks))
+            return merge_csv_unique(neg, ", ".join(chunks))
         return neg
 
     def to_dict(self) -> dict[str, Any]:
@@ -97,15 +96,6 @@ class StyleGenome:
             negative_fragments=_tuple("negative_fragments"),
             reasoning=str(data.get("reasoning") or "").strip(),
         )
-
-
-def genome_from_json(text: str) -> StyleGenome:
-    data = json.loads(text)
-    if isinstance(data, list) and data:
-        data = data[0]
-    if not isinstance(data, dict):
-        raise ValueError("Style genome JSON must be an object or non-empty array")
-    return StyleGenome.from_dict(data)
 
 
 def nearest_catalog_style_overlap(genome: StyleGenome) -> tuple[str, float]:
@@ -155,7 +145,6 @@ def is_genome_novel_enough(genome: StyleGenome, *, max_catalog_overlap: float = 
 
 __all__ = [
     "StyleGenome",
-    "genome_from_json",
     "is_genome_novel_enough",
     "nearest_catalog_style_overlap",
 ]

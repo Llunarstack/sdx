@@ -4,7 +4,7 @@
 
 **Context:** Text-to-image is increasingly **production infrastructure**, not only a “cool art” demo. Teams care about **functional precision**, **grounding**, and **outputs that read as real**—not just high scores on aesthetics.
 
-This doc **does not** claim SDX ships commercial parity with any external product. It **does** map where the field is moving and how SDX can evolve (see also [IMPROVEMENTS.md](IMPROVEMENTS.md) §12, [utils/generation/orchestration.py](../../utils/generation/orchestration.py)).
+This doc **does not** claim SDX ships commercial parity with any external product. It **does** map where the field is moving and how SDX can evolve (see also [IMPROVEMENTS.md](IMPROVEMENTS.md) §12, [utils/agentic/roles.py](../../utils/agentic/roles.py)).
 
 **Note:** Product names, release dates, and benchmarks change quickly. Treat the **industry snapshot** below as an orientation to common themes in early-2026 discussions—not a live leaderboard.
 
@@ -68,7 +68,7 @@ The field has shifted from “single text-to-image box” toward **integrated cr
 
 - Optional **texture / frequency** regularization or auxiliary losses (document loss schedule; see [IMPROVEMENTS.md](IMPROVEMENTS.md) §11).
 - **Multi-resolution / aspect buckets** — **implemented:** `train.py --resolution-buckets` (e.g. `256,512` or `512x768`), [`data/bucket_batch_sampler.py`](../../data/bucket_batch_sampler.py), [`data/t2i_dataset.py`](../../data/t2i_dataset.py) (single-GPU only; no `--val-split`; latent cache disabled when buckets are on). Prefer `--size-embed-dim` > 0 for best extrapolation ([IMPROVEMENTS.md](IMPROVEMENTS.md) §1.1).
-- **Lo-fi cosmetics** — **implemented:** [`add_motion_blur` / `add_lens_glare`](../../utils/quality/quality.py) alongside existing grain / `naturalize`.
+- **Capture authenticity** — **implemented:** physically based lens/sensor/ISP and film-grain finish in [`camera_isp.py`](../../utils/quality/camera_isp.py), routed by medium.
 - Dataset-side **“lived-in”** captions (wear, dust, film grain) in JSONL—not only tag lists.
 
 ---
@@ -85,7 +85,7 @@ The field has shifted from “single text-to-image box” toward **integrated cr
 
 **Good next steps**
 
-- Explicit **orchestration** — **implemented:** [`scripts/tools/ops/orchestrate_pipeline.py`](../../scripts/tools/ops/orchestrate_pipeline.py) (wraps `sample.py` with `--num` + `--pick-best`); [`sample_cli_hint()`](../../utils/generation/orchestration.py) for copy-paste; optional **`--pick-best combo_exposure`** ([`score_exposure_balance`](../../utils/quality/test_time_pick.py)) for lightweight highlight/shadow clipping avoidance.
+- Explicit **orchestration** — **implemented:** [`scripts/tools/ops/orchestrate_pipeline.py`](../../scripts/tools/ops/orchestrate_pipeline.py) (wraps `sample.py` with `--num` + `--pick-best`); optional **`--pick-best combo_exposure`** ([`score_exposure_balance`](../../utils/quality/test_time_pick.py)) for lightweight highlight/shadow clipping avoidance.
 - Optional **lightweight anatomy/physics** checks (hand bbox + finger count heuristics, shadow/light consistency) as *scores* feeding pick-best—not a full closed verifier.
 
 ---
@@ -145,7 +145,7 @@ SDX already has **VAE tiling** for large decodes and **sharpen/naturalize** in `
 **Good next steps**
 
 - **RAG-style** optional module — **stub:** [`utils/prompt/rag_prompt.py`](../../utils/prompt/rag_prompt.py) (`merge_facts_into_prompt`, `load_facts_from_jsonl`). Wire your own retrieval; then **encode** the merged prompt as usual.
-- **Character / subject consistency** — **helpers:** [`utils/consistency/character_lock.py`](../../utils/consistency/character_lock.py) (`merge_character_into_caption`, …) for stable JSONL / prompt prefixes.
+- **Character / subject consistency** — **helpers:** [`utils/consistency/character_customization.py`](../../utils/consistency/character_customization.py) (`build_character_prompt_additions`) turns a character sheet into stable prompt/negative additions (`sample.py --character-sheet`).
 - Clear **separation** in docs: “model knowledge” vs “user-supplied facts” for safety and reproducibility.
 
 ---
@@ -288,7 +288,7 @@ As of **early 2026**, much of the field’s energy has shifted from “make pret
 **SDX**
 
 - **Native resolution:** `sample.py` **width/height**, **VAE tiling** for large decodes; training **`--resolution-buckets`** ([`data/t2i_dataset.py`](../../data/t2i_dataset.py)) for multi-aspect / multi-res **single-GPU** training.
-- **Multi-angle consistency:** **Not** a built-in 3D/pose engine; use **data + captions**, **Control**-style paths where supported, **character lock** helpers ([`utils/consistency/character_lock.py`](../../utils/consistency/character_lock.py)), and **[`docs/LANDSCAPE_2026.md#industry-snapshot-march-2026`](LANDSCAPE_2026.md#industry-snapshot-march-2026)** for consistency themes.
+- **Multi-angle consistency:** **Not** a built-in 3D/pose engine; use **data + captions**, **Control**-style paths where supported, **character sheet** helpers ([`utils/consistency/character_customization.py`](../../utils/consistency/character_customization.py)), and **[`docs/LANDSCAPE_2026.md#industry-snapshot-march-2026`](LANDSCAPE_2026.md#industry-snapshot-march-2026)** for consistency themes.
 
 ---
 
@@ -321,7 +321,7 @@ As of **early 2026**, much of the field’s energy has shifted from “make pret
 
 - **Refinement** pass in **`sample.py`** (small **re-noise** + **denoise**).
 - **Multi-candidate + selection:** `--num K` + **`--pick-best`** ([`utils/quality/test_time_pick.py`](../../utils/quality/test_time_pick.py)) — e.g. `clip`, `edge`, `ocr`, `combo`, **`combo_exposure`**.
-- **Pipeline wrapper:** [`scripts/tools/ops/orchestrate_pipeline.py`](../../scripts/tools/ops/orchestrate_pipeline.py), [`utils/generation/orchestration.py`](../../utils/generation/orchestration.py).
+- **Pipeline wrapper:** [`scripts/tools/ops/orchestrate_pipeline.py`](../../scripts/tools/ops/orchestrate_pipeline.py), [`utils/agentic/roles.py`](../../utils/agentic/roles.py).
 
 This is **not** a full internal **latent self-critique** loop like a closed proprietary stack — it’s **explicit** test-time **scoring** and **optional** refinement.
 
@@ -363,4 +363,4 @@ This is **not** a full internal **latent self-critique** loop like a closed prop
 - [`utils/architecture/architecture_map.py`](../../utils/architecture/architecture_map.py) — theme → repo status
 - [IMPROVEMENTS.md](IMPROVEMENTS.md) §11–§12 — research hooks and alignment
 - [MODERN_DIFFUSION.md](MODERN_DIFFUSION.md) — timestep sampling and flow-era ideas
-- [utils/generation/orchestration.py](../../utils/generation/orchestration.py) — Designer / Verifier / Reasoner roles
+- [utils/agentic/roles.py](../../utils/agentic/roles.py) — Reasoner → Designer → Verifier role pipeline

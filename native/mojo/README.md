@@ -41,7 +41,7 @@ powershell -File native/mojo/install_mojo_wsl.ps1
 
 | Need | Prefer |
 |------|--------|
-| JSONL stats / validate | Rust `sdx-jsonl-tools` or `sdx_native.jsonl_manifest_pure` |
+| JSONL stats / validate | Rust `sdx-jsonl-tools` or `python -m toolkit.quality.manifest_digest` |
 | FNV / line CRC | Zig `sdx-linecrc` |
 | Latent grid math | C++ `sdx_latent` |
 | Image training on GPU | PyTorch + CUDA / `torch.compile` |

@@ -32,10 +32,8 @@ def test_build_sample_argv_instantstyle(tmp_path: Path):
         control_image=str(tmp_path / "canny.png"),
         control_type="canny",
     )
-    cfg = CopilotConfig(reference_style_mode="instantstyle", reference_strength=0.7)
-    argv = build_sample_argv(ckpt="ckpt.pt", plan=plan, out="o.png", config=cfg)
-    assert "--reference-style-mode" in argv
-    assert "instantstyle" in argv
+    argv = build_sample_argv(ckpt="ckpt.pt", plan=plan, out="o.png", config=CopilotConfig(moodboard_strength=0.8))
+    assert argv[argv.index("--moodboard-strength") + 1] == "0.8"
     assert "--moodboard-json" in argv
     assert "--control-image" in argv
     assert "--control-type" in argv

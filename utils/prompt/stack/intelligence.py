@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .tokens import split_tags, token_set
+from utils.prompt.tags import append_unique, split_tags, token_set
 
 
 @dataclass
@@ -145,7 +145,5 @@ def apply_intelligence(
     controls: dict[str, str] = dict(analysis.suggested_controls) if auto_controls else {}
     if auto_quality and analysis.missing_quality and analysis.complexity in ("simple", "moderate"):
         if "detailed" in analysis.suggested_positive:
-            from .tokens import append_unique
-
             out = append_unique(out, analysis.suggested_positive)
     return out, controls

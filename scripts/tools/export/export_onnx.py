@@ -40,15 +40,15 @@ def main():
         return 1
     model_name = getattr(cfg, "model_name", "DiT-XL/2-Text")
     model_fn = DiT_models_text.get(model_name) or DiT_models_text["DiT-XL/2-Text"]
-    model = model_fn(**get_dit_build_kwargs(cfg, class_dropout_prob=0.0))
+    build_kw = get_dit_build_kwargs(cfg, class_dropout_prob=0.0)
+    model = model_fn(**build_kw)
     state = ckpt.get("ema") or ckpt.get("model")
     model.load_state_dict(state, strict=True)
     model.eval()
 
     image_size = getattr(cfg, "image_size", 256)
     latent_size = image_size // 8
-    te = getattr(cfg, "text_encoder", "").lower()
-    text_dim = 4096 if "xxl" in te else (1024 if "xl" in te and "xxl" not in te else 768)
+    text_dim = build_kw["text_dim"]
     seq_len = 77  # typical max length
 
     batch = args.batch

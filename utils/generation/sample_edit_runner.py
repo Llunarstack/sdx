@@ -1,8 +1,7 @@
 """
 Run **img2img** and **inpainting** through the same path as ``sample.py`` (subprocess).
 
-This keeps API callers (e.g. :class:`MultimodalGenerator`) decoupled from loading VAE/DiT
-in-process. Requires a valid checkpoint and a working SDX environment (same as CLI sampling).
+This keeps API callers decoupled from loading VAE/DiT in-process. Requires a valid checkpoint and a working SDX environment (same as CLI sampling).
 """
 
 from __future__ import annotations

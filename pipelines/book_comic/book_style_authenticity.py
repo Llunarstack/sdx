@@ -11,27 +11,40 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pipelines.book_comic.book_style_fusion import primary_style_from_book_type
 from pipelines.book_comic.prompt_lexicon import merge_prompt_fragments
 
-# Aliases → canonical medium keys used below
+# Aliases -> canonical medium keys of _AUTH_POSITIVE; anything else falls back to "manga".
 _MEDIUM_ALIASES: dict[str, str] = {
-    "auto": "auto",
-    "manga": "manga",
     "manhwa": "webtoon",
-    "webtoon": "webtoon",
-    "graphic_novel": "graphic_novel",
     "graphicnovel": "graphic_novel",
     "comic": "comic_us",
-    "comic_us": "comic_us",
     "western": "comic_us",
     "us_comic": "comic_us",
-    "illustration": "illustration",
-    "children": "children",
     "kids": "children",
     "picture_book": "children",
-    "storyboard": "storyboard",
     "novel_cover": "illustration",
-    "other": "manga",
+}
+
+_LEVEL_TIERS: dict[str, str] = {
+    "lite": "lite",
+    "standard": "standard",
+    "balanced": "standard",
+    "medium": "standard",
+    "strong": "strong",
+    "max": "strong",
+    "maximum": "strong",
+    "heavy": "strong",
+}
+
+# Medium-independent human-craft lines appended per tier.
+_TIER_CRAFT_LINES: dict[str, tuple[str, ...]] = {
+    "lite": (),
+    "standard": ("single consistent artist hand across the page, intentional staging not stock collage",),
+    "strong": (
+        "convincing human art direction: one author's judgment calls on detail density and rest areas",
+        "avoid template panel rhythm and duplicated background geometry",
+    ),
 }
 
 # Positives: medium → tier → fragment
@@ -52,7 +65,7 @@ _AUTH_POSITIVE: dict[str, dict[str, str]] = {
         ),
     },
     "webtoon": {
-        "lite": ("vertical-scroll friendly shapes, restrained digital smoothing, readable silhouette at phone scale"),
+        "lite": "vertical-scroll friendly shapes, restrained digital smoothing, readable silhouette at phone scale",
         "standard": (
             "webtoon-native painting: soft gradients with hand-placed breaks, intentional rim-light "
             "variation, avoid plastic skin sheen, costume folds drawn not airbrushed flat"
@@ -175,25 +188,21 @@ _AUTH_NEGATIVE: dict[str, dict[str, str]] = {
 
 
 def peek_visual_memory_book_style(path: Path) -> str:
-    """Read only ``book_style`` from a visual-memory JSON (fast; no full validation)."""
+    """Read only ``book_style`` from a visual-memory JSON ("" when unreadable)."""
     try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            return str(data.get("book_style", "") or "").strip().lower()
-    except (OSError, json.JSONDecodeError, TypeError):
-        pass
-    return ""
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):  # ValueError covers JSONDecodeError and UnicodeDecodeError
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("book_style", "") or "").strip().lower()
 
 
 def normalize_medium(name: str) -> str:
+    """Canonical medium key for *name* (aliases resolved; unknown and ``auto`` -> ``manga``)."""
     k = (name or "").strip().lower().replace(" ", "_").replace("-", "_")
-    if k in _MEDIUM_ALIASES:
-        v = _MEDIUM_ALIASES[k]
-        return v if v != "auto" else "manga"
-    if k in _AUTH_POSITIVE:
-        return k
-    return "manga"
+    k = _MEDIUM_ALIASES.get(k, k)
+    return k if k in _AUTH_POSITIVE else "manga"
 
 
 def resolve_effective_medium(
@@ -203,6 +212,7 @@ def resolve_effective_medium(
     lexicon_style: str = "",
     visual_memory_book_style: str = "",
 ) -> str:
+    """Explicit *medium* wins, then visual-memory ``book_style``, then lexicon style, then book type."""
     m = (medium or "auto").lower().strip()
     if m != "auto":
         return normalize_medium(m)
@@ -210,22 +220,13 @@ def resolve_effective_medium(
     if vm:
         return normalize_medium(vm)
     ls = (lexicon_style or "").lower().strip()
-    if "webtoon" in ls or "manhwa" in ls or ls in ("webtoon", "manhwa_color"):
+    if "webtoon" in ls or "manhwa" in ls:
         return "webtoon"
-    if "graphic" in ls or ls in ("graphic_novel", "seinen", "editorial"):
+    if "graphic" in ls or ls in ("seinen", "editorial"):
         return "graphic_novel"
     if ls in ("western_comic", "us_comic", "comic"):
         return "comic_us"
-    bt = (book_type or "").lower().strip()
-    if bt == "comic":
-        return "comic_us"
-    if bt == "novel_cover":
-        return "illustration"
-    if bt == "storyboard":
-        return "storyboard"
-    if bt == "manga":
-        return "manga"
-    return "manga"
+    return primary_style_from_book_type(book_type)
 
 
 def resolve_authenticity_bundle(
@@ -238,45 +239,21 @@ def resolve_authenticity_bundle(
 ) -> dict[str, str]:
     """
     Return ``{"positive": str, "negative": str, "effective_medium": str}``.
-    *level*: ``none`` | ``lite`` | ``standard`` | ``strong``.
+    *level*: ``none``/``off`` | ``lite`` | ``standard`` (default for unknown) | ``strong``.
     """
     lv = (level or "none").lower().strip()
     if lv in ("", "none", "off"):
         return {"positive": "", "negative": "", "effective_medium": ""}
 
-    if lv in ("lite", "standard", "strong"):
-        tier = lv
-    elif lv in ("balanced", "medium"):
-        tier = "standard"
-    elif lv in ("max", "maximum", "heavy"):
-        tier = "strong"
-    else:
-        tier = "standard"
+    tier = _LEVEL_TIERS.get(lv, "standard")
     em = resolve_effective_medium(
         medium=medium,
         book_type=book_type,
         lexicon_style=lexicon_style,
         visual_memory_book_style=visual_memory_book_style,
     )
-    pos_map = _AUTH_POSITIVE.get(em, _AUTH_POSITIVE["manga"])
-    neg_map = _AUTH_NEGATIVE.get(em, _AUTH_NEGATIVE["manga"])
-    pos = pos_map.get(tier, pos_map.get("standard", ""))
-    neg = neg_map.get(tier, neg_map.get("standard", ""))
-    # Cross-cutting human-craft line (light) always for standard+
-    if tier == "standard":
-        pos = merge_prompt_fragments(
-            pos,
-            "single consistent artist hand across the page, intentional staging not stock collage",
-        )
-    elif tier == "strong":
-        pos = merge_prompt_fragments(
-            pos,
-            "convincing human art direction: one author's judgment calls on detail density and rest areas",
-            "avoid template panel rhythm and duplicated background geometry",
-        )
-    return {"positive": pos.strip(), "negative": neg.strip(), "effective_medium": em}
-
-
-def authenticity_preset_names() -> tuple[str, ...]:
-    """CLI / docs: valid ``--book-authenticity`` levels."""
-    return ("none", "lite", "standard", "strong")
+    return {
+        "positive": merge_prompt_fragments(_AUTH_POSITIVE[em][tier], *_TIER_CRAFT_LINES[tier]),
+        "negative": _AUTH_NEGATIVE[em][tier],
+        "effective_medium": em,
+    }

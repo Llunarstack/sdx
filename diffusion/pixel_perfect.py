@@ -7,20 +7,18 @@ Keeps RGB height/width on an integer grid that matches:
 - **DiT PatchEmbed**: each token covers ``patch_size`` latent cells per axis, so one token spans
   ``8 * patch_size`` RGB pixels when ``patch_size`` is isotropic.
 
-Block-AR masks are defined on ``sqrt(num_patches)``; using the model's own ``x_embedder.img_size``
-for latent shape already guarantees token count matches. This module snaps **requested** pixel
-sizes so decode/resize pipelines avoid half-pixel drift and crisp edges for line art / UI tiles.
+The DiTs accept any latent grid that tiles into whole patches (positions and block-AR masks are built
+per grid), so this module snaps **requested** pixel sizes onto that stride and picks the sampling
+canvas (``sampling_canvas_hw``).
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
 LATENT_TO_PIXEL: int = 8  # RGB pixels per latent cell (this repo's VAE convention)
-
 
 SnapMode = Literal["floor", "ceil", "nearest"]
 
@@ -30,35 +28,32 @@ def snap_to_multiple(n: int, m: int, *, mode: SnapMode = "nearest") -> int:
     if m <= 0:
         raise ValueError("m must be positive")
     n, m = int(n), int(m)
-    if mode == "floor":
-        return max(m, (n // m) * m)
-    if mode == "ceil":
-        return max(m, ((n + m - 1) // m) * m)
-    # nearest
     down = max(m, (n // m) * m)
-    up = max(m, ((n + m - 1) // m) * m)
+    up = max(m, -(-n // m) * m)
+    if mode == "floor":
+        return down
+    if mode == "ceil":
+        return up
     return up if abs(up - n) < abs(n - down) else down
 
 
-def _patch_size_latent(model: Any) -> int:
-    emb = getattr(model, "x_embedder", None)
-    if emb is None:
-        return 1
-    ps = getattr(emb, "patch_size", 1)
-    if isinstance(ps, int):
-        return max(1, int(ps))
-    if isinstance(ps, (tuple, list)) and len(ps) >= 1:
-        return max(1, int(ps[0]))
-    return 1
+def dit_patch_size(model: Any) -> int:
+    """Latent cells per patch side; the largest size for dynamic patching (``SuperiorViT``), else 1."""
+    model = getattr(model, "_orig_mod", model)
+    sizes = getattr(getattr(model, "patch_embed", None), "patch_sizes", None)
+    if sizes:
+        return max(int(p) for p in sizes)
+    ps = getattr(getattr(model, "x_embedder", None), "patch_size", None)
+    if ps is None:
+        ps = getattr(model, "patch_size", 1)
+    if isinstance(ps, (tuple, list)):
+        ps = ps[0] if ps else 1
+    return max(1, int(ps))
 
 
 def dit_rgb_stride_px(model: Any) -> int:
-    """
-    RGB pixels spanned by one DiT patch token along one axis (``8 * patch_size`` latent).
-    Falls back to ``LATENT_TO_PIXEL`` when ``x_embedder`` is missing.
-    """
-    pl = _patch_size_latent(model)
-    return int(LATENT_TO_PIXEL) * pl
+    """RGB pixels spanned by one DiT patch token along one axis (``8 * patch_size``)."""
+    return int(LATENT_TO_PIXEL) * dit_patch_size(model)
 
 
 def pixel_stride_for_pipeline(
@@ -66,26 +61,43 @@ def pixel_stride_for_pipeline(
     model: Any = None,
     override_stride_px: int | None = None,
 ) -> int:
-    """
-    Conservative stride for snapping **width/height**: at least VAE alignment (8), and DiT patch
-    alignment when ``model`` is provided.
-    """
+    """Pixel stride for snapping width/height: VAE alignment (8), or the DiT patch stride when ``model`` is given."""
     if override_stride_px is not None:
         s = int(override_stride_px)
         if s < LATENT_TO_PIXEL:
             raise ValueError(f"override_stride_px must be >= {LATENT_TO_PIXEL}")
         return s
-    s = LATENT_TO_PIXEL
-    if model is not None:
-        s = max(s, dit_rgb_stride_px(model))
-    return s
+    return LATENT_TO_PIXEL if model is None else dit_rgb_stride_px(model)
+
+
+def sampling_canvas_hw(
+    height_px: int,
+    width_px: int,
+    *,
+    native_px: int,
+    stride_px: int,
+    max_area_ratio: float = 2.0,
+) -> tuple[int, int]:
+    """Pixel ``(h, w)`` of the first sampling pass for a requested size.
+
+    The requested size snapped to ``stride_px`` when its area is within ``max_area_ratio`` of the native
+    ``native_px`` square (the sampler's SD3 resolution shift covers that range). Otherwise the requested
+    aspect ratio at the native pixel area (aspect-ratio bucketing, SDXL / NovelAI), leaving the final size
+    to hires-fix or a resize; ``max_area_ratio=1`` always does this.
+    """
+    h0, w0 = max(1, int(height_px)), max(1, int(width_px))
+    area_ratio = (h0 * w0) / float(native_px * native_px)
+    if 1.0 / max_area_ratio <= area_ratio <= max_area_ratio:
+        h, w = h0, w0
+    else:
+        aspect = w0 / h0
+        h, w = native_px / aspect**0.5, native_px * aspect**0.5
+    return snap_to_multiple(round(h), stride_px), snap_to_multiple(round(w), stride_px)
 
 
 def latent_hw_from_pixels(height_px: int, width_px: int) -> tuple[int, int]:
-    """``(latent_h, latent_w)`` for SD-style ``// 8`` latent."""
-    h = max(1, int(height_px) // LATENT_TO_PIXEL)
-    w = max(1, int(width_px) // LATENT_TO_PIXEL)
-    return h, w
+    """``(latent_h, latent_w)`` for the SD-style ``// 8`` latent."""
+    return max(1, int(height_px) // LATENT_TO_PIXEL), max(1, int(width_px) // LATENT_TO_PIXEL)
 
 
 def pixels_from_latent_hw(latent_h: int, latent_w: int) -> tuple[int, int]:
@@ -128,35 +140,29 @@ def resolve_pixel_perfect_hw(
     min_side: int = LATENT_TO_PIXEL,
     max_side: int = 16384,
 ) -> tuple[int, int, PixelPerfectCanvas]:
-    """
-    Snap ``height_px`` × ``width_px`` to a pipeline-aligned grid.
+    """Snap ``height_px`` x ``width_px`` onto the pipeline stride within ``[min_side, max_side]``.
 
-    Returns ``(h, w, spec)`` where ``h,w`` are multiples of the chosen stride and within bounds.
+    Returns ``(h, w, spec)``.
     """
     stride = pixel_stride_for_pipeline(model=model, override_stride_px=stride_px)
-
     lo = max(int(min_side), stride)
     hi = max(lo, int(max_side))
 
-    h0, w0 = int(height_px), int(width_px)
-    h0 = max(lo, min(hi, h0))
-    w0 = max(lo, min(hi, w0))
-    if square:
-        s = max(h0, w0)
-        s = max(lo, min(hi, s))
-        h0 = w0 = snap_to_multiple(s, stride, mode=mode)
+    def clamp(v: int) -> int:
+        return max(lo, min(hi, v))
 
-    h = snap_to_multiple(h0, stride, mode=mode)
-    w = snap_to_multiple(w0, stride, mode=mode)
-    h = max(lo, min(hi, h))
-    w = max(lo, min(hi, w))
+    h0, w0 = clamp(int(height_px)), clamp(int(width_px))
+    if square:
+        h0 = w0 = max(h0, w0)
+    h = clamp(snap_to_multiple(h0, stride, mode=mode))
+    w = clamp(snap_to_multiple(w0, stride, mode=mode))
 
     lh, lw = latent_hw_from_pixels(h, w)
     if model is None:
         patch_aligned = False
     else:
         dpx = dit_rgb_stride_px(model)
-        patch_aligned = dpx > 0 and h % dpx == 0 and w % dpx == 0
+        patch_aligned = h % dpx == 0 and w % dpx == 0
     spec = PixelPerfectCanvas(
         height_px=h,
         width_px=w,
@@ -169,47 +175,14 @@ def resolve_pixel_perfect_hw(
     return h, w, spec
 
 
-def validate_pixels_against_dit(
-    height_px: int,
-    width_px: int,
-    model: Any,
-) -> None:
-    """
-    Raise ``ValueError`` if pixel canvas does not match ``model.x_embedder.img_size`` latent shape.
-    """
-    emb = getattr(model, "x_embedder", None)
-    if emb is None:
-        return
-    img_size = getattr(emb, "img_size", None)
-    if img_size is None:
-        return
-    if isinstance(img_size, int):
-        eh = ew = int(img_size)
-    else:
-        eh, ew = int(img_size[0]), int(img_size[1])
-    lh, lw = latent_hw_from_pixels(height_px, width_px)
-    if lh != eh or lw != ew:
+def validate_pixels_against_dit(height_px: int, width_px: int, model: Any) -> None:
+    """Raise ``ValueError`` unless the pixel canvas tiles into whole DiT patches."""
+    stride = dit_rgb_stride_px(model)
+    if int(height_px) % stride or int(width_px) % stride:
+        lh, lw = latent_hw_from_pixels(height_px, width_px)
         raise ValueError(
-            f"pixel canvas {height_px}x{width_px} -> latent {lh}x{lw} != DiT x_embedder.img_size ({eh}x{ew})"
+            f"pixel canvas {height_px}x{width_px} (latent {lh}x{lw}) is not a multiple of the {stride}px DiT patch"
         )
-
-
-def ar_block_grid_side(num_patches: int) -> int | None:
-    """Return ``P`` with ``P*P == num_patches`` if square; else ``None``."""
-    np_ = int(num_patches)
-    if np_ <= 0:
-        return None
-    p = int(round(math.sqrt(float(np_))))
-    return p if p * p == np_ else None
-
-
-def validate_latent_matches_ar_grid(latent_h: int, latent_w: int, num_patches: int) -> None:
-    """Ensure latent grid matches a square token layout (required for 2D block-AR)."""
-    p = ar_block_grid_side(num_patches)
-    if p is None:
-        raise ValueError(f"num_patches={num_patches} is not a perfect square; cannot verify AR grid")
-    if int(latent_h) != p or int(latent_w) != p:
-        raise ValueError(f"latent {latent_h}x{latent_w} != AR token grid {p}x{p} (num_patches={num_patches})")
 
 
 def tag_manifest_pixel_perfect(
@@ -218,31 +191,26 @@ def tag_manifest_pixel_perfect(
     *,
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    """
-    Merge pixel-perfect fields into a manifest / JSONL row for ViT QA and book tooling.
-
-    Skips keys that already exist when ``overwrite`` is False.
-    """
+    """Copy of a manifest row with the pixel-perfect fields merged in; existing keys win unless ``overwrite``."""
     out = dict(row)
     d = spec.as_dict() if isinstance(spec, PixelPerfectCanvas) else dict(spec)
     for k, v in d.items():
-        if not overwrite and k in out:
-            continue
-        out[k] = v
+        if overwrite or k not in out:
+            out[k] = v
     return out
 
 
 __all__ = [
     "LATENT_TO_PIXEL",
     "PixelPerfectCanvas",
-    "ar_block_grid_side",
+    "dit_patch_size",
     "dit_rgb_stride_px",
     "latent_hw_from_pixels",
     "pixels_from_latent_hw",
     "pixel_stride_for_pipeline",
     "resolve_pixel_perfect_hw",
+    "sampling_canvas_hw",
     "snap_to_multiple",
     "tag_manifest_pixel_perfect",
-    "validate_latent_matches_ar_grid",
     "validate_pixels_against_dit",
 ]

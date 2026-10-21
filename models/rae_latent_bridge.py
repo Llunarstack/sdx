@@ -1,8 +1,7 @@
-"""
-RAE → DiT latent bridge (§11.6): maps Representation Autoencoder latents to SD-style 4-channel
-diffusion latents and back for decode, so existing DiT (in_channels=4) can train on RAE data.
+"""RAE -> DiT latent bridge: maps Representation Autoencoder latents to SD-style 4-channel diffusion latents
+and back for decode, so a DiT with ``in_channels=4`` can train on RAE data.
 
-Trains two 1×1 convs: to_dit (C_rae → 4), to_rae (4 → C_rae). Optional cycle loss keeps them
+Two trained 1x1 convs, ``to_dit`` (C_rae -> 4) and ``to_rae`` (4 -> C_rae); ``cycle_loss`` keeps them
 approximately inverse on the RAE latent distribution.
 """
 
@@ -48,6 +47,4 @@ class RAELatentBridge(nn.Module):
 
     def cycle_loss(self, z_rae: torch.Tensor) -> torch.Tensor:
         """L1 reconstruction: z ≈ to_rae(to_dit(z))."""
-        z_dit = self.rae_to_dit(z_rae)
-        back = self.dit_to_rae(z_dit)
-        return (back - z_rae).abs().mean()
+        return (self.dit_to_rae(self.rae_to_dit(z_rae)) - z_rae).abs().mean()

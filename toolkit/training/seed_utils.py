@@ -35,28 +35,4 @@ def seed_everything(seed: int, *, deterministic_cudnn: bool = False) -> None:
         pass
 
 
-def worker_seed_fn(base_seed: int, rank: int = 0):
-    """
-    Return a ``worker_init_fn`` for ``DataLoader`` compatible with PyTorch:
-
-        DataLoader(..., worker_init_fn=toolkit.training.worker_seed_fn(42, rank=0))
-    """
-
-    def _fn(worker_id: int) -> None:
-        try:
-            import numpy as np
-
-            np.random.seed(base_seed + rank * 1000 + worker_id)
-        except ImportError:
-            pass
-        try:
-            import torch
-
-            torch.manual_seed(base_seed + rank * 1000 + worker_id)
-        except ImportError:
-            pass
-
-    return _fn
-
-
-__all__ = ["seed_everything", "worker_seed_fn"]
+__all__ = ["seed_everything"]

@@ -1,56 +1,44 @@
 ﻿# Holy Grail adaptive sampling (how it fits together)
 
-**Holy Grail** is SDX's name for **per-step inference policy**: CFG strength, ControlNet scale, adapter scales, and optional latent refinement change across denoise steps instead of staying fixed.
+**Holy Grail** is SDX's name for a **per-step inference policy**: CFG strength, ControlNet scale and adapter scales change across denoise steps instead of staying fixed, with optional CADS condition annealing and a final latent detail pass.
 
-Implementation code lives under [`diffusion/sampling/`](../diffusion/sampling/) (import path `diffusion.sampling`). Runtime wiring is in `diffusion/gaussian_diffusion.py` and `sample.py` (`--holy-grail-preset`, related flags).
+The code is one module, [`diffusion/sampling.py`](../diffusion/sampling.py) (import path `diffusion.sampling`). `GaussianDiffusion.sample_loop` applies it each step; `sample.py` exposes it as `--holy-grail`, `--holy-grail-preset` and the `--holy-grail-*` knobs.
 
 ## End-to-end flow
 
 ```mermaid
 flowchart LR
-  subgraph inputs [Inputs]
-    P[Prompt + style]
-    M[Checkpoint + adapters]
-  end
-  subgraph choose [Preset]
-    R[recommender / auto]
-    PR[presets: photoreal, anime, ...]
-  end
-  subgraph plan [Per-step plan]
-    B[blueprint: CFG / control / adapter scales]
-    C[condition annealing CADS-style]
-    S[style_router progression]
-  end
-  subgraph guard [Safety]
-    RG[runtime_guard sanitizes kwargs]
-  end
-  subgraph loop [Denoise loop]
-    D[GaussianDiffusion step]
-    LR[optional latent_refiner]
-  end
-  P --> R
-  M --> R
-  R --> PR
-  PR --> B
-  B --> C
-  C --> S
-  S --> RG
-  RG --> D
-  D --> LR
+  P[Prompt + style] --> R[recommend_holy_grail_preset]
+  R --> PR[preset: balanced / photoreal / anime / illustration / aggressive]
+  PR --> G[sanitize_holy_grail_kwargs]
+  G --> B[build_holy_grail_step_plan: CFG / control / adapter per step]
+  B --> C[CADS: cads_noise_std + apply_condition_noise]
+  C --> D[GaussianDiffusion step]
+  D --> F[final unsharp_mask_latent + quantile clamp]
 ```
 
 ## Design intent
 
 | Idea | Role |
 |------|------|
-| **Presets + auto** | Pick a schedule bundle from prompt/style heuristics (`presets.py`, `recommender.py`). |
-| **Blueprint** | Single struct per step: `cfg_scale`, `control_scale`, `adapter_scale`, refine strength (`blueprint.py`). |
-| **Guidance fusion** | Modulate CFG from attention / signal proxies (`guidance_fusion.py`). |
-| **Condition annealing** | CADS-like decay of condition strength late in sampling (`condition_annealing.py`). |
-| **Latent refiner** | Light post-step clamp / detail pass (`latent_refiner.py`). |
-| **Runtime guard** | Clamp nonsense CLI combos before they hit the loop (`runtime_guard.py`). |
+| **Presets + auto** | `--holy-grail-preset auto` picks a knob bundle from prompt keywords; a preset only fills args still at their defaults. |
+| **Step plan** | CFG ramps from `cfg_early_ratio` to `cfg_late_ratio` of the base scale; ControlNet front-loads (or ramps up with `--holy-grail-no-frontload-control`); adapters boost late. |
+| **CADS** | Gaussian noise on the text conditioning, strongest at the first step and decaying as `(1-p)^power`: more varied compositions at high CFG while late steps stay faithful (Sadat et al., ICLR 2024). |
+| **Final latent pass** | `unsharp_mask_latent` (in `diffusion/sampling_utils.py`) lifts fine detail; the quantile clamp clips per-sample outliers without rescaling. |
+| **Guard** | Every knob is clamped to a stable range and made consistent before it reaches the loop. |
 
-## Further reading
+## CLI starter
 
-- [`diffusion/sampling/README.md`](../diffusion/sampling/README.md) — module list and CLI starter.
-- [`diffusion/holy_grail/README.md`](../diffusion/sampling/README.md) — compatibility entry point.
+```bash
+python sample.py --ckpt path/to.pt --prompt "..." --holy-grail \
+  --holy-grail-preset auto \
+  --holy-grail-cads-strength 0.03 \
+  --holy-grail-cfg-early-ratio 0.72 \
+  --holy-grail-cfg-late-ratio 1.0 \
+  --holy-grail-control-mult 1.1 \
+  --holy-grail-unsharp-sigma 0.6 \
+  --holy-grail-unsharp-amount 0.18 \
+  --holy-grail-clamp-quantile 0.995
+```
+
+`--holy-grail-clamp-quantile` clips per-sample outliers of the final latent to that |x| quantile (at least `--holy-grail-clamp-floor`); it does not rescale the latent.

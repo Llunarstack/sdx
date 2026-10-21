@@ -1,131 +1,73 @@
-"""
-UniPC (Zhao et al.) — unified predictor-corrector for few-step VP sampling.
+"""UniPC (Zhao et al., NeurIPS 2023, arXiv:2302.04867), data prediction with ``B(h) = e^{-h} - 1`` (bh2).
 
-Implements a practical bh2-style UniPC on x0 predictions, compatible with
-SDX's discrete VP schedule via λ(t) from ᾱ.
+The predictor UniP-2 equals the DPM-Solver++(2M) step (``vp_dpmpp_update``). The corrector UniC
+re-solves the last step with the model output at the predicted point, which the next step
+evaluates anyway, so UniPC costs one forward per step. UniC-2 reduces to Adams-Moulton
+``(5/12, 8/12, -1/12)`` weights on a uniform λ grid.
 """
 
 from __future__ import annotations
 
+import math
+
 import torch
 
 from diffusion.solvers.base import SolverState
-from diffusion.solvers.dpm_solver_pp import lambda_from_alpha_cumprod, vp_dpmpp_update
+from diffusion.solvers.dpm_solver_pp import _lam, _vp_alpha_sigma
 
 
-def _expand_coeff(c: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-    while c.ndim < x.ndim:
-        c = c.unsqueeze(-1)
-    return c
-
-
-def vp_unipc_predict(
+def unipc_correct(
     *,
-    x: torch.Tensor,
-    x0_pred: torch.Tensor,
-    alpha_bar_cur: torch.Tensor,
-    alpha_bar_next: torch.Tensor,
+    x_prev: torch.Tensor,
+    x0_new: torch.Tensor,
+    alpha_prev: float,
+    sigma_prev: float,
+    alpha_cur: float,
+    sigma_cur: float,
     state: SolverState,
-) -> tuple[torch.Tensor, SolverState]:
-    """UniPC predictor (DPM++ 2M)."""
-    return vp_dpmpp_update(
-        x=x,
-        x0_pred=x0_pred,
-        alpha_bar_cur=alpha_bar_cur,
-        alpha_bar_next=alpha_bar_next,
-        state=state,
-        order=2,
-    )
+    order: int = 2,
+) -> torch.Tensor:
+    """UniC: corrected sample at the current level from ``x_prev`` (the predictor's input) and ``x0_new``.
+
+    ``state`` must still end with the data prediction at the previous level (call before pushing ``x0_new``).
+    """
+    m0, lam0 = state.model_outputs[-1], state.timesteps[-1]
+    h = max(_lam(alpha_cur, sigma_cur) - lam0, 1e-8)
+    phi = -math.expm1(-h)
+    x_next = (sigma_cur / max(sigma_prev, 1e-12)) * x_prev + alpha_cur * phi * m0
+    d_t = x0_new - m0
+    if order < 2 or state.order < 2:
+        return x_next + 0.5 * alpha_cur * phi * d_t
+    r1 = min((state.timesteps[-2] - lam0) / h, -1e-6)
+    d1 = (state.model_outputs[-2] - m0) / r1
+    b_h = math.expm1(-h)
+    k1 = b_h / -h - 1.0
+    b0 = k1 / b_h
+    b1 = 2.0 * (k1 / -h - 0.5) / b_h
+    rho0 = (b0 - b1) / (1.0 - r1)
+    rho1 = b0 - rho0
+    return x_next + alpha_cur * phi * (rho0 * d1 + rho1 * d_t)
 
 
 def vp_unipc_correct(
     *,
-    x: torch.Tensor,
-    x0_pred: torch.Tensor,
-    corrector_x0: torch.Tensor,
-    alpha_bar_cur: torch.Tensor,
-    alpha_bar_next: torch.Tensor,
+    x_prev: torch.Tensor,
+    x0_new: torch.Tensor,
+    alpha_bar_prev,
+    alpha_bar_cur,
     state: SolverState,
-) -> tuple[torch.Tensor, SolverState]:
-    """
-    UniPC corrector: refine the step using x0 evaluated at the predicted next state.
-
-    Does **not** push a new history entry (predictor already did); updates the
-    last history slot to the corrected x0 at λ_next.
-    """
-    device = x.device
-    dtype = x.dtype
-    ab_c = alpha_bar_cur.to(device=device, dtype=torch.float64)
-    ab_n = alpha_bar_next.to(device=device, dtype=torch.float64)
-    if ab_c.ndim == 0:
-        ab_c = ab_c.expand(x.shape[0])
-        ab_n = ab_n.expand(x.shape[0])
-
-    lam_c = lambda_from_alpha_cumprod(ab_c)
-    lam_n = lambda_from_alpha_cumprod(ab_n)
-    h = (lam_n - lam_c).clamp(min=1e-8)
-
-    alpha_n = ab_n.sqrt()
-    sigma_c = (1.0 - ab_c).clamp(min=1e-12).sqrt()
-    sigma_n = (1.0 - ab_n).clamp(min=1e-12).sqrt()
-
-    x64 = x.to(dtype=torch.float64)
-    m0 = x0_pred.to(dtype=torch.float64)
-    m_corr = corrector_x0.to(dtype=torch.float64)
-    m_avg = 0.5 * (m0 + m_corr)
-
-    sigma_ratio = _expand_coeff(sigma_n / sigma_c.clamp(min=1e-12), x64)
-    alpha_n_e = _expand_coeff(alpha_n, x64)
-    phi_1 = _expand_coeff(torch.exp(-h) - 1.0, x64)
-
-    if state.order >= 2:
-        m1 = state.model_outputs[-2].to(dtype=torch.float64)
-        lam_s1 = state.timesteps[-2]
-        h0 = float(lam_c.reshape(-1)[0].item()) - float(lam_s1)
-        r0 = max(h0 / float(h.reshape(-1)[0].item() + 1e-12), 1e-6)
-        d0 = m_avg
-        d1 = (1.0 / r0) * (m_avg - m1)
-        x_next = sigma_ratio * x64 - alpha_n_e * phi_1 * d0 - 0.5 * alpha_n_e * phi_1 * d1
-    else:
-        x_next = sigma_ratio * x64 - alpha_n_e * phi_1 * m_avg
-
-    if state.model_outputs:
-        state.model_outputs[-1] = m_corr.detach().to(dtype=dtype)
-        state.timesteps[-1] = float(lam_n.reshape(-1)[0].item())
-
-    return x_next.to(dtype=dtype), state
-
-
-def vp_unipc_update(
-    *,
-    x: torch.Tensor,
-    x0_pred: torch.Tensor,
-    alpha_bar_cur: torch.Tensor,
-    alpha_bar_next: torch.Tensor,
-    state: SolverState,
-    corrector_x0: torch.Tensor | None = None,
-) -> tuple[torch.Tensor, SolverState, bool]:
-    """
-    UniPC step wrapper.
-
-    - ``corrector_x0 is None``: run predictor, return ``(x_pred, state, True)``.
-    - ``corrector_x0`` set: run corrector only, return ``(x_next, state, False)``.
-    """
-    if corrector_x0 is None:
-        x_pred, state = vp_unipc_predict(
-            x=x,
-            x0_pred=x0_pred,
-            alpha_bar_cur=alpha_bar_cur,
-            alpha_bar_next=alpha_bar_next,
-            state=state,
-        )
-        return x_pred, state, True
-    x_next, state = vp_unipc_correct(
-        x=x,
-        x0_pred=x0_pred,
-        corrector_x0=corrector_x0,
-        alpha_bar_cur=alpha_bar_cur,
-        alpha_bar_next=alpha_bar_next,
+    order: int = 2,
+) -> torch.Tensor:
+    """``unipc_correct`` on the VP schedule (ᾱ uniform over the batch)."""
+    alpha_prev, sigma_prev = _vp_alpha_sigma(alpha_bar_prev)
+    alpha_cur, sigma_cur = _vp_alpha_sigma(alpha_bar_cur)
+    return unipc_correct(
+        x_prev=x_prev,
+        x0_new=x0_new,
+        alpha_prev=alpha_prev,
+        sigma_prev=sigma_prev,
+        alpha_cur=alpha_cur,
+        sigma_cur=sigma_cur,
         state=state,
+        order=order,
     )
-    return x_next, state, False

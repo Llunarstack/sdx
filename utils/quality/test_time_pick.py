@@ -1,15 +1,27 @@
 """
-Test-time scaling: score candidate RGB images (uint8 HWC) to pick the best sample.
-Used by sample.py --pick-best (§11.3 IMPROVEMENTS.md).
+Best-of-N candidate scoring for ``sample.py --pick-best`` (and every other ranker in the repo).
+
+``score_*`` functions score one RGB uint8 HWC image. A pick metric is a weighted set of terms
+(``METRIC_WEIGHTS``); candidates are ranked per term and the weighted mean rank (a Borda count)
+picks the winner, so a term's units never matter and a negligible difference cannot swing the
+pick the way per-metric min-max scaling did. Terms that have no evidence for a prompt (no
+expected text, no count, a requested grade for the cast term...) drop out and the rest
+renormalise. Score candidates before any seeded grain / capture finish.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, fields
+from functools import lru_cache
+from importlib import import_module
+from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
+
+from utils.quality.quality import rgb_to_luminance
 
 try:
     from utils.native import (
@@ -22,18 +34,6 @@ except Exception:  # pragma: no cover - optional native path
     maybe_image_luma_stats_cuda = None
     maybe_count_components_native = None
 
-try:
-    from utils.native import maybe_norm01_native, maybe_weighted_sum_native
-except Exception:  # pragma: no cover - optional native path
-    maybe_norm01_native = None
-    maybe_weighted_sum_native = None
-
-_clip_model: Any = None
-_clip_processor: Any = None
-_clip_model_id: str | None = None
-_vit_model: Any = None
-_vit_cfg: Any = None
-_vit_ckpt: Any = None
 _PEOPLE_WORDS = {
     "people",
     "persons",
@@ -86,54 +86,42 @@ _OBJECT_COUNT_PATTERNS = (
 )
 _OCR_WHITESPACE_RE = re.compile(r"\s+")
 _MORPH_KERNEL_3 = np.ones((3, 3), dtype=np.uint8)
-_CV2_FACE_CASCADE = None  # lazy: cv2.CascadeClassifier or False if unavailable
-_CV2_HOG = None  # lazy HOGDescriptor
 
 
-def _norm01(scores: Sequence[float]) -> list[float]:
-    score_array = np.asarray(scores, dtype=np.float64)
-    n = int(score_array.size)
+def rank01(scores: Sequence[float], rel_tol: float = 1e-6) -> list[float]:
+    """Average ranks scaled to [0, 1] (worst 0, best 1; a single candidate gets 0.5).
+
+    Values within ``rel_tol`` of each other (relative to their magnitude) tie, so float noise
+    cannot order candidates. Invariant to any increasing rescaling of the scores; NaN ranks last.
+    """
+    x = np.nan_to_num(np.asarray(scores, dtype=np.float64), nan=-np.inf)
+    n = int(x.size)
     if n == 0:
         return []
-    if maybe_norm01_native is not None:
-        try:
-            score_list = score_array.tolist()
-            out = maybe_norm01_native([float(x) for x in score_list])
-            if out is not None and len(out) == len(score_list):
-                return [float(x) for x in out]
-        except Exception:
-            pass
-    lo = float(np.min(score_array))
-    hi = float(np.max(score_array))
-    span = hi - lo
-    if span < 1e-8:
+    if n == 1:
+        return [0.5]
+    order = np.argsort(x, kind="stable")
+    xs = x[order]
+    ranks = np.empty(n, dtype=np.float64)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and xs[j + 1] - xs[j] <= rel_tol * max(abs(xs[j]), abs(xs[j + 1]), 1e-12):
+            j += 1
+        ranks[order[i : j + 1]] = (i + j) / 2.0
+        i = j + 1
+    return (ranks / (n - 1)).tolist()
+
+
+def rank_aggregate(term_scores: Mapping[str, Sequence[float] | None], weights: Mapping[str, float]) -> list[float]:
+    """Weighted Borda count: per-candidate weighted mean of ``rank01`` over the available terms."""
+    lists = {k: v for k, v in term_scores.items() if v is not None and weights.get(k, 0.0) > 0}
+    if not lists:
+        n = max((len(v) for v in term_scores.values() if v is not None), default=0)
         return [0.5] * n
-    return ((score_array - lo) / span).astype(np.float64).tolist()
-
-
-def _weighted_sum(score_lists: Sequence[Sequence[float]], weights: Sequence[float]) -> list[float]:
-    rows = list(score_lists)
-    if not rows:
-        return []
-    cols = len(rows[0])
-    if any(len(r) != cols for r in rows):
-        raise ValueError("score lists must be rectangular")
-    if len(rows) != len(weights):
-        raise ValueError("weights length must equal number of score lists")
-    if maybe_weighted_sum_native is not None:
-        try:
-            out = maybe_weighted_sum_native(
-                [[float(v) for v in row] for row in rows],
-                [float(w) for w in weights],
-            )
-            if out is not None and len(out) == cols:
-                return [float(x) for x in out]
-        except Exception:
-            pass
-    score_matrix = np.asarray(rows, dtype=np.float64)
-    weight_array = np.asarray([float(weight) for weight in weights], dtype=np.float64)
-    # Matrix-vector multiply is the fastest pure-Python fallback path here.
-    return np.matmul(score_matrix.T, weight_array).astype(np.float64).tolist()
+    total = sum(weights[k] for k in lists)
+    ranked = {k: np.asarray(rank01(v)) for k, v in lists.items()}
+    return (sum(weights[k] * ranked[k] for k in lists) / total).tolist()
 
 
 def score_edge_sharpness(rgb_uint8: np.ndarray) -> float:
@@ -189,33 +177,29 @@ def score_clip_similarity(
     model_id: str = "openai/clip-vit-base-patch32",
 ) -> list[float]:
     """Per-image CLIP image-text similarity (higher = better prompt alignment)."""
-    global _clip_model, _clip_processor, _clip_model_id
     if not prompt or not str(prompt).strip():
         return [0.5] * len(rgb_uint8_list)
     try:
         import torch
         from PIL import Image
-        from transformers import CLIPModel, CLIPProcessor
+
+        model, processor = _clip(model_id, str(device))
     except ImportError:
         return [0.5] * len(rgb_uint8_list)
 
-    if _clip_model is None or _clip_model_id != model_id:
-        _clip_processor = cast(Any, CLIPProcessor).from_pretrained(model_id)
-        _clip_model = cast(Any, cast(Any, CLIPModel).from_pretrained(model_id)).to(device)
-        _clip_model.eval()
-        _clip_model_id = model_id
-
     pil_images = [Image.fromarray(im, mode="RGB") for im in rgb_uint8_list]
-    proc = _clip_processor(text=[prompt], images=pil_images, return_tensors="pt", padding=True)
-    proc = {k: v.to(device) for k, v in proc.items()}
+    proc = processor(text=[prompt], images=pil_images, return_tensors="pt", padding=True, truncation=True)
     with torch.inference_mode():
-        out = _clip_model(**proc)
-        logits = out.logits_per_image  # (N, 1) when one text duplicated
-        if logits.shape[-1] == 1:
-            scores = logits[:, 0].float().cpu().numpy().tolist()
-        else:
-            scores = logits.diag().float().cpu().numpy().tolist()
-    return [float(s) for s in scores]
+        logits = model(**{k: v.to(device) for k, v in proc.items()}).logits_per_image  # (N, 1)
+    return [float(s) for s in logits[:, 0].float().cpu().numpy()]
+
+
+@lru_cache(maxsize=2)
+def _clip(model_id: str, device: str) -> tuple[Any, Any]:
+    from transformers import CLIPModel, CLIPProcessor
+
+    processor = cast(Any, CLIPProcessor).from_pretrained(model_id)
+    return cast(Any, CLIPModel).from_pretrained(model_id).to(device).eval(), processor
 
 
 def score_exposure_balance(rgb_uint8: np.ndarray) -> float:
@@ -243,75 +227,31 @@ def score_exposure_balance(rgb_uint8: np.ndarray) -> float:
     return 1.0 - float(clipped) / float(n)
 
 
-def score_tiling_artifact_free(rgb_uint8: np.ndarray) -> float:
+def score_color_cast_neutrality(rgb_uint8: np.ndarray, plan: dict | None = None) -> float | None:
+    """[0, 1] midtone colour-cast score; None when the plan asks for a grade (the cast is intended).
+
+    Cast magnitude is the max gray-world gain deviation over midtones: <= 0.05 scores 1, >= 0.35 scores 0.
     """
-    Heuristic [0,1]: lower repeated-shift correlation implies fewer tiling/grid artifacts.
-    Higher is better (more artifact-free).
-    """
-    x = rgb_uint8.astype(np.float32)
-    if x.ndim == 3:
-        g = x.mean(axis=-1)
-    else:
-        g = x
-    h, w = g.shape[:2]
-    shifts = [(8, 0), (0, 8), (16, 0), (0, 16)]
-    corrs = []
-    for dy, dx in shifts:
-        if h <= dy + 4 or w <= dx + 4:
-            continue
-        a = g[0 : h - dy, 0 : w - dx].ravel()
-        b = g[dy:h, dx:w].ravel()
-        n = a.size
-        if n < 2:
-            continue
-        inv_n = 1.0 / float(n)
-        ma = float(a.mean())
-        mb = float(b.mean())
-        cov = float(a @ b) * inv_n - ma * mb
-        var_a = float(a @ a) * inv_n - ma * ma
-        var_b = float(b @ b) * inv_n - mb * mb
-        denom = (max(0.0, var_a) ** 0.5) * (max(0.0, var_b) ** 0.5)
-        if denom < 1e-6:
-            continue
-        c = cov / denom
-        if np.isfinite(c):
-            corrs.append(abs(c))
-    if not corrs:
-        return 0.5
-    # High repeated-pattern correlation => likely grid/tiling artifact.
-    worst = max(corrs)
-    return float(np.clip(1.0 - worst, 0.0, 1.0))
+    if (plan or {}).get("grade"):
+        return None
+    return float(np.clip(1.0 - (color_cast_magnitude(rgb_uint8) - 0.05) / 0.30, 0.0, 1.0))
 
 
-def score_color_cast_neutrality(rgb_uint8: np.ndarray) -> float:
-    """
-    Heuristic [0,1]: penalize strong global channel cast.
-    Higher = more balanced channel means.
-    """
-    if rgb_uint8.ndim != 3 or rgb_uint8.shape[2] < 3:
-        return 0.5
-    means = np.mean(rgb_uint8[..., :3], axis=(0, 1), dtype=np.float64)
-    spread = float(np.max(means) - np.min(means))
-    # 0 spread => perfect neutrality. ~80+ indicates strong cast.
-    return float(np.clip(1.0 - spread / 80.0, 0.0, 1.0))
-
-
-def score_saturation_balance(rgb_uint8: np.ndarray) -> float:
-    """
-    Heuristic [0,1]: penalize heavily over-saturated results.
-    Higher = more natural saturation balance.
-    """
-    if rgb_uint8.ndim != 3 or rgb_uint8.shape[2] < 3:
-        return 0.5
-    ch = rgb_uint8[..., :3]
-    maxc = np.max(ch, axis=-1).astype(np.float32, copy=False)
-    minc = np.min(ch, axis=-1).astype(np.float32, copy=False)
-    sat = np.where(maxc > 1e-6, (maxc - minc) / np.maximum(maxc, 1e-6), 0.0)
-    p95 = float(np.percentile(sat, 95))
-    # Keep a comfortable range around ~0.55; strongly penalize very high saturation tails.
-    if p95 <= 0.55:
-        return 1.0
-    return float(np.clip(1.0 - ((p95 - 0.55) / 0.45), 0.0, 1.0))
+def color_cast_magnitude(rgb: np.ndarray) -> float:
+    """Max |gray-world gain - 1| over midtones; 0 = neutral. Clipped shadows/highlights carry no cast."""
+    img = np.asarray(rgb, dtype=np.float32)
+    if img.ndim != 3 or img.shape[2] < 3:
+        return 0.0
+    luma = rgb_to_luminance(img)
+    w = np.clip((luma - 20.0) / 40.0, 0.0, 1.0) * np.clip((235.0 - luma) / 40.0, 0.0, 1.0)
+    wsum = float(w.sum())
+    if wsum < 1e-3:
+        return 0.0
+    means = [float((img[..., c] * w).sum() / wsum) for c in range(3)]
+    target = sum(means) / 3.0
+    if target < 1e-3:
+        return 0.0
+    return max(abs(target / max(m, 1e-3) - 1.0) for m in means)
 
 
 def score_dynamic_range_headroom(rgb_uint8: np.ndarray) -> float:
@@ -320,7 +260,7 @@ def score_dynamic_range_headroom(rgb_uint8: np.ndarray) -> float:
     """
     x = rgb_uint8.astype(np.float32)
     if x.ndim == 3 and x.shape[2] >= 3:
-        lum = 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
+        lum = rgb_to_luminance(x)
     else:
         lum = x if x.ndim == 2 else x[..., 0]
     p1 = float(np.percentile(lum, 1))
@@ -334,13 +274,16 @@ def score_dynamic_range_headroom(rgb_uint8: np.ndarray) -> float:
 
 def score_aesthetic_proxy(rgb_uint8: np.ndarray) -> float:
     """
-    Heuristic [0,1] aligned with ``scripts/tools/data/manifest_enrich.py``:
-    mean of exposure balance, tiling-freeness, and dynamic-range headroom.
+    Heuristic [0,1] (also ``scripts/tools/data/manifest_enrich.py``): mean of exposure balance,
+    dynamic-range headroom and, when measurable, decoder-grid freedom.
     """
-    a = float(score_exposure_balance(rgb_uint8))
-    b = float(score_tiling_artifact_free(rgb_uint8))
-    c = float(score_dynamic_range_headroom(rgb_uint8))
-    return float(max(0.0, min(1.0, (a + b + c) / 3.0)))
+    from utils.quality.ai_look import score_decoder_grid
+
+    parts = [float(score_exposure_balance(rgb_uint8)), float(score_dynamic_range_headroom(rgb_uint8))]
+    grid = score_decoder_grid(rgb_uint8)
+    if grid is not None:
+        parts.append(float(grid))
+    return float(np.clip(sum(parts) / len(parts), 0.0, 1.0))
 
 
 def score_photographic_detail_balance(rgb_uint8: np.ndarray) -> float:
@@ -435,36 +378,30 @@ def infer_expected_object_count(prompt: str) -> tuple[int, str]:
     return 0, ""
 
 
-def _cv2_face_cascade():
-    global _CV2_FACE_CASCADE
-    if _CV2_FACE_CASCADE is not None:
-        return _CV2_FACE_CASCADE
+@lru_cache(maxsize=1)
+def _cv2_face_cascade() -> Any:
+    """OpenCV frontal-face Haar cascade, or None when OpenCV or the XML is unavailable."""
     try:
         import cv2
 
         cv2_any = cast(Any, cv2)
-        path = cv2_any.data.haarcascades + "haarcascade_frontalface_default.xml"
-        cascade = cv2_any.CascadeClassifier(path)
-        _CV2_FACE_CASCADE = cascade if not cascade.empty() else False
+        cascade = cv2_any.CascadeClassifier(cv2_any.data.haarcascades + "haarcascade_frontalface_default.xml")
+        return None if cascade.empty() else cascade
     except Exception:
-        _CV2_FACE_CASCADE = False
-    return _CV2_FACE_CASCADE
+        return None
 
 
-def _cv2_hog_people():
-    global _CV2_HOG
-    if _CV2_HOG is not None:
-        return _CV2_HOG
+@lru_cache(maxsize=1)
+def _cv2_hog_people() -> Any:
     try:
         import cv2
 
         cv2_any = cast(Any, cv2)
         hog = cv2_any.HOGDescriptor()
         hog.setSVMDetector(cv2_any.HOGDescriptor_getDefaultPeopleDetector())
-        _CV2_HOG = hog
+        return hog
     except Exception:
-        _CV2_HOG = False
-    return _CV2_HOG
+        return None
 
 
 def estimate_people_count(rgb_uint8: np.ndarray) -> int:
@@ -608,6 +545,338 @@ def score_object_count_match(rgb_uint8: np.ndarray, expected_count: int, object_
     return float(np.clip(1.0 - (err / denom), 0.0, 1.0))
 
 
+def _maybe_human_scores(prompt: str, rgb_images: Sequence[np.ndarray], plan: dict | None = None) -> list[float] | None:
+    """Per-image human-likeness in [0,1]; None for drawn / rendered media."""
+    from utils.quality.art_critic import resolve_plan
+    from utils.quality.human_likeness import score_human_likeness
+
+    p = resolve_plan(prompt, plan)
+    if p.get("medium") in ("2d", "3d"):
+        return None
+    return [score_human_likeness(im, prompt, plan=p) for im in rgb_images]
+
+
+def _maybe_spatial_bind_scores(prompt: str, rgb_images: Sequence[np.ndarray]) -> list[float] | None:
+    """Per-image left/right color-bind scores; None when the prompt names no color pair."""
+    from utils.quality.scene_physics import score_spatial_color_bind
+
+    scores = [score_spatial_color_bind(im, prompt) for im in rgb_images]
+    return None if not scores or scores[0] is None else [float(s or 0.0) for s in scores]
+
+
+def _per_image(module: str, fn: str, with_prompt: bool = False):
+    def score(prompt: str, rgb_images: Sequence[np.ndarray]) -> list[float]:
+        f = getattr(import_module(f"utils.quality.{module}"), fn)
+        return [float(f(im, prompt) if with_prompt else f(im)) for im in rgb_images]
+
+    return score
+
+
+_SPECIALTY_PICK = {
+    "combo_human": _maybe_human_scores,
+    "combo_spatial_bind": _maybe_spatial_bind_scores,
+    "combo_contact": _per_image("contact_shadow", "score_contact_shadow"),
+    "combo_hand": _per_image("hand_verifier", "score_hand_structure"),
+    "combo_occlusion": _per_image("scene_physics", "score_occlusion"),
+    "combo_reflection": _per_image("scene_physics", "score_reflection"),
+    "combo_architecture": _per_image("architecture_consistency", "score_architecture_consistency", with_prompt=True),
+}
+
+
+@dataclass(slots=True)
+class PickContext:
+    """Everything a term may need besides the images."""
+
+    prompt: str = ""
+    device: str = "cpu"
+    expected_text: str = ""
+    clip_model_id: str = "openai/clip-vit-base-patch32"
+    expected_count: int = 0
+    expected_count_target: str = "auto"
+    expected_count_object: str = ""
+    vit_ckpt_path: str = ""
+    vit_use_adherence: bool = False
+    vit_num_ar_blocks: int = -1
+    plan: dict = field(default_factory=dict)
+
+
+def _vit_views(pil: Any, size: int) -> list[Any]:
+    """Aspect-preserving views: short side to ``size``, square crops tiling the long side.
+
+    Matches the near-square ``RandomResizedCrop`` the vit_quality head trains on and keeps the
+    high-frequency cues a squashing resize would smear.
+    """
+    from PIL import Image
+
+    w, h = pil.size
+    s = size / max(1, min(w, h))
+    im = pil.resize((max(size, round(w * s)), max(size, round(h * s))), Image.Resampling.BILINEAR)
+    W, H = im.size
+    long_side, horizontal = (W, True) if W >= H else (H, False)
+    offsets = sorted({0, (long_side - size) // 2, long_side - size})
+    return [im.crop((o, 0, o + size, size)) if horizontal else im.crop((0, o, size, o + size)) for o in offsets]
+
+
+def _score_vit_quality(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float] | None:
+    """Per-image vit_quality probability (optionally blended with adherence); None without a checkpoint."""
+    ckpt = str(ctx.vit_ckpt_path or "").strip()
+    if not ckpt:
+        return None
+    try:
+        import torch
+        from PIL import Image
+        from vit_quality.checkpoint_utils import cached_vit_scorer
+
+        scorer = cached_vit_scorer(ckpt, str(ctx.device))
+    except Exception:
+        return None
+    views: list[Any] = []
+    owner: list[int] = []
+    for i, im in enumerate(rgb_images):
+        for v in _vit_views(Image.fromarray(np.asarray(im, dtype=np.uint8), mode="RGB"), scorer.image_size):
+            views.append(scorer.normalize(v))
+            owner.append(i)
+    out = scorer(torch.stack(views, dim=0), ctx.prompt, ctx.vit_num_ar_blocks)
+    per_view = torch.sigmoid(out["quality_logit"].float()).reshape(-1).cpu().numpy()
+    if ctx.vit_use_adherence:
+        per_view = 0.65 * per_view + 0.35 * out["adherence_score"].float().reshape(-1).cpu().numpy()
+    idx = np.asarray(owner)
+    return [float(per_view[idx == i].mean()) for i in range(len(rgb_images))]
+
+
+# Reward-panel backends that judge the image (aesthetic / preference / IQA). Prompt-similarity
+# backends (CLIP-H, SigLIP2) are left out: the clip term already measures alignment.
+_REWARD_PATHS = {
+    "hpsv2": "default_hpsv2_path",
+    "pickscore": "default_pickscore_path",
+    "image_reward": "default_image_reward_path",
+    "cafe_aesthetic": "default_cafe_aesthetic_path",
+    "perceptclip": "default_perceptclip_iqa_path",
+    "musiq": "default_musiq_path",
+    "clip_iqa": "default_clip_iqa_path",
+}
+_WEIGHT_FILES = (
+    "model.safetensors",
+    "pytorch_model.bin",
+    "model.safetensors.index.json",
+    "pytorch_model.bin.index.json",
+)
+
+
+def _weights_on_disk(path_or_repo: str) -> bool:
+    """True when a pretrained folder holds weights or the HF hub cache already has the repo's weights."""
+    p = Path(path_or_repo)
+    if p.is_dir():
+        from utils.modeling.hf_scaffold import has_local_weights
+
+        return has_local_weights(p)
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except ImportError:
+        return False
+    return any(isinstance(try_to_load_from_cache(path_or_repo, f), str) for f in _WEIGHT_FILES)
+
+
+@lru_cache(maxsize=1)
+def local_reward_weights() -> Any:
+    """``HFRewardWeights`` with every backend whose weights are not on disk zeroed; None if none are."""
+    from utils.modeling import model_paths
+    from utils.modeling.hf_reward import HFRewardWeights
+
+    w = HFRewardWeights()
+    found = False
+    for name in (f.name for f in fields(w)):
+        fn = _REWARD_PATHS.get(name)
+        ok = bool(fn) and _weights_on_disk(getattr(model_paths, fn)())
+        found |= ok
+        if not ok:
+            setattr(w, name, 0.0)
+    return w if found else None
+
+
+def score_reward_models(rgb_images: Sequence[np.ndarray], prompt: str, device: str) -> list[float] | None:
+    """Local HF reward-panel composite per image (CAFE, PickScore, HPS, ImageReward... whichever exist)."""
+    weights = local_reward_weights()
+    if weights is None:
+        return None
+    from utils.modeling.hf_reward import HFRewardPanel
+
+    panel = HFRewardPanel(weights, device=device)
+    out = [panel.score_breakdown(im, prompt=prompt) for im in rgb_images]
+    return None if not any(b.parts for b in out) else [float(b.composite) for b in out]
+
+
+def _count_scores(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float] | None:
+    """Expected-count match; the target is explicit, else inferred (people first, then objects)."""
+    mode = str(ctx.expected_count_target or "auto").strip().lower()
+    count = int(ctx.expected_count or 0)
+    hint = str(ctx.expected_count_object or "").strip().lower()
+    if mode == "objects":
+        if count <= 0:
+            count, inferred = infer_expected_object_count(ctx.prompt)
+            hint = hint or inferred
+        objects = True
+    elif mode == "people":
+        count = count if count > 0 else infer_expected_people_count(ctx.prompt)
+        objects = False
+    elif count > 0:
+        objects = bool(hint)
+    else:
+        count = infer_expected_people_count(ctx.prompt)
+        objects = count <= 0
+        if objects:
+            count, inferred = infer_expected_object_count(ctx.prompt)
+            hint = hint or inferred
+    if count <= 0:
+        return None
+    if objects:
+        return [score_object_count_match(im, count, object_hint=hint) for im in rgb_images]
+    return [score_people_count_match(im, count) for im in rgb_images]
+
+
+def _each(fn: Callable[[np.ndarray], float | None]) -> Callable[[Sequence[np.ndarray], PickContext], list | None]:
+    def score(rgb_images: Sequence[np.ndarray], _ctx: PickContext) -> list | None:
+        vals = [fn(im) for im in rgb_images]
+        return None if any(v is None for v in vals) else [float(cast(float, v)) for v in vals]
+
+    return score
+
+
+def _ai_look_natural(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float]:
+    from utils.quality.ai_look import ai_look_score
+
+    return [ai_look_score(im, ctx.prompt, ctx.plan).natural for im in rgb_images]
+
+
+def _art(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float]:
+    from utils.quality.art_critic import score_art
+
+    return [score_art(im, ctx.plan).score for im in rgb_images]
+
+
+def _cast(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float] | None:
+    if ctx.plan.get("grade"):
+        return None
+    return [float(cast(float, score_color_cast_neutrality(im))) for im in rgb_images]
+
+
+def _specialty(fn: Callable[[str, Sequence[np.ndarray]], list[float] | None]) -> Callable:
+    return lambda ims, c: fn(c.prompt, ims)
+
+
+TERMS: dict[str, Callable[[Sequence[np.ndarray], PickContext], list[float] | None]] = {
+    **{name.removeprefix("combo_"): _specialty(fn) for name, fn in _SPECIALTY_PICK.items()},
+    "clip": lambda ims, c: (
+        score_clip_similarity(list(ims), c.prompt, device=c.device, model_id=c.clip_model_id)
+        if c.prompt.strip()
+        else None
+    ),
+    "edge": _each(lambda im: score_edge_sharpness(im)),
+    "ocr": lambda ims, c: [score_ocr_match(im, c.expected_text) for im in ims] if c.expected_text.strip() else None,
+    "vit": _score_vit_quality,
+    "aesthetic": _each(lambda im: score_aesthetic_proxy(im)),
+    "exposure": _each(lambda im: score_exposure_balance(im)),
+    "dynamic": _each(lambda im: score_dynamic_range_headroom(im)),
+    "detail": _each(lambda im: score_photographic_detail_balance(im)),
+    "skin": _each(lambda im: score_skin_tone_naturalness(im)),
+    "cast": _cast,
+    "count": _count_scores,
+    "human": lambda ims, c: _maybe_human_scores(c.prompt, ims, c.plan),
+    "ai_look": _ai_look_natural,
+    "art": _art,
+    "reward": lambda ims, c: score_reward_models(ims, c.prompt, c.device),
+}
+
+# Raw term values that are not already in [0, 1] (absolute scoring, e.g. ``CompositeRanker.score_one``).
+_UNIT_SCALE: dict[str, Callable[[float], float]] = {
+    "clip": lambda x: float(1.0 / (1.0 + np.exp(-(x - 25.0) / 5.0))),  # CLIP logit = 100 * cosine
+    "edge": lambda x: float(np.clip(x / 400.0, 0.0, 1.0)),  # Laplacian variance
+}
+
+
+def unit_scale(term: str, value: float) -> float:
+    """Map a raw term value to [0, 1] for absolute (single-image) scoring."""
+    fn = _UNIT_SCALE.get(term)
+    return fn(float(value)) if fn else float(np.clip(value, 0.0, 1.0))
+
+
+_SPECIALTY_BASE = {"clip": 0.40, "exposure": 0.14, "ai_look": 0.12, "human": 0.14, "ocr": 0.10}
+
+# Pick metric -> term weights. Single-term metrics return that term's raw scores.
+METRIC_WEIGHTS: dict[str, dict[str, float]] = {
+    "clip": {"clip": 1.0},
+    "edge": {"edge": 1.0},
+    "ocr": {"ocr": 1.0},
+    "vit": {"vit": 1.0},
+    "aesthetic": {"aesthetic": 1.0},
+    "natural": {"ai_look": 1.0},
+    "art": {"art": 1.0},
+    "combo": {"clip": 0.55, "edge": 0.20, "ai_look": 0.25, "ocr": 0.15},
+    "combo_vit": {"clip": 0.40, "edge": 0.15, "vit": 0.30, "ai_look": 0.15},
+    "combo_vit_hq": {
+        "clip": 0.18,
+        "edge": 0.08,
+        "vit": 0.22,
+        "exposure": 0.10,
+        "ai_look": 0.18,
+        "cast": 0.08,
+        "art": 0.16,
+    },
+    "combo_vit_realism": {
+        "clip": 0.16,
+        "detail": 0.08,
+        "exposure": 0.08,
+        "dynamic": 0.08,
+        "ai_look": 0.20,
+        "cast": 0.06,
+        "skin": 0.06,
+        "vit": 0.18,
+        "art": 0.10,
+        "ocr": 0.06,
+    },
+    "combo_exposure": {"clip": 0.45, "edge": 0.25, "exposure": 0.30},
+    "combo_structural": {"clip": 0.35, "edge": 0.20, "exposure": 0.20, "ai_look": 0.25},
+    "combo_hq": {"clip": 0.27, "edge": 0.13, "exposure": 0.15, "ai_look": 0.20, "cast": 0.10, "art": 0.15},
+    "combo_count": {"clip": 0.45, "edge": 0.25, "count": 0.30, "ocr": 0.10},
+    "combo_count_vit": {"clip": 0.38, "edge": 0.22, "count": 0.25, "vit": 0.15, "ocr": 0.08},
+    "combo_realism": {
+        "clip": 0.24,
+        "detail": 0.10,
+        "exposure": 0.10,
+        "dynamic": 0.08,
+        "ai_look": 0.22,
+        "cast": 0.06,
+        "skin": 0.06,
+        "art": 0.14,
+        "ocr": 0.04,
+    },
+    "aesthetic_realism": {
+        "detail": 0.14,
+        "exposure": 0.14,
+        "dynamic": 0.12,
+        "ai_look": 0.24,
+        "cast": 0.08,
+        "skin": 0.08,
+        "art": 0.20,
+        "ocr": 0.05,
+    },
+    "combo_natural": {"clip": 0.30, "ai_look": 0.45, "art": 0.25, "ocr": 0.10},
+    "combo_art": {"clip": 0.35, "art": 0.45, "ai_look": 0.20, "ocr": 0.10},
+    "superior_composite": {"clip": 0.30, "ai_look": 0.25, "art": 0.20, "reward": 0.15, "vit": 0.10, "ocr": 0.10},
+    **{name: {**_SPECIALTY_BASE, name.removeprefix("combo_"): 0.20} for name in _SPECIALTY_PICK},
+}
+
+# ``--pick-best`` choices (sample CLI, quality policy).
+PICK_METRICS: tuple[str, ...] = ("auto", "none", *METRIC_WEIGHTS)
+
+
+def term_scores(
+    rgb_images: Sequence[np.ndarray], terms: Sequence[str], ctx: PickContext
+) -> dict[str, list[float] | None]:
+    """Raw per-image scores for each named term (None where a term has no evidence)."""
+    return {t: TERMS[t](rgb_images, ctx) for t in terms}
+
+
 def pick_best_indices(
     rgb_images: list[np.ndarray],
     prompt: str,
@@ -621,300 +890,41 @@ def pick_best_indices(
     vit_ckpt_path: str = "",
     vit_use_adherence: bool = False,
     vit_num_ar_blocks: int = -1,
+    *,
+    plan: dict | None = None,
 ) -> tuple[int, list[float]]:
     """
-    Return (best_index, raw_scores_one_per_image).
-    metric: aesthetic, combo_vit_hq, combo_vit_realism, combo_count_vit, plus prior clip/vit/combo_* names.
+    Return (best_index, one score per image) for a ``PICK_METRICS`` name.
+
+    ``plan`` (see ``utils.quality.art_critic``) states the intended look; by default it is derived
+    from ``prompt``. Unknown metrics and ``none`` keep candidate 0.
     """
     metric = (metric or "none").lower().strip()
-    image_count = len(rgb_images)
-    if image_count == 0:
+    n = len(rgb_images)
+    if n == 0:
         return 0, []
-    if metric in ("none", ""):
-        return 0, [0.0] * image_count
+    weights = METRIC_WEIGHTS.get(metric)
+    if weights is None:
+        return 0, [0.0] * n
+    from utils.quality.art_critic import resolve_plan
 
-    def _score_vit_quality() -> list[float]:
-        """
-        Return per-image quality score in roughly [0,1] from vit_quality model.
-        If checkpoint/deps aren't available, returns neutral 0.5s.
-        """
-        global _vit_model, _vit_cfg, _vit_ckpt
-        ckpt = str(vit_ckpt_path or "").strip()
-        if not ckpt:
-            return [0.5] * image_count
-        try:
-            import torch
-            from PIL import Image
-            from torchvision import transforms
-            from vit_quality.checkpoint_utils import load_vit_quality_checkpoint
-            from vit_quality.dataset import text_feature_vector
-        except Exception:
-            return [0.5] * image_count
-        try:
-            dev = torch.device(device if torch.cuda.is_available() and str(device).startswith("cuda") else "cpu")
-        except Exception:
-            dev = torch.device("cpu")
-
-        try:
-            if _vit_model is None or _vit_ckpt != ckpt:
-                m, cfg = load_vit_quality_checkpoint(ckpt)
-                m = m.to(dev)
-                m.eval()
-                _vit_model, _vit_cfg, _vit_ckpt = m, cfg, ckpt
-        except Exception:
-            return [0.5] * image_count
-
-        img_sz = int((_vit_cfg or {}).get("image_size", 224) or 224)
-        tfm = transforms.Compose(
-            [
-                transforms.Resize((img_sz, img_sz), interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
-        )
-        txt = text_feature_vector(prompt).unsqueeze(0).to(dev)
-        imgs = []
-        for im in rgb_images:
-            try:
-                pil = Image.fromarray(im, mode="RGB")
-                imgs.append(tfm(pil))
-            except Exception:
-                imgs.append(torch.zeros((3, img_sz, img_sz), dtype=torch.float32))
-        x = torch.stack(imgs, dim=0).to(dev)
-        txt = txt.expand(x.shape[0], -1)
-        ar_cond = None
-        if bool((_vit_cfg or {}).get("use_ar_conditioning", False)):
-            try:
-                from utils.architecture.ar_block_conditioning import (
-                    ar_conditioning_vector,
-                    normalize_num_ar_blocks,
-                )
-
-                nb = normalize_num_ar_blocks(vit_num_ar_blocks)
-                if nb in (0, 2, 4):
-                    ar_cond = ar_conditioning_vector(nb, device=dev, dtype=txt.dtype).expand(x.shape[0], -1)
-            except Exception:
-                ar_cond = None
-        with torch.inference_mode():
-            out = _vit_model(x, txt, ar_conditioning=ar_cond)
-            q = out.get("quality_logit", None)
-            if q is None:
-                return [0.5] * image_count
-            q_prob = torch.sigmoid(q.float()).detach().cpu().numpy().tolist()
-            if vit_use_adherence and "adherence_score" in out:
-                a = out["adherence_score"].float().detach().cpu().numpy().tolist()
-                return [float(0.65 * qq + 0.35 * aa) for qq, aa in zip(q_prob, a)]
-            return [float(v) for v in q_prob]
-
-    if metric == "edge":
-        scores = [score_edge_sharpness(im) for im in rgb_images]
-        return int(np.argmax(scores)), scores
-
-    if metric == "ocr":
-        scores = [score_ocr_match(im, expected_text) for im in rgb_images]
-        return int(np.argmax(scores)), scores
-
-    if metric == "clip":
-        scores = score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id)
-        return int(np.argmax(scores)), scores
-
-    if metric == "vit":
-        scores = _score_vit_quality()
-        return int(np.argmax(scores)), scores
-
-    if metric == "aesthetic":
-        scores = [score_aesthetic_proxy(im) for im in rgb_images]
-        return int(np.argmax(scores)), scores
-
-    if metric == "combo":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        if expected_text and str(expected_text).strip():
-            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            combined = _weighted_sum([s_clip, s_edge, s_ocr], [0.5, 0.35, 0.15])
-        else:
-            combined = _weighted_sum([s_clip, s_edge], [0.65, 0.35])
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_vit":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        s_vit = _norm01(_score_vit_quality())
-        combined = _weighted_sum([s_clip, s_edge, s_vit], [0.45, 0.20, 0.35])
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_vit_hq":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        s_vit = _norm01(_score_vit_quality())
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
-        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
-        s_aes = _norm01([score_aesthetic_proxy(im) for im in rgb_images])
-        combined = _weighted_sum(
-            [s_clip, s_edge, s_vit, s_exp, s_tile, s_cast, s_sat, s_aes],
-            [0.16, 0.10, 0.22, 0.12, 0.10, 0.10, 0.10, 0.10],
-        )
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_vit_realism":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_det = _norm01([score_photographic_detail_balance(im) for im in rgb_images])
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        s_dyn = _norm01([score_dynamic_range_headroom(im) for im in rgb_images])
-        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
-        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
-        s_skin = _norm01([score_skin_tone_naturalness(im) for im in rgb_images])
-        s_vit = _norm01(_score_vit_quality())
-        if expected_text and str(expected_text).strip():
-            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            combined = _weighted_sum(
-                [s_clip, s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin, s_vit, s_ocr],
-                [0.16, 0.10, 0.10, 0.10, 0.08, 0.08, 0.08, 0.06, 0.18, 0.06],
-            )
-        else:
-            combined = _weighted_sum(
-                [s_clip, s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin, s_vit],
-                [0.18, 0.11, 0.11, 0.10, 0.09, 0.08, 0.08, 0.07, 0.18],
-            )
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_exposure":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        combined = _weighted_sum([s_clip, s_edge, s_exp], [0.45, 0.30, 0.25])
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_structural":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        combined = _weighted_sum([s_clip, s_edge, s_exp, s_tile], [0.35, 0.25, 0.20, 0.20])
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_hq":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
-        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
-        combined = _weighted_sum([s_clip, s_edge, s_exp, s_tile, s_cast, s_sat], [0.27, 0.18, 0.18, 0.14, 0.12, 0.11])
-        return int(np.argmax(combined)), combined
-
-    if metric in ("combo_count", "combo_count_vit"):
-        use_vit_cnt = metric == "combo_count_vit"
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_edge = _norm01([score_edge_sharpness(im) for im in rgb_images])
-        s_vit_cnt = _norm01(_score_vit_quality()) if use_vit_cnt else None
-        target_mode = str(expected_count_target or "auto").strip().lower()
-        expected_count_value = int(expected_count or 0)
-        object_hint = str(expected_count_object or "").strip().lower()
-        use_object_scoring = False
-        # auto => prefer explicit target, else infer people first, then non-people objects.
-        if target_mode == "objects":
-            if expected_count_value <= 0:
-                expected_count_value, inferred_object_hint = infer_expected_object_count(prompt)
-                if not object_hint:
-                    object_hint = inferred_object_hint
-            use_object_scoring = True
-        elif target_mode == "people":
-            if expected_count_value <= 0:
-                expected_count_value = infer_expected_people_count(prompt)
-            use_object_scoring = False
-        else:
-            if expected_count_value > 0:
-                # Explicit count in auto mode defaults to people unless object hint exists.
-                use_object_scoring = bool(object_hint)
-            else:
-                inferred_people_count = infer_expected_people_count(prompt)
-                if inferred_people_count > 0:
-                    expected_count_value = inferred_people_count
-                    use_object_scoring = False
-                else:
-                    inferred_object_count, inferred_object_hint = infer_expected_object_count(prompt)
-                    expected_count_value = inferred_object_count
-                    object_hint = object_hint or inferred_object_hint
-                    use_object_scoring = True
-        if expected_count_value > 0:
-            if use_object_scoring:
-                s_cnt = _norm01(
-                    [score_object_count_match(im, expected_count_value, object_hint=object_hint) for im in rgb_images]
-                )
-            else:
-                s_cnt = _norm01([score_people_count_match(im, expected_count_value) for im in rgb_images])
-            if expected_text and str(expected_text).strip():
-                s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-                if use_vit_cnt and s_vit_cnt is not None:
-                    combined = _weighted_sum([s_clip, s_edge, s_cnt, s_ocr, s_vit_cnt], [0.32, 0.18, 0.26, 0.08, 0.16])
-                else:
-                    combined = _weighted_sum([s_clip, s_edge, s_cnt, s_ocr], [0.38, 0.22, 0.30, 0.10])
-            else:
-                if use_vit_cnt and s_vit_cnt is not None:
-                    combined = _weighted_sum([s_clip, s_edge, s_cnt, s_vit_cnt], [0.38, 0.22, 0.25, 0.15])
-                else:
-                    combined = _weighted_sum([s_clip, s_edge, s_cnt], [0.45, 0.25, 0.30])
-            return int(np.argmax(combined)), combined
-        # No count target found; fall back to standard combo behavior.
-        if expected_text and str(expected_text).strip():
-            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            if use_vit_cnt and s_vit_cnt is not None:
-                combined = _weighted_sum([s_clip, s_edge, s_ocr, s_vit_cnt], [0.44, 0.28, 0.12, 0.16])
-            else:
-                combined = _weighted_sum([s_clip, s_edge, s_ocr], [0.5, 0.35, 0.15])
-        else:
-            if use_vit_cnt and s_vit_cnt is not None:
-                combined = _weighted_sum([s_clip, s_edge, s_vit_cnt], [0.50, 0.30, 0.20])
-            else:
-                combined = _weighted_sum([s_clip, s_edge], [0.65, 0.35])
-        return int(np.argmax(combined)), combined
-
-    if metric == "aesthetic_realism":
-        # Photo-style scoring without CLIP (for --pick-auto-no-clip).
-        s_det = _norm01([score_photographic_detail_balance(im) for im in rgb_images])
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        s_dyn = _norm01([score_dynamic_range_headroom(im) for im in rgb_images])
-        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
-        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
-        s_skin = _norm01([score_skin_tone_naturalness(im) for im in rgb_images])
-        if expected_text and str(expected_text).strip():
-            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            combined = _weighted_sum(
-                [s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin, s_ocr],
-                [0.184, 0.184, 0.158, 0.105, 0.105, 0.105, 0.105, 0.054],
-            )
-        else:
-            combined = _weighted_sum(
-                [s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin],
-                [0.216, 0.203, 0.176, 0.122, 0.108, 0.095, 0.081],
-            )
-        return int(np.argmax(combined)), combined
-
-    if metric == "combo_realism":
-        s_clip = _norm01(score_clip_similarity(rgb_images, prompt, device=device, model_id=clip_model_id))
-        s_det = _norm01([score_photographic_detail_balance(im) for im in rgb_images])
-        s_exp = _norm01([score_exposure_balance(im) for im in rgb_images])
-        s_dyn = _norm01([score_dynamic_range_headroom(im) for im in rgb_images])
-        s_tile = _norm01([score_tiling_artifact_free(im) for im in rgb_images])
-        s_cast = _norm01([score_color_cast_neutrality(im) for im in rgb_images])
-        s_sat = _norm01([score_saturation_balance(im) for im in rgb_images])
-        s_skin = _norm01([score_skin_tone_naturalness(im) for im in rgb_images])
-        if expected_text and str(expected_text).strip():
-            s_ocr = _norm01([score_ocr_match(im, expected_text) for im in rgb_images])
-            combined = _weighted_sum(
-                [s_clip, s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin, s_ocr],
-                [0.24, 0.14, 0.14, 0.12, 0.08, 0.08, 0.08, 0.08, 0.04],
-            )
-        else:
-            combined = _weighted_sum(
-                [s_clip, s_det, s_exp, s_dyn, s_tile, s_cast, s_sat, s_skin],
-                [0.26, 0.16, 0.15, 0.13, 0.09, 0.08, 0.07, 0.06],
-            )
-        return int(np.argmax(combined)), combined
-
-    return 0, [0.0] * image_count
+    ctx = PickContext(
+        prompt=prompt or "",
+        device=device,
+        expected_text=str(expected_text or ""),
+        clip_model_id=clip_model_id,
+        expected_count=int(expected_count or 0),
+        expected_count_target=expected_count_target,
+        expected_count_object=expected_count_object,
+        vit_ckpt_path=vit_ckpt_path,
+        vit_use_adherence=vit_use_adherence,
+        vit_num_ar_blocks=vit_num_ar_blocks,
+        plan=resolve_plan(prompt, plan),
+    )
+    scores = term_scores(rgb_images, list(weights), ctx)
+    if len(weights) == 1:
+        raw = next(iter(scores.values()))
+        combined = [0.5] * n if raw is None else [float(v) for v in raw]
+    else:
+        combined = rank_aggregate(scores, weights)
+    return int(np.argmax(combined)), combined

@@ -17,10 +17,10 @@ Grounded in:
 
 | Piece | Path |
 |-------|------|
-| Core math + controller | [`diffusion/solvers/apex.py`](../diffusion/solvers/apex.py) |
-| VP schedule `apex` | [`diffusion/inference_timesteps.py`](../diffusion/inference_timesteps.py) |
-| Flow schedule `apex` | [`diffusion/solvers/flow_ode.py`](../diffusion/solvers/flow_ode.py) |
-| Loop wiring | [`diffusion/gaussian_diffusion.py`](../diffusion/gaussian_diffusion.py) |
+| Core math + controller | [`diffusion/solvers/apex.py`](../../diffusion/solvers/apex.py) |
+| VP schedule `apex` | [`diffusion/inference_timesteps.py`](../../diffusion/inference_timesteps.py) |
+| Flow schedule `apex` | [`diffusion/solvers/flow_ode.py`](../../diffusion/solvers/flow_ode.py) |
+| Loop wiring | [`diffusion/gaussian_diffusion.py`](../../diffusion/gaussian_diffusion.py) |
 
 ## Modes
 

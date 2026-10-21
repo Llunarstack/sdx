@@ -1,59 +1,37 @@
-"""
-Optional ctypes bridge to ``sdx_beta_schedules`` for squared-cosine v2 betas.
-Falls back to pure NumPy in :mod:`diffusion.schedules` when the DLL is missing.
-"""
+"""Optional ctypes bridge to ``sdx_beta_schedules`` for squared-cosine v2 betas; :mod:`diffusion.schedules`
+falls back to NumPy when the library is missing."""
 
 from __future__ import annotations
 
 import ctypes
-from typing import Any
+import functools
 
 import numpy as np
 
-from sdx_native.native_tools import beta_schedules_shared_library_path
-
-_DLL: Any = None
+from sdx_native.native_tools import load_shared_library
 
 
-def _get_dll() -> ctypes.CDLL | None:
-    global _DLL
-    if _DLL is False:
-        return None
-    if _DLL is not None:
-        return _DLL
-    p = beta_schedules_shared_library_path()
-    if p is None:
-        _DLL = False
-        return None
-    try:
-        dll = ctypes.CDLL(str(p))
-        dll.sdx_squared_cosine_betas_v2.argtypes = [
+@functools.cache
+def _lib() -> ctypes.CDLL | None:
+    lib = load_shared_library("sdx_beta_schedules")
+    if lib is not None:
+        lib.sdx_squared_cosine_betas_v2.argtypes = [
             ctypes.c_int,
             ctypes.c_double,
             ctypes.POINTER(ctypes.c_double),
             ctypes.c_int64,
         ]
-        dll.sdx_squared_cosine_betas_v2.restype = ctypes.c_int64
-        _DLL = dll
-        return dll
-    except OSError:
-        _DLL = False
-        return None
+        lib.sdx_squared_cosine_betas_v2.restype = ctypes.c_int64
+    return lib
 
 
 def squared_cosine_betas_v2_native(n: int, max_beta: float = 0.999) -> np.ndarray | None:
-    """
-    Return ``(n,)`` float64 betas or ``None`` if the native library is unavailable
-    or returns an error.
-    """
-    if n < 1:
-        return None
-    dll = _get_dll()
-    if dll is None:
+    """``(n,)`` float64 betas, or ``None`` if the native library is unavailable or returns an error."""
+    lib = _lib()
+    if n < 1 or lib is None:
         return None
     out = np.empty(n, dtype=np.float64)
     ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-    ret = int(dll.sdx_squared_cosine_betas_v2(int(n), float(max_beta), ptr, ctypes.c_int64(int(n))))
-    if ret != int(n):
+    if int(lib.sdx_squared_cosine_betas_v2(int(n), float(max_beta), ptr, int(n))) != int(n):
         return None
     return out

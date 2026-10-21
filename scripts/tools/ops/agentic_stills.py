@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     if args.progressive_next and args.prompt:
-        from utils.agentic.progressive_interview import next_interview_item, start_progressive_interview
+        from utils.agentic.gen_interview import next_interview_item, start_progressive_interview
 
         state = start_progressive_interview(args.prompt)
         nxt = next_interview_item(state)

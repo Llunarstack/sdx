@@ -1,5 +1,4 @@
-"""
-One scene graph to rule them all — scenes, shots, cast, props, effects, transforms.
+"""One scene graph to rule them all — scenes, shots, cast, props, effects, transforms.
 
 You edit **one JSON file**. Everything else compiles from it. You never hand-wire
 retrieval, keyframes, and stitch separately unless you want to.
@@ -9,6 +8,8 @@ Mental model (3 layers only):
     SCENE  → global prompt, duration, style, cast/props/effects libraries
     SHOTS  → camera beats (the only required list besides scene)
     ENGINE → retrieval → keyframe edit → interpolate → stitch (automatic)
+
+Also holds what used to be: scene_preflight.
 """
 
 from __future__ import annotations
@@ -19,17 +20,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from config.defaults._lexicon import merge_csv_unique
+
 from .types import MasterTimeline, ShotSpec, TransitionType, VideoMode, VideoPlan
 
-__all__ = [
-    "CompiledScene",
-    "EntityDef",
-    "SceneGraph",
-    "compile_scene_file",
-    "compile_scene_graph",
-    "load_scene_graph",
-    "validate_scene_graph",
-]
+# ==================================================================================================
+# scene_graph
+# ==================================================================================================
 
 # Built-in effect tags → (positive, negative) fragments
 _EFFECT_PRESETS: dict[str, tuple[str, str]] = {
@@ -133,8 +130,6 @@ class SceneGraph:
     retrieval: dict[str, Any] = field(default_factory=dict)
     edit: dict[str, Any] = field(default_factory=dict)
     continuity: dict[str, Any] = field(default_factory=dict)
-    events: list[Any] = field(default_factory=list)
-    references: list[Any] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -236,7 +231,7 @@ def parse_scene_dict(data: Mapping[str, Any]) -> SceneGraph:
             )
         )
 
-    from .elements import parse_elements
+    from .controls import parse_elements
 
     return SceneGraph(
         version=int(data.get("version") or 1),
@@ -261,8 +256,6 @@ def parse_scene_dict(data: Mapping[str, Any]) -> SceneGraph:
         retrieval=dict(data.get("retrieval") or {}),
         edit=dict(data.get("edit") or {}),
         continuity=dict(data.get("continuity") or {}),
-        events=list(data.get("events") or scene.get("events") or []),
-        references=list(data.get("references") or data.get("refs") or scene.get("references") or []),
         raw=dict(data),
     )
 
@@ -377,7 +370,7 @@ def validate_scene_graph(graph: SceneGraph) -> list[str]:
             issues.append(f"character {cid!r} bind_element unknown: {ent.bind_element!r}")
 
     from .continuity_validators import parse_validator_config, run_continuity_validation
-    from .thumbnail_rehearsal import parse_thumbnail_config, plan_thumbnails, thumbnail_gate_issues
+    from .studio_compiler import parse_thumbnail_config, plan_thumbnails, thumbnail_gate_issues
 
     shots_for_val = list(graph.shots) if graph.shots else []
     if shots_for_val or graph.continuity:
@@ -409,10 +402,6 @@ def validate_scene_graph(graph: SceneGraph) -> list[str]:
             issues.append(msg)
 
     return issues
-
-
-def _merge_csv(*parts: str) -> str:
-    return ", ".join(p.strip() for p in parts if p and p.strip())
 
 
 def _compile_shot_prompt(graph: SceneGraph, shot: ShotNode) -> tuple[str, str, list[str]]:
@@ -459,7 +448,7 @@ def _compile_shot_prompt(graph: SceneGraph, shot: ShotNode) -> tuple[str, str, l
     if graph.style_notes:
         pos_parts.append(graph.style_notes)
 
-    return _merge_csv(*pos_parts), _merge_csv(*neg_parts), preserve
+    return merge_csv_unique(*pos_parts), merge_csv_unique(*neg_parts), preserve
 
 
 def _auto_shots_from_scene(graph: SceneGraph) -> list[ShotNode]:
@@ -473,7 +462,8 @@ def _auto_shots_from_scene(graph: SceneGraph) -> list[ShotNode]:
 
 
 def _shots_from_storyboard(graph: SceneGraph) -> list[ShotNode]:
-    from .storyboard import _infer_shot_type, camera_prompt_fragment, parse_storyboard
+    from .shot_planner import infer_shot_type
+    from .studio_compiler import camera_prompt_fragment, parse_storyboard
 
     cuts = parse_storyboard(graph.storyboard)
     if not cuts:
@@ -486,7 +476,7 @@ def _shots_from_storyboard(graph: SceneGraph) -> list[ShotNode]:
         prompt = c.prompt or graph.scene_prompt
         if cam_frag and cam_frag.lower() not in prompt.lower():
             prompt = f"{prompt}, {cam_frag}".strip(", ")
-        st = c.shot_type or _infer_shot_type(c.camera, prompt)
+        st = c.shot_type or infer_shot_type(f"{c.camera} {prompt}")
         dur = c.duration_sec if c.duration_sec > 0 else (per or graph.duration_sec / len(cuts))
         shots.append(
             ShotNode(
@@ -512,7 +502,7 @@ def _shots_from_storyboard(graph: SceneGraph) -> list[ShotNode]:
 
 
 def _shots_from_director_cuts(graph: SceneGraph, cuts: Sequence[Any]) -> list[ShotNode]:
-    from .storyboard import StoryboardCut
+    from .studio_compiler import StoryboardCut
 
     out: list[ShotNode] = []
     for i, c in enumerate(cuts):
@@ -564,7 +554,7 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
     if studio_out.prompt_suffix:
         graph.scene_prompt = f"{graph.scene_prompt}, {studio_out.prompt_suffix}".strip(", ")
     if studio_out.negative_suffix:
-        graph.global_negative = _merge_csv(graph.global_negative, studio_out.negative_suffix)
+        graph.global_negative = merge_csv_unique(graph.global_negative, studio_out.negative_suffix)
     if studio_out.motion_clip:
         graph.motion_clip = studio_out.motion_clip
     graph.raw.setdefault("studio", {})
@@ -594,7 +584,7 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
             s.duration_sec *= scale
 
     from .continuity_validators import parse_validator_config, run_continuity_validation
-    from .thumbnail_rehearsal import (
+    from .studio_compiler import (
         apply_thumbnail_timeline,
         parse_thumbnail_config,
         plan_thumbnails,
@@ -644,7 +634,7 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
 
     for i, sh in enumerate(shots):
         if sh.camera and not sh.motion_hint:
-            from .storyboard import camera_prompt_fragment
+            from .studio_compiler import camera_prompt_fragment
 
             sh.motion_hint = camera_prompt_fragment(sh.camera)
         en = enrich_by_id.get(sh.id)
@@ -653,9 +643,9 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
         pos, neg, preserve = _compile_shot_prompt(graph, sh)
         if en:
             if en.prompt_suffix:
-                pos = _merge_csv(pos, en.prompt_suffix)
+                pos = merge_csv_unique(pos, en.prompt_suffix)
             if en.negative_suffix:
-                neg = _merge_csv(neg, en.negative_suffix)
+                neg = merge_csv_unique(neg, en.negative_suffix)
             for ef in en.effects:
                 if ef not in sh.effects:
                     sh.effects.append(ef)
@@ -717,7 +707,7 @@ def compile_scene_graph(graph: SceneGraph) -> CompiledScene:
         aspect_ratio=ar,
     )
 
-    global_neg = _merge_csv(graph.global_negative, "flicker, morphing faces, inconsistent identity")
+    global_neg = merge_csv_unique(graph.global_negative, "flicker, morphing faces, inconsistent identity")
     plan = VideoPlan(
         mode=graph.mode,
         user_prompt=graph.scene_prompt or (shots[0].prompt if shots else ""),
@@ -807,11 +797,11 @@ def _resolve_bindings_for_shot(
         element_id = ent.bind_element or str(shot_bind.get("bind_element") or shot_bind.get("element") or "")
         bind_subject = False
         if element_id and element_id in graph.elements:
-            from .elements import ElementDef as _El
+            from .controls import ElementDef as _El
 
             el: _El = graph.elements[element_id]
             work = Path(graph.raw.get("_work_dir") or "runs/video")
-            from .elements import resolve_element_images
+            from .controls import resolve_element_images
 
             refs = resolve_element_images(el, work)
             if refs and not image:
@@ -826,7 +816,7 @@ def _resolve_bindings_for_shot(
             if eid in graph.elements and eid not in seen:
                 el2 = graph.elements[eid]
                 work = Path(graph.raw.get("_work_dir") or "runs/video")
-                from .elements import resolve_element_images
+                from .controls import resolve_element_images
 
                 refs2 = resolve_element_images(el2, work)
                 if refs2:
@@ -868,7 +858,7 @@ def _resolve_bindings_for_shot(
         mask = str(shot_bind.get("mask") or shot_bind.get("mask_path") or ent.mask_path or "")
         rig_json = ""
         if auto_rig and image:
-            from .auto_rig import auto_rig_character, write_rig_box_layout
+            from .controls import auto_rig_character, write_rig_box_layout
 
             rig = auto_rig_character(
                 entity_id,
@@ -938,7 +928,7 @@ def _compile_all_control_plans(
             shot_id=sh.id,
             shot_index=spec.index,
             base_prompt=spec.prompt,
-            base_negative=_merge_csv(spec.negative, global_neg),
+            base_negative=merge_csv_unique(spec.negative, global_neg),
             bindings=bindings,
             global_init_image=graph.anchor_image,
         )
@@ -953,7 +943,7 @@ def _compile_all_control_plans(
 
 
 def _apply_element_refs_to_plan(graph: SceneGraph, shot: ShotNode, cp: Any) -> None:
-    from .elements import ElementsLibrary, compile_element_refs
+    from .controls import ElementsLibrary, compile_element_refs
 
     work = graph.raw.get("_work_dir") or "runs/video"
     lib = ElementsLibrary(elements=dict(graph.elements))
@@ -978,3 +968,157 @@ def _apply_element_refs_to_plan(graph: SceneGraph, shot: ShotNode, cp: Any) -> N
 
 def compile_scene_file(path: str | Path) -> CompiledScene:
     return compile_scene_graph(load_scene_graph(path))
+
+
+# ==================================================================================================
+# scene_preflight: Pre-flight validation before running a scene graph pipeline.
+# ==================================================================================================
+
+
+@dataclass(slots=True)
+class PreflightIssue:
+    level: str  # error | warn | info
+    code: str
+    message: str
+    path: str = ""
+
+
+@dataclass(slots=True)
+class PreflightReport:
+    ok: bool
+    issues: list[PreflightIssue] = field(default_factory=list)
+
+    def errors(self) -> list[PreflightIssue]:
+        return [i for i in self.issues if i.level == "error"]
+
+    def warnings(self) -> list[PreflightIssue]:
+        return [i for i in self.issues if i.level == "warn"]
+
+
+def _check_path(issues: list[PreflightIssue], p: str, *, label: str, required: bool = False) -> None:
+    if not p or p.startswith("http"):
+        return
+    path = Path(p)
+    if path.is_file():
+        return
+    level = "error" if required else "warn"
+    issues.append(
+        PreflightIssue(
+            level=level,
+            code="missing_file",
+            message=f"{label} not found: {p}",
+            path=p,
+        )
+    )
+
+
+def run_preflight(
+    scene_path: str | Path,
+    *,
+    ckpt: str = "",
+    require_ckpt: bool = False,
+) -> PreflightReport:
+
+    issues: list[PreflightIssue] = []
+    try:
+        graph = load_scene_graph(scene_path)
+    except Exception as exc:
+        return PreflightReport(ok=False, issues=[PreflightIssue("error", "parse_failed", str(exc))])
+
+    if not graph.scene_prompt and not graph.shots:
+        issues.append(PreflightIssue("error", "empty_scene", "scene prompt or shots required"))
+
+    if graph.duration_sec <= 0:
+        issues.append(PreflightIssue("error", "bad_duration", "duration_sec must be > 0"))
+
+    if require_ckpt and not ckpt:
+        issues.append(PreflightIssue("error", "missing_ckpt", "checkpoint required for generation"))
+    elif ckpt and not Path(ckpt).is_file():
+        issues.append(PreflightIssue("warn", "ckpt_not_found", f"checkpoint not found: {ckpt}", ckpt))
+
+    _check_path(issues, str(graph.anchor_image or ""), label="anchor_image")
+    _check_path(issues, str(graph.motion_clip or ""), label="motion_clip")
+
+    for inp in graph.inputs:
+        img = str(getattr(inp, "image", "") or "")
+        _check_path(issues, img, label=f"input:{getattr(inp, 'id', '?')}.image")
+
+    lib = str(graph.retrieval.get("local_library") or "")
+    if lib and not Path(lib).is_dir():
+        issues.append(PreflightIssue("warn", "library_missing", f"local_library not found: {lib}", lib))
+
+    edit = graph.edit or {}
+    if edit.get("parallel_segments") and int(edit.get("max_segment_workers", 2) or 2) > 4:
+        issues.append(
+            PreflightIssue(
+                "warn",
+                "high_parallelism",
+                "max_segment_workers > 4 may OOM on single GPU",
+            )
+        )
+
+    from .continuity_validators import parse_validator_config, run_continuity_validation
+    from .studio_compiler import parse_thumbnail_config, plan_thumbnails, thumbnail_gate_issues
+
+    shots = list(graph.shots) if graph.shots else []
+    if shots or graph.continuity:
+        cfg = parse_validator_config(graph.continuity)
+        report = run_continuity_validation(shots, continuity=graph.continuity, config=cfg)
+        for ci in report.issues:
+            issues.append(
+                PreflightIssue(
+                    level="error" if ci.level == "error" else ("warn" if ci.level == "warn" else "info"),
+                    code=ci.code,
+                    message=ci.message,
+                    path=ci.shot_id,
+                )
+            )
+
+    thumb_cfg = parse_thumbnail_config(
+        graph.continuity,
+        studio=graph.raw.get("studio") if isinstance(graph.raw.get("studio"), Mapping) else None,
+        edit=graph.edit,
+    )
+    if thumb_cfg.enabled and shots:
+        tplan = plan_thumbnails(
+            shots,
+            config=thumb_cfg,
+            base_prompt=graph.scene_prompt,
+            aspect_width=graph.width,
+            aspect_height=graph.height,
+        )
+        for msg in thumbnail_gate_issues(tplan):
+            level = "error" if thumb_cfg.gate == "require_approval" else "warn"
+            issues.append(PreflightIssue(level, "thumbnail_gate", msg))
+        if tplan.enabled:
+            issues.append(
+                PreflightIssue(
+                    "info",
+                    "thumbnail_plan",
+                    f"{len(tplan.specs)} thumbnail(s), {tplan.pending_count} pending approval",
+                )
+            )
+
+    ok = not any(i.level == "error" for i in issues)
+    return PreflightReport(ok=ok, issues=issues)
+
+
+def format_preflight_report(report: PreflightReport) -> str:
+    lines = [f"Preflight: {'OK' if report.ok else 'FAILED'}"]
+    for i in report.issues:
+        lines.append(f"  [{i.level.upper()}] {i.code}: {i.message}")
+    return "\n".join(lines)
+
+
+__all__ = [
+    "CompiledScene",
+    "EntityDef",
+    "SceneGraph",
+    "compile_scene_file",
+    "compile_scene_graph",
+    "load_scene_graph",
+    "validate_scene_graph",
+    "PreflightIssue",
+    "PreflightReport",
+    "run_preflight",
+]

@@ -1,5 +1,5 @@
 """
-Unified native fast paths for Style Genome (Rust / CUDA / Go / Mojo).
+Unified native fast paths for Style Genome (Rust / CUDA / Go).
 
 Falls back to pure Python when optional builds are missing.
 """
@@ -12,54 +12,22 @@ from typing import Any
 
 import numpy as np
 
-from .style_genome import StyleGenome
+from .tags import token_set
 
 
-def native_stack_status() -> dict[str, Any]:
-    """Discovery JSON for diagnostics (``quick_test --show-native``)."""
-    out: dict[str, Any] = {
-        "rust_style_ops": False,
-        "cuda_style_pick": False,
-        "go_explore": False,
-        "mojo_style_tokens": False,
-    }
+def style_native_status() -> dict[str, Any]:
+    """Style-genome native backend availability (``explore_styles --show-native``)."""
+    out: dict[str, Any] = {"rust_style_ops": False, "cuda_style_pick": False, "go_explore": False}
     try:
-        from sdx_native.style_ops_native import get_style_ops_lib
-
-        out["rust_style_ops"] = get_style_ops_lib().available
-    except Exception:
-        pass
-    try:
-        from sdx_native.cuda_style_pick_native import get_cuda_style_pick_lib
-
-        out["cuda_style_pick"] = get_cuda_style_pick_lib().available
-    except Exception:
-        pass
-    try:
+        from sdx_native import cuda_style_pick_native, style_ops_native
         from sdx_native.native_tools import go_sdx_manifest_exe
 
+        out["rust_style_ops"] = style_ops_native.available()
+        out["cuda_style_pick"] = cuda_style_pick_native.available()
         out["go_explore"] = go_sdx_manifest_exe() is not None
     except Exception:
         pass
-    try:
-        from sdx_native.style_tokens_mojo import mojo_available
-
-        out["mojo_style_tokens"] = mojo_available()
-    except Exception:
-        pass
     return out
-
-
-def genome_style_fingerprint(genome: StyleGenome) -> int:
-    from sdx_native.style_tokens_mojo import style_fingerprint
-
-    return style_fingerprint(genome.style_head_string())
-
-
-def merge_genome_axes_native(genome: StyleGenome) -> str:
-    from sdx_native.style_ops_native import merge_style_axes
-
-    return merge_style_axes(genome.axis_tokens())
 
 
 def text_overlap(a: str, b: str) -> float:
@@ -68,8 +36,7 @@ def text_overlap(a: str, b: str) -> float:
     j = maybe_token_jaccard(a, b)
     if j is not None:
         return j
-    ta = {w.lower() for p in a.split(",") for w in p.split() if w.strip()}
-    tb = {w.lower() for p in b.split(",") for w in p.split() if w.strip()}
+    ta, tb = token_set(a), token_set(b)
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / len(ta | tb)
@@ -209,24 +176,10 @@ def run_go_explore_dedupe(
         return False
 
 
-def compile_genome_style_native(genome: StyleGenome, base_prompt: str, base_negative: str = "") -> tuple[str, str, str]:
-    """Compile using Rust axis merge when available."""
-    from .style_explore import compile_genome_pair
-
-    pos, neg, style = compile_genome_pair(genome, base_prompt, base_negative)
-    merged_style = merge_genome_axes_native(genome)
-    if merged_style:
-        style = merged_style
-    return pos, neg, style
-
-
 __all__ = [
-    "compile_genome_style_native",
     "explore_dedupe_python",
     "explore_stats_python",
-    "genome_style_fingerprint",
-    "merge_genome_axes_native",
-    "native_stack_status",
+    "style_native_status",
     "pick_best_embedding_index",
     "run_go_explore_dedupe",
     "run_go_explore_stats",

@@ -10,7 +10,7 @@ Built on research from GenEvolve, VisionCreator (UTPC), and VisionCreator-R1 (Ac
 User prompt
     │
     ▼
-┌─────────┐   UTPC plan (research/agi_image)
+┌─────────┐   UTPC plan (utils/agentic/planner.py)
 │ Planner │── rag → expand → generate → verify → reflect
 └─────────┘
     │
@@ -86,7 +86,6 @@ Experience memory appends to `experience_memory.jsonl` for cross-session learnin
 
 - **Superior Stack** (`utils/superior/`) = tools and quality modules
 - **Agentic Stack** (`utils/agentic/`) = autonomous orchestration over those tools
-- **Research schemas** (`research/agi_image/`) = portable plan/message types
 
 ## Honest scope
 

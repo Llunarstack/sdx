@@ -1,12 +1,13 @@
-"""Reverse image search via web upload (SauceNAO + TinEye) — no API keys required.
+"""Reverse image search via web upload (SauceNAO + TinEye) — no API keys required — and booru tag lookup.
 
-Optional API keys in secret.txt speed up SauceNAO/TinEye when present.
-Booru site credentials (danbooru/e621) from secret.txt are used to fetch tags after a match.
+Optional API keys (``<SERVICE>_API_KEY`` env or secret.txt) speed up SauceNAO/TinEye when present.
+Booru site credentials (danbooru/e621) from secret.txt are used to fetch a matched post's tags.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -14,9 +15,8 @@ import urllib.parse
 import urllib.request
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
-
-from utils.caption.api_keys import get_api_key
 
 _BOORU_URL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"danbooru\.donmai\.us/posts/(\d+)", re.I), "danbooru"),
@@ -47,6 +47,76 @@ class ReverseHit:
     characters: list[str] = field(default_factory=list)
     external_url: str = ""
     raw: dict = field(default_factory=dict)
+
+
+@dataclass
+class BooruPostTags:
+    post_id: str
+    character_tags: list[str]
+    copyright_tags: list[str]
+    artist_tags: list[str]
+    general_tags: list[str]
+    tag_string: str = ""
+
+
+@lru_cache(maxsize=8)
+def get_api_key(service: str, secrets_path: str | None = None) -> str:
+    """Optional SauceNAO/TinEye key from ``<SERVICE>_API_KEY`` or secret.txt; web upload works without one."""
+    svc = service.strip().lower()
+    from_env = (os.environ.get(f"{svc.upper()}_API_KEY") or "").strip()
+    if from_env:
+        return from_env
+    try:
+        from scripts.scrape.secrets_config import get_credentials
+
+        return (get_credentials(svc, secrets_path).api_key or "").strip()
+    except Exception:
+        return ""
+
+
+def fetch_booru_post(site: str, post_id: str, *, timeout_s: float = 30.0) -> BooruPostTags | None:
+    """Tags of a Danbooru or e621 post (authenticated with secret.txt credentials when present)."""
+    pid = str(post_id).strip()
+    if site not in ("danbooru", "e621") or not pid.isdigit():
+        return None
+    import requests
+
+    try:
+        from scripts.scrape.secrets_config import get_credentials, get_secrets_path
+
+        creds = get_credentials(site, get_secrets_path())
+        login = (creds.username, creds.api_key) if creds.username and creds.api_key else None
+    except Exception:
+        login = None
+    headers = {"User-Agent": "sdx-image-profiler/1.0"}
+    try:
+        if site == "danbooru":
+            params = {"login": login[0], "api_key": login[1]} if login else {}
+            url = f"https://danbooru.donmai.us/posts/{pid}.json"
+            r = requests.get(url, params=params, timeout=timeout_s, headers=headers)
+        else:
+            r = requests.get(f"https://e621.net/posts/{pid}.json", auth=login, timeout=timeout_s, headers=headers)
+        r.raise_for_status()
+        d = r.json()
+    except Exception:
+        return None
+    if site == "danbooru":
+        groups = {
+            k: str(d.get(f"tag_string_{k}") or "").split() for k in ("character", "copyright", "artist", "general")
+        }
+        tag_string = str(d.get("tag_string") or "")
+    else:
+        raw = (d.get("post") or {}).get("tags") or {}
+        groups = {k: [str(x) for x in v if str(x).strip()] for k, v in raw.items() if isinstance(v, list)}
+        tag_string = " ".join(t for v in groups.values() for t in v)
+    return BooruPostTags(
+        post_id=pid,
+        character_tags=groups.get("character", []),
+        copyright_tags=groups.get("copyright", []),
+        artist_tags=groups.get("artist", []),
+        general_tags=groups.get("general", []),
+        tag_string=tag_string,
+    )
 
 
 def parse_source_url(url: str) -> tuple[str, str]:

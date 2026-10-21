@@ -1,10 +1,12 @@
-"""Tests for EnhancedDiT ``SpatialControlModule`` count-modulated layout attention."""
+"""Tests for EnhancedDiT: count-modulated layout attention and gradient checkpointing."""
 
 from __future__ import annotations
 
+import copy
+
 import torch
 import torch.nn as nn
-from models.enhanced_dit import SpatialControlModule
+from models.enhanced_dit import EnhancedDiT, SpatialControlModule
 
 
 class _FixedCount(nn.Module):
@@ -40,3 +42,19 @@ def test_count_constraint_modulates_layout_attention() -> None:
     assert out_zero.shape == (2, 16, 32)
     assert out_one.shape == (2, 16, 32)
     assert not torch.allclose(out_zero, out_one)
+
+
+def test_gradient_checkpointing_recomputes_each_block() -> None:
+    torch.manual_seed(0)
+    plain = EnhancedDiT(input_size=8, hidden_size=32, depth=3, num_heads=4, num_classes=4, class_dropout_prob=0.0)
+    with torch.no_grad():
+        for p in plain.parameters():
+            p.add_(0.05 * torch.randn_like(p))
+    ckpt = copy.deepcopy(plain)
+    ckpt.enable_gradient_checkpointing()
+    x, t, y = torch.randn(2, 4, 8, 8), torch.tensor([10, 500]), torch.tensor([1, 2])
+    for m in (plain, ckpt):
+        m(x, t, y).pow(2).mean().backward()
+    for a, b in zip(plain.parameters(), ckpt.parameters()):
+        if a.grad is not None:
+            torch.testing.assert_close(a.grad, b.grad)

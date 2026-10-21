@@ -1,43 +1,53 @@
-# RSI — learn from your thumbs
+# RSI: your model teaches itself to make better art
 
-SDX already had automated preference flywheels (benchmark → mine → Diffusion-DPO).
-**RSI** closes the loop with **your** likes/dislikes on generated images and video frames.
+`rsi_loop` improves an SDX checkpoint with no human in the loop. Your thumbs-up/down are optional extra signal.
+It only practises art: every prompt it trains on is a medium (oil painting, pixel art, linocut,
+portrait photo, …, the 47 mediums in `config/defaults/art_mediums.py`) plus a subject, light and framing.
 
-## Quick path
+## One round
+
+1. **Curriculum**: 16 art prompts, weighted toward the medium family (traditional / 2d / photo / generic)
+   the champion currently scores worst on.
+2. **Paint**: the champion makes 4 candidates per prompt through the normal `sample.py` pipeline.
+   `--jobs-jsonl` loads the checkpoint and text encoders once per round.
+3. **Judge**: one art score per image. It blends the HF reward panel (PickScore, CLIP-H, CAFE aesthetic,
+   whichever are on disk), `art_critic` (composition, exposure, colour harmony) and `ai_look`
+   (decoder grid, halos, oversmoothing and other generated-look tells).
+4. **Learn**: best-vs-worst pairs per prompt (gap ≥ `--min-margin`) plus your feedback pairs train a
+   candidate with `train_diffusion_dpo`.
+5. **Gate**: candidate and champion paint the same held-out prompts with the same seeds. Held-out
+   subjects never appear in training prompts. The candidate is promoted only if the mean score rises
+   by `--min-gain` **and** it wins at least half the head-to-heads. Otherwise it is deleted and the
+   learning rate halves.
+
+## Run it
 
 ```bash
-# 1) Generate with provenance logging
-python sample.py --ckpt results/.../best.pt --prompt "..." --out out.png --log-feedback
-
-# 2) Rate
-python -m scripts.tools feedback like out.png --prompt "..."
-python -m scripts.tools feedback dislike out_bad.png --prompt "..."
-# or pairwise:
-python -m scripts.tools feedback pair --win out.png --lose out_bad.png --prompt "..."
-
-# 3) Immediate inference bias (no train)
-python -m scripts.tools feedback sync-taste
-python sample.py ... --apply-user-taste
-
-# 4) Train a better checkpoint from feedback
-python -m scripts.tools rsi_loop --base-ckpt results/.../best.pt --from-feedback outputs/feedback/feedback.jsonl
-# or merge with auto-mined pairs:
-python -m scripts.tools preference_flywheel --from-feedback outputs/feedback/feedback.jsonl --out data/prefs.jsonl
-python -m scripts.tools train_diffusion_dpo --ckpt results/.../best.pt --preference-jsonl data/prefs.jsonl --out rsi_dpo.pt
+python -m scripts.tools rsi_loop --base-ckpt results/run/best.pt --rounds 5   # start
+python -m scripts.tools rsi_loop --rounds 5                                   # resume, 5 more rounds
+python -m scripts.tools rsi_loop --status                                     # history
+python -m scripts.tools rsi_loop --base-ckpt results/run/best.pt --dry-run    # preview prompts + commands
 ```
 
-## Video
+Output goes to `outputs/rsi/`: `champion.pt` (current best), `champion.prev.pt` (the one before it),
+`state.json`, and `round_NNN/` with images, `prefs.jsonl` and `report.json`.
 
-Enable `log_feedback: true` in video edit/process options (hero frame is logged).
-Rate frames the same way with `--media-type video`.
+Before the first round:
 
-## Commands
+- **Train first.** RSI sharpens a model that already draws. It cannot rescue a checkpoint that still outputs noise.
+- **The checkpoint must sample.** `python sample.py --ckpt <ckpt> --prompt test` has to work with its text
+  encoder (T5-XXL etc.) and VAE on disk.
+- **Offline by default.** The judge sets `HF_HUB_OFFLINE=1` unless you set it, so a long unattended run
+  never starts a surprise multi-GB download.
 
-| Command | Role |
-|---------|------|
-| `python -m scripts.tools feedback …` | like / dislike / pair / pick / export-dpo / sync-taste / status |
-| `python -m scripts.tools rsi_loop …` | merge feedback → DPO (optional `--run-auto-improve`) |
-| `python -m scripts.tools preference_flywheel --from-feedback …` | mix human + benchmark pairs |
-| `python -m scripts.tools taste_profile like …` | also appends to the feedback bus |
+## Add your own taste
 
-Default log: `outputs/feedback/feedback.jsonl`.
+```bash
+python sample.py --ckpt ... --prompt "..." --out out.png --log-feedback
+python -m scripts.tools feedback like out.png --prompt "..."
+python -m scripts.tools feedback pair --win a.png --lose b.png --prompt "..."
+python -m scripts.tools feedback sync-taste    # immediate inference bias: sample.py --apply-user-taste
+```
+
+Every round mixes the pairs from `outputs/feedback/feedback.jsonl` into training (`--from-feedback ''` turns that off).
+Video frames can be rated with `--media-type video`, but RSI trains on images only.

@@ -247,7 +247,8 @@ class BooruClient:
 
     def _accept(self, post: Post) -> bool:
         """Apply safety/rating/dedupe gates. Updates stats. True = download it."""
-        unsafe = blocking_tags(post.tags)
+        # An untagged post cannot be screened, so it fails closed.
+        unsafe = blocking_tags(post.tags) if post.tags else ["<untagged>"]
         if unsafe:
             with self._lock:
                 self.stats.skipped_unsafe += 1

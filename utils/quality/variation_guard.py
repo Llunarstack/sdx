@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from utils.quality.quality import rgb_to_luminance
+
 __all__ = [
     "VariationReport",
     "audit_variation",
@@ -54,7 +56,7 @@ def image_signature(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         img = np.clip(img, 0, 255).astype(np.uint8)
     pil = Image.fromarray(img[..., :3])
     small = np.asarray(pil.resize((_SIG_SIZE, _SIG_SIZE), Image.BILINEAR), dtype=np.float32)
-    luma = (small[..., 0] * 0.299 + small[..., 1] * 0.587 + small[..., 2] * 0.114) / 255.0
+    luma = rgb_to_luminance(small) / 255.0
     hists = []
     for c in range(3):
         h, _ = np.histogram(img[..., c], bins=_HIST_BINS, range=(0, 256))

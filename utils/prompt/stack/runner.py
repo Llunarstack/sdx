@@ -17,12 +17,17 @@ def _load_stages() -> None:
     global _DEFAULT_INFERENCE_STAGES, _PREVIEW_STAGES, _TRAINING_STAGES
     if _DEFAULT_INFERENCE_STAGES:
         return
-    from .stages.content import stage_clauses, stage_content_controls, stage_intelligence
+    from .stages.budget import stage_token_budget
+    from .stages.content import (
+        stage_clauses,
+        stage_content_controls,
+        stage_intelligence,
+        stage_special_helpers,
+        stage_style_genome,
+    )
     from .stages.finalize import stage_neg_filter, stage_post_enrich, stage_prompt_breakdown
     from .stages.guidance import stage_guidance
     from .stages.negative import stage_negative_bootstrap
-    from .stages.special import stage_special_helpers
-    from .stages.style_genome import stage_style_genome
 
     _TRAINING_STAGES = [stage_guidance]
     _PREVIEW_STAGES = [
@@ -33,6 +38,7 @@ def _load_stages() -> None:
         stage_negative_bootstrap,
         stage_content_controls,
         stage_clauses,
+        stage_token_budget,
         stage_neg_filter,
     ]
     _DEFAULT_INFERENCE_STAGES = [
@@ -44,6 +50,7 @@ def _load_stages() -> None:
         stage_content_controls,
         stage_clauses,
         stage_post_enrich,
+        stage_token_budget,
         stage_prompt_breakdown,
         stage_neg_filter,
     ]
@@ -64,6 +71,7 @@ def run_prompt_stack(ctx: PromptContext, stages: Sequence[StageFn] | None = None
         else:
             stages = _DEFAULT_INFERENCE_STAGES
 
+    ctx.metadata.setdefault("input_positive", ctx.positive)
     for stage in stages:
         stage(ctx)
 

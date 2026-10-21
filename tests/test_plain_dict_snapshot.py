@@ -1,10 +1,10 @@
-"""``utils.runtime.plain_dict.to_plain_dict`` — slotted dataclasses and plain objects."""
+"""``utils.runtime.to_plain_dict`` — slotted dataclasses and plain objects."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from utils.runtime.plain_dict import to_plain_dict
+from utils.runtime import to_plain_dict
 
 
 @dataclass(slots=True)
@@ -39,7 +39,7 @@ def test_to_plain_dict_no_instance_dict_returns_empty():
 
 
 def test_vit_config_snapshot():
-    from vit_quality.config import ViTConfig
+    from vit_quality.model import ViTConfig
 
     d = to_plain_dict(ViTConfig())
     assert d["model_name"] == "vit_base_patch16_224"

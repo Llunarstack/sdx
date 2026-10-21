@@ -17,12 +17,15 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.nn.functional as F
 
 from .regional_box_sketch import SketchStroke, parse_strokes
+
+if TYPE_CHECKING:
+    from .guidance_stack import GuidanceConfig
 
 __all__ = [
     "BoxRegion",
@@ -156,10 +159,38 @@ def _parse_region_dict(d: Mapping[str, Any], idx: int) -> BoxRegion:
     )
 
 
+def _ideogram_regions(data: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Ideogram ``compositional_deconstruction.elements`` → region dicts.
+
+    Ideogram bboxes are ``[y_min, x_min, y_max, x_max]`` on a 0–1000 grid.
+    """
+    comp = data.get("compositional_deconstruction")
+    elements = comp.get("elements") if isinstance(comp, Mapping) else None
+    out: list[dict[str, Any]] = []
+    for i, el in enumerate(elements if isinstance(elements, list) else []):
+        bbox = el.get("bbox") if isinstance(el, Mapping) else None
+        if not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
+            continue
+        y1, x1, y2, x2 = (float(v) / 1000.0 for v in bbox[:4])
+        is_text = str(el.get("type", "")).lower() == "text"
+        text = str(el.get("text", "") or "").strip()
+        desc = str(el.get("desc", el.get("description", "")) or "").strip()
+        parts = [f'lettering reads exactly: "{text}"' if text else "", desc]
+        out.append(
+            {
+                "name": el.get("name") or f"{'text' if is_text else 'obj'}_{i + 1}",
+                "box": [x1, y1, x2, y2],
+                "prompt": ", ".join(p for p in parts if p),
+                "priority": el.get("priority", 12 if is_text else 6),
+            }
+        )
+    return out
+
+
 def parse_box_layout(data: Mapping[str, Any]) -> BoxLayoutSpec:
     if not isinstance(data, Mapping):
         raise TypeError("box layout must be a JSON object")
-    regions_raw = data.get("regions", data.get("boxes", []))
+    regions_raw = data.get("regions", data.get("boxes")) or _ideogram_regions(data)
     if not isinstance(regions_raw, list) or not regions_raw:
         raise ValueError("box layout requires a non-empty 'regions' list")
     regions = [_parse_region_dict(r, i) for i, r in enumerate(regions_raw) if isinstance(r, Mapping)]
@@ -174,8 +205,14 @@ def parse_box_layout(data: Mapping[str, Any]) -> BoxLayoutSpec:
         use_coordinate_tokens=bool(data.get("coordinate_tokens", data.get("use_loc_tokens", False))),
         lamic_isolation=bool(data.get("lamic_isolation", False)),
     )
+    global_prompt = str(data.get("global_prompt", data.get("prompt", data.get("description", ""))) or "").strip()
+    style = data.get("style")
+    palette = (style.get("color_palette") if isinstance(style, Mapping) else None) or data.get("color_palette")
+    if isinstance(palette, list) and palette:
+        pin = "color palette locked to " + ", ".join(str(c) for c in palette)
+        global_prompt = f"{global_prompt}, {pin}" if global_prompt else pin
     return BoxLayoutSpec(
-        global_prompt=str(data.get("global_prompt", data.get("prompt", "")) or "").strip(),
+        global_prompt=global_prompt,
         global_negative=str(data.get("global_negative", data.get("negative", "")) or "").strip(),
         regions=regions,
         feather_px=max(0, int(data.get("feather", data.get("feather_px", 8)) or 0)),
@@ -321,7 +358,7 @@ def encode_regional_plan(
     from .regional_box_sketch import build_region_sketch_masks, sketch_augmented_prompt
 
     try:
-        from frontier.layout.coordinate_bind import bind_coordinates_to_prompt
+        from frontier.layout import bind_coordinates_to_prompt
     except ImportError:
         bind_coordinates_to_prompt = None  # type: ignore
 
@@ -349,7 +386,7 @@ def encode_regional_plan(
     fusion_weights: tuple[float, ...] = ()
     if spec.inject.lamic_isolation:
         try:
-            from frontier.layout.lamic_schedule import RegionFusionSchedule, fusion_weight_at_step
+            from frontier.layout import RegionFusionSchedule, fusion_weight_at_step
 
             sched = RegionFusionSchedule()
             n_steps = max(4, int(pixel_size // 32))  # proxy; caller may override via plan
@@ -378,18 +415,19 @@ def regional_cfg_forward(
     model_kwargs_uncond: dict[str, Any],
     plan: RegionalCFGPlan,
     cfg_scale: float,
-    cfg_rescale: float = 0.0,
     block_cache: Any = None,
     sample_step: int = 0,
-    total_steps: int = 1,
-    **guidance_kw: Any,
+    guidance: GuidanceConfig | None = None,
+    x0_affine: tuple[Any, Any] | None = None,
+    sigma: float | None = None,
 ) -> torch.Tensor:
     """
-    Spatial blend of global CFG + per-region CFG predictions.
+    Spatial blend of global CFG + per-region CFG predictions through the guidance stack.
 
-    Two model forwards: one uncond, one batched (global + all regions).
+    Two model forwards: one uncond, one batched (global + all regions). Regions share the uncond
+    branch, so APG momentum (per-trajectory state) is not used here.
     """
-    from utils.generation.cfg_batched import combine_cfg_outputs
+    from utils.generation.guidance_stack import GuidanceConfig, combine_guided_prediction
 
     from .regional_box_sketch import apply_sketch_to_region_mask
 
@@ -413,7 +451,9 @@ def regional_cfg_forward(
             out = out[:, : x_in.shape[1]]
         return out
 
-    out_uncond = _model_out(x, model_kwargs_uncond)
+    g = guidance or GuidanceConfig()
+    out_uncond = _model_out(x, model_kwargs_uncond) if g.cfg_active(sigma) else None
+    stack_kw = dict(cfg_scale=float(cfg_scale), config=g, x0_affine=x0_affine)
 
     global_emb = model_kwargs_cond.get("encoder_hidden_states")
     if global_emb is None:
@@ -429,16 +469,7 @@ def regional_cfg_forward(
     out_global = outs[0:1].expand(B, -1, -1, -1)
     out_regions = outs[1:]
 
-    guided_global = combine_cfg_outputs(
-        out_global,
-        out_uncond,
-        x,
-        cfg_scale=float(cfg_scale),
-        cfg_rescale=float(cfg_rescale),
-        sample_step=int(sample_step),
-        total_steps=int(total_steps),
-        **guidance_kw,
-    )
+    guided_global = combine_guided_prediction(out_global, out_uncond, x, **stack_kw)
 
     inj = plan.inject
     if inj.mask_inject_steps > 0 and int(sample_step) >= int(inj.mask_inject_steps):
@@ -454,16 +485,7 @@ def regional_cfg_forward(
     result = guided_global * bg
     for i in range(R):
         out_r = out_regions[i : i + 1].expand(B, -1, -1, -1)
-        guided_r = combine_cfg_outputs(
-            out_r,
-            out_uncond,
-            x,
-            cfg_scale=float(cfg_scale),
-            cfg_rescale=float(cfg_rescale),
-            sample_step=int(sample_step),
-            total_steps=int(total_steps),
-            **guidance_kw,
-        )
+        guided_r = combine_guided_prediction(out_r, out_uncond, x, **stack_kw)
         m = masks[i : i + 1]
         if plan.region_sketches is not None and i < plan.region_sketches.shape[0]:
             sw = plan.region_sketch_weights[i] if i < len(plan.region_sketch_weights) else 0.7
