@@ -1382,3 +1382,96 @@ def verify_gen_searcher_8b_local(path: str) -> dict[str, object]:
         "missing": missing,
         "found_shards": found_shards,
     }
+
+
+# ==================================================================================================
+
+# Video foundation models (pipelines/video/hf_video_foundation.py). Config scaffolds live in
+
+# pretrained/<folder>; weights stay on the hub until downloaded.
+
+# ==================================================================================================
+
+
+def default_video_foundation_path() -> str:
+    """Default video foundation: Wan 2.2 TI2V-5B (text+image to video, fits one consumer GPU)."""
+
+    return resolve_model_path("Wan2.2-TI2V-5B", "Wan-AI/Wan2.2-TI2V-5B")
+
+
+def default_wan_t2v_path() -> str:
+
+    return resolve_model_path("Wan2.2-T2V-A14B", "Wan-AI/Wan2.2-T2V-A14B")
+
+
+def default_wan_i2v_path() -> str:
+
+    return resolve_model_path("Wan2.2-I2V-A14B", "Wan-AI/Wan2.2-I2V-A14B")
+
+
+def default_ltx_video_path() -> str:
+
+    return resolve_model_path("LTX-2.3", "Lightricks/LTX-2.3")
+
+
+def default_cogvideox_path() -> str:
+
+    return resolve_model_path("CogVideoX-5B", "THUDM/CogVideoX-5b")
+
+
+def default_cogvideox_i2v_path() -> str:
+
+    return resolve_model_path("CogVideoX-5B-I2V", "THUDM/CogVideoX-5b-I2V")
+
+
+def default_hunyuan_video_path() -> str:
+
+    return resolve_model_path("HunyuanVideo", "tencent/HunyuanVideo")
+
+
+def default_hunyuan_i2v_path() -> str:
+
+    return resolve_model_path("HunyuanVideo-I2V", "tencent/HunyuanVideo-I2V")
+
+
+def default_mochi_path() -> str:
+
+    return resolve_model_path("Mochi-1", "genmo/mochi-1-preview")
+
+
+def default_open_sora_path() -> str:
+
+    return resolve_model_path("Open-Sora-v2", "hpcai-tech/Open-Sora-v2")
+
+
+def default_svd_path() -> str:
+
+    return resolve_model_path("Stable-Video-Diffusion-XT-1-1", "stabilityai/stable-video-diffusion-img2vid-xt-1-1")
+
+
+def default_vace_path() -> str:
+    """VACE all-in-one video edit / control."""
+
+    return resolve_model_path("Wan2.1-VACE-14B", "Wan-AI/Wan2.1-VACE-14B")
+
+
+def default_v2v_path() -> str:
+    """Video-to-video restyle."""
+
+    return resolve_model_path("SkyReels-V3-V2V-14B", "Skywork/SkyReels-V3-V2V-14B")
+
+
+def default_flf2v_foundation_path() -> str:
+    """First-last-frame to video."""
+
+    return resolve_model_path("Wan2.1-FLF2V-14B-720P", "Wan-AI/Wan2.1-FLF2V-14B-720P")
+
+
+def default_wan_animate_path() -> str:
+
+    return resolve_model_path("Wan2.2-Animate-14B", "Wan-AI/Wan2.2-Animate-14B")
+
+
+def default_live_portrait_path() -> str:
+
+    return resolve_model_path("LivePortrait", "KwaiVGI/LivePortrait")

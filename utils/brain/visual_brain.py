@@ -169,7 +169,7 @@ class VisualBrain:
                 from utils.superior.inference_pipeline import build_tfidf_index_from_jsonl
 
                 idx = build_tfidf_index_from_jsonl(local_rag_jsonl)
-                rag_facts = idx.retrieve(user_prompt, top_k=self.defaults.rag_top_k)
+                rag_facts = idx.query(user_prompt, top_k=self.defaults.rag_top_k)
             except Exception:
                 pass
 

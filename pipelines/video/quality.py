@@ -41,6 +41,8 @@ class PermanenceReport:
     disappear_events: int = 0
     appear_events: int = 0
     notes: list[str] = field(default_factory=list)
+    # Restored video feature switches (superior pass, physics, audio, neural engine, ...).
+    repaired: int = 0
 
 
 def _downsample(rgb: np.ndarray, size: int = 64) -> np.ndarray:
@@ -356,6 +358,7 @@ class ExtremityReport:
     stability: float = 1.0
     collapsed_frames: int = 0
     notes: list[str] = field(default_factory=list)
+    repaired: int = 0
 
 
 def _hand_score(rgb: np.ndarray) -> float:
@@ -414,6 +417,7 @@ class GlyphReport:
     melt_events: int = 0
     rois: int = 0
     notes: list[str] = field(default_factory=list)
+    repaired: int = 0
 
 
 def _edge_map(rgb: np.ndarray) -> np.ndarray:
@@ -524,6 +528,7 @@ class IdentityFingerprint:
 class IdentityBindReport:
     score: float
     drift_frames: int = 0
+    repaired: int = 0
     per_frame: list[float] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -1067,3 +1072,224 @@ __all__ = [
     "apply_propagated_identity_lock",
     "composite_with_mask",
 ]
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/permanence.py
+# ==================================================================================================
+def _paste_bbox(dst: np.ndarray, src: np.ndarray, bbox: tuple[int, int, int, int], *, alpha: float) -> None:
+    y0, x0, y1, x1 = bbox
+    patch = src[y0:y1, x0:x1]
+    if patch.size == 0:
+        return
+    region = dst[y0:y1, x0:x1].astype(np.float32)
+    a = float(np.clip(alpha, 0.0, 1.0))
+    dst[y0:y1, x0:x1] = np.clip(region * (1.0 - a) + patch.astype(np.float32) * a, 0, 255).astype(np.uint8)
+
+
+def repair_permanence_breaks(
+    frame_paths: list[Path],
+    *,
+    strength: float = 0.55,
+    k_slots: int = 8,
+) -> PermanenceReport:
+    """
+    When a massive slot disappears with little global motion, reinject last patch.
+    """
+    paths = [Path(p) for p in frame_paths if Path(p).is_file()]
+    if len(paths) < 2:
+        return PermanenceReport(score=1.0)
+    repaired = 0
+    disappear = appear = 0
+    prev_rgb = read_frame_rgb(paths[0])
+    prev_slots = extract_slots(prev_rgb, k=k_slots)
+    h, w = prev_rgb.shape[:2]
+    for p in paths[1:]:
+        curr = read_frame_rgb(p)
+        slots = extract_slots(curr, k=k_slots)
+        pairs, dis, app = match_slots(prev_slots, slots, h=h, w=w)
+        disappear += len(dis)
+        appear += len(app)
+        # Global motion proxy
+        gmotion = float(np.mean(np.abs(curr.astype(np.float32) - prev_rgb.astype(np.float32))) / 255.0)
+        if gmotion < 0.12:  # mostly static camera — pops are suspicious
+            changed = False
+            for i in dis:
+                slot = prev_slots[i]
+                if slot.mass < 4.0:
+                    continue
+                _paste_bbox(curr, prev_rgb, slot.bbox, alpha=strength)
+                repaired += 1
+                changed = True
+            if changed:
+                save_frame_rgb(p, curr)
+                curr = read_frame_rgb(p)
+        prev_rgb = curr
+        prev_slots = extract_slots(curr, k=k_slots)
+    base = score_object_permanence(paths)
+    base.repaired = repaired
+    if repaired:
+        base.notes.append(f"repaired={repaired}")
+    return base
+
+
+def apply_permanence_pass(
+    frame_paths: list[Path],
+    *,
+    repair: bool = True,
+    strength: float = 0.55,
+) -> PermanenceReport:
+    if repair:
+        return repair_permanence_breaks(frame_paths, strength=strength)
+    return score_object_permanence(frame_paths)
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/identity_bind.py
+# ==================================================================================================
+def apply_identity_bind(
+    frame_paths: list[Path],
+    *,
+    fingerprint: IdentityFingerprint | None = None,
+    anchor: str | Path | None = None,
+    refs: list[str | Path] | None = None,
+    strength: float = 0.45,
+    drift_threshold: float = 0.62,
+) -> IdentityBindReport:
+    """Re-anchor drifted frames toward the best-matching frame's subject band."""
+    paths = [Path(p) for p in frame_paths if Path(p).is_file()]
+    if len(paths) < 2:
+        return IdentityBindReport(score=1.0)
+    report = score_identity_bind(
+        paths, fingerprint, anchor=anchor, refs=refs, sample_every=1, drift_threshold=drift_threshold
+    )
+    fp = fingerprint
+    if fp is None:
+        if refs:
+            fp = bind_from_refs(refs)
+        elif anchor and Path(anchor).is_file():
+            fp = build_fingerprint(read_frame_rgb(anchor))
+        else:
+            fp = build_fingerprint(read_frame_rgb(paths[0]))
+    donor_i = int(np.argmax(report.per_frame)) if report.per_frame else 0
+    donor = read_frame_rgb(paths[donor_i])
+    donor_band = _subject_band(donor, fp.band)
+    repaired = 0
+    from PIL import Image
+
+    for i, p in enumerate(paths):
+        if report.per_frame[i] >= drift_threshold:
+            continue
+        curr = read_frame_rgb(p)
+        h, w = curr.shape[:2]
+        x0, y0, x1, y1 = fp.band
+        xa, xb = int(w * x0), int(w * x1)
+        ya, yb = int(h * y0), int(h * y1)
+        patch = np.asarray(Image.fromarray(donor_band).resize((max(1, xb - xa), max(1, yb - ya)), Image.BILINEAR))
+        region = curr[ya:yb, xa:xb].astype(np.float32)
+        a = float(np.clip(strength, 0.0, 1.0))
+        if patch.shape[:2] == region.shape[:2]:
+            curr[ya:yb, xa:xb] = np.clip(region * (1.0 - a) + patch.astype(np.float32) * a, 0, 255).astype(np.uint8)
+            save_frame_rgb(p, curr)
+            repaired += 1
+    after = score_identity_bind(paths, fp, sample_every=1, drift_threshold=drift_threshold)
+    after.repaired = repaired
+    if repaired:
+        after.notes.append(f"identity_bind_repaired={repaired}")
+    return after
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/extremity_lock.py
+# ==================================================================================================
+def _extremity_mask(h: int, w: int) -> np.ndarray:
+    """Lower 45% + side margins — where hands/arms usually live."""
+    m = np.zeros((h, w), dtype=np.float32)
+    m[int(h * 0.55) :, :] = 1.0
+    m[:, : max(1, w // 4)] = np.maximum(m[:, : max(1, w // 4)], 0.85)
+    m[:, -max(1, w // 4) :] = np.maximum(m[:, -max(1, w // 4) :], 0.85)
+    return m
+
+
+def apply_extremity_lock(
+    frame_paths: list[Path],
+    *,
+    strength: float = 0.5,
+    collapse_drop: float = 0.22,
+) -> ExtremityReport:
+    paths = [Path(p) for p in frame_paths if Path(p).is_file()]
+    if len(paths) < 2:
+        return ExtremityReport(score=1.0)
+    scores = [_hand_score(read_frame_rgb(p)) for p in paths]
+    donor_i = int(np.argmax(scores))
+    donor = read_frame_rgb(paths[donor_i]).astype(np.float32)
+    h, w = donor.shape[:2]
+    mask = _extremity_mask(h, w)[..., None]
+    repaired = 0
+    for i, p in enumerate(paths):
+        if i == 0:
+            continue
+        drop = scores[i - 1] - scores[i]
+        if drop < collapse_drop and scores[i] >= 0.35:
+            continue
+        # Prefer previous good frame if better than global donor for local continuity
+        src_i = i - 1 if scores[i - 1] > scores[donor_i] * 0.9 else donor_i
+        src = read_frame_rgb(paths[src_i]).astype(np.float32)
+        curr = read_frame_rgb(p).astype(np.float32)
+        a = float(np.clip(strength, 0.0, 1.0))
+        out = curr * (1.0 - mask * a) + src * (mask * a)
+        save_frame_rgb(p, np.clip(out, 0, 255).astype(np.uint8))
+        repaired += 1
+    after = score_extremity_coherence(paths, collapse_drop=collapse_drop)
+    after.repaired = repaired
+    if repaired:
+        after.notes.append(f"extremity_repaired={repaired}")
+    return after
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/glyph_lock.py
+# ==================================================================================================
+def apply_glyph_lock(
+    frame_paths: list[Path],
+    *,
+    strength: float = 0.7,
+    melt_threshold: float = 0.28,
+) -> GlyphReport:
+    paths = [Path(p) for p in frame_paths if Path(p).is_file()]
+    if len(paths) < 2:
+        return GlyphReport(score=1.0)
+    donor = read_frame_rgb(paths[0])
+    rois = find_glyph_rois(donor)
+    if not rois:
+        return GlyphReport(score=1.0, notes=["no_glyph_rois"])
+    repaired = 0
+    for p in paths[1:]:
+        curr = read_frame_rgb(p)
+        edge = _edge_map(curr)
+        changed = False
+        for roi in rois:
+            h = _hash_patch(edge, roi.y0, roi.x0, roi.y1, roi.x1)
+            if _hamming(roi.edge_hash, h) < melt_threshold:
+                continue
+            patch = donor[roi.y0 : roi.y1, roi.x0 : roi.x1]
+            region = curr[roi.y0 : roi.y1, roi.x0 : roi.x1].astype(np.float32)
+            a = float(np.clip(strength, 0.0, 1.0))
+            curr[roi.y0 : roi.y1, roi.x0 : roi.x1] = np.clip(
+                region * (1.0 - a) + patch.astype(np.float32) * a, 0, 255
+            ).astype(np.uint8)
+            changed = True
+            repaired += 1
+        if changed:
+            save_frame_rgb(p, curr)
+    after = score_glyph_stability(paths, melt_threshold=melt_threshold)
+    after.repaired = repaired
+    after.rois = len(rois)
+    if repaired:
+        after.notes.append(f"glyph_repaired={repaired}")
+    return after
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/physics_gate.py
+# ==================================================================================================

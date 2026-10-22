@@ -402,68 +402,124 @@ def list_frontier_modules() -> list[dict[str, str]]:
     return [
         {
             "id": "tension_thermostat",
-            "module": "narrative_tension.py",
+            "module": "frontier_compiler.py#narrative_tension",
             "summary": "Emotion curve drives camera/motion/grade",
         },
         {
             "id": "causal_ripple",
-            "module": "causal_events.py",
+            "module": "frontier_compiler.py#causal_events",
             "summary": "Story events auto-trigger FX and camera reactions",
         },
         {
             "id": "anticipation_borrow",
-            "module": "anticipation_windup.py",
+            "module": "frontier_compiler.py#anticipation_windup",
             "summary": "Steals shot time for pre-action wind-up",
         },
-        {"id": "motif_haunting", "module": "motif_tracker.py", "summary": "Symbols must appear until resolved"},
-        {"id": "mise_en_scene", "module": "mise_en_scene.py", "summary": "Lead room/headroom composition grammar"},
-        {"id": "narrative_spotlight", "module": "diegetic_focus.py", "summary": "Fog-of-narrative detail budget"},
-        {"id": "kinetic_ledger", "module": "kinetic_continuity.py", "summary": "Cross-shot energy conservation"},
-        {"id": "temporal_echo", "module": "temporal_echo.py", "summary": "Shots rhyme visually with earlier beats"},
+        {
+            "id": "motif_haunting",
+            "module": "frontier_compiler.py#motif_tracker",
+            "summary": "Symbols must appear until resolved",
+        },
+        {
+            "id": "mise_en_scene",
+            "module": "frontier_compiler.py#mise_en_scene",
+            "summary": "Lead room/headroom composition grammar",
+        },
+        {
+            "id": "narrative_spotlight",
+            "module": "frontier_compiler.py#diegetic_focus",
+            "summary": "Fog-of-narrative detail budget",
+        },
+        {
+            "id": "kinetic_ledger",
+            "module": "frontier_compiler.py#kinetic_continuity",
+            "summary": "Cross-shot energy conservation",
+        },
+        {
+            "id": "temporal_echo",
+            "module": "frontier_compiler.py#temporal_echo",
+            "summary": "Shots rhyme visually with earlier beats",
+        },
         {
             "id": "semantic_gravity",
-            "module": "semantic_gravity.py",
+            "module": "frontier_compiler.py#semantic_gravity",
             "summary": "Narrative weight → drift repair priority",
         },
-        {"id": "breath_cadence", "module": "breath_cadence.py", "summary": "Micro motion synced to tension"},
-        {"id": "what_if_timeline", "module": "counterfactual_beats.py", "summary": "Parallel alternate shot branches"},
+        {
+            "id": "breath_cadence",
+            "module": "frontier_compiler.py#breath_cadence",
+            "summary": "Micro motion synced to tension",
+        },
+        {
+            "id": "what_if_timeline",
+            "module": "frontier_compiler.py#counterfactual_beats",
+            "summary": "Parallel alternate shot branches",
+        },
         {
             "id": "screen_direction_lock",
-            "module": "screen_direction.py",
+            "module": "frontier_compiler.py#screen_direction",
             "summary": "Movement vector 180° rule across cuts",
         },
         {
             "id": "offscreen_space",
-            "module": "offscreen_space.py",
+            "module": "frontier_compiler.py#offscreen_space",
             "summary": "Off-frame zones inject audio/light/reaction",
         },
         {
             "id": "emotional_contagion",
-            "module": "emotional_contagion.py",
+            "module": "frontier_compiler.py#emotional_contagion",
             "summary": "Crowd inherits hero emotional state",
         },
-        {"id": "material_memory", "module": "material_memory.py", "summary": "Wet/mud/blood persists until cleaned"},
+        {
+            "id": "material_memory",
+            "module": "frontier_compiler.py#material_memory",
+            "summary": "Wet/mud/blood persists until cleaned",
+        },
         {
             "id": "camera_empathy",
-            "module": "camera_empathy.py",
+            "module": "frontier_compiler.py#camera_empathy",
             "summary": "Camera retreats/lingers/trembles with subject",
         },
-        {"id": "weather_inertia", "module": "weather_inertia.py", "summary": "Climate cannot flip between cuts"},
+        {
+            "id": "weather_inertia",
+            "module": "frontier_compiler.py#weather_inertia",
+            "summary": "Climate cannot flip between cuts",
+        },
         {
             "id": "narrative_debt",
-            "module": "narrative_debt.py",
+            "module": "frontier_compiler.py#narrative_debt",
             "summary": "Plot threads must pay off by deadline shot",
         },
-        {"id": "chromatic_arc", "module": "chromatic_arc.py", "summary": "Color script evolves with story emotion"},
-        {"id": "stinger_frames", "module": "stinger_frames.py", "summary": "Impact/sakuga emphasis on last N frames"},
+        {
+            "id": "chromatic_arc",
+            "module": "frontier_compiler.py#chromatic_arc",
+            "summary": "Color script evolves with story emotion",
+        },
+        {
+            "id": "stinger_frames",
+            "module": "frontier_compiler.py#stinger_frames",
+            "summary": "Impact/sakuga emphasis on last N frames",
+        },
         {
             "id": "witness_lens",
-            "module": "witness_lens.py",
+            "module": "frontier_compiler.py#witness_lens",
             "summary": "Who watches changes framing (child/CCTV/lover)",
         },
-        {"id": "silence_map", "module": "silence_map.py", "summary": "Deliberate silence beats for horror/comedy"},
-        {"id": "scar_timeline", "module": "scar_timeline.py", "summary": "Injuries accumulate on characters"},
-        {"id": "parallax_budget", "module": "parallax_budget.py", "summary": "2.5D layer separation for compositing"},
+        {
+            "id": "silence_map",
+            "module": "frontier_compiler.py#silence_map",
+            "summary": "Deliberate silence beats for horror/comedy",
+        },
+        {
+            "id": "scar_timeline",
+            "module": "frontier_compiler.py#scar_timeline",
+            "summary": "Injuries accumulate on characters",
+        },
+        {
+            "id": "parallax_budget",
+            "module": "frontier_compiler.py#parallax_budget",
+            "summary": "2.5D layer separation for compositing",
+        },
     ]
 
 

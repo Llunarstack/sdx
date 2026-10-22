@@ -34,7 +34,7 @@ jobs:
           OUT="${RUNNER_TEMP}/basedpyright.json"
           python -m basedpyright --outputjson \
             native/_experimental/python/sdx_native/native_tools.py \
-            diffusion/snr_utils.py \
+            diffusion/schedules.py \
             examples/run_baseline_eval.py \
             utils/terminal.py \
             training/train_cli_parser.py \

@@ -514,6 +514,7 @@ class RenderEngine(str, Enum):
     SPIDER_VERSE = "spider_verse"
     HYBRID = "hybrid"
     DREAM_LOGIC = "dream_logic"
+    NEURAL = "neural"
 
 
 @dataclass(slots=True)
@@ -612,6 +613,16 @@ _ENGINES: dict[RenderEngine, EnginePreset] = {
         positive="surreal morphing, impossible architecture, dream logic, symbolic imagery",
         negative="documentary realism, rigid continuity",
     ),
+    RenderEngine.NEURAL: EnginePreset(
+        id=RenderEngine.NEURAL,
+        title="Neural VideoDiT",
+        positive="coherent motion, temporally consistent subject, stable lighting",
+        negative="flicker, frame-to-frame identity drift, melting geometry",
+        region_motion=False,
+        motion_transfer=False,
+        pipeline_notes="Denoise segments with your own VideoDiT checkpoint (neural_sample.run_neural_segment) "
+        "instead of retrieve -> keyframe edit -> interpolate; sets edit.neural_engine.",
+    ),
 }
 
 
@@ -670,6 +681,7 @@ def engine_edit_overrides(preset: EnginePreset) -> dict[str, Any]:
         "region_motion": preset.region_motion,
         "motion_transfer": preset.motion_transfer,
         "temporal_alpha": g.temporal_alpha,
+        **({"neural_engine": True} if preset.id is RenderEngine.NEURAL else {}),
     }
 
 

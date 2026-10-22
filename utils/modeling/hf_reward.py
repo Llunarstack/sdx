@@ -1,7 +1,7 @@
 """
 Unified Hugging Face **reward panel** for ranking, eval, and DPO mining.
 
-Combines available HF scorers (HPSv2, PickScore, CLIP-H/14, OneAlign, CAFE)
+Combines available HF scorers (HPSv2, PickScore, CLIP-H/14, OneAlign, CAFE, PerceptCLIP, ImageReward, SigLIP2, CLIP-IQA)
 with graceful fallback when weights are missing.
 """
 
@@ -21,7 +21,6 @@ class HFRewardWeights:
     cafe_aesthetic: float = 0.12
     perceptclip: float = 0.12
     image_reward: float = 0.10
-    musiq: float = 0.08
     siglip2: float = 0.07
     clip_iqa: float = 0.07
 
@@ -85,11 +84,6 @@ class HFRewardPanel:
             if v is not None:
                 parts["image_reward"] = float(v)
 
-        if w.musiq > 0:
-            v = hl.score_musiq(rgb_uint8, device=self.device)
-            if v is not None:
-                parts["musiq"] = float(v)
-
         if w.siglip2 > 0 and prompt.strip():
             v = hl.score_siglip2(rgb_uint8, prompt, device=self.device)
             if v is not None:
@@ -111,7 +105,6 @@ class HFRewardPanel:
             "cafe_aesthetic": w.cafe_aesthetic,
             "perceptclip": w.perceptclip,
             "image_reward": w.image_reward,
-            "musiq": w.musiq,
             "siglip2": w.siglip2,
             "clip_iqa": w.clip_iqa,
         }

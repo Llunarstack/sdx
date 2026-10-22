@@ -107,11 +107,10 @@ def _run_image_qc(
 ) -> dict[str, Any]:
     # Reuse the existing analyzer to avoid duplicating metric code.
     import numpy as np
+    from data.manifest_utils import first_str, resolve_image_path
     from PIL import Image
     from utils.quality.quality import rgb_to_luminance
     from utils.quality.test_time_pick import score_edge_sharpness
-
-    from scripts.tools.image_quality_qc import _extract_image_path, _resolve_path  # type: ignore
 
     results = 0
     fail = False
@@ -133,11 +132,9 @@ def _run_image_qc(
             processed += 1
             if sample and processed > sample:
                 break
-            img_path = _extract_image_path(row)
-            if not img_path:
-                continue
-            path = _resolve_path(img_path, manifest, image_root=image_root.strip() or None)
-            if not path.is_file():
+            root = Path(image_root.strip()) if image_root.strip() else None
+            path = resolve_image_path(first_str(row, ("image_path", "path", "image")), root, manifest.parent)
+            if path is None:
                 continue
             try:
                 img = Image.open(path).convert("RGB")

@@ -130,7 +130,7 @@ class ToolRegistry:
         from utils.superior.inference_pipeline import build_tfidf_index_from_jsonl
 
         idx = build_tfidf_index_from_jsonl(path)
-        facts = idx.retrieve(self.session["prompt"], top_k=self.rag_top_k)
+        facts = idx.query(self.session["prompt"], top_k=self.rag_top_k)
         self.session["rag_facts"] = facts
         if facts:
             merged = self.session["prompt"] + ". " + " ".join(facts[:3])

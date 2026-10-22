@@ -136,10 +136,10 @@ def maybe_clip_refine_latent(
     num_timesteps: int,
     t_frac: float,
     refine_steps: int,
-    refiner: Callable[[torch.Tensor, int], torch.Tensor],
+    refiner: Callable[[torch.Tensor, int, int], torch.Tensor],
 ) -> torch.Tensor:
     """
-    If CLIP cosine < ``sim_threshold``, run ``refiner(x0_clean, t_start)`` (caller supplies
+    If CLIP cosine < ``sim_threshold``, run ``refiner(x0_clean, t_start, refine_steps)`` (caller supplies
     q_sample + ``sample_loop``). Threshold should be tuned per model id (try 0.18–0.28).
     """
     if sim_threshold <= -2.0:  # sentinel "off" if mis-used

@@ -723,3 +723,22 @@ __all__ = [
     "pick_keyframe_indices",
     "schedule_keyframes_for_segment",
 ]
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/motion.py
+# ==================================================================================================
+def estimate_motion_score(frame_paths: list[Path], *, sample_pairs: int = 8) -> float:
+    """0–1 motion intensity proxy from sampled frame pairs."""
+    if len(frame_paths) < 2:
+        return 0.0
+    step = max(1, len(frame_paths) // max(1, sample_pairs))
+    mags: list[float] = []
+    for i in range(0, len(frame_paths) - 1, step):
+        a = read_frame_rgb(frame_paths[i])
+        b = read_frame_rgb(frame_paths[min(len(frame_paths) - 1, i + step)])
+        _, m = compute_flow_magnitude(a, b)
+        mags.append(m)
+    if not mags:
+        return 0.0
+    return float(min(1.0, np.mean(mags) / 8.0))

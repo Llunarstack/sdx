@@ -841,3 +841,30 @@ __all__ = [
     "image_prompt_brief",
     "prepare_i2v_conditioning",
 ]
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/video_text_encode.py
+# ==================================================================================================
+def encode_prompt_context_batch(
+    prompts: list[str],
+    *,
+    context_dim: int = 768,
+    device: str | torch.device = "cpu",
+) -> torch.Tensor:
+    mats = [encode_prompt_context(p, context_dim=context_dim, device=device) for p in prompts]
+    # Pad to max L
+    max_l = max(m.shape[1] for m in mats)
+    dim = mats[0].shape[2]
+    out = []
+    for m in mats:
+        if m.shape[1] < max_l:
+            pad = torch.zeros(1, max_l - m.shape[1], dim, device=m.device)
+            m = torch.cat([m, pad], dim=1)
+        out.append(m)
+    return torch.cat(out, dim=0)
+
+
+def null_context(context_dim: int = 768, *, max_len: int = 8, device: str | torch.device = "cpu") -> torch.Tensor:
+    """CFG-style null / empty prompt embedding."""
+    return encode_prompt_context("", context_dim=context_dim, max_len=max_len, device=device)

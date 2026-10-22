@@ -186,21 +186,15 @@ def step2_style_decompose(
     try:
         from utils.modeling.hf_scaffold import has_local_weights
         from utils.modeling.model_paths import (
-            default_dinov3_vitb16_path,
-            default_dinov3_vith16plus_path,
-            default_instantstyle_path,
-            default_ip_adapter_path,
-            default_siglip2_base_256_path,
+            default_dinov3_vitl16_path,
+            default_dinov3_vits16_path,
             default_siglip2_so400m_path,
         )
 
         for label, fn in (
-            ("DINOv3-H+", default_dinov3_vith16plus_path),
-            ("DINOv3-B16", default_dinov3_vitb16_path),
+            ("DINOv3-L16", default_dinov3_vitl16_path),
+            ("DINOv3-S16", default_dinov3_vits16_path),
             ("SigLIP2-SO400M", default_siglip2_so400m_path),
-            ("SigLIP2-base-256", default_siglip2_base_256_path),
-            ("InstantStyle", default_instantstyle_path),
-            ("IP-Adapter", default_ip_adapter_path),
         ):
             try:
                 local = fn()

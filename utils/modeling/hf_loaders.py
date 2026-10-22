@@ -44,7 +44,6 @@ from utils.modeling.model_paths import (
     default_marigold_depth_path,
     default_marigold_normals_path,
     default_moondream2_path,
-    default_musiq_path,
     default_nsfw_detector_path,
     default_onealign_path,
     default_owlv2_base_path,
@@ -66,6 +65,13 @@ from utils.modeling.model_paths import (
     default_watermark_detector_path,
     default_zoedepth_path,
 )
+
+
+def _image_text_to_text_cls() -> Any:
+    """VLM auto-class: ``AutoModelForImageTextToText`` (transformers >= 4.46); v5 removed ``AutoModelForVision2Seq``."""
+    import transformers
+
+    return getattr(transformers, "AutoModelForImageTextToText", None) or transformers.AutoModelForVision2Seq
 
 
 def _has_weights_at(path: str) -> bool:
@@ -195,10 +201,10 @@ def caption_kosmos2(path: str, *, device: str = "cuda") -> str:
         return ""
 
     def _load() -> tuple[Any, Any]:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoProcessor
 
         proc = AutoProcessor.from_pretrained(model_id)
-        model = AutoModelForVision2Seq.from_pretrained(model_id).to(device).eval()
+        model = _image_text_to_text_cls().from_pretrained(model_id).to(device).eval()
         return proc, model
 
     try:
@@ -416,33 +422,6 @@ def score_cafe_aesthetic(rgb_uint8: np.ndarray, *, device: str = "cuda") -> floa
         return None
 
 
-def score_musiq(rgb_uint8: np.ndarray, *, device: str = "cuda") -> float | None:
-    model_id = default_musiq_path()
-    if not _has_weights_at(model_id) and "/" not in model_id:
-        return None
-
-    def _load() -> tuple[Any, Any]:
-        from transformers import AutoImageProcessor, AutoModelForImageRegression
-
-        proc = AutoImageProcessor.from_pretrained(model_id)
-        model = AutoModelForImageRegression.from_pretrained(model_id).to(device).eval()
-        return proc, model
-
-    try:
-        proc, model = _CACHE.get_or_load("musiq", _load)
-        import torch
-        from PIL import Image
-
-        pil = Image.fromarray(rgb_uint8)
-        inputs = proc(images=pil, return_tensors="pt").to(device)
-        with torch.no_grad():
-            out = model(**inputs).logits
-        raw = float(out.squeeze().item())
-        return float(np.clip(raw / 100.0, 0.0, 1.0))
-    except Exception:
-        return None
-
-
 def score_perceptclip(rgb_uint8: np.ndarray, *, prompt: str = "", device: str = "cuda") -> float | None:
     model_id = default_perceptclip_iqa_path()
     if not _has_weights_at(model_id) and "/" not in model_id:
@@ -534,10 +513,10 @@ def caption_smolvlm2(path: str, *, user_prompt: str = "", device: str = "cuda") 
         return ""
 
     def _load() -> tuple[Any, Any]:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoProcessor
 
         proc = AutoProcessor.from_pretrained(model_id)
-        model = AutoModelForVision2Seq.from_pretrained(model_id).to(device).eval()
+        model = _image_text_to_text_cls().from_pretrained(model_id).to(device).eval()
         return proc, model
 
     try:
@@ -788,10 +767,10 @@ def caption_qwen25_vl(path: str, *, user_prompt: str = "", device: str = "cuda")
         return ""
 
     def _load() -> tuple[Any, Any]:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoProcessor
 
         proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        model = AutoModelForVision2Seq.from_pretrained(model_id, trust_remote_code=True).to(device).eval()
+        model = _image_text_to_text_cls().from_pretrained(model_id, trust_remote_code=True).to(device).eval()
         return proc, model
 
     try:
@@ -960,10 +939,10 @@ def caption_qwen25_vl_7b(path: str, *, user_prompt: str = "", device: str = "cud
         return ""
 
     def _load() -> tuple[Any, Any]:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoProcessor
 
         proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        model = AutoModelForVision2Seq.from_pretrained(model_id, trust_remote_code=True).to(device).eval()
+        model = _image_text_to_text_cls().from_pretrained(model_id, trust_remote_code=True).to(device).eval()
         return proc, model
 
     try:
@@ -1040,10 +1019,10 @@ def caption_smolvlm(path: str, *, user_prompt: str = "", device: str = "cuda") -
         return ""
 
     def _load() -> tuple[Any, Any]:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoProcessor
 
         proc = AutoProcessor.from_pretrained(model_id)
-        model = AutoModelForVision2Seq.from_pretrained(model_id).to(device).eval()
+        model = _image_text_to_text_cls().from_pretrained(model_id).to(device).eval()
         return proc, model
 
     try:
@@ -1240,10 +1219,10 @@ def _caption_qwen2_vl(path: str, *, user_prompt: str, device: str, size: str = "
         return ""
 
     def _load() -> tuple[Any, Any]:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoProcessor
 
         proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        model = AutoModelForVision2Seq.from_pretrained(model_id, trust_remote_code=True).to(device).eval()
+        model = _image_text_to_text_cls().from_pretrained(model_id, trust_remote_code=True).to(device).eval()
         return proc, model
 
     try:
@@ -1295,7 +1274,6 @@ __all__ = [
     "score_clip_iqa",
     "score_hpsv2",
     "score_image_reward",
-    "score_musiq",
     "score_nsfw_probability",
     "score_onealign",
     "score_perceptclip",

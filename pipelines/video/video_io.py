@@ -474,3 +474,106 @@ __all__ = [
     "SegmentWorkResult",
     "run_segments_parallel",
 ]
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/timeline.py
+# ==================================================================================================
+from .types import MasterTimeline, SegmentAssignment
+
+
+@dataclass(slots=True)
+class TimelineSlot:
+    segment_index: int
+    start_frame: int
+    end_frame: int
+    transition: TransitionType
+
+
+def build_master_slots(assignments: list[SegmentAssignment], timeline: MasterTimeline) -> list[TimelineSlot]:
+    slots: list[TimelineSlot] = []
+    cursor = 0
+    for i, seg in enumerate(assignments):
+        n = frame_count_for_duration(seg.shot.duration_sec, timeline.fps)
+        start = cursor
+        end = cursor + n
+        slots.append(
+            TimelineSlot(
+                segment_index=i,
+                start_frame=start,
+                end_frame=end,
+                transition=seg.transition if i > 0 else TransitionType.CUT,
+            )
+        )
+        cursor = end
+    return slots
+
+
+def transition_overlap_frames(transition: TransitionType, fps: float) -> int:
+    if transition == TransitionType.DISSOLVE:
+        return max(2, int(round(fps * 0.35)))
+    if transition == TransitionType.MATCH_ACTION:
+        return max(1, int(round(fps * 0.12)))
+    return 0
+
+
+def retime_frame_indices(source_count: int, target_count: int) -> list[int]:
+    """Map target frame indices to nearest source indices."""
+    if source_count <= 0 or target_count <= 0:
+        return []
+    if source_count == target_count:
+        return list(range(source_count))
+    out: list[int] = []
+    for t in range(target_count):
+        src = int(round(t * (source_count - 1) / max(1, target_count - 1)))
+        out.append(min(source_count - 1, max(0, src)))
+    return out
+
+
+# ==================================================================================================
+# Restored from b654ae9:pipelines/video/stitch.py
+# ==================================================================================================
+def crossfade_segments(
+    frames_a: Sequence[np.ndarray],
+    frames_b: Sequence[np.ndarray],
+    overlap: int,
+) -> list[np.ndarray]:
+    if overlap <= 0 or not frames_a or not frames_b:
+        return list(frames_a) + list(frames_b)
+    overlap = min(overlap, len(frames_a), len(frames_b))
+    head = list(frames_a[:-overlap])
+    tail = list(frames_b[overlap:])
+    blend: list[np.ndarray] = []
+    for i in range(overlap):
+        t = (i + 1) / (overlap + 1)
+        a = frames_a[-overlap + i].astype(np.float32)
+        b = frames_b[i].astype(np.float32)
+        blend.append(np.clip((1 - t) * a + t * b, 0, 255).astype(np.uint8))
+    return head + blend + tail
+
+
+def stitch_segment_videos(
+    segment_videos: list[str | Path],
+    out_path: str | Path,
+    *,
+    fps: float = 24.0,
+) -> Path:
+    """Concat segment mp4s via ffmpeg when available."""
+    from .video_io import extract_frames, ffmpeg_available
+
+    if ffmpeg_available() and len(segment_videos) > 1:
+        import subprocess
+
+        out = Path(out_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        list_file = out.with_suffix(".concat.txt")
+        lines = [f"file '{Path(v).resolve().as_posix()}'\n" for v in segment_videos]
+        list_file.write_text("".join(lines), encoding="utf-8")
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(out)]
+        subprocess.run(cmd, check=True, capture_output=True)
+        list_file.unlink(missing_ok=True)
+        return out
+    all_frames: list[list[Path]] = []
+    for v in segment_videos:
+        tmp = Path(out_path).parent / f"_seg_{len(all_frames):02d}_frames"
+        all_frames.append(extract_frames(v, tmp, fps=fps))
+    return stitch_frame_lists(all_frames, out_path, fps=fps)

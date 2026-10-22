@@ -584,3 +584,40 @@ __all__ = [
     "FrontierPlan",
     "analyze_prompt",
 ]
+
+
+# ==================================================================================================
+# Restored from b654ae9:frontier/narrative/tension_field.py
+# ==================================================================================================
+@dataclass(frozen=True)
+class TensionFieldPlan:
+    tension: float
+    prompt_fragments: tuple[str, ...]
+    step_emphasis: tuple[float, ...]
+    cfg_boost: float
+
+
+@dataclass
+class TensionField:
+    num_steps: int = 28
+
+    def plan(self, tension: float) -> TensionFieldPlan:
+        t = max(0.0, min(1.0, float(tension)))
+        n = max(4, self.num_steps)
+        if t >= 0.75:
+            frags = ("sharp micro-contrast", "urgent diagonal energy", "high-stakes focal sharpness")
+            curve = tuple(0.55 + 0.9 * (1.0 - abs(i / max(1, n - 1) - 0.35)) for i in range(n))
+            cfg = 1.0 + t * 0.35
+        elif t >= 0.4:
+            frags = ("controlled drama", "building visual pressure")
+            curve = tuple(0.7 + 0.5 * (i / max(1, n - 1)) for i in range(n))
+            cfg = 1.0 + t * 0.15
+        else:
+            frags = ("calm negative space", "gentle atmospheric falloff")
+            curve = tuple(1.0 - 0.55 * (i / max(1, n - 1)) for i in range(n))
+            cfg = 1.0
+        return TensionFieldPlan(tension=t, prompt_fragments=frags, step_emphasis=curve, cfg_boost=cfg)
+
+
+def build_tension_field(num_steps: int = 28) -> TensionField:
+    return TensionField(num_steps=num_steps)

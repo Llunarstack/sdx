@@ -53,7 +53,7 @@ def main() -> int:
         prompt=prompt,
         height=1024,
         width=1024,
-        prior_guidance_scale=4.0,
+        guidance_scale=4.0,
         num_inference_steps=20,
     )
     latents = prior_output.image_embeddings
