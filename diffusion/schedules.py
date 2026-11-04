@@ -112,18 +112,18 @@ def vp_shifted_timestep(alpha_cumprod: NDArray[Any], t: int, shift: float) -> in
 # ==================================================================================================
 
 
-def _clip_betas(beta: np.ndarray) -> np.ndarray:
+def _clip_betas(beta: NDArray[Any]) -> NDArray[Any]:
     return np.clip(beta.astype(np.float64), 1e-4, 0.999)
 
 
-def linear_beta_schedule(num_timesteps: int) -> np.ndarray:
+def linear_beta_schedule(num_timesteps: int) -> NDArray[Any]:
     result = rust_diffusion_math("maybe_linear_beta_schedule_rust", int(num_timesteps))
     if result is not None:
         return result.astype(np.float64)
     return np.linspace(0.0001, 0.02, int(num_timesteps), dtype=np.float64)
 
 
-def _squared_cosine_betas_numpy(num_timesteps: int, max_beta: float = 0.999) -> np.ndarray:
+def _squared_cosine_betas_numpy(num_timesteps: int, max_beta: float = 0.999) -> NDArray[Any]:
     """``beta_t = 1 - alpha_bar(t+1) / alpha_bar(t)`` with ``alpha_bar(t) = cos^2((t/T + 0.008) / 1.008 * pi/2)``."""
     n = int(num_timesteps)
     if n < 1:
@@ -134,7 +134,7 @@ def _squared_cosine_betas_numpy(num_timesteps: int, max_beta: float = 0.999) -> 
     return _clip_betas(np.minimum(1.0 - ab2 / np.maximum(ab1, 1e-12), float(max_beta)))
 
 
-def cosine_beta_schedule(num_timesteps: int) -> np.ndarray:
+def cosine_beta_schedule(num_timesteps: int) -> NDArray[Any]:
     """Nichol & Dhariwal (IDDPM) cosine schedule; same betas as ``squaredcos_cap_v2``."""
     result = rust_diffusion_math("maybe_cosine_beta_schedule_rust", int(num_timesteps))
     if result is not None:
@@ -146,14 +146,14 @@ def sigmoid_beta_schedule(
     num_timesteps: int,
     beta_start: float = 1e-4,
     beta_end: float = 2e-2,
-) -> np.ndarray:
+) -> NDArray[Any]:
     """Smooth S-curve from ~``beta_start`` to ~``beta_end``."""
     x = np.linspace(-6.0, 6.0, int(num_timesteps), dtype=np.float64)
     sig = 1.0 / (1.0 + np.exp(-x))
     return _clip_betas(sig * (beta_end - beta_start) + beta_start)
 
 
-def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999) -> np.ndarray:
+def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999) -> NDArray[Any]:
     """Improved-DDPM / diffusers ``squaredcos_cap_v2``: Rust library, else the C++ one, else NumPy."""
     n = int(num_timesteps)
     if n < 1:
@@ -179,7 +179,7 @@ ZTSNR_SUFFIX = "_ztsnr"
 _ZTSNR_TERMINAL_ALPHA_BAR = 2.0**-24
 
 
-def rescale_zero_terminal_snr(betas: np.ndarray) -> np.ndarray:
+def rescale_zero_terminal_snr(betas: NDArray[Any]) -> NDArray[Any]:
     """Lin et al. 2024, "Common Diffusion Noise Schedules and Sample Steps are Flawed", Algorithm 1.
 
     Shift and scale ``sqrt(alpha_bar)`` so it keeps its first value and ends at 0: the model is trained on pure noise
@@ -195,7 +195,7 @@ def rescale_zero_terminal_snr(betas: np.ndarray) -> np.ndarray:
     return 1.0 - alphas
 
 
-def get_beta_schedule(schedule_name: str, num_timesteps: int) -> np.ndarray:
+def get_beta_schedule(schedule_name: str, num_timesteps: int) -> NDArray[Any]:
     """``(num_timesteps,)`` betas for ``linear`` | ``cosine`` | ``sigmoid`` | ``squaredcos_cap_v2`` |
     ``squared_cosine_v2``, optionally with the ``_ztsnr`` suffix (zero terminal SNR)."""
     name = str(schedule_name).lower().strip()
@@ -219,7 +219,7 @@ def get_beta_schedule(schedule_name: str, num_timesteps: int) -> np.ndarray:
 # ==================================================================================================
 
 
-def space_timesteps(num_timesteps: int, section_counts: str | list[int]) -> np.ndarray:
+def space_timesteps(num_timesteps: int, section_counts: str | list[int]) -> NDArray[Any]:
     """Sorted unique timestep indices in ``[0, num_timesteps)``.
 
     ``section_counts`` is ``"ddimN"`` (an even integer stride giving exactly N steps, falling back
