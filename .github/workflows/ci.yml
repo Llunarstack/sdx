@@ -40,7 +40,17 @@ jobs:
             training/cli.py \
             utils/generation/sample_cli_parser.py \
             > "$OUT" || true
-          python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; ec=int(s.get('errorCount',0)); wc=int(s.get('warningCount',0)); print(f\"basedpyright: {ec} errors, {wc} warnings\"); sys.exit(1 if ec else 0)" "$OUT"
+          python - "$OUT" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1], encoding="utf-8-sig"))
+          s = d.get("summary") or {}
+          ec, wc = int(s.get("errorCount", 0)), int(s.get("warningCount", 0))
+          for x in d.get("generalDiagnostics", []):
+              if x.get("severity") == "error":
+                  print(f"{x['file']}:{x['range']['start']['line'] + 1}: [{x.get('rule', '')}] {x['message']}")
+          print(f"basedpyright: {ec} errors, {wc} warnings")
+          sys.exit(1 if ec else 0)
+          PY
 
       - name: Smoke imports
         run: python -m scripts.tools smoke_imports
