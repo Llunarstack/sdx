@@ -282,6 +282,13 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Path to file with tags (one per line or comma-separated); used like --tags",
     )
     parser.add_argument("--init-image", type=str, default="", help="Img2img: path to initial image")
+    parser.add_argument(
+        "--edit-image",
+        type=str,
+        default="",
+        help="Instruction edit: the image to change; --prompt is the instruction (e.g. 'make her hair red'). "
+        "Needs a checkpoint trained with train.py --edit-conditioning.",
+    )
     parser.add_argument("--strength", type=float, default=0.75, help="Img2img strength 0-1")
     parser.add_argument("--init-latent", type=str, default="", help="Start from saved latent .pt (from-z)")
     parser.add_argument("--mask", type=str, default="", help="Inpainting: path to mask (white=inpaint)")
@@ -435,6 +442,35 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="Capture-finish ISO (0 = from the prompt: explicit 'ISO 800', low-light and indoor cues).",
+    )
+    parser.add_argument(
+        "--game-asset",
+        type=str,
+        default="auto",
+        help=(
+            "Game imagery conventions (prompt pack, pixel-perfect finish, critics). auto = detect from the prompt; "
+            "off; or force one of: pixel_art, sprite, sprite_sheet, tileset, icon, ui_hud, character_sheet, "
+            "in_engine, key_art, card_art, game_map, environment_concept, isometric, voxel, low_poly, toon."
+        ),
+    )
+    parser.add_argument(
+        "--pixel-size",
+        type=int,
+        default=0,
+        help="Pixel art: size of one art pixel in output pixels (0 = '32x32' in the prompt, else estimated).",
+    )
+    parser.add_argument(
+        "--palette-colors",
+        type=int,
+        default=-1,
+        help="Pixel art palette size (-1 = from the prompt: 1-bit 2, 2-bit 4, 8-bit 16, else 32; 0 = keep colours).",
+    )
+    parser.add_argument(
+        "--transparent-bg",
+        type=str,
+        default="auto",
+        choices=["auto", "on", "off"],
+        help="Save sprites/icons with a transparent background (PNG). auto = on for sprites, sheets and icons.",
     )
     parser.add_argument(
         "--camera-jpeg-quality",
@@ -888,7 +924,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--local-rag-jsonl",
         type=str,
         default="",
-        help="JSONL corpus for local TF-IDF RAG (utils/superior/inference_pipeline.py); merges top facts into prompt before encode.",
+        help="JSONL corpus for local TF-IDF RAG (utils/agentic/quality_loop.py); merges top facts into prompt before encode.",
     )
     parser.add_argument(
         "--local-rag-top-k",
@@ -899,12 +935,12 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--superior-self-correct",
         action="store_true",
-        help="After sampling, CLIP-gate a short refine pass when alignment score is low (see utils/superior/inference_pipeline.py).",
+        help="After sampling, CLIP-gate a short refine pass when alignment score is low (see utils/agentic/quality_loop.py).",
     )
     parser.add_argument(
         "--expand-prompt",
         action="store_true",
-        help="Heuristic prompt expansion before encode (utils/superior/inference_pipeline.py).",
+        help="Heuristic prompt expansion before encode (utils/agentic/quality_loop.py).",
     )
     parser.add_argument(
         "--fdg-low",
@@ -1118,7 +1154,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=int,
         default=-1,
         help=(
-            "If 0/2/4: ViT quality scorer uses matching DiT block-AR regime (see utils/architecture/ar_block_conditioning.py). "
+            "If 0/2/4: ViT quality scorer uses matching DiT block-AR regime (see utils/modeling/architecture.py). "
             "-1 = ViT unknown one-hot (checkpoint default)."
         ),
     )
@@ -1542,7 +1578,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         default="none",
         help=(
             "Bias toward several *different* instances in one frame (posters, books, panels, group shots, "
-            "turnarounds): structure + anti-clone negatives + higher --num floor. See utils.prompt.multi_instance_scene."
+            "turnarounds): structure + anti-clone negatives + higher --num floor. See utils.prompt.scene."
         ),
     )
     parser.add_argument(
@@ -1567,7 +1603,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         default="off",
         help=(
             "Add separation, per-entity noun consistency, pose/weight/contact, optional anatomy + "
-            "physics/creature heuristics (see utils.prompt.detailed_scene_entities). "
+            "physics/creature heuristics (see utils.prompt.scene). "
             "Use auto for group/count/long multi-clause prompts; on always appends."
         ),
     )
@@ -1622,7 +1658,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         choices=["3d", "realistic", "3d_realistic", "style_mix"],
-        help="Prepend recommended tags for hard styles (3d, realistic, 3d_realistic, style_mix); see config/defaults/prompt_domains.py for negatives",
+        help="Prepend recommended tags for hard styles (3d, realistic, 3d_realistic, style_mix); see config/prompts.py for negatives",
     )
     parser.add_argument(
         "--naturalize",
@@ -1778,6 +1814,31 @@ def build_sample_parser() -> argparse.ArgumentParser:
     )
     parser.set_defaults(realism_autopilot=True)
     parser.add_argument(
+        "--realism",
+        type=str,
+        default="auto",
+        choices=["off", "auto", "max"],
+        help="Photographic prompts (utils/prompt/realism.py): auto = shot spec (camera, shutter, ISO agreeing with "
+        "lens and light), capture finish at that ISO / focal length, saturation and highlight correction, "
+        "plastic-skin / waxy-highlight critics; max = stronger correction + best-of-4 combo_realism; off = none.",
+    )
+    parser.add_argument(
+        "--shot-spec",
+        type=str,
+        default="",
+        help="Camera text added to the prompt and planned with it, e.g. '85mm f/1.4 ISO 6400 1/60s'; "
+        "'off' keeps the shot-spec caption out of the prompt (empty = derive from the prompt).",
+    )
+    parser.add_argument(
+        "--hard-prompts",
+        type=str,
+        default="auto",
+        choices=["off", "auto", "max"],
+        help="Exact counts, left/right/above/in-front relations, colour binding and text in the image "
+        "(utils/prompt/realism.py): prompt packs, a per-subject box layout, expected count / text and the "
+        "matching --pick-best auto critic; max also turns on best-of-4.",
+    )
+    parser.add_argument(
         "--lora-scaffold",
         type=str,
         default="none",
@@ -1888,8 +1949,23 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--scene-domain",
         type=str,
         default="none",
-        choices=["none", "objects", "vehicles", "buildings", "architecture", "mixed"],
-        help="Grounding hints for objects/vehicles/buildings-heavy scenes.",
+        choices=[
+            "none",
+            "objects",
+            "vehicles",
+            "buildings",
+            "architecture",
+            "mixed",
+            "product",
+            "food",
+            "interior",
+            "machinery",
+            "nature_macro",
+            "technical",
+            "diagram",
+        ],
+        help="Grounding hints for objects/vehicles/buildings-heavy scenes, and for product, food, interior, "
+        "machinery, nature macro, technical illustration and diagram/map prompts (auto-inferred).",
     )
     parser.add_argument(
         "--clothing-mode",
@@ -2138,7 +2214,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         default=0,
         metavar="N",
         help=(
-            "Invent N novel style genomes (utils.prompt.style_inventor) and apply "
+            "Invent N novel style genomes (utils.prompt.style) and apply "
             "genome #--style-genome-index via PromptStack before generation."
         ),
     )
@@ -2170,7 +2246,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Shorthand: --invent-styles 3, --num 3, --pick-best combo if unset. "
-            "For full genome×mutation manifests use scripts.tools.explore_styles."
+            "For full genome×mutation manifests use `python -m scripts.tools prompts explore-styles`."
         ),
     )
     parser.add_argument(
@@ -2186,7 +2262,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="normal",
         choices=("normal", "insane", "apocalypse", "chimera", "glitch", "eldritch", "cyberpunk"),
-        help="Style genome invention mode (see utils.prompt.style_genome_chaos).",
+        help="Style genome invention mode (see utils.prompt.style).",
     )
     parser.add_argument(
         "--style-chaos-level",
@@ -2320,14 +2396,14 @@ def build_sample_parser() -> argparse.ArgumentParser:
         help="Disable character-sheet safety sanitization and avoid anti-explicit negative injections "
         "(default on; --no-uncensored-mode restores them).",
     )
-    from config.defaults.model_presets import OP_MODES, PRESETS
+    from config.presets import OP_MODES, PRESETS
 
     parser.add_argument(
         "--preset",
         type=str,
         default=None,
         choices=list(PRESETS),
-        help="Apply a sampler preset (soft defaults) from config.defaults.model_presets",
+        help="Apply a sampler preset (soft defaults) from config.presets",
     )
     parser.add_argument(
         "--op-mode",
@@ -2367,7 +2443,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-quality-defaults",
         action="store_true",
-        help="Skip the prompt-routed quality policy (config/defaults/quality_policy.py): no soft-filled guidance, "
+        help="Skip the prompt-routed quality policy (config/presets.py): no soft-filled guidance, "
         "anti-AI packs, pick-best, OCR repair or frontier subject; only the flags you pass apply.",
     )
     parser.add_argument(
@@ -2486,7 +2562,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         "--prompt-layout",
         type=str,
         default="",
-        help="JSON file: layered prompt (intent/subjects/scene/camera/…). See utils/prompt/prompt_layout.py and examples/prompt_layout.example.json",
+        help="JSON file: layered prompt (intent/subjects/scene/camera/…). See utils/prompt/text.py and examples/prompt_layout.example.json",
     )
     parser.add_argument(
         "--t5-layout-encode",
@@ -2503,7 +2579,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="off",
         help="Invention Lab prompt/repair stack: off | auto | all | comma list of modules "
-        "(utils/generation/inventions/stack.py).",
+        "(utils/generation/inventions.py).",
     )
     parser.add_argument(
         "--invention-adaptive-steps",
@@ -2520,7 +2596,7 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=str,
         default="",
         help="Multi-character cast JSON: ownership phrases, anti-blend negatives, box layout, sheets "
-        "(utils/generation/multi_char_cast.py; see docs/research/CORPUS_AND_CAST.md).",
+        "(utils/generation/inventions.py; see docs/RESEARCH.md).",
     )
     parser.add_argument(
         "--corpus-jsonl",

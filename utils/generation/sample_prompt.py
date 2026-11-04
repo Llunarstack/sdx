@@ -1,16 +1,19 @@
-"""Prompt phases of ``sample.py``: the user's prompt, prompt additions, and the final encoder text."""
+"""``sample.py`` prompt phases: feature planners (frontier, Krea, attention layout, auto-refine), the user's prompt, additions and the final encoder text."""
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from utils.generation.sample_helpers import (
+from utils.generation.sample_core import (
     TEXT_MAX_TOKENS,
     _apply_gender_swap,
     _build_size_tokens,
@@ -20,8 +23,460 @@ from utils.generation.sample_helpers import (
     _parse_expected_texts,
     _parse_scale_csv,
 )
-from utils.prompt.prompt_emphasis import parse_prompt_emphasis
+from utils.prompt.text import parse_prompt_emphasis
 from utils.safety.minor_guard import require_allowed
+
+
+def apply_sample_feature_prompt_phase(args: Any, *, steps: int = 50) -> None:
+    """Prompt-time mutations (before text encoding)."""
+    _apply_character_session(args)
+    _apply_krea_controls(args)
+    _apply_frontier_perfect(args, steps=steps)
+    _apply_frontier_creative(args, steps=steps)
+    _apply_frontier(args, steps=steps, diffusion_only=False)
+
+
+def _apply_krea_controls(args: Any) -> None:
+    if not any(
+        (
+            getattr(args, "krea_turbo_preset", False),
+            str(getattr(args, "creativity_mode", "") or "").strip(),
+            str(getattr(args, "style_ref", "") or "").strip(),
+            str(getattr(args, "style_references_json", "") or "").strip(),
+            str(getattr(args, "moodboard_json", "") or "").strip(),
+            str(getattr(args, "moodboard_images", "") or "").strip(),
+            abs(float(getattr(args, "slider_intensity", 0) or 0)) > 1e-6,
+            abs(float(getattr(args, "slider_complexity", 0) or 0)) > 1e-6,
+            abs(float(getattr(args, "slider_movement", 0) or 0)) > 1e-6,
+        )
+    ):
+        return
+    from utils.generation.sample_core import apply_krea_controls_to_args
+
+    apply_krea_controls_to_args(args)
+
+
+def apply_sample_feature_diffusion_phase(args: Any, *, steps: int = 50) -> dict[str, Any]:
+    """Diffusion-time kwargs (after layout / regional plan)."""
+    extra: dict[str, Any] = {}
+    extra.update(_apply_frontier_perfect(args, steps=steps, diffusion_only=True))
+    extra.update(_apply_frontier_creative(args, steps=steps, diffusion_only=True))
+    extra.update(_apply_frontier(args, steps=steps, diffusion_only=True))
+    extra.update(_apply_attention_layout(args, steps=steps))
+    return extra
+
+
+def _apply_frontier_perfect(args: Any, *, steps: int, diffusion_only: bool = False) -> dict[str, Any]:
+    perfect = getattr(args, "frontier_perfect", False)
+    subject_only = getattr(args, "frontier_subject", False)
+    if not perfect and not subject_only:
+        return {}
+    if diffusion_only:
+        return {}
+
+    if perfect:
+        from frontier.planning import PolicyTier, analyze_perfect, perfect_sample_kwargs
+
+        tier_name = str(getattr(args, "safety_tier", "moderate") or "moderate").lower()
+        tier = PolicyTier(tier_name)
+        plan = analyze_perfect(
+            args.prompt or "",
+            num_steps=steps,
+            serendipity_dial=float(getattr(args, "frontier_serendipity", 0.25) or 0.25),
+            layout_regions=len(getattr(getattr(args, "_box_layout_spec", None), "regions", []) or []),
+            auto_resolve_contradictions=bool(getattr(args, "frontier_auto_resolve", False)),
+            safety_tier=tier,
+        )
+        args.perfect_frontier_plan = plan
+        if plan.refused:
+            from utils.safety.minor_guard import ProhibitedContentError
+
+            raise ProhibitedContentError(
+                f"Prompt refused: sexual content involving minors ({', '.join(plan.refuse_reasons)})."
+            )
+        kw = perfect_sample_kwargs(plan, base_negative=getattr(args, "negative_prompt", "") or "")
+        args.prompt = kw.get("prompt", args.prompt)
+        args.negative_prompt = kw.get("negative_prompt", getattr(args, "negative_prompt", ""))
+        if kw.get("cfg_scale_multiplier") and getattr(args, "cfg_scale", None):
+            args.cfg_scale = float(args.cfg_scale) * float(kw["cfg_scale_multiplier"])
+        return {k: v for k, v in kw.items() if k not in ("prompt", "negative_prompt")}
+
+    from frontier.planning import analyze_subject, subject_sample_kwargs
+
+    sub = analyze_subject(args.prompt or "")
+    args.subject_frontier_plan = sub
+    kw = subject_sample_kwargs(sub, base_negative=getattr(args, "negative_prompt", "") or "")
+    args.prompt = kw.get("prompt", args.prompt)
+    args.negative_prompt = kw.get("negative_prompt", getattr(args, "negative_prompt", ""))
+    if kw.get("cfg_scale_multiplier") and getattr(args, "cfg_scale", None):
+        args.cfg_scale = float(args.cfg_scale) * float(kw["cfg_scale_multiplier"])
+    return {k: v for k, v in kw.items() if k not in ("prompt", "negative_prompt")}
+
+
+def _apply_frontier_creative(args: Any, *, steps: int, diffusion_only: bool = False) -> dict[str, Any]:
+    if not getattr(args, "frontier_creative", False):
+        return {}
+
+    from frontier.imagination import analyze_imagination, imagination_sample_kwargs
+
+    seed = int(getattr(args, "seed", 0) or 0)
+    rnd_seed = seed if getattr(args, "creative_random_constraint", False) else None
+    plan = analyze_imagination(
+        args.prompt or "",
+        num_steps=steps,
+        base_serendipity=float(getattr(args, "frontier_serendipity", 0.25) or 0.25),
+        mutate_count=int(getattr(args, "creative_mutate", 0) or 0),
+        mutate_seed=seed,
+        random_constraint_seed=rnd_seed,
+    )
+    args.imagination_plan = plan
+
+    if diffusion_only:
+        extra: dict[str, Any] = {}
+        if plan.step_emphasis:
+            extra["step_emphasis"] = list(plan.step_emphasis)
+        from frontier.engine import SerendipityInjector
+
+        inj = SerendipityInjector(num_steps=steps)
+        curve = inj.curve(plan.serendipity_dial)
+        extra["step_noise_scales"] = list(curve.scales)
+        return extra
+
+    kw = imagination_sample_kwargs(plan, base_negative=getattr(args, "negative_prompt", "") or "")
+    args.prompt = kw.get("prompt", args.prompt)
+    args.negative_prompt = kw.get("negative_prompt", getattr(args, "negative_prompt", ""))
+    if plan.suppress_contradiction_resolve:
+        args.frontier_auto_resolve = False
+    if kw.get("cfg_scale_multiplier") and getattr(args, "cfg_scale", None):
+        args.cfg_scale = float(args.cfg_scale) * float(kw["cfg_scale_multiplier"])
+    if plan.mutations:
+        args.creative_prompt_mutations = plan.mutations
+    args.frontier_serendipity = plan.serendipity_dial
+    return {k: v for k, v in kw.items() if k not in ("prompt", "negative_prompt")}
+
+
+def write_fix_region_mask(
+    box_spec: Any,
+    region_name: str,
+    *,
+    image_size: int,
+    out_path: str | Path,
+) -> tuple[Path, str]:
+    """Rasterize a box region to an inpaint mask PNG; returns (path, regional prompt)."""
+    import torch
+    from PIL import Image
+
+    latent_h = latent_w = max(8, image_size // 8)
+    mask_latent, reg_prompt = build_region_fix_mask(
+        box_spec, region_name, latent_h=latent_h, latent_w=latent_w, device=torch.device("cpu")
+    )
+    mask_up = torch.nn.functional.interpolate(mask_latent, size=(image_size, image_size), mode="nearest")
+    arr = (mask_up[0, 0].numpy() * 255).astype("uint8")
+    p = Path(out_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(arr, mode="L").save(p)
+    return p, reg_prompt
+
+
+def _apply_frontier(args: Any, *, steps: int, diffusion_only: bool = False) -> dict[str, Any]:
+    if getattr(args, "frontier_perfect", False) or getattr(args, "frontier_subject", False):
+        return {}
+    if getattr(args, "frontier_creative", False):
+        return {}
+    if not getattr(args, "frontier", False):
+        return {}
+    from frontier.engine import apply_frontier_to_args, frontier_diffusion_hooks
+
+    dial = float(getattr(args, "frontier_serendipity", 0.25) or 0.25)
+    if diffusion_only and getattr(args, "frontier_plan", None) is not None:
+        plan = args.frontier_plan
+    else:
+        from frontier.engine import FrontierEngine
+
+        eng = FrontierEngine(num_steps=steps, serendipity_dial=dial)
+        plan = apply_frontier_to_args(args, engine=eng)
+        if getattr(args, "frontier_auto_resolve", False):
+            from frontier.engine import ContradictionScanner
+
+            args.prompt = ContradictionScanner().suggest_rewrite(args.prompt or "")
+    hooks = frontier_diffusion_hooks(plan)
+    extra: dict[str, Any] = {}
+    if hooks.get("serendipity_scales"):
+        extra["step_noise_scales"] = hooks["serendipity_scales"]
+    if hooks.get("entropy_per_step"):
+        extra["step_noise_scales"] = hooks.get("entropy_per_step")
+    if not diffusion_only:
+        witness_cfg = getattr(args, "cfg_scale", None)
+        if plan.witness and plan.witness.cfg_bias and witness_cfg:
+            args.cfg_scale = float(witness_cfg) * float(plan.witness.cfg_bias)
+    return extra
+
+
+def _apply_character_session(args: Any) -> dict[str, Any]:
+    path = str(getattr(args, "character_session", "") or "").strip()
+    if not path:
+        return {}
+    session = load_character_session(path)
+    additions = session.get("prompt_additions", "")
+    if additions:
+        base = (args.prompt or "").strip()
+        args.prompt = f"{base}, {additions}" if base else additions
+    refs = session.get("reference_images", [])
+    if refs and not getattr(args, "dissect_refs", ""):
+        args.dissect_refs = ",".join(str(r) for r in refs)
+    neg = session.get("negative_prompt", "")
+    if neg:
+        base_neg = getattr(args, "negative_prompt", "") or ""
+        args.negative_prompt = f"{base_neg}, {neg}" if base_neg else neg
+    return {}
+
+
+def _apply_attention_layout(args: Any, *, steps: int) -> dict[str, Any]:
+    if not getattr(args, "box_attn_layout", False):
+        return {}
+    box_spec = getattr(args, "_box_layout_spec", None)
+    if box_spec is None:
+        return {}
+    from frontier.layout import build_attention_layout_plan
+
+    frac = float(getattr(args, "box_attn_inject_frac", 0.4) or 0.4)
+    strength = float(getattr(args, "box_attn_strength", 0.85) or 0.85)
+    plan = build_attention_layout_plan(
+        box_spec.regions,
+        num_steps=steps,
+        inject_frac=frac,
+        strength=strength,
+    )
+    args._attention_layout_plan = plan
+    return {"attention_layout_plan": plan}
+
+
+def load_character_session(path: str | Path) -> dict[str, Any]:
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"character session not found: {p}")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("character session must be a JSON object")
+    return data
+
+
+def save_character_session(path: str | Path, data: dict[str, Any]) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def build_region_fix_mask(
+    box_spec: Any,
+    region_name: str,
+    *,
+    latent_h: int,
+    latent_w: int,
+    device: Any = None,
+) -> tuple[Any, str]:
+    """Return (mask tensor 1,1,H,W), regional prompt for ``region_name``."""
+    import torch
+
+    from utils.generation.regional import build_latent_region_masks
+
+    name = region_name.strip().lower()
+    target = None
+    for r in box_spec.regions:
+        if str(r.name).strip().lower() == name:
+            target = r
+            break
+    if target is None:
+        raise KeyError(f"region {region_name!r} not in box layout")
+    region_masks, _bg = build_latent_region_masks(box_spec, latent_h, latent_w, device=device or torch.device("cpu"))
+    idx = list(box_spec.regions).index(target)
+    mask = region_masks[idx : idx + 1].clone()
+    return mask, str(target.prompt or target.name)
+
+
+@dataclass
+class AutoRefineResult:
+    best_index: int
+    scores: list[float]
+    outputs: list[str]
+    prompts: list[str] = field(default_factory=list)
+
+
+def _replace_or_append_prompt(cmd: list[str], prompt: str) -> list[str]:
+    """Return a copy of ``cmd`` with ``--prompt`` value replaced or appended."""
+    out: list[str] = []
+    replaced = False
+    i = 0
+    while i < len(cmd):
+        tok = cmd[i]
+        if tok == "--prompt" and i + 1 < len(cmd):
+            out.extend(["--prompt", prompt])
+            i += 2
+            replaced = True
+            continue
+        if tok.startswith("--prompt="):
+            out.append(f"--prompt={prompt}")
+            i += 1
+            replaced = True
+            continue
+        out.append(tok)
+        i += 1
+    if not replaced:
+        out.extend(["--prompt", prompt])
+    return out
+
+
+def run_auto_refine_candidates(
+    *,
+    sample_cmd: Sequence[str],
+    num_candidates: int = 3,
+    seed_base: int = 42,
+    out_stem: str = "refine",
+    prompt_variants: Sequence[str] | None = None,
+) -> AutoRefineResult:
+    """
+    Run ``sample.py`` multiple times; pick the best with the model-free ``heuristic`` ranker preset.
+
+    When ``prompt_variants`` is set, each candidate uses a different prompt
+    (e.g. from ``--creative-mutate``). Otherwise only seed offsets vary.
+    """
+    from PIL import Image
+
+    from utils.agentic.quality_loop import CompositeRanker
+
+    outputs: list[str] = []
+    prompts_used: list[str] = []
+    images: list[np.ndarray] = []
+    variants = list(prompt_variants or [])
+    for i in range(max(1, int(num_candidates))):
+        out = f"{out_stem}_{i}.png"
+        cmd = list(sample_cmd)
+        if variants:
+            cmd = _replace_or_append_prompt(cmd, variants[i % len(variants)])
+            prompts_used.append(variants[i % len(variants)])
+        else:
+            prompts_used.append(_extract_prompt_from_cmd(cmd) or "")
+        cmd = cmd + ["--seed", str(seed_base + i), "--out", out]
+        subprocess.run(cmd, check=True)
+        outputs.append(out)
+        images.append(np.array(Image.open(out).convert("RGB")))
+    best_i, scores = CompositeRanker("heuristic").pick_best_index(
+        images, prompt=_extract_prompt_from_cmd(sample_cmd) or "", device="cpu"
+    )
+    return AutoRefineResult(best_index=best_i, scores=scores, outputs=outputs, prompts=prompts_used)
+
+
+def _extract_prompt_from_cmd(cmd: Sequence[str]) -> str:
+    for i, tok in enumerate(cmd):
+        if tok == "--prompt" and i + 1 < len(cmd):
+            return str(cmd[i + 1])
+        if tok.startswith("--prompt="):
+            return tok.split("=", 1)[1]
+    return ""
+
+
+def run_creative_refine(
+    *,
+    sample_cmd: Sequence[str],
+    base_prompt: str,
+    num_candidates: int = 4,
+    seed_base: int = 42,
+    out_stem: str = "creative",
+    mutate_count: int | None = None,
+    base_serendipity: float = 0.25,
+) -> AutoRefineResult:
+    """
+    Build mutation variants from ``analyze_imagination``, run each, pick best.
+
+    Falls back to seed-only diversity if no mutations requested.
+    """
+    from frontier.imagination import analyze_imagination
+
+    count = int(mutate_count if mutate_count is not None else num_candidates)
+    plan = analyze_imagination(
+        base_prompt,
+        base_serendipity=base_serendipity,
+        mutate_count=max(count, num_candidates),
+        mutate_seed=seed_base,
+    )
+    variants = plan.mutations if plan.mutations else None
+    if variants:
+        # Include augmented base as first candidate
+        base_aug = plan.augmented_prompt or base_prompt
+        if base_aug not in variants:
+            variants = [base_aug] + list(variants)
+    return run_auto_refine_candidates(
+        sample_cmd=sample_cmd,
+        num_candidates=num_candidates,
+        seed_base=seed_base,
+        out_stem=out_stem,
+        prompt_variants=variants,
+    )
+
+
+def export_adherence_heatmap(
+    attn_weights: Any,
+    prompt: str,
+    out_path: str | Path,
+    *,
+    latent_h: int = 64,
+    latent_w: int = 64,
+    box_spec: Any = None,
+) -> Path:
+    """Save PNG heatmap from cross-attention weights + optional box overlay."""
+    import torch
+    from models.conditioning import PromptParser, attribute_binding_heatmap
+    from PIL import Image, ImageDraw
+
+    parser = PromptParser()
+    parsed = parser.parse(prompt)
+    heat = attribute_binding_heatmap(
+        attn_weights if isinstance(attn_weights, torch.Tensor) else torch.as_tensor(attn_weights),
+        parsed,
+        spatial_h=latent_h,
+        spatial_w=latent_w,
+    )
+    arr = heat.detach().float().cpu().numpy()
+    arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)
+    rgb = (plt_colormap_inferno(arr) * 255).astype(np.uint8)
+    img = Image.fromarray(rgb, mode="RGB")
+    if box_spec is not None:
+        draw = ImageDraw.Draw(img)
+        w, h = img.size
+        for r in getattr(box_spec, "regions", []) or []:
+            x1, y1, x2, y2 = float(r.x1), float(r.y1), float(r.x2), float(r.y2)
+            draw.rectangle([x1 * w, y1 * h, x2 * w, y2 * h], outline=(0, 200, 255), width=2)
+    p = Path(out_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    img.save(p)
+    return p
+
+
+def plt_colormap_inferno(arr: np.ndarray) -> np.ndarray:
+    """Inferno-like colormap without matplotlib dependency."""
+    x = np.clip(arr, 0.0, 1.0)
+    r = np.clip(1.5 * x - 0.1, 0, 1)
+    g = np.clip(1.2 * x - 0.2, 0, 1) * np.clip(x * 2, 0, 1)
+    b = np.clip(0.8 - x, 0, 1) * np.clip(1.5 * x, 0, 1)
+    return np.stack([r, g, b], axis=-1)
+
+
+def append_benchmark_history(leaderboard_path: Path, history_path: Path) -> dict[str, Any]:
+    """Append ``leaderboard.json`` snapshot to rolling history file."""
+    lb = json.loads(leaderboard_path.read_text(encoding="utf-8"))
+    hist: list[Any] = []
+    if history_path.is_file():
+        hist = json.loads(history_path.read_text(encoding="utf-8"))
+        if not isinstance(hist, list):
+            hist = []
+    import datetime as _dt
+
+    entry = {"timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "leaderboard": lb}
+    hist.append(entry)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    history_path.write_text(json.dumps(hist, indent=2), encoding="utf-8")
+    return entry
+
 
 _COUNT_RE = re.compile(
     r"\b(exactly\s+\d+|\d+\s+(people|persons|person|characters?|girls?|boys?|coins?|candles?|windows?))\b"
@@ -69,7 +524,7 @@ def _join(*parts: str, sep: str = ", ") -> str:
 def load_box_layout(args: Any, prompt: str) -> str:
     """Load ``--box-layout`` into ``args._box_layout_spec``; returns the prompt with its global text merged."""
     try:
-        from utils.generation.regional_box_prompting import layout_text_from_regions, load_box_layout_file
+        from utils.generation.regional import layout_text_from_regions, load_box_layout_file
 
         spec = load_box_layout_file(str(args.box_layout).strip())
     except Exception as e:
@@ -137,7 +592,7 @@ def compose_user_prompt(args: Any, parser: Any) -> None:
         prompt = load_box_layout(args, prompt)
     if has_prompt_layout:
         try:
-            from utils.prompt.prompt_layout import load_prompt_layout_file, merge_prompt_with_layout
+            from utils.prompt.text import load_prompt_layout_file, merge_prompt_with_layout
 
             compiled = load_prompt_layout_file(str(args.prompt_layout).strip())
             args._prompt_layout_negative = compiled.negative or ""
@@ -165,7 +620,7 @@ def compose_user_prompt(args: Any, parser: Any) -> None:
 def _apply_cast_and_corpus(args: Any) -> None:
     """``--cast-json`` (multi-character cast) and ``--corpus-jsonl`` (retrieved captions + moodboard)."""
     try:
-        from utils.generation.inventions.wire import apply_cast_and_corpus_to_namespace
+        from utils.generation.inventions import apply_cast_and_corpus_to_namespace
 
         apply_cast_and_corpus_to_namespace(args, work_dir="outputs/_invention")
     except Exception as e:
@@ -181,7 +636,7 @@ def _expand_artist_mentions(args: Any) -> None:
     if getattr(args, "prompt_compose", True):
         if "@" not in raw and "+" not in raw:
             return
-        from utils.prompt.prompt_composer import compose_prompt
+        from utils.prompt.text import compose_prompt
 
         idx = str(getattr(args, "artist_index", "") or "").strip() or None
         composed = compose_prompt(raw, artist_strength=strength, artist_index=idx)
@@ -191,7 +646,7 @@ def _expand_artist_mentions(args: Any) -> None:
         if composed.blocks:
             print(f"Prompt blocks: {', '.join(sorted(composed.blocks))}")
     elif getattr(args, "artist_style", True) and "@" in raw:
-        from utils.prompt.artist_registry import expand_artist_mentions
+        from utils.prompt.text import expand_artist_mentions
 
         args.prompt, artists = expand_artist_mentions(raw, strength=strength)
         if artists:
@@ -219,7 +674,7 @@ def compose_prompt_additions(args: Any) -> PromptExtras:
 
     if getattr(args, "scene_blueprint", "").strip():
         try:
-            from utils.prompt.scene_blueprint import load_scene_blueprint
+            from utils.prompt.scene import load_scene_blueprint
 
             scene_pos, extras.scene_negative = load_scene_blueprint(
                 args.scene_blueprint, strength=float(getattr(args, "scene_blueprint_strength", 1.0))
@@ -232,7 +687,7 @@ def compose_prompt_additions(args: Any) -> PromptExtras:
 
     if getattr(args, "originality", 0.0) and args.prompt:
         try:
-            from utils.prompt.originality_augment import inject_originality_tokens
+            from utils.prompt.art_direction import inject_originality_tokens
 
             strength = max(0.0, min(1.0, float(args.originality)))
             rng = np.random.default_rng(int(args.seed) + int(1000 * strength))
@@ -249,7 +704,7 @@ def _auto_original_character(args: Any) -> str:
     if not (getattr(args, "auto_original_character", True) and getattr(args, "prompt", "")):
         return ""
     try:
-        from utils.prompt.auto_oc import infer_auto_original_character
+        from utils.prompt.scene import infer_auto_original_character
 
         profile = infer_auto_original_character(
             str(args.prompt),
@@ -290,8 +745,8 @@ def _character_sheets(args: Any) -> tuple[str, str]:
         len(sheet_paths) >= 2 and str(getattr(args, "composition_mode", "none") or "none") == "multi_character"
     )
     if use_labels and len(pos_all) >= 2:
-        from utils.prompt.multi_subject import merge_character_sheet_positives, multi_sheet_extra_negatives_csv
-        from utils.prompt.tags import merge_csv_unique
+        from utils.prompt.scene import merge_character_sheet_positives, multi_sheet_extra_negatives_csv
+        from utils.prompt.text import merge_csv_unique
 
         return (
             merge_character_sheet_positives(pos_all),
@@ -302,7 +757,7 @@ def _character_sheets(args: Any) -> tuple[str, str]:
 
 def _style_packs(args: Any) -> list[str]:
     """Text implied by --hard-style, --naturalize(-deep), --anti-bleed and --diversity."""
-    from config.defaults.prompt_domains import (
+    from config.prompts import (
         CONCEPT_BLEEDING_POSITIVE,
         DIVERSITY_POSITIVE,
         HARD_STYLE_RECOMMENDED_PROMPTS,
@@ -324,11 +779,10 @@ def _style_packs(args: Any) -> list[str]:
 
 def build_prompt_plan(args: Any, m: Any, extras: PromptExtras) -> PromptPlan:
     """Feature, enrichment and prompt-stack passes; returns the text the encoders see."""
-    from utils.generation.sample_features import apply_sample_feature_prompt_phase
 
     apply_sample_feature_prompt_phase(args, steps=int(getattr(args, "steps", 50) or 50))
     if bool(getattr(args, "apply_user_taste", False)):
-        from utils.generation.user_taste import apply_taste_to_prompts, load_user_taste
+        from utils.generation.planners import apply_taste_to_prompts, load_user_taste
 
         pos, neg = apply_taste_to_prompts(
             str(getattr(args, "prompt", "") or ""), str(getattr(args, "negative_prompt", "") or ""), load_user_taste()
@@ -351,13 +805,13 @@ def build_prompt_plan(args: Any, m: Any, extras: PromptExtras) -> PromptPlan:
     else:
         prompt, emphasis = args.prompt, []
     if getattr(args, "expand_prompt", False) and prompt.strip() and not getattr(args, "_skip_prompt_expansion", False):
-        from utils.superior.inference_pipeline import expand_prompt_heuristic
+        from utils.agentic.quality_loop import expand_prompt_heuristic
 
         prompt = expand_prompt_heuristic(prompt)
         print("Superior: expanded prompt heuristically.", file=sys.stderr)
     hm = str(getattr(args, "human_made", "none") or "none").lower().strip()
     if hm not in ("none", "off", "0", ""):
-        from utils.quality.human_made import append_human_made_prompt_fragments
+        from utils.quality.finishing import append_human_made_prompt_fragments
 
         prompt, args.negative_prompt = append_human_made_prompt_fragments(
             prompt, str(getattr(args, "negative_prompt", "") or ""), hm
@@ -415,15 +869,21 @@ def build_prompt_plan(args: Any, m: Any, extras: PromptExtras) -> PromptPlan:
 
 
 def _apply_invention_stack(args: Any) -> None:
-    """``--invention-stack``; a box layout it plans is loaded here because the user's layout was read earlier."""
+    """``--invention-stack`` then ``--hard-prompts`` (counts, relations, binding, text); a box layout either
+    plans is loaded here because the user's layout was read earlier."""
     before = str(getattr(args, "box_layout", "") or "")
     try:
-        from utils.generation.inventions.wire import apply_invention_to_namespace
+        from utils.generation.inventions import apply_invention_to_namespace
 
         apply_invention_to_namespace(args)
     except Exception as e:
         print(f"Warning: invention stack skipped: {e}", file=sys.stderr)
-        return
+    try:
+        from utils.prompt.realism import apply_hard_prompts_to_args
+
+        apply_hard_prompts_to_args(args)
+    except Exception as e:
+        print(f"Warning: hard-prompt plan skipped: {e}", file=sys.stderr)
     if str(getattr(args, "box_layout", "") or "") != before and getattr(args, "_box_layout_spec", None) is None:
         args.prompt = load_box_layout(args, str(args.prompt or ""))
 
@@ -449,7 +909,7 @@ def _ground_and_design(args: Any, prompt: str, device: Any) -> str:
     local_rag = str(getattr(args, "local_rag_jsonl", "") or "").strip()
     if local_rag:
         try:
-            from utils.superior.inference_pipeline import SuperiorPromptStack
+            from utils.agentic.quality_loop import SuperiorPromptStack
 
             stack = SuperiorPromptStack(rag_jsonl=local_rag, rag_top_k=int(getattr(args, "local_rag_top_k", 8) or 8))
             prompt = stack.enrich(prompt)
@@ -461,7 +921,7 @@ def _ground_and_design(args: Any, prompt: str, device: Any) -> str:
     brief = str(getattr(args, "composition_brief", "off") or "off")
     if brief != "off" and prompt.strip():
         try:
-            from utils.prompt.composition_brief import apply_composition_brief
+            from utils.prompt.art_direction import apply_composition_brief
 
             prompt = apply_composition_brief(prompt, brief)  # type: ignore[arg-type]
         except Exception as e:
@@ -506,11 +966,7 @@ def _agentic_facts(args: Any, prompt: str) -> str:
     if not facts_path:
         return prompt
     try:
-        from utils.prompt.rag_prompt import (
-            load_facts_from_gen_searcher_json,
-            load_facts_from_jsonl,
-            merge_facts_into_prompt,
-        )
+        from utils.prompt.rag import load_facts_from_gen_searcher_json, load_facts_from_jsonl, merge_facts_into_prompt
 
         mode = str(getattr(args, "agentic_facts_format", "auto") or "auto").lower().strip()
         max_facts = max(1, int(getattr(args, "agentic_max_facts", 16) or 16))
@@ -533,11 +989,7 @@ def _agentic_facts(args: Any, prompt: str) -> str:
 def _creative_rag(args: Any, prompt: str, device: Any) -> str:
     """Semantic conflict resolution plus intent-aware enrichment (moondream2 / Qwen2.5 when available)."""
     try:
-        from utils.prompt.advanced_prompting import (
-            CreativeRAGOptimizer,
-            classify_prompt_intent,
-            resolve_semantic_conflicts,
-        )
+        from utils.prompt.rag import CreativeRAGOptimizer, classify_prompt_intent, resolve_semantic_conflicts
 
         level = float(getattr(args, "creative_rag_level", 0.7) or 0.7)
         refs = [str(getattr(args, "creative_rag_image", "") or "").strip()]
@@ -589,7 +1041,7 @@ def _multi_instance(args: Any, prompt: str, num_gen: int) -> tuple[str, int]:
     if preset in ("none", "") or not prompt.strip():
         return prompt, num_gen
     try:
-        from utils.prompt.multi_instance_scene import apply_multi_instance_preset, describe_limitation_short
+        from utils.prompt.scene import apply_multi_instance_preset, describe_limitation_short
 
         user_n = max(0, int(getattr(args, "multi_instance_count", 0) or 0))
         prompt, neg, min_n, expected, note = apply_multi_instance_preset(prompt, preset, user_expected_count=user_n)
@@ -614,8 +1066,8 @@ def _multi_instance(args: Any, prompt: str, num_gen: int) -> tuple[str, int]:
     if not bool(getattr(args, "multi_instance_auto", False)):
         return prompt, num_gen
     try:
-        from utils.prompt.composition_brief import apply_composition_brief
-        from utils.prompt.multi_instance_scene import multi_instance_auto_settings, print_multi_instance_hints
+        from utils.prompt.art_direction import apply_composition_brief
+        from utils.prompt.scene import multi_instance_auto_settings, print_multi_instance_hints
 
         st = multi_instance_auto_settings(preset)
         if st.get("composition_brief_boost") and str(getattr(args, "composition_brief", "off")).lower() == "off":
@@ -651,11 +1103,7 @@ def _detailed_scene(args: Any, prompt: str) -> str:
     if mode == "off" or not prompt.strip():
         return prompt
     try:
-        from utils.prompt.detailed_scene_entities import (
-            apply_detailed_scene_boost,
-            detailed_scene_warrants_boost,
-            extract_key_segments,
-        )
+        from utils.prompt.scene import apply_detailed_scene_boost, detailed_scene_warrants_boost, extract_key_segments
 
         if mode == "on" or (mode == "auto" and detailed_scene_warrants_boost(prompt)):
             prompt, neg = apply_detailed_scene_boost(prompt, "on", strength=strength)  # type: ignore[arg-type]
@@ -680,8 +1128,6 @@ def _fix_region(args: Any, prompt: str, image_size: int) -> str:
     try:
         import tempfile
 
-        from utils.generation.sample_features import write_fix_region_mask
-
         mask_path, region_prompt = write_fix_region_mask(
             box_spec,
             region,
@@ -695,13 +1141,3 @@ def _fix_region(args: Any, prompt: str, image_size: int) -> str:
     except Exception as e:
         print(f"Warning: --fix-region failed: {e}", file=sys.stderr)
         return prompt
-
-
-__all__ = [
-    "PromptExtras",
-    "PromptPlan",
-    "build_prompt_plan",
-    "compose_prompt_additions",
-    "compose_user_prompt",
-    "load_box_layout",
-]

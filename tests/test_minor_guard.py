@@ -246,14 +246,14 @@ def test_require_encodable_trusts_only_marked_negatives() -> None:
 
 def test_encoder_backstop_raises_before_tokenizer() -> None:
     import torch
-    from utils.generation.sample_helpers import encode_text
+    from utils.generation.sample_core import encode_text
 
     with pytest.raises(ProhibitedContentError):
         encode_text(["nsfw, loli"], None, None, torch.device("cpu"))
 
 
 def test_simple_generate_refuses_negative_used_as_prompt_below_cfg_one() -> None:
-    from utils.generation.simple_latent_generate import sample_one_image_pil
+    from utils.generation.sample_run import sample_one_image_pil
 
     kw = dict(model=None, diffusion=None, tokenizer=None, text_encoder=None, vae=None, device="cpu", eval_mode=False)
     with pytest.raises(ProhibitedContentError):
@@ -261,7 +261,7 @@ def test_simple_generate_refuses_negative_used_as_prompt_below_cfg_one() -> None
 
 
 def test_content_policy_tier_never_disables_block() -> None:
-    from frontier.perfect import ContentPolicy, PolicyDecision, PolicyTier
+    from frontier.planning import ContentPolicy, PolicyDecision, PolicyTier
 
     for tier in PolicyTier:
         assert ContentPolicy(tier).evaluate("nude child, of age").decision == PolicyDecision.REFUSE
@@ -278,7 +278,7 @@ def test_videomax_refuses() -> None:
 
 
 def test_steering_helpers_share_the_guard() -> None:
-    from config.defaults.quality_policy import match_profile_name
+    from config.presets import match_profile_name
 
     assert match_profile_name("nsfw, lolita fashion") == "nsfw"
     assert match_profile_name("nsfw, child") != "nsfw"
@@ -288,13 +288,13 @@ def test_steering_helpers_share_the_guard() -> None:
     "tag", ["oppai_loli", "teen", "kid", "little_girl", "female_child", "l0li", "lolis", "loli\u200b", "young_girl"]
 )
 def test_scraper_blocks_variant_tags(tag: str) -> None:
-    from scripts.scrape.safety import is_allowed
+    from scripts.scrape import is_allowed
 
     assert not is_allowed(["scenery", tag])
 
 
 def test_scraper_rejects_untagged_posts(tmp_path) -> None:
-    from scripts.scrape.booru_client import BooruClient, Post
+    from scripts.scrape import BooruClient, Post
 
     client = BooruClient(None, tmp_path, user_agent="test", rate_per_sec=1.0)
     post = Post(site="e621", id="1", md5="m", file_url="https://x/y.png", ext="png", tags=[])
@@ -321,8 +321,7 @@ def test_dataset_drops_minor_rows(tmp_path) -> None:
 
 
 def test_training_scripts_drop_minor_rows(tmp_path) -> None:
-    from scripts.tools.training.train_flow_grpo import _load_prompts
-    from scripts.tools.training.train_reference_adapter import _collect_pairs
+    from scripts.tools.trainers import _collect_pairs, _load_prompts
 
     prompts = tmp_path / "p.txt"
     prompts.write_text("a red fox in snow\nkids at a playground\nnude chlid\n", encoding="utf-8")

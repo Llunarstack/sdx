@@ -1,23 +1,26 @@
-"""
-Linear **rectified-flow** training objective (Liu et al. 2022; SD3 recipe, Esser et al. 2024).
+r"""Linear **rectified-flow** training objective (Liu et al. 2022; SD3 recipe, Esser et al. 2024).
 
-Uses ``x_t = (1 - s) x_0 + s \\epsilon`` with ``s = t / (T-1)`` and discrete ``t \\in [0, T-1]`` for the DiT timestep
-embedding. The network output is matched to the velocity ``v^* = \\epsilon - x_0`` (same channels as latents).
+Uses ``x_t = (1 - s) x_0 + s \epsilon`` with ``s = t / (T-1)`` and discrete ``t \in [0, T-1]`` for the DiT timestep
+embedding. The network output is matched to the velocity ``v^* = \epsilon - x_0`` (same channels as latents).
 Works for any latent rank (images ``(B, C, H, W)`` or video ``(B, C, T, H, W)``).
 
 Sampling: ``GaussianDiffusion.sample_loop(..., flow_matching_sample=True)`` integrates in ``s`` on the same index grid,
 with the same resolution shift (``flow_shift`` + ``flow_shift_ref_hw``) used here in training.
 ``ConsistencyFlowLoss`` adds the velocity-consistency term for few-step distillation of a trained flow.
+
+Training auxiliaries shared with the VP objective: Spectral Flow Prediction (``spectral_sfp_per_sample_loss``,
+an FFT-weighted MSE whose radial weights move from low to high frequencies as noise falls) and the
+latent-bridge regularizer (``bridge_aux_vp_loss`` on shuffle-paired latent mixes).
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.nn as nn
 
-from diffusion.schedules import time_shift
+from .schedules import time_shift
 
 
 def sample_flow_time(
@@ -78,7 +81,7 @@ def flow_matching_per_sample_losses(
     ``t_idx`` given: used as is (the caller samples and shifts it). Otherwise ``s`` comes from
     :func:`sample_flow_time` (``logit_normal`` / ``shift``) and is snapped to the index grid so the timestep embedding
     and the interpolation agree exactly. ``spectral_kwargs`` (``low_sigma`` / ``high_sigma`` / ``tau_power``) swaps the
-    MSE for the frequency-weighted loss of ``diffusion.spectral_sfp``.
+    MSE for the frequency-weighted loss of ``spectral_sfp_per_sample_loss``.
     """
     if x0.shape != epsilon.shape:
         raise ValueError("x0 and epsilon must match shape")
@@ -95,8 +98,6 @@ def flow_matching_per_sample_losses(
         out = out[:, : x0.shape[1]]
     target = epsilon - x0
     if spectral_kwargs:
-        from diffusion.spectral_sfp import spectral_sfp_per_sample_loss
-
         return spectral_sfp_per_sample_loss(out, target, t_idx, int(num_timesteps), **spectral_kwargs)
     return (out - target).pow(2).flatten(1).mean(dim=1)
 
@@ -128,7 +129,7 @@ class ConsistencyFlowLoss:
     @torch.no_grad()
     def update_teacher_ema(self) -> None:
         """Move the teacher toward the student (call after each optimizer step)."""
-        for t_param, s_param in zip(self.teacher.parameters(), self.student.parameters()):
+        for t_param, s_param in zip(self.teacher.parameters(), self.student.parameters(), strict=True):
             t_param.mul_(self.ema_decay).add_(s_param, alpha=1.0 - self.ema_decay)
 
     def compute(
@@ -157,10 +158,133 @@ class ConsistencyFlowLoss:
         return {"loss": loss, "loss_mean": loss.mean(), "s": s}
 
 
+def radial_normalized_grid(h: int, w: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    """``(H, W)`` distance from the fftshifted spectrum centre, normalized to ``[0, 1]``."""
+    ys = (torch.arange(h, device=device, dtype=dtype) - (h - 1) * 0.5) / max(h, 1)
+    xs = (torch.arange(w, device=device, dtype=dtype) - (w - 1) * 0.5) / max(w, 1)
+    gy, gx = torch.meshgrid(ys, xs, indexing="ij")
+    r = torch.sqrt(gy**2 + gx**2)
+    return r / (r.max() + 1e-8)
+
+
+def time_frequency_weights(
+    h: int,
+    w: int,
+    t: torch.Tensor,
+    num_timesteps: int,
+    *,
+    low_sigma: float = 0.22,
+    high_sigma: float = 0.22,
+    tau_power: float = 1.0,
+    device: torch.device,
+    dtype: torch.dtype,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """``(B, 1, H, W)`` non-negative weights summing to 1 over the frequency axes for each batch row.
+
+    ``t = 0`` is almost clean and weights high frequencies; ``t = num_timesteps - 1`` is almost pure noise and
+    weights low frequencies.
+    """
+    r = radial_normalized_grid(h, w, device, dtype)
+    w_low = torch.exp(-((r / (float(low_sigma) + eps)) ** 2))
+    w_high = torch.exp(-(((1.0 - r) / (float(high_sigma) + eps)) ** 2))
+    w_low = (w_low / (w_low.sum() + eps)).view(1, 1, h, w)
+    w_high = (w_high / (w_high.sum() + eps)).view(1, 1, h, w)
+
+    tau = (t.float() / max(num_timesteps - 1, 1)).clamp(0.0, 1.0)
+    if tau_power != 1.0:
+        tau = tau.pow(float(tau_power))
+    tau_b = tau.view(-1, 1, 1, 1)
+    wb = tau_b * w_low + (1.0 - tau_b) * w_high
+    return wb / (wb.sum(dim=(-2, -1), keepdim=True) + eps)
+
+
+def spectral_sfp_per_sample_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    t: torch.Tensor,
+    num_timesteps: int,
+    *,
+    low_sigma: float = 0.22,
+    high_sigma: float = 0.22,
+    tau_power: float = 1.0,
+) -> torch.Tensor:
+    """Per-sample loss ``(B,)``: ``sum_w W(w, t) |FFT(err)(w)|^2`` averaged over channels.
+
+    ``pred`` / ``target`` are ``(B, C, H, W)``; ``t`` holds ``(B,)`` integer indices (large ``t`` = noisy). With the
+    orthonormal FFT (Parseval) and weights summing to 1, uniform weights give exactly the mean spatial MSE.
+    """
+    err = (pred - target).to(torch.float32)
+    _, _, h, w = err.shape
+    f = torch.fft.fftshift(torch.fft.fft2(err, dim=(-2, -1), norm="ortho"), dim=(-2, -1))
+    power = f.real.pow(2) + f.imag.pow(2)
+    wb = time_frequency_weights(
+        h,
+        w,
+        t,
+        num_timesteps,
+        low_sigma=low_sigma,
+        high_sigma=high_sigma,
+        tau_power=tau_power,
+        device=err.device,
+        dtype=err.dtype,
+    )
+    return (power * wb).mean(dim=1).sum(dim=(-2, -1))
+
+
+if TYPE_CHECKING:
+    from diffusion.gaussian_diffusion import GaussianDiffusion
+
+
+def shuffle_pair_latents(latents: torch.Tensor) -> torch.Tensor:
+    """Permute the batch so (for ``B >= 2``) the permutation is never the identity."""
+    b = latents.shape[0]
+    if b < 2:
+        return latents
+    identity = torch.arange(b, device=latents.device)
+    perm = torch.randperm(b, device=latents.device)
+    while bool((perm == identity).all()):
+        perm = torch.randperm(b, device=latents.device)
+    return latents[perm]
+
+
+def bridge_aux_vp_loss(
+    diffusion: GaussianDiffusion,
+    model: torch.nn.Module,
+    latents: torch.Tensor,
+    t: torch.Tensor,
+    model_kwargs: dict,
+    *,
+    mix_lambda: float = 0.15,
+    **loss_kwargs: Any,
+) -> torch.Tensor:
+    """Scalar VP loss on ``x0 = (1-λ) latents + λ shuffle_pair(latents)``.
+
+    ``loss_kwargs`` (noise, noise_offset, loss weighting, spectral SFP) go to ``training_losses``;
+    refinement and per-sample weights are always off for this auxiliary term.
+    """
+    lam = max(0.0, min(1.0, float(mix_lambda)))
+    if lam <= 0.0:
+        raise ValueError("mix_lambda must be > 0")
+    x0 = (1.0 - lam) * latents + lam * shuffle_pair_latents(latents)
+    return diffusion.training_losses(
+        model,
+        x0,
+        t,
+        model_kwargs=model_kwargs,
+        refinement_prob=0.0,
+        refinement_max_t=0,
+        sample_weights=None,
+        **loss_kwargs,
+    )["loss"]
+
+
 __all__ = [
     "ConsistencyFlowLoss",
     "flow_matching_per_sample_losses",
     "flow_time_to_index",
     "sample_flow_time",
     "shift_timestep_indices",
+    "bridge_aux_vp_loss",
+    "shuffle_pair_latents",
 ]

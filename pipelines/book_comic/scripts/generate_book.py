@@ -11,13 +11,13 @@ Why workflow-first:
 - Adding true multi-page "reasoning" into the core model is architecture/training work.
 - You already have the key primitives (inpainting + MDM freeze + OCR text masks), so we can ship a working generator now.
 
-Stack: each page calls **repo-root** ``sample.py`` (DiT + diffusion), forwarding pick-best metrics that can load **vit_quality** checkpoints and optional **DiT AR regime** alignment via ``utils.architecture.ar_block_conditioning`` (see ``--pick-vit-ar-blocks`` / ``--pick-vit-ar-from-ckpt``).
-Optional **LoRA / DoRA / LyCORIS**, stacked **ControlNet** maps, **holy-grail** scheduling, and **reference / IP-Adapter** weights use the same flags as ``sample.py`` (see ``book_helpers.extend_sample_py_adapter_control_cmd``).
-**Hires-fix, finishing presets, latent spectral/domain knobs, refinement, and face/post-reference** flags match ``sample.py`` via ``book_helpers.extend_sample_py_sdx_enhance_cmd`` (OCR repair subprocesses get the same fragment).
+Stack: each page calls **repo-root** ``sample.py`` (DiT + diffusion), forwarding pick-best metrics that can load **vit_quality** checkpoints and optional **DiT AR regime** alignment via ``utils.modeling.architecture`` (see ``--pick-vit-ar-blocks`` / ``--pick-vit-ar-from-ckpt``).
+Optional **LoRA / DoRA / LyCORIS**, stacked **ControlNet** maps, **holy-grail** scheduling, and **reference / IP-Adapter** weights use the same flags as ``sample.py`` (see ``render.extend_sample_py_adapter_control_cmd``).
+**Hires-fix, finishing presets, latent spectral/domain knobs, refinement, and face/post-reference** flags match ``sample.py`` via ``render.extend_sample_py_sdx_enhance_cmd`` (OCR repair subprocesses get the same fragment).
 **``--book-preflight``** checks that **DiT** and **ViT** checkpoints, LoRAs, and control maps exist and warns on AR / resolution mismatches (``book_model_readiness``).
 **``--book-dry-run``** prints the first resolved ``sample.py`` argv and exits (no images written).
 **Adherence / quality packs, CLIP guard & monitor, volatile CFG, SAG, dual-stage layout** forward through
-``book_helpers.extend_sample_py_adherence_quality_cmd`` (also appended to OCR repair argv).
+``render.extend_sample_py_adherence_quality_cmd`` (also appended to OCR repair argv).
 """
 
 from __future__ import annotations
@@ -772,7 +772,7 @@ def main() -> None:
         "--pick-vit-ar-blocks",
         type=int,
         default=-1,
-        help="0/2/4: ViT scorer AR regime matching DiT num_ar_blocks (-1 = unknown one-hot). See utils/architecture/ar_block_conditioning.py.",
+        help="0/2/4: ViT scorer AR regime matching DiT num_ar_blocks (-1 = unknown one-hot). See utils/modeling/architecture.py.",
     )
     parser.add_argument(
         "--pick-vit-ar-from-ckpt",
@@ -848,7 +848,7 @@ def main() -> None:
     parser.add_argument("--post-grain", type=float, default=-1.0, help="Grain amount (-1 = preset).")
     parser.add_argument("--post-micro-contrast", type=float, default=-1.0, help="-1 = preset.")
 
-    # Lexicon / aspect (see pipelines/book_comic/prompt_lexicon.py, docs/BOOK_COMIC_TECH.md)
+    # Lexicon / aspect (see pipelines/book_comic/prompt_lexicon.py, docs/GUIDES.md)
     parser.add_argument(
         "--lexicon-style",
         default="none",
@@ -1342,7 +1342,7 @@ def main() -> None:
         help="Trained IP-Adapter-style projector checkpoint (sample.py).",
     )
 
-    # --- sample.py SDX polish (hires / latent / post / refine / faces) — see book_helpers.extend_sample_py_sdx_enhance_cmd
+    # --- sample.py SDX polish (hires / latent / post / refine / faces) — see render.extend_sample_py_sdx_enhance_cmd
     parser.add_argument(
         "--flow-matching-sample",
         action="store_true",
@@ -1762,7 +1762,7 @@ def main() -> None:
         ],
         help=(
             "Extra positive/negative fragments for mature narrative fidelity, surreal OCs, "
-            "crowds, reflections, etc. See book_challenging_content.py."
+            "crowds, reflections, etc. See pipelines/book_comic/story.py."
         ),
     )
     parser.add_argument(
@@ -1789,7 +1789,7 @@ def main() -> None:
             "manhwa_western",
             "illustration_manga",
         ],
-        help="Hybrid sequential-art idiom (manga×comic, etc.); see book_style_fusion.py. Visual-memory style_mix can also set this.",
+        help="Hybrid sequential-art idiom (manga×comic, etc.); see pipelines/book_comic/story.py. Visual-memory style_mix can also set this.",
     )
     parser.add_argument(
         "--style-secondary",
@@ -2044,7 +2044,7 @@ def main() -> None:
         help="Write book_manifest.json under --output-dir (prompts, seeds, paths, flags).",
     )
 
-    # Cross-page consistency (prompt cues; see pipelines/book_comic/consistency_helpers.py)
+    # Cross-page consistency (prompt cues; see pipelines/book_comic/story.py)
     parser.add_argument(
         "--consistency-json",
         default="",
@@ -2095,7 +2095,7 @@ def main() -> None:
         default="",
         help=(
             "JSON visual memory for cast/props (proportions, camera, page overrides); "
-            "see pipelines/book_comic/visual_memory.py and examples/book_visual_memory.example.json"
+            "see pipelines/book_comic/story.py and examples/book_visual_memory.example.json"
         ),
     )
 
@@ -2106,7 +2106,7 @@ def main() -> None:
         args.control = []
 
     _ensure_repo_on_path()
-    from utils.architecture.ar_block_conditioning import read_num_ar_blocks_from_checkpoint
+    from utils.modeling.architecture import read_num_ar_blocks_from_checkpoint
 
     _dit_ar_nb = -1
     try:
@@ -2116,18 +2116,9 @@ def main() -> None:
     if bool(getattr(args, "pick_vit_ar_from_ckpt", False)) and _dit_ar_nb in (0, 2, 4):
         args.pick_vit_ar_blocks = _dit_ar_nb
 
-    from pipelines.book_comic import (
-        book_challenging_content,
-        book_helpers,
-        book_model_readiness,
-        book_style_authenticity,
-        book_style_fusion,
-        consistency_helpers,
-        prompt_lexicon,
-    )
-    from pipelines.book_comic import visual_memory as book_visual_memory
+    from pipelines.book_comic import prompt_lexicon, render, story
 
-    settings = book_helpers.resolve_book_sample_settings(args)
+    settings = render.resolve_book_sample_settings(args)
     _style_cfg = prompt_lexicon.resolve_book_style_controls(
         book_style_pack=str(getattr(args, "book_style_pack", "none") or "none"),
         artist_pack=str(getattr(args, "artist_pack", "none") or "none"),
@@ -2159,7 +2150,7 @@ def main() -> None:
         negative_level=_auto_h.get("negative_level", "none") if _human_neg_raw == "none" else _human_neg_raw,
     )
 
-    _audit_errs, _audit_warns = book_helpers.audit_book_run_flags(
+    _audit_errs, _audit_warns = render.audit_book_run_flags(
         pick_best=str(settings.pick_best or ""),
         sample_candidates=int(settings.sample_candidates),
         pick_vit_ckpt=str(getattr(args, "pick_vit_ckpt", "") or ""),
@@ -2175,7 +2166,7 @@ def main() -> None:
     if _audit_errs:
         raise SystemExit("book run configuration errors:\n" + "\n".join(_audit_errs))
 
-    _pf_errs, _pf_warns = book_model_readiness.run_book_preflight(
+    _pf_errs, _pf_warns = render.run_book_preflight(
         args,
         dit_ar_blocks=_dit_ar_nb,
         mode=str(getattr(args, "book_preflight", "warn") or "warn"),
@@ -2188,7 +2179,7 @@ def main() -> None:
 
     def _cfg_cmd_tail() -> list[str]:
         tail: list[str] = []
-        book_helpers.append_optional_sample_flags(
+        render.append_optional_sample_flags(
             tail,
             vae_tiling=bool(getattr(args, "vae_tiling", False)),
             pick_clip_model=str(getattr(args, "pick_clip_model", "") or ""),
@@ -2234,17 +2225,17 @@ def main() -> None:
         return tail
 
     ocr_extra = (
-        book_helpers.build_extra_ocr_sample_flags(settings)
+        render.build_extra_ocr_sample_flags(settings)
         + _cfg_cmd_tail()
         + _photo_tail()
-        + book_helpers.adapter_control_argv_for_sample(args)
-        + book_helpers.sdx_enhance_argv_for_sample(args)
-        + book_helpers.adherence_quality_argv_for_sample(args)
+        + render.adapter_control_argv_for_sample(args)
+        + render.sdx_enhance_argv_for_sample(args)
+        + render.adherence_quality_argv_for_sample(args)
     )
 
     out_dir = Path(args.output_dir)
     _ensure_repo_on_path()
-    from pipelines.book_comic.book_project import BookProject
+    from pipelines.book_comic.render import BookProject
 
     book_proj = BookProject.open(out_dir, create=True)
     book_proj.ckpt = str(args.ckpt)
@@ -2343,8 +2334,8 @@ def main() -> None:
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, technique_hint_str)
     panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, human_hint_str)
     _vm_early = str(getattr(args, "visual_memory", "") or "").strip()
-    _vm_style_peek = book_style_authenticity.peek_visual_memory_book_style(Path(_vm_early)) if _vm_early else ""
-    _book_auth_bundle = book_style_authenticity.resolve_authenticity_bundle(
+    _vm_style_peek = story.peek_visual_memory_book_style(Path(_vm_early)) if _vm_early else ""
+    _book_auth_bundle = story.resolve_authenticity_bundle(
         level=str(getattr(args, "book_authenticity", "none") or "none"),
         medium=str(getattr(args, "book_authenticity_medium", "auto") or "auto"),
         book_type=str(args.book_type),
@@ -2355,8 +2346,8 @@ def main() -> None:
         panel_hint_str = prompt_lexicon.merge_prompt_fragments(panel_hint_str, _book_auth_bundle["positive"])
     _book_auth_neg = str(_book_auth_bundle.get("negative") or "").strip()
     _book_auth_effective_medium = str(_book_auth_bundle.get("effective_medium") or "").strip()
-    _primary_style_bm = _vm_style_peek or book_style_fusion.primary_style_from_book_type(str(args.book_type))
-    _style_fusion_cli = book_style_fusion.fusion_from_cli(
+    _primary_style_bm = _vm_style_peek or story.primary_style_from_book_type(str(args.book_type))
+    _style_fusion_cli = story.fusion_from_cli(
         preset=str(getattr(args, "style_fusion_preset", "none") or "none"),
         secondary=str(getattr(args, "style_secondary", "") or ""),
         primary_book_style=_primary_style_bm,
@@ -2373,7 +2364,7 @@ def main() -> None:
 
     if bool(getattr(args, "auto_original_character", True)):
         try:
-            from utils.prompt.auto_oc import infer_auto_original_character
+            from utils.prompt.scene import infer_auto_original_character
 
             _seed_parts = [
                 str(getattr(args, "cover_prompt", "") or ""),
@@ -2440,26 +2431,26 @@ def main() -> None:
     consistency_spec: dict[str, Any] = {}
     cj = str(getattr(args, "consistency_json", "") or "").strip()
     if cj:
-        consistency_spec = dict(consistency_helpers.load_consistency_json(Path(cj)))
-    consistency_helpers.overlay_cli_on_spec(consistency_spec, args)
-    consistency_block = consistency_helpers.positive_block_from_mapping(consistency_spec)
+        consistency_spec = dict(story.load_consistency_json(Path(cj)))
+    story.overlay_cli_on_spec(consistency_spec, args)
+    consistency_block = story.positive_block_from_mapping(consistency_spec)
     _challenge_pack_cli = str(getattr(args, "book_challenge_pack", "none") or "none").strip().lower()
     _book_challenge_pos = prompt_lexicon.merge_prompt_fragments(
-        book_challenging_content.challenge_pack_positive(_challenge_pack_cli),
+        story.challenge_pack_positive(_challenge_pack_cli),
         str(getattr(args, "book_challenge_extra", "") or "").strip(),
     )
     consistency_block = prompt_lexicon.merge_prompt_fragments(consistency_block, _book_challenge_pos)
-    consistency_neg_level = consistency_helpers.negative_level_from_spec(
+    consistency_neg_level = story.negative_level_from_spec(
         consistency_spec, getattr(args, "consistency_negative", None)
     )
-    consistency_neg_fragment = consistency_helpers.consistency_negative_addon(consistency_neg_level)
-    _book_challenge_neg = book_challenging_content.challenge_pack_negative(_challenge_pack_cli)
+    consistency_neg_fragment = story.consistency_negative_addon(consistency_neg_level)
+    _book_challenge_neg = story.challenge_pack_negative(_challenge_pack_cli)
 
     vm_path = str(getattr(args, "visual_memory", "") or "").strip()
     book_vm = None
     if vm_path:
         try:
-            book_vm = book_visual_memory.load_visual_memory(Path(vm_path))
+            book_vm = story.load_visual_memory(Path(vm_path))
         except Exception as e:
             raise SystemExit(f"--visual-memory: failed to load {vm_path!r}: {e}") from e
 
@@ -2484,7 +2475,7 @@ def main() -> None:
     if args.pages and args.page_prompt_template:
         for i in range(args.pages):
             prompts.append(
-                book_helpers.expand_page_prompt_template(
+                render.expand_page_prompt_template(
                     args.page_prompt_template,
                     page_index=i,
                     total_pages=int(args.pages),
@@ -2507,7 +2498,7 @@ def main() -> None:
         needs_speech_bubble_ocr = args.anchor_speech_bubbles
         if needs_expected_text_ocr or needs_speech_bubble_ocr:
             try:
-                from utils.generation.text_rendering import create_text_rendering_pipeline
+                from utils.generation.editing import create_text_rendering_pipeline
 
                 pipe = create_text_rendering_pipeline()
                 text_engine = pipe["engine"]
@@ -2550,7 +2541,7 @@ def main() -> None:
         return base
 
     def _postprocess_output(path: Path, page_seed: int) -> None:
-        book_helpers.apply_postprocess_to_image_file(
+        render.apply_postprocess_to_image_file(
             path,
             sharpen_amount=settings.post_sharpen,
             naturalize=settings.post_naturalize,
@@ -2572,9 +2563,9 @@ def main() -> None:
         prompt_final = _apply_book_style(prompt_prefix, prompt)
         if args.force_text_quote and expected_texts_for_prompt:
             prompt_final = _maybe_append_text_says(prompt_final, expected_texts_for_prompt)
-        prompt_final = book_helpers.enhance_prompt_for_page(prompt_final, settings=settings)
+        prompt_final = render.enhance_prompt_for_page(prompt_final, settings=settings)
 
-        pick_exp = book_helpers.expected_text_for_pick(expected_texts_for_prompt)
+        pick_exp = render.expected_text_for_pick(expected_texts_for_prompt)
 
         cmd: list[str] = [
             sys.executable,
@@ -2596,7 +2587,7 @@ def main() -> None:
             "--scheduler",
             args.scheduler,
         ]
-        book_helpers.append_sample_py_quality_flags(
+        render.append_sample_py_quality_flags(
             cmd,
             settings,
             pick_expected_text=pick_exp,
@@ -2612,7 +2603,7 @@ def main() -> None:
             ),
             pick_auto_no_clip=bool(getattr(args, "pick_auto_no_clip", False)),
         )
-        book_helpers.append_sample_py_beam_flags(
+        render.append_sample_py_beam_flags(
             cmd,
             beam_width=int(getattr(args, "beam_width", 0) or 0),
             beam_steps=int(getattr(args, "beam_steps", 0) or 0),
@@ -2625,9 +2616,9 @@ def main() -> None:
         )
         cmd.extend(_cfg_cmd_tail())
         cmd.extend(_photo_tail())
-        book_helpers.extend_sample_py_adapter_control_cmd(cmd, args)
-        book_helpers.extend_sample_py_sdx_enhance_cmd(cmd, args)
-        book_helpers.extend_sample_py_adherence_quality_cmd(cmd, args)
+        render.extend_sample_py_adapter_control_cmd(cmd, args)
+        render.extend_sample_py_sdx_enhance_cmd(cmd, args)
+        render.extend_sample_py_adherence_quality_cmd(cmd, args)
         if args.character_sheet.strip():
             cmd += ["--character-sheet", args.character_sheet]
         if args.character_prompt_extra.strip():
@@ -2681,7 +2672,7 @@ def main() -> None:
         seed: int,
     ) -> None:
         vm_cover = book_vm.prompt_fragment_for_cover() if book_vm is not None else ""
-        composed = book_helpers.compose_book_page_prompt(
+        composed = render.compose_book_page_prompt(
             user_prompt=user_prompt,
             narration_prefix=narration_p,
             consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block, vm_cover),
@@ -2749,7 +2740,7 @@ def main() -> None:
     back_prompt = str(getattr(args, "back_cover_prompt", "") or "").strip()
     if back_prompt:
         back_out = book_proj.cover_path("back")
-        back_seed = book_helpers.derive_book_page_seed(int(args.seed), 9999)
+        back_seed = render.derive_book_page_seed(int(args.seed), 9999)
         _run_cover_side(
             side="back",
             user_prompt=back_prompt,
@@ -2779,9 +2770,9 @@ def main() -> None:
                 prev_path = page_out
             continue
 
-        rolling = book_helpers.build_rolling_page_context(prev_prompts, num_previous=context_n, max_chars=context_mc)
+        rolling = render.build_rolling_page_context(prev_prompts, num_previous=context_n, max_chars=context_mc)
         vm_page = book_vm.prompt_fragment_for_page(i) if book_vm is not None else ""
-        composed_prompt = book_helpers.compose_book_page_prompt(
+        composed_prompt = render.compose_book_page_prompt(
             user_prompt=page_prompt,
             narration_prefix=narration_p,
             consistency_block=prompt_lexicon.merge_prompt_fragments(consistency_block, oc_block, vm_page),
@@ -2803,7 +2794,7 @@ def main() -> None:
                     "index": i,
                     "path": book_proj.rel(page_out),
                     "prompt": composed_prompt,
-                    "seed": book_helpers.derive_book_page_seed(int(args.seed), i),
+                    "seed": render.derive_book_page_seed(int(args.seed), i),
                     "skipped": True,
                 }
             )
@@ -2819,7 +2810,7 @@ def main() -> None:
             args.anchor_face or args.edge_anchor or args.anchor_speech_bubbles or user_anchor_exists
         )
 
-        page_seed = book_helpers.derive_book_page_seed(int(args.seed), i)
+        page_seed = render.derive_book_page_seed(int(args.seed), i)
 
         if i == 0 or not should_anchor:
             sample_generate(
@@ -3032,10 +3023,10 @@ def main() -> None:
                 "dual_stage_layout": bool(getattr(args, "dual_stage_layout", False)),
                 "hard_style": str(getattr(args, "hard_style", "") or "").strip() or None,
             },
-            "book_model_stack": book_model_readiness.book_model_stack_snapshot(
+            "book_model_stack": render.book_model_stack_snapshot(
                 args,
                 dit_ar_blocks=_dit_ar_nb,
-                vit_cfg=book_model_readiness.peek_vit_config_for_args(args),
+                vit_cfg=render.peek_vit_config_for_args(args),
             ),
             "user_style_fragment": _user_style_cli or None,
             "style_fusion_preset": str(getattr(args, "style_fusion_preset", "none") or "none"),

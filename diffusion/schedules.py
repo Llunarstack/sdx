@@ -8,7 +8,10 @@
 Any name with the ``_ztsnr`` suffix (e.g. ``linear_ztsnr``) is rescaled to zero terminal SNR
 (:func:`rescale_zero_terminal_snr`).
 
-Also holds what used to be: snr_utils, respace.
+Also: SNR / alpha_cumprod helpers, the SD3 / Flux resolution time shifts, DDIM-style respacing
+(``space_timesteps``), and training-time timesteps: ``sample_training_timesteps`` (uniform, logit-normal,
+high/low-noise) and ``get_timestep_loss_weight`` (min-SNR, min-SNR-soft, EDM, v, eps, unit; every scheme is a
+weight on the x0 error converted to the space the model predicts in, Hang et al. 2023 Sec. 3.4).
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import math
 from typing import Any
 
 import numpy as np
+import torch
 from numpy.typing import NDArray
 
 # ==================================================================================================
@@ -27,9 +31,9 @@ from numpy.typing import NDArray
 
 
 def rust_diffusion_math(fn_name: str, *args: Any) -> NDArray[Any] | None:
-    """Result of ``sdx_native.diffusion_math_native.<fn_name>(*args)``, or ``None`` when the library is unavailable."""
+    """Result of ``sdx_native.ffi.<fn_name>(*args)``, or ``None`` when the library is unavailable."""
     try:
-        from sdx_native import diffusion_math_native
+        from sdx_native import ffi as diffusion_math_native
 
         return getattr(diffusion_math_native, fn_name)(*args)
     except (ImportError, OSError, RuntimeError):
@@ -158,7 +162,7 @@ def squared_cosine_beta_schedule_v2(num_timesteps: int, max_beta: float = 0.999)
     if result is not None and result.shape == (n,):
         return result
     try:
-        from sdx_native.beta_schedules_native import squared_cosine_betas_v2_native
+        from sdx_native.ffi import squared_cosine_betas_v2_native
     except ImportError:
         pass
     else:
@@ -249,6 +253,90 @@ def space_timesteps(num_timesteps: int, section_counts: str | list[int]) -> np.n
             cur_idx += frac_stride
         start_idx += size
     return np.unique(np.array(all_steps, dtype=np.int64))
+
+
+_EPS = 1e-12
+
+
+def _x0_space_weight(lw: str, snr: torch.Tensor, gamma: float, sigma_data: float) -> torch.Tensor | None:
+    if lw == "min_snr":
+        return snr.clamp(max=gamma) if gamma > 0 else None
+    if lw == "min_snr_soft":
+        return snr * gamma / (snr + gamma) if gamma > 0 else None
+    if lw == "edm":
+        sigma2 = 1.0 / snr.clamp(min=_EPS)
+        sd2 = float(sigma_data) ** 2
+        return (sigma2 + sd2) / (sigma2 * sd2)
+    if lw == "v":
+        return snr + 1.0
+    if lw == "eps":
+        return snr
+    if lw == "unit":
+        return None
+    raise ValueError(f"Unknown loss_weighting {lw!r}; use min_snr | min_snr_soft | edm | v | eps | unit")
+
+
+def get_timestep_loss_weight(
+    loss_weighting: str,
+    *,
+    snr: torch.Tensor | None,
+    alpha_cumprod: torch.Tensor,
+    min_snr_gamma: float,
+    loss_weighting_sigma_data: float,
+    prediction_type: str = "epsilon",
+) -> torch.Tensor:
+    """
+    Per-batch-element weight ``(B,)`` multiplying the per-sample MSE of the model's prediction.
+
+    ``snr`` is ``abar / (1 - abar)`` at the sampled timesteps (computed from ``alpha_cumprod`` when ``None``).
+    ``prediction_type``: ``epsilon`` | ``v`` | ``x0`` (the space the per-sample MSE was taken in).
+    """
+    if snr is None:
+        snr = alpha_cumprod / (1.0 - alpha_cumprod).clamp(min=_EPS)
+    snr = snr.to(torch.float32)
+    w = _x0_space_weight(str(loss_weighting).lower().strip(), snr, float(min_snr_gamma), loss_weighting_sigma_data)
+    if w is None:
+        return torch.ones_like(snr)
+    pt = str(prediction_type).lower()
+    if pt == "v":
+        return w / (snr + 1.0)
+    if pt == "x0":
+        return w
+    # eps: w/snr is 0/0 only where snr == 0 (zero-terminal SNR); its limit there is 1 for the min-SNR family.
+    return torch.where(snr > 0, w / snr.clamp(min=_EPS), torch.ones_like(snr))
+
+
+def sample_training_timesteps(
+    batch_size: int,
+    num_timesteps: int,
+    *,
+    device: torch.device,
+    dtype: torch.dtype = torch.long,
+    mode: str = "uniform",
+    logit_mean: float = 0.0,
+    logit_std: float = 1.0,
+) -> torch.Tensor:
+    """
+    ``(batch_size,)`` step indices in ``[0, num_timesteps - 1]``.
+
+    ``mode``: ``uniform`` (classic DDPM ``randint``); ``logit_normal`` (``u ~ sigmoid(N(logit_mean, logit_std))``,
+    ``t = round(u * (T-1))``); ``high_noise`` (``u ~ Beta(2, 1)``, more heavily corrupted latents);
+    ``low_noise`` (``u ~ Beta(1, 2)``, more fine-detail tail).
+    """
+    if num_timesteps <= 0:
+        raise ValueError("num_timesteps must be positive")
+    T, B = int(num_timesteps), int(batch_size)
+    m = str(mode or "uniform").strip().lower()
+    if m == "uniform":
+        return torch.randint(0, T, (B,), device=device, dtype=dtype)
+    if m in ("logit_normal", "logit-normal", "sd3"):
+        u = torch.sigmoid(torch.randn(B, device=device, dtype=torch.float32) * float(logit_std) + float(logit_mean))
+    elif m in ("high_noise", "high-noise", "beta_high", "low_noise", "low-noise", "beta_low", "detail"):
+        a, b = (2.0, 1.0) if m.startswith(("high", "beta_high")) else (1.0, 2.0)
+        u = torch.distributions.Beta(torch.tensor(a, device=device), torch.tensor(b, device=device)).sample((B,))
+    else:
+        raise ValueError(f"Unknown timestep_sample_mode {mode!r}; use uniform | logit_normal | high_noise | low_noise")
+    return (u * float(T - 1)).round().to(dtype=dtype)
 
 
 __all__ = [

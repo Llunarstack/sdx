@@ -21,7 +21,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from utils.quality.quality import rgb_to_luminance
+from utils.quality.finishing import rgb_to_luminance
 
 try:
     from utils.native import (
@@ -274,10 +274,10 @@ def score_dynamic_range_headroom(rgb_uint8: np.ndarray) -> float:
 
 def score_aesthetic_proxy(rgb_uint8: np.ndarray) -> float:
     """
-    Heuristic [0,1] (also ``scripts/tools/data/manifest_enrich.py``): mean of exposure balance,
+    Heuristic [0,1] (also ``scripts/tools/manifest.py enrich``): mean of exposure balance,
     dynamic-range headroom and, when measurable, decoder-grid freedom.
     """
-    from utils.quality.ai_look import score_decoder_grid
+    from utils.quality.critics import score_decoder_grid
 
     parts = [float(score_exposure_balance(rgb_uint8)), float(score_dynamic_range_headroom(rgb_uint8))]
     grid = score_decoder_grid(rgb_uint8)
@@ -547,8 +547,8 @@ def score_object_count_match(rgb_uint8: np.ndarray, expected_count: int, object_
 
 def _maybe_human_scores(prompt: str, rgb_images: Sequence[np.ndarray], plan: dict | None = None) -> list[float] | None:
     """Per-image human-likeness in [0,1]; None for drawn / rendered media."""
-    from utils.quality.art_critic import resolve_plan
-    from utils.quality.human_likeness import score_human_likeness
+    from utils.quality.critics import resolve_plan
+    from utils.quality.critics import score_human_likeness
 
     p = resolve_plan(prompt, plan)
     if p.get("medium") in ("2d", "3d"):
@@ -558,7 +558,7 @@ def _maybe_human_scores(prompt: str, rgb_images: Sequence[np.ndarray], plan: dic
 
 def _maybe_spatial_bind_scores(prompt: str, rgb_images: Sequence[np.ndarray]) -> list[float] | None:
     """Per-image left/right color-bind scores; None when the prompt names no color pair."""
-    from utils.quality.scene_physics import score_spatial_color_bind
+    from utils.quality.critics import score_spatial_color_bind
 
     scores = [score_spatial_color_bind(im, prompt) for im in rgb_images]
     return None if not scores or scores[0] is None else [float(s or 0.0) for s in scores]
@@ -575,10 +575,10 @@ def _per_image(module: str, fn: str, with_prompt: bool = False):
 _SPECIALTY_PICK = {
     "combo_human": _maybe_human_scores,
     "combo_spatial_bind": _maybe_spatial_bind_scores,
-    "combo_contact": _per_image("contact_shadow", "score_contact_shadow"),
-    "combo_hand": _per_image("hand_verifier", "score_hand_structure"),
-    "combo_occlusion": _per_image("scene_physics", "score_occlusion"),
-    "combo_reflection": _per_image("scene_physics", "score_reflection"),
+    "combo_contact": _per_image("critics", "score_contact_shadow"),
+    "combo_hand": _per_image("critics", "score_hand_structure"),
+    "combo_occlusion": _per_image("critics", "score_occlusion"),
+    "combo_reflection": _per_image("critics", "score_reflection"),
     "combo_architecture": _per_image("architecture_consistency", "score_architecture_consistency", with_prompt=True),
 }
 
@@ -625,7 +625,7 @@ def _score_vit_quality(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> li
     try:
         import torch
         from PIL import Image
-        from vit_quality.checkpoint_utils import cached_vit_scorer
+        from vit_quality.model import cached_vit_scorer
 
         scorer = cached_vit_scorer(ckpt, str(ctx.device))
     except Exception:
@@ -667,7 +667,7 @@ def _weights_on_disk(path_or_repo: str) -> bool:
     """True when a pretrained folder holds weights or the HF hub cache already has the repo's weights."""
     p = Path(path_or_repo)
     if p.is_dir():
-        from utils.modeling.hf_scaffold import has_local_weights
+        from utils.modeling.model_paths import has_local_weights
 
         return has_local_weights(p)
     try:
@@ -681,7 +681,7 @@ def _weights_on_disk(path_or_repo: str) -> bool:
 def local_reward_weights() -> Any:
     """``HFRewardWeights`` with every backend whose weights are not on disk zeroed; None if none are."""
     from utils.modeling import model_paths
-    from utils.modeling.hf_reward import HFRewardWeights
+    from utils.modeling.hf_loaders import HFRewardWeights
 
     w = HFRewardWeights()
     found = False
@@ -699,7 +699,7 @@ def score_reward_models(rgb_images: Sequence[np.ndarray], prompt: str, device: s
     weights = local_reward_weights()
     if weights is None:
         return None
-    from utils.modeling.hf_reward import HFRewardPanel
+    from utils.modeling.hf_loaders import HFRewardPanel
 
     panel = HFRewardPanel(weights, device=device)
     out = [panel.score_breakdown(im, prompt=prompt) for im in rgb_images]
@@ -743,13 +743,13 @@ def _each(fn: Callable[[np.ndarray], float | None]) -> Callable[[Sequence[np.nda
 
 
 def _ai_look_natural(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float]:
-    from utils.quality.ai_look import ai_look_score
+    from utils.quality.critics import ai_look_score
 
     return [ai_look_score(im, ctx.prompt, ctx.plan).natural for im in rgb_images]
 
 
 def _art(rgb_images: Sequence[np.ndarray], ctx: PickContext) -> list[float]:
-    from utils.quality.art_critic import score_art
+    from utils.quality.critics import score_art
 
     return [score_art(im, ctx.plan).score for im in rgb_images]
 
@@ -896,7 +896,7 @@ def pick_best_indices(
     """
     Return (best_index, one score per image) for a ``PICK_METRICS`` name.
 
-    ``plan`` (see ``utils.quality.art_critic``) states the intended look; by default it is derived
+    ``plan`` (see ``utils.quality.critics``) states the intended look; by default it is derived
     from ``prompt``. Unknown metrics and ``none`` keep candidate 0.
     """
     metric = (metric or "none").lower().strip()
@@ -906,7 +906,7 @@ def pick_best_indices(
     weights = METRIC_WEIGHTS.get(metric)
     if weights is None:
         return 0, [0.0] * n
-    from utils.quality.art_critic import resolve_plan
+    from utils.quality.critics import resolve_plan
 
     ctx = PickContext(
         prompt=prompt or "",

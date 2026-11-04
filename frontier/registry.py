@@ -31,7 +31,7 @@ IDEAS: list[ResearchIdea] = [
         source="Regional-Prompting-FLUX / InstantX",
         url="https://arxiv.org/html/2411.02395",
         status="implemented",
-        module="utils/generation/regional_box_prompting.py",
+        module="utils/generation/regional.py",
         summary="Per-box prompts + masks blended during CFG; mask_inject_steps + base_ratio.",
     ),
     ResearchIdea(
@@ -40,7 +40,7 @@ IDEAS: list[ResearchIdea] = [
         source="Ideogram / sketch-conditioned layout",
         url="https://ideogram.ai",
         status="implemented",
-        module="utils/generation/regional_box_sketch.py",
+        module="utils/generation/regional.py",
         summary="Vector strokes or sketch PNG per box with text prompt.",
     ),
     ResearchIdea(
@@ -85,7 +85,7 @@ IDEAS: list[ResearchIdea] = [
         source="Kynkäänniemi et al., NeurIPS 2024",
         url="https://arxiv.org/abs/2404.07724",
         status="implemented",
-        module="utils/generation/guidance_stack.py",
+        module="utils/generation/guidance.py",
         summary="Apply CFG only inside a noise-level band (--cfg-interval lo,hi in EDM sigma).",
     ),
     ResearchIdea(
@@ -94,7 +94,7 @@ IDEAS: list[ResearchIdea] = [
         source="Dense Diffusion (Kim et al., ICCV 2023) / BoxDiff",
         url="https://github.com/naver-ai/DenseDiffusion",
         status="implemented",
-        module="frontier/attention.py",
+        module="frontier/layout.py",
         summary="--box-attn-layout biases cross-attention toward each box's prompt tokens in early steps.",
     ),
     ResearchIdea(
@@ -111,7 +111,7 @@ IDEAS: list[ResearchIdea] = [
         title="Generate → critique → re-prompt",
         source="Agentic T2I 2025–2026",
         status="partial",
-        module="utils/generation/agentic_stills.py",
+        module="utils/generation/planners.py",
         summary="Interview, drafts, critique and refined sample.py argv; plans only, the caller runs sample.py.",
     ),
     ResearchIdea(
@@ -119,7 +119,7 @@ IDEAS: list[ResearchIdea] = [
         title="Cause-effect plausibility scan",
         source="World-model / physics-aware T2I trend",
         status="implemented",
-        module="frontier/synthesis.py",
+        module="frontier/planning.py",
         summary="Flag missing implied effects (rain→wet) before sampling.",
     ),
     ResearchIdea(
@@ -127,7 +127,7 @@ IDEAS: list[ResearchIdea] = [
         title="Adaptive guidance compute tiers",
         source="Product + TeaCache / step-skip literature",
         status="partial",
-        module="frontier/synthesis.py",
+        module="frontier/planning.py",
         summary="Plans SKIP/LITE/FULL/HEAVY tiers per denoise step; no sampler acts on the tiers yet.",
     ),
     ResearchIdea(
@@ -135,7 +135,7 @@ IDEAS: list[ResearchIdea] = [
         title="Uncertainty-aware escalation",
         source="Test-time scaling / clarification agents",
         status="partial",
-        module="frontier/synthesis.py",
+        module="frontier/planning.py",
         summary="Score ambiguous prompts and boost CFG; the best-of-N recommendation is not acted on yet.",
     ),
     ResearchIdea(
@@ -143,7 +143,7 @@ IDEAS: list[ResearchIdea] = [
         title="Relational scene graph from text",
         source="Scene graph conditioned generation",
         status="partial",
-        module="frontier/synthesis.py",
+        module="frontier/planning.py",
         summary="Subject-relation-object edges → regional layout hints; the hints are not applied to layout yet.",
     ),
     ResearchIdea(
@@ -151,7 +151,7 @@ IDEAS: list[ResearchIdea] = [
         title="Hard-token CFG emphasis",
         source="Prompt weighting / counting / text rendering",
         status="implemented",
-        module="frontier/synthesis.py",
+        module="frontier/planning.py",
         summary="Boost text, hands, counts with (token:weight) fragments.",
     ),
     ResearchIdea(
@@ -159,7 +159,7 @@ IDEAS: list[ResearchIdea] = [
         title="Deep frontier synthesis",
         source="SDX frontier orchestration",
         status="implemented",
-        module="frontier/synthesis.py",
+        module="frontier/planning.py",
         summary="Compose plausibility, uncertainty, relations, compute tiers.",
     ),
     ResearchIdea(
@@ -167,7 +167,7 @@ IDEAS: list[ResearchIdea] = [
         title="Human vs creature vs mecha body modes",
         source="SDX frontier anatomy",
         status="implemented",
-        module="frontier/subject.py",
+        module="frontier/planning.py",
         summary="Route anatomy guidance so dragons are not penalized for extra limbs.",
     ),
     ResearchIdea(
@@ -175,7 +175,7 @@ IDEAS: list[ResearchIdea] = [
         title="Species-aware creature body plans",
         source="Fantasy / VFX creature design",
         status="implemented",
-        module="frontier/subject.py",
+        module="frontier/planning.py",
         summary="Draconic, insectoid, eldritch limb and surface hints.",
     ),
     ResearchIdea(
@@ -183,7 +183,7 @@ IDEAS: list[ResearchIdea] = [
         title="Mature-content render quality",
         source="Adult art / boudoir photography craft",
         status="implemented",
-        module="frontier/subject.py",
+        module="frontier/planning.py",
         summary="Skin, lighting, proportion coherence — not censorship.",
     ),
     ResearchIdea(
@@ -191,7 +191,7 @@ IDEAS: list[ResearchIdea] = [
         title="Stroke-level medium vocabulary",
         source="Traditional + digital brush craft",
         status="implemented",
-        module="frontier/subject.py",
+        module="frontier/planning.py",
         summary="Impasto, hatch, spray, calligraphic stroke packs.",
     ),
     ResearchIdea(
@@ -199,7 +199,7 @@ IDEAS: list[ResearchIdea] = [
         title="Extended medium library",
         source="SDX art_mediums expansion",
         status="implemented",
-        module="config/defaults/art_mediums.py",
+        module="config/styles.py",
         summary="Spray paint, encaustic, ukiyo-e, risograph, collage, etc. (merged into MEDIUM_SPECS).",
     ),
     ResearchIdea(
@@ -207,7 +207,7 @@ IDEAS: list[ResearchIdea] = [
         title="Anti-AI-slop photoreal stack",
         source="Uncanny / plastic skin failure modes",
         status="implemented",
-        module="frontier/subject.py",
+        module="frontier/planning.py",
         summary="Lens, sensor, and negative pack against synthetic tells.",
     ),
     ResearchIdea(
@@ -215,7 +215,7 @@ IDEAS: list[ResearchIdea] = [
         title="Subject-aware frontier orchestration",
         source="SDX frontier",
         status="implemented",
-        module="frontier/subject.py",
+        module="frontier/planning.py",
         summary="Merge body, creature, mature, medium, brush, photoreal plans.",
     ),
     ResearchIdea(
@@ -223,7 +223,7 @@ IDEAS: list[ResearchIdea] = [
         title="Perfect frontier (all analyzers)",
         source="SDX frontier",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Deep + subject + scene quality + safety; --frontier-perfect.",
     ),
     ResearchIdea(
@@ -244,7 +244,7 @@ IDEAS: list[ResearchIdea] = [
         title="Volumetric atmosphere and weather",
         source="Environmental rendering",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Fog, god rays, rain, snow, dust haze.",
     ),
     ResearchIdea(
@@ -252,7 +252,7 @@ IDEAS: list[ResearchIdea] = [
         title="Multi-material surface truth",
         source="PBR / material rendering",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Metal, glass, fabric, skin, wood, liquid, hair.",
     ),
     ResearchIdea(
@@ -260,7 +260,7 @@ IDEAS: list[ResearchIdea] = [
         title="Action freeze and motion blur",
         source="Sports / action photography",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Pan blur, impact frames, gravity-readable poses.",
     ),
     ResearchIdea(
@@ -268,7 +268,7 @@ IDEAS: list[ResearchIdea] = [
         title="Historical era accuracy",
         source="Period drama / costume",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Anachronism negatives per era.",
     ),
     ResearchIdea(
@@ -276,7 +276,7 @@ IDEAS: list[ResearchIdea] = [
         title="In-image typography steering",
         source="Ideogram / Imagen text",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Quoted text spelling + legibility CFG boost.",
     ),
     ResearchIdea(
@@ -284,7 +284,7 @@ IDEAS: list[ResearchIdea] = [
         title="Tiered content policy (pre-gen)",
         source="Platform safety best practice",
         status="implemented",
-        module="frontier/perfect.py",
+        module="frontier/planning.py",
         summary="Adult-NSFW steering tiers (--safety-tier); minor block via utils/safety/minor_guard.",
     ),
     ResearchIdea(
@@ -420,7 +420,7 @@ IDEAS: list[ResearchIdea] = [
         title="Mutation-driven auto-refine",
         source="SDX creative frontier",
         status="implemented",
-        module="utils/generation/sample_features.py",
+        module="utils/generation/sample_prompt.py",
         summary="run_creative_refine + --auto-refine with --frontier-creative.",
     ),
     ResearchIdea(
@@ -429,7 +429,7 @@ IDEAS: list[ResearchIdea] = [
         source="Krea 2 API",
         url="https://www.krea.ai/blog/krea-2-api-launch",
         status="implemented",
-        module="utils/generation/krea_controls.py",
+        module="utils/generation/sample_core.py",
         summary="--style-ref / --style-references-json weighted CLIP blend → reference tokens.",
     ),
     ResearchIdea(
@@ -438,7 +438,7 @@ IDEAS: list[ResearchIdea] = [
         source="Krea 2 API",
         url="https://www.krea.ai/blog/krea-2-api-launch",
         status="implemented",
-        module="utils/generation/krea_controls.py",
+        module="utils/generation/sample_core.py",
         summary="--moodboard-json / --moodboard-images → pooled style embedding.",
     ),
     ResearchIdea(
@@ -447,7 +447,7 @@ IDEAS: list[ResearchIdea] = [
         source="Krea Generative Sliders",
         url="https://www.krea.ai/index/generative-sliders",
         status="implemented",
-        module="utils/generation/krea_controls.py",
+        module="utils/generation/sample_core.py",
         summary="--slider-intensity/complexity/movement + --creativity-mode.",
     ),
     ResearchIdea(
@@ -456,7 +456,7 @@ IDEAS: list[ResearchIdea] = [
         source="Krea 2 Turbo",
         url="https://github.com/krea-ai/krea-2",
         status="implemented",
-        module="utils/generation/krea_controls.py",
+        module="utils/generation/sample_core.py",
         summary="--krea-turbo-preset (~8 steps, low CFG).",
     ),
     ResearchIdea(
@@ -528,7 +528,7 @@ IDEAS: list[ResearchIdea] = [
         title="Depth-aware keyframe interpolation",
         source="SDX video pipeline",
         status="implemented",
-        module="pipelines/video/interpolate.py",
+        module="pipelines/video/motion.py",
         summary="Sobel+luminance depth proxy for occlusion-aware mid-frame blends.",
     ),
     ResearchIdea(
@@ -640,7 +640,7 @@ IDEAS: list[ResearchIdea] = [
         title="Scene preflight validation",
         source="SDX video pipeline",
         status="implemented",
-        module="pipelines/video/scene_graph.py",
+        module="pipelines/video/scene.py",
         summary="--preflight checks paths, ckpt, library before run.",
     ),
     ResearchIdea(
@@ -672,7 +672,7 @@ IDEAS: list[ResearchIdea] = [
         title="First-last-frame (FLF2V) shot mode",
         source="SDX video pipeline",
         status="implemented",
-        module="pipelines/video/interpolate.py",
+        module="pipelines/video/motion.py",
         summary="Pin start/end images; interpolate with optional source motion guide.",
     ),
     ResearchIdea(
@@ -680,7 +680,7 @@ IDEAS: list[ResearchIdea] = [
         title="Storyboard cuts with camera verbs",
         source="SDX video pipeline",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Kling-style cuts[] → shots with tracking/push_in/orbit prompts.",
     ),
     ResearchIdea(
@@ -688,7 +688,7 @@ IDEAS: list[ResearchIdea] = [
         title="Style generation router",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="auto engine: realistic | anime | pixar_3d | voxel | claymation | …",
     ),
     ResearchIdea(
@@ -696,7 +696,7 @@ IDEAS: list[ResearchIdea] = [
         title="AI Director Mode storyboard expansion",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="One prompt → multi-shot cuts + director notes; edit before gen.",
     ),
     ResearchIdea(
@@ -704,7 +704,7 @@ IDEAS: list[ResearchIdea] = [
         title="Multi-engine presets",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Per-style edit overrides, prompts, animation presets, layer hints.",
     ),
     ResearchIdea(
@@ -712,7 +712,7 @@ IDEAS: list[ResearchIdea] = [
         title="Character + world bibles",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Persistent Alex/world rules across episodes and engines.",
     ),
     ResearchIdea(
@@ -728,7 +728,7 @@ IDEAS: list[ResearchIdea] = [
         title="Disney principles sliders",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Pixar/Ghibli/Looney presets + squash/anticipation/timing prompts.",
     ),
     ResearchIdea(
@@ -736,7 +736,7 @@ IDEAS: list[ResearchIdea] = [
         title="Virtual camera rig",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="ARRI/drone/VHS/anime operator presets → prompt + fps.",
     ),
     ResearchIdea(
@@ -744,7 +744,7 @@ IDEAS: list[ResearchIdea] = [
         title="Director personality presets",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Spielberg, Nolan, Miyazaki, horror — cinematic bias injection.",
     ),
     ResearchIdea(
@@ -752,7 +752,7 @@ IDEAS: list[ResearchIdea] = [
         title="Rehearsal stages (animatic → full)",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Cheap animatic/low-poly passes before full GPU render.",
     ),
     ResearchIdea(
@@ -760,7 +760,7 @@ IDEAS: list[ResearchIdea] = [
         title="Layer-based style routing",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Background realistic + character anime hybrid via layer_stack.",
     ),
     ResearchIdea(
@@ -768,7 +768,7 @@ IDEAS: list[ResearchIdea] = [
         title="Thumbnail-first rehearsal gate",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/studio_compiler.py",
+        module="pipelines/video/studio.py",
         summary="Cheap 128px composition pass; require_approval gate before full render.",
     ),
     ResearchIdea(
@@ -776,7 +776,7 @@ IDEAS: list[ResearchIdea] = [
         title="Continuity validators (eyeline, props, light)",
         source="SDX video studio",
         status="implemented",
-        module="pipelines/video/continuity_validators.py",
+        module="pipelines/video/scene.py",
         summary="Eyeline 180°, prop ledger, motivated lighting, silhouette readability.",
     ),
     ResearchIdea(

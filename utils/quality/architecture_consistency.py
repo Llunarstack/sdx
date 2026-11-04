@@ -31,8 +31,8 @@ from typing import Any
 
 import numpy as np
 
-from utils.prompt.tags import append_unique
-from utils.quality.quality import rgb_to_luminance
+from utils.prompt.text import append_unique
+from utils.quality.finishing import rgb_to_luminance
 
 __all__ = [
     "ArchitectureProfile",
@@ -650,7 +650,7 @@ def apply_architecture_consistency(args: Any, *, prompt: str | None = None) -> d
         serial = {k: v for k, v in layout.items() if not k.startswith("_")}
         layout_path.write_text(json.dumps(serial, indent=2), encoding="utf-8")
         try:
-            from utils.generation.regional_box_prompting import parse_box_layout
+            from utils.generation.regional import parse_box_layout
 
             spec = parse_box_layout(serial)
             args._box_layout_spec = spec

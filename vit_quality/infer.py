@@ -44,9 +44,9 @@ def _manifest_rows(manifest: Path):
 
 
 def main() -> int:
-    from utils.architecture.ar_block_conditioning import normalize_num_ar_blocks, parse_num_ar_blocks_from_row
+    from utils.modeling.architecture import normalize_num_ar_blocks, parse_num_ar_blocks_from_row
 
-    from vit_quality.checkpoint_utils import ViTScorer
+    from vit_quality.model import ViTScorer
 
     p = argparse.ArgumentParser(description="Run ViT quality/adherence scoring on a JSONL manifest")
     p.add_argument("--ckpt", required=True, help="Path to ViT checkpoint (best.pt/last.pt)")

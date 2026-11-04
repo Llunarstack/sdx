@@ -16,17 +16,41 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from utils.generation.sample_cli_passthrough import sample_argv
+from utils.generation.sample_argv import sample_argv
 from utils.safety.minor_guard import require_allowed
 
-from .motion import schedule_keyframes_for_segment
-from .motion_grammar import MotionGrammar, apply_motion_grammar, grammar_for_engine, grammar_for_prompt
-from .quality import score_segment_quality
-from .types import KeyframeEditJob, ProvenanceRecord, SegmentAssignment, VideoPlan
-from .video_io import (
+from pipelines.video.motion import (
+    apply_regional_motion,
+    detect_motion_beats,
+    interpolate_flf2v_sequence,
+    interpolate_sequence,
+    interpolate_sequence_depth,
+    motion_template_sequence,
+    parse_motion_brush,
+    repair_flow_consistency,
+    schedule_keyframes_for_segment,
+    stabilize_frame_paths,
+)
+from pipelines.video.quality import (
+    apply_identity_lock_to_sequence,
+    apply_propagated_identity_lock,
+    repair_sequence_drift,
+    score_segment_quality,
+)
+from pipelines.video.scene import KeyframeEditJob, ProvenanceRecord, SegmentAssignment, VideoPlan
+from pipelines.video.studio import (
+    MotionGrammar,
+    apply_motion_grammar,
+    apply_style_route_to_options,
+    grammar_for_engine,
+    grammar_for_prompt,
+    route_style,
+)
+from pipelines.video.video_io import (
     extract_frames,
     frame_count_for_duration,
     normalize_segment_window,
+    probe_video,
     read_frame_rgb,
     save_frame_rgb,
     write_video_from_frames,
@@ -401,8 +425,8 @@ def harmonize_frame_sequence(
     if smooth_window > 0 and len(rgbs) > 1:
         w = int(smooth_window)
         means = [np.mean(rgbs[max(0, i - w) : i + w + 1], axis=0) for i in range(len(rgbs))]
-        rgbs = [0.92 * x + 0.08 * m for x, m in zip(rgbs, means)]
-    for p, rgb in zip(frame_paths, rgbs):
+        rgbs = [0.92 * x + 0.08 * m for x, m in zip(rgbs, means, strict=False)]
+    for p, rgb in zip(frame_paths, rgbs, strict=False):
         save_frame_rgb(p, np.clip(rgb, 0, 255).astype(np.uint8))
     return frame_paths
 
@@ -411,7 +435,8 @@ def apply_deflicker(frame_paths: list[Path], *, window: int = 5, strength: float
     """Pull each frame's mean luma toward the rolling median (flicker from per-frame img2img edits)."""
     if not frame_paths:
         return []
-    lumas = [float(read_frame_rgb(p)[..., :3].astype(np.float32).mean()) for p in frame_paths]
+    rgbs = [read_frame_rgb(p) for p in frame_paths]
+    lumas = [float(rgb[..., :3].astype(np.float32).mean()) for rgb in rgbs]
     half = max(1, int(window)) // 2
     s = float(max(0.0, min(1.0, strength)))
     for i, p in enumerate(frame_paths):
@@ -419,7 +444,7 @@ def apply_deflicker(frame_paths: list[Path], *, window: int = 5, strength: float
             continue
         target = float(np.median(lumas[max(0, i - half) : i + half + 1]))
         gain = 1.0 + (target / lumas[i] - 1.0) * s
-        save_frame_rgb(p, np.clip(read_frame_rgb(p).astype(np.float32) * gain, 0, 255).astype(np.uint8))
+        save_frame_rgb(p, np.clip(rgbs[i].astype(np.float32) * gain, 0, 255).astype(np.uint8))
     return frame_paths
 
 
@@ -452,8 +477,9 @@ def apply_velocity_ease(frame_paths: list[Path], *, ease: str = "smooth") -> lis
     if len(frame_paths) < 3:
         return frame_paths
     rgbs = [read_frame_rgb(p) for p in frame_paths]
-    for p, j in zip(frame_paths, ease_indices(len(rgbs), ease=ease)):
-        save_frame_rgb(p, rgbs[j])
+    for i, (p, j) in enumerate(zip(frame_paths, ease_indices(len(rgbs), ease=ease), strict=True)):
+        if j != i:
+            save_frame_rgb(p, rgbs[j])
     return frame_paths
 
 
@@ -516,19 +542,15 @@ def synthetic_segment_from_color(
     frame_count: int,
     rgb: tuple[int, int, int] = (32, 32, 48),
 ) -> list[Path]:
-    import numpy as np
-
-    from .video_io import save_frame_rgb
-
     frames_dir = work_dir / "synthetic_frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     arr = np.zeros((height, width, 3), dtype=np.uint8)
     arr[:] = rgb
-    paths: list[Path] = []
-    for i in range(frame_count):
-        fp = frames_dir / f"frame_{i + 1:06d}.png"
-        save_frame_rgb(fp, arr)
-        paths.append(fp)
+    paths = [frames_dir / f"frame_{i + 1:06d}.png" for i in range(frame_count)]
+    if paths:
+        save_frame_rgb(paths[0], arr)
+        for fp in paths[1:]:
+            shutil.copyfile(paths[0], fp)
     return paths
 
 
@@ -606,7 +628,7 @@ def process_segment(
     if control_plan is not None and getattr(control_plan, "metadata", {}).get("element_video_refs"):
         vrefs = control_plan.metadata["element_video_refs"]
         if vrefs and not (clip and Path(clip.path).is_file()):
-            from .retrieval import build_clip_candidate_from_path
+            from pipelines.video.pipeline import build_clip_candidate_from_path
 
             vpath = str(vrefs[0])
             if Path(vpath).is_file():
@@ -643,8 +665,6 @@ def process_segment(
         if assignment.use_motion_only:
             ops.append("motion_template")
         if opts.camera_stabilize and len(source_frames) >= 2:
-            from .motion import stabilize_frame_paths
-
             stabilize_frame_paths(source_frames, strength=opts.camera_stabilize_strength)
             ops.append("camera_stabilize")
     elif clip and clip.path.startswith("http"):
@@ -659,8 +679,6 @@ def process_segment(
     beat_indices: list[int] | None = None
     if opts.motion_beat_keyframes and len(source_frames) >= 3:
         try:
-            from .motion import detect_motion_beats
-
             beat_indices = detect_motion_beats(source_frames)
             ops.append("motion_beats")
         except Exception:
@@ -696,7 +714,7 @@ def process_segment(
             except Exception:
                 pass
 
-    for k_i, (f_idx, src_path) in enumerate(zip(schedule.frame_indices, schedule.frame_paths)):
+    for k_i, (f_idx, src_path) in enumerate(zip(schedule.frame_indices, schedule.frame_paths, strict=False)):
         out_p = edited_dir / f"kf_{k_i:03d}.png"
         if dry_run or not ckpt:
             shutil.copy2(src_path, out_p)
@@ -731,8 +749,6 @@ def process_segment(
 
     brush_spec = None
     if assignment.motion_brush:
-        from .motion import parse_motion_brush
-
         brush_spec = parse_motion_brush(assignment.motion_brush)
 
     use_flf2v = bool(
@@ -746,8 +762,6 @@ def process_segment(
     )
 
     if use_flf2v:
-        from .interpolate import interpolate_flf2v_sequence
-
         flf_dir = wd / "flf2v"
         if flf_dir.exists():
             shutil.rmtree(flf_dir)
@@ -769,8 +783,6 @@ def process_segment(
     elif _should_motion_transfer(opts, assignment, source_frames) and edited_key_paths:
         rig_path = _rig_path_from_control(control_plan) if opts.region_motion else ""
         if opts.region_motion and rig_path:
-            from .motion import apply_regional_motion
-
             mt_dir = wd / "region_motion"
             if mt_dir.exists():
                 shutil.rmtree(mt_dir)
@@ -784,8 +796,6 @@ def process_segment(
             )
             ops.append("region_motion")
         else:
-            from .motion import motion_template_sequence
-
             mt_dir = wd / "motion_transfer"
             if mt_dir.exists():
                 shutil.rmtree(mt_dir)
@@ -804,8 +814,6 @@ def process_segment(
         if interp_dir.exists():
             shutil.rmtree(interp_dir)
         if opts.depth_interpolate:
-            from .interpolate import interpolate_sequence_depth
-
             final_frames = interpolate_sequence_depth(
                 edited_key_paths,
                 target_frames,
@@ -814,8 +822,6 @@ def process_segment(
             )
             ops.append("interpolate:depth")
         else:
-            from .interpolate import interpolate_sequence
-
             final_frames = interpolate_sequence(
                 edited_key_paths,
                 target_frames,
@@ -825,8 +831,6 @@ def process_segment(
             ops.append("interpolate")
 
     if opts.flow_consistency and len(final_frames) >= 2:
-        from .motion import repair_flow_consistency
-
         repair_flow_consistency(final_frames)
         ops.append("flow_consistency")
 
@@ -845,8 +849,6 @@ def process_segment(
         anchor_img, mask_path = _collect_lock_anchor(control_plan, plan)
         if anchor_img and Path(anchor_img).is_file():
             if opts.propagate_masks:
-                from .quality import apply_propagated_identity_lock
-
                 apply_propagated_identity_lock(
                     final_frames,
                     anchor_img,
@@ -856,8 +858,6 @@ def process_segment(
                 )
                 ops.append("identity_lock:propagated")
             else:
-                from .quality import apply_identity_lock_to_sequence
-
                 apply_identity_lock_to_sequence(
                     final_frames,
                     anchor_img,
@@ -867,8 +867,6 @@ def process_segment(
                 ops.append("identity_lock")
 
     if opts.semantic_drift_repair and len(final_frames) >= 2:
-        from .quality import repair_sequence_drift
-
         anchor_img, _ = _collect_lock_anchor(control_plan, plan)
         report = repair_sequence_drift(
             final_frames,
@@ -909,8 +907,6 @@ def process_segment(
 
 
 def probe_video_safe(path: str | Path):
-    from .video_io import probe_video
-
     return probe_video(path)
 
 
@@ -965,8 +961,6 @@ def write_pose_control_image(
     width: int = 512,
     height: int = 512,
 ) -> Path:
-    from .video_io import save_frame_rgb
-
     rgb = pose_from_rig_boxes(width, height, parts)
     op = Path(out_path)
     op.parent.mkdir(parents=True, exist_ok=True)
@@ -1149,42 +1143,6 @@ def process_segment_with_retry(
     return best_frames, best_q
 
 
-__all__ = [
-    "SampleOptions",
-    "build_keyframe_sample_extras",
-    "merge_argv",
-    "parse_sample_options",
-    "ProcessOptions",
-    "parse_process_options",
-    "ProvenanceLog",
-    "record_segment_provenance",
-    "write_provenance_json",
-    "build_sample_cmd_for_keyframe",
-    "run_keyframe_edit",
-    "run_keyframe_batch",
-    "GRADES",
-    "apply_deflicker",
-    "apply_grade_to_sequence",
-    "apply_velocity_ease",
-    "ease_indices",
-    "enhance_frame",
-    "enhance_sequence",
-    "grade_frame",
-    "harmonize_frame_sequence",
-    "process_segment",
-    "render_segment_video",
-    "synthetic_segment_from_color",
-    "pose_from_rig_boxes",
-    "write_pose_control_image",
-    "pose_control_args",
-    "VideoMaxPlan",
-    "apply_video_quality",
-    "plan_videomax",
-    "RetryPolicy",
-    "process_segment_with_retry",
-]
-
-
 # ==================================================================================================
 # Restored from b654ae9:pipelines/video/temporal.py
 # ==================================================================================================
@@ -1233,7 +1191,7 @@ def apply_temporal_smoothing(
         if alpha > 0 and i > 0:
             mean = (1.0 - alpha) * rgbs[i] + alpha * smoothed[-1].astype(np.float32)
         smoothed.append(np.clip(mean, 0, 255).astype(np.uint8))
-    for p, rgb in zip(frame_paths, smoothed):
+    for p, rgb in zip(frame_paths, smoothed, strict=False):
         save_frame_rgb(p, rgb)
     return frame_paths
 
@@ -1616,8 +1574,6 @@ def apply_videomax_to_options(
 
     ``tier`` is kept for older callers; VIDEOMAX has one tier now.
     """
-    from pipelines.video.style_router import apply_style_route_to_options, route_style
-
     opts = apply_video_quality(replace(opts, videomax=True), prompt=prompt)
     force = force_style or str(getattr(opts, "motion_grammar", "") or "")
     route = route_style(prompt, style_hint=style_hint, force="" if force in ("auto", "none") else force)
@@ -1646,3 +1602,127 @@ def videomax_sample_extras(opts: Any, *, prompt: str = "") -> list[str]:
         base = _strip_invention_stack_pairs(base)
         base = ["--invention-stack", inv, *base]
     return base
+
+
+# Image-stack parallel → video helper → VIDEOMAX / superior_pass axis
+VIDEO_QUALITY_MAP: dict[str, dict[str, str]] = {
+    "DOVER": {
+        "image_analogue": "Aesthetic-Predictor / technical sharpness critics",
+        "axis": "flicker + artifact + aesthetic",
+        "use": "Frame/clip aesthetic + technical score for quality_retry",
+        "path_fn": "default_dover_path",
+    },
+    "VideoScore-v1.1": {
+        "image_analogue": "HPSv3 / ImageReward / PickScore",
+        "axis": "prompt_drift + overall preference",
+        "use": "AI-generated video preference for pick-best / retry",
+        "path_fn": "default_videoscore_path",
+    },
+    "VisionReward-Video": {
+        "image_analogue": "HPSv3 multi-axis (heavy)",
+        "axis": "physics + stability + preservation + fidelity",
+        "use": "21-dim preference (scaffold / large weights on hub)",
+        "path_fn": "default_visionreward_video_path",
+    },
+    "XCLIP-base-patch32": {
+        "image_analogue": "CLIP / SigLIP adherence",
+        "axis": "prompt_drift / temporal_adherence",
+        "use": "Prompt↔video embedding similarity",
+        "path_fn": "default_xclip_path",
+    },
+    "InternVideo2-1B": {
+        "image_analogue": "Qwen3-VL / DINOv3 video twin",
+        "axis": "prompt_drift + retrieval",
+        "use": "Video-text features for adherence / clip retrieval",
+        "path_fn": "default_internvideo_path",
+    },
+    "RAFT-OpticalFlow": {
+        "image_analogue": "(no stills twin — temporal only)",
+        "axis": "flicker / flow_consistency / motion_shutter",
+        "use": "Optical flow for deflicker + physics_gate",
+        "path_fn": "default_raft_path",
+    },
+    "CoTracker3": {
+        "image_analogue": "GroundingDINO track over time",
+        "axis": "object_vanish / permanence / count_bind",
+        "use": "Point tracking for object permanence repair",
+        "path_fn": "default_cotracker_path",
+    },
+    "DWPose": {
+        "image_analogue": "OpenPose ControlNet / anatomy guidance",
+        "axis": "hand_morph / extremity_lock",
+        "use": "2D pose for hand/limb coherence",
+        "path_fn": "default_dwpose_path",
+    },
+    "ArcFace": {
+        "image_analogue": "IP-Adapter-FaceID / identity lock",
+        "axis": "identity_drift",
+        "use": "Face embedding lock across frames",
+        "path_fn": "default_arcface_path",
+    },
+    "Buffalo-L": {
+        "image_analogue": "InsightFace pack",
+        "axis": "identity_drift",
+        "use": "Detection + recognition pack for identity_bind",
+        "path_fn": "default_arcface_path",
+    },
+    "Whisper-Large-V3-Turbo": {
+        "image_analogue": "(audio — lip_sync)",
+        "axis": "lip_desync",
+        "use": "ASR timing for native_audio / lip_sync gate",
+        "path_fn": "default_whisper_path",
+    },
+    "VideoMAE-base": {
+        "image_analogue": "DINOv2 temporal backbone",
+        "axis": "artifact / shimmer",
+        "use": "Motion feature backbone for critics",
+        "path_fn": "default_videomae_path",
+    },
+    # Shared image pretrained already wired into video
+    "SAM2-Hiera-Large": {
+        "image_analogue": "SAM2 (same)",
+        "axis": "occlusion_pop / count",
+        "use": "Temporal masks for occlusion_resolve",
+        "path_fn": "default_sam2_hiera_large_path",
+    },
+    "Depth-Anything-V3-Large": {
+        "image_analogue": "Depth Anything (same)",
+        "axis": "floating_feet / contact_ground",
+        "use": "Per-frame depth for contact + depth_interpolate",
+        "path_fn": "default_depth_anything_path",
+    },
+    "Qwen3-VL-8B-Instruct": {
+        "image_analogue": "VLM critic (same)",
+        "axis": "prompt_drift",
+        "use": "Frame/clip caption critique",
+        "path_fn": "default_qwen_vl_path",
+    },
+    "GroundingDINO-Base": {
+        "image_analogue": "GroundingDINO (same)",
+        "axis": "count_bind / object_vanish",
+        "use": "Open-vocab detect for count permanence",
+        "path_fn": "default_grounding_dino_base_path",
+    },
+    "HPSv3": {
+        "image_analogue": "HPSv3 (frame-wise)",
+        "axis": "aesthetic preference on keyframes",
+        "use": "Score keyframe stills inside VIDEOMAX pick-best",
+        "path_fn": "default_hps_path",
+    },
+}
+
+
+def list_video_quality_helpers() -> list[str]:
+    return sorted(VIDEO_QUALITY_MAP.keys())
+
+
+def resolve_video_quality_bundle() -> dict[str, Any]:
+    """Resolve local/hub paths for the curated quality shortlist."""
+    from utils.modeling import model_paths as mp
+
+    out: dict[str, Any] = {}
+    for name, row in VIDEO_QUALITY_MAP.items():
+        fn = getattr(mp, row["path_fn"], None)
+        path = fn() if callable(fn) else ""
+        out[name] = {**row, "resolved": path}
+    return out

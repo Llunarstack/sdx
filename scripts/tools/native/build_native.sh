@@ -158,18 +158,8 @@ if [[ -z "${RUSTC_WRAPPER:-}" ]] && command -v sccache >/dev/null 2>&1; then
 fi
 
 if command -v cargo >/dev/null 2>&1; then
-  echo "==> cargo build: sdx-jsonl-tools"
-  (cd "$ROOT/native/rust/sdx-jsonl-tools" && cargo build --release)
-  echo "==> cargo build: sdx-noise-schedule"
-  (cd "$ROOT/native/rust/sdx-noise-schedule" && cargo build --release)
-  echo "==> cargo build: sdx-diffusion-math"
-  (cd "$ROOT/native/rust/sdx-diffusion-math" && cargo build --release)
-  echo "==> cargo build: sdx-image-metrics"
-  (cd "$ROOT/native/rust/sdx-image-metrics" && cargo build --release)
-  for crate in sdx-image-ops sdx-prompt-ops sdx-canny-ops sdx-style-embed sdx-quality-scorers; do
-    echo "==> cargo build: $crate"
-    (cd "$ROOT/native/rust/$crate" && cargo build --release)
-  done
+  echo "==> cargo build: native/rust (sdx_rs, sdx-jsonl-tools, sdx-noise-schedule)"
+  (cd "$ROOT/native/rust" && cargo build --release)
 else
   echo "(skip) cargo not found"
 fi

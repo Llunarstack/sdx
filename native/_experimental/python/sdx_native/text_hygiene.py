@@ -1,26 +1,27 @@
 """
-Unicode and structure hygiene for training/inference captions (stdlib + optional xxhash).
+Unicode and structure hygiene for training/inference captions and JSONL manifests (stdlib + optional xxhash):
+NFKC normalization, zero-width / C0-control stripping, dedupe fingerprints, pos/neg overlap.
 
-Implements the Python side of ``docs/NATIVE_AND_SYSTEM_LIBS.md`` (NFKC normalization,
-zero-width stripping, dedupe fingerprints). Kept under ``sdx_native`` so it does not
-pull ``data.__init__`` (which would create import cycles if this module imported ``data``).
+Kept under ``sdx_native`` so it does not pull ``data.__init__`` (importing ``data`` here would create cycles).
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import unicodedata
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
 
-_ZWSP_CHARS: frozenset[str] = frozenset(("\u200b", "\u200c", "\u200d", "\ufeff"))
+_ZWSP_TABLE = dict.fromkeys(map(ord, "​‌‍﻿"))
 _C0_REMOVE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 def strip_zwsp(text: str) -> str:
     """Remove zero-width spaces / joiners / BOM from *text*."""
-    if not text:
-        return text
-    return "".join(c for c in text if c not in _ZWSP_CHARS)
+    return text.translate(_ZWSP_TABLE) if text else text
 
 
 def strip_c0_controls(text: str) -> str:
@@ -57,11 +58,7 @@ def caption_fingerprint(
     algorithm: str = "auto",
     normalize_first: bool = True,
 ) -> str:
-    """
-    Fingerprint a caption for near-dedup.
-
-    - ``auto``: **xxhash** 64-bit hex if installed, else **SHA256** hex.
-    """
+    """Near-dedup fingerprint: ``auto`` = xxhash 64-bit hex if installed, else SHA256 hex."""
     raw = normalize_caption_for_training(caption) if normalize_first else (caption or "")
     data = raw.encode("utf-8")
     algo = (algorithm or "auto").lower()
@@ -87,10 +84,59 @@ def pos_neg_token_overlap(positive: str, negative: str) -> tuple[int, int, float
     return len(inter), len(union), (len(inter) / len(union) if union else 0.0)
 
 
-__all__ = [
-    "caption_fingerprint",
-    "normalize_caption_for_training",
-    "pos_neg_token_overlap",
-    "strip_c0_controls",
-    "strip_zwsp",
-]
+def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
+    """JSON-object rows of ``path``; blank, malformed and non-object lines are skipped."""
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                yield obj
+
+
+def normalize_jsonl_caption_fields(
+    rec: dict[str, Any],
+    *,
+    caption_key: str = "caption",
+    negative_caption_key: str = "negative_caption",
+    negative_prompt_fallback_key: str = "negative_prompt",
+    unicode_form: str = "NFKC",
+    strip_controls: bool = True,
+) -> tuple[str, str]:
+    """Normalize a row's caption and negative caption in place; returns ``(caption, negative)`` ("" if missing).
+
+    The negative comes from ``negative_caption_key`` when present, else ``negative_prompt_fallback_key``.
+    """
+    caption = str(rec.get(caption_key) or "")
+    neg_key = negative_caption_key if negative_caption_key in rec else negative_prompt_fallback_key
+    negative = str(rec.get(neg_key) or "")
+    if caption.strip():
+        caption = normalize_caption_for_training(caption, unicode_form=unicode_form, strip_controls=strip_controls)
+        rec[caption_key] = caption
+    if negative.strip():
+        negative = normalize_caption_for_training(negative, unicode_form=unicode_form, strip_controls=strip_controls)
+        rec[neg_key] = negative
+    return caption, negative
+
+
+def normalize_manifest_jsonl(
+    *,
+    inp: Path,
+    out: Path,
+    unicode_form: str = "NFKC",
+    strip_controls: bool = True,
+) -> int:
+    """Stream-normalize a manifest JSONL file. Returns number of rows written."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with out.open("w", encoding="utf-8", newline="\n") as fw:
+        for rec in _iter_jsonl(inp):
+            normalize_jsonl_caption_fields(rec, unicode_form=unicode_form, strip_controls=strip_controls)
+            fw.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            n += 1
+    return n

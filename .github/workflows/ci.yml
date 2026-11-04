@@ -36,8 +36,8 @@ jobs:
             native/_experimental/python/sdx_native/native_tools.py \
             diffusion/schedules.py \
             examples/run_baseline_eval.py \
-            utils/terminal.py \
-            training/train_cli_parser.py \
+            utils/runtime.py \
+            training/cli.py \
             utils/generation/sample_cli_parser.py \
             utils/generation/sample_helpers.py \
             > "$OUT" || true

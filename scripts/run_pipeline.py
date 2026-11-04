@@ -200,7 +200,7 @@ def _step_setup() -> None:
 
 def _step_verify() -> None:
     if _is_windows():
-        _py(["-m", "toolkit.training.env_health"], timeout=120)
+        _py(["-m", "toolkit.env_health"], timeout=120)
         _py(
             [
                 "-c",
@@ -216,7 +216,7 @@ def _step_verify() -> None:
             if not shutil.which(bin_name):
                 print(f"  WARN: {bin_name} not on PATH")
     else:
-        _run_cmd(["bash", str(ROOT / "runpod" / "lib" / "verify_env.sh")], timeout=300)
+        _run_cmd(["bash", str(ROOT / "runpod" / "verify_env.sh")], timeout=300)
 
 
 def _step_smoke(args: argparse.Namespace, paths: dict[str, Path]) -> None:
@@ -241,7 +241,8 @@ def _step_smoke(args: argparse.Namespace, paths: dict[str, Path]) -> None:
 def _step_pretrained(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     paths["pretrained"].mkdir(parents=True, exist_ok=True)
     cmd = [
-        "setup/download_pretrained.py",
+        "setup/download.py",
+        "pretrained",
         "--dest",
         str(paths["pretrained"]),
         "--workers",
@@ -255,7 +256,8 @@ def _step_datasets(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     if not paths["secrets"].is_file():
         raise FileNotFoundError(f"secrets missing: {paths['secrets']}")
     dl = [
-        "setup/download_datasets.py",
+        "setup/download.py",
+        "datasets",
         "--out",
         str(paths["data"]),
         "--ratings",
@@ -282,7 +284,8 @@ def _step_datasets(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     _py(dl, timeout=args.dataset_timeout or None)
     _py(
         [
-            "setup/merge_manifests.py",
+            "setup/manifests.py",
+            "merge",
             "--data-root",
             str(paths["data"]),
             "--out",
@@ -292,7 +295,8 @@ def _step_datasets(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     )
     _py(
         [
-            "setup/build_artist_index.py",
+            "setup/indexes.py",
+            "artist-index",
             "--data-root",
             str(paths["data"]),
             "--out",
@@ -314,7 +318,8 @@ def _step_preprocess(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     print("  seed RAG corpus (booru tags)", flush=True)
     _py(
         [
-            "setup/build_rag_corpus.py",
+            "setup/indexes.py",
+            "rag-corpus",
             "--manifest",
             str(manifest),
             "--out",
@@ -328,7 +333,8 @@ def _step_preprocess(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     prompt_research = os.environ.get("SDX_PROMPT_RESEARCH", "1") == "1"
     enrich_workers = 1 if prompt_research else args.enrich_workers
     enrich = [
-        "setup/enrich_manifest_captions.py",
+        "setup/manifests.py",
+        "enrich",
         "--manifest",
         str(manifest),
         "--data-root",
@@ -365,7 +371,8 @@ def _step_preprocess(args: argparse.Namespace, paths: dict[str, Path]) -> None:
     print("  final RAG corpus (researched captions)", flush=True)
     _py(
         [
-            "setup/build_rag_corpus.py",
+            "setup/indexes.py",
+            "rag-corpus",
             "--manifest",
             str(rag_manifest),
             "--out",
@@ -378,7 +385,8 @@ def _step_preprocess(args: argparse.Namespace, paths: dict[str, Path]) -> None:
         control_src = enrich_out
     _py(
         [
-            "setup/preprocess_control_maps.py",
+            "setup/manifests.py",
+            "control-maps",
             "--manifest",
             str(control_src),
             "--data-root",
@@ -535,7 +543,7 @@ def _resolve_steps(args: argparse.Namespace) -> list[tuple[str, bool]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from utils.terminal import configure_stdio_for_console
+    from utils.runtime import configure_stdio_for_console
 
     configure_stdio_for_console()
     p = argparse.ArgumentParser(

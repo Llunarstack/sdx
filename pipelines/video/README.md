@@ -136,7 +136,7 @@ See `examples/scene_tier1.example.json` and `examples/scene_i2v_control.example.
 ### Edit block (scene JSON)
 
 Tune the engine without touching Python. `"video_quality": "lite" | "standard" | "strong" | "max"` and
-`"motion_grammar"` fill these for you; see [docs/guides/VIDEOMAX.md](../../docs/guides/VIDEOMAX.md).
+`"motion_grammar"` fill these for you; see [docs/GUIDES.md](../../docs/GUIDES.md#video-quality-presets-and-videomax).
 
 ```json
 "edit": {

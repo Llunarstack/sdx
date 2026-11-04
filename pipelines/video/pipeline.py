@@ -1,24 +1,29 @@
-"""Main retrieve → transform → compose video pipeline.
-
-Also holds what used to be: i2v, t2v.
-"""
+"""Retrieve -> transform -> compose video pipeline: clip retrieval, plan building, segment orchestration."""
 
 from __future__ import annotations
 
 import json
+import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 from typing import Any
 
-from .retrieval import (
-    download_remote_clip,
-    load_local_clip_library,
-    rank_clips_for_shot,
-    search_pexels_videos,
-    search_web_catalog,
+from pipelines.video.motion import estimate_motion_score
+from pipelines.video.scene import (
+    ClipCandidate,
+    RetrievalSource,
+    SegmentAssignment,
+    ShotSpec,
+    VideoMode,
+    VideoPipelineResult,
+    VideoPlan,
+    compile_scene_graph,
+    load_scene_graph,
+    plan_video_from_prompt,
 )
-from .segment_processor import (
+from pipelines.video.segment_processor import (
     ProcessOptions,
     ProvenanceLog,
     RetryPolicy,
@@ -29,9 +34,230 @@ from .segment_processor import (
     render_segment_video,
     write_provenance_json,
 )
-from .shot_planner import plan_video_from_prompt
-from .types import ClipCandidate, SegmentAssignment, VideoMode, VideoPipelineResult, VideoPlan
-from .video_io import probe_video, save_frame_rgb, stitch_frame_lists
+from pipelines.video.video_io import (
+    SegmentWorkItem,
+    collect_segment_audio,
+    extract_frames,
+    mux_audio_onto_video,
+    probe_video,
+    read_frame_rgb,
+    run_segments_parallel,
+    save_frame_rgb,
+    stitch_frame_lists,
+)
+
+
+def _tokenize(text: str) -> list[str]:
+    return [t for t in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(t) > 2]
+
+
+def build_clip_candidate_from_path(
+    path: str | Path,
+    *,
+    source: RetrievalSource = RetrievalSource.LOCAL,
+    title: str = "",
+    tags: list[str] | None = None,
+    license: str = "user",
+    url: str = "",
+) -> ClipCandidate:
+    p = Path(path)
+    info = probe_video(p) if p.suffix.lower() in (".mp4", ".mov", ".webm", ".mkv", ".avi") else {}
+    return ClipCandidate(
+        source=source,
+        path=str(p.resolve()),
+        title=title or p.stem,
+        tags=list(tags or []),
+        duration_sec=float(info.get("duration_sec") or 0.0),
+        fps=float(info.get("fps") or 24.0),
+        width=int(info.get("width") or 0),
+        height=int(info.get("height") or 0),
+        license=license,
+        url=url,
+    )
+
+
+def load_local_clip_library(
+    root: str | Path,
+    *,
+    extensions: Sequence[str] = (".mp4", ".mov", ".webm", ".mkv"),
+) -> list[ClipCandidate]:
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    out: list[ClipCandidate] = []
+    for ext in extensions:
+        for p in root.rglob(f"*{ext}"):
+            sidecar = p.with_suffix(p.suffix + ".json")
+            meta: dict[str, Any] = {}
+            if sidecar.is_file():
+                try:
+                    meta = json.loads(sidecar.read_text(encoding="utf-8"))
+                except Exception:
+                    meta = {}
+            tags = meta.get("tags") or []
+            if isinstance(tags, str):
+                tags = [t.strip() for t in tags.split(",") if t.strip()]
+            out.append(
+                build_clip_candidate_from_path(
+                    p,
+                    source=RetrievalSource.LOCAL,
+                    title=str(meta.get("title") or p.stem),
+                    tags=list(tags),
+                    license=str(meta.get("license") or "local"),
+                    url=str(meta.get("url") or ""),
+                )
+            )
+    return out
+
+
+def rank_clips_for_shot(
+    shot: ShotSpec,
+    candidates: Sequence[ClipCandidate],
+    *,
+    motion_scores: dict[str, float] | None = None,
+) -> list[ClipCandidate]:
+    """Score clips by tag/token overlap + duration fit + optional motion score."""
+    motion_scores = motion_scores or {}
+    q = set(_tokenize(shot.prompt)) | set(_tokenize(shot.motion_hint)) | set(_tokenize(shot.shot_type))
+    ranked: list[ClipCandidate] = []
+    for c in candidates:
+        hay = set(_tokenize(c.title)) | set(_tokenize(" ".join(c.tags)))
+        overlap = len(q & hay) / max(1, len(q))
+        dur_fit = 1.0
+        if c.duration_sec > 0 and shot.duration_sec > 0:
+            ratio = min(c.duration_sec, shot.duration_sec) / max(c.duration_sec, shot.duration_sec)
+            dur_fit = ratio
+        motion = float(motion_scores.get(c.path, 0.5))
+        want_motion = 0.6 if "static" not in shot.motion_hint.lower() else 0.3
+        motion_fit = 1.0 - abs(motion - want_motion)
+        score = 0.55 * overlap + 0.25 * dur_fit + 0.20 * motion_fit
+        ranked.append(
+            ClipCandidate(
+                source=c.source,
+                path=c.path,
+                title=c.title,
+                tags=list(c.tags),
+                duration_sec=c.duration_sec,
+                fps=c.fps,
+                width=c.width,
+                height=c.height,
+                license=c.license,
+                url=c.url,
+                score=float(score),
+                motion_score=motion,
+            )
+        )
+    ranked.sort(key=lambda x: x.score, reverse=True)
+    return ranked
+
+
+def search_pexels_videos(query: str, *, max_results: int = 5) -> list[ClipCandidate]:
+    """
+    Search Pexels video API when ``PEXELS_API_KEY`` is set.
+
+    Returns metadata + download URL; does not download unless caller uses ``download_pexels_clip``.
+    """
+    key = (os.environ.get("PEXELS_API_KEY") or "").strip()
+    if not key:
+        return []
+    try:
+        import urllib.parse
+        import urllib.request
+
+        url = "https://api.pexels.com/videos/search?" + urllib.parse.urlencode(
+            {"query": query, "per_page": str(max(1, max_results))}
+        )
+        req = urllib.request.Request(url, headers={"Authorization": key})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return []
+    out: list[ClipCandidate] = []
+    for vid in data.get("videos") or []:
+        files = vid.get("video_files") or []
+        best = None
+        best_area = 0
+        for f in files:
+            w, h = int(f.get("width") or 0), int(f.get("height") or 0)
+            if w * h > best_area and f.get("link"):
+                best_area = w * h
+                best = f
+        if not best:
+            continue
+        out.append(
+            ClipCandidate(
+                source=RetrievalSource.PEXELS,
+                path=str(best.get("link") or ""),
+                title=str(vid.get("url") or query)[:120],
+                tags=_tokenize(query),
+                duration_sec=float(vid.get("duration") or 0.0),
+                fps=24.0,
+                width=int(best.get("width") or 0),
+                height=int(best.get("height") or 0),
+                license="pexels",
+                url=str(vid.get("url") or best.get("link") or ""),
+                score=0.5,
+            )
+        )
+    return out
+
+
+def download_remote_clip(url: str, dest: Path) -> Path:
+    import urllib.request
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(url, dest)
+    return dest
+
+
+def search_web_catalog(
+    query: str,
+    *,
+    catalog_path: str | Path = "",
+    max_results: int = 5,
+) -> list[ClipCandidate]:
+    """
+    Search a local JSON catalog of licensed web clips (metadata only).
+
+    Catalog format: ``{"clips": [{"title", "tags", "path" or "url", "license"}]}``
+    """
+    cp = Path(catalog_path) if catalog_path else Path("data/video_catalog.json")
+    if not cp.is_file():
+        return []
+    try:
+        data = json.loads(cp.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rows = data.get("clips") or data.get("videos") or []
+    q = set(_tokenize(query))
+    scored: list[ClipCandidate] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("title") or "")
+        tags = row.get("tags") or []
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",")]
+        hay = set(_tokenize(title)) | set(_tokenize(" ".join(str(t) for t in tags)))
+        overlap = len(q & hay) / max(1, len(q))
+        if overlap <= 0:
+            continue
+        path = str(row.get("path") or row.get("url") or "")
+        scored.append(
+            ClipCandidate(
+                source=RetrievalSource.WEB_CATALOG,
+                path=path,
+                title=title,
+                tags=[str(t) for t in tags],
+                duration_sec=float(row.get("duration_sec") or 0.0),
+                license=str(row.get("license") or "catalog"),
+                url=str(row.get("url") or path),
+                score=float(overlap),
+            )
+        )
+    scored.sort(key=lambda c: c.score, reverse=True)
+    return scored[:max_results]
+
 
 # ==================================================================================================
 # i2v: Image-to-video: anchor frame 0, borrow motion from reference clip.
@@ -255,9 +481,6 @@ def run_from_scene_file(
     sample_extra_args: Sequence[str] | None = None,
 ) -> VideoPipelineResult:
     """Run pipeline from a single scene graph JSON (recommended entry point)."""
-    from .retrieval import build_clip_candidate_from_path, load_local_clip_library
-    from .scene_graph import compile_scene_graph, load_scene_graph
-
     graph = load_scene_graph(scene_path)
     graph.raw["_work_dir"] = str(Path(work_dir).resolve())
     compiled = compile_scene_graph(graph)
@@ -371,8 +594,6 @@ def run_t2v_pipeline(
     # User-uploaded clips in work_dir/clips
     upload_dir = Path(work_dir) / "clips"
     if upload_dir.is_dir():
-        from .retrieval import load_local_clip_library
-
         candidates.extend(load_local_clip_library(upload_dir))
     assignments = assign_clips_to_plan(plan, candidates, keyframe_interval=keyframe_interval)
     return _run_assignments(
@@ -416,8 +637,6 @@ def run_i2v_pipeline(
     anchor = prepare_anchor_frame(anchor_image, wd / "anchor", width=width, height=height)
     candidates = []
     if motion_clip and Path(motion_clip).is_file():
-        from .retrieval import build_clip_candidate_from_path
-
         candidates.append(build_clip_candidate_from_path(motion_clip))
     assignments = assign_clips_to_plan(plan, candidates, keyframe_interval=keyframe_interval, use_motion_only=True)
     return _run_assignments(
@@ -490,8 +709,6 @@ def _process_one_segment(
 
     frames, q = _run_once()
     if anchor_frame is not None and assignment.shot.index == 0 and frames:
-        from .video_io import read_frame_rgb
-
         save_frame_rgb(frames[0], read_frame_rgb(anchor_frame))
     return assignment.shot.index, frames, q
 
@@ -533,7 +750,7 @@ def _run_assignments(
         cp = None
         if control_plans and assignment.shot.index < len(control_plans):
             cp = control_plans[assignment.shot.index]
-            from .controls import build_sample_args_for_plan
+            from pipelines.video.controls import build_sample_args_for_plan
 
             seg_extra.extend(build_sample_args_for_plan(cp))
             if cp.positive_prompt:
@@ -547,8 +764,6 @@ def _run_assignments(
     seg_results: dict[int, tuple[list[Path], Any]] = {}
 
     if opts.parallel_segments and len(work) > 1:
-        from .video_io import SegmentWorkItem, run_segments_parallel
-
         items = [SegmentWorkItem(i, work[i][1]) for i in range(len(work))]
 
         def _worker(item: SegmentWorkItem):
@@ -607,8 +822,6 @@ def _run_assignments(
     )
 
     if opts.audio_from_source and not dry_run:
-        from .video_io import collect_segment_audio, mux_audio_onto_video
-
         audio = collect_segment_audio(source_clips, wd / "audio", durations=shot_durations)
         if audio:
             mux_audio_onto_video(final, audio)
@@ -626,16 +839,151 @@ def _run_assignments(
     )
 
 
-__all__ = [
-    "build_i2v_plan",
-    "prepare_anchor_frame",
-    "assign_clips_to_plan",
-    "build_t2v_plan",
-    "gather_retrieval_candidates",
-    "preview_retrieval_rankings",
-    "run_from_scene_file",
-    "run_i2v_pipeline",
-    "run_t2v_pipeline",
-    "run_video_pipeline",
-    "save_plan_json",
-]
+def score_clip_for_prompt(clip: Any, prompt: str) -> float:
+    """
+    Structured score: token overlap + grounded entity/tag hits + duration prior.
+
+    Uses PromptGroundGraph so 'three red cars' prefers clips tagged red/car.
+    """
+    from pipelines.video.neural_sample import parse_prompt_ground
+
+    g = parse_prompt_ground(prompt)
+    q = set(_tokenize(prompt))
+    for e in g.entities:
+        q.add(e.name.lower())
+        q.update(a.lower() for a in e.attributes)
+    hay = set(_tokenize(getattr(clip, "title", "") or "")) | set(
+        _tokenize(" ".join(str(t) for t in (getattr(clip, "tags", []) or [])))
+    )
+    if not q:
+        return 0.0
+    overlap = len(q & hay) / max(len(q), 1)
+    # Entity hit bonus
+    ent_hits = 0
+    for e in g.entities:
+        if e.negated:
+            continue
+        if e.name.lower() in hay or any(a.lower() in hay for a in e.attributes):
+            ent_hits += 1
+    ent = ent_hits / max(len([e for e in g.entities if not e.negated]), 1)
+    return float(0.55 * overlap + 0.45 * ent)
+
+
+def rank_clips_structured(
+    clips: list[Any],
+    prompt: str,
+    *,
+    top_k: int = 8,
+) -> list[tuple[Any, float]]:
+    scored = [(c, score_clip_for_prompt(c, prompt)) for c in clips]
+    scored.sort(key=lambda t: -t[1])
+    return scored[: max(1, top_k)]
+
+
+def preview_shot_plan(
+    prompt: str,
+    *,
+    mode: str = "t2v",
+    duration_sec: float = 6.0,
+    fps: float = 24.0,
+) -> VideoPlan:
+    return plan_video_from_prompt(
+        prompt,
+        mode=VideoMode(mode),
+        duration_sec=duration_sec,
+        fps=fps,
+    )
+
+
+def build_motion_score_cache(
+    library_dir: str | Path,
+    *,
+    cache_path: Path | None = None,
+    max_frames: int = 24,
+) -> dict[str, float]:
+    lib = Path(library_dir)
+    cache_path = cache_path or lib / "motion_scores.json"
+    scores: dict[str, float] = {}
+    if cache_path.is_file():
+        try:
+            scores = json.loads(cache_path.read_text(encoding="utf-8"))
+        except Exception:
+            scores = {}
+    for clip in load_local_clip_library(lib):
+        if clip.path in scores:
+            continue
+        tmp = lib / ".motion_cache" / Path(clip.path).stem
+        frames = extract_frames(clip.path, tmp, max_frames=max_frames)
+        scores[clip.path] = estimate_motion_score(frames)
+    cache_path.write_text(json.dumps(scores, indent=2), encoding="utf-8")
+    return scores
+
+
+def create_clip_sidecar(
+    video_path: str | Path,
+    *,
+    title: str = "",
+    tags: Sequence[str] | None = None,
+    license: str = "local",
+    url: str = "",
+) -> Path:
+    p = Path(video_path)
+    sidecar = p.with_suffix(p.suffix + ".json")
+    sidecar.write_text(
+        json.dumps(
+            {
+                "title": title or p.stem,
+                "tags": list(tags or []),
+                "license": license,
+                "url": url,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return sidecar
+
+
+def log_segment_feedback(
+    frame_paths: list[Path] | list[str],
+    *,
+    prompt: str = "",
+    segment_index: int = 0,
+    scores: dict[str, Any] | None = None,
+    log_path: str | Path | None = None,
+) -> Path | None:
+    """Record a generate event for the hero (middle) frame of a segment."""
+    paths = [Path(p) for p in frame_paths if Path(p).is_file()]
+    if not paths:
+        return None
+    hero = paths[len(paths) // 2]
+    try:
+        from utils.training.preference import record_generation
+
+        return record_generation(
+            str(hero),
+            prompt=prompt,
+            media_type="video",
+            log_path=log_path,
+            extra={
+                "segment_index": int(segment_index),
+                "n_frames": len(paths),
+                "scores": dict(scores or {}),
+            },
+        )
+    except Exception:
+        return None
+
+
+def rate_segment(
+    *,
+    like: bool,
+    hero_frame: str | Path,
+    prompt: str = "",
+    log_path: str | Path | None = None,
+) -> Path:
+    from utils.training.preference import record_dislike, record_like
+
+    if like:
+        return record_like(str(hero_frame), prompt=prompt, media_type="video", log_path=log_path)
+    return record_dislike(str(hero_frame), prompt=prompt, media_type="video", log_path=log_path)

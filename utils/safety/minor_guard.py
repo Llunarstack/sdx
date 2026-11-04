@@ -690,7 +690,7 @@ def _cached_weights(src: str) -> bool:
     Never triggers a download.
     """
     if os.path.isdir(src):
-        from utils.modeling.hf_scaffold import has_local_weights
+        from utils.modeling.model_paths import has_local_weights
 
         return has_local_weights(src)
     from huggingface_hub import try_to_load_from_cache
@@ -715,7 +715,7 @@ def _age_model() -> ZeroShotAge | None:
     import torch
     from transformers import CLIPModel, CLIPProcessor
 
-    from utils.generation.clip_alignment import _clip_feature_tensor
+    from utils.generation.guidance import _clip_feature_tensor
 
     # The folder may hold only tokenizer/config files while the weights sit in the HF cache.
     local = model_dir() / "CLIP-ViT-L-14"

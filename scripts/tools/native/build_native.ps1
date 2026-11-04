@@ -297,57 +297,9 @@ if (-not $env:RUSTC_WRAPPER) {
 
 if (Get-Command cargo -ErrorAction SilentlyContinue) {
 
-    Write-Host "==> cargo build: sdx-jsonl-tools"
+    Write-Host "==> cargo build: native\rust (sdx_rs, sdx-jsonl-tools, sdx-noise-schedule)"
 
-    Push-Location (Join-Path $RepoRoot "native\rust\sdx-jsonl-tools")
-
-    try {
-
-        & cargo build --release
-
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-    } finally {
-
-        Pop-Location
-
-    }
-
-    Write-Host "==> cargo build: sdx-noise-schedule"
-
-    Push-Location (Join-Path $RepoRoot "native\rust\sdx-noise-schedule")
-
-    try {
-
-        & cargo build --release
-
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-    } finally {
-
-        Pop-Location
-
-    }
-
-    Write-Host "==> cargo build: sdx-diffusion-math"
-
-    Push-Location (Join-Path $RepoRoot "native\rust\sdx-diffusion-math")
-
-    try {
-
-        & cargo build --release
-
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-    } finally {
-
-        Pop-Location
-
-    }
-
-    Write-Host "==> cargo build: sdx-image-metrics"
-
-    Push-Location (Join-Path $RepoRoot "native\rust\sdx-image-metrics")
+    Push-Location (Join-Path $RepoRoot "native\rust")
 
     try {
 

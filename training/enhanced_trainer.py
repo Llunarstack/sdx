@@ -27,11 +27,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.enhanced_dit import EnhancedDiT
-from utils.consistency.character_consistency import BodyEncoder, CharacterDatabase, CharacterProfile, FaceEncoder
-from utils.consistency.consistency_losses import ConsistencyLossManager
-from utils.consistency.style_harmonization import create_style_harmonization_system
-from utils.generation.text_rendering import TextRenderingEngine
+from models.dit_variants import EnhancedDiT
+from utils.consistency import (
+    BodyEncoder,
+    CharacterDatabase,
+    CharacterProfile,
+    ConsistencyLossManager,
+    FaceEncoder,
+    create_style_harmonization_system,
+)
+from utils.generation.editing import TextRenderingEngine
 
 
 @dataclass(slots=True)

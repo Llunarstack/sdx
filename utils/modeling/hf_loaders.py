@@ -1,22 +1,16 @@
-"""
-Lazy Hugging Face model loaders wired to ``model_paths`` and ``hf_scaffold``.
-
-Each helper loads only when local weights exist (or hub id resolves with
-weights on first ``from_pretrained``). Config-only scaffolds do not block hub
-fallback thanks to ``resolve_model_path_require_weights``.
-"""
+"""Lazy Hugging Face model loaders (captioners, OCR, depth, detectors, reward scorers), the reward panel and ControlNet control-map helpers."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeVar
 
 import numpy as np
+from PIL import Image, ImageFilter
 
-from utils.modeling import hf_scaffold
 from utils.modeling.model_paths import (
     default_blip2_flan_t5_xl_path,
     default_blip2_opt_path,
@@ -25,6 +19,20 @@ from utils.modeling.model_paths import (
     default_cafe_aesthetic_path,
     default_clip_h14_path,
     default_clip_iqa_path,
+    default_controlnet_canny_path,
+    default_controlnet_canny_sdxl_path,
+    default_controlnet_depth_path,
+    default_controlnet_depth_sdxl_path,
+    default_controlnet_hed_path,
+    default_controlnet_lineart_path,
+    default_controlnet_mlsd_path,
+    default_controlnet_normal_path,
+    default_controlnet_openpose_path,
+    default_controlnet_openpose_sdxl_path,
+    default_controlnet_scribble_path,
+    default_controlnet_seg_path,
+    default_controlnet_softedge_path,
+    default_controlnet_union_sdxl_path,
     default_depth_anything_v2_base_path,
     default_depth_anything_v2_large_path,
     default_depth_anything_v2_small_path,
@@ -64,6 +72,7 @@ from utils.modeling.model_paths import (
     default_vit_gpt2_coco_path,
     default_watermark_detector_path,
     default_zoedepth_path,
+    has_local_weights,
 )
 
 
@@ -75,7 +84,7 @@ def _image_text_to_text_cls() -> Any:
 
 
 def _has_weights_at(path: str) -> bool:
-    return hf_scaffold.has_local_weights(path)
+    return has_local_weights(path)
 
 
 @dataclass
@@ -1100,7 +1109,7 @@ def detect_owlv2(path: str, queries: list[str], *, device: str = "cuda", thresho
         scores = results[0]["scores"]
         labels = results[0]["labels"]
         hits: list[str] = []
-        for idx, score in zip(labels.tolist(), scores.tolist()):
+        for idx, score in zip(labels.tolist(), scores.tolist(), strict=True):
             if score >= threshold and 0 <= idx < len(queries):
                 label = queries[idx]
                 if label not in hits:
@@ -1154,7 +1163,7 @@ def caption_image_chain(
             md_path = default_moondream2_path()
             if _has_weights_at(md_path) or "/" in md_path:
                 try:
-                    from utils.prompt.creative_rag import CreativeRAGEngine
+                    from utils.prompt.rag import CreativeRAGEngine
 
                     engine = CreativeRAGEngine()
                     result = engine.enrich(
@@ -1242,42 +1251,224 @@ def _caption_qwen2_vl(path: str, *, user_prompt: str, device: str, size: str = "
         return ""
 
 
-__all__ = [
-    "caption_blip",
-    "caption_blip2",
-    "caption_blip2_flan",
-    "caption_florence2",
-    "caption_git",
-    "caption_image_chain",
-    "caption_internvl2",
-    "caption_kosmos2",
-    "caption_llava",
-    "caption_llava_v16",
-    "caption_paligemma2",
-    "caption_qwen25_vl",
-    "caption_qwen25_vl_7b",
-    "caption_smolvlm",
-    "caption_smolvlm2",
-    "caption_vit_gpt2",
-    "caption_vit_gpt2_coco",
-    "depth_map",
-    "detect_grounding_dino",
-    "detect_objects",
-    "detect_owlv2",
-    "marigold_depth_map",
-    "normals_map",
-    "ocr_got",
-    "ocr_trocr",
-    "ocr_trocr_handwritten",
-    "score_cafe_aesthetic",
-    "score_clip_h14",
-    "score_clip_iqa",
-    "score_hpsv2",
-    "score_image_reward",
-    "score_nsfw_probability",
-    "score_onealign",
-    "score_perceptclip",
-    "score_pickscore",
-    "score_siglip2",
-    "score_watermark_probability",
-]
+ControlPathFn = Callable[[], str]
+
+CONTROLNET_REGISTRY: dict[str, ControlPathFn] = {
+    "canny": default_controlnet_canny_path,
+    "depth": default_controlnet_depth_path,
+    "openpose": default_controlnet_openpose_path,
+    "lineart": default_controlnet_lineart_path,
+    "scribble": default_controlnet_scribble_path,
+    "mlsd": default_controlnet_mlsd_path,
+    "softedge": default_controlnet_softedge_path,
+    "seg": default_controlnet_seg_path,
+    "normal": default_controlnet_normal_path,
+    "hed": default_controlnet_hed_path,
+    "canny_sdxl": default_controlnet_canny_sdxl_path,
+    "depth_sdxl": default_controlnet_depth_sdxl_path,
+    "openpose_sdxl": default_controlnet_openpose_sdxl_path,
+    "union_sdxl": default_controlnet_union_sdxl_path,
+}
+
+# Maps that can be synthesized without neural weights.
+PIL_PROXY_TYPES: frozenset[str] = frozenset({"canny", "softedge", "hed"})
+
+
+def list_controlnet_types() -> list[str]:
+    return sorted(CONTROLNET_REGISTRY.keys())
+
+
+def resolve_controlnet_path(control_type: str) -> str:
+    key = str(control_type).strip().lower()
+    fn = CONTROLNET_REGISTRY.get(key)
+    if fn is None:
+        raise KeyError(f"Unknown control type: {control_type}")
+    return fn()
+
+
+def controlnet_has_weights(control_type: str) -> bool:
+    try:
+        path = resolve_controlnet_path(control_type)
+        return has_local_weights(path)
+    except KeyError:
+        return False
+
+
+def extract_pil_proxy(path: str, output_path: str, control_type: str) -> str:
+    """Write a cheap proxy control map (canny or softedge)."""
+    kind = str(control_type).strip().lower()
+    if kind not in PIL_PROXY_TYPES:
+        return ""
+    try:
+        img = Image.open(path).convert("RGB")
+    except Exception:
+        return ""
+    if kind == "canny":
+        out = img.convert("L").filter(ImageFilter.FIND_EDGES)
+    elif kind == "hed":
+        out = img.convert("L").filter(ImageFilter.EMBOSS).filter(ImageFilter.FIND_EDGES)
+    else:
+        out = img.convert("L").filter(ImageFilter.GaussianBlur(radius=1)).filter(ImageFilter.FIND_EDGES)
+    dest = Path(output_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    out.save(dest)
+    return str(dest)
+
+
+def extract_control_maps_batch(
+    path: str,
+    output_dir: Path,
+    *,
+    types: Sequence[str] = ("canny", "softedge", "depth"),
+    device: str = "cuda",
+) -> dict[str, str]:
+    """Merge PIL proxies + HF depth/normal loaders."""
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(path).stem
+    maps: dict[str, str] = {}
+
+    for kind in types:
+        key = str(kind).strip().lower()
+        if key in PIL_PROXY_TYPES:
+            dest = out_dir / f"{stem}_{key}.png"
+            out = extract_pil_proxy(path, str(dest), key)
+            if out:
+                maps[key] = out
+            continue
+        if key == "depth":
+            try:
+                dest = out_dir / f"{stem}_depth.png"
+                for prefer in ("small", "base", "large", "dpt", "zoe"):
+                    out = depth_map(str(path), str(dest), device=device, prefer=prefer)
+                    if out:
+                        maps["depth"] = out
+                        break
+                if "depth" not in maps:
+                    out = marigold_depth_map(str(path), str(dest), device=device)
+                    if out:
+                        maps["depth"] = out
+            except Exception:
+                pass
+        elif key == "normals":
+            try:
+                dest = out_dir / f"{stem}_normals.png"
+                out = normals_map(str(path), str(dest), device=device)
+                if out:
+                    maps["normals"] = out
+            except Exception:
+                pass
+
+    return maps
+
+
+@dataclass(slots=True)
+class HFRewardWeights:
+    hpsv2: float = 0.16
+    pickscore: float = 0.16
+    clip_h14: float = 0.12
+    onealign: float = 0.12
+    cafe_aesthetic: float = 0.12
+    perceptclip: float = 0.12
+    image_reward: float = 0.10
+    siglip2: float = 0.07
+    clip_iqa: float = 0.07
+
+
+@dataclass(slots=True)
+class HFRewardBreakdown:
+    composite: float
+    parts: dict[str, float] = field(default_factory=dict)
+
+
+class HFRewardPanel:
+    """Score RGB uint8 images with multiple HF reward backends."""
+
+    def __init__(
+        self,
+        weights: HFRewardWeights | None = None,
+        *,
+        device: str = "cuda",
+    ) -> None:
+        self.weights = weights or HFRewardWeights()
+        self.device = device
+
+    def score_breakdown(self, rgb_uint8: np.ndarray, *, prompt: str = "") -> HFRewardBreakdown:
+
+        parts: dict[str, float] = {}
+        w = self.weights
+
+        if w.hpsv2 > 0 and prompt.strip():
+            v = score_hpsv2(rgb_uint8, prompt, device=self.device)
+            if v is not None:
+                parts["hpsv2"] = float(v)
+
+        if w.pickscore > 0 and prompt.strip():
+            v = score_pickscore(rgb_uint8, prompt, device=self.device)
+            if v is not None:
+                parts["pickscore"] = float(v)
+
+        if w.clip_h14 > 0 and prompt.strip():
+            v = score_clip_h14(rgb_uint8, prompt, device=self.device)
+            if v is not None:
+                parts["clip_h14"] = float(v)
+
+        if w.onealign > 0:
+            v = score_onealign(rgb_uint8, prompt=prompt, device=self.device)
+            if v is not None:
+                parts["onealign"] = float(v)
+
+        if w.cafe_aesthetic > 0:
+            v = score_cafe_aesthetic(rgb_uint8, device=self.device)
+            if v is not None:
+                parts["cafe_aesthetic"] = float(v)
+
+        if w.perceptclip > 0:
+            v = score_perceptclip(rgb_uint8, prompt=prompt, device=self.device)
+            if v is not None:
+                parts["perceptclip"] = float(v)
+
+        if w.image_reward > 0 and prompt.strip():
+            v = score_image_reward(rgb_uint8, prompt, device=self.device)
+            if v is not None:
+                parts["image_reward"] = float(v)
+
+        if w.siglip2 > 0 and prompt.strip():
+            v = score_siglip2(rgb_uint8, prompt, device=self.device)
+            if v is not None:
+                parts["siglip2"] = float(v)
+
+        if w.clip_iqa > 0:
+            v = score_clip_iqa(rgb_uint8, device=self.device)
+            if v is not None:
+                parts["clip_iqa"] = float(v)
+
+        if not parts:
+            return HFRewardBreakdown(composite=0.5, parts={})
+
+        weight_map = {
+            "hpsv2": w.hpsv2,
+            "pickscore": w.pickscore,
+            "clip_h14": w.clip_h14,
+            "onealign": w.onealign,
+            "cafe_aesthetic": w.cafe_aesthetic,
+            "perceptclip": w.perceptclip,
+            "image_reward": w.image_reward,
+            "siglip2": w.siglip2,
+            "clip_iqa": w.clip_iqa,
+        }
+        tw = sum(weight_map[k] for k in parts) or 1.0
+        composite = float(sum(weight_map[k] * parts[k] for k in parts) / tw)
+        return HFRewardBreakdown(composite=composite, parts=parts)
+
+    def score(self, rgb_uint8: np.ndarray, *, prompt: str = "") -> float:
+        return self.score_breakdown(rgb_uint8, prompt=prompt).composite
+
+    def rank_indices(
+        self,
+        images: list[np.ndarray],
+        *,
+        prompt: str = "",
+    ) -> list[int]:
+        scores = [self.score(im, prompt=prompt) for im in images]
+        return sorted(range(len(scores)), key=lambda i: -scores[i])

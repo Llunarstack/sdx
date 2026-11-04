@@ -2,7 +2,7 @@
 Special Prompt Helpers for AI Image Generation.
 
 Covers categories that standard prompt engineering guides and the existing
-``config/defaults/prompt_domains.py`` system handle poorly:
+``config/prompts.py`` system handle poorly:
 
 1. **Weird / surreal / abstract** — dreamlike logic, impossible geometry, Magritte-style
 2. **Horror / dark / disturbing** — dread atmosphere, body horror, psychological unease
@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import re
 
-from config.defaults._lexicon import merge_csv_unique
+from config.prompts import merge_csv_unique
 
 __all__ = [
     # Category constants
@@ -1965,7 +1965,7 @@ def _style_fusion_score(prompt: str) -> int:
 
     Counting style keywords instead called "pixel art knight" or "noir portrait" a style fusion.
     """
-    from config.defaults.art_mediums import detect_all_mediums
+    from config.styles import detect_all_mediums
 
     families = {m.family for m in detect_all_mediums(prompt)}
     return len(families) if len(families) >= 2 else 0

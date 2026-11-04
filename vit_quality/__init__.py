@@ -23,8 +23,8 @@ _ATTR_ORIGIN: dict[str, str] = {
     "ViTConfig": "model",
     "ViTQualityAdherenceModel": "model",
     "build_vit_model": "model",
-    "load_vit_quality_checkpoint": "checkpoint_utils",
-    "vit_model_parameter_report": "checkpoint_utils",
+    "load_vit_quality_checkpoint": "model",
+    "vit_model_parameter_report": "model",
     "pairwise_ranking_loss": "model",
     "binary_focal_loss_with_logits": "model",
 }

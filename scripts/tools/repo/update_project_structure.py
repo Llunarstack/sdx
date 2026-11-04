@@ -195,7 +195,7 @@ def main() -> int:
 ## See also
 
 - [docs/CODEBASE.md](docs/CODEBASE.md) — navigate the tree, `scripts/` layout, contribution rules
-- [docs/reference/FILES.md](docs/reference/FILES.md) — full file map
+- [docs/FILES.md](docs/FILES.md) — full file map
 
 """
     out: Path = args.out

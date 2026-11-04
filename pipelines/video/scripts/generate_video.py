@@ -63,7 +63,7 @@ def main() -> int:
         return 0
 
     if args.list_engines:
-        from pipelines.video.studio_compiler import list_engines
+        from pipelines.video.studio import list_engines
 
         for e in list_engines():
             print(f"  {e.id.value}: {e.title} — {e.pipeline_notes or e.positive[:60]}")
@@ -77,10 +77,10 @@ def main() -> int:
         return 0
 
     if args.scene:
-        from pipelines.video.scene_graph import compile_scene_file, load_scene_graph, validate_scene_graph
+        from pipelines.video.scene import compile_scene_file, load_scene_graph, validate_scene_graph
 
         if args.preflight:
-            from pipelines.video.scene_graph import format_preflight_report, run_preflight
+            from pipelines.video.scene import format_preflight_report, run_preflight
 
             report = run_preflight(args.scene, ckpt=args.ckpt, require_ckpt=bool(args.ckpt))
             print(format_preflight_report(report))
@@ -89,7 +89,7 @@ def main() -> int:
         graph = load_scene_graph(args.scene)
         issues = validate_scene_graph(graph)
         if args.validate_continuity:
-            from pipelines.video.continuity_validators import (
+            from pipelines.video.scene import (
                 format_continuity_report,
                 parse_validator_config,
                 run_continuity_validation,
@@ -105,7 +105,7 @@ def main() -> int:
         if args.thumbnail_plan:
             from dataclasses import asdict
 
-            from pipelines.video.studio_compiler import parse_thumbnail_config, plan_thumbnails
+            from pipelines.video.studio import parse_thumbnail_config, plan_thumbnails
 
             thumb_cfg = parse_thumbnail_config(
                 graph.continuity,
@@ -114,7 +114,7 @@ def main() -> int:
             )
             shots = list(graph.shots) if graph.shots else []
             if not shots:
-                from pipelines.video.scene_graph import compile_scene_graph
+                from pipelines.video.scene import compile_scene_graph
 
                 try:
                     compiled = compile_scene_graph(graph)
@@ -193,8 +193,7 @@ def main() -> int:
     if args.plan_only:
         from dataclasses import asdict
 
-        from pipelines.video.shot_planner import plan_video_from_prompt
-        from pipelines.video.types import VideoMode
+        from pipelines.video.scene import VideoMode, plan_video_from_prompt
 
         plan = plan_video_from_prompt(
             args.prompt,

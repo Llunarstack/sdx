@@ -29,7 +29,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(_ROOT))
 
-from utils.terminal import configure_stdio_for_console  # noqa: E402
+from utils.runtime import configure_stdio_for_console  # noqa: E402
 
 configure_stdio_for_console()
 

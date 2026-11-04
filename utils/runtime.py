@@ -1,10 +1,11 @@
-"""Runtime helpers: fast JSON (``orjson`` when installed), plain-dict snapshots and an optional cProfile wrapper."""
+"""Runtime helpers: UTF-8 console stdio on Windows, fast JSON (orjson when installed), plain-dict snapshots and an optional cProfile wrapper."""
 
 from __future__ import annotations
 
 import argparse
 import cProfile
 import json
+import os
 import pstats
 import sys
 from collections.abc import Callable, Sequence
@@ -12,12 +13,31 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
+
+def configure_stdio_for_console() -> None:
+    """
+    Avoid UnicodeEncodeError on Windows terminals using legacy encodings (e.g. cp1252).
+
+    Sets UTF-8 with ``errors="replace"`` so ``--help`` and logging stay robust when
+    output includes non-ASCII text (typographic arrows, emoji, etc.).
+    """
+    if os.name != "nt":
+        return
+    try:
+        stdout_rc = getattr(sys.stdout, "reconfigure", None)
+        if callable(stdout_rc):
+            stdout_rc(encoding="utf-8", errors="replace")
+        stderr_rc = getattr(sys.stderr, "reconfigure", None)
+        if callable(stderr_rc):
+            stderr_rc(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
 try:
     import orjson
 except ImportError:
     orjson = None  # type: ignore[misc, assignment]
-
-__all__ = ["ProfileConfig", "consume_profile_args", "json_dumps", "json_loads", "run_with_cprofile", "to_plain_dict"]
 
 
 def json_loads(data: str | bytes) -> Any:
@@ -51,7 +71,7 @@ def to_plain_dict(obj: Any) -> dict[str, Any]:
     """
     if isinstance(obj, dict):
         return dict(obj)
-    if is_dataclass(obj):
+    if is_dataclass(obj) and not isinstance(obj, type):
         return asdict(obj)
     od = getattr(obj, "__dict__", None)
     if isinstance(od, dict):

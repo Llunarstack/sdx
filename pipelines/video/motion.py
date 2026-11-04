@@ -1,11 +1,11 @@
-"""Motion analysis: optical flow, camera motion score, motion templates.
-
-Also holds what used to be: motion_beats, mask_propagate, motion_brush, motion_transfer, region_motion, motion_library, flow_consistency, camera_stabilize, keyframes.
+"""Motion analysis and temporal synthesis: optical flow, motion brushes/templates, stabilization,
+keyframe scheduling and picking, frame interpolation.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from .video_io import frame_count_for_duration, read_frame_rgb, save_frame_rgb
+from pipelines.video.video_io import frame_count_for_duration, read_frame_rgb, save_frame_rgb
 
 # ==================================================================================================
 # motion
@@ -635,7 +635,7 @@ def stabilize_frame_paths(frame_paths: list[Path], *, strength: float = 0.65) ->
         return frame_paths
     rgbs = [read_frame_rgb(p) for p in frame_paths]
     stable = stabilize_rgb_sequence(rgbs, strength=strength)
-    for p, rgb in zip(frame_paths, stable):
+    for p, rgb in zip(frame_paths, stable, strict=False):
         save_frame_rgb(p, rgb)
     return frame_paths
 
@@ -694,37 +694,6 @@ def schedule_keyframes_for_segment(
     )
 
 
-__all__ = [
-    "compute_flow_magnitude",
-    "warp_frame_with_flow",
-    "detect_motion_beats",
-    "merge_beat_indices",
-    "load_mask_binary",
-    "propagate_mask_sequence",
-    "rasterize_box_mask",
-    "MotionBrushSpec",
-    "apply_brush_to_flow",
-    "load_motion_brush",
-    "parse_motion_brush",
-    "warp_with_motion_brush",
-    "motion_template_sequence",
-    "retime_frame_list",
-    "load_rig_boxes",
-    "apply_regional_motion",
-    "feather_mask",
-    "MotionPack",
-    "MotionLibrary",
-    "parse_motion_library",
-    "resolve_motion_clip",
-    "repair_flow_consistency",
-    "stabilize_frame_paths",
-    "stabilize_rgb_sequence",
-    "KeyframeSchedule",
-    "pick_keyframe_indices",
-    "schedule_keyframes_for_segment",
-]
-
-
 # ==================================================================================================
 # Restored from b654ae9:pipelines/video/motion.py
 # ==================================================================================================
@@ -742,3 +711,397 @@ def estimate_motion_score(frame_paths: list[Path], *, sample_pairs: int = 8) -> 
     if not mags:
         return 0.0
     return float(min(1.0, np.mean(mags) / 8.0))
+
+
+# ==================================================================================================
+# interpolate
+# ==================================================================================================
+
+
+def _write_retimed(all_paths: Sequence[Path], out: Path, produced: set[Path]) -> list[Path]:
+    """Write ``out/frame_NNNNNN.png``: frames this module wrote are byte-copied, other sources are decoded once."""
+    decoded: dict[Path, np.ndarray] = {}
+    final: list[Path] = []
+    for i, src in enumerate(all_paths):
+        fp = out / f"frame_{i + 1:06d}.png"
+        if src.resolve() == fp.resolve():
+            final.append(src)
+            continue
+        if src in produced:
+            shutil.copyfile(src, fp)
+        else:
+            if src not in decoded:
+                decoded[src] = read_frame_rgb(src)
+            save_frame_rgb(fp, decoded[src])
+        final.append(fp)
+    return final
+
+
+def blend_frames(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
+    t = float(max(0.0, min(1.0, t)))
+    return np.clip((1.0 - t) * a.astype(np.float32) + t * b.astype(np.float32), 0, 255).astype(np.uint8)
+
+
+def interpolate_between_keyframes(
+    frame_a_path: str | Path,
+    frame_b_path: str | Path,
+    out_dir: str | Path,
+    *,
+    count: int,
+    use_flow: bool = True,
+    prefix: str = "mid",
+) -> list[Path]:
+    """Generate ``count`` intermediate frames between A and B."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    a = read_frame_rgb(frame_a_path)
+    b = read_frame_rgb(frame_b_path)
+    flow = None
+    if use_flow:
+        try:
+            flow, _ = compute_flow_magnitude(a, b)
+        except Exception:
+            flow = None
+    paths: list[Path] = []
+    for i in range(1, count + 1):
+        t = i / (count + 1)
+        if flow is not None:
+            warped = warp_frame_with_flow(a, flow, alpha=t)
+            rgb = blend_frames(warped, b, t * 0.35)
+        else:
+            rgb = blend_frames(a, b, t)
+        fp = out / f"{prefix}_{i:04d}.png"
+        save_frame_rgb(fp, rgb)
+        paths.append(fp)
+    return paths
+
+
+def interpolate_sequence(
+    keyframe_paths: Sequence[str | Path],
+    target_frame_count: int,
+    out_dir: str | Path,
+    *,
+    use_flow: bool = True,
+) -> list[Path]:
+    """
+    Expand sparse keyframes to ``target_frame_count`` frames via segment interpolation.
+    """
+    keys = [Path(p) for p in keyframe_paths if Path(p).is_file()]
+    if not keys:
+        return []
+    if len(keys) == 1:
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        paths = [out / f"frame_{i + 1:06d}.png" for i in range(target_frame_count)]
+        if paths:
+            save_frame_rgb(paths[0], read_frame_rgb(keys[0]))
+            for fp in paths[1:]:
+                shutil.copyfile(paths[0], fp)
+        return paths
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    segments = len(keys) - 1
+    per_seg = max(1, target_frame_count // segments)
+    all_paths: list[Path] = [keys[0]]
+    produced: set[Path] = set()
+    for s in range(segments):
+        mids = interpolate_between_keyframes(
+            keys[s],
+            keys[s + 1],
+            out / f"seg_{s:02d}",
+            count=max(0, per_seg - 2),
+            use_flow=use_flow,
+            prefix="mid",
+        )
+        produced.update(mids)
+        all_paths.extend(mids)
+        all_paths.append(keys[s + 1])
+    # Retime to exact count
+    if len(all_paths) > target_frame_count:
+        idx = np.linspace(0, len(all_paths) - 1, target_frame_count).astype(int)
+        all_paths = [all_paths[i] for i in idx]
+    elif len(all_paths) < target_frame_count:
+        last = all_paths[-1]
+        while len(all_paths) < target_frame_count:
+            all_paths.append(last)
+    return _write_retimed(all_paths, out, produced)
+
+
+# ==================================================================================================
+# depth_interpolate: Edge-aware depth-proxy interpolation between keyframes.
+# ==================================================================================================
+
+
+def depth_proxy(rgb: np.ndarray) -> np.ndarray:
+    """Cheap depth stand-in: inverse luminance + Sobel edge emphasis."""
+    gray = rgb[..., :3].astype(np.float32).mean(axis=2) / 255.0
+    inv = 1.0 - gray
+    try:
+        import cv2
+
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        edge = np.sqrt(gx * gx + gy * gy)
+        edge = edge / (edge.max() + 1e-6)
+        depth = np.clip(0.65 * inv + 0.35 * edge, 0, 1)
+    except ImportError:
+        depth = inv
+    return depth.astype(np.float32)
+
+
+def depth_aware_blend(
+    a: np.ndarray, b: np.ndarray, t: float, *, da: np.ndarray | None = None, db: np.ndarray | None = None
+) -> np.ndarray:
+    """Occlusion-aware blend using depth proxy (closer layer wins at mid-t); pass ``da``/``db`` to reuse depths."""
+    t = float(max(0.0, min(1.0, t)))
+    da = depth_proxy(a) if da is None else da
+    db = depth_proxy(b) if db is None else db
+    # Soft winner-take-most: nearer surface dominates cross-fade
+    wa = (1.0 - t) * (1.0 + da * 0.75)
+    wb = t * (1.0 + db * 0.75)
+    wsum = wa + wb + 1e-6
+    wa, wb = wa / wsum, wb / wsum
+    out = wa[..., None] * a.astype(np.float32) + wb[..., None] * b.astype(np.float32)
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def interpolate_sequence_depth(
+    keyframe_paths: Sequence[str | Path],
+    target_frame_count: int,
+    out_dir: str | Path,
+    *,
+    use_flow: bool = True,
+) -> list[Path]:
+    """Like ``interpolate_sequence`` but mid-frames use depth-aware blending."""
+
+    keys = [Path(p) for p in keyframe_paths if Path(p).is_file()]
+    if len(keys) <= 1:
+        return interpolate_sequence(keyframe_paths, target_frame_count, out_dir, use_flow=use_flow)
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    segments = len(keys) - 1
+    per_seg = max(1, target_frame_count // segments)
+    all_paths: list[Path] = [keys[0]]
+    produced: set[Path] = set()
+    for s in range(segments):
+        a = read_frame_rgb(keys[s])
+        b = read_frame_rgb(keys[s + 1])
+        db = depth_proxy(b)
+        seg_dir = out / f"seg_{s:02d}"
+        seg_dir.mkdir(parents=True, exist_ok=True)
+        mids: list[Path] = []
+        count = max(0, per_seg - 2)
+        flow = None
+        if use_flow:
+            try:
+                flow, _ = compute_flow_magnitude(a, b)
+            except Exception:
+                flow = None
+        da = depth_proxy(a) if flow is None else None
+        for i in range(1, count + 1):
+            t = i / (count + 1)
+            if flow is not None:
+                warped = warp_frame_with_flow(a, flow, alpha=t)
+                rgb = depth_aware_blend(warped, b, t * 0.45, db=db)
+            else:
+                rgb = depth_aware_blend(a, b, t, da=da, db=db)
+            fp = seg_dir / f"mid_{i:04d}.png"
+            save_frame_rgb(fp, rgb)
+            mids.append(fp)
+        produced.update(mids)
+        all_paths.extend(mids)
+        all_paths.append(keys[s + 1])
+
+    if len(all_paths) > target_frame_count:
+        idx = np.linspace(0, len(all_paths) - 1, target_frame_count).astype(int)
+        all_paths = [all_paths[i] for i in idx]
+    elif len(all_paths) < target_frame_count:
+        all_paths.extend([all_paths[-1]] * (target_frame_count - len(all_paths)))
+
+    return _write_retimed(all_paths[:target_frame_count], out, produced)
+
+
+# ==================================================================================================
+# flf2v: First–last-frame video (FLF2V) interpolation between anchor endpoints.
+# ==================================================================================================
+
+
+def prepare_flf2v_keyframes(
+    start_path: str | Path,
+    end_path: str | Path,
+    out_dir: str | Path,
+    *,
+    mid_keyframe_paths: Sequence[Path] | None = None,
+) -> list[Path]:
+    """Ordered keyframes: start → mids → end."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    start_p = out / "flf_start.png"
+    end_p = out / "flf_end.png"
+    save_frame_rgb(start_p, read_frame_rgb(start_path))
+    save_frame_rgb(end_p, read_frame_rgb(end_path))
+    keys = [start_p]
+    if mid_keyframe_paths:
+        keys.extend([Path(p) for p in mid_keyframe_paths if Path(p).is_file()])
+    keys.append(end_p)
+    return keys
+
+
+def interpolate_flf2v_sequence(
+    start_path: str | Path,
+    end_path: str | Path,
+    target_frame_count: int,
+    out_dir: str | Path,
+    *,
+    mid_keyframe_paths: Sequence[Path] | None = None,
+    source_frame_paths: Sequence[Path] | None = None,
+    use_depth: bool = True,
+    use_flow: bool = True,
+) -> list[Path]:
+    """
+    Constrain segment between ``start_path`` and ``end_path``.
+
+    Optional source frames guide mid-segment motion; endpoints are pinned.
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if target_frame_count <= 0:
+        return []
+
+    start_rgb = read_frame_rgb(start_path)
+    end_rgb = read_frame_rgb(end_path)
+    end_depth = depth_proxy(end_rgb) if use_depth else None
+    keys = prepare_flf2v_keyframes(start_path, end_path, out / "keys", mid_keyframe_paths=mid_keyframe_paths)
+
+    if len(keys) == 2 and source_frame_paths and len(source_frame_paths) >= 3 and use_flow:
+        n = target_frame_count
+        paths: list[Path] = []
+        for i in range(n):
+            t = i / max(1, n - 1)
+            if i == 0:
+                rgb = start_rgb
+            elif i == n - 1:
+                rgb = end_rgb
+            else:
+                src_i = min(len(source_frame_paths) - 1, int(round(t * (len(source_frame_paths) - 1))))
+                src_rgb = read_frame_rgb(source_frame_paths[src_i])
+                try:
+                    flow_s, _ = compute_flow_magnitude(start_rgb, src_rgb)
+                    warped = warp_frame_with_flow(start_rgb, flow_s, alpha=t)
+                    if use_depth:
+                        rgb = depth_aware_blend(warped, end_rgb, t, db=end_depth)
+                    else:
+                        rgb = depth_aware_blend(warped, src_rgb, 0.5)
+                except Exception:
+                    rgb = (
+                        depth_aware_blend(start_rgb, end_rgb, t, db=end_depth)
+                        if use_depth
+                        else ((1 - t) * start_rgb.astype(np.float32) + t * end_rgb.astype(np.float32)).astype(np.uint8)
+                    )
+            fp = out / f"frame_{i + 1:06d}.png"
+            save_frame_rgb(fp, rgb)
+            paths.append(fp)
+        return paths
+
+    if use_depth and len(keys) >= 2:
+        return interpolate_sequence_depth(keys, target_frame_count, out, use_flow=use_flow)
+    return interpolate_sequence(keys, target_frame_count, out, use_flow=use_flow)
+
+
+def pixel_continuity_score(candidate: np.ndarray, previous: np.ndarray) -> float:
+    """
+    Higher = more similar to previous keyframe (less flicker risk).
+
+    Uses downsampled RGB L2 in [0, 1].
+    """
+    a = np.asarray(candidate, dtype=np.float32)
+    b = np.asarray(previous, dtype=np.float32)
+    if a.shape != b.shape:
+        from PIL import Image
+
+        b = np.asarray(
+            Image.fromarray(b.astype(np.uint8)).resize((a.shape[1], a.shape[0]), Image.BILINEAR),
+            dtype=np.float32,
+        )
+    # Downsample for speed
+    step = max(1, min(a.shape[0], a.shape[1]) // 64)
+    a_s = a[::step, ::step, :3] / 255.0
+    b_s = b[::step, ::step, :3] / 255.0
+    rms = float(np.sqrt(np.mean((a_s - b_s) ** 2)))
+    return float(np.clip(1.0 - rms * 2.5, 0.0, 1.0))
+
+
+def pick_keyframe_with_continuity(
+    candidate_paths: list[str | Path],
+    *,
+    previous_keyframe: str | Path | None = None,
+    quality_scores: list[float] | None = None,
+    continuity_weight: float = 0.35,
+) -> tuple[int, list[float]]:
+    """
+    Pick best candidate index blending quality scores with continuity to previous KF.
+
+    If ``quality_scores`` is None, uses edge sharpness as a cheap proxy.
+    """
+    paths = [Path(p) for p in candidate_paths]
+    n = len(paths)
+    if n == 0:
+        return 0, []
+    if n == 1:
+        return 0, [1.0]
+
+    if quality_scores is None:
+        from pipelines.video.quality import score_frame_sharpness
+
+        quality_scores = [score_frame_sharpness(read_frame_rgb(p)) for p in paths]
+    q = np.asarray(quality_scores, dtype=np.float64)
+    if q.size != n:
+        q = np.resize(q, n)
+    q_min, q_max = float(q.min()), float(q.max())
+    qn = (q - q_min) / (q_max - q_min + 1e-8) if q_max > q_min else np.ones(n)
+
+    w = float(max(0.0, min(1.0, continuity_weight)))
+    if previous_keyframe and Path(previous_keyframe).is_file() and w > 1e-6:
+        prev = read_frame_rgb(previous_keyframe)
+        cont = np.asarray(
+            [pixel_continuity_score(read_frame_rgb(p), prev) for p in paths],
+            dtype=np.float64,
+        )
+        combined = (1.0 - w) * qn + w * cont
+    else:
+        combined = qn
+
+    best = int(np.argmax(combined))
+    return best, [float(x) for x in combined]
+
+
+def harmonize_keyframe_pair(
+    current_path: str | Path,
+    previous_path: str | Path,
+    *,
+    strength: float = 0.25,
+) -> Path:
+    """
+    Soft-blend current keyframe toward previous for identity continuity
+    (cross-keyframe identity before interpolate).
+    """
+    cur_p = Path(current_path)
+    prev_p = Path(previous_path)
+    if not cur_p.is_file() or not prev_p.is_file():
+        return cur_p
+    s = float(max(0.0, min(0.6, strength)))
+    if s < 1e-6:
+        return cur_p
+    cur = read_frame_rgb(cur_p).astype(np.float32)
+    prev = read_frame_rgb(prev_p).astype(np.float32)
+    if prev.shape != cur.shape:
+        from PIL import Image
+
+        prev = np.asarray(
+            Image.fromarray(prev.astype(np.uint8)).resize((cur.shape[1], cur.shape[0]), Image.BILINEAR),
+            dtype=np.float32,
+        )
+    out = cur * (1.0 - s) + prev * s
+    save_frame_rgb(cur_p, np.clip(out, 0, 255).astype(np.uint8))
+    return cur_p

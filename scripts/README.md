@@ -22,5 +22,5 @@ All paths are relative to the **repository root**. Prefer running scripts with `
 ## See also
 
 - [docs/CODEBASE.md](../docs/CODEBASE.md) — repo tree, entry points
-- [docs/reference/FILES.md](../docs/reference/FILES.md) — file map
+- [docs/FILES.md](../docs/FILES.md) — file map
 - [README.md](../README.md) — project entry

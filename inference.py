@@ -14,13 +14,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # torch and the checkpoint stack are imported inside the functions so ``--help`` stays light
 # (tests/test_cli_entrypoints.py).
-from utils.terminal import configure_stdio_for_console
+from utils.runtime import configure_stdio_for_console
 
 configure_stdio_for_console()
 
 
 def load_model_from_ckpt(ckpt_path, device="cuda"):
-    from utils.checkpoint.checkpoint_loading import load_sampler_checkpoint
+    from utils.modeling.checkpoints import load_sampler_checkpoint
 
     model, cfg, rae_bridge, _fusion_sd = load_sampler_checkpoint(
         ckpt_path, device=device, reject_enhanced=False, verbose=True
@@ -77,7 +77,7 @@ def main():
         print("CUDA not available; using CPU.", file=sys.stderr)
     device = torch.device(dev)
     if device.type == "cuda":
-        from utils.training.device_perf import configure_inference_cuda
+        from utils.training.perf import configure_inference_cuda
 
         configure_inference_cuda()
 

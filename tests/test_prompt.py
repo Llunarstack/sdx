@@ -1,10 +1,11 @@
 """PromptParser extracts clothing, objects, people, and spatial relation tokens.
 
-Also holds what used to be: test_prompt_adherence_parse, test_prompt_breakdown, test_prompt_budget, test_prompt_composer_artists, test_prompt_emphasis_import, test_prompt_lexicon_artist_helpers, test_prompt_research, test_prompt_stack, test_prompt_stack_exports, test_prompt_train_sample_parity, test_prompt_training_pkg_lazy.
+Also holds what used to be: test_prompt_adherence_parse, test_prompt_breakdown, test_prompt_budget, test_prompt_composer_artists, test_prompt_emphasis_import, test_prompt_lexicon_artist_helpers, test_prompt_research, test_prompt_stack, test_prompt_stack_exports, test_prompt_train_sample_parity, test_prompt_training_pkg_lazy, test_artist_composition_controls, test_auto_oc, test_composition_brief, test_creature_character_prompts, test_detailed_scene_entities, test_multi_instance_scene, test_photo_realism, test_physics_material_prompts, test_prompt_tags, test_rag_prompt_gen_searcher.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -15,42 +16,67 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
-from models.prompt_adherence import PromptParser, attribute_binding_heatmap
+from config.prompts import HUMANOID_MONSTER_PROMPT_KEYWORDS
+from models.conditioning import PromptParser, attribute_binding_heatmap
 from pipelines.book_comic import prompt_lexicon
-from utils.caption.prompt_research import (
-    PromptResearchResult,
-    _seed_from_description,
-    research_prompt_for_image,
-    retrieve_rag_facts,
-)
-from utils.generation.quality_stack import apply_best_model_policy
+from utils.captioning import PromptResearchResult, _seed_from_description, research_prompt_for_image, retrieve_rag_facts
 from utils.generation.sample_cli_parser import build_sample_parser
-from utils.prompt.art_direction import apply_art_direction_to_args
-from utils.prompt.artist_registry import ArtistRegistry, expand_artist_mentions, normalize_artist_tag
-from utils.prompt.prompt_breakdown import (
-    apply_prompt_breakdown,
-    build_breakdown,
-    warrant_prompt_breakdown,
+from utils.generation.sample_core import apply_best_model_policy
+from utils.prompt import rag as rp
+from utils.prompt.art_direction import (
+    apply_art_direction_to_args,
+    apply_composition_brief,
+    composition_brief_warranted,
+    infer_photo_realism_controls,
+    is_photographic_prompt,
+    photo_realism_fragments,
+    recommend_photo_post_profile,
 )
-from utils.prompt.prompt_composer import compose_prompt, parse_blocks
-from utils.prompt.prompt_emphasis import parse_prompt_emphasis, token_weights_from_cleaned_segments
+from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
+from utils.prompt.scene import (
+    apply_detailed_scene_boost,
+    apply_multi_instance_preset,
+    describe_limitation_short,
+    detailed_scene_warrants_boost,
+    extract_key_segments,
+    infer_auto_original_character,
+    multi_instance_auto_settings,
+    print_multi_instance_hints,
+    prompt_requests_original_character,
+    suggest_creature_prompt_addons,
+    suggest_physics_prompt_addons,
+)
 from utils.prompt.stack import (
+    CLAUSE_REGISTRY,
     PromptContext,
     StackMode,
     analyze_prompt,
     append_unique,
     apply_clauses,
     apply_sample_prompt_stack,
+    apply_training_guidance_pair,
+    fit_tags,
     list_clauses,
     merge_guidance_for_training_caption,
     resolve_content_controls,
     run_prompt_stack,
     split_tags,
+    tag_token_counts,
 )
-from utils.prompt.stack.clauses import CLAUSE_REGISTRY
-from utils.prompt.stack.stages.budget import fit_tags, tag_token_counts
-from utils.prompt.stack.stages.guidance import apply_training_guidance_pair
-from utils.prompt.tags import filter_negative_by_positive
+from utils.prompt.text import (
+    ArtistRegistry,
+    apply_prompt_breakdown,
+    build_breakdown,
+    compose_prompt,
+    expand_artist_mentions,
+    filter_negative_by_positive,
+    merge_csv_unique,
+    normalize_artist_tag,
+    parse_blocks,
+    parse_prompt_emphasis,
+    token_weights_from_cleaned_segments,
+    warrant_prompt_breakdown,
+)
 
 # ==================================================================================================
 # test_prompt_adherence_parse: PromptParser extracts clothing, objects, people, and spatial relation tokens.
@@ -192,7 +218,7 @@ def test_negative_filter_drops_whole_tags_against_requested_words():
 
 
 def test_category_and_lighting_bugs():
-    from config.defaults.art_mediums import guidance_fragments
+    from config.styles import guidance_fragments
     from utils.prompt.content_controls import infer_content_controls_from_prompt
     from utils.prompt.special_prompt_helpers import classify_prompt_category
 
@@ -270,7 +296,7 @@ def test_prompt_emphasis_import_without_torch():
     code = """
 import sys
 sys.modules['torch'] = None
-from utils.prompt.prompt_emphasis import parse_prompt_emphasis
+from utils.prompt.text import parse_prompt_emphasis
 cleaned, _ = parse_prompt_emphasis('(hi) there')
 assert cleaned == 'hi there', cleaned
 """
@@ -627,9 +653,9 @@ def test_research_without_models_uses_fallback(tmp_path):
         sources=["vlm_uncensored", "rag:1", "creative_rag"],
     )
 
-    with patch("utils.caption.prompt_research.describe_image_uncensored", return_value=fake.image_description):
-        with patch("utils.caption.prompt_research.retrieve_rag_facts", return_value=fake.retrieved_facts):
-            with patch("utils.prompt.creative_rag.CreativeRAGEngine", side_effect=RuntimeError("no gpu")):
+    with patch("utils.captioning.describe_image_uncensored", return_value=fake.image_description):
+        with patch("utils.captioning.retrieve_rag_facts", return_value=fake.retrieved_facts):
+            with patch("utils.prompt.rag.CreativeRAGEngine", side_effect=RuntimeError("no gpu")):
                 result = research_prompt_for_image(
                     img,
                     rag_corpus=corpus,
@@ -785,7 +811,7 @@ def test_stack_exports_append_csv_and_token_set():
 
 
 def test_config_prompt_domains_canonical():
-    from config.defaults.prompt_domains import DEFAULT_NEGATIVE_PROMPT
+    from config.prompts import DEFAULT_NEGATIVE_PROMPT
 
     assert DEFAULT_NEGATIVE_PROMPT
 
@@ -909,17 +935,12 @@ import sys
 
 pkgs = ["utils"] + [
     f"utils.{p}"
-    for p in ("analysis", "architecture", "checkpoint", "consistency", "generation", "modeling", "prompt", "quality", "training")
+    for p in ("agentic", "generation", "modeling", "prompt", "quality", "training")
 ]
 for pkg in pkgs:
     importlib.import_module(pkg)
 extra = sorted(k for k in sys.modules if k.startswith("utils.") and k not in pkgs)
 assert not extra, f"unexpected eager loads: {extra}"
-
-import utils.quality as q
-
-assert callable(q.naturalize)
-assert "utils.quality.quality" in sys.modules
 """
     )
 
@@ -949,3 +970,401 @@ _ = n.native_stack_status
 assert "sdx_native" in sys.modules
 """
     )
+
+
+# ==================================================================================================
+# test_artist_composition_controls
+# ==================================================================================================
+
+
+def test_artist_composition_lite_adds_tags():
+    p, n = apply_content_controls(
+        "1girl",
+        "bad",
+        artist_composition="lite",
+    )
+    assert "rule of thirds" in p.lower()
+    assert "muddy focal point" in n.lower()
+
+
+def test_infer_artist_composition_from_keywords():
+    inf = infer_content_controls_from_prompt("city street, two point perspective, vanishing point")
+    assert inf.get("artist_composition") == "perspective"
+    inf2 = infer_content_controls_from_prompt("golden ratio portrait, classical composition")
+    assert inf2.get("artist_composition") == "classical"
+
+
+# ==================================================================================================
+# test_auto_oc: Tests for utils.prompt.scene.
+# ==================================================================================================
+
+
+def test_prompt_requests_original_character():
+    assert prompt_requests_original_character("create an original character for my comic")
+    assert prompt_requests_original_character("my oc in a sci-fi city")
+    assert not prompt_requests_original_character("landscape with mountains and clouds")
+
+
+def test_infer_auto_original_character_is_deterministic():
+    p = "design an oc space pilot hero"
+    a = infer_auto_original_character(p, seed=42)
+    b = infer_auto_original_character(p, seed=42)
+    assert a is not None and b is not None
+    assert a == b
+
+
+def test_infer_auto_original_character_keyword_bias():
+    p = "create an original character detective noir style"
+    prof = infer_auto_original_character(p, seed=7)
+    assert prof is not None
+    assert prof.archetype == "noir_detective"
+    assert "original character" in prof.to_prompt_block().lower()
+
+
+def test_infer_auto_original_character_style_context_bias():
+    p = "create an original character for my project"
+    prof = infer_auto_original_character(p, seed=5, style_context="anime 3d game toon pbr")
+    assert prof is not None
+    assert prof.archetype == "space_pilot"
+    assert ("stylized topology-friendly hair silhouette" in prof.visual_traits) or (
+        "clean anime face planes" in prof.visual_traits
+    )
+
+
+# ==================================================================================================
+# test_composition_brief: Tests for utils.prompt.art_direction (layout / text fidelity heuristics).
+# ==================================================================================================
+
+
+def test_auto_skips_plain_prompt():
+    assert not composition_brief_warranted("a red apple on a table")
+    p = apply_composition_brief("a red apple on a table", "auto")
+    assert "coherent perspective" not in p
+
+
+def test_auto_triggers_poster():
+    assert composition_brief_warranted("concert poster with bold title")
+    p = apply_composition_brief("concert poster", "auto")
+    assert "coherent perspective" in p
+
+
+def test_auto_triggers_quoted_string():
+    assert composition_brief_warranted('sign that says "OPEN" in neon')
+    p = apply_composition_brief('sign that says "OPEN"', "auto")
+    assert "coherent perspective" in p
+
+
+def test_on_always_appends():
+    p = apply_composition_brief("a red apple", "on")
+    assert "coherent perspective" in p
+
+
+def test_off_noop():
+    p = apply_composition_brief("concert poster", "off")
+    assert p == "concert poster"
+
+
+def test_no_double_append_on():
+    once = apply_composition_brief("mountain vista", "on")
+    twice = apply_composition_brief(once, "on")
+    assert twice == once
+
+
+# ==================================================================================================
+# test_creature_character_prompts: Tests for creature / anthro / robot / monster prompt defaults and analyzer.
+# ==================================================================================================
+
+
+def test_suggest_creature_anthro() -> None:
+    pos, neg = suggest_creature_prompt_addons("anthropomorphic red fox wearing a jacket")
+    assert "anthropomorphic" in pos.lower() or "anthro" in pos.lower()
+    assert neg
+
+
+def test_suggest_creature_robot() -> None:
+    pos, neg = suggest_creature_prompt_addons("mecha pilot standing next to building-sized robot")
+    assert "robot" in pos.lower() or "hard-surface" in pos.lower() or "panel" in pos.lower()
+    assert neg
+
+
+def test_suggest_creature_empty() -> None:
+    pos, neg = suggest_creature_prompt_addons("plain red apple on white table")
+    assert pos == ""
+    assert neg == ""
+
+
+def test_suggest_creature_sfw_rating() -> None:
+    pos, neg = suggest_creature_prompt_addons("anthro rabbit mage, fantasy illustration", rating="sfw")
+    assert "sfw" in pos.lower() or "general audience" in pos.lower()
+    assert "nsfw" in neg.lower() or "nude" in neg.lower()
+
+
+def test_suggest_creature_nsfw_auto() -> None:
+    pos, neg = suggest_creature_prompt_addons("anthro wolf, explicit, adult character portrait")
+    assert "adult" in pos.lower() or "mature" in pos.lower()
+    assert "minor" in neg.lower() or "underage" in neg.lower()
+
+
+def test_suggest_creature_nsfw_rating() -> None:
+    pos, neg = suggest_creature_prompt_addons("anthro cat, detailed", rating="nsfw")
+    assert "adult" in pos.lower() or "mature" in pos.lower()
+    assert "melted anatomy" in neg.lower() or "fused limbs" in neg.lower()
+
+
+def test_humanoid_keyword_tuple_covers_succubus() -> None:
+    assert "succubus" in HUMANOID_MONSTER_PROMPT_KEYWORDS
+    assert "tiefling" in HUMANOID_MONSTER_PROMPT_KEYWORDS
+
+
+def test_suggest_succubus_triggers_humanoid_pack() -> None:
+    pos, neg = suggest_creature_prompt_addons("succubus character with bat wings and tail")
+    assert pos and "humanoid" in pos.lower()
+    assert neg
+
+
+# ==================================================================================================
+# test_detailed_scene_entities: Tests for detailed multi-entity / pose / physics prompt boosting.
+# ==================================================================================================
+
+
+def test_warrant_group():
+    assert detailed_scene_warrants_boost("a crowd of knights in the square")
+
+
+def test_warrant_count():
+    assert detailed_scene_warrants_boost("five people waiting at a bus stop")
+
+
+def test_no_warrant_short():
+    assert not detailed_scene_warrants_boost("a red apple")
+
+
+def test_apply_on_adds_pose_and_negatives():
+    p, neg = apply_detailed_scene_boost(
+        "two warriors dueling on a stone bridge over water",
+        "on",
+        strength="lite",
+    )
+    assert "water" in p.lower() or "bridge" in p.lower()
+    assert "meniscus" in p.lower() or "liquid" in p.lower() or "spatially" in p.lower()
+    assert neg
+    assert "merged" in neg.lower() or "floating" in neg.lower()
+
+
+def test_extract_key_segments():
+    s = extract_key_segments("masterpiece, a tall knight in armor, glowing sword")
+    assert any("knight" in x.lower() for x in s)
+
+
+def test_off_noop_detailed_scene_entities():
+    p, neg = apply_detailed_scene_boost("crowd scene", "off")
+    assert p == "crowd scene" and neg == ""
+
+
+def test_auto_skips_when_not_warranted():
+    p, neg = apply_detailed_scene_boost("a red apple on a table", "auto")
+    assert p == "a red apple on a table" and neg == ""
+
+
+# ==================================================================================================
+# test_multi_instance_scene: Tests for multi-instance scene prompting (posters, stacks, turnarounds).
+# ==================================================================================================
+
+
+def test_none_is_noop():
+    p, neg, n, ec, note = apply_multi_instance_preset("a cat", "none")
+    assert p == "a cat" and neg == "" and n == 1 and ec is None
+
+
+def test_distinct_objects_augment():
+    p, neg, n, ec, note = apply_multi_instance_preset(
+        "wall of concert posters",
+        "distinct_objects",
+        user_expected_count=0,
+    )
+    assert "multiple separate framed" in p.lower()
+    assert "cloned identical posters" in neg
+    assert n >= 8
+    assert ec is None
+    assert note
+
+
+def test_user_count_sets_expected_hint():
+    _p, _neg, _n, ec, _note = apply_multi_instance_preset(
+        "five ads",
+        "distinct_objects",
+        user_expected_count=5,
+    )
+    assert ec == 5
+
+
+def test_turnaround_suggested_count():
+    _p, _neg, _n, ec, _note = apply_multi_instance_preset(
+        "hero design",
+        "turnaround_sheet",
+        user_expected_count=0,
+    )
+    assert ec == 4
+    assert "turnaround model sheet" in _p.lower()
+
+
+def test_limitation_blurb_nonempty():
+    assert "memory" in describe_limitation_short().lower()
+
+
+def test_panel_strip_augment():
+    p, neg, n, _ec, _note = apply_multi_instance_preset("my comic", "panel_strip")
+    assert "storyboard strip" in p.lower()
+    assert "panels melting" in neg
+    assert n >= 8
+
+
+def test_auto_settings_people_vs_objects():
+    assert multi_instance_auto_settings("group_portrait")["expected_count_target"] == "people"
+    assert multi_instance_auto_settings("distinct_objects")["expected_count_target"] == "objects"
+    assert multi_instance_auto_settings("group_portrait")["pick_best"] == "combo_count"
+
+
+def test_print_hints_smoke():
+    buf = io.StringIO()
+    print_multi_instance_hints("stacked_media", stream=buf)
+    assert "dissect-refs" in buf.getvalue().lower()
+
+
+# ==================================================================================================
+# test_photo_realism: Tests for utils.prompt.art_direction helpers.
+# ==================================================================================================
+
+
+def test_infer_photo_realism_controls_from_prompt():
+    out = infer_photo_realism_controls("cinematic still with teal-orange grade and pro mist filter at golden hour")
+    assert out.get("photo_realism_pack") == "cinematic"
+    assert out.get("photo_color_grade") == "teal_orange"
+    assert out.get("photo_filter") == "pro_mist"
+    assert out.get("photo_lighting_technique") == "golden_hour"
+
+
+def test_photo_realism_fragments_builds_positive_and_negative():
+    pos, neg = photo_realism_fragments(
+        photo_realism_pack="studio_portrait",
+        photo_color_grade="kodak_portra",
+        photo_lighting_technique="rembrandt",
+        photo_filter="clean_digital",
+        photo_grain_style="fine_35mm",
+        strength=1.0,
+    )
+    assert "studio portrait realism" in pos
+    assert "kodak portra" in pos
+    assert "rembrandt portrait lighting technique" in pos
+    assert "fine 35mm-like grain structure" in pos
+    assert "plastic skin retouch" in neg
+
+
+def test_is_photographic_prompt_detects_camera_language():
+    assert is_photographic_prompt("cinematic still portrait, 35mm lens, golden hour")
+    assert not is_photographic_prompt("anime cel shade line art character sheet")
+
+
+def test_recommend_photo_post_profile_prefers_realism_metric():
+    rec = recommend_photo_post_profile(
+        photo_realism_pack="film_analog",
+        photo_color_grade="cinestill_800t",
+        photo_filter="none",
+        photo_grain_style="none",
+    )
+    assert rec["pick_best_metric"] == "combo_realism"
+    assert float(rec["photo_post_strength"]) >= 0.7
+    assert rec["photo_grain_style"] == "fine_35mm"
+
+
+# ==================================================================================================
+# test_physics_material_prompts: Tests for physics / fluids / transparency prompt defaults.
+# ==================================================================================================
+
+
+def test_suggest_addons_water() -> None:
+    pos, neg = suggest_physics_prompt_addons("a cup of water on a table")
+    assert "meniscus" in pos or "liquid" in pos.lower()
+    assert neg
+
+
+def test_suggest_addons_glass() -> None:
+    pos, neg = suggest_physics_prompt_addons("frosted glass door in office")
+    assert "glass" in pos.lower() or "refraction" in pos.lower()
+    assert neg
+
+
+def test_suggest_addons_empty() -> None:
+    pos, neg = suggest_physics_prompt_addons("red square abstract")
+    assert pos == ""
+    assert neg == ""
+
+
+# ==================================================================================================
+# test_prompt_tags: Tests for ``utils.prompt.text`` comma-tag helpers.
+# ==================================================================================================
+
+
+def test_filter_negative_python_matches_contract():
+    pos = "red dress, sky"
+    neg = "red, blurry, dress, artifact"
+    out = filter_negative_by_positive(pos, neg)
+    assert "blurry" in out
+    assert "red" not in out.split()
+    assert "dress" not in out.split()
+
+
+def test_filter_negative_unified():
+    pos = "1girl, blue eyes"
+    neg = "1girl, extra limbs, blue"
+    out = filter_negative_by_positive(pos, neg)
+    assert "extra" in out or "limbs" in out
+
+
+def test_append_unique_and_merge():
+    assert "c" in append_unique("a, b", ["B", "c"])
+    m = merge_csv_unique("x, y", "Y, z")
+    assert m == "x, y, z"
+
+
+# ==================================================================================================
+# test_rag_prompt_gen_searcher
+# ==================================================================================================
+
+
+def test_facts_from_gen_searcher_payload_extracts_nested_text():
+    payload = {
+        "reasoning_summary": "Need accurate skyline and bridge orientation.",
+        "search_results": [
+            {"title": "City skyline guide", "snippet": "Bridge is east-facing at sunset."},
+            {"text": "Landmark clocktower has four visible faces."},
+        ],
+        "references": {"items": [{"description": "Main plaza has red brick pavement."}]},
+    }
+    facts = rp.facts_from_gen_searcher_payload(payload, max_entries=10)
+    assert facts
+    joined = " | ".join(facts).lower()
+    assert "bridge is east-facing at sunset" in joined
+    assert "red brick pavement" in joined
+
+
+def test_load_facts_from_gen_searcher_json_jsonl(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    rows = [
+        {"search_summary": "A", "search_results": [{"snippet": "B"}]},
+        {"final_answer": "C"},
+    ]
+    p.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    facts = rp.load_facts_from_gen_searcher_json(p, max_entries=10)
+    assert any(f.lower() == "a" for f in facts)
+    assert any(f.lower() == "b" for f in facts)
+    assert any(f.lower() == "c" for f in facts)
+
+
+def test_merge_facts_into_prompt_with_gen_searcher_facts():
+    payload = {"search_results": [{"snippet": "Ancient stone walls around the harbor."}]}
+    facts = rp.facts_from_gen_searcher_payload(payload, max_entries=4)
+    merged = rp.merge_facts_into_prompt("cinematic harbor at dusk", facts, max_chars=600)
+    assert "Context (user-supplied facts" in merged
+    assert "Ancient stone walls around the harbor." in merged
+    assert merged.endswith("cinematic harbor at dusk")

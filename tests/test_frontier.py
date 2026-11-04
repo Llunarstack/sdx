@@ -1,16 +1,16 @@
 """Tests for frontier outside-the-box generation modules.
 
-Also holds what used to be: test_frontier_creative, test_frontier_horizon, test_frontier_ideas, test_frontier_perfect, test_frontier_regressions, test_frontier_subject.
+Also holds what used to be: test_frontier_creative, test_frontier_horizon, test_frontier_ideas, test_frontier_perfect, test_frontier_regressions, test_frontier_subject, test_bridge_2d3d, test_creative_3d, test_field_training, test_mesh_export, test_neus_render, test_radiance_and_rigging, test_triplane_spatial, test_view_dependent_render, test_perfect_model_helpers.
 """
 
 from __future__ import annotations
 
-import frontier.subject as realism
+import frontier.planning as realism
+import numpy as np
 import pytest
 import torch
-from config.defaults.art_mediums import detect_medium_ids, guidance_fragments
+from config.styles import detect_medium_ids, guidance_fragments
 from frontier import FrontierEngine, analyze_prompt
-from frontier.attention import build_attention_layout_plan
 from frontier.engine import (
     AbsenceExtractor,
     ContradictionScanner,
@@ -39,47 +39,87 @@ from frontier.layout import (
     OmostCanvas,
     RegionFusionSchedule,
     bind_coordinates_to_prompt,
+    build_attention_layout_plan,
     canvas_to_box_layout,
     fusion_weight_at_step,
     score_layout_masks,
 )
-from frontier.perfect import (
-    AtmospherePlanner,
-    ContentPolicy,
-    MaterialPlanner,
-    MotionPlanner,
-    MotionStyle,
-    PolicyDecision,
-    PolicyTier,
-    TypographyPlanner,
-    analyze_perfect,
+from frontier.multiview import (
+    AABB,
+    AssetGraph,
+    BridgeConfig,
+    Lift2Dto3D,
+    NeusRenderer,
+    SemanticPart,
+    SHRadianceDecoder,
+    Skeleton,
+    SpatialLatentField,
+    TriPlaneConfig,
+    View,
+    auto_skeleton_from_points,
+    blend_conditioning,
+    build_spatial_field,
+    contact_sheet,
+    detokenize_skeleton,
+    eikonal_loss,
+    eval_sh_basis,
+    extract_mesh,
+    fit_from_views,
+    fit_sdf,
+    forward_kinematics,
+    linear_blend_skinning,
+    look_at_rays,
+    mutate_conditioning,
+    perfect_angles,
+    rig_mesh,
+    sdf_and_gradient,
+    sdf_regression_loss,
+    sh_num_coeffs,
+    skinning_matrices,
+    skinning_weights,
+    slerp,
+    spatial_graft,
+    sphere_sdf,
+    surface_normal,
+    tokenize_skeleton,
+    validate_mesh,
+    viewpoint_rays,
+    volume_render_sdf,
+    write_obj,
 )
-from frontier.registry import idea_by_id, list_ideas
-from frontier.subject import (
+from frontier.planning import (
     AntiSlopScanner,
+    AtmospherePlanner,
     BodyMode,
     BodyPlanner,
     BrushPlanner,
-    CreatureFamily,
-    CreatureTaxonomy,
-    MatureClass,
-    MatureGuidance,
-    PhotorealStack,
-    RealismTier,
-    analyze_subject,
-    subject_sample_kwargs,
-)
-from frontier.synthesis import (
     ComputeBudgetPlanner,
     ConfidenceGate,
+    ContentPolicy,
+    CreatureFamily,
+    CreatureTaxonomy,
     GuidanceTier,
+    MaterialPlanner,
+    MatureClass,
+    MatureGuidance,
+    MotionPlanner,
+    MotionStyle,
+    PhotorealStack,
     PhysicalPlausibilityScanner,
+    PolicyDecision,
+    PolicyTier,
+    RealismTier,
     SceneRelationParser,
     TokenEmphasisPlanner,
+    TypographyPlanner,
     analyze_deep,
+    analyze_perfect,
+    analyze_subject,
     deep_sample_kwargs,
+    subject_sample_kwargs,
 )
-from utils.generation.regional_box_prompting import build_latent_region_masks, parse_box_layout
+from frontier.registry import idea_by_id, list_ideas
+from utils.generation.regional import build_latent_region_masks, parse_box_layout
 
 # ==================================================================================================
 # test_frontier
@@ -249,7 +289,7 @@ class TestNewCreativeModules:
 
 class TestPromptReplace:
     def test_replace_prompt_in_cmd(self):
-        from utils.generation.sample_features import _replace_or_append_prompt
+        from utils.generation.sample_prompt import _replace_or_append_prompt
 
         cmd = ["python", "sample.py", "--prompt", "old", "--ckpt", "x.pt"]
         out = _replace_or_append_prompt(cmd, "new prompt")
@@ -445,7 +485,7 @@ class TestPerfectRefuse:
         assert plan.refused
 
     def test_sample_features_raises(self):
-        from utils.generation.sample_features import _apply_frontier_perfect
+        from utils.generation.sample_prompt import _apply_frontier_perfect
 
         class Args:
             prompt = "nude child"
@@ -578,3 +618,986 @@ class TestSubjectOrchestration:
     def test_registry_entries(self):
         assert idea_by_id("body_mode_router").status == "implemented"
         assert idea_by_id("anti_slop_realism").status == "implemented"
+
+
+# ==================================================================================================
+# test_bridge_2d3d: Tests for the 2D->3D conditioning bridge and end-to-end field wiring.
+# ==================================================================================================
+
+
+BCFG = BridgeConfig(text_dim=64, image_dim=48, cond_dim=32, num_heads=4, hidden=64)
+
+
+@pytest.fixture
+def bridge() -> Lift2Dto3D:
+    torch.manual_seed(0)
+    return Lift2Dto3D(BCFG)
+
+
+def test_text_only_shape(bridge: Lift2Dto3D) -> None:
+    cond = bridge(torch.randn(3, BCFG.text_dim))
+    assert cond.shape == (3, BCFG.cond_dim)
+
+
+def test_text_plus_image_shape(bridge: Lift2Dto3D) -> None:
+    cond = bridge(torch.randn(2, BCFG.text_dim), torch.randn(2, 10, BCFG.image_dim))
+    assert cond.shape == (2, BCFG.cond_dim)
+
+
+def test_image_tokens_change_output(bridge: Lift2Dto3D) -> None:
+    bridge.eval()
+    text = torch.randn(1, BCFG.text_dim)
+    a = bridge(text)
+    b = bridge(text, torch.randn(1, 10, BCFG.image_dim))
+    assert not torch.allclose(a, b)
+
+
+def test_padding_mask_ignores_padded_tokens(bridge: Lift2Dto3D) -> None:
+    bridge.eval()
+    text = torch.randn(1, BCFG.text_dim)
+    real = torch.randn(1, 4, BCFG.image_dim)
+    padded = torch.cat([real, torch.randn(1, 3, BCFG.image_dim)], dim=1)
+    mask = torch.tensor([[False, False, False, False, True, True, True]])
+    out_real = bridge(text, real)
+    out_masked = bridge(text, padded, image_token_mask=mask)
+    assert torch.allclose(out_real, out_masked, atol=1e-5)
+
+
+def test_image_disabled_rejects_tokens() -> None:
+    b = Lift2Dto3D(BridgeConfig(text_dim=64, image_dim=0, cond_dim=32))
+    with pytest.raises(ValueError):
+        b(torch.randn(1, 64), torch.randn(1, 5, 48))
+
+
+def test_end_to_end_text_to_field() -> None:
+    """The bridge output must drive a real 3D field forward pass."""
+    torch.manual_seed(1)
+    bridge = Lift2Dto3D(BridgeConfig(text_dim=64, image_dim=0, cond_dim=32))
+    field = SpatialLatentField(TriPlaneConfig(cond_dim=32, plane_channels=8, grid_res=16, feature_dim=16))
+
+    cond = bridge(torch.randn(2, 64))
+    planes = field.encode(cond)
+    pts = torch.empty(2, 20, 3).uniform_(-1, 1)
+    sdf = field.decode_sdf(planes, pts)
+    assert sdf.shape == (2, 20, 1)
+
+    # gradient flows from the 3D field all the way back into the 2D bridge
+    sdf.mean().backward()
+    assert any(p.grad is not None for p in bridge.parameters())
+
+
+def test_field_to_mesh_export() -> None:
+    """Full path: conditioning -> field -> watertight mesh with vertex colors."""
+    torch.manual_seed(2)
+    field = SpatialLatentField(TriPlaneConfig(cond_dim=16, plane_channels=8, grid_res=16, feature_dim=16))
+    planes = field.encode(torch.randn(1, 16))
+    verts, faces, colors = field.to_mesh(planes, resolution=20, with_color=True)
+    # An untrained field may or may not cross zero; assert the contract holds either way.
+    assert verts.shape[1] == 3
+    assert faces.shape[1] == 3
+    if len(verts):
+        assert colors.shape == verts.shape
+        assert faces.max() < len(verts)
+
+
+# ==================================================================================================
+# test_creative_3d: Tests for the creative SDX-3D features drawn from the original design notes:
+# ==================================================================================================
+
+
+def _sphere_sdf(radius: float, center=(0.0, 0.0, 0.0)):
+    c = np.asarray(center)
+
+    def fn(p: np.ndarray) -> np.ndarray:
+        return np.linalg.norm(p - c, axis=1) - radius
+
+    return fn
+
+
+# --------------------------------------------------------------------------- #
+# Perfect Angles
+# --------------------------------------------------------------------------- #
+
+
+def test_viewpoint_camera_positions():
+    o, d = viewpoint_rays("front", radius=2.5, height=8, width=8)
+    # Camera origin sits on the -Z axis at the requested radius, all rays share it.
+    assert torch.allclose(o[0], torch.tensor([0.0, 0.0, -2.5]), atol=1e-5)
+    assert torch.allclose(d.norm(dim=-1), torch.ones(64), atol=1e-5)
+
+
+def test_top_view_up_vector_is_nondegenerate():
+    # up is parallel to view dir for top/bottom; rays must still be finite & unit.
+    _, d = viewpoint_rays("top", height=6, width=6)
+    assert torch.isfinite(d).all()
+    assert torch.allclose(d.norm(dim=-1), torch.ones(36), atol=1e-5)
+
+
+def test_perfect_angles_returns_all_views_same_object():
+    torch.manual_seed(0)
+    field = SpatialLatentField(TriPlaneConfig(cond_dim=16, plane_channels=8, grid_res=16, feature_dim=16))
+    renderer = NeusRenderer(n_samples=24)
+    planes = field.encode(torch.zeros(1, 16))
+    imgs = perfect_angles(field, planes, renderer, names=["front", "right", "top"], resolution=12)
+    assert set(imgs) == {"front", "right", "top"}
+    for im in imgs.values():
+        assert im.shape == (12, 12, 3)
+        assert (im >= 0).all() and (im <= 1).all()
+
+
+def test_contact_sheet_tiles_images():
+    imgs = [np.full((10, 10, 3), v, dtype=np.float32) for v in (0.2, 0.4, 0.6, 0.8)]
+    sheet = contact_sheet(imgs, cols=2, pad=2)
+    # 2x2 grid of 10px tiles + 3 pads of 2px each way.
+    assert sheet.shape == (2 * 10 + 3 * 2, 2 * 10 + 3 * 2, 3)
+
+
+# --------------------------------------------------------------------------- #
+# Semantic Asset Graph — non-destructive editing
+# --------------------------------------------------------------------------- #
+
+
+def test_editing_one_part_leaves_others_bit_identical():
+    graph = (
+        AssetGraph()
+        .add(SemanticPart("a", _sphere_sdf(0.25, (-0.5, 0, 0)), AABB.around((-0.5, 0, 0), 0.35)))
+        .add(SemanticPart("b", _sphere_sdf(0.25, (0.5, 0, 0)), AABB.around((0.5, 0, 0), 0.35)))
+    )
+    v0, _ = graph.to_mesh(resolution=40)
+    b_region = v0[v0[:, 0] > 0.1]
+    b_before = np.array(sorted(map(tuple, np.round(b_region, 6))))
+
+    # Edit only part "a" (grow it). Part "b" must not move at all.
+    graph.edit_part("a", _sphere_sdf(0.32, (-0.5, 0, 0)))
+    v1, _ = graph.to_mesh(resolution=40)
+    b_after = np.array(sorted(map(tuple, np.round(v1[v1[:, 0] > 0.1], 6))))
+
+    assert b_before.shape == b_after.shape
+    assert np.array_equal(b_before, b_after)
+
+
+def test_graph_union_contains_both_parts():
+    graph = (
+        AssetGraph()
+        .add(SemanticPart("a", _sphere_sdf(0.25, (-0.5, 0, 0)), AABB.around((-0.5, 0, 0), 0.35)))
+        .add(SemanticPart("b", _sphere_sdf(0.25, (0.5, 0, 0)), AABB.around((0.5, 0, 0), 0.35)))
+    )
+    v, _ = graph.to_mesh(resolution=40)
+    assert (v[:, 0] < -0.1).any() and (v[:, 0] > 0.1).any()  # both lobes present
+
+
+# --------------------------------------------------------------------------- #
+# Reality-check validator
+# --------------------------------------------------------------------------- #
+
+
+def test_validator_on_sphere_matches_analytic_quantities():
+    radius = 0.6
+    v, f = extract_mesh(_sphere_sdf(radius), resolution=48)
+    report = validate_mesh(v, f)
+    assert report.watertight
+    assert report.euler_characteristic == 2
+    # Volume 4/3 pi r^3, area 4 pi r^2 — within a few % for this resolution.
+    assert abs(report.volume - (4 / 3) * np.pi * radius**3) < 0.03
+    assert abs(report.surface_area - 4 * np.pi * radius**2) < 0.1
+    assert max(abs(c) for c in report.center_of_mass) < 0.02  # centered
+    assert all(abs(d - 2 * radius) < 0.05 for d in report.dimensions)
+
+
+def test_validator_flags_open_mesh():
+    # A single triangle: open, degenerate volume -> warnings, not watertight.
+    v = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32)
+    f = np.array([[0, 1, 2]], dtype=np.int64)
+    report = validate_mesh(v, f)
+    assert not report.watertight
+    assert report.warnings
+
+
+# --------------------------------------------------------------------------- #
+# Genetic cross-breeding
+# --------------------------------------------------------------------------- #
+
+
+def test_slerp_hits_endpoints():
+    a = torch.randn(2, 16)
+    b = torch.randn(2, 16)
+    assert torch.allclose(slerp(a, b, 0.0), a, atol=1e-4)
+    assert torch.allclose(slerp(a, b, 1.0), b, atol=1e-4)
+
+
+def test_blend_conditioning_is_between_parents():
+    a = torch.randn(1, 32)
+    b = torch.randn(1, 32)
+    mid = blend_conditioning(a, b, 0.5)
+    assert mid.shape == a.shape
+    assert not torch.allclose(mid, a) and not torch.allclose(mid, b)
+
+
+def test_spatial_graft_takes_lower_from_a_upper_from_b():
+    a = _sphere_sdf(0.5)  # bigger body (A) for the lower half
+    b = _sphere_sdf(0.3)  # smaller body (B) for the upper half
+    chimera = spatial_graft(a, b, axis=1, split=0.0, smooth=0.05)
+
+    below = np.array([[0.0, -0.4, 0.0]])
+    above = np.array([[0.0, 0.4, 0.0]])
+    assert np.isclose(chimera(below), a(below), atol=1e-3)  # A dominates below seam
+    assert np.isclose(chimera(above), b(above), atol=1e-3)  # B dominates above seam
+
+    # And it still meshes to something watertight.
+    v, f = extract_mesh(chimera, resolution=40)
+    assert len(v) > 0
+    assert validate_mesh(v, f).watertight
+
+
+def test_mutation_perturbs_but_stays_close():
+    cond = torch.zeros(1, 16)
+    m = mutate_conditioning(cond, strength=0.1, seed=1)
+    assert m.shape == cond.shape
+    assert 0.0 < m.abs().mean() < 1.0
+
+
+# ==================================================================================================
+# test_field_training: Tests for the spatial-field training objective.
+# ==================================================================================================
+
+
+def _small_field(seed: int = 0) -> SpatialLatentField:
+    torch.manual_seed(seed)
+    return SpatialLatentField(
+        TriPlaneConfig(cond_dim=32, plane_channels=16, grid_res=32, feature_dim=32, decoder_hidden=64)
+    )
+
+
+def test_eikonal_zero_for_unit_gradients() -> None:
+    grad = torch.nn.functional.normalize(torch.randn(2, 50, 3), dim=-1)
+    assert eikonal_loss(grad).item() < 1e-6
+
+
+def test_eikonal_positive_for_nonunit_gradients() -> None:
+    grad = 2.0 * torch.nn.functional.normalize(torch.randn(2, 50, 3), dim=-1)
+    assert abs(eikonal_loss(grad).item() - 1.0) < 1e-5  # (2 - 1)^2 = 1
+
+
+def test_regression_weights_surface_more_than_interior() -> None:
+    # Same absolute error (0.2), once near the surface (target≈0) and once far
+    # (target=1). The near-surface error must be penalized more.
+    near = sdf_regression_loss(torch.tensor([[[0.2]]]), torch.tensor([[[0.0]]]))
+    far = sdf_regression_loss(torch.tensor([[[1.2]]]), torch.tensor([[[1.0]]]))
+    assert near > far
+
+
+def test_sdf_and_gradient_supports_double_backward() -> None:
+    """Eikonal needs a differentiable gradient; verify second-order flow works
+    through grid_sample and reaches the network parameters."""
+    field = _small_field()
+    planes = field.encode(torch.zeros(1, 32))
+    points = torch.empty(1, 64, 3).uniform_(-1, 1)
+    sdf, grad = sdf_and_gradient(field, planes, points)
+    assert sdf.shape == (1, 64, 1)
+    assert grad.shape == (1, 64, 3)
+    eikonal_loss(grad).backward()
+    assert any(p.grad is not None for p in field.parameters())
+
+
+def test_surface_normal_is_unit() -> None:
+    field = _small_field()
+    planes = field.encode(torch.zeros(1, 32))
+    n = surface_normal(field, planes, torch.empty(1, 40, 3).uniform_(-1, 1))
+    norms = n.norm(dim=-1)
+    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-4)
+
+
+def test_fit_sphere_learns_and_meshes_to_a_sphere() -> None:
+    field = _small_field(seed=3)
+    radius = 0.5
+    result = fit_sdf(field, sphere_sdf(radius), steps=250, n_points=1024, lr=2e-3)
+
+    # 1) The regression loss dropped substantially.
+    first = float(np.mean(result.losses[:20]))
+    last = float(np.mean(result.losses[-20:]))
+    assert last < 0.3 * first, f"loss did not fall enough: {first:.4f} -> {last:.4f}"
+
+    # 2) The trained field now meshes to a real, non-empty surface...
+    planes = field.encode(result.cond)
+    verts, faces = field.to_mesh(planes, resolution=32)
+    assert len(verts) > 0 and len(faces) > 0
+
+    # 3) ...and that surface is a sphere of about the right radius.
+    r = np.linalg.norm(verts, axis=1)
+    assert 0.35 < float(np.median(r)) < 0.65
+
+
+# ==================================================================================================
+# test_mesh_export: Tests for SDF -> mesh extraction (marching tetrahedra).
+# ==================================================================================================
+
+
+def _sphere_sdf_mesh_export(radius: float):
+    def fn(points: np.ndarray) -> np.ndarray:
+        return np.linalg.norm(points, axis=1) - radius
+
+    return fn
+
+
+def test_sphere_mesh_is_nonempty():
+    verts, faces = extract_mesh(_sphere_sdf_mesh_export(0.6), resolution=24)
+    assert len(verts) > 0
+    assert len(faces) > 0
+    assert faces.max() < len(verts)  # faces index valid vertices
+
+
+def test_sphere_vertices_lie_on_surface():
+    radius = 0.6
+    verts, _ = extract_mesh(_sphere_sdf_mesh_export(radius), resolution=32)
+    r = np.linalg.norm(verts, axis=1)
+    cell = 2.0 / 32
+    # Linear interpolation puts vertices within ~one cell of the true surface.
+    assert np.abs(r - radius).max() < cell
+
+
+def test_sphere_is_closed_manifold():
+    """Euler characteristic V - E + F == 2 for a watertight genus-0 sphere."""
+    verts, faces = extract_mesh(_sphere_sdf_mesh_export(0.6), resolution=24)
+    v = len(verts)
+    f = len(faces)
+    edges = set()
+    for a, b, c in faces:
+        for x, y in ((a, b), (b, c), (c, a)):
+            edges.add((min(x, y), max(x, y)))
+    e = len(edges)
+    assert v - e + f == 2, f"not closed: V={v} E={e} F={f}, chi={v - e + f}"
+
+
+def test_every_edge_shared_by_two_faces():
+    """A watertight mesh has no boundary edges — each is used exactly twice."""
+    _, faces = extract_mesh(_sphere_sdf_mesh_export(0.6), resolution=24)
+    counts: dict[tuple[int, int], int] = {}
+    for a, b, c in faces:
+        for x, y in ((a, b), (b, c), (c, a)):
+            key = (min(x, y), max(x, y))
+            counts[key] = counts.get(key, 0) + 1
+    assert all(n == 2 for n in counts.values())
+
+
+def test_empty_field_yields_empty_mesh():
+    # SDF positive everywhere -> no surface.
+    verts, faces = extract_mesh(lambda p: np.ones(len(p)), resolution=8)
+    assert len(verts) == 0
+    assert len(faces) == 0
+
+
+def test_write_obj_roundtrip(tmp_path):
+    verts, faces = extract_mesh(_sphere_sdf_mesh_export(0.6), resolution=16)
+    out = tmp_path / "sphere.obj"
+    colors = np.abs(verts)  # any [0,1]-ish colors
+    write_obj(str(out), verts, faces, vertex_colors=colors)
+    text = out.read_text(encoding="utf-8")
+    assert text.count("\nv ") + text.startswith("v ") >= len(verts) - 1
+    assert "f " in text
+    # face indices are 1-based and within range
+    for line in text.splitlines():
+        if line.startswith("f "):
+            idx = [int(t) for t in line.split()[1:]]
+            assert all(1 <= i <= len(verts) for i in idx)
+
+
+# ==================================================================================================
+# test_neus_render: Tests for NeuS-style volume rendering and photometric multi-view training.
+# ==================================================================================================
+
+
+INV_S = torch.tensor(30.0)
+
+
+def _sphere_scene(radius: float):
+    def sdf_fn(p: torch.Tensor) -> torch.Tensor:
+        return p.norm(dim=-1) - radius
+
+    def color_fn(p: torch.Tensor) -> torch.Tensor:
+        return 0.5 + 0.5 * torch.nn.functional.normalize(p, dim=-1)  # normal-as-color
+
+    return sdf_fn, color_fn
+
+
+def test_look_at_rays_shapes_and_unit():
+    o, d = look_at_rays(torch.tensor([0.0, 0.0, -3.0]), torch.zeros(3), height=8, width=8)
+    assert o.shape == (64, 3) and d.shape == (64, 3)
+    assert torch.allclose(d.norm(dim=-1), torch.ones(64), atol=1e-5)
+
+
+def test_analytic_sphere_silhouette_is_a_centered_disk():
+    radius = 0.6
+    sdf_fn, color_fn = _sphere_scene(radius)
+    h = w = 24
+    o, d = look_at_rays(torch.tensor([0.0, 0.0, -3.0]), torch.zeros(3), fov_deg=40, height=h, width=w)
+    out = volume_render_sdf(sdf_fn, color_fn, o, d, INV_S, near=1.5, far=4.0, n_samples=128)
+    opacity = out["opacity"].reshape(h, w)
+
+    center = opacity[h // 2, w // 2]
+    corner = opacity[0, 0]
+    assert center > 0.9, f"sphere center should be opaque, got {center:.3f}"
+    assert corner < 0.1, f"corner should see empty space, got {corner:.3f}"
+
+
+def test_analytic_sphere_depth_matches_geometry():
+    radius = 0.6
+    dist = 3.0
+    sdf_fn, color_fn = _sphere_scene(radius)
+    o, d = look_at_rays(torch.tensor([0.0, 0.0, -dist]), torch.zeros(3), fov_deg=40, height=24, width=24)
+    out = volume_render_sdf(sdf_fn, color_fn, o, d, INV_S, near=1.5, far=4.0, n_samples=256)
+    depth = out["depth"].reshape(24, 24)
+    center_depth = float(depth[12, 12])
+    # Front of the sphere sits at (dist - radius) along the central ray.
+    assert abs(center_depth - (dist - radius)) < 0.1
+
+
+def test_weights_are_a_valid_partition():
+    sdf_fn, color_fn = _sphere_scene(0.6)
+    o, d = look_at_rays(torch.tensor([0.0, 0.0, -3.0]), torch.zeros(3), height=8, width=8)
+    out = volume_render_sdf(sdf_fn, color_fn, o, d, INV_S, n_samples=64)
+    w = out["weights"]
+    assert torch.all(w >= 0)
+    assert torch.all(out["opacity"] <= 1.0 + 1e-4)
+
+
+def test_field_render_is_differentiable():
+    torch.manual_seed(0)
+    field = SpatialLatentField(TriPlaneConfig(cond_dim=16, plane_channels=8, grid_res=16, feature_dim=16))
+    renderer = NeusRenderer(n_samples=32)
+    planes = field.encode(torch.zeros(1, 16))
+    o, d = look_at_rays(torch.tensor([0.0, 0.0, -2.0]), torch.zeros(3), height=6, width=6)
+    out = renderer.render(field, planes, o, d, near=0.5, far=3.5)
+    assert out["rgb"].shape == (36, 3)
+    out["rgb"].mean().backward()
+    assert any(p.grad is not None for p in field.parameters())
+    assert renderer.deviation.variance.grad is not None
+
+
+def test_photometric_overfit_to_sphere_views_decreases_loss():
+    """End-to-end: supervise the field with posed images of a sphere."""
+    torch.manual_seed(1)
+    radius = 0.6
+    sdf_fn, color_fn = _sphere_scene(radius)
+    h = w = 14
+
+    # Ground-truth renders from three viewpoints.
+    cams = [
+        torch.tensor([0.0, 0.0, -2.5]),
+        torch.tensor([2.5, 0.0, 0.0]),
+        torch.tensor([0.0, 2.2, -1.0]),
+    ]
+    views = []
+    for c in cams:
+        o, d = look_at_rays(c, torch.zeros(3), fov_deg=45, height=h, width=w)
+        gt = volume_render_sdf(sdf_fn, color_fn, o, d, INV_S, near=0.5, far=4.0, n_samples=96)
+        views.append(View(o, d, gt["rgb"], gt["opacity"].clamp(0, 1)))
+
+    field = SpatialLatentField(
+        TriPlaneConfig(cond_dim=16, plane_channels=16, grid_res=32, feature_dim=32, decoder_hidden=64)
+    )
+    renderer = NeusRenderer(n_samples=48)
+    hist = fit_from_views(field, renderer, views, steps=120, rays_per_step=196, lr=3e-3, near=0.5, far=4.0)
+
+    first = float(np.mean(hist[:15]))
+    last = float(np.mean(hist[-15:]))
+    assert last < 0.6 * first, f"photometric loss did not fall enough: {first:.4f} -> {last:.4f}"
+
+
+# ==================================================================================================
+# test_radiance_and_rigging: Tests for view-dependent SH radiance and the auto-rigging machinery.
+# ==================================================================================================
+
+
+# --------------------------------------------------------------------------- #
+# Spherical-harmonic view-dependent radiance
+# --------------------------------------------------------------------------- #
+
+
+def test_sh_coeff_counts():
+    assert [sh_num_coeffs(d) for d in range(4)] == [1, 4, 9, 16]
+
+
+def test_sh_degree0_is_constant_over_directions():
+    d1 = torch.nn.functional.normalize(torch.randn(10, 3), dim=-1)
+    d2 = torch.nn.functional.normalize(torch.randn(10, 3), dim=-1)
+    b1 = eval_sh_basis(d1, 0)
+    b2 = eval_sh_basis(d2, 0)
+    assert b1.shape == (10, 1)
+    assert torch.allclose(b1, b2)  # DC term ignores direction
+    assert torch.allclose(b1, torch.full_like(b1, 0.28209479177387814))
+
+
+def test_sh_basis_shape_and_direction_dependence():
+    dirs = torch.nn.functional.normalize(torch.randn(5, 3), dim=-1)
+    basis = eval_sh_basis(dirs, 3)
+    assert basis.shape == (5, 16)
+    # Different directions produce different higher-order responses.
+    a = eval_sh_basis(torch.tensor([[1.0, 0.0, 0.0]]), 3)
+    b = eval_sh_basis(torch.tensor([[0.0, 1.0, 0.0]]), 3)
+    assert not torch.allclose(a, b)
+
+
+def test_sh_radiance_degree0_is_view_independent():
+    torch.manual_seed(0)
+    dec = SHRadianceDecoder(feature_dim=16, degree=0)
+    feat = torch.randn(4, 16)
+    d1 = torch.nn.functional.normalize(torch.randn(4, 3), dim=-1)
+    d2 = torch.nn.functional.normalize(torch.randn(4, 3), dim=-1)
+    c1 = dec(feat, d1)
+    c2 = dec(feat, d2)
+    assert c1.shape == (4, 3)
+    assert torch.allclose(c1, c2)  # no directional terms -> flat color
+
+
+def test_sh_radiance_degree3_varies_with_view_and_is_bounded():
+    torch.manual_seed(1)
+    dec = SHRadianceDecoder(feature_dim=16, degree=3)
+    feat = torch.randn(4, 16)
+    d1 = torch.nn.functional.normalize(torch.randn(4, 3), dim=-1)
+    d2 = torch.nn.functional.normalize(torch.randn(4, 3), dim=-1)
+    c1, c2 = dec(feat, d1), dec(feat, d2)
+    assert not torch.allclose(c1, c2)  # reflections move with the camera
+    assert torch.all((c1 >= 0) & (c1 <= 1))
+
+
+def test_sh_radiance_gradients_flow():
+    dec = SHRadianceDecoder(feature_dim=8, degree=2)
+    feat = torch.randn(3, 8, requires_grad=True)
+    dirs = torch.nn.functional.normalize(torch.randn(3, 3), dim=-1)
+    dec(feat, dirs).mean().backward()
+    assert feat.grad is not None and torch.isfinite(feat.grad).all()
+
+
+# --------------------------------------------------------------------------- #
+# Auto-rigging: skeleton, tokenization, skinning, LBS, FK
+# --------------------------------------------------------------------------- #
+
+
+def _bar_points(n=400):
+    """A long thin bar along +x — an obvious principal axis for rigging."""
+    rng = np.random.default_rng(0)
+    x = rng.uniform(-1.0, 1.0, n)
+    y = rng.uniform(-0.05, 0.05, n)
+    z = rng.uniform(-0.05, 0.05, n)
+    return np.stack([x, y, z], axis=1)
+
+
+def test_auto_skeleton_lies_on_principal_axis_and_chains():
+    skel = auto_skeleton_from_points(_bar_points(), n_joints=5)
+    assert skel.n_joints == 5
+    # Joints should be spread along x and near-zero in y, z.
+    assert np.ptp(skel.joints[:, 0]) > 1.0
+    assert np.abs(skel.joints[:, 1:]).max() < 0.2
+    # Parent chain: -1, 0, 1, 2, 3
+    assert list(skel.parents) == [-1, 0, 1, 2, 3]
+
+
+def test_skeleton_tokenization_roundtrip():
+    skel = auto_skeleton_from_points(_bar_points(), n_joints=6)
+    tokens = tokenize_skeleton(skel)
+    assert len(tokens) == 6
+    back = detokenize_skeleton(tokens)
+    assert np.allclose(back.joints, skel.joints)
+    assert np.array_equal(back.parents, skel.parents)
+
+
+def test_skinning_weights_are_a_partition():
+    pts = _bar_points()
+    skel = auto_skeleton_from_points(pts, n_joints=5)
+    w = skinning_weights(pts, skel)
+    assert w.shape == (len(pts), 5)
+    assert np.all(w >= 0)
+    assert np.allclose(w.sum(axis=1), 1.0)
+
+
+def test_skinning_binds_vertex_to_nearest_joint():
+    skel = auto_skeleton_from_points(_bar_points(), n_joints=5)
+    # A vertex sitting right at the last joint should be dominated by it.
+    v = skel.joints[-1][None, :]
+    w = skinning_weights(v, skel, temperature=0.05)
+    assert int(np.argmax(w[0])) == skel.n_joints - 1
+
+
+def test_forward_kinematics_rest_pose_returns_joints():
+    skel = auto_skeleton_from_points(_bar_points(), n_joints=5)
+    rot = np.broadcast_to(np.eye(3), (skel.n_joints, 3, 3))
+    g = forward_kinematics(skel, rot)
+    assert np.allclose(g[:, :3, 3], skel.joints, atol=1e-9)
+
+
+def test_lbs_identity_is_a_noop():
+    pts = _bar_points()
+    skel, w = rig_mesh(pts, n_joints=5)
+    transforms = np.broadcast_to(np.eye(4), (skel.n_joints, 4, 4))
+    out = linear_blend_skinning(pts, w, transforms)
+    assert np.allclose(out, pts, atol=1e-9)
+
+
+def test_lbs_bends_the_bar_when_a_joint_rotates():
+    pts = _bar_points()
+    skel, w = rig_mesh(pts, n_joints=5)
+    # Rotate the last joint 90° about z. (The skeleton's axis sign is arbitrary,
+    # so identify vertices by their binding weight, not by a hard-coded x-side.)
+    rots = np.broadcast_to(np.eye(3), (skel.n_joints, 3, 3)).copy()
+    c, s = np.cos(np.pi / 2), np.sin(np.pi / 2)
+    rots[-1] = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+    mats = skinning_matrices(skel, rots)
+    posed = linear_blend_skinning(pts, w, mats)
+
+    shift = np.linalg.norm(posed - pts, axis=1)
+    bound = w[:, -1] > 0.5  # vertices controlled by the rotated joint
+    free = w[:, -1] < 0.01  # vertices essentially unbound to it
+    assert bound.any() and free.any()
+    assert shift[bound].mean() > 0.05  # they actually swung
+    assert shift[free].mean() < 0.2 * shift[bound].mean()  # the rest stayed ~put
+
+
+def test_skeleton_validates_length_mismatch():
+    import pytest
+
+    with pytest.raises(ValueError):
+        Skeleton(joints=np.zeros((3, 3)), parents=np.array([-1, 0]))
+
+
+# ==================================================================================================
+# test_triplane_spatial: Tests for the tri-plane spatial latent field (SDX-Spatial 3D core).
+# ==================================================================================================
+
+
+# Small config so the whole suite runs fast on CPU.
+CFG = TriPlaneConfig(
+    cond_dim=32,
+    plane_channels=8,
+    grid_res=16,
+    base_channels=32,
+    feature_dim=16,
+    decoder_hidden=32,
+)
+
+
+@pytest.fixture
+def field() -> SpatialLatentField:
+    torch.manual_seed(0)
+    return SpatialLatentField(CFG)
+
+
+def _planes_and_points(field: SpatialLatentField, b: int = 2, n: int = 64):
+    cond = torch.randn(b, CFG.cond_dim)
+    planes = field.encode(cond)
+    points = torch.empty(b, n, 3).uniform_(-1.0, 1.0)
+    return planes, points
+
+
+def test_encode_plane_shapes(field: SpatialLatentField) -> None:
+    planes, _ = _planes_and_points(field)
+    assert len(planes) == 3
+    for p in planes:
+        assert p.shape == (2, CFG.plane_channels, CFG.grid_res, CFG.grid_res)
+
+
+def test_query_feature_shape(field: SpatialLatentField) -> None:
+    planes, points = _planes_and_points(field)
+    feat = field.query(planes, points)
+    assert feat.shape == (2, 64, CFG.feature_dim)
+
+
+def test_splat_decoder_ranges_and_shapes(field: SpatialLatentField) -> None:
+    planes, points = _planes_and_points(field)
+    s = field.decode_splats(planes, points)
+    assert s.positions.shape == (2, 64, 3)
+    assert s.scales.shape == (2, 64, 3)
+    assert torch.all(s.scales > 0)
+    assert torch.all((s.opacities >= 0) & (s.opacities <= 1))
+    assert torch.all((s.colors >= 0) & (s.colors <= 1))
+    # rotations are unit quaternions
+    norms = s.rotations.norm(dim=-1)
+    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+    # splat position stays near its query point (bounded offset)
+    assert torch.all((s.positions - points).abs() <= 0.1 + 1e-4)
+
+
+def test_sdf_shape(field: SpatialLatentField) -> None:
+    planes, points = _planes_and_points(field)
+    sdf = field.decode_sdf(planes, points)
+    assert sdf.shape == (2, 64, 1)
+    assert torch.isfinite(sdf).all()
+
+
+def test_pbr_ranges(field: SpatialLatentField) -> None:
+    planes, points = _planes_and_points(field)
+    pbr = field.decode_pbr(planes, points)
+    assert torch.all((pbr.albedo >= 0) & (pbr.albedo <= 1))
+    assert torch.all((pbr.roughness >= 0) & (pbr.roughness <= 1))
+    assert torch.all((pbr.metallic >= 0) & (pbr.metallic <= 1))
+    normal_norms = pbr.normal.norm(dim=-1)
+    assert torch.allclose(normal_norms, torch.ones_like(normal_norms), atol=1e-5)
+
+
+def test_multiview_consistency_is_view_independent(field: SpatialLatentField) -> None:
+    """The core guarantee: same object-space point -> identical surface, no
+    matter the query order or how the 'camera' reached it."""
+    field.eval()
+    cond = torch.randn(1, CFG.cond_dim)
+    planes = field.encode(cond)
+    pts = torch.empty(1, 32, 3).uniform_(-0.9, 0.9)
+
+    # "Front camera" queries the points directly.
+    front = field.decode_pbr(planes, pts)
+    # "Side camera" reaches the same points in a shuffled order.
+    perm = torch.randperm(32)
+    side = field.decode_pbr(planes, pts[:, perm])
+
+    assert torch.allclose(front.albedo[:, perm], side.albedo, atol=1e-6)
+    assert torch.allclose(front.roughness[:, perm], side.roughness, atol=1e-6)
+
+
+def test_different_conditioning_gives_different_field(field: SpatialLatentField) -> None:
+    a = field.encode(torch.randn(1, CFG.cond_dim))
+    b = field.encode(torch.randn(1, CFG.cond_dim))
+    assert not torch.allclose(a[0], b[0])
+
+
+def test_render_view_runs(field: SpatialLatentField) -> None:
+    planes = field.encode(torch.randn(1, CFG.cond_dim))
+    cam_origin = torch.tensor([[0.0, 0.0, -2.0]])
+    # A tiny 4x4 pinhole ray bundle pointing down +z.
+    ys, xs = torch.meshgrid(torch.linspace(-0.3, 0.3, 4), torch.linspace(-0.3, 0.3, 4), indexing="ij")
+    dirs = torch.stack((xs.reshape(-1), ys.reshape(-1), torch.ones(16)), dim=-1)
+    dirs = torch.nn.functional.normalize(dirs, dim=-1).unsqueeze(0)
+    rgb, depth, hit = field.render_view(planes, cam_origin, dirs, steps=8)
+    assert rgb.shape == (1, 16, 3)
+    assert depth.shape == (1, 16)
+    assert hit.shape == (1, 16)
+    assert torch.isfinite(rgb).all()
+    assert torch.all((rgb >= 0) & (rgb <= 1))
+
+
+def test_gradients_flow_through_all_heads(field: SpatialLatentField) -> None:
+    planes, points = _planes_and_points(field, b=1, n=16)
+    sdf = field.decode_sdf(planes, points)
+    pbr = field.decode_pbr(planes, points)
+    splats = field.decode_splats(planes, points)
+    loss = sdf.mean() + pbr.albedo.mean() + splats.opacities.mean()
+    loss.backward()
+    grads = [p.grad for p in field.parameters() if p.grad is not None]
+    assert grads, "no parameter received a gradient"
+    assert all(torch.isfinite(g).all() for g in grads)
+
+
+def test_builder_helper() -> None:
+    f = build_spatial_field(cond_dim=16, grid_res=8, plane_channels=4, feature_dim=8)
+    assert f.cfg.cond_dim == 16
+    assert f.cfg.grid_res == 8
+
+
+def test_invalid_grid_res_rejected() -> None:
+    with pytest.raises(ValueError):
+        TriPlaneConfig(grid_res=24)  # not a power of two
+
+
+# ==================================================================================================
+# test_view_dependent_render: Tests for wiring SH view-dependent radiance into the NeuS renderer (3D).
+# ==================================================================================================
+
+
+CFG_view_dependent_render = TriPlaneConfig(cond_dim=16, plane_channels=8, grid_res=16, feature_dim=16)
+
+
+def _setup(sh: bool):
+    torch.manual_seed(0)
+    field = SpatialLatentField(CFG_view_dependent_render)
+    decoder = SHRadianceDecoder(feature_dim=CFG_view_dependent_render.feature_dim, degree=3) if sh else None
+    renderer = NeusRenderer(n_samples=24, sh_decoder=decoder)
+    planes = field.encode(torch.zeros(1, CFG_view_dependent_render.cond_dim))
+    o, d = look_at_rays(torch.tensor([0.0, 0.0, -2.0]), torch.zeros(3), height=6, width=6)
+    return field, renderer, planes, o, d
+
+
+def test_sh_renderer_runs_and_is_bounded():
+    field, renderer, planes, o, d = _setup(sh=True)
+    out = renderer.render(field, planes, o, d, near=0.5, far=3.5)
+    assert out["rgb"].shape == (36, 3)
+    assert torch.isfinite(out["rgb"]).all()
+    assert torch.all((out["rgb"] >= 0) & (out["rgb"] <= 1))
+
+
+def test_sh_decoder_receives_gradient():
+    field, renderer, planes, o, d = _setup(sh=True)
+    out = renderer.render(field, planes, o, d, near=0.5, far=3.5)
+    out["rgb"].mean().backward()
+    assert any(p.grad is not None for p in renderer.sh_decoder.parameters())
+
+
+def test_sh_path_differs_from_flat_albedo():
+    # Same field + camera, with and without the SH decoder, should differ:
+    # confirms the view-dependent path is actually engaged.
+    field, renderer_sh, planes, o, d = _setup(sh=True)
+    renderer_flat = NeusRenderer(n_samples=24)  # no sh_decoder
+    rgb_sh = renderer_sh.render(field, planes, o, d, near=0.5, far=3.5)["rgb"]
+    rgb_flat = renderer_flat.render(field, planes, o, d, near=0.5, far=3.5)["rgb"]
+    assert not torch.allclose(rgb_sh, rgb_flat)
+
+
+def test_flat_renderer_unchanged_by_default():
+    # Default renderer (no decoder) still returns valid albedo colors.
+    field, renderer, planes, o, d = _setup(sh=False)
+    assert renderer.sh_decoder is None
+    out = renderer.render(field, planes, o, d, near=0.5, far=3.5)
+    assert torch.all((out["rgb"] >= 0) & (out["rgb"] <= 1))
+
+
+# ==================================================================================================
+# test_perfect_model_helpers: Tests for Dense Diffusion wiring, glyph projector, hand/count helpers.
+# ==================================================================================================
+
+
+def test_region_masks_and_bias():
+    from frontier.layout import AttentionLayoutPlan, bias_cross_attention, region_masks_from_boxes
+
+    masks = region_masks_from_boxes(((0.0, 0.0, 0.5, 0.5), (0.5, 0.5, 1.0, 1.0)), latent_h=8, latent_w=8)
+    assert masks.shape == (2, 1, 8, 8)
+    plan = AttentionLayoutPlan(
+        region_names=("a", "b"),
+        boxes=((0.0, 0.0, 0.5, 0.5), (0.5, 0.5, 1.0, 1.0)),
+        enforce_steps=(0, 1, 2),
+        strength=0.9,
+    )
+    logits = torch.zeros(2, 4, 64, 16)
+    out = bias_cross_attention(
+        logits,
+        region_masks=masks,
+        step_index=0,
+        plan=plan,
+        cond_batch_size=1,
+    )
+    assert out.shape == logits.shape
+    # Cond row biased; uncond (batch 1) unchanged
+    assert not torch.allclose(out[0], logits[0])
+    assert torch.allclose(out[1], logits[1])
+
+
+def test_bias_pools_latent_masks_to_patch_grid():
+    """Latent 8x8 masks vs 4x4 patch tokens must pool spatially (not flat-crop)."""
+    from frontier.layout import AttentionLayoutPlan, bias_cross_attention, region_masks_from_boxes
+
+    # Region A: top-left quarter of 8x8 latent; region B: bottom-right quarter.
+    masks = region_masks_from_boxes(((0.0, 0.0, 0.5, 0.5), (0.5, 0.5, 1.0, 1.0)), latent_h=8, latent_w=8)
+    plan = AttentionLayoutPlan(
+        region_names=("a", "b"),
+        boxes=((0.0, 0.0, 0.5, 0.5), (0.5, 0.5, 1.0, 1.0)),
+        enforce_steps=(0,),
+        strength=1.0,
+    )
+    # 4x4 patch grid => 16 spatial tokens
+    logits = torch.zeros(1, 1, 16, 8)
+    out = bias_cross_attention(
+        logits,
+        region_masks=masks,
+        step_index=0,
+        plan=plan,
+        num_patch_tokens=16,
+    )
+    # Text chunk 0 gets region A (top-left of 4x4); chunk 1 gets region B (bottom-right).
+    # Token layout is row-major: indices 0..3 top row, 12..15 bottom row.
+    bias_a = (out[0, 0, :, 0] - logits[0, 0, :, 0]).view(4, 4)
+    bias_b = (out[0, 0, :, 4] - logits[0, 0, :, 4]).view(4, 4)
+    assert bias_a[:2, :2].mean() > bias_a[2:, 2:].mean()
+    assert bias_b[2:, 2:].mean() > bias_b[:2, :2].mean()
+    # Opposite corners should stay near-zero for the mismatched region
+    assert float(bias_a[3, 3]) < float(bias_a[0, 0])
+    assert float(bias_b[0, 0]) < float(bias_b[3, 3])
+
+
+def test_layout_attn_context_cross_attention():
+    from frontier.layout import AttentionLayoutPlan, region_masks_from_boxes
+    from models.attention import clear_layout_attn, set_layout_attn
+    from models.dit_text import CrossAttention
+
+    attn = CrossAttention(hidden_size=32, num_heads=4, text_dim=32, qk_norm=False)
+    x = torch.randn(1, 16, 32)
+    text = torch.randn(1, 8, 32)
+    plan = AttentionLayoutPlan(
+        region_names=("r0",),
+        boxes=((0.0, 0.0, 1.0, 1.0),),
+        enforce_steps=tuple(range(10)),
+        strength=1.0,
+    )
+    masks = region_masks_from_boxes(plan.boxes, latent_h=4, latent_w=4)
+    set_layout_attn(plan=plan, region_masks=masks, step_index=0, cond_batch_size=1, num_patch_tokens=16)
+    try:
+        out = attn(x, text, use_xformers=False)
+        assert out.shape == x.shape
+    finally:
+        clear_layout_attn()
+
+
+def test_hand_structure_score_in_unit_range():
+    from utils.quality.critics import score_hand_structure
+
+    img = np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8)
+    img[80:, :, :] = np.clip(
+        img[80:, :, :].astype(np.int16) + np.random.randint(-40, 40, img[80:].shape),
+        0,
+        255,
+    ).astype(np.uint8)
+    s = score_hand_structure(img)
+    assert 0.0 <= s <= 1.0
+
+
+def test_frontier_consume_sanitize_and_emphasis():
+    from types import SimpleNamespace
+
+    from utils.generation.guidance import (
+        apply_token_emphasis_to_args,
+        merge_step_emphasis_into_noise_scales,
+        sanitize_diffusion_feature_kwargs,
+    )
+
+    args = SimpleNamespace(prompt="a woman with detailed hands holding a sign", cfg_scale=4.0)
+    meta = apply_token_emphasis_to_args(args)
+    assert "weights" in meta
+    assert "hands" in str(meta["weights"]).lower() or "(hands" in args.prompt.lower()
+    assert args.cfg_scale > 4.0
+
+    merged = merge_step_emphasis_into_noise_scales(
+        step_emphasis=[2.0, 1.0, 0.5],
+        step_noise_scales=[1.0, 1.0, 1.0],
+    )
+    assert merged is not None and len(merged) == 3
+    assert merged[0] > merged[-1]
+
+    clean = sanitize_diffusion_feature_kwargs(
+        {
+            "step_emphasis": [1.5, 1.0],
+            "step_noise_scales": [1.0, 1.0],
+            "frontier_token_emphasis": {"hands": 1.2},
+            "attention_layout_plan": object(),
+        }
+    )
+    assert "step_emphasis" not in clean
+    assert "frontier_token_emphasis" not in clean
+    assert "step_noise_scales" in clean
+    assert "attention_layout_plan" in clean
+
+
+def test_layout_attn_on_qk_norm():
+    from frontier.layout import AttentionLayoutPlan, region_masks_from_boxes
+    from models.attention import clear_layout_attn, set_layout_attn
+    from models.dit_text import CrossAttention
+
+    attn = CrossAttention(hidden_size=32, num_heads=4, text_dim=32, qk_norm=True, qk_norm_eps=1e-6)
+    x = torch.randn(1, 16, 32)
+    text = torch.randn(1, 8, 32)
+    plan = AttentionLayoutPlan(
+        region_names=("r0",),
+        boxes=((0.0, 0.0, 1.0, 1.0),),
+        enforce_steps=tuple(range(10)),
+        strength=1.0,
+    )
+    masks = region_masks_from_boxes(plan.boxes, latent_h=4, latent_w=4)
+    set_layout_attn(plan=plan, region_masks=masks, step_index=0, cond_batch_size=1, num_patch_tokens=16)
+    try:
+        out = attn(x, text, use_xformers=False)
+        assert out.shape == x.shape
+    finally:
+        clear_layout_attn()

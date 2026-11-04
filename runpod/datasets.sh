@@ -8,14 +8,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
-source "$HERE/lib/ensure_repo.sh"
+source "$HERE/lib.sh"
 sdx_ensure_repo || exit 1
-# shellcheck source=/dev/null
-source "$HERE/lib/load_secrets.sh"
-# shellcheck source=/dev/null
-source "$HERE/lib/hf_sites.sh"
-# shellcheck source=/dev/null
-source "$HERE/lib/turbo_hf.sh"
 sdx_load_hf_token || echo "WARN: run hf auth login for gated datasets" >&2
 # shellcheck source=/dev/null
 source "$SDX_ROOT/runpod/env.defaults"

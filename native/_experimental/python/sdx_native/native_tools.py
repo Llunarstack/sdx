@@ -1,8 +1,8 @@
 """
-Optional ``native/`` helpers: discover built CLIs and shared libraries, run JSONL tools,
-FNV fingerprints, ctypes access to ``libsdx_latent``, and pure-Python fallbacks.
+Optional ``native/`` helpers: discover built CLIs and shared libraries, run the Rust JSONL / noise-schedule
+tools, FNV fingerprints, latent geometry (C++ ``sdx_cpu`` or pure Python), JSONL merge, and status.
 
-Nothing here is required for ``train.py`` / ``sample.py``; failures degrade gracefully.
+Nothing here is required for ``train.py`` / ``sample.py``; every native path has a pure-Python fallback.
 """
 
 from __future__ import annotations
@@ -11,15 +11,10 @@ import ctypes
 import functools
 import hashlib
 import json
-import shutil
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
-
-from sdx_native.latent_geometry import latent_numel as py_latent_numel
-from sdx_native.latent_geometry import latent_spatial_size as py_latent_spatial_size
-from sdx_native.latent_geometry import num_patch_tokens as py_num_patch_tokens
-from sdx_native.latent_geometry import patch_grid_dim as py_patch_grid_dim
 
 
 def _find_repo_root() -> Path:
@@ -32,78 +27,55 @@ def _find_repo_root() -> Path:
 
 
 REPO_ROOT = _find_repo_root()
+NATIVE = REPO_ROOT / "native"
+_RUST_TARGET = NATIVE / "rust" / "target"
 
-# Every ctypes library a wrapper in this package can load (``native/cpp`` targets and Rust cdylibs).
-SHARED_LIBRARIES: tuple[str, ...] = (
-    "sdx_latent",
-    "sdx_inference_timesteps",
-    "sdx_beta_schedules",
-    "sdx_image_metrics",
-    "sdx_mask_ops",
-    "sdx_cuda_image_metrics",
-    "sdx_cuda_gaussian_blur",
-    "sdx_cuda_ml",
-    "sdx_diffusion_math",
-    "sdx_prompt_ops",
-    "sdx_quality_scorers",
-    "sdx_image_ops",
-)
+# ctypes libraries loaded by ``sdx_native.ffi``: ``native/cpp`` targets and the ``native/rust`` cdylib.
+SHARED_LIBRARIES: tuple[str, ...] = ("sdx_cpu", "sdx_cuda", "sdx_rs")
 
 
-def _exe(rel_dir: str, name: str) -> Path | None:
-    base = REPO_ROOT / "native" / rel_dir
+def _exe(base: Path, name: str) -> Path | None:
     for n in (f"{name}.exe", name):
-        p = base / n
-        if p.is_file():
-            return p
+        if (base / n).is_file():
+            return base / n
     return None
 
 
 def rust_jsonl_tools_exe() -> Path | None:
-    """``sdx-jsonl-tools`` release binary if ``cargo build --release`` was run."""
-    return _exe("rust/sdx-jsonl-tools/target/release", "sdx-jsonl-tools")
+    """``sdx-jsonl-tools`` release binary if ``cargo build --release`` was run in ``native/rust``."""
+    return _exe(_RUST_TARGET / "release", "sdx-jsonl-tools")
 
 
 def rust_noise_schedule_exe() -> Path | None:
-    """``sdx-noise-schedule`` release binary if ``cargo build --release`` was run."""
-    return _exe("rust/sdx-noise-schedule/target/release", "sdx-noise-schedule")
+    """``sdx-noise-schedule`` release binary if ``cargo build --release`` was run in ``native/rust``."""
+    return _exe(_RUST_TARGET / "release", "sdx-noise-schedule")
 
 
 def zig_linecrc_exe() -> Path | None:
     """Zig ``sdx-linecrc`` if ``zig build`` was run."""
-    return _exe("_experimental/zig/sdx-linecrc/zig-out/bin", "sdx-linecrc")
+    return _exe(NATIVE / "_experimental/zig/sdx-linecrc/zig-out/bin", "sdx-linecrc")
 
 
 def zig_pathstat_exe() -> Path | None:
-    """Zig ``sdx-pathstat`` — file sizes for a path list (one per line)."""
-    return _exe("_experimental/zig/sdx-pathstat/zig-out/bin", "sdx-pathstat")
+    """Zig ``sdx-pathstat`` (file sizes for a path list, one per line)."""
+    return _exe(NATIVE / "_experimental/zig/sdx-pathstat/zig-out/bin", "sdx-pathstat")
 
 
 def go_sdx_manifest_exe() -> Path | None:
-    """Go merge helper if built next to source."""
-    return _exe("go/sdx-manifest", "sdx-manifest")
-
-
-def mojo_cli_path() -> str:
-    """Modular ``mojo`` or ``magic`` CLI if on PATH."""
-    return (shutil.which("mojo") or shutil.which("magic") or "").strip()
+    """Go merge / explore helper if built next to its source."""
+    return _exe(NATIVE / "go/sdx-manifest", "sdx-manifest")
 
 
 def shared_library_path(name: str) -> Path | None:
-    """First built artifact for ``name``: ``native/cpp/build`` target, else Rust crate ``name`` with ``-``."""
-    cpp = REPO_ROOT / "native" / "cpp" / "build"
-    rust = REPO_ROOT / "native" / "rust" / name.replace("_", "-") / "target"
-    files = (f"{name}.dll", f"lib{name}.so", f"lib{name}.dylib")
-    candidates = [
-        cpp / "Release" / files[0],
-        cpp / "Debug" / files[0],
-        cpp / files[1],
-        cpp / files[2],
-        *(rust / profile / f for profile in ("release", "debug") for f in files),
-    ]
-    for p in candidates:
-        if p.is_file() and p.stat().st_size > 0:
-            return p
+    """First non-empty build of ``name`` under ``native/cpp/build`` (any generator) or ``native/rust/target``."""
+    cpp = NATIVE / "cpp" / "build"
+    dirs = (cpp, cpp / "Release", cpp / "Debug", _RUST_TARGET / "release", _RUST_TARGET / "debug")
+    files = (f"{name}.dll", f"lib{name}.dll", f"lib{name}.so", f"lib{name}.dylib")
+    for d in dirs:
+        for f in files:
+            p = d / f
+            if p.is_file() and p.stat().st_size > 0:
+                return p
     return None
 
 
@@ -119,23 +91,26 @@ def load_shared_library(name: str) -> ctypes.CDLL | None:
         return None
 
 
-def _run(exe: Path | None, missing: str, args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+_RUST_MISSING = "Rust {} not built (cargo build --release in native/rust)"
+
+
+def _run(exe: Path | None, name: str, args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
     if exe is None:
-        raise FileNotFoundError(missing)
+        raise FileNotFoundError(_RUST_MISSING.format(name))
     return subprocess.run([str(exe), *args], capture_output=True, text=True, timeout=timeout)
 
 
-_JSONL_TOOLS_MISSING = "Rust sdx-jsonl-tools not built (cargo build --release in native/rust/sdx-jsonl-tools)"
+def _jsonl_tools(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+    return _run(rust_jsonl_tools_exe(), "sdx-jsonl-tools", args, timeout)
 
 
 def run_rust_noise_schedule(args: list[str], *, timeout: float = 120) -> subprocess.CompletedProcess[str]:
-    """Run ``sdx-noise-schedule`` (e.g. ``[\"linear\", \"--steps\", \"1000\"]``)."""
-    missing = "Rust sdx-noise-schedule not built (cargo build --release in native/rust/sdx-noise-schedule)"
-    return _run(rust_noise_schedule_exe(), missing, args, timeout)
+    """Run ``sdx-noise-schedule`` (e.g. ``["linear", "--steps", "1000"]``)."""
+    return _run(rust_noise_schedule_exe(), "sdx-noise-schedule", args, timeout)
 
 
 def run_rust_jsonl_stats(manifest: Path, *, timeout: float = 600) -> subprocess.CompletedProcess[str]:
-    return _run(rust_jsonl_tools_exe(), _JSONL_TOOLS_MISSING, ["stats", str(manifest)], timeout)
+    return _jsonl_tools(["stats", str(manifest)], timeout)
 
 
 def run_rust_image_paths(
@@ -145,21 +120,16 @@ def run_rust_image_paths(
     sort: bool = False,
     timeout: float = 600,
 ) -> subprocess.CompletedProcess[str]:
-    """Run `sdx-jsonl-tools image-paths` — stdout is one path per line."""
-    args = ["image-paths", str(manifest)]
-    if all_rows:
-        args.append("--all-rows")
-    if sort:
-        args.append("--sort")
-    return _run(rust_jsonl_tools_exe(), _JSONL_TOOLS_MISSING, args, timeout)
+    """``sdx-jsonl-tools image-paths``: stdout is one path per line."""
+    args = ["image-paths", str(manifest)] + ["--all-rows"] * all_rows + ["--sort"] * sort
+    return _jsonl_tools(args, timeout)
 
 
 def run_rust_dup_image_paths(
     manifest: Path, *, top: int = 20, timeout: float = 600
 ) -> subprocess.CompletedProcess[str]:
-    """Run `sdx-jsonl-tools dup-image-paths` — duplicate path report."""
-    args = ["dup-image-paths", str(manifest), "--top", str(top)]
-    return _run(rust_jsonl_tools_exe(), _JSONL_TOOLS_MISSING, args, timeout)
+    """``sdx-jsonl-tools dup-image-paths``: duplicate path report."""
+    return _jsonl_tools(["dup-image-paths", str(manifest), "--top", str(top)], timeout)
 
 
 def run_rust_jsonl_validate(
@@ -169,15 +139,8 @@ def run_rust_jsonl_validate(
     max_caption_len: int = 0,
     timeout: float = 600,
 ) -> subprocess.CompletedProcess[str]:
-    args = [
-        "validate",
-        str(manifest),
-        "--min-caption-len",
-        str(min_caption_len),
-        "--max-caption-len",
-        str(max_caption_len),
-    ]
-    return _run(rust_jsonl_tools_exe(), _JSONL_TOOLS_MISSING, args, timeout)
+    args = ["validate", str(manifest), "--min-caption-len", str(min_caption_len)]
+    return _jsonl_tools(args + ["--max-caption-len", str(max_caption_len)], timeout)
 
 
 def file_md5_hex(path: Path, *, prefer_native_md5: bool = True) -> str:
@@ -205,87 +168,116 @@ def file_md5_hex(path: Path, *, prefer_native_md5: bool = True) -> str:
         return ""
 
 
-# FNV-1a 64 as in ``native/_experimental/zig/sdx-linecrc`` file mode. The offset basis is the standard
-# 14695981039346656037 with its last two digits missing; it must stay identical to the Zig tool's so both
-# produce the same fingerprints.
+# FNV-1a 64 over raw file bytes, as in ``sdx-linecrc --file`` and ``sdx-jsonl-tools file-fnv``. The offset
+# basis is the standard 14695981039346656037 with its last two digits missing; it must stay identical to the
+# native tools' so all three produce the same fingerprints.
 _FNV_OFFSET = 146959810393466560
 _FNV_PRIME = 1099511628211
 
 
-def fnv1a64_file(path: Path, chunk: int = 65536) -> tuple[int, int, int]:
-    """
-    Same fingerprint as ``sdx-linecrc --file`` (streaming over file bytes).
-
-    Returns ``(hash_u64, line_count, byte_count)``.
-    """
-    h = _FNV_OFFSET
-    line_count = 0
-    byte_count = 0
+def fnv1a64_file(path: Path, chunk: int = 1 << 20) -> tuple[int, int, int]:
+    """``(hash_u64, line_count, byte_count)`` of the file bytes (pure Python; one step per byte)."""
+    h, prime, mask = _FNV_OFFSET, _FNV_PRIME, 0xFFFFFFFFFFFFFFFF
+    line_count = byte_count = 0
     with path.open("rb") as f:
         while buf := f.read(chunk):
             byte_count += len(buf)
             line_count += buf.count(b"\n")
             for b in buf:
-                h ^= b
-                h = (h * _FNV_PRIME) & 0xFFFFFFFFFFFFFFFF
+                h = ((h ^ b) * prime) & mask
     return h, line_count, byte_count
 
 
-def manifest_fingerprint_line(path: Path) -> str:
-    """Human-readable fingerprint; uses Zig if built, else Python FNV (same **file** mode)."""
+def _native_fingerprint(path: Path) -> str | None:
     zig = zig_linecrc_exe()
-    if zig:
-        try:
+    rust = rust_jsonl_tools_exe()
+    try:
+        if zig:
             r = subprocess.run([str(zig), "--file", str(path)], capture_output=True, text=True, timeout=600)
             if r.returncode == 0 and r.stdout.strip():
                 return r.stdout.strip()
-        except (subprocess.TimeoutExpired, OSError):
-            pass
+        if rust:
+            r = subprocess.run([str(rust), "file-fnv", str(path)], capture_output=True, text=True, timeout=600)
+            kv = dict(line.split(": ", 1) for line in r.stdout.splitlines() if ": " in line)
+            if r.returncode == 0 and {"fnv1a64", "newlines", "bytes"} <= kv.keys():
+                return f"fnv1a64={kv['fnv1a64']} lines={kv['newlines']} bytes={kv['bytes']}"
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
+def manifest_fingerprint_line(path: Path) -> str:
+    """``fnv1a64=<hex> lines=<n> bytes=<n>``: Zig or Rust tool when built (much faster), else pure Python."""
+    native = _native_fingerprint(path)
+    if native:
+        return native
     h, lines, nbytes = fnv1a64_file(path)
     return f"fnv1a64={h:x} lines={lines} bytes={nbytes}"
 
 
+# Latent / DiT patch geometry; same results as the ``sdx_cpu`` C ABI (0 for invalid or non-divisible input).
+
+
+def latent_spatial_size(image_hw: int, vae_scale: int) -> int:
+    """Latent side length ``image_hw // vae_scale``."""
+    if image_hw <= 0 or vae_scale <= 0 or image_hw % vae_scale != 0:
+        return 0
+    return image_hw // vae_scale
+
+
+def patch_grid_dim(latent_hw: int, patch_size: int) -> int:
+    """Patches per side ``latent_hw // patch_size``."""
+    if latent_hw <= 0 or patch_size <= 0 or latent_hw % patch_size != 0:
+        return 0
+    return latent_hw // patch_size
+
+
+def num_patch_tokens(image_hw: int, vae_scale: int, patch_size: int) -> int:
+    """DiT patch token count (square grid, no register tokens): ``(latent/patch)^2``."""
+    g = patch_grid_dim(latent_spatial_size(image_hw, vae_scale), patch_size)
+    return g * g
+
+
+def latent_numel(channels: int, latent_h: int, latent_w: int) -> int:
+    """``C * H * W`` for a latent tensor (0 if any dimension is invalid or the product overflows int32)."""
+    if channels <= 0 or latent_h <= 0 or latent_w <= 0:
+        return 0
+    n = channels * latent_h * latent_w
+    return n if n <= 2147483647 else 0
+
+
+def dit_patch_size_from_variant_name(model_name: str) -> int:
+    """Patch size from a registry name like ``DiT-XL/2-Text`` or ``DiT-B/4-Text``; 2 when there is no ``/N``."""
+    m = re.search(r"/(\d+)(?:-|/|$)", model_name)
+    return max(1, int(m.group(1))) if m else 2
+
+
 class LatentLib:
-    """ctypes wrapper for ``libsdx_latent`` with Python fallbacks."""
+    """Latent geometry through ``sdx_cpu`` when built (``available``), else the pure-Python functions above."""
 
     def __init__(self) -> None:
-        dll = load_shared_library("sdx_latent")
-        if dll is not None:
-            for fn, nargs in (
-                ("sdx_latent_spatial_size", 2),
-                ("sdx_patch_grid_dim", 2),
-                ("sdx_num_patch_tokens", 3),
-                ("sdx_latent_numel", 3),
-            ):
-                # Older builds lack sdx_latent_numel.
-                if hasattr(dll, fn):
-                    getattr(dll, fn).argtypes = (ctypes.c_int,) * nargs
-                    getattr(dll, fn).restype = ctypes.c_int
-        self._dll: Any = dll
+        self._dll: Any = load_shared_library("sdx_cpu")
 
     @property
     def available(self) -> bool:
         return self._dll is not None
 
-    def num_patch_tokens(self, image_hw: int, vae_scale: int, patch_size: int) -> int:
-        if self._dll is not None:
-            return int(self._dll.sdx_num_patch_tokens(int(image_hw), int(vae_scale), int(patch_size)))
-        return py_num_patch_tokens(image_hw, vae_scale, patch_size)
+    def _call(self, c_name: str, py_fn: Any, *args: int) -> int:
+        if self._dll is None:
+            return py_fn(*args)
+        return int(getattr(self._dll, c_name)(*(ctypes.c_int(int(a)) for a in args)))
 
     def latent_spatial_size(self, image_hw: int, vae_scale: int) -> int:
-        if self._dll is not None:
-            return int(self._dll.sdx_latent_spatial_size(int(image_hw), int(vae_scale)))
-        return py_latent_spatial_size(image_hw, vae_scale)
+        return self._call("sdx_latent_spatial_size", latent_spatial_size, image_hw, vae_scale)
 
     def patch_grid_dim(self, latent_hw: int, patch_size: int) -> int:
-        if self._dll is not None:
-            return int(self._dll.sdx_patch_grid_dim(int(latent_hw), int(patch_size)))
-        return py_patch_grid_dim(latent_hw, patch_size)
+        return self._call("sdx_patch_grid_dim", patch_grid_dim, latent_hw, patch_size)
+
+    def num_patch_tokens(self, image_hw: int, vae_scale: int, patch_size: int) -> int:
+        return self._call("sdx_num_patch_tokens", num_patch_tokens, image_hw, vae_scale, patch_size)
 
     def latent_numel(self, channels: int, latent_h: int, latent_w: int) -> int:
-        if self._dll is not None and hasattr(self._dll, "sdx_latent_numel"):
-            return int(self._dll.sdx_latent_numel(int(channels), int(latent_h), int(latent_w)))
-        return py_latent_numel(channels, latent_h, latent_w)
+        return self._call("sdx_latent_numel", latent_numel, channels, latent_h, latent_w)
 
 
 @functools.cache
@@ -300,7 +292,7 @@ def merge_jsonl_files(
     dedupe_key: str = "image_path",
     prefer_go: bool = True,
 ) -> None:
-    """Merge JSONL files; first row wins per ``dedupe_key``. Prefers Go binary if present."""
+    """Merge JSONL files; first row wins per ``dedupe_key``. Prefers the Go binary if built."""
     go = go_sdx_manifest_exe() if prefer_go else None
     if go is not None:
         cmd = [str(go), "merge", "-o", str(output), "--dedupe-key", dedupe_key, *(str(p) for p in inputs)]
@@ -332,7 +324,7 @@ def merge_jsonl_files(
 
 
 def native_stack_status() -> dict[str, Any]:
-    """Summary for diagnostics (e.g. ``quick_test --show-native``)."""
+    """Which native tools and libraries are built (e.g. ``quick_test --show-native``)."""
     import importlib.util
 
     status: dict[str, Any] = {
@@ -342,7 +334,6 @@ def native_stack_status() -> dict[str, Any]:
         "zig_sdx_linecrc": str(zig_linecrc_exe() or ""),
         "zig_sdx_pathstat": str(zig_pathstat_exe() or ""),
         "go_sdx_manifest": str(go_sdx_manifest_exe() or ""),
-        "mojo_or_magic_cli": mojo_cli_path(),
         "xxhash_installed": importlib.util.find_spec("xxhash") is not None,
     }
     for name in SHARED_LIBRARIES:

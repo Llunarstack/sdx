@@ -1,20 +1,23 @@
-"""Text-to-image training dataset (image folders or JSONL manifests) and its collate function."""
+"""Text-to-image training dataset (image folders or JSONL manifests), its collate function, the aspect-bucket
+batch sampler and the EnhancedDiT annotation dataset."""
 
 import json
 import math
 import random
 import struct
+from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
-from config.defaults.style_artists import extract_style_from_text
-from models.controlnet import control_type_to_id
+from config.styles import extract_style_from_text
+from models.conditioning import control_type_to_id
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 from utils.safety.minor_guard import reasons as minor_guard_reasons
-from utils.training.part_aware_training import (
+from utils.training.objectives import (
     PartAwareCaptionConfig,
     apply_part_aware_caption_pipeline,
     foveated_random_crop_box,
@@ -92,8 +95,11 @@ def center_crop(pil_image: Image.Image, image_size: int) -> Image.Image:
 
 def _to_tensor(pil_image: Image.Image) -> torch.Tensor:
     """RGB image -> ``(3, H, W)`` float tensor in ``[-1, 1]``."""
-    arr = np.array(pil_image).astype(np.float32) / 255.0
-    return torch.from_numpy((arr - 0.5) / 0.5).permute(2, 0, 1)
+    arr = np.asarray(pil_image, dtype=np.float32)  # fresh float copy, safe to modify in place
+    arr /= 255.0
+    arr -= 0.5
+    arr /= 0.5
+    return torch.from_numpy(arr).permute(2, 0, 1)
 
 
 def nearest_aspect_bucket(width: int, height: int, buckets: list[tuple[int, int]]) -> int:
@@ -119,6 +125,9 @@ class Text2ImageDataset(Dataset):
     Rows whose text involves minors are dropped at scan time (``n_blocked``). ``crop_mode`` is
     ``center`` | ``random`` | ``largest_center`` (cover-resize, then centre crop; same as ``center``).
     """
+
+    # Manifest fields copied verbatim onto each sample (subclasses add their annotations here).
+    _extra_row_keys: tuple[str, ...] = ()
 
     def __init__(
         self,
@@ -302,14 +311,21 @@ class Text2ImageDataset(Dataset):
                 if not isinstance(d, dict):
                     continue
                 path = d.get("image_path") or d.get("path") or d.get("image")
-                cap = d.get("caption") or d.get("text")
+                cap = d.get("caption") or d.get("text") or d.get("instruction")  # edit rows: instruction
                 if not (path and cap):
                     continue
                 neg = negative_caption_from_row(d)
                 screened = manifest_row_text(d)
+                pl_inline = d.get("prompt_layout")
                 pl_file = self._resolve_media_path(d.get("prompt_layout_path"))
                 if pl_file is not None and pl_file.is_file():
-                    screened += ", " + pl_file.read_text(encoding="utf-8", errors="ignore")
+                    pl_text = pl_file.read_text(encoding="utf-8", errors="ignore")
+                    screened += ", " + pl_text
+                    if not isinstance(pl_inline, dict):
+                        try:  # parsed once here instead of on every __getitem__
+                            pl_inline = json.loads(pl_text)
+                        except ValueError:
+                            pass
                 if minor_guard_reasons(screened, neg, training=True):
                     self.n_blocked += 1
                     continue
@@ -321,7 +337,6 @@ class Text2ImageDataset(Dataset):
                     regions = rc
                 gmask = d.get("grounding_mask") or d.get("mask_path") or ""
                 cg, cl, ec = d.get("caption_global"), d.get("caption_local"), d.get("entity_captions")
-                pl_inline = d.get("prompt_layout")
                 pl_path = d.get("prompt_layout_path") or ""
                 size = (d.get("width"), d.get("height"))
                 self.samples.append(
@@ -335,7 +350,11 @@ class Text2ImageDataset(Dataset):
                         or d.get("control_kind")
                         or d.get("controlnet_type")
                         or "",
-                        "init_image": d.get("init_image") or d.get("init_image_path") or d.get("source_image") or "",
+                        "init_image": d.get("init_image")
+                        or d.get("init_image_path")
+                        or d.get("source_image")
+                        or d.get("source_image_path")
+                        or "",
                         "weight": float(d.get("weight", d.get("aesthetic_score", 1.0))),
                         "difficulty": float(d.get("difficulty", 0.5)),
                         "regions": regions,
@@ -348,6 +367,7 @@ class Text2ImageDataset(Dataset):
                         "size": tuple(map(int, size))
                         if all(isinstance(v, (int, float)) and v > 0 for v in size)
                         else None,
+                        **{k: d[k] for k in self._extra_row_keys if k in d},
                     }
                 )
             return
@@ -574,4 +594,155 @@ def collate_t2i(batch: list[dict]) -> dict[str, Any]:
         out["grounding_mask_valid"] = torch.tensor(["grounding_mask" in b for b in batch], dtype=torch.bool)
     if any("prompt_layout" in b for b in batch):
         out["prompt_layout"] = [b.get("prompt_layout") for b in batch]
+    return out
+
+
+class ResolutionBucketBatchSampler(Sampler[list[int]]):
+    """Yields index batches that share a bucket id, so ``collate_t2i`` can stack them."""
+
+    def __init__(
+        self,
+        dataset: Text2ImageDataset,
+        batch_size: int,
+        *,
+        drop_last: bool = True,
+        shuffle_batches: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        if not getattr(dataset, "resolution_buckets", None):
+            raise ValueError("ResolutionBucketBatchSampler requires dataset.resolution_buckets")
+        self.dataset = dataset
+        self.batch_size = int(batch_size)
+        self.drop_last = drop_last
+        self.shuffle_batches = shuffle_batches
+        self.generator = generator
+        groups: defaultdict[int, list[int]] = defaultdict(list)
+        for i, bucket in enumerate(dataset._bucket_assign):
+            groups[bucket].append(i)
+        self._groups = dict(groups)
+
+    def __len__(self) -> int:
+        bs = self.batch_size
+        return sum(len(idxs) // bs if self.drop_last else -(-len(idxs) // bs) for idxs in self._groups.values())
+
+    def _shuffled(self, items: list) -> list:
+        perm = torch.randperm(len(items), generator=self.generator).tolist()
+        return [items[j] for j in perm]
+
+    def __iter__(self) -> Iterator[list[int]]:
+        batches: list[list[int]] = []
+        for idxs in self._groups.values():
+            idxs = self._shuffled(idxs)
+            for j in range(0, len(idxs), self.batch_size):
+                chunk = idxs[j : j + self.batch_size]
+                if len(chunk) == self.batch_size or not self.drop_last:
+                    batches.append(chunk)
+        if self.shuffle_batches:
+            batches = self._shuffled(batches)
+        yield from batches
+
+
+_ENHANCED_KEYS = ("spatial_layout", "anatomy_mask", "text_tokens", "text_positions", "character_id", "style_id")
+
+
+class EnhancedT2IDataset(Text2ImageDataset):
+    """Adds the optional enhanced annotations to each item; samples without them simply omit those keys.
+
+    Extra JSONL fields (all optional):
+      "spatial_layout":   [[x1, y1, x2, y2], ...]  normalised bbox per object
+      "anatomy_mask":     path to a grayscale mask (white = human region)
+      "text_tokens":      ["word1", "word2", ...]  strings rendered in the image
+      "text_positions":   [[cx, cy], ...]  normalised centre per text token
+      "character_id":     int  character slot index (consistency training)
+      "style_id":         int  style slot index
+    """
+
+    _extra_row_keys = _ENHANCED_KEYS
+
+    def __init__(self, *args, max_objects: int = 10, max_text_tokens: int = 8, **kwargs):
+        self.max_objects = int(max_objects)
+        self.max_text_tokens = int(max_text_tokens)
+        super().__init__(*args, **kwargs)
+
+    def _load_spatial_layout(self, raw: Any) -> torch.Tensor | None:
+        """``(max_objects, 4)`` zero-padded boxes, or ``None`` when absent or malformed."""
+        if not raw:
+            return None
+        try:
+            bboxes = [[float(v) for v in box[:4]] for box in raw[: self.max_objects]]
+        except (TypeError, ValueError):
+            return None
+        if not bboxes:
+            return None
+        t = torch.zeros(self.max_objects, 4, dtype=torch.float32)
+        t[: len(bboxes)] = torch.tensor(bboxes, dtype=torch.float32)
+        return t
+
+    def _load_anatomy_mask(self, mask_rel: str, idx: int) -> torch.Tensor | None:
+        """Binary ``(1, H, W)`` mask cropped with the image's (centre) crop geometry."""
+        mask_l = self._open_mask(mask_rel)
+        if mask_l is None:
+            return None
+        m = np.array(self._crop_image(mask_l, idx), dtype=np.float32) / 255.0
+        return torch.from_numpy((m > 0.5).astype(np.float32)).unsqueeze(0)
+
+    def _load_text_tokens(self, tokens: Any, positions: Any) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        """``(ids, positions)``: string length as a tokenizer-free id proxy (capped at 255) and ``(cx, cy)`` centres."""
+        if not tokens:
+            return None, None
+        try:
+            tok_list = [str(t) for t in tokens[: self.max_text_tokens]]
+            pos_list = positions[: len(tok_list)] if positions else []
+        except (TypeError, AttributeError):
+            return None, None
+        ids = torch.zeros(self.max_text_tokens, dtype=torch.int64)
+        pos = torch.zeros(self.max_text_tokens, 2, dtype=torch.float32)
+        for i, tok in enumerate(tok_list):
+            ids[i] = min(len(tok), 255)
+        for i, p in enumerate(pos_list):
+            try:
+                pos[i, 0] = float(p[0])
+                pos[i, 1] = float(p[1])
+            except (TypeError, ValueError, IndexError):
+                pass
+        return ids, pos
+
+    def _getitem_impl(self, idx: int, hw_idx: int | None = None) -> dict[str, Any]:
+        # Annotations come from the sample actually loaded (``idx``), cropped to the requested bucket (``hw_idx``).
+        out = super()._getitem_impl(idx, hw_idx)
+        hw_idx = idx if hw_idx is None else hw_idx
+        s = self.samples[idx]
+        layout = self._load_spatial_layout(s.get("spatial_layout"))
+        if layout is not None:
+            out["spatial_layout"] = layout
+        anat_rel = str(s.get("anatomy_mask") or "").strip()
+        if anat_rel:
+            anat = self._load_anatomy_mask(anat_rel, hw_idx)
+            if anat is not None:
+                out["anatomy_mask"] = anat
+        tok_ids, tok_pos = self._load_text_tokens(s.get("text_tokens"), s.get("text_positions"))
+        if tok_ids is not None:
+            out["text_tokens"] = tok_ids
+            out["text_positions"] = tok_pos
+        for key in ("character_id", "style_id"):
+            try:
+                out[key] = int(s[key])
+            except (KeyError, TypeError, ValueError):
+                pass
+        return out
+
+
+def collate_enhanced(batch: list[dict[str, Any]]) -> dict[str, Any]:
+    """:func:`collate_t2i` plus the enhanced tensors; a partly annotated batch is zero-padded with a ``*_valid`` mask."""
+    out = collate_t2i(batch)
+    for key in ("spatial_layout", "anatomy_mask", "text_tokens", "text_positions"):
+        if all(key in b for b in batch):
+            out[key] = torch.stack([b[key] for b in batch])
+        elif any(key in b for b in batch):
+            ref = next(b[key] for b in batch if key in b)
+            out[key] = torch.stack([b.get(key, torch.zeros_like(ref)) for b in batch])
+            out[f"{key}_valid"] = torch.tensor([key in b for b in batch], dtype=torch.bool)
+    for key in ("character_id", "style_id"):
+        if any(key in b for b in batch):
+            out[key] = torch.tensor([b.get(key, -1) for b in batch], dtype=torch.long)
     return out

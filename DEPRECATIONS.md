@@ -50,6 +50,6 @@ This file tracks active compatibility shims and canonical paths.
 | `utils.optimization.*` / `utils.speed.*` / `utils.inference.*` / `utils.compression.*` / `utils.distributed.*` / `utils.monitoring.*` | `utils.superior.*` caches / VAE tiling / real train flags |
 | `utils.quality.vit_critic_loop` | `vit_quality` / `utils.superior.auto_loop` |
 | `innovations.*` | `utils.agentic` / `utils.quality` / `utils.superior` / `frontier` |
-| `docs/NATIVE_KERNELS.md` | `docs/NATIVE_AND_SYSTEM_LIBS.md` + `native/README.md` |
+| `docs/NATIVE_KERNELS.md` | `docs/MODEL_STACK.md` + `native/README.md` |
 | `scripts/book/*.py` launchers | `pipelines/book_comic/scripts/*.py` |
 | `utils.architecture.ar_dit_vit` | `utils.architecture.ar_block_conditioning` |

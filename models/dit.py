@@ -1,13 +1,15 @@
-"""Class-conditional Diffusion Transformer (Peebles & Xie, "Scalable Diffusion Models with Transformers").
+"""Class-conditional Diffusion Transformer (Peebles & Xie, "Scalable Diffusion Models with Transformers") and the
+shared DiT building blocks.
 
 A latent ``(B, C, H, W)`` is patchified into tokens, run through transformer blocks and unpatchified.
 Timestep and class label enter through adaLN-Zero: each block predicts per-channel shift/scale/gate from the
 conditioning vector, and those layers start at zero so every block begins as the identity, which is what
 lets deep DiTs train stably.
 
-Also the source of shared building blocks (``timestep_embedding``, ``TimestepEmbedder``, ``DiTBlock``,
-``FinalLayer``, ``LayerScale``, sin/cos position tables); the text-to-image variants live in
-``models/dit_text.py``.
+Shared pieces: ``timestep_embedding``, ``TimestepEmbedder``, ``DiTBlock``, ``FinalLayer``, ``LayerScale``,
+sin/cos position tables, and the token-level Mixture-of-Experts (``MoERouter`` / ``MoEExperts`` /
+``MoEFeedForward`` / ``MoEProjection``: DiT-MoE style, conditioning-aware top-k routing with a Switch-style
+load-balancing loss). The text-to-image variants live in ``models/dit_text.py``.
 """
 
 import functools
@@ -16,9 +18,8 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
-
-from .moe import MoEFeedForward
 
 
 def modulate(x, shift, scale):
@@ -29,15 +30,18 @@ def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
+@functools.lru_cache(maxsize=32)
+def _sinusoid_freqs(half: int, max_period: float, device: torch.device) -> torch.Tensor:
+    return torch.exp(-math.log(max_period) * torch.arange(half, device=device, dtype=torch.float32) / half)
+
+
 def timestep_embedding(t: torch.Tensor, dim: int, max_period: float = 10000) -> torch.Tensor:
     """Sinusoidal embedding of scalars ``t`` (any shape) -> ``(*t.shape, dim)``.
 
     Each channel is a sinusoid of a different frequency (geometric spacing up to ``max_period``), giving the
     network a smooth, unique code per value; the same table embeds timesteps and PixArt size conditions.
     """
-    half = dim // 2
-    freqs = torch.exp(-math.log(max_period) * torch.arange(half, device=t.device, dtype=torch.float32) / half)
-    args = t.float()[..., None] * freqs
+    args = t.float()[..., None] * _sinusoid_freqs(dim // 2, float(max_period), t.device)
     embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
     if dim % 2:
         embedding = torch.cat([embedding, torch.zeros_like(embedding[..., :1])], dim=-1)
@@ -327,3 +331,131 @@ DiT_models = {
     "DiT-XL/2": DiT_XL_2,
     "DiT-XL/4": DiT_XL_4,
 }
+
+
+class MoERouter(nn.Module):
+    """Top-k gate: ``(B, N, C)`` tokens (+ optional ``(B, C)`` context) -> ``(top_idx, top_weights, aux_loss)``."""
+
+    def __init__(self, hidden_size: int, *, num_experts: int, top_k: int = 2):
+        super().__init__()
+        if num_experts <= 0:
+            raise ValueError("num_experts must be > 0")
+        if top_k <= 0:
+            raise ValueError("top_k must be > 0")
+        if top_k > num_experts:
+            raise ValueError("top_k cannot exceed num_experts")
+        self.hidden_size = hidden_size
+        self.num_experts = int(num_experts)
+        self.top_k = int(top_k)
+        self.gate = nn.Linear(hidden_size, self.num_experts, bias=False)
+        self.context_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+
+    def forward(self, x: torch.Tensor, routing_context: torch.Tensor | None = None):
+        """``top_idx`` / ``top_weights`` are ``(B*N, top_k)``; ``aux_loss`` is a scalar."""
+        if x.dim() != 3:
+            raise ValueError(f"{type(self).__name__} expects x=(B,N,C) but got shape {tuple(x.shape)}")
+        B, N, C = x.shape
+        T = B * N
+        x_flat = x.reshape(T, C)
+        if routing_context is not None:
+            if routing_context.dim() != 2 or routing_context.shape[0] != B or routing_context.shape[1] != C:
+                raise ValueError(f"routing_context must be (B,C) with matching B,C; got {tuple(routing_context.shape)}")
+            x_flat = x_flat + self.context_proj(routing_context).unsqueeze(1).expand(B, N, C).reshape(T, C)
+        logits = self.gate(x_flat)
+        top_vals, top_idx = torch.topk(logits, k=self.top_k, dim=-1)
+        top_weights = F.softmax(top_vals, dim=-1)
+        # Router probabilities are differentiable, the expert load counts are not (Switch Transformer).
+        importance = F.softmax(logits, dim=-1).sum(dim=0) / float(T)
+        assign = torch.zeros(T, self.num_experts, device=x.device, dtype=importance.dtype)
+        load = assign.scatter_(1, top_idx, 1.0).sum(dim=0) / float(T)
+        return top_idx, top_weights, self.num_experts * (importance * load).sum()
+
+
+class MoEExperts(MoERouter):
+    """Top-k mixture over ``experts`` (each maps ``(n, C) -> (n, C)``); the last aux loss is in ``last_aux_loss``.
+
+    ``router_override`` routes with a shared ``MoERouter`` instead of this module's own gate.
+    """
+
+    def __init__(self, hidden_size: int, experts: nn.ModuleList, *, top_k: int = 2):
+        super().__init__(hidden_size, num_experts=len(experts), top_k=top_k)
+        self.experts = experts
+        self.last_aux_loss = None
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        routing_context: torch.Tensor | None = None,
+        router_override: MoERouter | None = None,
+        report_aux_loss: bool = True,
+    ) -> torch.Tensor:
+        router = router_override if router_override is not None else super().forward
+        top_idx, top_weights, aux_loss = router(x, routing_context=routing_context)
+        self.last_aux_loss = aux_loss if report_aux_loss else None
+        B, N, C = x.shape
+        x_flat = x.reshape(B * N, C)
+        out = torch.zeros_like(x_flat)
+        # Group the (token, slot) assignments by expert with one host sync (the per-expert counts); the stable
+        # sort keeps each expert's rows in the same (token, slot) order as a per-expert nonzero() would.
+        flat = top_idx.reshape(-1)
+        order = torch.argsort(flat, stable=True)
+        token_ids, slots = order // top_idx.shape[1], order % top_idx.shape[1]
+        start = 0
+        for e, count in enumerate(torch.bincount(flat, minlength=self.num_experts).tolist()):
+            if count:
+                tok, k = token_ids[start : start + count], slots[start : start + count]
+                y = self.experts[e](x_flat[tok])
+                out.index_add_(0, tok, y * top_weights[tok, k].unsqueeze(-1))
+            start += count
+        return out.reshape(B, N, C)
+
+
+class MoEFeedForward(MoEExperts):
+    """MoE MLP: ``num_experts`` independent ``Linear -> act -> Linear`` feed-forwards."""
+
+    def __init__(
+        self,
+        hidden_size: int,
+        hidden_features: int,
+        *,
+        num_experts: int,
+        top_k: int = 2,
+        dropout: float = 0.0,
+        act_layer=nn.GELU,
+    ):
+        experts = nn.ModuleList(
+            nn.Sequential(
+                nn.Linear(hidden_size, hidden_features),
+                act_layer(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_features, hidden_size),
+                nn.Dropout(dropout),
+            )
+            for _ in range(max(0, int(num_experts)))
+        )
+        super().__init__(hidden_size, experts, top_k=top_k)
+        self.hidden_features = hidden_features
+
+
+class MoEProjection(MoEExperts):
+    """Sparse ``C -> C`` projection (attention output) over ``num_experts`` linear experts."""
+
+    def __init__(
+        self,
+        hidden_size: int,
+        *,
+        num_experts: int,
+        top_k: int = 2,
+        dropout: float = 0.0,
+        bias: bool = True,
+        act_layer=None,
+    ):
+        experts = []
+        for _ in range(max(0, int(num_experts))):
+            layers = [nn.Linear(hidden_size, hidden_size, bias=bias)]
+            if act_layer is not None:
+                layers.append(act_layer())
+            if dropout and dropout > 0:
+                layers.append(nn.Dropout(dropout))
+            experts.append(nn.Sequential(*layers))
+        super().__init__(hidden_size, nn.ModuleList(experts), top_k=top_k)

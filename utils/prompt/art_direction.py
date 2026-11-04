@@ -1,37 +1,22 @@
-"""Art direction planner: prompt -> explicit shot, lens, lighting and palette decisions.
-
-Plan-then-generate (LayoutGPT, Feng et al. NeurIPS 2023; RPG, Yang et al. ICML 2024): decide
-the picture before sampling instead of echoing keywords. Cues the user wrote are parsed and
-marked explicit; open fields are filled from the defaults photographers, cinematographers and
-painters use for that subject (portrait: 85 mm, loop light from high front-side, 3:1 ratio;
-landscape: wide lens, deep focus, horizon on a third, low raking sun; noir: hard split light,
-8:1). When the prompt leaves a choice open between equally good options (which third, which
-time of day), the seed picks, so different seeds explore different shots instead of all
-collapsing to the same golden-hour centred frame.
-
-``plan_art_direction`` returns an :class:`ArtDirection`; ``caption()`` is the conditioning text
-(only decided fields, phrased for the medium: no lens terms for paintings), ``to_dict()`` the
-plan critics score against (``utils.quality.art_critic`` keys: grade, key, composition,
-harmony, contrast, medium, pixel_art). ``gate_tag`` drops pack text that contradicts the plan
-(skin and hands with no people, camera terms on a painting).
-"""
+"""Art direction: prompt -> shot, lens, lighting and palette decisions, composition brief, photo-realism packs and originality tokens."""
 
 from __future__ import annotations
 
 import random
 import re
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from config.defaults.art_mediums import detect_all_mediums
-
-__all__ = [
-    "ArtDirection",
-    "apply_art_direction_to_args",
-    "gate_tag",
-    "mentions_people",
-    "plan_art_direction",
-]
+from config.styles import detect_all_mediums
+from data.caption_utils import (
+    AGE_TAGS,
+    ANATOMY_FRAMING_TAGS,
+    BODY_PART_TAGS,
+    BUILD_BODY_TAGS,
+    HEIGHT_TAGS,
+    SUBJECT_PREFIXES,
+)
 
 
 def _rx(*alternatives: str) -> re.Pattern[str]:
@@ -441,7 +426,7 @@ class ArtDirection:
         return d
 
     def critic_targets(self) -> dict[str, Any]:
-        """Plan keys in ``utils.quality.art_critic`` vocabulary (absent when not decided)."""
+        """Plan keys in ``utils.quality.critics`` vocabulary (absent when not decided)."""
         out: dict[str, Any] = {"medium": self.medium_family, "pixel_art": self.medium == "pixel_art"}
         if self.grade in ("teal_orange", "warm", "cool", "neon", "mono", "vivid", "muted", "mixed"):
             out["grade"] = self.grade
@@ -1011,3 +996,365 @@ def apply_art_direction_to_args(args: Any) -> ArtDirection | None:
     args._art_direction = ad
     args.art_direction_plan = ad.to_dict()
     return ad
+
+
+CompositionBriefMode = Literal["off", "auto", "on"]
+
+# Triggers for auto mode (UI, posters, quoted strings, multilingual text mentions).
+_NEEDS_BRIEF_PATTERNS: tuple[str, ...] = (
+    r"\b(ui|ux|gui|user interface|app screen|mobile app|web page|mockup|wireframe|"
+    r"dashboard|navbar|menu bar|icon pack|component library)\b",
+    r"\b(poster|billboard|flyer|brochure|magazine cover|book cover|album cover|"
+    r"packaging|label|signage|neon sign|title card|opening credits|credits scene)\b",
+    r"\b(logo|logotype|wordmark|subtitle|caption|speech bubble|typography)\b",
+    r"\b(japanese text|chinese text|korean text|arabic text|mixed language)\b",
+    r"\b(render (the |any )?text|exact (text|string)|readable text)\b",
+    r"\blayout\b|\b(grid|baseline|margins)\b",
+)
+
+_SUFFIX = (
+    "coherent perspective and unified lighting across the frame; "
+    "if letters or signage appear, crisp edges and correct spelling for the stated language (no gibberish glyphs); "
+    "preserve subject identity, facial likeness, material colors, and key shadows when adapting from references"
+)
+
+
+def composition_brief_warranted(prompt: str) -> bool:
+    """Heuristic: prompt likely benefits from text/layout fidelity guidance."""
+    p = (prompt or "").strip().lower()
+    if not p:
+        return False
+    if re.search(r'"[^"]{2,}"', prompt):
+        return True
+    return any(re.search(pat, p, re.IGNORECASE) for pat in _NEEDS_BRIEF_PATTERNS)
+
+
+def apply_composition_brief(prompt: str, mode: CompositionBriefMode) -> str:
+    """Append a concise composition-and-text fidelity suffix when appropriate."""
+    prompt = (prompt or "").strip()
+    if mode == "off" or not prompt:
+        return prompt
+    if mode == "auto" and not composition_brief_warranted(prompt):
+        return prompt
+    low = prompt.lower()
+    # Avoid stacking the same guidance if a prior pass or the user already included it.
+    if "coherent perspective and unified lighting" in low:
+        return prompt
+    fragment = _SUFFIX
+    if fragment in low:
+        return prompt
+    return f"{prompt}, {fragment}".strip().strip(",")
+
+
+PHOTO_REALISM_PACKS: dict[str, tuple[str, str]] = {
+    "none": ("", ""),
+    "documentary": (
+        "photoreal documentary capture, natural lens perspective, candid realism, controlled dynamic range",
+        "cgi render look, overprocessed hdr, waxy skin, synthetic microtexture",
+    ),
+    "cinematic": (
+        "photoreal cinematic still, motivated practical lighting, filmic tonal separation, plausible optical depth",
+        "clipped highlights, crushed blacks, fake bloom halos, inconsistent light motivation",
+    ),
+    "studio_portrait": (
+        "studio portrait realism, key-fill-rim lighting discipline, realistic skin pores, subtle lens compression",
+        "plastic skin retouch, uncanny symmetry, over-smoothing, artificial eye shine",
+    ),
+    "film_analog": (
+        "analog film realism, organic grain cadence, natural highlight rolloff, gentle color response",
+        "digital crunch artifacts, sterile noise pattern, harsh clipping, over-sharpened edges",
+    ),
+    "night_noir": (
+        "night-time photorealism, practical-light contrast control, atmospheric depth cues, reflective surface realism",
+        "flat night exposure, neon clipping, muddy shadows, fake reflective behavior",
+    ),
+    "product_catalog": (
+        "commercial product photography realism, controlled studio reflections, clean edge definition, true material response",
+        "warped product geometry, implausible reflections, blown specular hotspots, noisy gradients",
+    ),
+    "fashion_editorial": (
+        "fashion editorial photorealism, high-end lighting styling, skin-texture fidelity, premium composition polish",
+        "plastic beauty filter look, over-airbrushed skin, clipped fabric highlights, flat posing",
+    ),
+}
+
+PHOTO_COLOR_GRADE_HINTS: dict[str, str] = {
+    "none": "",
+    "natural": "natural color grade, restrained saturation, realistic white balance continuity",
+    "teal_orange": "cinematic teal-orange split-tone with controlled skin-tone preservation",
+    "kodak_portra": "kodak portra inspired color response, warm skin bias, soft contrast rolloff",
+    "cinestill_800t": "cinestill 800T inspired tungsten-night palette, cool shadows with warm practical highlights",
+    "noir_bw": "black-and-white film-noir grade, rich monochrome contrast and tonal separation",
+    "fujifilm_eterna": "fujifilm eterna inspired subtle cinematic palette, restrained contrast and organic color separation",
+}
+
+PHOTO_LIGHTING_TECHNIQUES: dict[str, str] = {
+    "none": "",
+    "three_point": "three-point lighting discipline with balanced key-fill-backlight ratio",
+    "golden_hour": "golden-hour lighting technique with warm directional key and soft atmospheric fill",
+    "overcast_soft": "overcast soft-light technique with low-contrast skin-friendly diffusion",
+    "motivated_practical": "motivated practical-light technique, source-driven highlights and grounded shadow logic",
+    "rim_backlight": "rim/backlight separation technique for clear subject silhouette depth",
+    "butterfly": "butterfly portrait lighting technique with flattering facial-plane highlights",
+    "rembrandt": "rembrandt portrait lighting technique with controlled triangle-light facial modeling",
+}
+
+PHOTO_FILTER_HINTS: dict[str, str] = {
+    "none": "",
+    "pro_mist": "pro-mist diffusion filter feel, softened highlight halation without detail collapse",
+    "polarizer": "polarizer filter behavior, controlled reflections, cleaner sky and surface contrast",
+    "nd_long_exposure": "ND long-exposure photographic behavior with intentional motion blend and exposure control",
+    "vintage_diffusion": "vintage diffusion filter character with gentle glow and softened micro-contrast",
+    "clean_digital": "clean modern digital filter profile with neutral contrast and minimal color cast",
+}
+
+PHOTO_GRAIN_HINTS: dict[str, str] = {
+    "none": "",
+    "fine_35mm": "fine 35mm-like grain structure with subtle luminance texture",
+    "medium_35mm": "medium 35mm-like grain cadence, visible but balanced texture presence",
+    "heavy_16mm": "heavy 16mm-like grain character for gritty analog texture",
+    "clean_digital": "clean digital noise floor with minimal grain impression",
+}
+
+_PHOTO_INTENT_TERMS: set[str] = {
+    "photo",
+    "photograph",
+    "photoreal",
+    "photorealistic",
+    "dslr",
+    "mirrorless",
+    "35mm",
+    "film",
+    "cinematic still",
+    "documentary",
+    "editorial",
+    "portrait",
+    "studio lighting",
+    "bokeh",
+    "lens",
+    "iso",
+    "shutter",
+    "aperture",
+    "golden hour",
+    "color grading",
+}
+
+
+def infer_photo_realism_controls(prompt: str) -> dict[str, str]:
+    p = str(prompt or "").lower()
+    out: dict[str, str] = {}
+    if any(k in p for k in ("documentary", "photojournal", "street photo", "candid")):
+        out["photo_realism_pack"] = "documentary"
+    elif any(k in p for k in ("studio portrait", "headshot", "beauty photo")):
+        out["photo_realism_pack"] = "studio_portrait"
+    elif any(k in p for k in ("fashion editorial", "editorial photo")):
+        out["photo_realism_pack"] = "fashion_editorial"
+    elif any(k in p for k in ("product photo", "catalog photo", "packshot")):
+        out["photo_realism_pack"] = "product_catalog"
+    elif any(k in p for k in ("night noir", "night photo", "neon night")):
+        out["photo_realism_pack"] = "night_noir"
+    elif any(k in p for k in ("analog film", "35mm", "film photo", "portra", "cinestill")):
+        out["photo_realism_pack"] = "film_analog"
+    elif any(k in p for k in ("cinematic still", "cinematic photo")):
+        out["photo_realism_pack"] = "cinematic"
+
+    if any(k in p for k in ("teal orange", "teal-orange")):
+        out["photo_color_grade"] = "teal_orange"
+    elif "portra" in p:
+        out["photo_color_grade"] = "kodak_portra"
+    elif "cinestill" in p:
+        out["photo_color_grade"] = "cinestill_800t"
+    elif any(k in p for k in ("black and white", "black-and-white", "monochrome noir")):
+        out["photo_color_grade"] = "noir_bw"
+
+    if any(k in p for k in ("golden hour", "sunset photo")):
+        out["photo_lighting_technique"] = "golden_hour"
+    elif any(k in p for k in ("three point lighting", "three-point lighting")):
+        out["photo_lighting_technique"] = "three_point"
+    elif "overcast" in p:
+        out["photo_lighting_technique"] = "overcast_soft"
+
+    if "pro mist" in p or "promist" in p:
+        out["photo_filter"] = "pro_mist"
+    elif "polarizer" in p:
+        out["photo_filter"] = "polarizer"
+    elif "long exposure" in p or "nd filter" in p:
+        out["photo_filter"] = "nd_long_exposure"
+
+    return out
+
+
+def is_photographic_prompt(prompt: str) -> bool:
+    p = str(prompt or "").lower()
+    if not p.strip():
+        return False
+    return any(term in p for term in _PHOTO_INTENT_TERMS)
+
+
+def recommend_photo_post_profile(
+    *,
+    photo_realism_pack: str,
+    photo_color_grade: str,
+    photo_filter: str,
+    photo_grain_style: str,
+) -> dict[str, str]:
+    """
+    Recommend stronger realism defaults for postprocess and ranking.
+    """
+    pack = str(photo_realism_pack or "none").lower().strip()
+    grade = str(photo_color_grade or "none").lower().strip()
+    filt = str(photo_filter or "none").lower().strip()
+    grain = str(photo_grain_style or "none").lower().strip()
+
+    post_strength = "0.62"
+    pick_metric = "combo_realism"
+    if pack in {"studio_portrait", "fashion_editorial", "product_catalog"}:
+        post_strength = "0.58"
+    elif pack in {"film_analog", "night_noir"}:
+        post_strength = "0.72"
+    elif pack in {"cinematic", "documentary"}:
+        post_strength = "0.64"
+
+    if grade in {"noir_bw", "cinestill_800t"}:
+        post_strength = str(max(float(post_strength), 0.7))
+    if filt in {"nd_long_exposure", "vintage_diffusion"}:
+        post_strength = str(max(float(post_strength), 0.68))
+    if grain == "clean_digital":
+        post_strength = str(min(float(post_strength), 0.55))
+    if grain == "none" and pack == "film_analog":
+        grain = "fine_35mm"
+
+    return {
+        "photo_post_strength": post_strength,
+        "pick_best_metric": pick_metric,
+        "photo_grain_style": grain,
+    }
+
+
+def photo_realism_fragments(
+    *,
+    photo_realism_pack: str = "none",
+    photo_color_grade: str = "none",
+    photo_lighting_technique: str = "none",
+    photo_filter: str = "none",
+    photo_grain_style: str = "none",
+    strength: float = 1.0,
+) -> tuple[str, str]:
+    """
+    Build positive/negative prompt fragments for photoreal/photography realism.
+    """
+    s = max(0.25, min(2.0, float(strength)))
+    pos_pack, neg_pack = PHOTO_REALISM_PACKS.get((photo_realism_pack or "none").lower().strip(), ("", ""))
+    pos = ", ".join(
+        x
+        for x in (
+            pos_pack,
+            PHOTO_COLOR_GRADE_HINTS.get((photo_color_grade or "none").lower().strip(), ""),
+            PHOTO_LIGHTING_TECHNIQUES.get((photo_lighting_technique or "none").lower().strip(), ""),
+            PHOTO_FILTER_HINTS.get((photo_filter or "none").lower().strip(), ""),
+            PHOTO_GRAIN_HINTS.get((photo_grain_style or "none").lower().strip(), ""),
+        )
+        if str(x).strip()
+    )
+    neg = str(neg_pack or "").strip()
+    if not pos and not neg:
+        return "", ""
+    if abs(s - 1.0) < 1e-6:
+        return pos, neg
+    # Light weighting syntax compatible with existing prompt emphasis parsing.
+    weighted = f"({pos}:{s:.2f})" if pos else ""
+    return weighted, neg
+
+
+if TYPE_CHECKING:
+    import numpy as np
+
+
+ORIGINALITY_POSITIVE_TOKENS: tuple[str, ...] = (
+    "unique composition",
+    "original concept",
+    "fresh perspective",
+    "unexpected details",
+    "distinctive lighting",
+    "novel scene",
+    "inventive composition",
+    "creative accidents",
+    "new idea",
+    "rare details",
+    "unusual angle",
+    "dynamic framing",
+    "asymmetric balance",
+    "bold color story",
+    "muted palette twist",
+    "dramatic rim light",
+    "soft volumetric light",
+    "cinematic depth",
+    "environmental storytelling",
+    "foreground interest",
+    "layered depth",
+    "tactile materials",
+    "hand-crafted look",
+    "non-stock pose",
+    "candid moment",
+    "slice of life",
+    "dreamlike twist",
+    "subtle surreal touch",
+    "editorial fashion vibe",
+    "fine art photography",
+    "concept art energy",
+    "indie aesthetic",
+    "one-of-a-kind mood",
+    "surprising negative space",
+    "rhythm in shapes",
+)
+
+
+def inject_originality_tokens(
+    prompt: str,
+    strength: float,
+    rng: np.random.Generator,
+    *,
+    tokens: Sequence[str] | None = None,
+) -> str:
+    """
+    Insert *k* random originality tokens after leading person/subject tags (comma-separated).
+
+    *strength* in ``[0, 1]`` maps to ``k = 1 + round(3 * strength)`` clipped to token count.
+    """
+    strength = max(0.0, min(1.0, float(strength)))
+    if not (prompt and prompt.strip()) or strength <= 0:
+        return prompt
+
+    pool = list(tokens) if tokens is not None else list(ORIGINALITY_POSITIVE_TOKENS)
+    if not pool:
+        return prompt
+
+    k = 1 + int(round(strength * 3))
+    k = max(1, min(k, len(pool)))
+    chosen = list(rng.choice(pool, size=k, replace=False))
+
+    parts = [p.strip() for p in prompt.split(",") if p.strip()]
+    person_terms = (
+        list(SUBJECT_PREFIXES)
+        + list(AGE_TAGS)
+        + list(HEIGHT_TAGS)
+        + list(BUILD_BODY_TAGS)
+        + list(ANATOMY_FRAMING_TAGS)
+        + list(BODY_PART_TAGS)
+    )
+
+    def _norm(x: str) -> str:
+        return x.lower().strip().replace("_", " ")
+
+    person_norm = [_norm(t) for t in person_terms]
+
+    def _is_person_term(tag: str) -> bool:
+        t = _norm(tag)
+        return any(t == pt or t.startswith(pt + " ") for pt in person_norm)
+
+    insert_at = 0
+    while insert_at < len(parts) and _is_person_term(parts[insert_at]):
+        insert_at += 1
+
+    parts[insert_at:insert_at] = chosen
+    return ", ".join(parts)

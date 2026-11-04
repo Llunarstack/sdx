@@ -103,7 +103,7 @@ def _pytest(patterns: list[str]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from utils.terminal import configure_stdio_for_console
+    from utils.runtime import configure_stdio_for_console
 
     configure_stdio_for_console()
     p = argparse.ArgumentParser(description="SDX integration smoke test (mini scrape → train).")
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  train_results={results_dir}", flush=True)
 
     def secrets_parse() -> str:
-        from scripts.scrape.secrets_config import get_secrets_path, parse_secrets_file
+        from scripts.scrape import get_secrets_path, parse_secrets_file
 
         path = secrets if secrets.is_file() else get_secrets_path()
         creds = parse_secrets_file(path)
@@ -376,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     step("control_dataset_load", control_dataset_load)
 
     def artist_index() -> str:
-        from utils.prompt.artist_registry import build_from_manifests
+        from utils.prompt.text import build_from_manifests
 
         man = pick_training_manifest(combined, enriched)
         reg = build_from_manifests([man])
@@ -385,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     step("artist_index", artist_index)
 
     def prompt_composer() -> str:
-        from utils.prompt.prompt_composer import compose_prompt
+        from utils.prompt.text import compose_prompt
 
         out = compose_prompt("+character: 1girl, solo | base scene", artist_index=None)
         assert out.positive
@@ -394,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
     step("prompt_composer", prompt_composer)
 
     def image_profiler() -> str:
-        from utils.caption.image_profiler import profile_from_manifest_row
+        from utils.captioning import profile_from_manifest_row
 
         man = pick_training_manifest(combined, enriched)
         rows = read_manifest_rows(man)
@@ -407,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def reverse_search_web() -> str:
         from data.t2i_dataset import Text2ImageDataset
-        from utils.caption.reverse_search import reverse_search_file
+        from utils.captioning import reverse_search_file
 
         man = pick_training_manifest(combined, enriched)
         ds = Text2ImageDataset(str(man), image_size=64, data_root=str(data_root))
@@ -421,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     step("reverse_search_saucenao", reverse_search_web, skip=args.skip_reverse)
 
     def rag_retrieval() -> str:
-        from utils.prompt.rag_prompt import retrieve_facts_for_query_local
+        from utils.prompt.rag import retrieve_facts_for_query_local
 
         if not rag.is_file():
             raise FileNotFoundError(rag)

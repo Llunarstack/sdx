@@ -6,47 +6,14 @@ Prompt-side planners used by `sample.py` (`--frontier`, `--frontier-subject`, `-
 
 | Module | What | Research source |
 |--------|------|-----------------|
-| `logic.py` | Contradictions, absence (negative space) | — |
-| `narrative.py` | Witness POV, temporal moment | — |
-| `chaos.py` | Serendipity, entropy budget | — |
-| `memory.py` | Generation echo (failure memory) | — |
-| `layout.py` | Omost canvas, `<loc_*>` tokens, LAMIC schedule, IN-R/FI-R metrics | Omost, ConsistCompose, LAMIC |
-| `attention.py` | Dense Diffusion cross-attention bias for box layouts (`--box-attn-layout`) | Dense Diffusion, BoxDiff |
-| `causality.py` | Rain→wet, fire→smoke plausibility scan | World-model T2I |
-| `economy.py` | SKIP/LITE/FULL/HEAVY compute tiers per step | Step-skip / product |
-| `uncertainty.py` | Ambiguity score → CFG boost + best-of-N | Test-time scaling |
-| `semantics.py` | Subject-relation-object graph → layout hints | Scene graphs |
-| `adherence.py` | Hard-token (text, hands, counts) emphasis | Prompt weighting |
-| `anatomy.py` | Human vs stylized vs mecha body modes | Anatomy routing |
-| `creatures.py` | Dragon, insectoid, eldritch body plans | Creature VFX |
-| `mature.py` | NSFW/boudoir *quality* (lighting, skin, form) | Adult art craft |
-| `medium.py` | Brush strokes (medium packs live in `config/defaults/art_mediums.py`) | Brush craft |
-| `realism.py` | Anti-AI-slop, lens/sensor photoreal stack | Uncanny valley |
-| `subject.py` | Compose anatomy + creature + mature + medium + realism | — |
-| `atmosphere.py` | Fog, god rays, rain, snow, dust | Environmental |
-| `materials.py` | Metal, glass, fabric, skin, wood, liquid, hair | PBR cues |
-| `motion.py` | Pan blur, action freeze, impact frames | Action photo |
-| `era.py` | Medieval → cyberpunk anachronism guards | Period accuracy |
-| `typography.py` | Quoted text legibility + CFG boost | Ideogram-class text |
-| `safety.py` | Adult-NSFW steering tiers (`--safety-tier`); the minor block in `utils/safety/minor_guard.py` always runs first | Platform diligence |
-| `perfect.py` | **Everything** — `--frontier-perfect` | — |
-| `surreal.py` | Dream logic, metamorphosis, scale paradox | vs contradiction resolver |
-| `paradox.py` | Escher, infinite loops — keep don't fix | Beautiful impossibility |
-| `mutation.py` | Prompt variants for explore / best-of-N | Not static tags |
-| `constraint.py` | Art-school limits (monochrome, silhouette…) | Creative restriction |
-| `synesthesia.py` | Music → serendipity/CFG knobs | Cross-modal physics |
-| `cinema.py` | OTS, POV, ECU shot grammar | Director language |
-| `vibe.py` | Mood → step curves + CFG | Mood physics |
-| `weathering.py` | Rust, repair, graffiti layers | Object biography |
-| `glitch.py` | VHS, datamosh, RGB split | Intentional artifacts |
-| `imagination.py` | Creative orchestrator — `--frontier-creative` | No art-medium dup |
-| `fusion.py` | Genre mashups with dominant/accent rule | Steampunk+cyber etc. |
-| `archetype.py` | Threshold, mirror, labyrinth symbols | Mythic composition |
-| `rhythm.py` | Visual beat, repetition, spiral | Pattern composition |
-| `focal.py` | DOF as emotional story + CFG hint | Focus intent |
-| `collective.py` | Crowds without clone faces | Group grammar |
-| `scale.py` | Titan / miniature / cosmic magnitude | Size contrast |
+| `engine.py` | Contradictions, absence, witness POV, temporal moment, serendipity, entropy budget, generation echo; `FrontierEngine` and the sampler hooks | — |
+| `layout.py` | Omost canvas, `<loc_*>` tokens, LAMIC schedule, IN-R/FI-R metrics, Dense Diffusion cross-attention bias (`--box-attn-layout`), storyboard chains | Omost, ConsistCompose, LAMIC, Dense Diffusion, BoxDiff |
+| `planning.py` | Deep synthesis (causality, compute tiers, uncertainty, scene relations, hard-token emphasis), subject planners (anatomy, creatures, mature quality, brushwork, anti-slop realism), perfect mode (atmosphere, materials, motion, era, typography, adult-NSFW steering tiers), video bridge | World-model T2I, test-time scaling, scene graphs |
+| `imagination.py` | Creative orchestrator — `--frontier-creative` (surreal, paradox, mutation, constraint, synesthesia, cinema, mood, weathering, glitch, fusion, archetype, rhythm, focal, crowds, scale) | — |
+| `multiview.py` | SDX-Spatial 3D core: tri-plane field, SDF fitting, NeuS rendering, mesh export/validation, SH radiance, rigging, asset graph | EG3D, NeuS |
 | `registry.py` | Idea catalog + status | — |
+
+The minor block in `utils/safety/minor_guard.py` always runs before the adult-NSFW steering tiers in `planning.py`.
 
 ## Quick start
 
@@ -108,7 +75,7 @@ print(score_layout_masks(rm, bg))
 ### Deep frontier (all analyzers)
 
 ```python
-from frontier.synthesis import analyze_deep, deep_sample_kwargs
+from frontier.planning import analyze_deep, deep_sample_kwargs
 
 plan = analyze_deep("rain on empty street at night, logo on sign", layout_regions=2)
 kw = deep_sample_kwargs(plan, base_negative="blurry")
@@ -118,7 +85,7 @@ kw = deep_sample_kwargs(plan, base_negative="blurry")
 ### Subject-aware (bodies, creatures, NSFW quality, mediums, realism)
 
 ```python
-from frontier.subject import analyze_subject, subject_sample_kwargs
+from frontier.planning import analyze_subject, subject_sample_kwargs
 
 plan = analyze_subject(
     "hyperreal boudoir portrait, hands on silk, oil impasto background",

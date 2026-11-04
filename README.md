@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="docs/releases/v13.md"><img src="https://img.shields.io/badge/release-v13.0.0-0ea5e9?style=flat-square" alt="v13"/></a>
+  <a href="docs/CHANGELOG.md"><img src="https://img.shields.io/badge/release-v13.0.0-0ea5e9?style=flat-square" alt="v13"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=flat-square" alt="License"/></a>
   <img src="https://img.shields.io/badge/tests-1700%2B-22c55e?style=flat-square" alt="Tests"/>
 </p>
@@ -73,7 +73,7 @@ python sample.py --ckpt outputs/best.pt --prompt "your prompt" --out result.png 
 python -m scripts.tools video_generate --scene examples/scene_frontier.example.json --plan-only
 ```
 
-**Health check:** `python -m toolkit.training.env_health` · **Tests:** `pytest tests/ -q` · **RSI:** [docs/guides/RSI_FEEDBACK.md](docs/guides/RSI_FEEDBACK.md)
+**Health check:** `python -m toolkit.env_health` · **Tests:** `pytest tests/ -q` · **RSI:** [docs/QUALITY.md](docs/QUALITY.md#rsi-your-model-teaches-itself-to-make-better-art)
 
 ---
 
@@ -83,7 +83,7 @@ SDX is a **framework you train** — not a hosted model scoreboard. Leaders belo
 
 Legend: **✓** strong / built-in · **◐** partial / LoRA-only / plugin · **ext** community extensions · **✗** not available · **n/a** wrong product shape
 
-Full research tables + sources → [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md)
+Full research tables + sources → [docs/RESEARCH.md](docs/RESEARCH.md#competitive-analysis--solution-roadmap)
 
 ### Landscape: what the leaders are actually good at
 
@@ -196,7 +196,7 @@ Use those when you need **pixels tomorrow**. Use SDX when you need to **own the 
 | “Drop-in Flux / Veo replacement” | Different shape: framework + training + director, not one mega-checkpoint |
 | “One demo ckpt does everything” | You train or bring weights; SDX supplies the stack |
 
-Deeper strategy + weakness→fix map: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) · field notes: [docs/research/LANDSCAPE_2026.md](docs/research/LANDSCAPE_2026.md)
+Deeper strategy + weakness→fix map: [docs/RESEARCH.md](docs/RESEARCH.md#competitive-analysis--solution-roadmap) · field notes: [docs/RESEARCH.md](docs/RESEARCH.md#image-generation-landscape-architecture-and-workflows-2026)
 
 ---
 
@@ -288,12 +288,12 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 | Area | Highlights |
 |------|------------|
 | **VIDEOMAX** | `video_quality: max`: strong keyframe sampling, per-medium motion grammar, segment gates + retry |
-| **Invention stack** | `--invention-stack auto`: oracle-picked prompt passes (count, binding, negation, anatomy, anti-plastic) + subject/medium-gated scene priors ([docs](docs/research/INVENTION_STACK.md)) |
+| **Invention stack** | `--invention-stack auto`: oracle-picked prompt passes (count, binding, negation, anatomy, anti-plastic) + subject/medium-gated scene priors ([docs](docs/RESEARCH.md#invention-stack)) |
 | **RSI** | `rsi_loop`: the model paints art, judges it, trains on its own best-vs-worst pairs (plus your thumbs) and keeps a checkpoint only if held-out art scores rise |
 | **Quality policy** | Compete soft-defaults, CFG-Zero, pick-best num sync |
 | **Tests** | **1700+** pytest cases |
 
-[Full v13 release notes](docs/releases/v13.md) · [RSI](docs/guides/RSI_FEEDBACK.md) · [VIDEOMAX](docs/guides/VIDEOMAX.md)
+[Full v13 release notes](docs/CHANGELOG.md#sdx-v13--videomax-rsi-feedback--invention-waves) · [RSI](docs/QUALITY.md#rsi-your-model-teaches-itself-to-make-better-art) · [VIDEOMAX](docs/GUIDES.md#video-quality-presets-and-videomax)
 
 ### v1 to v13
 
@@ -304,7 +304,7 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 | Feedback | no | Thumbs to flywheel to DPO |
 | Tests | few | **1700+** |
 
-[Full comparison](docs/releases/VERSION_COMPARISON.md)
+[Full comparison](docs/CHANGELOG.md#sdx-version-comparison)
 
 
 ---
@@ -338,15 +338,15 @@ sdx/
 | Topic | Link |
 |-------|------|
 | Getting started | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
-| **v13 release** | [docs/releases/v13.md](docs/releases/v13.md) |
-| RSI / user feedback | [docs/guides/RSI_FEEDBACK.md](docs/guides/RSI_FEEDBACK.md) |
-| VIDEOMAX | [docs/guides/VIDEOMAX.md](docs/guides/VIDEOMAX.md) |
+| **v13 release** | [docs/CHANGELOG.md](docs/CHANGELOG.md#sdx-v13--videomax-rsi-feedback--invention-waves) |
+| RSI / user feedback | [docs/QUALITY.md](docs/QUALITY.md#rsi-your-model-teaches-itself-to-make-better-art) |
+| VIDEOMAX | [docs/GUIDES.md](docs/GUIDES.md#video-quality-presets-and-videomax) |
 | Codebase map | [docs/CODEBASE.md](docs/CODEBASE.md) |
 | Video pipeline | [pipelines/video/README.md](pipelines/video/README.md) |
 | Frontier | [frontier/README.md](frontier/README.md) |
-| Competitive notes | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) |
-| v12 release | [docs/releases/v12.md](docs/releases/v12.md) |
-| v1 → v13 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
+| Competitive notes | [docs/RESEARCH.md](docs/RESEARCH.md#competitive-analysis--solution-roadmap) |
+| v12 release | [docs/CHANGELOG.md](docs/CHANGELOG.md#sdx-v12--ai-film-studio-video-pipeline--frontier-horizon) |
+| v1 → v13 | [docs/CHANGELOG.md](docs/CHANGELOG.md#sdx-version-comparison) |
 | **Jargon & acronyms** | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 
 ---
@@ -374,21 +374,21 @@ To keep the graph human-only:
 
 | Version | Focus | Notes |
 |---------|--------|--------|
-| **[v13](docs/releases/v13.md)** | VIDEOMAX, RSI feedback, Invention Lab, 1700+ tests | **Current** · tag `v13.0.0` |
-| [v12](docs/releases/v12.md) | AI film studio video, frontier horizon | `v12.0.0` |
-| [v11](docs/releases/v11.md) | Regional box layout, frontier research, package restructure | `v11.0.0` |
-| [v10](docs/releases/v10.md) | ELIQ, artifacts, explainable quality | `v10.0.0` |
-| [v9](docs/releases/v9.md) | GRPO family, Superior Stack, agentic training | `v9.0.0` |
-| [v8](docs/releases/v8.md) | Style Genome, unified PromptStack | `v8.0.0` |
-| [v7](docs/releases/v7.md) | CI, reproducibility, security, benchmarks | `v7.0.0` |
-| [v6](docs/releases/v6.md) | Native acceleration, book/comic pipeline | `v6.0.0` |
-| [v5](docs/releases/v5.md) | Inference scaling, beam search, data curation | `v5.0.0` |
-| [v4](docs/releases/v4.md) | Smart quality filtering, adaptive iteration | `v4` |
-| [v3](docs/releases/v3.md) | Hard-case detection, benchmark training loops | `v3` |
-| [v0.2](docs/releases/v0.2.0.md) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
-| [v0.1](docs/releases/v0.1.0.md) | Foundation train + sample framework | `v0.1.0` |
+| **[v13](docs/CHANGELOG.md#sdx-v13--videomax-rsi-feedback--invention-waves)** | VIDEOMAX, RSI feedback, Invention Lab, 1700+ tests | **Current** · tag `v13.0.0` |
+| [v12](docs/CHANGELOG.md#sdx-v12--ai-film-studio-video-pipeline--frontier-horizon) | AI film studio video, frontier horizon | `v12.0.0` |
+| [v11](docs/CHANGELOG.md#sdx-v11--layout-control-frontier-research--package-restructure) | Regional box layout, frontier research, package restructure | `v11.0.0` |
+| [v10](docs/CHANGELOG.md#sdx-v10-advanced-quality--explainability-release) | ELIQ, artifacts, explainable quality | `v10.0.0` |
+| [v9](docs/CHANGELOG.md#sdx-v9-source-release) | GRPO family, Superior Stack, agentic training | `v9.0.0` |
+| [v8](docs/CHANGELOG.md#sdx-v8--style-genome-and-unified-prompt-pipeline) | Style Genome, unified PromptStack | `v8.0.0` |
+| [v7](docs/CHANGELOG.md#sdx-v7--production-quality-and-research-infrastructure) | CI, reproducibility, security, benchmarks | `v7.0.0` |
+| [v6](docs/CHANGELOG.md#sdx-v6--native-acceleration-and-book-generation-pipeline) | Native acceleration, book/comic pipeline | `v6.0.0` |
+| [v5](docs/CHANGELOG.md#sdx-v5--inference-scaling-and-quality-optimization) | Inference scaling, beam search, data curation | `v5.0.0` |
+| [v4](docs/CHANGELOG.md#sdx-v4--smart-quality-filtering-and-advanced-models) | Smart quality filtering, adaptive iteration | `v4` |
+| [v3](docs/CHANGELOG.md#sdx-v3--automated-quality-improvement-and-benchmarking) | Hard-case detection, benchmark training loops | `v3` |
+| [v0.2](docs/CHANGELOG.md#sdx-v020--advanced-training-methods-flow-matching-dpo-distillation) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
+| [v0.1](docs/CHANGELOG.md#sdx-v010--baseline-text-to-image-training-framework) | Foundation train + sample framework | `v0.1.0` |
 
-[Full timeline & v1 → v13 comparison →](docs/releases/VERSION_COMPARISON.md) · **[What does this jargon mean? →](docs/GLOSSARY.md)**
+[Full timeline & v1 → v13 comparison →](docs/CHANGELOG.md#sdx-version-comparison) · **[What does this jargon mean? →](docs/GLOSSARY.md)**
 
 <details>
 <summary><strong>Version history in plain English</strong> (click to expand)</summary>

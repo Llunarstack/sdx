@@ -16,9 +16,9 @@ import numpy as np
 import pytest
 import torch
 from PIL import Image
-from utils.caption.image_profiler import profile_image
-from utils.generation.image_dissection import parse_part_requests, visual_facts_from_requests
-from utils.image_resize import fit_image_to_size
+from utils.captioning import profile_image
+from utils.generation.editing import parse_part_requests, visual_facts_from_requests
+from utils.quality.finishing import fit_image_to_size
 from utils.safety import minor_guard as mg
 from utils.safety.minor_guard import ProhibitedContentError, ZeroShotAge, reasons, require_image_allowed
 
@@ -104,7 +104,7 @@ def test_missing_weights_refuse_sexual_conditioning_but_warn_for_outputs(tmp_pat
 @pytest.mark.parametrize(("rgb", "refused"), [((1.0, -1.0, -1.0), True), ((-1.0, 1.0, -1.0), False)])
 @patch("sample.encode_text", return_value=torch.zeros(2, 2, 8))
 def test_flagged_library_output_is_never_returned(_enc, fake_age, rgb, refused) -> None:
-    from utils.generation.simple_latent_generate import sample_one_image_pil
+    from utils.generation.sample_run import sample_one_image_pil
 
     vae = MagicMock()
     vae.decode.return_value = SimpleNamespace(sample=torch.tensor(rgb).view(1, 3, 1, 1).expand(1, 3, 32, 32))
@@ -119,7 +119,7 @@ def test_flagged_library_output_is_never_returned(_enc, fake_age, rgb, refused) 
 
 
 def test_sample_main_screens_outputs_before_any_save() -> None:
-    import utils.generation.sample_main as sm
+    import utils.generation.sample_run as sm
 
     main = next(
         n
@@ -128,16 +128,17 @@ def test_sample_main_screens_outputs_before_any_save() -> None:
     )
     calls = [n for n in ast.walk(main) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
     guard = [c.lineno for c in calls if c.func.id == "require_image_allowed" and ast.unparse(c.args[0]) == "finals"]
-    saves = [c.lineno for c in calls if c.func.id in ("_save", "save_rgb")]
+    saves = [c.lineno for c in calls if c.func.id in ("_save", "save_rgb", "save_game_image")]
     assert guard and saves and max(guard) < min(saves)
 
 
 def test_conditioning_image_paths_cover_every_image_flag() -> None:
     from utils.generation.sample_cli_parser import build_sample_parser
-    from utils.generation.sample_main import conditioning_image_paths
+    from utils.generation.sample_core import conditioning_image_paths
 
     flags = {
         "--init-image": "init.png",
+        "--edit-image": "edit.png",
         "--control-image": "ctl.png",
         "--reference-image": "ref.png",
         "--post-reference-image": "post.png",
@@ -149,7 +150,7 @@ def test_conditioning_image_paths_cover_every_image_flag() -> None:
         "--control": "ctl2.png:canny:0.7",
     }
     args = build_sample_parser().parse_args(["--ckpt", "x.pt", "--prompt", "p", *sum(flags.items(), ())])
-    want = {"init", "ctl", "ref", "post", "rag", "rag1", "rag2", "dis", "style", "mood", "ctl2"}
+    want = {"init", "edit", "ctl", "ref", "post", "rag", "rag1", "rag2", "dis", "style", "mood", "ctl2"}
     assert {Path(p).stem for p in conditioning_image_paths(args)} == want
 
 
@@ -166,7 +167,7 @@ class _FakeTagger:
         self.model_dir, self.threshold = Path("wd"), threshold
 
     def scores(self, img):
-        from utils.caption.wd_tagger import WDTag
+        from utils.captioning import WDTag
 
         child = 0.3 if "kid" in Path(img).name else 0.05  # above SCREEN_THRESHOLD, below the caption threshold
         return [WDTag("solo", "general", 0.9), WDTag("female_child", "general", child)]
@@ -176,7 +177,7 @@ class _FakeTagger:
 
 
 def test_wd_screen_drops_youth_rows(tmp_path, monkeypatch) -> None:
-    import setup.tag_manifest_wd as tmw
+    import setup.manifests as tmw
 
     for name in ("adult.png", "kid.png", "tagged.png"):
         Image.fromarray(GREEN).save(tmp_path / name)
@@ -201,7 +202,7 @@ def test_wd_screen_drops_youth_rows(tmp_path, monkeypatch) -> None:
 
 
 def test_wd_tagger_input_format_and_categories(tmp_path, monkeypatch) -> None:
-    from utils.caption.wd_tagger import WDTagger
+    from utils.captioning import WDTagger
 
     (tmp_path / "model.onnx").write_bytes(b"")
     (tmp_path / "selected_tags.csv").write_text(
@@ -263,7 +264,7 @@ def test_visual_facts_mentions_parts() -> None:
 
 def test_dissect_background_full_mask(tmp_path: Path) -> None:
     # Heavy models are not required for background extraction.
-    from utils.generation.image_dissection import dissect_images_to_parts
+    from utils.generation.editing import dissect_images_to_parts
 
     img_p = tmp_path / "a.png"
     Image.new("RGB", (64, 32), (10, 20, 30)).save(img_p)
@@ -325,7 +326,7 @@ def test_metadata_only_without_image_file():
 
 
 # ==================================================================================================
-# test_image_resize: Tests for utils.image_resize fitting modes.
+# test_image_resize: Tests for utils.quality.finishing fitting modes.
 # ==================================================================================================
 
 

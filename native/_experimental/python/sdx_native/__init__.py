@@ -1,1 +1,1 @@
-"""Python bindings / helpers for ``native/`` (Rust, Zig, Go, C++, CUDA, and pure-Python JSONL tools)."""
+"""Python side of ``native/``: tool discovery (``native_tools``), ctypes bindings (``ffi``), caption hygiene."""

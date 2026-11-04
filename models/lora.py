@@ -8,9 +8,17 @@ Supported checkpoint layouts:
 
 Stacking many adapters at high strength blows out the style, so per-layer scales can be normalised to a
 total budget (and per-role budgets).
+
+Training: ``inject_trainable_lora`` wraps ``nn.Linear`` layers with trainable LoRA / DoRA adapters
+(``TrainableLoRALinear``) and freezes the base weights; ``lora_state_dict`` saves them with the same key
+convention the loader reads, so a trained adapter drops straight into ``sample.py --lora``.
 """
 
+from __future__ import annotations
+
+import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -130,7 +138,7 @@ class MultiLoRALinear(nn.Module):
 
     A LoRA adapter adds ``strength * alpha/rank * x A^T B^T``. A DoRA adapter with a per-output-row magnitude
     ``m`` uses ``W' = m * (W + alpha/rank * B A) / ||W + alpha/rank * B A||_row`` (the formula
-    ``models.lora_train`` trains) and adds ``strength * x (W' - W)^T``.
+    ``inject_trainable_lora`` trains) and adds ``strength * x (W' - W)^T``.
     """
 
     def __init__(self, linear: nn.Linear):
@@ -168,7 +176,7 @@ class MultiLoRALinear(nn.Module):
 
     def effective_scales(self) -> list[float]:
         """Per-adapter ``strength * alpha / rank`` (the multiplier on a LoRA delta)."""
-        return [s * r for s, r in zip(self._strengths, self._alpha_ratios)]
+        return [s * r for s, r in zip(self._strengths, self._alpha_ratios, strict=True)]
 
     def set_scale_normalization(
         self,
@@ -191,7 +199,7 @@ class MultiLoRALinear(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.linear(x)
-        for ad, strength, ratio in zip(self._adapter_params, self._strengths, self._alpha_ratios):
+        for ad, strength, ratio in zip(self._adapter_params, self._strengths, self._alpha_ratios, strict=True):
             if "dora_mag" in ad:
                 w = self.linear.weight
                 merged = w + ratio * (ad["up"] @ ad["down"])
@@ -297,3 +305,141 @@ def apply_loras(
         touched += 1
 
     return model, touched
+
+
+# Default injection targets: attention projections and MLP layers, matched by
+# substring against each Linear's dotted module path. Covers the DiT blocks
+# without touching embedders/heads.
+DEFAULT_TARGETS: tuple[str, ...] = ("qkv", "q_proj", "k_proj", "v_proj", "proj", "fc1", "fc2", "mlp")
+
+
+class TrainableLoRALinear(nn.Module):
+    """``nn.Linear`` + a single trainable LoRA/DoRA adapter. Base weight frozen."""
+
+    def __init__(self, linear: nn.Linear, *, rank: int, alpha: float, use_dora: bool = False):
+        super().__init__()
+        self.linear = linear
+        for p in self.linear.parameters():
+            p.requires_grad = False
+
+        in_f = linear.in_features
+        out_f = linear.out_features
+        self.rank = int(rank)
+        self.alpha = float(alpha)
+        self.scaling = self.alpha / max(1, self.rank)
+        self.use_dora = bool(use_dora)
+
+        dev = linear.weight.device
+        dtype = linear.weight.dtype
+        # A (down): rank x in, B (up): out x rank. B starts at zero so the
+        # adapter is an identity at step 0 (standard LoRA init).
+        self.lora_down = nn.Parameter(torch.empty(self.rank, in_f, device=dev, dtype=dtype))
+        self.lora_up = nn.Parameter(torch.zeros(out_f, self.rank, device=dev, dtype=dtype))
+        nn.init.kaiming_uniform_(self.lora_down, a=math.sqrt(5))
+
+        if self.use_dora:
+            # Magnitude of each output column of the (frozen) base weight.
+            base_norm = torch.linalg.norm(linear.weight.detach(), dim=1)
+            self.dora_magnitude = nn.Parameter(base_norm.to(device=dev, dtype=dtype))
+        else:
+            self.register_parameter("dora_magnitude", None)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not self.use_dora:
+            base = self.linear(x)
+            delta = (x @ self.lora_down.T @ self.lora_up.T) * self.scaling
+            return base + delta
+
+        # DoRA: renormalize (W + dW) to the learned per-column magnitude.
+        w = self.linear.weight
+        dw = (self.lora_up @ self.lora_down) * self.scaling
+        merged = w + dw
+        norm = torch.linalg.norm(merged, dim=1).clamp_min(1e-6)
+        directional = merged / norm.unsqueeze(1)
+        eff_w = self.dora_magnitude.unsqueeze(1) * directional
+        return nn.functional.linear(x, eff_w, self.linear.bias)
+
+    def adapter_state(self, base_key: str) -> dict[str, torch.Tensor]:
+        """Adapter tensors keyed for the inference loader (``apply_loras``)."""
+        out = {
+            f"{base_key}.lora_down.weight": self.lora_down.detach().cpu(),
+            f"{base_key}.lora_up.weight": self.lora_up.detach().cpu(),
+            f"{base_key}.alpha": torch.tensor(float(self.alpha)),
+        }
+        if self.dora_magnitude is not None:
+            out[f"{base_key}.dora_magnitude_vector"] = self.dora_magnitude.detach().cpu()
+        return out
+
+
+def _iter_target_linears(model: nn.Module, targets: Sequence[str]) -> list[tuple[nn.Module, str, str, nn.Linear]]:
+    """``(parent_module, attr_name, dotted_path, linear)`` for every Linear whose path contains a target."""
+    found: list[tuple[nn.Module, str, str, nn.Linear]] = []
+    module_by_path = dict(model.named_modules())
+    for path, module in module_by_path.items():
+        if not isinstance(module, nn.Linear):
+            continue
+        if targets and not any(t in path for t in targets):
+            continue
+        parent_path, _, attr = path.rpartition(".")
+        parent = module_by_path.get(parent_path, model)
+        found.append((parent, attr, path, module))
+    return found
+
+
+def _filter_layer_group(
+    found: list[tuple[nn.Module, str, str, nn.Linear]], layer_group: str
+) -> list[tuple[nn.Module, str, str, nn.Linear]]:
+    """Keep one depth third of the blocks, with the same split ``models.lora.apply_loras`` uses at inference."""
+    known = [i for i in (_extract_layer_index(path) for _, _, path, _ in found) if i is not None]
+    lo, hi = (min(known), max(known)) if known else (0, 0)
+    return [f for f in found if layer_in_group(_extract_layer_index(f[2]), layer_group, lo, hi)]
+
+
+def inject_trainable_lora(
+    model: nn.Module,
+    *,
+    rank: int = 16,
+    alpha: float = 16.0,
+    use_dora: bool = False,
+    targets: Sequence[str] | None = None,
+    layer_group: str = "all",
+) -> tuple[list[nn.Parameter], int]:
+    """Freeze ``model`` and wrap target Linear layers with trainable adapters.
+
+    ``layer_group`` (all/first/middle/last) limits adapters to a third of block depth.
+    Returns ``(trainable_params, num_layers_wrapped)``.
+    """
+    targets = tuple(targets) if targets is not None else DEFAULT_TARGETS
+
+    # Freeze everything first; adapters below re-enable grad on their own params.
+    for p in model.parameters():
+        p.requires_grad = False
+
+    found = _filter_layer_group(_iter_target_linears(model, targets), str(layer_group or "all").strip().lower())
+    for parent, attr, _path, linear in found:
+        setattr(parent, attr, TrainableLoRALinear(linear, rank=rank, alpha=alpha, use_dora=use_dora))
+    return [p for p in model.parameters() if p.requires_grad], len(found)
+
+
+def lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
+    """Collect adapter-only tensors from all injected layers, keyed for inference."""
+    out: dict[str, torch.Tensor] = {}
+    for path, module in model.named_modules():
+        if isinstance(module, TrainableLoRALinear):
+            # ``path`` ends at the wrapper; the inference loader resolves the same
+            # dotted path to this module and reads its adapter tensors.
+            out.update(module.adapter_state(path))
+    return out
+
+
+def unfreeze_control_encoder(model: nn.Module) -> int:
+    """Re-enable gradients on the in-DiT ControlNet encoder (for LoRA + control training)."""
+    raw = model.module if hasattr(model, "module") else model
+    enc = getattr(raw, "control_encoder", None)
+    if enc is None:
+        return 0
+    n = 0
+    for p in enc.parameters():
+        p.requires_grad = True
+        n += p.numel()
+    return n

@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from config.defaults._lexicon import merge_csv_unique
+from config.prompts import merge_csv_unique
 
 # ==================================================================================================
 # frontier_compiler
@@ -994,7 +994,7 @@ def _sample_palette(pts: list[tuple[float, str]], u: float) -> str:
         return pts[0][1]
     if u >= pts[-1][0]:
         return pts[-1][1]
-    for a, b in zip(pts, pts[1:]):
+    for a, b in zip(pts, pts[1:], strict=False):
         if a[0] <= u <= b[0]:
             return a[1] if (u - a[0]) < (b[0] - u) else b[1]
     return pts[-1][1]
@@ -1760,7 +1760,7 @@ class TensionCurve:
             return pts[0].value
         if u >= pts[-1].at:
             return pts[-1].value
-        for a, b in zip(pts, pts[1:]):
+        for a, b in zip(pts, pts[1:], strict=False):
             if a.at <= u <= b.at:
                 span = max(1e-6, b.at - a.at)
                 t = (u - a.at) / span

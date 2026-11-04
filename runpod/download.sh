@@ -13,9 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
 # shellcheck source=/dev/null
-source "$ROOT/runpod/lib/hf_sites.sh"
-# shellcheck source=/dev/null
-source "$ROOT/runpod/lib/turbo_hf.sh"
+source "$ROOT/runpod/lib.sh"
 cd "$ROOT"
 
 MODELS=1
@@ -40,18 +38,18 @@ read -r -a HF_SITES <<<"$SDX_HF_SITES"
 
 if [ "$MODELS" = 1 ]; then
   echo "==> Pretrained models -> $SDX_PRETRAINED"
-  python setup/download_pretrained.py --dest "$SDX_PRETRAINED" --workers "${SDX_DL_WORKERS:-16}" --profile "${SDX_MODEL_PROFILE:-full}"
+  python setup/download.py pretrained --dest "$SDX_PRETRAINED" --workers "${SDX_DL_WORKERS:-16}" --profile "${SDX_MODEL_PROFILE:-full}"
 fi
 
 if [ "$DATASETS" = 1 ]; then
   DATA_LOCK="${SDX_DATA_LOCK:-$SDX_DATA/.data_download.lock}"
   mkdir -p "$(dirname "$DATA_LOCK")"
-  if ! pgrep -af "[d]ownload_hf_datasets" >/dev/null 2>&1; then
+  if ! pgrep -af "[d]ownload.py hf-datasets" >/dev/null 2>&1; then
     rm -f "$DATA_LOCK" "$SDX_DATA/.scrape.lock"
   fi
   exec 9>"$DATA_LOCK"
   if ! flock -n 9; then
-    if pgrep -af "[d]ownload_hf_datasets" >/dev/null 2>&1; then
+    if pgrep -af "[d]ownload.py hf-datasets" >/dev/null 2>&1; then
       echo "ERROR: dataset download already running (lock: $DATA_LOCK)" >&2
       exit 1
     fi
@@ -68,29 +66,29 @@ if [ "$DATASETS" = 1 ]; then
       --image-format "${SDX_HF_IMAGE_FORMAT:-jpg}"
     )
     [ -n "${SDX_HF_FORCE:-}" ] && HF_ARGS+=(--force)
-    python setup/download_hf_datasets.py "${HF_ARGS[@]}"
+    python setup/download.py hf-datasets "${HF_ARGS[@]}"
 fi
 
 if [ "$DATA_PREP" = 1 ]; then
-  python setup/merge_manifests.py \
+  python setup/manifests.py merge \
     --data-root "$SDX_DATA" \
     --out "$SDX_DATA/combined/manifest.jsonl" \
     --sites "${HF_SITES[@]}"
 
-  python setup/cleanup_scrape_media.py \
+  python setup/manifests.py cleanup-media \
     --data-root "$SDX_DATA" \
     --sites "${HF_SITES[@]}" \
     --rewrite-manifests \
     --backup \
     --drop-raw-media || true
 
-  python setup/sanitize_manifest.py \
+  python setup/manifests.py sanitize \
     --manifest "$SDX_DATA/combined/manifest.jsonl" \
     --data-root "$SDX_DATA" \
     --backup \
     --verify-images
 
-  python setup/build_artist_index.py \
+  python setup/indexes.py artist-index \
     --data-root "$SDX_DATA" \
     --out "$SDX_DATA/artist_index.json"
 fi
@@ -100,7 +98,7 @@ if [ "$WD_TAG" = 1 ] && [ "${SDX_USE_WD_TAGGER:-1}" = "1" ]; then
   if [ -f "$TAG_MANIFEST" ]; then
     echo "==> WD EVA02 tagger enrichment"
     TAGGED="${SDX_TAGGED_MANIFEST:-$SDX_DATA/tagged/manifest.jsonl}"
-    python setup/tag_manifest_wd.py \
+    python setup/manifests.py wd-tag \
       --manifest "$TAG_MANIFEST" \
       --data-root "$SDX_DATA" \
       --out "$TAGGED" \
@@ -122,7 +120,7 @@ if [ "$PREPROCESS" = 1 ]; then
 
   echo "==> Seed RAG corpus"
   RAG="${SDX_RAG_CORPUS:-$SDX_DATA/rag_corpus.jsonl}"
-  python setup/build_rag_corpus.py --manifest "$MANIFEST" --out "$RAG"
+  python setup/indexes.py rag-corpus --manifest "$MANIFEST" --out "$RAG"
 
   echo "==> Caption enrichment (VLM + RAG)"
   ENRICH_OUT="${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}"
@@ -134,17 +132,17 @@ if [ "$PREPROCESS" = 1 ]; then
     if [ "${SDX_ENRICH_REVERSE:-0}" != "1" ]; then ENRICH_ARGS+=(--no-reverse-search); fi
     ENRICH_ARGS+=(--booru-only)
   fi
-  python setup/enrich_manifest_captions.py "${ENRICH_ARGS[@]}" || echo "WARN: enrichment failed (non-fatal)."
+  python setup/manifests.py enrich "${ENRICH_ARGS[@]}" || echo "WARN: enrichment failed (non-fatal)."
 
   echo "==> Final RAG corpus"
   RAG_MANIFEST="$MANIFEST"
   if [ -f "$ENRICH_OUT" ] && [ -s "$ENRICH_OUT" ]; then RAG_MANIFEST="$ENRICH_OUT"; fi
-  python setup/build_rag_corpus.py --manifest "$RAG_MANIFEST" --out "$RAG"
+  python setup/indexes.py rag-corpus --manifest "$RAG_MANIFEST" --out "$RAG"
 
   echo "==> Control maps"
   CTRL_MANIFEST="$MANIFEST"
   if [ -f "$ENRICH_OUT" ] && [ -s "$ENRICH_OUT" ]; then CTRL_MANIFEST="$ENRICH_OUT"; fi
-  python setup/preprocess_control_maps.py \
+  python setup/manifests.py control-maps \
     --manifest "$CTRL_MANIFEST" \
     --data-root "$SDX_DATA" \
     --out "${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}" \

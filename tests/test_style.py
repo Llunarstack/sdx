@@ -1,4 +1,4 @@
-"""Tests for config.defaults.style_artists extraction helpers.
+"""Tests for config.styles extraction helpers.
 
 Also holds what used to be: test_style_artists, test_style_genome, test_style_guidance, test_style_native.
 """
@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 import numpy as np
-from config.defaults.style_artists import (
+from config.styles import (
     DIGITAL_ART_STYLE_TAGS_NSFW,
     DIGITAL_ART_STYLE_TAGS_SFW,
     RENDERED_3D_STYLE_TAGS_NSFW,
@@ -17,21 +17,28 @@ from config.defaults.style_artists import (
     TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_NSFW,
     TRADITIONAL_DRAWN_PAINTED_STYLE_TAGS_SFW,
     compact_style_summary_for_clip,
+    detect_style_ids,
     detect_style_tag_buckets,
     extract_style_from_text,
     matched_style_facet_ids,
     matching_style_tags_in_prompt,
     style_embedding_auxiliary_text,
+    style_guidance_fragments,
     style_tag_quality_fragments,
 )
-from config.defaults.style_guidance import detect_style_ids, style_guidance_fragments
-from utils.prompt.style_explore import StyleExplorePlanner, compile_genome_pair
-from utils.prompt.style_genome import StyleGenome, is_genome_novel_enough
-from utils.prompt.style_inventor import StyleInventor
-from utils.prompt.style_native import pick_best_embedding_index, style_native_status, text_overlap
+from utils.prompt.style import (
+    StyleExplorePlanner,
+    StyleGenome,
+    StyleInventor,
+    compile_genome_pair,
+    is_genome_novel_enough,
+    pick_best_embedding_index,
+    style_native_status,
+    text_overlap,
+)
 
 # ==================================================================================================
-# test_style_artists: Tests for config.defaults.style_artists extraction helpers.
+# test_style_artists: Tests for config.styles extraction helpers.
 # ==================================================================================================
 
 
@@ -183,7 +190,7 @@ def test_explore_planner_manifest(tmp_path: Path):
 
 
 def test_chaos_fusion_hypermutate():
-    from utils.prompt.style_genome_chaos import (
+    from utils.prompt.style import (
         apply_chaos_level,
         fuse_genomes,
         hypermutate,
@@ -210,7 +217,7 @@ def test_chaos_fusion_hypermutate():
 
 
 def test_insane_explore_plan():
-    from utils.prompt.style_explore import StyleExplorePlanner
+    from utils.prompt.style import StyleExplorePlanner
 
     planner = StyleExplorePlanner(use_qwen=False)
     plan = planner.plan(
@@ -228,7 +235,7 @@ def test_insane_explore_plan():
 
 
 # ==================================================================================================
-# test_style_guidance: Tests for config.defaults.style_guidance.
+# test_style_guidance: Tests for config.styles.
 # ==================================================================================================
 
 
@@ -324,7 +331,7 @@ def test_text_overlap():
 def test_explore_stats_python_fallback(tmp_path):
     import json
 
-    from utils.prompt.style_native import explore_stats_python
+    from utils.prompt.style import explore_stats_python
 
     p = tmp_path / "m.jsonl"
     rows = [
@@ -341,11 +348,11 @@ def test_explore_stats_python_fallback(tmp_path):
 def test_rust_style_ops_when_built():
     import pytest
 
-    from sdx_native import style_ops_native
+    from sdx_native import ffi
 
-    if not style_ops_native.available():
-        pytest.skip("sdx_prompt_ops release DLL not built or missing style symbols")
-    j = style_ops_native.maybe_token_jaccard("a, b", "a, c")
+    if not ffi.rust_available():
+        pytest.skip("sdx_rs release DLL not built (cargo build --release in native/rust)")
+    j = ffi.maybe_token_jaccard("a, b", "a, c")
     assert j is not None and j > 0
 
 

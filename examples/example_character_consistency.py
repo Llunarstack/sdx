@@ -14,9 +14,9 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from models.enhanced_dit import EnhancedDiT  # noqa: E402
+from models.dit_variants import EnhancedDiT  # noqa: E402
 from training.enhanced_trainer import EnhancedTrainer, EnhancedTrainingBatch  # noqa: E402
-from utils.consistency.character_consistency import (  # noqa: E402
+from utils.consistency import (  # noqa: E402
     CharacterDatabase,
     PhysicalFeatures,
     StylePreferences,

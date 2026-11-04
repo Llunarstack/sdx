@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipelines.book_comic.book_training_helpers import (  # noqa: E402
+from pipelines.book_comic.training import (  # noqa: E402
     build_train_command,
     resolve_book_train_settings,
     run_native_manifest_preflight,

@@ -1,12 +1,13 @@
 """Training data conditioning: aspect-ratio buckets, bucket batches, caption tag front-loading, caption dropout.
 
-Also holds what used to be: test_training_data, test_training_objectives, test_training_wiring.
+Also holds what used to be: test_training_data, test_training_objectives, test_training_wiring, test_ar_curriculum, test_device_perf, test_error_handling_utils, test_preference_rl, test_srpo_reward, test_timestep_curriculum.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -16,12 +17,34 @@ from data.caption_utils import front_load_tags
 from data.manifest_utils import negative_caption_from_row, pick_training_manifest
 from data.t2i_dataset import nearest_aspect_bucket
 from diffusion import create_diffusion
-from diffusion.schedules import get_beta_schedule
-from diffusion.spectral_sfp import spectral_sfp_per_sample_loss
-from diffusion.timestep_sampling import get_timestep_loss_weight
+from diffusion.flow_matching import spectral_sfp_per_sample_loss
+from diffusion.schedules import get_beta_schedule, get_timestep_loss_weight
 from models.dit_text import TextEmbedder
 from PIL import Image
-from utils.training.ot_noise_pairing import pair_noise_to_latents
+from utils.training.monitoring import get_model_info
+from utils.training.objectives import (
+    pair_noise_to_latents,
+    parse_ar_order_mix,
+    parse_timestep_curriculum_schedule,
+    resolve_ar_for_step,
+    resolve_timestep_kwargs_for_step,
+)
+from utils.training.perf import (
+    dataloader_perf_kwargs,
+    encode_text_multi_group,
+    parallel_train_torchrun_example,
+    resolve_training_num_workers,
+    training_perf_hints,
+)
+from utils.training.preference import (
+    GRPOGuardConfig,
+    SRPOConfig,
+    flow_sde_step,
+    grpo_guard_weighted_loss,
+    grpo_weighted_loss,
+    semantic_relative_reward,
+    timestep_reward_mask,
+)
 
 # ==================================================================================================
 # test_training_data: Training data conditioning: aspect-ratio buckets, bucket batches, caption tag front-loading, caption dropout.
@@ -183,7 +206,7 @@ def test_ot_pairing_permutes_noise_and_lowers_cost():
 
 
 def test_ema_warmup():
-    from train import ema_decay_at
+    from training.loop import ema_decay_at
 
     assert ema_decay_at(0, 0.9999) == pytest.approx(0.1)
     assert ema_decay_at(100, 0.9999) == pytest.approx(101 / 110)
@@ -263,7 +286,7 @@ def test_dataset_reads_negative_prompt_hint(tmp_path: Path):
 
 def test_control_manifest_row_shape(tmp_path: Path):
     """Control preprocess output must include fields train.py reads."""
-    from setup.preprocess_control_maps import _extract_one
+    from setup.manifests import _extract_one
 
     data_root = tmp_path / "sdx"
     img_dir = data_root / "danbooru" / "images"
@@ -291,12 +314,9 @@ def test_pipeline_scripts_exist():
     root = Path(__file__).resolve().parents[1]
     required = [
         "train.py",
-        "setup/download_datasets.py",
-        "setup/merge_manifests.py",
-        "setup/enrich_manifest_captions.py",
-        "setup/build_rag_corpus.py",
-        "setup/preprocess_control_maps.py",
-        "setup/build_artist_index.py",
+        "setup/download.py",
+        "setup/manifests.py",
+        "setup/indexes.py",
         "scripts/run_pipeline.py",
         "runpod/download.sh",
         "runpod/train.sh",
@@ -307,7 +327,7 @@ def test_pipeline_scripts_exist():
 
 
 def test_train_cli_has_manifest_arg():
-    from training.train_cli_parser import build_train_arg_parser
+    from training.cli import build_train_arg_parser
 
     p = build_train_arg_parser()
     args = p.parse_args(["--manifest-jsonl", "x.jsonl", "--data-path", "/data"])
@@ -315,8 +335,8 @@ def test_train_cli_has_manifest_arg():
 
 
 def test_enriched_row_fields_survive_merge_research():
-    from setup.enrich_manifest_captions import _merge_research_row
-    from utils.caption.prompt_research import PromptResearchResult
+    from setup.manifests import _merge_research_row
+    from utils.captioning import PromptResearchResult
 
     row = {
         "caption": "1girl, solo",
@@ -332,3 +352,222 @@ def test_enriched_row_fields_survive_merge_research():
     assert "miku" in merged["caption"].lower()
     assert merged["negative_caption"] == "low quality"
     assert merged["booru_caption"] == "1girl, solo"
+
+
+# ==================================================================================================
+# test_ar_curriculum: Tests for utils.training.objectives runtime resolution.
+# ==================================================================================================
+
+
+def test_parse_ar_order_mix_filters_and_dedupes():
+    out = parse_ar_order_mix("raster,zorder,snake,spiral,zorder,invalid")
+    assert out == ["raster", "zorder", "snake", "spiral"]
+
+
+def test_resolve_ar_for_step_linear_and_mix():
+    # linear ramp 0 -> 4 over steps; order cycles deterministic.
+    b0, o0 = resolve_ar_for_step(
+        0,
+        base_blocks=2,
+        base_order="raster",
+        curriculum_mode="linear",
+        ramp_start=0,
+        ramp_end=100,
+        curriculum_start_blocks=0,
+        curriculum_target_blocks=4,
+        order_mix="raster,snake",
+    )
+    b1, o1 = resolve_ar_for_step(
+        60,
+        base_blocks=2,
+        base_order="raster",
+        curriculum_mode="linear",
+        ramp_start=0,
+        ramp_end=100,
+        curriculum_start_blocks=0,
+        curriculum_target_blocks=4,
+        order_mix="raster,snake",
+    )
+    assert b0 == 0 and o0 in ("raster", "snake")
+    assert b1 in (2, 4) and o1 in ("raster", "snake")
+
+
+def test_resolve_ar_for_step_none_uses_base():
+    b, o = resolve_ar_for_step(
+        999,
+        base_blocks=2,
+        base_order="zorder",
+        curriculum_mode="none",
+    )
+    assert b == 2
+    assert o == "zorder"
+
+
+# ==================================================================================================
+# test_device_perf: Device / perf helpers (no GPU required for string/dataclass checks).
+# ==================================================================================================
+
+
+def test_parallel_train_torchrun_example_shape() -> None:
+    s = parallel_train_torchrun_example(3, extra="--data-path x")
+    assert "--standalone" in s and "--nproc_per_node=3" in s
+    assert "--data-path x" in s and s.strip().startswith("python")
+
+
+def test_training_perf_hints_keys() -> None:
+    h = training_perf_hints(num_workers=4, world_size=2)
+    assert "world_size=2" in h.ddp_note
+    assert "expandable_segments" in h.vram_fragmentation_note
+    assert "num_workers=4" in h.datloader_note
+
+
+def test_dataloader_perf_kwargs_prefetch() -> None:
+    kw = dataloader_perf_kwargs(num_workers=4, prefetch_factor=3)
+    assert kw["num_workers"] == 4
+    assert kw["prefetch_factor"] == 3
+    assert kw["pin_memory"] is False or kw["pin_memory"] is True
+    kw0 = dataloader_perf_kwargs(num_workers=0, prefetch_factor=2)
+    assert "prefetch_factor" not in kw0
+
+
+def test_resolve_training_num_workers_auto() -> None:
+    assert resolve_training_num_workers(-1, 10_000, 32, auto=False) >= 2
+    assert resolve_training_num_workers(6, 10_000, 32, auto=False) == 6
+
+
+def test_encode_text_multi_group() -> None:
+    calls: list = []
+
+    def _fake_encode(caps: list) -> list:
+        calls.append(list(caps))
+        return [[len(c)] for c in caps]
+
+    g0, g1, g2 = encode_text_multi_group([["p1", "p2"], None, ["s1"]], _fake_encode)
+    assert calls == [["p1", "p2", "s1"]]
+    assert g0 == [[2], [2]]
+    assert g1 is None
+    assert g2 == [[2]]
+
+
+# ==================================================================================================
+# test_error_handling_utils: Tests for ``utils.training.monitoring`` helpers.
+# ==================================================================================================
+
+
+def test_get_model_info_linear() -> None:
+    m = torch.nn.Linear(4, 2, bias=True)
+    info = get_model_info(m)
+    assert info["total_parameters"] == 10  # 4*2 + 2
+    assert info["trainable_parameters"] == 10
+    assert "model_size_mb" in info
+    assert info["device"] == torch.device("cpu")
+
+
+# ==================================================================================================
+# test_preference_rl: Preference-RL weighting (GRPO / GRPO-Guard / SRPO) and the Flow-GRPO SDE rollout step.
+# ==================================================================================================
+
+
+def _grad_per_sample(loss_fn) -> torch.Tensor:
+    per = torch.ones(4, requires_grad=True)
+    loss_fn(per).backward()
+    return per.grad
+
+
+def test_grpo_fits_high_reward_rollouts_hardest():
+    adv = torch.tensor([2.0, 0.5, -0.5, -2.0])
+    g = _grad_per_sample(lambda per: grpo_weighted_loss(per, adv))
+    assert torch.all(g[:-1] > g[1:])
+
+
+def test_grpo_needs_the_group():
+    with pytest.raises(ValueError):
+        grpo_weighted_loss(torch.ones(1), torch.ones(1))
+
+
+def test_grpo_guard_weights_increase_with_advantage():
+    adv = torch.tensor([2.0, 0.5, -0.5, -2.0])
+    cfg = GRPOGuardConfig(grad_reweight=False)
+    g = _grad_per_sample(lambda per: grpo_guard_weighted_loss(per, adv, torch.full((4,), 0.5), config=cfg))
+    assert torch.all(g[:-1] >= g[1:]) and g[0] > g[-1]
+
+
+def test_flow_sde_keeps_the_flow_marginals():
+    """With the exact velocity of 1-D Gaussian data, the SDE must still land on the data distribution."""
+    torch.manual_seed(0)
+    data_std = 0.5
+
+    def velocity(x, s):  # E[eps - x0 | x_s] for x0 ~ N(0, data_std^2)
+        var = (1 - s) ** 2 * data_std**2 + s**2
+        return x * (s - (1 - s) * data_std**2) / var
+
+    x = torch.randn(20000)
+    grid = torch.linspace(1.0, 0.0, 201).tolist()
+    for s_cur, s_next in zip(grid[:-1], grid[1:]):
+        v = velocity(x, s_cur)
+        x = flow_sde_step(x, v, s_cur, s_next, noise_level=0.7) if s_next > 0 else x - s_cur * v
+    assert float(x.std()) == pytest.approx(data_std, rel=0.05)
+
+
+# ==================================================================================================
+# test_srpo_reward: SRPO realism reward + late-timestep mask (``utils.training.preference``, wired via ``train_flow_grpo --srpo``).
+# ==================================================================================================
+
+
+def test_semantic_relative_reward_cancels_global_bias():
+    def biased_score(images, text):
+        return torch.full((images.shape[0],), 10.0) + (1.0 if "realistic" in text else 0.0)
+
+    cfg = SRPOConfig(control_positive="realistic", control_negative="plastic")
+    r = semantic_relative_reward(biased_score, torch.zeros(3, 3, 8, 8), "portrait", config=cfg)
+    assert torch.allclose(r, torch.ones(3))
+
+
+def test_semantic_relative_reward_works_on_float_scores():
+    cfg = SRPOConfig(control_positive="natural", control_negative="waxy")
+    assert semantic_relative_reward(lambda img, text: 0.7 if "natural" in text else 0.4, None, "", config=cfg) == (
+        pytest.approx(0.3)
+    )
+
+
+def test_timestep_mask_zeroes_late_steps():
+    mask = timestep_reward_mask(torch.tensor([0.1, 0.5, 0.8, 0.95]), cutoff=0.75)
+    assert mask.tolist() == [1.0, 1.0, 0.0, 0.0]
+
+
+# ==================================================================================================
+# test_timestep_curriculum: Tests for ``utils.training.objectives``.
+# ==================================================================================================
+
+
+def test_parse_curriculum_segments() -> None:
+    phases = parse_timestep_curriculum_schedule("0:high_noise|40000:logit_normal:0:1.5")
+    assert len(phases) == 2
+    assert phases[0].start_step == 0
+    assert phases[0].mode == "high_noise"
+    assert phases[1].mode == "logit_normal"
+    assert phases[1].logit_mean == 0.0
+    assert phases[1].logit_std == 1.5
+
+
+def test_resolve_phase_by_global_step() -> None:
+    cfg = SimpleNamespace(
+        timestep_curriculum_schedule="0:high_noise|10:uniform",
+        timestep_sample_mode="logit_normal",
+        timestep_logit_mean=0.0,
+        timestep_logit_std=1.0,
+    )
+    assert resolve_timestep_kwargs_for_step(cfg, 0)["mode"] == "high_noise"
+    assert resolve_timestep_kwargs_for_step(cfg, 9)["mode"] == "high_noise"
+    assert resolve_timestep_kwargs_for_step(cfg, 10)["mode"] == "uniform"
+
+
+def test_empty_schedule_uses_flat_config() -> None:
+    cfg = SimpleNamespace(
+        timestep_curriculum_schedule="",
+        timestep_sample_mode="low_noise",
+        timestep_logit_mean=0.0,
+        timestep_logit_std=1.0,
+    )
+    kw = resolve_timestep_kwargs_for_step(cfg, 999)
+    assert kw["mode"] == "low_noise"

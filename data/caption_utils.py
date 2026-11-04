@@ -487,7 +487,7 @@ def apply_training_guidance_to_caption_pair(
     include_art_guidance_photography: bool = True,
 ) -> tuple[str, str]:
     """Shortcomings / art-medium / anatomy / style guidance on a caption pair (PromptStack guidance stage)."""
-    from utils.prompt.stack.stages.guidance import apply_training_guidance_pair
+    from utils.prompt.stack import apply_training_guidance_pair
 
     return apply_training_guidance_pair(
         caption,

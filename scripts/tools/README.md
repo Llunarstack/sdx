@@ -45,12 +45,11 @@ Equivalent module runs (also valid):
 
 | Tool | Purpose |
 |------|--------|
-| [preview_generation_prompt.py](preview_generation_prompt.py) | Print effective pos/neg after `content_controls` (no GPU / no checkpoint). |
-| [benchmark_suite.py](benchmark_suite.py) | Compare one or more checkpoints on a prompt suite with composite quality scores (text/count-aware + saturation), built-in packs (`top_contender_proxy_v1`, `text_heavy_v1`, `count_stress_v1`, `biz_visual_content_v1`), optional seed-robustness ranking (`--seed-list`, `--robustness-penalty`), and hard-case mining (`--export-hardcases-jsonl`). |
-| [training/mine_preference_pairs.py](training/mine_preference_pairs.py) | Convert benchmark `results.json` into DPO preference JSONL (win/lose + shared prompt), with optional hard-case boosting (`--hardcases-jsonl`, `--hardcase-extra-pairs`, `--hardcase-min-margin-scale`). |
-| [data/caption_hygiene.py](data/caption_hygiene.py) | JSONL caption QA: NFKC samples, duplicate fingerprints, pos/neg overlap (`sdx_native.text_hygiene`). |
-| [data/ar_tag_manifest.py](data/ar_tag_manifest.py) | Tag JSONL with `num_ar_blocks` / `ar_regime` from SDX DiT checkpoint (ViT alignment); see [docs/AR.md](../../docs/AR.md). |
-| [../../toolkit/README.md](../../toolkit/README.md) | **Toolkit** (repo root): `env_health`, `manifest_digest`, seeds — not under `scripts/tools/`. |
+| [prompts.py](prompts.py) | Print effective pos/neg after `content_controls` (no GPU / no checkpoint). |
+| [bench.py](bench.py) | Compare one or more checkpoints on a prompt suite with composite quality scores (text/count-aware + saturation), built-in packs (`top_contender_proxy_v1`, `text_heavy_v1`, `count_stress_v1`, `biz_visual_content_v1`), optional seed-robustness ranking (`--seed-list`, `--robustness-penalty`), and hard-case mining (`--export-hardcases-jsonl`). |
+| [bench.py](bench.py) | Convert benchmark `results.json` into DPO preference JSONL (win/lose + shared prompt), with optional hard-case boosting (`--hardcases-jsonl`, `--hardcase-extra-pairs`, `--hardcase-min-margin-scale`). |
+| [captions.py](captions.py) | JSONL caption QA: NFKC samples, duplicate fingerprints, pos/neg overlap (`sdx_native.text_hygiene`). |
+| [manifest.py](manifest.py) | Tag JSONL with `num_ar_blocks` / `ar_regime` from SDX DiT checkpoint (ViT alignment); see [docs/MODEL_STACK.md](../../docs/MODEL_STACK.md#block-wise-autoregressive-ar-generation). |
 
 ## See also
 

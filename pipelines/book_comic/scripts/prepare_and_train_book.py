@@ -22,16 +22,16 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipelines.book_comic.book_training_helpers import (  # noqa: E402
-    build_caption_normalize_command,
-    build_hf_export_command,
-    resolve_train_humanization_pack,
-)
 from pipelines.book_comic.scripts.train_book_model import (  # noqa: E402
     AR_PROFILES,
     add_manifest_gate_args,
     manifest_gate_command,
     split_passthrough,
+)
+from pipelines.book_comic.training import (  # noqa: E402
+    build_caption_normalize_command,
+    build_hf_export_command,
+    resolve_train_humanization_pack,
 )
 
 TRAIN_WRAPPER = Path(__file__).resolve().with_name("train_book_model.py")

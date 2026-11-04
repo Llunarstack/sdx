@@ -15,7 +15,7 @@ _HAS_TORCH = find_spec("torch") is not None
 _LAZY_EXPORTS = {
     "Text2ImageDataset": ".t2i_dataset",
     "collate_t2i": ".t2i_dataset",
-    "ResolutionBucketBatchSampler": ".bucket_batch_sampler",
+    "ResolutionBucketBatchSampler": ".t2i_dataset",
 }
 
 __all__ = list(_LAZY_EXPORTS)

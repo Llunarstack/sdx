@@ -25,10 +25,10 @@ class TrainConfig:
     region_layout_tag: str = "[layout]"  # prefix before regional block; "" to disable
     # Prepend adherence tags to training captions (see data/caption_utils.py).
     boost_adherence_caption: bool = False
-    # Append failure-mode prompt/negative hints per caption (see config.defaults.ai_image_shortcomings).
+    # Append failure-mode prompt/negative hints per caption (see config.prompts).
     train_shortcomings_mitigation: str = "none"  # "none" | "auto" | "all"
     train_shortcomings_2d: bool = False
-    # Artist-first medium guidance per caption (see config.defaults.art_mediums).
+    # Artist-first medium guidance per caption (see config.styles).
     train_art_guidance_mode: str = "none"  # "none" | "auto" | "all"
     train_art_guidance_photography: bool = True
     train_anatomy_guidance: str = "none"  # "none" | "lite" | "strong"
@@ -37,12 +37,12 @@ class TrainConfig:
     # NFKC + zero-width strip on training captions (see sdx_native.text_hygiene).
     caption_unicode_normalize: bool = False
     # Strip ( ) / [ ] emphasis brackets for T5 and pass token_weights to DiT
-    # (see utils/prompt/prompt_emphasis.py).
+    # (see utils/prompt/text.py).
     train_prompt_emphasis: bool = False
 
     # Part-aware / grounding
     # JSONL fields: grounding_mask, caption_global, caption_local, entity_captions
-    # See utils/training/part_aware_training.py
+    # See utils/training/objectives.py
     attn_grounding_loss_weight: float = 0.0  # VP-DDPM only; 0 = off
     attn_grounding_token_start: int = 0
     attn_grounding_token_end: int = 0  # 0 = all text positions
@@ -72,19 +72,25 @@ class TrainConfig:
     # "t5" = T5 only (default).
     # "triple" = T5 + CLIP-ViT-L/14 + CLIP-ViT-bigG/14 pooled tokens fused.
     # "penta" = T5 + CLIP-L + CLIP-bigG + CLIP-H + LongCLIP-L (4 extra fused tokens).
-    # See utils/modeling/text_encoder_bundle.py.
+    # See utils/modeling/encoders.py.
     text_encoder_mode: str = "t5"
     clip_text_encoder_l: str = ""  # empty = resolve via utils/modeling/model_paths.py
     clip_text_encoder_bigg: str = ""  # empty = resolve via utils/modeling/model_paths.py
     clip_text_encoder_h: str = ""  # penta: CLIP-ViT-H/14
     clip_text_encoder_long: str = ""  # penta: LongCLIP-L
-    vae_model: str = "stabilityai/sd-vae-ft-mse"
+    # 16-channel VAEs (FLUX / SD3 / REPA-E) keep far more detail than the SD 1.x 4-channel one. REPA-E's
+    # end-to-end-tuned FLUX VAE also trains diffusion faster. Latent channels / scale / shift are read
+    # from the VAE config at train time and saved into the checkpoint.
+    vae_model: str = "REPA-E/e2e-flux-vae"
+    vae_subfolder: str = ""  # e.g. "vae" when vae_model is a full pipeline repo
     # "kl"  = AutoencoderKL (classic Stable Diffusion VAE)
     # "rae" = AutoencoderRAE (Representation Autoencoder)
     autoencoder_type: str = "kl"
-    latent_scale: float = 0.18215
+    latent_scale: float = 0.18215  # SD 1.x value; overwritten from the VAE config by train.py
+    latent_shift: float = 0.0
+    latent_channels: int = 4
     # When RAE latent channels != 4: train a 1×1 bridge (RAELatentBridge) to/from
-    # DiT latents (see models/rae_latent_bridge.py).
+    # DiT latents (see models/conditioning.py RAELatentBridge).
     rae_use_latent_bridge: bool = True
     rae_bridge_cycle_weight: float = 0.01  # cycle loss z ≈ to_rae(to_dit(z)); 0 = off
 
@@ -127,7 +133,7 @@ class TrainConfig:
     # Note: changes model architecture — not compatible with checkpoints trained without it.
     qk_norm: bool = False
     # Block-wise AR mask (ACDiT-style): 0 = full bidirectional attention.
-    # 2 = 2×2 blocks, 4 = 4×4 blocks in raster order. See docs/AR.md.
+    # 2 = 2×2 blocks, 4 = 4×4 blocks in raster order. See docs/MODEL_STACK.md.
     num_ar_blocks: int = 0
     ar_block_order: str = "raster"  # "raster" | "zorder" | "snake" | "spiral"
     # Runtime AR schedule (applied in train loop; can change block count per step).
@@ -176,7 +182,7 @@ class TrainConfig:
     spectral_sfp_low_sigma: float = 0.22
     spectral_sfp_high_sigma: float = 0.22
     spectral_sfp_tau_power: float = 1.0
-    # OT noise–latent mini-batch coupling (see utils/training/ot_noise_pairing.py).
+    # OT noise–latent mini-batch coupling (see utils/training/objectives.py).
     ot_noise_pair_reg: float = 0.0  # 0 = off; Sinkhorn regulariser (e.g. 0.05)
     ot_noise_pair_iters: int = 40
     ot_noise_pair_mode: str = "soft"  # "soft" | "hungarian" (hungarian requires scipy)
@@ -189,12 +195,12 @@ class TrainConfig:
     # VP bridge auxiliary regulariser (shuffle-pair latent mix).
     bridge_aux_weight: float = 0.0  # 0 = off; try 0.02–0.15
     bridge_aux_lambda: float = 0.2  # mix x0 = (1-λ)x + λ·shuffle(x); in (0, 1]
-    # Timestep sampling distribution (see diffusion/timestep_sampling.py).
+    # Timestep sampling distribution (see diffusion/schedules.py).
     timestep_sample_mode: str = "uniform"  # "uniform" | "logit_normal" | "high_noise" | "low_noise"
     timestep_logit_mean: float = 0.0
     timestep_logit_std: float = 1.0
     # When non-empty, overrides timestep_sample_mode / logit params by training step; see
-    # utils/training/timestep_curriculum.py (e.g. "0:high_noise|40000:logit_normal:0:1|90000:low_noise").
+    # utils/training/objectives.py (e.g. "0:high_noise|40000:logit_normal:0:1|90000:low_noise").
     timestep_curriculum_schedule: str = ""
 
     # Training length
@@ -235,6 +241,10 @@ class TrainConfig:
 
     # Img2img training
     img2img_prob: float = 0.0  # 0 = off; e.g. 0.2 to learn image-to-image editing
+    # Instruction editing (in-context): rows with a source image (``init_image`` / ``source_image``) and an
+    # instruction caption train the model to edit; ``edit_source_dropout`` of steps stay plain text-to-image.
+    edit_conditioning: bool = False
+    edit_source_dropout: float = 0.1
 
     # MDM — Masked Diffusion Models style training
     # Randomly mask latent patches; model learns to inpaint masked regions.
@@ -329,10 +339,11 @@ def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: float | None = None
     is_enhanced = model_name.startswith("EnhancedDiT")
 
     if model_name.startswith("SuperiorViT"):
-        from models.hybrid_dit import HYBRID_EXTRAS_DEFAULTS
+        from models.dit_text import HYBRID_EXTRAS_DEFAULTS
 
         kw = {
             "input_size": latent_size,
+            "in_channels": int(getattr(cfg, "latent_channels", 4) or 4),
             "text_dim": text_dim,
             "class_dropout_prob": dropout,
             "drop_path_rate": float(getattr(cfg, "drop_path_rate", 0.0)),
@@ -342,6 +353,7 @@ def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: float | None = None
 
     kw: dict = {
         "input_size": latent_size,
+        "in_channels": int(getattr(cfg, "latent_channels", 4) or 4),
         "text_dim": text_dim,
         "class_dropout_prob": dropout,
         "num_ar_blocks": getattr(cfg, "num_ar_blocks", 0),
@@ -383,12 +395,14 @@ def get_dit_build_kwargs(cfg: object, *, class_dropout_prob: float | None = None
         kw["prompt_schedule_num_timesteps"] = int(getattr(cfg, "num_timesteps", 1000))
 
     if model_name.startswith("HybridDiT"):
-        from models.hybrid_dit import HYBRID_DIT_DEFAULTS
+        from models.dit_text import HYBRID_DIT_DEFAULTS
 
         # The preset turns these on; a config can only raise them (e.g. more registers).
         for key, value in HYBRID_DIT_DEFAULTS.items():
             kw[key] = getattr(cfg, key, None) or value
 
+    if not is_enhanced and bool(getattr(cfg, "edit_conditioning", False)):
+        kw["edit_conditioning"] = True  # only passed when on, so models without it keep building
     if not is_enhanced:
         kw["moe_num_experts"] = getattr(cfg, "moe_num_experts", 0)
         kw["moe_top_k"] = getattr(cfg, "moe_top_k", 2)

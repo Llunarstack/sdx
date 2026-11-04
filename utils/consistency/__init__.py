@@ -1,1 +1,0 @@
-"""Character/style consistency utilities."""

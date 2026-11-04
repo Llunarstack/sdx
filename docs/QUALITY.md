@@ -45,7 +45,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --cfg-scale 7 --cfg-rescale 0
 
 - **Stay near the native pixel area** — `--width` / `--height` set the sampling grid (any aspect ratio, snapped to whole patches). Sizes beyond 2× the native area are composed at the native area and enlarged after decode, which is soft; add `--hires-fix` to render that detail, and `--vae-tiling` for large decodes.
 - **More steps** — 25–35 steps often improve clarity; we default to 50.
-- **Post-process** — `--sharpen 0.3` and `--contrast 1.05` can help (see `utils/quality/quality.py`).
+- **Post-process** — `--sharpen 0.3` and `--contrast 1.05` can help (see `utils/quality/finishing.py`).
 - **VAE** — Train/sample with a good VAE (e.g. sd-vae-ft-mse or sdxl-vae); avoid heavily quantized VAEs for final decode.
 
 ---
@@ -147,7 +147,7 @@ This produces a prompt like `MyStyle, 1girl, smile` so the LoRA activates correc
 - **Style mixing:** Put the dominant style first in the prompt; use explicit phrases like "2.5d", "semi-realistic", "photorealistic anime".
 - **Multiple LoRAs:** Use lower scales (0.5–0.6 each) so they blend; put the dominant LoRA first and its trigger at the start of the prompt. If output is muddy, try `--cfg-scale 5` or `--cfg-rescale 0.7`.
 
-See [docs/DOMAINS.md](reference/DOMAINS.md) for full hard-style prompts and negatives.
+See [docs/PROMPT_STACK.md](PROMPT_STACK.md#generating-3d-realistic-interiorexterior-and-other-hard-domains) for full hard-style prompts and negatives.
 
 ---
 
@@ -205,12 +205,12 @@ See [docs/DOMAINS.md](reference/DOMAINS.md) for full hard-style prompts and nega
 
 **Fixes:**
 
-- **`--naturalize`** — One flag that: (1) adds an **anti-AI-look negative** (plastic skin, oversmooth, airbrushed, waxy, doll-like, synthetic, CGI, uncanny, etc.) so the model is steered away from those traits; (2) prepends **natural-look positive** hints (natural skin texture, subtle imperfections, raw photo, natural lighting) to the prompt; (3) after best-of-N selection, runs the **capture finish** (`utils/quality/camera_isp.py`): photos go through a linear-light lens (cos^4 vignette, radial lateral CA, optical blur), Poisson-Gaussian sensor noise on a Bayer mosaic with Malvar-He-Cutler demosaic, camera tone curve, sharpening and JPEG 4:2:0; film prompts get density-space emulsion grain instead; anime, illustration, painting and 3D get no photographic texture.
+- **`--naturalize`** — One flag that: (1) adds an **anti-AI-look negative** (plastic skin, oversmooth, airbrushed, waxy, doll-like, synthetic, CGI, uncanny, etc.) so the model is steered away from those traits; (2) prepends **natural-look positive** hints (natural skin texture, subtle imperfections, raw photo, natural lighting) to the prompt; (3) after best-of-N selection, runs the **capture finish** (`utils/quality/finishing.py`): photos go through a linear-light lens (cos^4 vignette, radial lateral CA, optical blur), Poisson-Gaussian sensor noise on a Bayer mosaic with Malvar-He-Cutler demosaic, camera tone curve, sharpening and JPEG 4:2:0; film prompts get density-space emulsion grain instead; anime, illustration, painting and 3D get no photographic texture.
 - **`--naturalize-grain 0`** — prompt/negative changes only, no capture finish (any positive value keeps it on; noise comes from the camera/film model).
 - **`--camera-isp auto|none|phone|dslr|compact|film`**, **`--camera-iso`**, **`--camera-jpeg-quality`** — force or tune the capture finish; **`--save-16bit`** writes 16-bit PNG from the float pipeline (8-bit output is TPDF-dithered).
-- **`--num 4 --pick-best combo_natural`** (or `combo_art`) — rank candidates *before* the capture finish with the critics in `utils/quality/ai_look.py` (decoder-grid residual, noise-floor shape, 1/f² spectral slope, oversmoothing, gamut-hugging chroma, HDR halos, mirror symmetry) and `utils/quality/art_critic.py` (saliency composition, horizon tilt, subject cropping, exposure / key, local contrast, hue-template harmony). Every metric aggregates by weighted Borda count, and the critics read the prompt's intent: a requested teal-orange or other grade, low-/high-key exposure, centred or symmetric layout, or dutch angle is never penalised. `superior_composite` also adds any HF reward model (CAFE, PickScore, HPS, ImageReward) whose weights are on disk.
+- **`--num 4 --pick-best combo_natural`** (or `combo_art`) — rank candidates *before* the capture finish with the critics in `utils/quality/critics.py` (decoder-grid residual, noise-floor shape, 1/f² spectral slope, oversmoothing, gamut-hugging chroma, HDR halos, mirror symmetry) and `utils/quality/critics.py` (saliency composition, horizon tilt, subject cropping, exposure / key, local contrast, hue-template harmony). Every metric aggregates by weighted Borda count, and the critics read the prompt's intent: a requested teal-orange or other grade, low-/high-key exposure, centred or symmetric layout, or dutch angle is never penalised. `superior_composite` also adds any HF reward model (CAFE, PickScore, HPS, ImageReward) whose weights are on disk.
 - **Lower CFG** — Try `--cfg-scale 5` or `6` for a less “pushed” look.
-- **Training:** Include diverse, non-perfect references and captions that mention “natural skin texture,” “film grain,” “imperfections,” so the model learns a less polished look. You can add `ANTI_AI_LOOK_NEGATIVE`-style terms to your training negatives (see `config/defaults/prompt_domains.py`).
+- **Training:** Include diverse, non-perfect references and captions that mention “natural skin texture,” “film grain,” “imperfections,” so the model learns a less polished look. You can add `ANTI_AI_LOOK_NEGATIVE`-style terms to your training negatives (see `config/prompts.py`).
 
 ---
 
@@ -229,7 +229,7 @@ These tips align with common Civitai and A1111/ComfyUI recommendations; adjust p
 
 ## Community model issues
 
-Community-reported problems (SDXL, Flux/Klein, Illustrious/NoobAI, Z-Image, Civitai) and the mitigations available in SDX: **config/defaults/prompt_domains.py** negatives, **sample.py** flags, and **training** practices.
+Community-reported problems (SDXL, Flux/Klein, Illustrious/NoobAI, Z-Image, Civitai) and the mitigations available in SDX: **config/prompts.py** negatives, **sample.py** flags, and **training** practices.
 
 **Sources:** Reddit r/StableDiffusion, Civitai articles & comments, FLUX GitHub (#406 grid artifact), [Stable Diffusion Art](https://stable-diffusion-art.com/common-problems-in-ai-images-and-how-to-fix-them/), ComfyUI prompt-engineering docs, Black Forest Labs FLUX.
 
@@ -293,7 +293,7 @@ Community-reported problems (SDXL, Flux/Klein, Illustrious/NoobAI, Z-Image, Civi
 
 ### Config reference
 
-The negatives live in **config/defaults/prompt_domains.py**:
+The negatives live in **config/prompts.py**:
 
 - **Concept bleeding:** `CONCEPT_BLEEDING_NEGATIVE`, `CONCEPT_BLEEDING_POSITIVE`
 - **Artifacts:** `ARTIFACT_NEGATIVES`
@@ -321,7 +321,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 
 **Fixes at inference:**
 - Use **positive** tags: `correct hands`, `five fingers`, `natural hands`, `visible hands`.
-- Negatives: `--shortcomings-mitigation auto` adds the anatomy pack from `config/defaults/ai_image_shortcomings.py`.
+- Negatives: `--shortcomings-mitigation auto` adds the anatomy pack from `config/prompts.py`.
 - **Prompt tips:** object anchoring, simple poses, avoid vague “no deformed hands”.
 
 ---
@@ -358,7 +358,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 
 **How we prepare:**
 - Boost “single subject”, “no duplicate”, “clear composition” (`DOMAIN_TAGS["avoid_failures"]`).
-- Train on multiple aspect ratios if possible (see `docs/IMPROVEMENTS.md` multi-resolution).
+- Train on multiple aspect ratios if possible (see `docs/RESEARCH.md` multi-resolution).
 
 **Fixes at inference:**
 - Use **1:1** for head/shoulder shots, or for portrait aspect add **full-body cues** so one body fills the frame: “standing”, “long dress”, “legs”, “shoes”.
@@ -410,7 +410,7 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 **What goes wrong:** Quality drop at resolutions or aspect ratios the model wasn’t trained on.
 
 **How we prepare:**
-- Train at your target resolution (`--image-size`). For multiple aspect ratios, see `docs/IMPROVEMENTS.md` (multi-resolution / bucketing).
+- Train at your target resolution (`--image-size`). For multiple aspect ratios, see `docs/RESEARCH.md` (multi-resolution / bucketing).
 
 **Fixes at inference:**
 - `--width` / `--height` choose the aspect ratio of the sampling grid itself (no stretch). Keep the area within about 2× of training, or use `--hires-fix` for larger outputs.
@@ -430,16 +430,16 @@ Based on common failures of Stable Diffusion, SDXL, FLUX, and similar models (20
 | Composition       | “clear composition”, “well proportioned” | `--shortcomings-mitigation auto`     |
 
 **Code/config:**
-- `config/defaults/ai_image_shortcomings.py` — taxonomy + `mitigation_fragments` for `sample.py --shortcomings-mitigation` and `train.py --train-shortcomings-mitigation` (photoreal, **digital painting / concept / pixel / vector / game textures**, 3D render, plus optional 2D-anime packs with `--shortcomings-2d` / `--train-shortcomings-2d`; see [QUALITY.md](QUALITY.md)).
-- `config/defaults/art_mediums.py` — artist-first medium + anatomy/proportion guidance for `sample.py --art-guidance-mode --anatomy-guidance`, `train.py --train-art-guidance-mode --train-anatomy-guidance`, and book pipeline forwarding.
-- `config/defaults/style_guidance.py` — style-domain + artist/game-name guidance for `sample.py --style-guidance-mode`, `train.py --train-style-guidance-mode`, normalize-captions tooling, and book pipeline forwarding.
+- `config/prompts.py` — taxonomy + `mitigation_fragments` for `sample.py --shortcomings-mitigation` and `train.py --train-shortcomings-mitigation` (photoreal, **digital painting / concept / pixel / vector / game textures**, 3D render, plus optional 2D-anime packs with `--shortcomings-2d` / `--train-shortcomings-2d`; see [QUALITY.md](#quality-guide)).
+- `config/styles.py` — artist-first medium + anatomy/proportion guidance for `sample.py --art-guidance-mode --anatomy-guidance`, `train.py --train-art-guidance-mode --train-anatomy-guidance`, and book pipeline forwarding.
+- `config/styles.py` — style-domain + artist/game-name guidance for `sample.py --style-guidance-mode`, `train.py --train-style-guidance-mode`, normalize-captions tooling, and book pipeline forwarding.
 - `data/caption_utils.py` — `DOMAIN_TAGS`, `boost_domain_tags`, `apply_training_guidance_to_caption_pair` (shortcomings / art / style guidance on caption pairs)
 
 ---
 
 ## 9. Community-wide issues (SDXL, Flux, Illustrious, NoobAI, Z-Image)
 
-Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornness, CFG burn, centering bias, distant face meltdown, resolution lock, seed variance, and vocabulary gaps are all documented with **mitigations** (prompt tips, negatives, and sample.py flags) in **[docs/QUALITY.md](QUALITY.md)** (*Community model issues*).
+Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornness, CFG burn, centering bias, distant face meltdown, resolution lock, seed variance, and vocabulary gaps are all documented with **mitigations** (prompt tips, negatives, and sample.py flags) in **[docs/QUALITY.md](#quality-guide)** (*Community model issues*).
 
 **sample.py flags that address these:**
 - `--naturalize` — plastic/AI look (negative + natural prefix + capture finish)
@@ -450,22 +450,22 @@ Concept bleeding, plastic skin, repetitive faces, artifacts, watermark stubbornn
 - `--boost-quality` — prompt adherence; `--subject-first` — tag order
 - `--cfg-rescale 0.7`, lower `--cfg-scale` — v-pred burn, oversaturation
 
-**Config:** The related negatives are in `config/defaults/prompt_domains.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`). See [QUALITY.md](QUALITY.md) (*Community model issues*) for the full issue → mitigation table.
+**Config:** The related negatives are in `config/prompts.py` (e.g. `CONCEPT_BLEEDING_NEGATIVE`, `ARTIFACT_NEGATIVES`). See [QUALITY.md](#quality-guide) (*Community model issues*) for the full issue → mitigation table.
 
 ---
 
 ## 10. Gaps: what frontier models still struggle with — and what SDX does **not** fully solve
 
-This section is the honest complement to §1–9 and [QUALITY.md](QUALITY.md): **community mitigations** (prompts, negatives, flags) are not the same as a **guaranteed fix**. Below, **“no in-repo fix”** means there is no integrated module that *enforces* correctness; you rely on training data, luck, or external tools.
+This section is the honest complement to §1–9 and [QUALITY.md](#quality-guide): **community mitigations** (prompts, negatives, flags) are not the same as a **guaranteed fix**. Below, **“no in-repo fix”** means there is no integrated module that *enforces* correctness; you rely on training data, luck, or external tools.
 
 ### A. Still fundamentally hard (diffusion + CLIP/T5 blind spots)
 
 | Problem | Why models fail | What SDX has | What we **don’t** have |
 | :--- | :--- | :--- | :--- |
-| **Arbitrary spelled text** | Text is learned as texture; long strings are unstable. | OCR-guided **repair** when you know the target string (`sample.py` / `generate_book.py` + `utils/generation/text_rendering.py`); lettering negatives; book pipeline expected text. | General “render this exact paragraph” without **known** expected text; no diffusers-style dedicated text renderer layer in-core. |
+| **Arbitrary spelled text** | Text is learned as texture; long strings are unstable. | OCR-guided **repair** when you know the target string (`sample.py` / `generate_book.py` + `utils/generation/editing.py`); lettering negatives; book pipeline expected text. | General “render this exact paragraph” without **known** expected text; no diffusers-style dedicated text renderer layer in-core. |
 | **Exact counts** (“exactly 7 coins”) | No discrete counter in the denoiser. | Dataset-side `add_anti_blending_and_count`, explicit prompt counts, negatives for merging, and inference pick-best `--pick-best combo_count` (+ `--expected-count`, `--expected-count-target`, `--expected-count-object`) as lightweight people/simple-object count verification. | No hard cardinality guarantee for arbitrary object classes; still heuristic without constrained decoding/segmentation. |
 | **Fine spatial logic** (“left hand holds blue cup, right waves”) | Conditioning is global; relations are fuzzy. | `--subject-first`, early prompt ordering. | Scene-graph / layout-conditioned attention (ControlNet-class conditioning is only partially exposed via `control_cond_dim` on `DiT_Text` — not a full layout stack). |
-| **Physical plausibility** | No simulation; only statistics of pixels. | Tips, pick-best metrics (`utils/quality/test_time_pick.py`), orchestration hooks. | Physics engine, 3D consistency, reflection law enforcement ([`architecture_map`](../utils/architecture/architecture_map.py): `physical_grounding` = not in repo). |
+| **Physical plausibility** | No simulation; only statistics of pixels. | Tips, pick-best metrics (`utils/quality/test_time_pick.py`), orchestration hooks. | Physics engine, 3D consistency, reflection law enforcement ([`architecture_map`](../utils/modeling/architecture.py): `physical_grounding` = not in repo). |
 | **Identity across unrelated images** | No persistent memory per user. | `--character-sheet`, **`--reference-image`** + CLIP → extra cross-attn tokens (`DiT_Text`), book anchors, `consistency_helpers`. | Strong identity still needs **trained** `--reference-adapter-pt` or LoRA; default projector is randomly initialized. |
 | **Video / temporal coherence** | Out of scope for single-image DiT. | — | Native video diffusion or frame consistency training. |
 
@@ -473,38 +473,38 @@ This section is the honest complement to §1–9 and [QUALITY.md](QUALITY.md): *
 
 | Problem | SDX mitigation | Remaining gap |
 | :--- | :--- | :--- |
-| **Hands / anatomy** | `DOMAIN_TAGS`, shortcomings anatomy pack | No **auxiliary anatomy loss** or hand keypoint head on the denoiser ([`auxiliary_structure_supervision`](../utils/architecture/architecture_map.py)). |
+| **Hands / anatomy** | `DOMAIN_TAGS`, shortcomings anatomy pack | No **auxiliary anatomy loss** or hand keypoint head on the denoiser ([`auxiliary_structure_supervision`](../utils/modeling/architecture.py)). |
 | **Distant / small faces** | Close-up or medium shot; more pixels on the face | In `sample.py`: **`--face-enhance`** (Haar + local sharpen/contrast), **`--face-restore-shell`** for external GFPGAN/ADetailer CLIs; not a full in-repo face restoration model. |
 | **Composition / cropping** | shortcomings composition pack, quality tags, inference `--resize-mode center_crop|saliency_crop` (+ `--resize-saliency-face-bias`) | Saliency crop is heuristic (not semantic segmentation/subject detector); complex multi-subject scenes may still need manual framing. |
-| **Style / concept bleeding** | `--anti-bleed`, dataset boosts | No token-level cross-attention steering (SAG / per-token scale) — see [IMPROVEMENTS.md](research/IMPROVEMENTS.md) §2.2. |
+| **Style / concept bleeding** | `--anti-bleed`, dataset boosts | No token-level cross-attention steering (SAG / per-token scale) — see [IMPROVEMENTS.md](RESEARCH.md#improvement-ideas-quality-fixes-and-better-training) §2.2. |
 
 ### C. Training / inference tooling gaps (listed elsewhere, summarized)
 
-These are called out in [IMPROVEMENTS.md](research/IMPROVEMENTS.md) and [DIFFUSION_LEVERAGE_ROADMAP.md](research/DIFFUSION_LEVERAGE_ROADMAP.md):
+These are called out in [IMPROVEMENTS.md](RESEARCH.md#improvement-ideas-quality-fixes-and-better-training) and [DIFFUSION_LEVERAGE_ROADMAP.md](RESEARCH.md#diffusion-stack-high-leverage-upgrades-10-class-levers):
 
 - **Few-step distilled student** (consistency / DMD) — no trainer in repo.  
-- **Full flow-matching / rectified-flow training** — not drop-in for current `GaussianDiffusion` ([MODERN_DIFFUSION.md](research/MODERN_DIFFUSION.md)).  
+- **Full flow-matching / rectified-flow training** — not drop-in for current `GaussianDiffusion` ([MODERN_DIFFUSION.md](RESEARCH.md#modern-diffusion--flow-ideas-20242026)).  
 - **Extra samplers** (DPM++ / UniPC as first-class flags) — DDIM/Euler-style path is primary; more schedulers are “add” items.  
 - **Inpaint-aware *training*** (random latent masks) — not wired; inpainting is inference/workflow (`sample.py`, book pipeline).  
 - **DDP + resolution buckets** — buckets exist; multi-GPU + buckets is constrained.  
 - **WebDataset / giant-scale streaming** — optional future in IMPROVEMENTS.  
-- **Live web retrieval** — facts via `utils/prompt/rag_prompt.py` only; no built-in crawl.
+- **Live web retrieval** — facts via `utils/prompt/rag.py` only; no built-in crawl.
 
 ### D. Where to invest if you want to *close* gaps (not just document them)
 
 1. **Text:** double down on OCR + expected-text workflows **or** train with readable text in-domain; consider external typography for production UI.  
-2. **Structure:** auxiliary heads or ControlNet-style conditioning (see [DIFFUSION_LEVERAGE_ROADMAP.md](research/DIFFUSION_LEVERAGE_ROADMAP.md) §3–4).  
+2. **Structure:** auxiliary heads or ControlNet-style conditioning (see [DIFFUSION_LEVERAGE_ROADMAP.md](RESEARCH.md#diffusion-stack-high-leverage-upgrades-10-class-levers) §3–4).  
 3. **Identity:** reference-image adapter or stronger character-sheet conditioning in `DiT_Text`.  
-4. **Inference control:** SAG / cross-attn hooks in `sample.py` ([IMPROVEMENTS.md](research/IMPROVEMENTS.md) §2.2).  
+4. **Inference control:** SAG / cross-attn hooks in `sample.py` ([IMPROVEMENTS.md](RESEARCH.md#improvement-ideas-quality-fixes-and-better-training) §2.2).  
 5. **Faces at distance:** optional post-pass script wrapping GFPGAN/CodeFormer or face-region inpaint — **bridge** the doc↔code gap ADetailer users expect.
 
-When you ship a new fix, update **§1–9** or [QUALITY.md](QUALITY.md) for users, and **`architecture_map.py`** for theme status.
+When you ship a new fix, update **§1–9** or [QUALITY.md](#quality-guide) for users, and **`architecture_map.py`** for theme status.
 
 ---
 
 ## Part 3 — General AI image failure modes
 
-A reference guide to typical failure modes in current image diffusion and generative models—useful for training goals, caption design, and evaluation. For SDX-specific mitigations and config hooks, see [QUALITY.md](QUALITY.md) and [QUALITY.md](QUALITY.md).
+A reference guide to typical failure modes in current image diffusion and generative models—useful for training goals, caption design, and evaluation. For SDX-specific mitigations and config hooks, see [QUALITY.md](#quality-guide) and [QUALITY.md](#quality-guide).
 
 ---
 
@@ -578,7 +578,7 @@ Defaults often skew **high-contrast, high-saturation** (“rainbow” palettes).
 
 **Hand-painted game assets / stylized 3D** — **Albedo vs lighting** confusion, muddy texture paint, and **texel density** that jumps across UV islands. Reads as noise mud instead of directed hand-painted direction.
 
-These map to mitigation ids `digital_painting`, `concept_matte_digital`, `pixel_digital`, `vector_flat_digital`, `stylized_game_digital` in `config/defaults/ai_image_shortcomings.py` (included in `auto` when keywords match, and in `all` with other non–2D-anime packs).
+These map to mitigation ids `digital_painting`, `concept_matte_digital`, `pixel_digital`, `vector_flat_digital`, `stylized_game_digital` in `config/prompts.py` (included in `auto` when keywords match, and in `all` with other non–2D-anime packs).
 
 ---
 
@@ -633,9 +633,9 @@ Limitations cluster around: **no grounded physical simulation**; **correlational
 
 ## In this repo
 
-- **Registry and keyword detection:** `config/defaults/ai_image_shortcomings.py` (`config.ai_image_shortcomings`).
-- **Artist-first medium guidance:** `config/defaults/art_mediums.py` (`config.art_mediums`) for traditional, digital, photography, and anatomy/proportion packs.
-- **Style-domain + artist/game guidance:** `config/defaults/style_guidance.py` (`config.style_guidance`) for anime/comic/editorial/concept/game/photo language + artist/game-name stabilization cues.
+- **Registry and keyword detection:** `config/prompts.py`.
+- **Artist-first medium guidance:** `config/styles.py` for traditional, digital, photography, and anatomy/proportion packs.
+- **Style-domain + artist/game guidance:** `config/styles.py` for anime/comic/editorial/concept/game/photo language + artist/game-name stabilization cues.
 - **Sampling:** `python sample.py ... --shortcomings-mitigation auto` (match prompts to categories) or `all` (full photoreal pack; add `--shortcomings-2d` for stylized 2D packs).
 - **Sampling (medium/anatomy):** `python sample.py ... --art-guidance-mode auto|all --anatomy-guidance lite|strong` (optional `--no-art-guidance-photography`). Anatomy packs apply only when the prompt names a person, in both modes.
 - **Art direction and prompt budget (default on):** `utils/prompt/art_direction.py` turns the prompt into an explicit plan (shot size, framing, horizon, lens and aperture, key light direction/quality/ratio, time of day and colour temperature, palette harmony and grade), keeps what you wrote, decides the rest from genre defaults, and places a short caption of the decisions right after your words. The prompt-stack budget then keeps your words, the caption, and pack text that fits `--prompt-budget` (96 T5 tokens by default; `--negative-budget` 160 for the negative), dropping pack text the plan contradicts (skin/hands with nobody in frame, camera terms on a painting). `--art-direction off` keeps the budget but skips the plan caption. The quality policy uses `auto` shortcomings packs and adds photo-capture packs (human-made, naturalize, anti-slop, DSLR media, photo realism) only when no non-photo medium is named.
@@ -644,3 +644,355 @@ Limitations cluster around: **no grounded physical simulation**; **correlational
 - **Training:** `python train.py ... --train-shortcomings-mitigation auto|all --train-art-guidance-mode auto|all` with optional `--train-shortcomings-2d`, `--train-anatomy-guidance`, `--no-train-art-guidance-photography`.
 - **Training (style domains):** `python train.py ... --train-style-guidance-mode auto|all` (optional `--no-train-style-guidance-artists`).
 - **Offline manifests:** `python -m scripts.tools normalize_captions ... --shortcomings-mitigation auto --art-guidance-mode auto --style-guidance-mode auto` (plus optional 2D/anatomy toggles).
+## Game imagery and pixel-perfect pixel art
+
+Detected from the prompt (`utils/prompt/game.py`), overridable with `--game-asset <type>|off`. Each asset type adds its
+conventions to the prompt: sprite sheets (even grid, same framing per frame), seamless tiles, item icons (centred,
+readable at 32 px), HUD/UI, character turnarounds, in-engine screenshots, key/card art, maps, environment concepts,
+isometric, voxel, low-poly and cel-shaded.
+
+Pixel art is finished as real pixel art (`utils/quality/pixel_art.py`): the art-pixel grid is detected (or set with
+`--pixel-size` / "32x32" in the prompt), each cell gets one colour, the palette is k-means-quantised (`--palette-colors`;
+1-bit 2, 2-bit 4, 8-bit 16, else 32) with near-duplicate shades merged, anti-aliasing leftovers are removed (glints kept),
+and the image is rebuilt on an exact grid as uint8 so saving can't dither it. A native-size `<name>_sprite.png` is saved
+beside the output. Sprites, sheets and icons get a transparent PNG background (`--transparent-bg auto|on|off`); tiles are
+offset-blended to wrap seamlessly. With best-of-N, a grid / seam / icon-readability critic joins the ranking.
+
+## Photorealism and hard prompts
+
+`--realism off|auto|max` (default auto; `utils/prompt/realism.py`, `utils/quality/realism.py`). For prompts the art
+direction plans as photographic, a shot spec picks camera, shutter and ISO that agree with the planned lens and light
+(EV at ISO 100 per time of day / light source; handheld 1/focal, 1/125 with people, 1/1000 for action; ISO makes up the
+rest, opening the aperture before passing ISO 6400; studio = strobe, ISO 100, 1/160). Values the prompt states are kept;
+the rest is captioned (`--shot-spec off` drops the caption, `--shot-spec "85mm f/1.4 ISO 6400"` adds camera text). The
+capture finish then always runs for those prompts, at the shot's ISO (luminance-weighted Poisson-Gaussian grain plus
+CFA chroma noise) with vignette / lateral CA from its focal length and aperture, after a measured saturation tame-down
+(off unless the 99th-percentile CIELAB chroma passes 80) and a filmic highlight shoulder (off without highlights).
+`max` corrects at full strength and ranks best-of-4 with `combo_realism`. The AI-look critic gains plastic-skin and
+waxy-highlight parts (skin fine-band texture, smooth or clipped sheen), so every metric using `ai_look` sees them.
+
+`--hard-prompts off|auto|max` (default auto): exact counts ("five apples"), spatial relations (left/right of, above,
+below, on top of, in front of, behind, next to) and colour binding with several subjects get prompt packs and a box
+layout (one region per subject or counted instance, other subjects' colours in each region's negative) unless a layout
+was given; the expected count / text feed the critics, text in the image (quotes, curly quotes, "a sign that says OPEN")
+turns on the text-friendly negative, and `--pick-best auto` uses combo_count / combo_spatial_bind / combo_hand /
+combo_human. `max` also turns on best-of-4. Product, food, interior, machinery, nature macro, technical illustration and
+diagram/map prompts get `--scene-domain` packs; holding / waving / group prompts infer the hand and people-layout packs.
+
+---
+
+## Superior Stack
+
+Composable modules that raise **inference and data-prep quality** on top of your trained DiT checkpoint. This is not a separate model — it is orchestration, retrieval, ranking, and correction around `sample.py`.
+
+### Modules (`utils/agentic/quality_loop.py`)
+
+The former `utils/superior/` files below are now sections of `utils.agentic.quality_loop` (old file names kept for orientation).
+
+| Module | Role |
+|--------|------|
+| `retrieval.py` | TF-IDF over JSONL facts (local RAG, no API) |
+| `auto_stack.py` | Merge retrieved facts + light quality hints into the prompt |
+| `composite_ranker.py` | The one candidate aggregator: weight presets over `test_time_pick` terms (`superior_composite`, `online` for GRPO, `ensemble`); Borda ranking or absolute `score_one` |
+| `self_correct.py` | CLIP alignment gate + short refine pass |
+| `inference_pipeline.py` | Build `sample.py` argv for high-quality defaults |
+| `utils/generation/guidance.py` | Composable guidance: APG, FDG, CFG rescale, CFG-Zero★, TCFG, PAG, SLG, guidance interval |
+
+### Quick start
+
+**CLI wrapper** (4 candidates + composite ranking + optional RAG):
+
+```bash
+python -m scripts.tools superior_generate \
+  --ckpt results/your_run/best.pt \
+  --prompt "neon alley at night, cinematic" \
+  --local-rag-jsonl datasets/style_notes.jsonl \
+  --num 4 --out out.png
+```
+
+**Direct `sample.py` flags:**
+
+```bash
+python sample.py --ckpt results/.../best.pt \
+  --prompt "..." --num 4 --pick-best superior_composite \
+  --local-rag-jsonl datasets/captions.jsonl --local-rag-top-k 8 \
+  --superior-self-correct --compile-inference --out out.png
+```
+
+### Training-side
+
+- **`python -m scripts.tools superior_dpo_loop`** — mine benchmark pairs → train Diffusion-DPO
+- **`python -m scripts.tools superior_curate`** — dedup/filter JSONL via `utils/quality/critics.py`
+- **`python -m scripts.tools model_soup`** — average multiple checkpoints
+- Use **`utils/training/preference.py`** for teacher→student latent distillation (custom loop).
+- See **`python -m scripts.tools train_kd_distill`** for KD entry points.
+
+### Full alignment loop (wave 3)
+
+One command runs benchmark → ViT-weighted preference mining → DPO → re-benchmark → optional model soup:
+
+```bash
+python -m scripts.tools superior_auto_loop \
+  --base-ckpt results/run/best.pt \
+  --vit-ckpt vit_quality/results/best.pt \
+  --local-rag-jsonl datasets/style_notes.jsonl \
+  --model-soup --iterations 2
+```
+
+Lower-level control: `python -m scripts.tools auto_improve_loop` with `--vit-ckpt`, `--local-rag-jsonl`, `--model-soup`.
+
+### Full flywheel (wave 4)
+
+Curate data → align (benchmark/DPO/soup) → promote best checkpoint:
+
+```bash
+python -m scripts.tools run_flywheel \
+  --base-ckpt results/run/best.pt \
+  --manifest-in datasets/train.jsonl \
+  --manifest-out datasets/train_clean.jsonl \
+  --local-rag-jsonl datasets/style_facts.jsonl \
+  --vit-ckpt vit_quality/results/best.pt \
+  --work-dir flywheel_run
+```
+
+**Ensemble inference** (multiple checkpoints, one winner):
+
+```bash
+python -m scripts.tools superior_ensemble \
+  --checkpoints results/a/best.pt results/b/dpo_policy.pt soup_policy.pt \
+  --prompt "portrait of an engineer" --num-per-ckpt 2 --out best.png
+```
+
+**Eval report** from benchmark output:
+
+```bash
+python -m scripts.tools superior_eval_report bench_after/
+```
+
+Use **`--preset superior`** in ``sample.py`` for Superior Stack sampler defaults.
+
+### Libraries added (wave 4)
+
+| Module | Role |
+|--------|------|
+| `config/presets.py` | Central defaults + `FlywheelPlan` |
+| `utils/agentic/quality_loop.py` | Curate + align orchestration |
+| `utils/agentic/quality_loop.py` | Multi-checkpoint generation + global rank |
+| `utils/agentic/quality_loop.py` | Mine negatives from failed cases |
+| `utils/agentic/quality_loop.py` | Markdown benchmark reports |
+
+### Libraries added (wave 3)
+
+| Module | Role |
+|--------|------|
+| `utils/agentic/quality_loop.py` | ViT-weighted DPO pair mining |
+| `utils/agentic/quality_loop.py` | LLM or heuristic prompt expansion |
+| `utils/agentic/quality_loop.py` | Python API for auto-improve loop |
+
+| Module | Role |
+|--------|------|
+| `utils/quality/critics.py` | Programmatic manifest curation API |
+| `utils/agentic/quality_loop.py` | Benchmark → DPO training orchestration |
+| `utils/agentic/quality_loop.py` | Checkpoint averaging |
+| `utils/agentic/quality_loop.py` | Fast pre/post generation gates |
+| `models/attention.py` | Fused SDPA cross-attention path |
+
+### Wave 5 (research-backed alignment + inference)
+
+| Module | Role |
+|--------|------|
+| `utils/training/preference.py` | Timestep DPO weights, SDPO safeguard, EMA ref |
+| `utils/modeling/architecture.py` | SpeCa-lite step reuse (`--feature-cache-delta`) |
+
+**DPO trainer flags:** `--timestep-dpo-weight high_noise`, `--safeguarded-dpo 0.85`, `--ref-ema-alpha 0.01`
+
+**Flywheel (any OS):** `python -m scripts.tools superior flywheel --base-ckpt results/best.pt --work-dir flywheel_run`
+
+See [research/SUPERIOR_RESEARCH_2026.md](RESEARCH.md#superior-stack--research-map-20252026) for paper mapping.
+
+### Wave 6 (speed + online RL + distill flywheel)
+
+| Module | Role |
+|--------|------|
+| `utils/modeling/architecture.py` | BWCache/TeaCache-lite per-block DiT reuse |
+| `utils/training/preference.py` | Flow-GRPO scaffold (sample → reward → weighted update) |
+| `train_consistency_distill.py` | LCM-style consistency distillation (few-step student) |
+| `train_flow_grpo.py` | Online GRPO alignment trainer |
+| `train_ladd_distill.py` | LADD teacher MSE + latent discriminator |
+| `hard_negative.py` | Flywheel closure via `--use-hard-negatives` in auto_improve_loop |
+
+**Block cache inference:** `--block-cache-thresh 0.18 --block-cache-recompute-every 4`
+
+**Few-step student:** `python -m scripts.tools train_consistency_distill --teacher-ckpt ... --data ...`
+
+**Online RL:** `python -m scripts.tools train_flow_grpo --ckpt ... --prompts prompts.txt --vit-ckpt ...`
+
+### Wave 7 (TaylorSeer + DenseGRPO + LCM fast path)
+
+| Module | Role |
+|--------|------|
+| `utils/modeling/architecture.py` | TaylorSeer block forecast (`--taylor-cache`) |
+| `utils/training/preference.py` | Step-wise dense GRPO rewards |
+| `sample.py --lcm-ckpt` | Few-step consistency student (4-step flow) |
+
+**Taylor + block cache:** `--block-cache-thresh 0.18 --taylor-cache --taylor-cache-order 1`
+
+**DenseGRPO training:** `train_flow_grpo --dense-grpo --dense-ode-steps 4`
+
+**LCM inference:** `sample.py --ckpt base.pt --lcm-ckpt lcm_student.pt --lcm-steps 4`
+
+### Honest scope
+
+Frontier labs have proprietary data scale, eval harnesses, and foundation pretraining. SDX Superior Stack gives you **testable, local** levers: grounded prompts, better candidate selection, and alignment-based refine — wired to your checkpoint and prompt stack. Quality still depends on **training data and your DiT weights**.
+
+### See also
+
+- [IMPROVEMENTS.md](RESEARCH.md#improvement-ideas-quality-fixes-and-better-training) — training/inference roadmap
+- [LANDSCAPE_2026.md](RESEARCH.md#image-generation-landscape-architecture-and-workflows-2026) — industry patterns (Designer / Verifier / Reasoner)
+- [recipes/fast_training.md](GETTING_STARTED.md#fast-training-and-sampling-no-quality-trade-offs) — throughput defaults
+
+---
+
+## RSI: your model teaches itself to make better art
+
+`rsi_loop` improves an SDX checkpoint with no human in the loop. Your thumbs-up/down are optional extra signal.
+It only practises art: every prompt it trains on is a medium (oil painting, pixel art, linocut,
+portrait photo, …, the 47 mediums in `config/styles.py`) plus a subject, light and framing.
+
+### One round
+
+1. **Curriculum**: 16 art prompts, weighted toward the medium family (traditional / 2d / photo / generic)
+   the champion currently scores worst on.
+2. **Paint**: the champion makes 4 candidates per prompt through the normal `sample.py` pipeline.
+   `--jobs-jsonl` loads the checkpoint and text encoders once per round.
+3. **Judge**: one art score per image. It blends the HF reward panel (PickScore, CLIP-H, CAFE aesthetic,
+   whichever are on disk), `art_critic` (composition, exposure, colour harmony) and `ai_look`
+   (decoder grid, halos, oversmoothing and other generated-look tells).
+4. **Learn**: best-vs-worst pairs per prompt (gap ≥ `--min-margin`) plus your feedback pairs train a
+   candidate with `train_diffusion_dpo`.
+5. **Gate**: candidate and champion paint the same held-out prompts with the same seeds. Held-out
+   subjects never appear in training prompts. The candidate is promoted only if the mean score rises
+   by `--min-gain` **and** it wins at least half the head-to-heads. Otherwise it is deleted and the
+   learning rate halves.
+
+### Run it
+
+```bash
+python -m scripts.tools rsi_loop --base-ckpt results/run/best.pt --rounds 5   # start
+python -m scripts.tools rsi_loop --rounds 5                                   # resume, 5 more rounds
+python -m scripts.tools rsi_loop --status                                     # history
+python -m scripts.tools rsi_loop --base-ckpt results/run/best.pt --dry-run    # preview prompts + commands
+```
+
+Output goes to `outputs/rsi/`: `champion.pt` (current best), `champion.prev.pt` (the one before it),
+`state.json`, and `round_NNN/` with images, `prefs.jsonl` and `report.json`.
+
+Before the first round:
+
+- **Train first.** RSI sharpens a model that already draws. It cannot rescue a checkpoint that still outputs noise.
+- **The checkpoint must sample.** `python sample.py --ckpt <ckpt> --prompt test` has to work with its text
+  encoder (T5-XXL etc.) and VAE on disk.
+- **Offline by default.** The judge sets `HF_HUB_OFFLINE=1` unless you set it, so a long unattended run
+  never starts a surprise multi-GB download.
+
+### Add your own taste
+
+```bash
+python sample.py --ckpt ... --prompt "..." --out out.png --log-feedback
+python -m scripts.tools feedback like out.png --prompt "..."
+python -m scripts.tools feedback pair --win a.png --lose b.png --prompt "..."
+python -m scripts.tools feedback sync-taste    # immediate inference bias: sample.py --apply-user-taste
+```
+
+Every round mixes the pairs from `outputs/feedback/feedback.jsonl` into training (`--from-feedback ''` turns that off).
+Video frames can be rated with `--media-type video`, but RSI trains on images only.
+
+---
+
+## Baseline prompt pack for quick eval
+
+The repo ships [`examples/eval_prompts_baseline.json`](../examples/eval_prompts_baseline.json): short prompts that stress **object**, **hands**, **text**, **counting**, **style**, etc.
+
+### Driver script (recommended)
+
+[`examples/run_baseline_eval.py`](../examples/run_baseline_eval.py) prints `sample.py` commands by default; add `--execute` to run them.
+
+```bash
+python examples/run_baseline_eval.py --ckpt results/your_run/best.pt
+python examples/run_baseline_eval.py --ckpt results/your_run/best.pt --execute -- --steps 30 --preset auto
+```
+
+Arguments after `--` are forwarded to `sample.py`.
+
+### Load in Python
+
+```python
+from examples.run_baseline_eval import load_eval_prompts
+
+for eid, prompt in load_eval_prompts("examples/eval_prompts_baseline.json"):
+    print(eid, "->", prompt[:60], "...")
+```
+
+### Docs
+
+- Experiment grids: [SAMPLING_EXPERIMENTS_BACKLOG.md](RESEARCH.md#sampling-experiments-backlog)
+- Quality research map: [IMAGE_QUALITY_LEVERS_2026.md](RESEARCH.md#image-quality-research-levers-20252026--sdx-map)
+
+---
+
+## Quick evaluation recipe (Holy Grail + manifests)
+
+Copy-paste oriented. Paths assume repo root.
+
+### 1. Environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -U pip
+pip install -r requirements.txt
+```
+
+### 2. One-command sanity (no custom checkpoint)
+
+Uses DiT-XL/2 ImageNet weights from Hugging Face (see repo `demo.py`).
+
+```bash
+python demo.py
+```
+
+### 3. Sample with a text checkpoint + Holy Grail preset
+
+Replace the checkpoint path with your `results/.../best.pt` (or equivalent).
+
+```bash
+python sample.py --ckpt results/your_run/best.pt \
+  --prompt "your prompt here" \
+  --preset auto \
+  --out out.png
+```
+
+Adjust steps, resolution, and CFG flags per `README.md` and `docs/QUALITY.md`.
+
+### 4. Training run artifacts
+
+When training with `train.py`, the experiment directory receives reproducibility files:
+
+- `config.train.json` — frozen training config snapshot
+- `run_manifest.json` — command, git info, torch/CUDA versions, seed, etc.
+
+Disable with `--no-save-run-manifest` if you truly do not want these files.
+
+### 5. Deeper reading
+
+- [HOLY_GRAIL_OVERVIEW.md](HOW_GENERATION_WORKS.md#holy-grail-adaptive-sampling-how-it-fits-together)
+- [TCIS_OVERVIEW.md](HOW_GENERATION_WORKS.md#tcis--tri-consensus-iterative-synthesis)
+- [QUALITY.md](#quality-guide)
+
+### See also
+
+- [eval_baseline_prompts.md](#baseline-prompt-pack-for-quick-eval) — structured prompt pack + 
+un_baseline_eval.py.
+### See also
+
+- [local_ci_mirror.md](GETTING_STARTED.md#mirror-github-ci-locally) — run the same checks as CI before you push.

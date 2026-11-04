@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from .types import TransitionType
+from .scene import MasterTimeline, SegmentAssignment, TransitionType
 
 # ==================================================================================================
 # video_io
@@ -156,12 +156,11 @@ def write_video_from_frames(
             str(float(fps)),
             "-i",
             str(list_file),
-            "-pix_fmt",
-            "yuv420p",
         ]
         if audio_path and Path(audio_path).is_file():
+            # Inputs first: an option placed before ``-i`` applies to that input, not the output.
             cmd.extend(["-i", str(audio_path), "-c:a", "aac", "-shortest"])
-        cmd.append(str(out))
+        cmd.extend(["-pix_fmt", "yuv420p", str(out)])
         subprocess.run(cmd, check=True, capture_output=True)
         list_file.unlink(missing_ok=True)
         return out
@@ -303,25 +302,30 @@ def stitch_frame_lists(
     fps: float = 24.0,
     transitions: list[TransitionType] | None = None,
 ) -> Path:
+    """Encode segments back to back; only transition overlaps are decoded and blended, other frames stream as-is."""
     transitions = transitions or [TransitionType.CUT] * len(segment_frames)
-    merged: list[np.ndarray] = []
-    for i, paths in enumerate(segment_frames):
-        frames = [read_frame_rgb(p) for p in paths]
-        if i == 0:
-            merged = frames
-            continue
-        tr = transitions[i] if i < len(transitions) else TransitionType.CUT
-        overlap = transition_overlap_frames_fx(tr, fps) if tr != TransitionType.CUT else 0
-        merged = apply_transition(merged, frames, tr, overlap)
     out = Path(out_path)
     tmp = out.parent / f"{out.stem}_frames"
-    tmp.mkdir(parents=True, exist_ok=True)
-    fpsaths: list[Path] = []
-    for j, rgb in enumerate(merged):
-        fp = tmp / f"final_{j + 1:06d}.png"
-        save_frame_rgb(fp, rgb)
-        fpsaths.append(fp)
-    return write_video_from_frames(fpsaths, out, fps=fps)
+    merged: list[Path] = []
+    for i, seg in enumerate(segment_frames):
+        paths = [Path(p) for p in seg]
+        tr = transitions[i] if i < len(transitions) else TransitionType.CUT
+        overlap = transition_overlap_frames_fx(tr, fps) if i and tr != TransitionType.CUT else 0
+        overlap = min(overlap, len(merged), len(paths))
+        if overlap > 0:
+            blended = apply_transition(
+                [read_frame_rgb(p) for p in merged[-overlap:]],
+                [read_frame_rgb(p) for p in paths[:overlap]],
+                tr,
+                overlap,
+            )
+            del merged[-overlap:]
+            for rgb in blended:
+                fp = tmp / f"blend_{len(merged) + 1:06d}.png"
+                save_frame_rgb(fp, rgb)
+                merged.append(fp)
+        merged.extend(paths[overlap:])
+    return write_video_from_frames(merged, out, fps=fps)
 
 
 # ==================================================================================================
@@ -475,12 +479,10 @@ __all__ = [
     "run_segments_parallel",
 ]
 
+
 # ==================================================================================================
 # Restored from b654ae9:pipelines/video/timeline.py
 # ==================================================================================================
-from .types import MasterTimeline, SegmentAssignment
-
-
 @dataclass(slots=True)
 class TimelineSlot:
     segment_index: int
@@ -558,11 +560,7 @@ def stitch_segment_videos(
     fps: float = 24.0,
 ) -> Path:
     """Concat segment mp4s via ffmpeg when available."""
-    from .video_io import extract_frames, ffmpeg_available
-
     if ffmpeg_available() and len(segment_videos) > 1:
-        import subprocess
-
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         list_file = out.with_suffix(".concat.txt")

@@ -1,7 +1,5 @@
 """Imagination engine (``--frontier-creative``): creative analyzers that emit prompt fragments AND diffusion knobs
 (serendipity, CFG, step curves) without duplicating the art-medium / shortcomings prompt stack.
-
-Also holds what used to be: archetype, cinema, collective, constraint, focal, fusion, glitch, mutation, paradox, rhythm, scale, surreal, synesthesia, vibe, weathering.
 """
 
 from __future__ import annotations
@@ -14,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from config.defaults._lexicon import merge_csv_unique
+from config.prompts import merge_csv_unique
 
 # ==================================================================================================
 # archetype: Jungian-adjacent symbols as compositional anchors — artistic, not preachy.

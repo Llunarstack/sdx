@@ -1,6 +1,6 @@
 """Tests for book challenging-content prompt fragments.
 
-Also holds what used to be: test_book_challenging_content, test_book_helpers, test_book_manifest_utils, test_book_model_readiness, test_book_project, test_book_prompt_intel, test_book_style_authenticity, test_book_style_fusion, test_book_text_continuity, test_book_train_preset, test_book_train_scripts, test_book_training_helpers, test_book_visual_memory.
+Also holds what used to be: test_book_challenging_content, test_book_helpers, test_book_manifest_utils, test_book_model_readiness, test_book_project, test_book_prompt_intel, test_book_style_authenticity, test_book_style_fusion, test_book_text_continuity, test_book_train_preset, test_book_train_scripts, test_book_training_helpers, test_book_visual_memory, test_consistency_text_continuity.
 """
 
 from __future__ import annotations
@@ -12,35 +12,28 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from pipelines.book_comic import book_challenging_content, book_helpers
-from pipelines.book_comic import book_training_helpers as bth
-from pipelines.book_comic.book_manifest_utils import (
-    manifest_summary_lines,
-    validate_book_manifest,
-)
-from pipelines.book_comic.book_project import BookProject
-from pipelines.book_comic.book_prompt_intel import (
+from pipelines.book_comic import render, story
+from pipelines.book_comic import training as bth
+from pipelines.book_comic.render import BookProject, manifest_summary_lines, validate_book_manifest
+from pipelines.book_comic.scripts import prepare_and_train_book as prep
+from pipelines.book_comic.scripts import train_book_model as tbm
+from pipelines.book_comic.story import (
     approximate_token_estimate,
     composed_prompt_length_report,
     find_cast_mentions,
-)
-from pipelines.book_comic.book_style_authenticity import (
-    peek_visual_memory_book_style,
-    resolve_authenticity_bundle,
-    resolve_effective_medium,
-)
-from pipelines.book_comic.book_style_fusion import (
     freeform_style_fusion,
     fusion_fragment_from_preset,
     fusion_from_cli,
+    lettering_visual_memory_fragment,
+    load_visual_memory,
+    peek_visual_memory_book_style,
+    positive_block_from_mapping,
     primary_style_from_book_type,
+    resolve_authenticity_bundle,
+    resolve_effective_medium,
+    text_continuity_clause,
 )
-from pipelines.book_comic.book_text_continuity import lettering_visual_memory_fragment, text_continuity_clause
-from pipelines.book_comic.consistency_helpers import positive_block_from_mapping
-from pipelines.book_comic.scripts import prepare_and_train_book as prep
-from pipelines.book_comic.scripts import train_book_model as tbm
-from pipelines.book_comic.visual_memory import load_visual_memory
-from training.book_train_preset import apply_book_train_preset_to_args
+from training.cli import apply_book_train_preset_to_args
 
 # ==================================================================================================
 # test_book_challenging_content: Tests for book challenging-content prompt fragments.
@@ -48,19 +41,19 @@ from training.book_train_preset import apply_book_train_preset_to_args
 
 
 def test_challenge_pack_positive_mature_coherence() -> None:
-    frag = book_challenging_content.challenge_pack_positive("mature_coherence")
+    frag = story.challenge_pack_positive("mature_coherence")
     assert "mature-rated" in frag
 
 
 def test_challenge_pack_positive_max_includes_mature() -> None:
-    frag = book_challenging_content.challenge_pack_positive("max")
+    frag = story.challenge_pack_positive("max")
     assert "mature-rated" in frag
     assert "surreal" in frag
 
 
 def test_challenging_content_from_mapping() -> None:
     block = {"pack": "surreal_weird", "tags": ["hands_heavy"], "extra": "dream logic"}
-    out = book_challenging_content.challenging_content_from_mapping(block)
+    out = story.challenging_content_from_mapping(block)
     assert "surreal" in out
     assert "hands-heavy" in out.lower() or "hands" in out.lower()
     assert "dream logic" in out
@@ -75,12 +68,12 @@ def test_positive_block_from_mapping_challenging_content() -> None:
 
 
 def test_visual_memory_challenge_clause_adds_mature_fidelity() -> None:
-    frag = book_challenging_content.visual_memory_challenge_clause({"book_challenge_pack": "none"})
+    frag = story.visual_memory_challenge_clause({"book_challenge_pack": "none"})
     assert "mature-rated" in frag
 
 
 # ==================================================================================================
-# test_book_helpers: Tests for pipelines.book_comic.book_helpers shortcomings wiring.
+# test_book_helpers: Tests for pipelines.book_comic.render shortcomings wiring.
 # ==================================================================================================
 
 
@@ -117,25 +110,25 @@ def _args(**overrides):
 
 
 def test_production_vit_preset():
-    pv = book_helpers.preset_for_book_accuracy("production_vit")
+    pv = render.preset_for_book_accuracy("production_vit")
     assert pv.pick_best == "combo_vit_hq"
     assert pv.sample_candidates == 6
 
 
 def test_production_fidelity_preset():
-    pf = book_helpers.preset_for_book_accuracy("production_fidelity")
+    pf = render.preset_for_book_accuracy("production_fidelity")
     assert pf.pick_best == "combo_vit_hq"
     assert pf.sample_candidates == 8
     assert pf.shortcomings_mitigation == "all"
 
 
 def test_derive_book_page_seed():
-    assert book_helpers.derive_book_page_seed(10, 0) == 10
-    assert book_helpers.derive_book_page_seed(10, 1) == 10 + book_helpers.BOOK_PAGE_SEED_STRIDE
+    assert render.derive_book_page_seed(10, 0) == 10
+    assert render.derive_book_page_seed(10, 1) == 10 + render.BOOK_PAGE_SEED_STRIDE
 
 
 def test_audit_book_run_flags_vit_warning():
-    _, warns = book_helpers.audit_book_run_flags(
+    _, warns = render.audit_book_run_flags(
         pick_best="combo_vit",
         sample_candidates=2,
         pick_vit_ckpt="",
@@ -145,7 +138,7 @@ def test_audit_book_run_flags_vit_warning():
 
 
 def test_audit_book_run_flags_beam_sample_mismatch():
-    _, warns = book_helpers.audit_book_run_flags(
+    _, warns = render.audit_book_run_flags(
         pick_best="clip",
         sample_candidates=4,
         beam_width=4,
@@ -154,7 +147,7 @@ def test_audit_book_run_flags_beam_sample_mismatch():
 
 
 def test_normalize_book_prompt_fragment():
-    assert book_helpers.normalize_book_prompt_fragment("  a  \n b , ") == "a b"
+    assert render.normalize_book_prompt_fragment("  a  \n b , ") == "a b"
 
 
 def test_extend_sample_py_adapter_control_cmd_lora_and_control():
@@ -191,7 +184,7 @@ def test_extend_sample_py_adapter_control_cmd_lora_and_control():
         reference_adapter_pt="",
     )
     cmd = ["python", "sample.py"]
-    book_helpers.extend_sample_py_adapter_control_cmd(cmd, ns)
+    render.extend_sample_py_adapter_control_cmd(cmd, ns)
     s = " ".join(cmd)
     assert "--control edge.png:canny:0.7" in s
     assert "--lora a.safetensors:0.6:style" in s
@@ -233,7 +226,7 @@ def test_adapter_control_argv_for_sample_matches_extend():
         reference_clip_model="openai/clip-vit-large-patch14",
         reference_adapter_pt="",
     )
-    frag = book_helpers.adapter_control_argv_for_sample(ns)
+    frag = render.adapter_control_argv_for_sample(ns)
     assert "--style" in frag
     assert "ink" in frag
 
@@ -272,7 +265,7 @@ def test_extend_sample_py_sdx_enhance_cmd_hires_finishing_and_spectral():
         refine_gate_threshold=0.7,
     )
     cmd = ["python", "sample.py"]
-    book_helpers.extend_sample_py_sdx_enhance_cmd(cmd, ns)
+    render.extend_sample_py_sdx_enhance_cmd(cmd, ns)
     s = " ".join(cmd)
     assert "--spectral-coherence-latent 0.08" in s
     assert "--spectral-coherence-cutoff 0.12" in s
@@ -286,7 +279,7 @@ def test_extend_sample_py_sdx_enhance_cmd_hires_finishing_and_spectral():
 
 
 def test_audit_book_run_flags_clip_and_adherence_hints():
-    _, warns = book_helpers.audit_book_run_flags(
+    _, warns = render.audit_book_run_flags(
         pick_best="combo_vit",
         sample_candidates=2,
         pick_vit_ckpt="",
@@ -328,7 +321,7 @@ def test_extend_sample_py_adherence_quality_cmd_packs_and_clip():
         no_cache=False,
     )
     cmd = ["python", "sample.py"]
-    book_helpers.extend_sample_py_adherence_quality_cmd(cmd, ns)
+    render.extend_sample_py_adherence_quality_cmd(cmd, ns)
     s = " ".join(cmd)
     assert "--quality-pack illustrative" in s
     assert "--adherence-pack strict" in s
@@ -373,7 +366,7 @@ def test_extend_sample_argv_visual_design_preset_via_book_helpers():
         visual_design_preset="keynote_slide",
     )
     cmd: list[str] = []
-    book_helpers.extend_sample_py_adherence_quality_cmd(cmd, ns)
+    render.extend_sample_py_adherence_quality_cmd(cmd, ns)
     assert cmd == ["--visual-design-preset", "keynote_slide"]
 
 
@@ -408,7 +401,7 @@ def test_extend_sample_py_adherence_includes_visual_design():
         visual_design_negative_pack=True,
     )
     cmd: list[str] = []
-    book_helpers.extend_sample_py_adherence_quality_cmd(cmd, ns)
+    render.extend_sample_py_adherence_quality_cmd(cmd, ns)
     s = " ".join(cmd)
     assert "--visual-design-domain stem" in s
     assert "--visual-design-intensity strong" in s
@@ -443,8 +436,8 @@ def test_adherence_quality_argv_for_sample_matches_extend():
         no_cache=True,
     )
     cmd = ["x"]
-    book_helpers.extend_sample_py_adherence_quality_cmd(cmd, ns)
-    frag = book_helpers.adherence_quality_argv_for_sample(ns)
+    render.extend_sample_py_adherence_quality_cmd(cmd, ns)
+    frag = render.adherence_quality_argv_for_sample(ns)
     assert cmd[1:] == frag
 
 
@@ -482,16 +475,16 @@ def test_sdx_enhance_argv_for_sample_matches_extend():
         refine_gate_threshold=0.62,
     )
     cmd = ["x"]
-    book_helpers.extend_sample_py_sdx_enhance_cmd(cmd, ns)
-    frag = book_helpers.sdx_enhance_argv_for_sample(ns)
+    render.extend_sample_py_sdx_enhance_cmd(cmd, ns)
+    frag = render.sdx_enhance_argv_for_sample(ns)
     assert cmd[1:] == frag
 
 
 def test_preset_defaults_for_book_accuracy():
-    fast = book_helpers.preset_for_book_accuracy("fast")
+    fast = render.preset_for_book_accuracy("fast")
     assert fast.shortcomings_mitigation == "none"
     assert fast.shortcomings_2d is False
-    balanced = book_helpers.preset_for_book_accuracy("balanced")
+    balanced = render.preset_for_book_accuracy("balanced")
     assert balanced.shortcomings_mitigation == "auto"
     assert balanced.shortcomings_2d is True
     assert balanced.art_guidance_mode == "auto"
@@ -500,7 +493,7 @@ def test_preset_defaults_for_book_accuracy():
 
 
 def test_resolve_overrides_shortcomings():
-    settings = book_helpers.resolve_book_sample_settings(
+    settings = render.resolve_book_sample_settings(
         _args(
             book_accuracy="balanced",
             shortcomings_mitigation="all",
@@ -512,9 +505,9 @@ def test_resolve_overrides_shortcomings():
 
 
 def test_append_sample_py_quality_flags_includes_shortcomings():
-    settings = book_helpers.resolve_book_sample_settings(_args(book_accuracy="balanced"))
+    settings = render.resolve_book_sample_settings(_args(book_accuracy="balanced"))
     cmd = ["python", "sample.py"]
-    book_helpers.append_sample_py_quality_flags(cmd, settings, pick_expected_text="")
+    render.append_sample_py_quality_flags(cmd, settings, pick_expected_text="")
     assert "--shortcomings-mitigation" in cmd
     assert "--shortcomings-2d" in cmd
     assert "--art-guidance-mode" in cmd
@@ -523,11 +516,11 @@ def test_append_sample_py_quality_flags_includes_shortcomings():
 
 
 def test_append_sample_py_quality_flags_forwards_vit_pick_and_ar():
-    settings = book_helpers.resolve_book_sample_settings(
+    settings = render.resolve_book_sample_settings(
         _args(book_accuracy="none", sample_candidates=2, pick_best="combo_vit_hq")
     )
     cmd = ["python", "sample.py"]
-    book_helpers.append_sample_py_quality_flags(
+    render.append_sample_py_quality_flags(
         cmd,
         settings,
         pick_expected_text="",
@@ -550,7 +543,7 @@ def test_append_sample_py_quality_flags_forwards_vit_pick_and_ar():
 
 def test_append_sample_py_beam_flags():
     cmd = ["python", "sample.py"]
-    book_helpers.append_sample_py_beam_flags(
+    render.append_sample_py_beam_flags(
         cmd,
         beam_width=4,
         beam_steps=8,
@@ -573,20 +566,20 @@ def test_append_sample_py_beam_flags():
 
 
 def test_append_sample_py_quality_flags_combo_vit_realism_forwards_expected_text():
-    settings = book_helpers.resolve_book_sample_settings(
+    settings = render.resolve_book_sample_settings(
         _args(book_accuracy="none", sample_candidates=2, pick_best="combo_vit_realism")
     )
     cmd = ["python", "sample.py"]
-    book_helpers.append_sample_py_quality_flags(cmd, settings, pick_expected_text="BONJOUR")
+    render.append_sample_py_quality_flags(cmd, settings, pick_expected_text="BONJOUR")
     assert "--expected-text BONJOUR" in " ".join(cmd)
 
 
 def test_append_sample_py_quality_flags_combo_count_forwards_count_args():
-    settings = book_helpers.resolve_book_sample_settings(
+    settings = render.resolve_book_sample_settings(
         _args(book_accuracy="none", sample_candidates=2, pick_best="combo_count")
     )
     cmd = ["python", "sample.py"]
-    book_helpers.append_sample_py_quality_flags(
+    render.append_sample_py_quality_flags(
         cmd,
         settings,
         pick_expected_text="",
@@ -602,7 +595,7 @@ def test_append_sample_py_quality_flags_combo_count_forwards_count_args():
 
 
 def test_compose_book_page_prompt_order():
-    s = book_helpers.compose_book_page_prompt(
+    s = render.compose_book_page_prompt(
         user_prompt="page scene",
         narration_prefix="nar",
         consistency_block="cons",
@@ -616,7 +609,7 @@ def test_compose_book_page_prompt_order():
 
 
 def test_expand_page_prompt_template():
-    s = book_helpers.expand_page_prompt_template(
+    s = render.expand_page_prompt_template(
         "p{page1} of {total_pages} idx{page0} last{total_pages0} {chapter}",
         page_index=2,
         total_pages=10,
@@ -629,8 +622,8 @@ def test_expand_page_prompt_template():
 
 
 def test_build_extra_ocr_flags_includes_shortcomings():
-    settings = book_helpers.resolve_book_sample_settings(_args(book_accuracy="production"))
-    flags = book_helpers.build_extra_ocr_sample_flags(settings)
+    settings = render.resolve_book_sample_settings(_args(book_accuracy="production"))
+    flags = render.build_extra_ocr_sample_flags(settings)
     assert "--shortcomings-mitigation" in flags
     assert "all" in flags
     assert "--shortcomings-2d" in flags
@@ -640,7 +633,7 @@ def test_build_extra_ocr_flags_includes_shortcomings():
 
 
 # ==================================================================================================
-# test_book_manifest_utils: Tests for ``pipelines.book_comic.book_manifest_utils``.
+# test_book_manifest_utils: Tests for ``pipelines.book_comic.render``.
 # ==================================================================================================
 
 
@@ -676,7 +669,7 @@ def test_validate_book_manifest_check_files(tmp_path) -> None:
         "ckpt": "z.pt",
         "entries": [{"kind": "page", "index": 0, "path": "pages/page_000.png", "prompt": "a"}],
     }
-    from pipelines.book_comic.book_manifest_utils import validate_book_manifest
+    from pipelines.book_comic.render import validate_book_manifest
 
     errs, _ = validate_book_manifest(m, project_root=tmp_path, check_files=True)
     assert not errs
@@ -687,7 +680,7 @@ def test_validate_book_manifest_missing_file(tmp_path) -> None:
         "ckpt": "z.pt",
         "entries": [{"kind": "page", "index": 0, "path": "pages/missing.png"}],
     }
-    from pipelines.book_comic.book_manifest_utils import validate_book_manifest
+    from pipelines.book_comic.render import validate_book_manifest
 
     errs, _ = validate_book_manifest(m, project_root=tmp_path, check_files=True)
     assert errs
@@ -700,12 +693,12 @@ def test_manifest_summary_includes_pick() -> None:
 
 
 # ==================================================================================================
-# test_book_model_readiness: Tests for ``pipelines.book_comic.book_model_readiness`` and ViT peek helper.
+# test_book_model_readiness: Tests for ``pipelines.book_comic.render`` and ViT peek helper.
 # ==================================================================================================
 
 
 def test_peek_vit_quality_config(tmp_path: Path) -> None:
-    from vit_quality.checkpoint_utils import peek_vit_quality_config
+    from vit_quality.model import peek_vit_quality_config
 
     p = tmp_path / "vq.pt"
     torch.save({"config": {"use_ar_conditioning": True, "image_size": 384}}, p)
@@ -715,15 +708,13 @@ def test_peek_vit_quality_config(tmp_path: Path) -> None:
 
 
 def test_run_book_preflight_off() -> None:
-    from pipelines.book_comic import book_model_readiness
 
     ns = SimpleNamespace(ckpt="__no_such_ckpt__", pick_vit_ckpt="", lora=[], control=[])
-    e, w = book_model_readiness.run_book_preflight(ns, mode="off")
+    e, w = render.run_book_preflight(ns, mode="off")
     assert e == [] and w == []
 
 
 def test_run_book_preflight_strict_missing_ckpt(tmp_path: Path) -> None:
-    from pipelines.book_comic import book_model_readiness
 
     ns = SimpleNamespace(
         ckpt=str(tmp_path / "nope.pt"),
@@ -738,15 +729,14 @@ def test_run_book_preflight_strict_missing_ckpt(tmp_path: Path) -> None:
         visual_memory="",
         consistency_json="",
     )
-    errs, _ = book_model_readiness.run_book_preflight(ns, mode="strict", resolved_pick_best="clip")
+    errs, _ = render.run_book_preflight(ns, mode="strict", resolved_pick_best="clip")
     assert errs
 
 
 def test_collect_dual_model_ar_mismatch() -> None:
-    from pipelines.book_comic import book_model_readiness
 
     ns = SimpleNamespace(pick_vit_ckpt="x.pt", pick_vit_ar_blocks=4, pick_vit_ar_from_ckpt=False)
-    w = book_model_readiness.collect_dual_model_alignment_warnings(
+    w = render.collect_dual_model_alignment_warnings(
         ns,
         dit_ar_blocks=2,
         vit_cfg={"use_ar_conditioning": True, "image_size": 224},
@@ -755,7 +745,6 @@ def test_collect_dual_model_ar_mismatch() -> None:
 
 
 def test_book_model_stack_snapshot() -> None:
-    from pipelines.book_comic import book_model_readiness
 
     ns = SimpleNamespace(
         ckpt="c.pt",
@@ -765,39 +754,35 @@ def test_book_model_stack_snapshot() -> None:
         pick_vit_ar_blocks=-1,
         pick_vit_ar_from_ckpt=False,
     )
-    snap = book_model_readiness.book_model_stack_snapshot(ns, dit_ar_blocks=0, vit_cfg={})
+    snap = render.book_model_stack_snapshot(ns, dit_ar_blocks=0, vit_cfg={})
     assert snap["dit_num_ar_blocks"] == 0
     assert snap["lora_count"] == 1
 
 
 def test_missing_path_errors_parse_drive_letter_specs(tmp_path: Path) -> None:
     r"""``C:\...:0.8`` specs must keep the drive letter (regression: split on the first colon)."""
-    from pipelines.book_comic import book_model_readiness
 
     weights = tmp_path / "style.safetensors"
     weights.write_bytes(b"x")
     ckpt = tmp_path / "dit.pt"
     ckpt.write_bytes(b"x")
     ns = SimpleNamespace(ckpt=str(ckpt), lora=[f"{weights}:0.8:style"], control=[f"{weights}:canny:0.7"])
-    assert book_model_readiness.collect_missing_path_errors(ns) == []
+    assert render.collect_missing_path_errors(ns) == []
 
 
 def test_pick_vit_ar_blocks_zero_is_a_real_regime() -> None:
     """``--pick-vit-ar-blocks 0`` must not be treated as unset (regression: ``int(x or -1)``)."""
-    from pipelines.book_comic import book_model_readiness
 
     ns = SimpleNamespace(pick_vit_ckpt="x.pt", pick_vit_ar_blocks=0, pick_vit_ar_from_ckpt=False)
-    w = book_model_readiness.collect_dual_model_alignment_warnings(
-        ns, dit_ar_blocks=2, vit_cfg={"use_ar_conditioning": True}
-    )
+    w = render.collect_dual_model_alignment_warnings(ns, dit_ar_blocks=2, vit_cfg={"use_ar_conditioning": True})
     assert not any("is unset" in x for x in w)
     assert any("resolves to 0" in x for x in w)
-    snap = book_model_readiness.book_model_stack_snapshot(ns, vit_cfg={})
+    snap = render.book_model_stack_snapshot(ns, vit_cfg={})
     assert snap["pick_vit_ar_blocks_cli"] == 0
 
 
 # ==================================================================================================
-# test_book_project: Tests for ``pipelines.book_comic.book_project`` layout.
+# test_book_project: Tests for ``pipelines.book_comic.render`` layout.
 # ==================================================================================================
 
 
@@ -833,7 +818,7 @@ def test_book_project_open_roundtrip(tmp_path: Path) -> None:
 
 
 # ==================================================================================================
-# test_book_prompt_intel: Tests for pipelines.book_comic.book_prompt_intel.
+# test_book_prompt_intel: Tests for pipelines.book_comic.story.
 # ==================================================================================================
 
 
@@ -856,7 +841,7 @@ def test_length_report_ignores_empty_blocks_in_token_estimate():
 
 
 # ==================================================================================================
-# test_book_style_authenticity: Tests for pipelines.book_comic.book_style_authenticity.
+# test_book_style_authenticity: Tests for pipelines.book_comic.story.
 # ==================================================================================================
 
 
@@ -890,7 +875,7 @@ def test_peek_visual_memory_book_style_non_utf8_returns_empty(tmp_path: Path):
 
 
 # ==================================================================================================
-# test_book_style_fusion: Tests for pipelines.book_comic.book_style_fusion.
+# test_book_style_fusion: Tests for pipelines.book_comic.story.
 # ==================================================================================================
 
 
@@ -915,7 +900,7 @@ def test_freeform_empty_secondary():
 
 
 # ==================================================================================================
-# test_book_text_continuity: Tests for pipelines.book_comic.book_text_continuity.
+# test_book_text_continuity: Tests for pipelines.book_comic.story.
 # ==================================================================================================
 
 
@@ -1020,7 +1005,7 @@ def test_help_is_cp1252_safe():
 
 
 # ==================================================================================================
-# test_book_training_helpers: Tests for pipelines.book_comic.book_training_helpers.
+# test_book_training_helpers: Tests for pipelines.book_comic.training.
 # ==================================================================================================
 
 
@@ -1156,7 +1141,7 @@ def test_build_hf_export_command():
         shuffle_seed=7,
     )
     joined = " ".join(cmd)
-    assert "hf_export_to_sdx_manifest.py" in joined
+    assert "manifest.py hf-export" in joined
     assert "--dataset org/bookset" in joined
     assert "--manifest-name m.jsonl" in joined
     assert "--max-samples 123" in joined
@@ -1185,7 +1170,7 @@ def test_build_caption_normalize_command():
         style_guidance_artists=False,
     )
     joined = " ".join(cmd)
-    assert "normalize_captions.py" in joined
+    assert "captions.py normalize" in joined
     assert "--shortcomings-mitigation all" in joined
     assert "--shortcomings-2d" in cmd
     assert "--no-art-guidance-photography" in cmd
@@ -1244,7 +1229,7 @@ def test_build_train_command_forwards_zero_curriculum_blocks():
 
 
 # ==================================================================================================
-# test_book_visual_memory: Tests for ``pipelines.book_comic.visual_memory``.
+# test_book_visual_memory: Tests for ``pipelines.book_comic.story``.
 # ==================================================================================================
 
 
@@ -1384,3 +1369,41 @@ def test_null_fields_do_not_render_none(tmp_path: Path) -> None:
     assert mem.entity_ids() == ["a"]
     assert "None" not in mem.prompt_fragment_for_page(0)
     assert "None" not in mem.prompt_fragment_for_cover()
+
+
+def test_book_scene_split_pages():
+    from scripts.tools.book import split_into_page_prompts
+
+    raw = "intro\n## Page 1\nhero runs\n\n---PAGE---\n\n### page 2\nvillain laughs\n"
+    assert split_into_page_prompts(raw) == ["intro", "hero runs", "villain laughs"]
+
+
+# ==================================================================================================
+# test_consistency_text_continuity: Consistency JSON text_continuity merged into positive block.
+# ==================================================================================================
+
+
+def test_positive_block_includes_text_continuity():
+    spec = {
+        "character": "a hero",
+        "text_continuity": {
+            "chapter_motto": "Never look back",
+            "locked_phrases": ["Remember the bridge"],
+        },
+    }
+    out = positive_block_from_mapping(spec)
+    assert "Never look back" in out
+    assert "bridge" in out.lower()
+
+
+def test_positive_block_ignores_json_nulls():
+    spec = {
+        "character": {"label": "Ren", "hair": None},
+        "props": [{"description": None, "label": "x"}, {"description": "lantern", "label": None}],
+        "vehicle": {"description": None},
+        "lettering": {"extra": None},
+    }
+    out = positive_block_from_mapping(spec)
+    assert "None" not in out
+    assert "recurring character Ren" in out
+    assert "same recurring prop: lantern" in out

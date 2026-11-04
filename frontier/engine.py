@@ -1,6 +1,5 @@
-"""Frontier engine: compose logic, narrative, chaos, and memory analyzers into one plan.
-
-Also holds what used to be: chaos, logic, memory, narrative.
+"""Frontier engine: compose logic, narrative, chaos, and memory analyzers into one plan, and wire frontier plans
+into the production sampling stack (``apply_frontier_to_args`` / ``frontier_diffusion_hooks``; no model weights).
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from config.defaults._lexicon import merge_csv_unique
+from config.prompts import merge_csv_unique
 
 # ==================================================================================================
 # chaos: Controlled randomness for sampling.
@@ -564,28 +563,6 @@ class FrontierEngine:
         self.echo_memory.record_failure(prompt, tags, severity=severity)
 
 
-__all__ = [
-    "EntropyBudget",
-    "EntropyBudgetAllocator",
-    "SerendipityCurve",
-    "SerendipityInjector",
-    "AbsenceConstraint",
-    "AbsenceExtractor",
-    "Contradiction",
-    "ContradictionScanner",
-    "ArtifactEcho",
-    "GenerationEchoMemory",
-    "MomentCue",
-    "TemporalMomentAnalyzer",
-    "WitnessFrame",
-    "WitnessPerspective",
-    "WitnessPerspectiveAnalyzer",
-    "FrontierEngine",
-    "FrontierPlan",
-    "analyze_prompt",
-]
-
-
 # ==================================================================================================
 # Restored from b654ae9:frontier/narrative/tension_field.py
 # ==================================================================================================
@@ -621,3 +598,57 @@ class TensionField:
 
 def build_tension_field(num_steps: int = 28) -> TensionField:
     return TensionField(num_steps=num_steps)
+
+
+def apply_frontier_to_args(
+    args: Any,
+    *,
+    prompt: str | None = None,
+    engine: FrontierEngine | None = None,
+) -> FrontierPlan:
+    """Set ``prompt``, ``negative_prompt``, ``frontier_plan`` and ``frontier_risk_score`` on an argparse namespace."""
+    eng = engine or FrontierEngine()
+    plan = eng.analyze(prompt if prompt is not None else getattr(args, "prompt", "") or "")
+    kw = eng.sample_kwargs(plan, base_negative=getattr(args, "negative_prompt", "") or "")
+    if kw["prompt"]:
+        args.prompt = kw["prompt"]
+    args.negative_prompt = kw["negative_prompt"]
+    args.frontier_plan = plan
+    args.frontier_risk_score = kw["frontier_risk_score"]
+    return plan
+
+
+def frontier_diffusion_hooks(plan: FrontierPlan) -> dict[str, Any]:
+    """Per-step curves for the sample loop: ``serendipity_scales``, ``entropy_per_step``, ``step_emphasis``."""
+    out: dict[str, Any] = {}
+    if plan.serendipity is not None:
+        out["serendipity_scales"] = list(plan.serendipity.scales)
+    if plan.entropy is not None:
+        out["entropy_per_step"] = list(plan.entropy.per_step)
+    if plan.moment is not None:
+        out["step_emphasis"] = list(plan.moment.step_emphasis)
+    return out
+
+
+__all__ = [
+    "EntropyBudget",
+    "EntropyBudgetAllocator",
+    "SerendipityCurve",
+    "SerendipityInjector",
+    "AbsenceConstraint",
+    "AbsenceExtractor",
+    "Contradiction",
+    "ContradictionScanner",
+    "ArtifactEcho",
+    "GenerationEchoMemory",
+    "MomentCue",
+    "TemporalMomentAnalyzer",
+    "WitnessFrame",
+    "WitnessPerspective",
+    "WitnessPerspectiveAnalyzer",
+    "FrontierEngine",
+    "FrontierPlan",
+    "analyze_prompt",
+    "apply_frontier_to_args",
+    "frontier_diffusion_hooks",
+]

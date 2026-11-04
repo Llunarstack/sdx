@@ -17,11 +17,11 @@ import numpy as np  # noqa: E402
 
 
 def main() -> int:
-    from utils.prompt.style_native import style_native_status
+    from utils.prompt.style import style_native_status
 
     print("style_native_status:", json.dumps(style_native_status(), indent=2))
 
-    from sdx_native.style_ops_native import maybe_token_jaccard
+    from sdx_native.ffi import maybe_token_jaccard
 
     j = maybe_token_jaccard("red dress, blue", "red dress, golden")
     if j is None:
@@ -31,8 +31,8 @@ def main() -> int:
         assert 0.0 < j <= 1.0
 
     # Inventor + chaos
-    from utils.prompt.style_genome_chaos import fuse_genomes, invent_insane_batch
-    from utils.prompt.style_inventor import StyleInventor
+    from utils.prompt.style import fuse_genomes, invent_insane_batch
+    from utils.prompt.style import StyleInventor
 
     inv = StyleInventor(use_qwen=False)
     genomes = inv.invent("samurai at sunset", n=2, invention_mode="insane", chaos_level=0.8, seed=42)
@@ -45,7 +45,7 @@ def main() -> int:
     assert len(batch) == 2
 
     # Explore planner + manifest
-    from utils.prompt.style_explore import StyleExplorePlanner
+    from utils.prompt.style import StyleExplorePlanner
 
     out = _ROOT / "data" / "style_genomes" / "_smoke_explore.jsonl"
     planner = StyleExplorePlanner(use_qwen=False)
@@ -101,7 +101,7 @@ def main() -> int:
     print("PromptStack trace:", " -> ".join(result.trace[:8]), "...")
 
     # CUDA pick-best (numpy fallback ok)
-    from utils.prompt.style_native import pick_best_embedding_index
+    from utils.prompt.style import pick_best_embedding_index
 
     dim = 16
     q = np.random.randn(dim).astype(np.float32)
@@ -112,7 +112,7 @@ def main() -> int:
     assert idx == 2
 
     # Go explore-stats (optional)
-    from utils.prompt.style_native import run_go_explore_stats
+    from utils.prompt.style import run_go_explore_stats
 
     stats = run_go_explore_stats(out)
     if stats:

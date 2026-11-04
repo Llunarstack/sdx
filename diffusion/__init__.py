@@ -4,6 +4,6 @@ sampling loop), training objectives and inference solvers. See ``diffusion/READM
 """
 
 from .gaussian_diffusion import GaussianDiffusion, create_diffusion
-from .inference_timesteps import list_timestep_schedules
+from .solvers import list_timestep_schedules
 
 __all__ = ["GaussianDiffusion", "create_diffusion", "list_timestep_schedules"]
