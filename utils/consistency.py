@@ -125,7 +125,7 @@ class CharacterProfile:
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "CharacterProfile":
+    def from_dict(cls, data: dict[str, Any]) -> CharacterProfile:
         """Create profile from dictionary."""
         # Convert lists back to numpy arrays
         if "face_embedding" in data and data["face_embedding"] is not None:
@@ -2100,5 +2100,3 @@ class StyleHarmonizer:
 def create_style_harmonization_system() -> StyleHarmonizer:
     """Create and initialize the style harmonization system."""
     return StyleHarmonizer()
-
-

@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 
 from utils.prompt.text import append_unique
 
-_PIXEL_RX = re.compile(r"\bpixel[\s-]?art\b|\bpixelart\b|\b(?:1|2|4|8|16|32)[\s-]?bit\b|\bpixel(?:ated)? (?:sprite|game|character|tileset|style)")
+_PIXEL_RX = re.compile(
+    r"\bpixel[\s-]?art\b|\bpixelart\b|\b(?:1|2|4|8|16|32)[\s-]?bit\b|\bpixel(?:ated)? (?:sprite|game|character|tileset|style)"
+)
 _GRID_RX = re.compile(r"\b(8|12|16|24|32|48|64|96|128)\s*[x×]\s*\1\b")
 
 
@@ -31,8 +33,13 @@ _ASSETS: tuple[_Asset, ...] = (
     _a(
         "sprite_sheet",
         r"sprite ?sheet|animation frames|(?:walk|run|attack|idle) (?:cycle|animation)",
-        ("sprite sheet", "evenly spaced grid of frames", "same character size and framing in every frame",
-         "consistent palette across frames", "plain flat background"),
+        (
+            "sprite sheet",
+            "evenly spaced grid of frames",
+            "same character size and framing in every frame",
+            "consistent palette across frames",
+            "plain flat background",
+        ),
         ("uneven spacing", "overlapping frames", "inconsistent character design", "cropped frames", "perspective"),
         transparent_bg=True,
     ),
@@ -47,8 +54,13 @@ _ASSETS: tuple[_Asset, ...] = (
     _a(
         "icon",
         r"\b(?:item|inventory|skill|ability|spell|loot|ui|game|potion|weapon) icons?\b|icon set",
-        ("single centered object", "bold readable silhouette", "clear at small size", "strong rim light",
-         "plain background"),
+        (
+            "single centered object",
+            "bold readable silhouette",
+            "clear at small size",
+            "strong rim light",
+            "plain background",
+        ),
         ("cluttered background", "tiny details", "cropped object", "text", "multiple objects"),
         transparent_bg=True,
         critic="icon",
@@ -56,31 +68,52 @@ _ASSETS: tuple[_Asset, ...] = (
     _a(
         "ui_hud",
         r"\bhud\b|game ui\b|game interface|health bar|inventory screen|main menu|menu screen|minimap|skill tree",
-        ("clean aligned UI panels", "consistent margins", "legible labels", "clear visual hierarchy",
-         "UI framing the screen edges"),
+        (
+            "clean aligned UI panels",
+            "consistent margins",
+            "legible labels",
+            "clear visual hierarchy",
+            "UI framing the screen edges",
+        ),
         ("garbled text", "misaligned panels", "overlapping widgets", "illegible lettering", "random symbols"),
     ),
     _a(
         "character_sheet",
         r"character (?:sheet|turnaround|reference sheet|design sheet)|turnaround|model sheet|front,? side,? (?:and )?back",
-        ("character turnaround", "front view, side view, back view", "identical design in every view",
-         "neutral standing pose", "orthographic views", "plain background"),
+        (
+            "character turnaround",
+            "front view, side view, back view",
+            "identical design in every view",
+            "neutral standing pose",
+            "orthographic views",
+            "plain background",
+        ),
         ("different outfits between views", "inconsistent proportions", "perspective distortion", "dynamic pose"),
     ),
     _a(
         "in_engine",
         r"in[\s-]?game screenshot|gameplay screenshot|game screenshot|in[\s-]?engine|(?:first|third)[\s-]person "
         r"(?:shooter|view|game)|open[\s-]world game|\bgameplay\b|video game (?:scene|still)",
-        ("real-time rendered game graphics", "physically based materials", "consistent world scale",
-         "dynamic shadows", "natural game camera field of view", "atmospheric depth"),
-        ("pre-rendered cinematic look", "warped architecture", "floating objects", "garbled UI text",
-         "deformed hands"),
+        (
+            "real-time rendered game graphics",
+            "physically based materials",
+            "consistent world scale",
+            "dynamic shadows",
+            "natural game camera field of view",
+            "atmospheric depth",
+        ),
+        ("pre-rendered cinematic look", "warped architecture", "floating objects", "garbled UI text", "deformed hands"),
     ),
     _a(
         "key_art",
         r"key art|cover art|box art|game poster|splash art|loading screen",
-        ("dramatic hero composition", "clear focal character", "readable silhouette", "open space for a title",
-         "cinematic lighting"),
+        (
+            "dramatic hero composition",
+            "clear focal character",
+            "readable silhouette",
+            "open space for a title",
+            "cinematic lighting",
+        ),
         ("cluttered composition", "flat lighting", "cropped head", "random text", "watermark"),
     ),
     _a(
@@ -98,8 +131,13 @@ _ASSETS: tuple[_Asset, ...] = (
     _a(
         "environment_concept",
         r"environment (?:concept|art|design)|level (?:design|concept)|game (?:environment|level)",
-        ("environment concept art", "clear foreground, midground and background", "atmospheric perspective",
-         "human figure for scale", "readable landmarks"),
+        (
+            "environment concept art",
+            "clear foreground, midground and background",
+            "atmospheric perspective",
+            "human figure for scale",
+            "readable landmarks",
+        ),
         ("flat depth", "muddy values", "no sense of scale"),
     ),
     _a(
@@ -128,10 +166,14 @@ _ASSETS: tuple[_Asset, ...] = (
     ),
 )
 
-_PIXEL_POS = ("pixel art", "crisp hard-edged pixels", "limited color palette", "clean 1-pixel outlines",
-              "deliberate dithering only")
-_PIXEL_NEG = ("anti-aliasing", "blurry", "smooth gradients", "mixed pixel sizes", "jpeg artifacts",
-              "sub-pixel detail")
+_PIXEL_POS = (
+    "pixel art",
+    "crisp hard-edged pixels",
+    "limited color palette",
+    "clean 1-pixel outlines",
+    "deliberate dithering only",
+)
+_PIXEL_NEG = ("anti-aliasing", "blurry", "smooth gradients", "mixed pixel sizes", "jpeg artifacts", "sub-pixel detail")
 
 
 @dataclass(frozen=True)
@@ -168,8 +210,13 @@ def detect_game_profile(prompt: str) -> GameProfile | None:
     if asset is None and not pixel:
         if not re.search(r"\bsprite\b", p):
             return None
-        asset = _Asset("sprite", re.compile(""), ("2d game sprite", "single character", "full body in frame",
-                       "plain flat background"), ("cropped", "busy background", "perspective"), transparent_bg=True)
+        asset = _Asset(
+            "sprite",
+            re.compile(""),
+            ("2d game sprite", "single character", "full body in frame", "plain flat background"),
+            ("cropped", "busy background", "perspective"),
+            transparent_bg=True,
+        )
     grid_m = _GRID_RX.search(p)
     pos = (asset.positive if asset else ()) + (_PIXEL_POS if pixel else ())
     neg = (asset.negative if asset else ()) + (_PIXEL_NEG if pixel else ())
@@ -178,7 +225,8 @@ def detect_game_profile(prompt: str) -> GameProfile | None:
         pixel_art=pixel,
         grid=int(grid_m.group(1)) if (pixel and grid_m) else 0,
         palette_colors=_palette_for(p) if pixel else 0,
-        transparent_bg=bool(asset and asset.transparent_bg) or bool(re.search(r"transparent background|no background", p)),
+        transparent_bg=bool(asset and asset.transparent_bg)
+        or bool(re.search(r"transparent background|no background", p)),
         tileable=bool(asset and asset.tileable),
         critic="pixel" if pixel else (asset.critic if asset else ""),
         positive=pos,

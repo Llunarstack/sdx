@@ -505,7 +505,9 @@ def write_reference_sheet_manifest(sheet: ReferenceSheet, path: str | Path) -> P
     p = Path(path)
     payload = {
         "source": sheet.source,
-        "views": [{"name": n, "path": vp, "box": list(b)} for (n, b), vp in zip(sheet.boxes, sheet.views, strict=False)],
+        "views": [
+            {"name": n, "path": vp, "box": list(b)} for (n, b), vp in zip(sheet.boxes, sheet.views, strict=False)
+        ],
     }
     p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return p

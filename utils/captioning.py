@@ -188,7 +188,8 @@ class WDTagger:
             batch = self._preprocess(img, self._input_size)
         probs = self._session.run(None, {self._input_name: batch})[0][0]  # the graph ends in a sigmoid
         tags = [
-            WDTag(name=n, category=c, score=float(p)) for n, c, p in zip(self._tag_names, self._tag_categories, probs, strict=True)
+            WDTag(name=n, category=c, score=float(p))
+            for n, c, p in zip(self._tag_names, self._tag_categories, probs, strict=True)
         ]
         tags.sort(key=lambda t: t.score, reverse=True)
         return tags

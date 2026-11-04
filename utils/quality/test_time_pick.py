@@ -547,8 +547,7 @@ def score_object_count_match(rgb_uint8: np.ndarray, expected_count: int, object_
 
 def _maybe_human_scores(prompt: str, rgb_images: Sequence[np.ndarray], plan: dict | None = None) -> list[float] | None:
     """Per-image human-likeness in [0,1]; None for drawn / rendered media."""
-    from utils.quality.critics import resolve_plan
-    from utils.quality.critics import score_human_likeness
+    from utils.quality.critics import resolve_plan, score_human_likeness
 
     p = resolve_plan(prompt, plan)
     if p.get("medium") in ("2d", "3d"):

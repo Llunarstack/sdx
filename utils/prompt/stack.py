@@ -542,7 +542,7 @@ def stage_token_budget(ctx: PromptContext) -> None:
     additions = [t for t in tags[head_end:] if t.lower() not in keys]
     caption = split_tags(ad.caption()) if ad is not None else []
     caption += split_tags(str(getattr(args, "_shot_caption", "") or ""))  # utils.prompt.realism shot spec
-    gated =[t for t in additions if ad is None or gate_tag(t, ad, user_text=user)]
+    gated = [t for t in additions if ad is None or gate_tag(t, ad, user_text=user)]
     kept, dropped = fit_tags(protected, caption + gated, limit=limit, extra=extra, tokenizer=ctx.tokenizer)
     # The leading user text is kept byte-for-byte so emphasis offsets computed on it stay valid.
     head = _leading_text(ctx.positive, head_end)

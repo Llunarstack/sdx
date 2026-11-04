@@ -4312,26 +4312,26 @@ Result: Better quality without artifacts from schedule violations
 ```python
 # Simplified flow matching training
 for epoch in range(num_epochs):
-  for batch in dataloader:
-    images, captions = batch
-    latents = vae.encode(images)
-    
-    # Flow matching: simple linear interpolation
-    t = torch.rand(batch_size)  # Random time 0-1
-    noise = torch.randn_like(latents)
-    
-    # Linear flow (simpler than VP!)
-    x_t = (1 - t) * latents + t * noise
-    
-    # Model predicts noise (same as VP)
-    text_embed = text_encoder(captions)
-    pred = dit(x_t, t, text_embed)
-    
-    # Loss: predict noise
-    loss = mse(pred, noise)
-    
-    loss.backward()
-    optimizer.step()
+    for batch in dataloader:
+        images, captions = batch
+        latents = vae.encode(images)
+
+        # Flow matching: simple linear interpolation
+        t = torch.rand(batch_size)  # Random time 0-1
+        noise = torch.randn_like(latents)
+
+        # Linear flow (simpler than VP!)
+        x_t = (1 - t) * latents + t * noise
+
+        # Model predicts noise (same as VP)
+        text_embed = text_encoder(captions)
+        pred = dit(x_t, t, text_embed)
+
+        # Loss: predict noise
+        loss = mse(pred, noise)
+
+        loss.backward()
+        optimizer.step()
 ```
 
 Key difference from VP: No complex variance calculations, just linear interpolation.
@@ -4341,23 +4341,23 @@ Key difference from VP: No complex variance calculations, just linear interpolat
 ```python
 # DPO training loop
 for batch in dataloader:
-  prompt, good_image, bad_image = batch
-  
-  # Get likelihoods from model
-  good_latent = vae.encode(good_image)
-  bad_latent = vae.encode(bad_image)
-  
-  text_embed = text_encoder(prompt)
-  
-  # Score both images at multiple timesteps
-  good_score = compute_likelihood(good_latent, text_embed, model)
-  bad_score = compute_likelihood(bad_latent, text_embed, model)
-  
-  # DPO loss: prefer good over bad
-  loss = -log_sigmoid(good_score - bad_score)
-  
-  loss.backward()
-  optimizer.step()
+    prompt, good_image, bad_image = batch
+
+    # Get likelihoods from model
+    good_latent = vae.encode(good_image)
+    bad_latent = vae.encode(bad_image)
+
+    text_embed = text_encoder(prompt)
+
+    # Score both images at multiple timesteps
+    good_score = compute_likelihood(good_latent, text_embed, model)
+    bad_score = compute_likelihood(bad_latent, text_embed, model)
+
+    # DPO loss: prefer good over bad
+    loss = -log_sigmoid(good_score - bad_score)
+
+    loss.backward()
+    optimizer.step()
 ```
 
 The model learns to maximize the score gap between good and bad.

@@ -98,9 +98,8 @@ def _forever(loader):
 
 def _text_encoder(cfg, device: str, fusion_sd, max_length: int, dtype: torch.dtype):
     """``(tokenizer, text_encoder, vae, encode)`` with ``encode(captions) -> encoder_hidden_states``."""
-    from utils.modeling.encoders import encode_kwargs_for_captions, encode_text, load_text_bundle_for_training
-
     import training.loop as train_mod
+    from utils.modeling.encoders import encode_kwargs_for_captions, encode_text, load_text_bundle_for_training
 
     tokenizer, text_encoder, vae = train_mod.get_t5_and_vae(device, cfg)
     bundle = load_text_bundle_for_training(cfg, torch.device(device), fusion_sd)
@@ -230,6 +229,7 @@ def _dpo_main(argv: list[str]) -> int:
         print("batch-size must be >= 2 (drop_last=True).", file=sys.stderr)
         return 1
 
+    import training.loop as train_mod
     from diffusion.flow_matching import flow_matching_per_sample_losses, shift_timestep_indices
     from diffusion.gaussian_diffusion import offset_noise
     from utils.modeling.checkpoints import finetuned_checkpoint, load_dit_text_checkpoint
@@ -240,8 +240,6 @@ def _dpo_main(argv: list[str]) -> int:
         safeguarded_dpo_preference_loss,
         timestep_dpo_weight,
     )
-
-    import training.loop as train_mod
 
     device = _pick_device(args.device)
     policy, cfg, rae_bridge, _name, fusion_sd = load_dit_text_checkpoint(args.ckpt, device=device, reject_enhanced=True)
@@ -1218,9 +1216,8 @@ def _precompute_latents_main(argv: list[str]) -> int:
     if not manifest:
         parser.error("Provide --manifest-jsonl or --data-path")
 
-    from utils.modeling.encoders import get_autoencoder_class, latent_spec, load_autoencoder
-
     import training.loop as train_mod
+    from utils.modeling.encoders import get_autoencoder_class, latent_spec, load_autoencoder
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     nw = args.num_workers if args.num_workers >= 0 else min(16, os.cpu_count() or 1)

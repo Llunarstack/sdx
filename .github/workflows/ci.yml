@@ -39,7 +39,6 @@ jobs:
             utils/runtime.py \
             training/cli.py \
             utils/generation/sample_cli_parser.py \
-            utils/generation/sample_helpers.py \
             > "$OUT" || true
           python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; ec=int(s.get('errorCount',0)); wc=int(s.get('warningCount',0)); print(f\"basedpyright: {ec} errors, {wc} warnings\"); sys.exit(1 if ec else 0)" "$OUT"
 

@@ -777,7 +777,9 @@ def score_off_center_mass(rgb: np.ndarray) -> float:
     arr = _as_rgb(rgb)
     if arr is None:
         return 0.5
-    edge = np.abs(np.diff(rgb_to_luminance(arr), axis=1, prepend=0.0)) + np.abs(np.diff(rgb_to_luminance(arr), axis=0, prepend=0.0))
+    edge = np.abs(np.diff(rgb_to_luminance(arr), axis=1, prepend=0.0)) + np.abs(
+        np.diff(rgb_to_luminance(arr), axis=0, prepend=0.0)
+    )
     mass = edge + 1e-3
     h, w = mass.shape
     ys = np.arange(h, dtype=np.float64)[:, None]

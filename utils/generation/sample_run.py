@@ -1405,7 +1405,6 @@ def sample_one_image_pil(
     return pil
 
 
-
 def explicit_flags(parser: Any, argv: list[str]) -> frozenset[str]:
     """Destinations of the options the user typed (``--flag``, ``--flag=v``, unique ``--fl`` prefixes)."""
     options = {opt: action.dest for action in parser._actions for opt in action.option_strings}

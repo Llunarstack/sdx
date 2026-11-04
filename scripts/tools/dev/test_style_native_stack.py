@@ -31,8 +31,7 @@ def main() -> int:
         assert 0.0 < j <= 1.0
 
     # Inventor + chaos
-    from utils.prompt.style import fuse_genomes, invent_insane_batch
-    from utils.prompt.style import StyleInventor
+    from utils.prompt.style import StyleInventor, fuse_genomes, invent_insane_batch
 
     inv = StyleInventor(use_qwen=False)
     genomes = inv.invent("samurai at sunset", n=2, invention_mode="insane", chaos_level=0.8, seed=42)

@@ -296,8 +296,7 @@ def enrich_manifest(
     rag_corpus: Path | None = None,
     skip_complete: bool = True,
 ) -> int:
-    from utils.captioning import profile_from_manifest_row
-    from utils.captioning import research_prompt_for_image
+    from utils.captioning import profile_from_manifest_row, research_prompt_for_image
 
     rows = _read_rows(manifest, max_rows)
     out.parent.mkdir(parents=True, exist_ok=True)

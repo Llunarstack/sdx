@@ -70,13 +70,14 @@ from training.loop import (
 )
 from utils.modeling.encoders import encode_kwargs_for_captions, encode_text, load_text_encoder_bundle
 from utils.runtime import to_plain_dict
-from utils.training.monitoring import estimate_memory_usage, validate_train_config
 from utils.training.monitoring import (
+    estimate_memory_usage,
     get_model_info,
     log_gpu_memory,
     log_system_info,
     print_model_summary,
     setup_logging,
+    validate_train_config,
 )
 from utils.training.objectives import parse_ar_order_mix, resolve_ar_for_step
 from utils.training.perf import (

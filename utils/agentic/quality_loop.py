@@ -67,6 +67,7 @@ def build_superior_sample_argv(
     Example::
 
         import subprocess, sys
+
         cfg = SuperiorInferenceConfig()
         argv = [
             sys.executable,

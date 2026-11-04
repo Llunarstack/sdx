@@ -1366,8 +1366,6 @@ def verify_gen_searcher_8b_local(path: str) -> dict[str, object]:
     }
 
 
-
-
 # Video foundation models (pipelines/video/neural_sample.py). Config scaffolds live in
 # pretrained/<folder>; weights stay on the hub until downloaded.
 
