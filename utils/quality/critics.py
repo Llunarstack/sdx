@@ -565,7 +565,8 @@ def score_horizon(rgb: np.ndarray, plan: dict | None = None) -> tuple[float | No
     )
     if lines is None or not len(lines):
         return None, None
-    tilt = float(np.degrees(lines[0, 0, 1])) - 90.0
+    # OpenCV returns (N, 1, 3) up to 4.11 and (N, 3) after; (rho, theta, votes) either way.
+    tilt = float(np.degrees(np.asarray(lines).reshape(-1, lines.shape[-1])[0, 1])) - 90.0
     return 1.0 - ramp(abs(tilt), 0.4, 1.5), tilt
 
 

@@ -509,7 +509,8 @@ def estimate_object_count(rgb_uint8: np.ndarray, object_hint: str = "") -> int:
                 maxRadius=max(6, int(min(h, w) * 0.14)),
             )
             if circles is not None:
-                return int(circles.shape[1])
+                # (1, N, 3) on older OpenCV, (N, 3) on newer: count rows, not axis 1.
+                return int(np.asarray(circles).reshape(-1, circles.shape[-1]).shape[0])
         except Exception:
             pass
 
