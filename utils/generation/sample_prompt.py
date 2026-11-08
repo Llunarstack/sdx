@@ -471,7 +471,7 @@ def append_benchmark_history(leaderboard_path: Path, history_path: Path) -> dict
             hist = []
     import datetime as _dt
 
-    entry = {"timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "leaderboard": lb}
+    entry = {"timestamp": _dt.datetime.now(_dt.UTC).isoformat().replace("+00:00", "Z"), "leaderboard": lb}
     hist.append(entry)
     history_path.parent.mkdir(parents=True, exist_ok=True)
     history_path.write_text(json.dumps(hist, indent=2), encoding="utf-8")

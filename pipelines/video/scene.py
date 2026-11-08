@@ -6,7 +6,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +14,13 @@ from config.prompts import merge_csv_unique
 from frontier.imagination import ShotGrammar
 
 
-class VideoMode(str, Enum):
+class VideoMode(StrEnum):
     T2V = "t2v"
     I2V = "i2v"
     V2V = "v2v"
 
 
-class TransitionType(str, Enum):
+class TransitionType(StrEnum):
     CUT = "cut"
     DISSOLVE = "dissolve"
     MATCH_ACTION = "match_action"
@@ -29,7 +29,7 @@ class TransitionType(str, Enum):
     DIP = "dip_to_black"
 
 
-class RetrievalSource(str, Enum):
+class RetrievalSource(StrEnum):
     LOCAL = "local"
     USER_UPLOAD = "user_upload"
     PEXELS = "pexels"

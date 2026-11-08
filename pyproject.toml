@@ -4,7 +4,7 @@ name = "sdx"
 version = "13.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 # Install runtime deps with: pip install -r requirements.txt
 
@@ -41,7 +41,7 @@ sdx-sample = "sample:main"
 demo = ["huggingface_hub>=0.20"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 src = [
   "config",
@@ -70,7 +70,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-# Expand gradually; B (bugbear) and UP (pyupgrade) catch real footguns on py310+.
+# Expand gradually; B (bugbear) and UP (pyupgrade) catch real footguns on py311+.
 select = [
   "E",   # pycodestyle errors
   "W",   # pycodestyle warnings

@@ -9,7 +9,7 @@ import math
 import wave
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,7 +22,7 @@ from pipelines.video.video_io import mux_audio_onto_video, read_frame_rgb, save_
 # ==================================================================================================
 
 
-class ControlMode(str, Enum):
+class ControlMode(StrEnum):
     """
     What text vs image are allowed to change.
 

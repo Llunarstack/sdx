@@ -209,7 +209,6 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [scripts/tools/ckpt.py](../scripts/tools/ckpt.py) | Checkpoint / model inspection and export commands. |
 | [scripts/tools/danbooru.py](../scripts/tools/danbooru.py) | Danbooru tag vocabulary: fetch -> split general tags into buckets -> merge one categorized TSV. |
 | [scripts/tools/dev/architecture_themes.py](../scripts/tools/dev/architecture_themes.py) | Dump ``utils.modeling.architecture`` themes as JSON or Markdown. |
-| [scripts/tools/dev/cursorfix.sh](../scripts/tools/dev/cursorfix.sh) | Rewrites commits authored/committed by Cursor Agent to your identity. |
 | [scripts/tools/dev/generate_sdx_architecture_diagram.py](../scripts/tools/dev/generate_sdx_architecture_diagram.py) |  |
 | [scripts/tools/dev/integration_smoke.py](../scripts/tools/dev/integration_smoke.py) | End-to-end integration smoke test before RunPod spend. |
 | [scripts/tools/dev/quick_test.py](../scripts/tools/dev/quick_test.py) | Smoke test: one forward pass (no training). Verifies imports, config, and model run. |

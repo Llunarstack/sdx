@@ -274,7 +274,7 @@ class ProvenanceLog:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            "generated_at": _dt.datetime.now(_dt.UTC).isoformat(),
             "segments": [
                 {
                     "segment_index": r.segment_index,
@@ -303,7 +303,7 @@ def record_segment_provenance(
         license=str(clip.license if clip else "generated"),
         url=str(clip.url if clip else ""),
         operations=list(operations or []),
-        retrieved_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+        retrieved_at=_dt.datetime.now(_dt.UTC).isoformat(),
     )
 
 

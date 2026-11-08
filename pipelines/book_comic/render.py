@@ -9,7 +9,7 @@ import shutil
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -1306,7 +1306,7 @@ class BookProject:
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
             "version": 1,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
             "title": self.title,
             "ckpt": self.ckpt,
             "book_type": self.book_type,

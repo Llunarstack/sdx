@@ -6,7 +6,7 @@
 > python -m scripts.tools update_project_structure
 > ```
 >
-> Generated: **2026-11-04 03:41:05 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-11-08 02:44:14 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -213,7 +213,6 @@ sdx/
 │   │   ├── dev/
 │   │   │   ├── __init__.py
 │   │   │   ├── architecture_themes.py
-│   │   │   ├── cursorfix.sh
 │   │   │   ├── generate_sdx_architecture_diagram.py
 │   │   │   ├── integration_smoke.py
 │   │   │   ├── prepare-commit-msg

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
@@ -798,7 +798,7 @@ def director_by_id(name: str) -> DirectorPersonality | None:
 # ==================================================================================================
 
 
-class RenderEngine(str, Enum):
+class RenderEngine(StrEnum):
     REALISTIC = "realistic"
     ANIME_2D = "anime_2d"
     PIXAR_3D = "pixar_3d"
@@ -2159,7 +2159,7 @@ def apply_style_route_to_options(opts: Any, route: StyleRoute) -> Any:
     return opts
 
 
-class RehearsalStage(str, Enum):
+class RehearsalStage(StrEnum):
     ANIMATIC = "animatic"
     LOW_POLY = "low_poly"
     KEYFRAME = "keyframe"

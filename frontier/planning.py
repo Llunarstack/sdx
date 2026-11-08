@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from config.prompts import merge_csv_unique
@@ -191,7 +191,7 @@ class PhysicalPlausibilityScanner:
 # ==================================================================================================
 
 
-class GuidanceTier(str, Enum):
+class GuidanceTier(StrEnum):
     SKIP = "skip"  # no CFG, no regional: trust momentum
     LITE = "lite"  # single CFG pass
     FULL = "full"  # regional + attention + batched CFG
@@ -247,7 +247,7 @@ class ComputeBudgetPlanner:
 # ==================================================================================================
 
 
-class RelationKind(str, Enum):
+class RelationKind(StrEnum):
     LEFT_OF = "left_of"
     RIGHT_OF = "right_of"
     ABOVE = "above"
@@ -319,7 +319,7 @@ class SceneRelationParser:
 # ==================================================================================================
 
 
-class UncertaintySignal(str, Enum):
+class UncertaintySignal(StrEnum):
     VAGUE_QUANTITY = "vague_quantity"
     CONFLICTING_STYLE = "conflicting_style"
     UNGROUNDED_REFERENCE = "ungrounded_reference"
@@ -474,7 +474,7 @@ def deep_sample_kwargs(plan: DeepFrontierPlan, *, base_negative: str = "") -> di
 # ==================================================================================================
 
 
-class BodyMode(str, Enum):
+class BodyMode(StrEnum):
     REALISTIC_HUMAN = "realistic_human"
     STYLIZED_HUMAN = "stylized_human"  # anime, cartoon people
     CREATURE = "creature"  # single-species monster/animal
@@ -655,7 +655,7 @@ class BodyPlanner:
 # ==================================================================================================
 
 
-class CreatureFamily(str, Enum):
+class CreatureFamily(StrEnum):
     DRACONIC = "draconic"
     AVIAN = "avian"
     FELINE = "feline"
@@ -794,7 +794,7 @@ class CreatureTaxonomy:
 # ==================================================================================================
 
 
-class MatureClass(str, Enum):
+class MatureClass(StrEnum):
     NONE = "none"
     ARTISTIC_NUDE = "artistic_nude"
     BOUDOIR = "boudoir"
@@ -880,7 +880,7 @@ class MatureGuidance:
 # ==================================================================================================
 
 
-class StrokeStyle(str, Enum):
+class StrokeStyle(StrEnum):
     IMPASTO = "impasto"
     WET_ON_WET = "wet_on_wet"
     DRY_BRUSH = "dry_brush"
@@ -984,7 +984,7 @@ class BrushPlanner:
 # ==================================================================================================
 
 
-class RealismTier(str, Enum):
+class RealismTier(StrEnum):
     NONE = "none"
     STANDARD = "standard"
     HYPERREAL = "hyperreal"
@@ -1188,7 +1188,7 @@ def subject_sample_kwargs(plan: SubjectFrontierPlan, *, base_negative: str = "")
 # ==================================================================================================
 
 
-class WeatherMood(str, Enum):
+class WeatherMood(StrEnum):
     FOG = "fog"
     MIST = "mist"
     RAIN = "rain"
@@ -1264,7 +1264,7 @@ class AtmospherePlanner:
 # ==================================================================================================
 
 
-class HistoricalEra(str, Enum):
+class HistoricalEra(StrEnum):
     ANCIENT = "ancient"
     MEDIEVAL = "medieval"
     RENAISSANCE = "renaissance"
@@ -1361,7 +1361,7 @@ class EraPlanner:
 # ==================================================================================================
 
 
-class SurfaceClass(str, Enum):
+class SurfaceClass(StrEnum):
     METAL = "metal"
     GLASS = "glass"
     FABRIC = "fabric"
@@ -1446,7 +1446,7 @@ class MaterialPlanner:
 # ==================================================================================================
 
 
-class MotionStyle(str, Enum):
+class MotionStyle(StrEnum):
     FREEZE = "freeze"
     PAN = "pan"
     TRACK = "track"
@@ -1513,13 +1513,13 @@ class MotionPlanner:
 # ==================================================================================================
 
 
-class PolicyTier(str, Enum):
+class PolicyTier(StrEnum):
     OFF = "off"
     MODERATE = "moderate"
     STRICT = "strict"
 
 
-class PolicyDecision(str, Enum):
+class PolicyDecision(StrEnum):
     ALLOW = "allow"
     STEER = "steer"
     REFUSE = "refuse"

@@ -46,7 +46,7 @@ body:
     attributes:
       label: Platform
       description: OS + Python + CUDA/GPU details
-      placeholder: Windows 11, Python 3.10, CUDA 12.1, RTX 4090
+      placeholder: Windows 11, Python 3.13, CUDA 12.1, RTX 4090
     validations:
       required: true
   - type: checkboxes

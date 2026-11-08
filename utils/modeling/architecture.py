@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -750,7 +750,7 @@ def pick_best_candidate_index(
     return ranked[0]
 
 
-class ParityStatus(str, Enum):
+class ParityStatus(StrEnum):
     """Rough alignment with an external research/product theme."""
 
     IMPLEMENTED = "implemented"  # Feature exists and is usable in train/sample

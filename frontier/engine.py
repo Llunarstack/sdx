@@ -9,7 +9,7 @@ import re
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from config.prompts import merge_csv_unique
@@ -294,7 +294,7 @@ class GenerationEchoMemory:
 # ==================================================================================================
 
 
-class MomentPhase(str, Enum):
+class MomentPhase(StrEnum):
     STATIC = "static"
     ANTICIPATION = "anticipation"  # before the action
     CLIMAX = "climax"  # peak action
@@ -362,7 +362,7 @@ class TemporalMomentAnalyzer:
         return tuple(0.5 + 0.5 * (i / (n - 1)) for i in range(n))
 
 
-class WitnessPerspective(str, Enum):
+class WitnessPerspective(StrEnum):
     NEUTRAL = "neutral"
     CHILD = "child"  # low angle, wonder
     GUARD = "guard"  # surveillance, flat, wide

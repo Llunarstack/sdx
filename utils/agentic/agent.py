@@ -9,7 +9,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -191,7 +191,7 @@ def apply_memory_to_prompt(prompt: str, memory: Sequence[TrajectoryExperience]) 
     return prompt + ", " + ", ".join(bits[:6])
 
 
-class GenerationStepKind(str, Enum):
+class GenerationStepKind(StrEnum):
     refine_prompt = "refine_prompt"
     diffusion_sample = "diffusion_sample"
     inpaint_region = "inpaint_region"
@@ -668,7 +668,7 @@ def sample_cmd(
     return cmd
 
 
-class AgentTool(str, Enum):
+class AgentTool(StrEnum):
     rag_retrieve = "rag_retrieve"
     web_search = "web_search"
     understand_refs = "understand_refs"

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Repo root: scripts/tools/repo/update_project_structure.py -> parents[3]
@@ -170,7 +170,7 @@ def main() -> int:
     tree_lines = build_tree_lines(REPO_ROOT, max_depth=int(args.max_depth), skip_extra_dirs=skip_extra)
     tree_body = "\n".join(tree_lines) if tree_lines else "(empty)"
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     skipped_display = sorted(SKIP_DIRS_DEFAULT & skip_extra)
     now_line = f"> Generated: **{now}** · max depth: **{args.max_depth}** · repo root: `{REPO_ROOT.name}/`"
     if skipped_display:

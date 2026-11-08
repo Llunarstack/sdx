@@ -9,7 +9,7 @@ import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from config.prompts import merge_csv_unique
@@ -19,7 +19,7 @@ from config.prompts import merge_csv_unique
 # ==================================================================================================
 
 
-class ArchetypeSymbol(str, Enum):
+class ArchetypeSymbol(StrEnum):
     THRESHOLD = "threshold"
     MIRROR = "mirror"
     LABYRINTH = "labyrinth"
@@ -96,7 +96,7 @@ class SymbolMapEngine:
 # ==================================================================================================
 
 
-class ShotType(str, Enum):
+class ShotType(StrEnum):
     ESTABLISHING = "establishing"
     WIDE = "wide"
     MEDIUM = "medium"
@@ -204,7 +204,7 @@ class ShotGrammar:
 # ==================================================================================================
 
 
-class CrowdScale(str, Enum):
+class CrowdScale(StrEnum):
     SMALL_GROUP = "small_group"
     CROWD = "crowd"
     MASS = "mass"
@@ -266,7 +266,7 @@ class CrowdGrammar:
 # ==================================================================================================
 
 
-class LimitRule(str, Enum):
+class LimitRule(StrEnum):
     MONOCHROME = "monochrome"
     TRIADIC_ONLY = "triadic_only"
     SINGLE_LIGHT = "single_light"
@@ -359,7 +359,7 @@ class CreativeConstraintEngine:
 # ==================================================================================================
 
 
-class FocusIntent(str, Enum):
+class FocusIntent(StrEnum):
     ISOLATE = "isolate"
     DISCOVER = "discover"
     OVERWHELM = "overwhelm"
@@ -427,7 +427,7 @@ class FocalStoryteller:
 # ==================================================================================================
 
 
-class GenrePair(str, Enum):
+class GenrePair(StrEnum):
     STEAMPUNK_CYBER = "steampunk_cyber"
     FOLK_SCIFI = "folk_scifi"
     ANIME_OIL = "anime_oil"
@@ -512,7 +512,7 @@ class GenreCollisionEngine:
 # ==================================================================================================
 
 
-class GlitchAesthetic(str, Enum):
+class GlitchAesthetic(StrEnum):
     VHS = "vhs"
     DATAMOSH = "datamosh"
     SCANLINE = "scanline"
@@ -589,7 +589,7 @@ class GlitchPlanner:
 # ==================================================================================================
 
 
-class MutationAxis(str, Enum):
+class MutationAxis(StrEnum):
     TIME_SHIFT = "time_shift"
     WEATHER_SWAP = "weather_swap"
     SCALE_FLIP = "scale_flip"
@@ -677,7 +677,7 @@ class PromptMutator:
 # ==================================================================================================
 
 
-class BeautifulParadox(str, Enum):
+class BeautifulParadox(StrEnum):
     ESCHER = "escher"
     INFINITE_LOOP = "infinite_loop"
     DUAL_TIME = "dual_time"
@@ -739,7 +739,7 @@ class ParadoxKeeper:
 # ==================================================================================================
 
 
-class VisualRhythm(str, Enum):
+class VisualRhythm(StrEnum):
     REPETITION = "repetition"
     RADIAL = "radial"
     GRID = "grid"
@@ -807,7 +807,7 @@ class RhythmPlanner:
 # ==================================================================================================
 
 
-class ScaleRelation(str, Enum):
+class ScaleRelation(StrEnum):
     TITAN = "titan"
     MINIATURE = "miniature"
     COSMIC = "cosmic"
@@ -870,7 +870,7 @@ class MagnitudePlanner:
 # ==================================================================================================
 
 
-class SurrealMode(str, Enum):
+class SurrealMode(StrEnum):
     NONE = "none"
     DREAM = "dream"
     METAMORPHOSIS = "metamorphosis"
@@ -1141,7 +1141,7 @@ class MoodPhysics:
 # ==================================================================================================
 
 
-class WearLevel(str, Enum):
+class WearLevel(StrEnum):
     PRISTINE = "pristine"
     WORN = "worn"
     WEATHERED = "weathered"

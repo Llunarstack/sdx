@@ -9,7 +9,7 @@ import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -454,7 +454,7 @@ def _load_character_sheet(
     )
 
 
-class CreativityMode(str, Enum):
+class CreativityMode(StrEnum):
     RAW = "raw"
     LOW = "low"
     MEDIUM = "medium"

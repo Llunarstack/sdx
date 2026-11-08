@@ -10,7 +10,7 @@ import platform
 import random
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
@@ -239,7 +239,7 @@ def write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger) 
     manifest_out = exp_dir / "run_manifest.json"
     cfg_out.write_text(json_dumps(to_plain_dict(cfg), indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
     manifest = {
-        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "created_utc": datetime.now(UTC).isoformat(),
         "command": " ".join(sys.argv),
         "cwd": str(Path.cwd()),
         "python": sys.version,

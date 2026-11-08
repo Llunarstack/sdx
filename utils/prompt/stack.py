@@ -9,14 +9,14 @@ import sys
 import traceback
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from utils.prompt.content_controls import apply_content_controls, infer_content_controls_from_prompt
 from utils.prompt.text import append_csv, append_unique, join_tags, split_tags, token_set
 
 
-class StackMode(str, Enum):
+class StackMode(StrEnum):
     """Which stages run (inference full, preview subset, training guidance-only)."""
 
     INFERENCE = "inference"

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from utils.runtime import ProfileConfig, consume_profile_args, json_dumps, json_loads, run_with_cprofile, to_plain_dict
@@ -47,7 +47,7 @@ def test_loads_accepts_bytes():
 
 
 def test_dumps_with_default_forces_stdlib():
-    dt = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    dt = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
     s = json_dumps({"t": dt}, default=lambda o: o.isoformat(), ensure_ascii=False)
     assert json.loads(s)["t"].startswith("2024-06-01")
 
