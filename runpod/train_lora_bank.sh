@@ -42,7 +42,7 @@ if [ ! -f "$MANIFEST" ]; then
 fi
 
 echo "==> Build LoRA subset manifests from $MANIFEST"
-python setup/build_lora_subsets.py \
+python setup/indexes.py lora-subsets \
   --manifest "$MANIFEST" \
   --data-root "$SDX_DATA" \
   --out "$SUBSETS" \
@@ -85,7 +85,7 @@ for mpath in "$SUBSETS"/style/*/manifest.jsonl; do
 done
 
 echo "==> Build LoRA bank index"
-python setup/build_lora_bank_index.py --bank-root "$BANK" --out "$BANK/index.json"
+python setup/indexes.py lora-bank --bank-root "$BANK" --out "$BANK/index.json"
 
 echo "LoRA bank ready: $BANK/index.json"
 echo "Sample: SDX_PROMPT='@wlop @style:anime 1girl' SDX_SAMPLE_CKPT=$BASE bash runpod/sample.sh"

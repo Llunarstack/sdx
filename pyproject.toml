@@ -4,7 +4,7 @@ name = "sdx"
 version = "13.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 # Install runtime deps with: pip install -r requirements.txt
 
@@ -41,7 +41,7 @@ sdx-sample = "sample:main"
 demo = ["huggingface_hub>=0.20"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 src = [
   "config",
@@ -52,7 +52,6 @@ src = [
   "models",
   "native/_experimental/python",
   "pipelines",
-  "research",
   "scripts",
   "toolkit",
   "training",
@@ -68,11 +67,10 @@ exclude = [
   "design",
   "site",
   ".git",
-  "native/mojo",
 ]
 
 [tool.ruff.lint]
-# Expand gradually; B (bugbear) and UP (pyupgrade) catch real footguns on py310+.
+# Expand gradually; B (bugbear) and UP (pyupgrade) catch real footguns on py311+.
 select = [
   "E",   # pycodestyle errors
   "W",   # pycodestyle warnings
@@ -95,15 +93,11 @@ ignore = [
 "scripts/**" = ["E402"]  # imports after sys.path tweaks in some tools
 "sample.py" = ["E402"]  # repo-root sys.path bootstrap + early --help parser before heavy imports
 "train.py" = ["E402"]  # stdio configure before heavy imports; early --help path
-"utils/generation/sample_main.py" = ["E402"]  # stdio configure before helper imports
 "vit_quality/**" = ["E402"]  # repo-root sys.path bootstrap before utils imports
 "setup/**" = ["E402"]  # sys.path bootstrap in setup scripts
 "examples/**" = ["E402"]
 "demo.py" = ["E402"]
 "inference.py" = ["E402"]
-"native/_experimental/python/sdx_native/__init__.py" = ["I001"]  # large explicit re-export surface; isort splits combined imports
-"utils/native/__init__.py" = ["I001"]  # sys.path bootstrap then star imports
-"research/**" = ["E402"]
 "pipelines/**" = ["E402"]
 "toolkit/**" = ["E402"]
 "frontier/**" = ["E402"]
@@ -151,10 +145,9 @@ check_untyped_defs = true
 files = [
   "config/train_config.py",
   "models/lora.py",
-  "training/train_args.py",
-  "training/train_cli_parser.py",
-  "utils/training/part_aware_training.py",
-  "utils/terminal.py",
+  "training/cli.py",
+  "utils/training/objectives.py",
+  "utils/runtime.py",
   "utils/generation/sample_cli_parser.py",
-  "utils/generation/sample_helpers.py",
+  "utils/generation/sample_core.py",
 ]

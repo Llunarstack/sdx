@@ -42,5 +42,5 @@ if ($env:SDX_SKIP_EDITABLE_INSTALL -ne "1") {
 
 New-Item -ItemType Directory -Force -Path $env:SDX_DATA, $env:SDX_PRETRAINED, $env:SDX_RESULTS | Out-Null
 
-python -m toolkit.training.env_health
+python -m toolkit.env_health
 Write-Host "Setup complete."

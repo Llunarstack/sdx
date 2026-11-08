@@ -2,7 +2,7 @@
 Special Prompt Helpers for AI Image Generation.
 
 Covers categories that standard prompt engineering guides and the existing
-``config/defaults/prompt_domains.py`` system handle poorly:
+``config/prompts.py`` system handle poorly:
 
 1. **Weird / surreal / abstract** — dreamlike logic, impossible geometry, Magritte-style
 2. **Horror / dark / disturbing** — dread atmosphere, body horror, psychological unease
@@ -32,6 +32,8 @@ Design notes
 from __future__ import annotations
 
 import re
+
+from config.prompts import merge_csv_unique
 
 __all__ = [
     # Category constants
@@ -75,13 +77,9 @@ __all__ = [
     # Detection + wiring
     "classify_prompt_category",
     "apply_special_helpers",
-    # Utility
-    "merge_csv_unique",
 ]
 
-# ---------------------------------------------------------------------------
 # Category name constants
-# ---------------------------------------------------------------------------
 
 CATEGORY_WEIRD: str = "weird"
 CATEGORY_HORROR: str = "horror"
@@ -93,51 +91,8 @@ CATEGORY_MINIMALIST: str = "minimalist"
 CATEGORY_NSFW_PRECISION: str = "nsfw_precision"
 CATEGORY_STANDARD: str = "standard"
 
-_ALL_CATEGORIES: tuple[str, ...] = (
-    CATEGORY_WEIRD,
-    CATEGORY_HORROR,
-    CATEGORY_NARRATIVE,
-    CATEGORY_EMOTION,
-    CATEGORY_TECHNICAL,
-    CATEGORY_STYLE_FUSION,
-    CATEGORY_MINIMALIST,
-    CATEGORY_NSFW_PRECISION,
-    CATEGORY_STANDARD,
-)
 
-
-# ---------------------------------------------------------------------------
-# Utility
-# ---------------------------------------------------------------------------
-
-
-def merge_csv_unique(*chunks: str) -> str:
-    """
-    Join comma-separated token strings with de-duplication (order preserved).
-
-    Mirrors the same helper in ``ai_image_shortcomings.py`` and
-    ``style_guidance.py`` so callers can use either interchangeably.
-    """
-    seen: set = set()
-    out: list[str] = []
-    for chunk in chunks:
-        if not chunk or not str(chunk).strip():
-            continue
-        for part in str(chunk).split(","):
-            p = part.strip()
-            if not p:
-                continue
-            key = p.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(p)
-    return ", ".join(out)
-
-
-# ---------------------------------------------------------------------------
 # 1. WEIRD / SURREAL / ABSTRACT
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - Models default to "colorful psychedelic dream" when they see "surreal".
 #   - Abstract prompts collapse to generic swirling shapes or kaleidoscope patterns.
@@ -290,9 +245,7 @@ def weird_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 2. HORROR / DARK / DISTURBING
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - "Horror" defaults to Halloween orange-and-black with jack-o-lanterns.
 #   - "Dark" gets interpreted as low-exposure photography, not mood.
@@ -469,9 +422,7 @@ def horror_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 3. NARRATIVE / STORY-DRIVEN
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - "The moment before X" loses the anticipation and becomes a static portrait.
 #   - "Aftermath of Y" loses the implied history and becomes a clean scene.
@@ -657,9 +608,7 @@ def narrative_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 4. EMOTION / MOOD-FIRST
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - Emotion tokens get overridden by subject/style tokens (T5 truncation).
 #   - "Melancholy" defaults to "sad face" rather than pervasive mood.
@@ -838,9 +787,7 @@ def emotion_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 5. HARD TECHNICAL (foreshortening, unusual perspectives, multi-subject)
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - Extreme foreshortening collapses to "weird anatomy" or gets corrected away.
 #   - Worm's-eye / bird's-eye views default to mild tilt rather than extreme angle.
@@ -1051,9 +998,7 @@ def technical_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 6. STYLE FUSION (combining incompatible styles)
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - Two incompatible styles collapse to whichever is more common in training.
 #   - "Photorealistic anime" becomes either photo or anime, not both.
@@ -1063,8 +1008,6 @@ def technical_helpers(prompt: str) -> tuple[str, str]:
 #   - "2.5D" and "semi-realistic" are understood but other fusions are not.
 # Strategy: use explicit fusion grammar tokens, establish a dominant/modifier
 #   hierarchy, and suppress the model's tendency to resolve to one style.
-# Note: this complements STYLE_MIX_TIPS in prompt_domains.py but goes deeper
-#   into the token-level mechanics of making fusions work.
 
 STYLE_FUSION_POSITIVE_TOKENS: list[str] = [
     # Fusion grammar anchors
@@ -1249,9 +1192,7 @@ def style_fusion_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 7. MINIMALIST / NEGATIVE-SPACE
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - "Minimalist" gets interpreted as "simple low-quality" and produces
 #     low-detail outputs rather than intentional restraint.
@@ -1407,9 +1348,7 @@ def minimalist_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 8. NSFW ANATOMY PRECISION
-# ---------------------------------------------------------------------------
 # Failure modes addressed:
 #   - Generic anatomy tags ("bad anatomy", "correct anatomy") are too vague.
 #   - Per-body-part precision is needed for NSFW content where anatomy errors
@@ -1793,15 +1732,13 @@ def nsfw_precision_helpers(prompt: str) -> tuple[str, str]:
     return pos, neg
 
 
-# ---------------------------------------------------------------------------
 # 9. AUTO-DETECTION: classify_prompt_category()
-# ---------------------------------------------------------------------------
 # Detection strategy:
 #   - Use word-boundary regex for precision (avoids "horror" matching "horrible").
 #   - Score each category by keyword matches; return highest-scoring category.
 #   - Tie-breaking: more specific categories win over "standard".
 #   - NSFW precision is detected by explicit body-part vocabulary.
-#   - Style fusion requires detecting two or more style keywords.
+#   - Style fusion requires two different medium families (anime + photo, 3d + oil, ...).
 #   - Minimalist requires explicit minimalism vocabulary (not just "simple").
 
 # Detection keyword sets per category
@@ -2022,26 +1959,16 @@ _DETECT_PATTERNS[CATEGORY_NSFW_PRECISION] = _compile_detect(
     ]
 )
 
-# Style fusion requires two style keywords — handled separately in classify
-_STYLE_KEYWORDS: list[str] = [
-    "photorealistic",
-    "realistic",
-    "anime",
-    "manga",
-    "cartoon",
-    "illustration",
-    "oil painting",
-    "watercolor",
-    "digital art",
-    "3d render",
-    "pixel art",
-    "sketch",
-    "ink",
-    "cel shaded",
-    "painterly",
-    "noir",
-    "black and white",
-]
+
+def _style_fusion_score(prompt: str) -> int:
+    """Number of distinct medium families named (photo, 2d, traditional, 3d); fusion needs two.
+
+    Counting style keywords instead called "pixel art knight" or "noir portrait" a style fusion.
+    """
+    from config.styles import detect_all_mediums
+
+    families = {m.family for m in detect_all_mediums(prompt)}
+    return len(families) if len(families) >= 2 else 0
 
 
 def classify_prompt_category(prompt: str) -> str:
@@ -2054,7 +1981,7 @@ def classify_prompt_category(prompt: str) -> str:
 
     Detection is keyword-based with word-boundary matching.  When multiple
     categories score equally, the more specific category wins.  Style fusion
-    requires detecting two or more incompatible style keywords.
+    requires two different medium families (e.g. anime + photo).
 
     Args:
         prompt: The user's positive prompt string.
@@ -2074,10 +2001,9 @@ def classify_prompt_category(prompt: str) -> str:
         if score > 0:
             scores[category] = score
 
-    # Style fusion: check for two or more incompatible style keywords
-    style_hits = sum(1 for kw in _STYLE_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", p, re.IGNORECASE))
-    if style_hits >= 2:
-        scores[CATEGORY_STYLE_FUSION] = scores.get(CATEGORY_STYLE_FUSION, 0) + style_hits
+    fusion = _style_fusion_score(p)
+    if fusion:
+        scores[CATEGORY_STYLE_FUSION] = scores.get(CATEGORY_STYLE_FUSION, 0) + fusion
 
     if not scores:
         return CATEGORY_STANDARD
@@ -2109,9 +2035,7 @@ def classify_prompt_category(prompt: str) -> str:
     return best_categories[0]
 
 
-# ---------------------------------------------------------------------------
 # 10. MAIN ENTRY POINT: apply_special_helpers()
-# ---------------------------------------------------------------------------
 
 # Map category names to their helper functions
 _CATEGORY_HELPERS: dict[str, object] = {
@@ -2200,116 +2124,10 @@ def apply_special_helpers(
     return enriched_positive, enriched_negative
 
 
-# ---------------------------------------------------------------------------
 # Convenience: apply multiple categories at once
-# ---------------------------------------------------------------------------
 
 
-def apply_multiple_helpers(
-    prompt: str,
-    negative: str,
-    categories: list[str],
-) -> tuple[str, str]:
-    """
-    Apply multiple category helpers in sequence and merge all additions.
-
-    Useful when a prompt spans multiple categories (e.g. horror + narrative,
-    or technical + nsfw_precision).  Each helper's additions are merged
-    cumulatively.
-
-    Args:
-        prompt:   The user's positive prompt string.
-        negative: The user's negative prompt string.
-        categories:
-            List of ``CATEGORY_*`` constants.  ``"auto"`` and ``"standard"``
-            are silently skipped.
-
-    Returns:
-        ``(enriched_positive, enriched_negative)``
-    """
-    pos = str(prompt or "")
-    neg = str(negative or "")
-
-    for cat in categories:
-        c = str(cat or "").lower().strip()
-        if c in ("auto", CATEGORY_STANDARD) or c not in _CATEGORY_HELPERS:
-            continue
-        helper = _CATEGORY_HELPERS[c]
-        pos_addon, neg_addon = helper(pos)  # type: ignore[operator]
-        pos = merge_csv_unique(pos, pos_addon)
-        neg = merge_csv_unique(neg, neg_addon)
-
-    return pos, neg
-
-
-# ---------------------------------------------------------------------------
 # Convenience: suggest categories for a prompt (for UI / tooling)
-# ---------------------------------------------------------------------------
 
 
-def suggest_categories(prompt: str, *, top_n: int = 3) -> list[str]:
-    """
-    Return the top-N most likely categories for a prompt, ranked by score.
-
-    Useful for UI tooling that wants to show the user which helpers are
-    relevant without automatically applying them.
-
-    Args:
-        prompt: The user's positive prompt string.
-        top_n:  Maximum number of categories to return (default 3).
-
-    Returns:
-        List of category strings, highest-scoring first.  May be shorter
-        than ``top_n`` if fewer categories match.  Never includes
-        ``"standard"``.
-    """
-    if not prompt or not prompt.strip():
-        return []
-
-    p = prompt.lower()
-    scores: dict[str, int] = {}
-
-    for category, patterns in _DETECT_PATTERNS.items():
-        score = sum(1 for pat in patterns if pat.search(p))
-        if score > 0:
-            scores[category] = score
-
-    # Style fusion scoring
-    style_hits = sum(1 for kw in _STYLE_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", p, re.IGNORECASE))
-    if style_hits >= 2:
-        scores[CATEGORY_STYLE_FUSION] = scores.get(CATEGORY_STYLE_FUSION, 0) + style_hits
-
-    sorted_cats = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
-    return sorted_cats[:top_n]
-
-
-# ---------------------------------------------------------------------------
 # Convenience: get token lists for a category (for inspection / debugging)
-# ---------------------------------------------------------------------------
-
-
-def get_category_tokens(category: str) -> tuple[list[str], list[str]]:
-    """
-    Return the base positive and negative token lists for a category.
-
-    Returns the static token lists (not the dynamic per-prompt additions).
-    Useful for inspection, debugging, or building UI token pickers.
-
-    Args:
-        category: One of the ``CATEGORY_*`` constants.
-
-    Returns:
-        ``(positive_tokens, negative_tokens)`` — lists of token strings.
-        Returns ``([], [])`` for ``"standard"`` or unknown categories.
-    """
-    _token_map: dict[str, tuple[list[str], list[str]]] = {
-        CATEGORY_WEIRD: (WEIRD_POSITIVE_TOKENS, WEIRD_NEGATIVE_TOKENS),
-        CATEGORY_HORROR: (HORROR_POSITIVE_TOKENS, HORROR_NEGATIVE_TOKENS),
-        CATEGORY_NARRATIVE: (NARRATIVE_POSITIVE_TOKENS, NARRATIVE_NEGATIVE_TOKENS),
-        CATEGORY_EMOTION: (EMOTION_POSITIVE_TOKENS, EMOTION_NEGATIVE_TOKENS),
-        CATEGORY_TECHNICAL: (TECHNICAL_POSITIVE_TOKENS, TECHNICAL_NEGATIVE_TOKENS),
-        CATEGORY_STYLE_FUSION: (STYLE_FUSION_POSITIVE_TOKENS, STYLE_FUSION_NEGATIVE_TOKENS),
-        CATEGORY_MINIMALIST: (MINIMALIST_POSITIVE_TOKENS, MINIMALIST_NEGATIVE_TOKENS),
-        CATEGORY_NSFW_PRECISION: (NSFW_PRECISION_POSITIVE_TOKENS, NSFW_PRECISION_NEGATIVE_TOKENS),
-    }
-    return _token_map.get(category, ([], []))

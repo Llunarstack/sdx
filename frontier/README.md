@@ -1,76 +1,28 @@
 # Frontier — outside-the-box generation
 
-Research playground + ideas to try before promoting to production.
+Prompt-side planners used by `sample.py` (`--frontier`, `--frontier-subject`, `--frontier-perfect`, `--frontier-creative`) and box-layout tooling. `registry.py` lists each idea with its module and status.
 
 ## Modules
 
-| Folder | What | Research source |
+| Module | What | Research source |
 |--------|------|-----------------|
-| `logic/` | Contradictions, absence (negative space) | — |
-| `narrative/` | Witness POV, temporal moment | — |
-| `chaos/` | Serendipity, entropy budget | — |
-| `memory/` | Generation echo (failure memory) | — |
-| **`guidance/`** | Dynamic CFG picker, guidance intervals | arXiv:2509.16131, 2404.13040 |
-| **`layout/`** | Omost canvas, `<loc_*>` tokens, LAMIC schedule, IN-R/FI-R metrics | Omost, ConsistCompose, LAMIC |
-| **`attention/`** | Cross-attn layout plan (hook for DiT) | BoxDiff, Dense Diffusion |
-| **`compose/`** | Per-region reference images | Regional-Prompting-FLUX + PULID |
-| **`causality/`** | Rain→wet, fire→smoke plausibility scan | World-model T2I |
-| **`economy/`** | SKIP/LITE/FULL/HEAVY compute tiers per step | Step-skip / product |
-| **`world/`** | Character + location bible, continuity locks | Series generation |
-| **`counterfactual/`** | "Change X to Y" preserve-and-edit parsing | Instruction edit |
-| **`uncertainty/`** | Ambiguity score → CFG boost + best-of-N | Test-time scaling |
-| **`inverse/`** | Image → box layout sketch (VLM hook) | LayoutGPT / Omost reverse |
-| **`provenance/`** | Audit JSON for exact rerun | C2PA-adjacent |
-| **`retrieval/`** | Local JSONL fact/style RAG | RAG-T2I |
-| **`blend/`** | Style DNA profiles without LoRA | Multi-style prompts |
-| **`semantics/`** | Subject-relation-object graph → layout hints | Scene graphs |
-| **`temporal/`** | Storyboard beats + carry tags | Sequential stills |
-| **`adherence/`** | Hard-token (text, hands, counts) emphasis | Prompt weighting |
-| **`multiview/`** | *(research)* same subject, new camera | Zero123 family |
-| **`latent/`** | *(research)* concept vector walks | SDEdit / P2P |
-| **`anatomy/`** | Human vs stylized vs mecha body modes | Anatomy routing |
-| **`creatures/`** | Dragon, insectoid, eldritch body plans | Creature VFX |
-| **`mature/`** | NSFW/boudoir *quality* (lighting, skin, form) | Adult art craft |
-| **`medium/`** | Brush strokes + 18 extended mediums | art_mediums++ |
-| **`realism/`** | Anti-AI-slop, lens/sensor photoreal stack | Uncanny valley |
-| `subject.py` | Compose anatomy + creature + mature + medium + realism | — |
-| **`composition/`** | Framing: thirds, dutch, negative space, depth layers | Design |
-| **`lighting/`** | Rembrandt, butterfly, rim, golden hour, neon | Portrait craft |
-| **`atmosphere/`** | Fog, god rays, rain, snow, dust | Environmental |
-| **`materials/`** | Metal, glass, fabric, skin, wood, liquid, hair | PBR cues |
-| **`harmony/`** | Complementary, analogous, triadic palettes | Color theory |
-| **`motion/`** | Pan blur, action freeze, impact frames | Action photo |
-| **`era/`** | Medieval → cyberpunk anachronism guards | Period accuracy |
-| **`typography/`** | Quoted text legibility + CFG boost | Ideogram-class text |
-| **`optics/`** | Anamorphic, fisheye, tilt-shift, vintage lens | Lens character |
-| **`safety/`** | Tiered pre-gen policy (`--safety-tier`) | Platform diligence |
-| `perfect.py` | **Everything** — `--frontier-perfect` | — |
-| **`surreal/`** | Dream logic, metamorphosis, scale paradox | vs contradiction resolver |
-| **`paradox/`** | Escher, infinite loops — keep don't fix | Beautiful impossibility |
-| **`mutation/`** | Prompt variants for explore / best-of-N | Not static tags |
-| **`constraint/`** | Art-school limits (monochrome, silhouette…) | Creative restriction |
-| **`synesthesia/`** | Music → serendipity/CFG knobs | Cross-modal physics |
-| **`cinema/`** | OTS, POV, ECU shot grammar | Director language |
-| **`vibe/`** | Mood → step curves + CFG | Mood physics |
-| **`weathering/`** | Rust, repair, graffiti layers | Object biography |
-| **`glitch/`** | VHS, datamosh, RGB split | Intentional artifacts |
-| `imagination.py` | Creative orchestrator — `--frontier-creative` | No art-medium dup |
-| **`fusion/`** | Genre mashups with dominant/accent rule | Steampunk+cyber etc. |
-| **`archetype/`** | Threshold, mirror, labyrinth symbols | Mythic composition |
-| **`rhythm/`** | Visual beat, repetition, spiral | Pattern composition |
-| **`focal/`** | DOF as emotional story + CFG hint | Focus intent |
-| **`collective/`** | Crowds without clone faces | Group grammar |
-| **`scale/`** | Titan / miniature / cosmic magnitude | Size contrast |
+| `engine.py` | Contradictions, absence, witness POV, temporal moment, serendipity, entropy budget, generation echo; `FrontierEngine` and the sampler hooks | — |
+| `layout.py` | Omost canvas, `<loc_*>` tokens, LAMIC schedule, IN-R/FI-R metrics, Dense Diffusion cross-attention bias (`--box-attn-layout`), storyboard chains | Omost, ConsistCompose, LAMIC, Dense Diffusion, BoxDiff |
+| `planning.py` | Deep synthesis (causality, compute tiers, uncertainty, scene relations, hard-token emphasis), subject planners (anatomy, creatures, mature quality, brushwork, anti-slop realism), perfect mode (atmosphere, materials, motion, era, typography, adult-NSFW steering tiers), video bridge | World-model T2I, test-time scaling, scene graphs |
+| `imagination.py` | Creative orchestrator — `--frontier-creative` (surreal, paradox, mutation, constraint, synesthesia, cinema, mood, weathering, glitch, fusion, archetype, rhythm, focal, crowds, scale) | — |
+| `multiview.py` | SDX-Spatial 3D core: tri-plane field, SDF fitting, NeuS rendering, mesh export/validation, SH radiance, rigging, asset graph | EG3D, NeuS |
 | `registry.py` | Idea catalog + status | — |
+
+The minor block in `utils/safety/minor_guard.py` always runs before the adult-NSFW steering tiers in `planning.py`.
 
 ## Quick start
 
 ```python
 from frontier.registry import list_ideas, idea_by_id
 
-# Browse what to try next
-for idea in list_ideas(status="planned"):
-    print(idea.id, idea.url)
+# What is implemented vs partial
+for idea in list_ideas(status="partial"):
+    print(idea.id, idea.module, idea.summary)
 
 # Omost canvas → box JSON
 from frontier.layout import OmostCanvas, canvas_to_box_layout
@@ -99,7 +51,6 @@ with open("my_layout.json", "w") as f:
       "name": "hero",
       "box": [0.05, 0.1, 0.5, 0.95],
       "prompt": "knight with sword",
-      "reference": "refs/face.png",
       "strokes": [{"points": [[0.5, 0.1], [0.5, 0.9]], "width": 0.03}]
     }
   ]
@@ -109,7 +60,6 @@ with open("my_layout.json", "w") as f:
 - **`mask_inject_steps`** — Regional-Prompting-FLUX: regional blend only early steps
 - **`base_ratio`** — global vs regional CFG weight (lower = stronger boxes)
 - **`coordinate_tokens`** — ConsistCompose `<loc_x1_y1_x2_y2>` in regional prompts
-- **`reference`** — per-box identity image (PULID-style; path relative to JSON)
 
 ## Layout QA (before sampling)
 
@@ -122,14 +72,10 @@ rm, bg = build_latent_region_masks(spec, 64, 64, device=torch.device("cpu"))
 print(score_layout_masks(rm, bg))
 ```
 
-## Planned next (from literature)
-
-See `frontier/registry.py` — **metapoint**, **dense_diffusion**, per-region CADS, VLM refine loop, **multiview**, **latent navigation**.
-
 ### Deep frontier (all analyzers)
 
 ```python
-from frontier.synthesis import analyze_deep, deep_sample_kwargs
+from frontier.planning import analyze_deep, deep_sample_kwargs
 
 plan = analyze_deep("rain on empty street at night, logo on sign", layout_regions=2)
 kw = deep_sample_kwargs(plan, base_negative="blurry")
@@ -139,7 +85,7 @@ kw = deep_sample_kwargs(plan, base_negative="blurry")
 ### Subject-aware (bodies, creatures, NSFW quality, mediums, realism)
 
 ```python
-from frontier.subject import analyze_subject, subject_sample_kwargs
+from frontier.planning import analyze_subject, subject_sample_kwargs
 
 plan = analyze_subject(
     "hyperreal boudoir portrait, hands on silk, oil impasto background",

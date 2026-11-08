@@ -1,0 +1,789 @@
+"""Inference solvers and step grids for SDX.
+
+- ``SolverState``: history buffer for the multistep solvers.
+- DPM-Solver++ (Lu et al. 2022, arXiv:2211.01095): one exponential integrator for any interpolant
+  ``x = alpha*x0 + sigma*eps`` on ``lambda = log(alpha/sigma)`` (VP and rectified flow), orders 1-3, SDE for eta > 0.
+- UniPC (Zhao et al. 2023, arXiv:2302.04867): the UniC corrector on top of the DPM++(2M) predictor.
+- APEX (Adaptive Predictive EXtrapolation): three-phase step-size schedule, embedded error estimate and
+  difficulty-driven re-spacing of the remaining VP timesteps.
+- VP inference timestep schedules (``build_inference_timesteps``; ``ddim``, ``euler``, ``karras_rho``, ``ays``,
+  ``apex``, ``indices:...``) and rectified-flow s-grids (``build_flow_s_grid``).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable
+from dataclasses import dataclass, field
+
+import numpy as np
+import torch
+
+from .schedules import inverse_time_shift, time_shift
+
+
+@dataclass
+class SolverState:
+    """History buffer for multistep solvers (DPM++ / UniPC / flow AB)."""
+
+    model_outputs: list[torch.Tensor] = field(default_factory=list)
+    timesteps: list[float] = field(default_factory=list)  # λ (VP) or s (flow)
+    max_order: int = 3
+
+    def push(self, model_output: torch.Tensor, time_value: float) -> None:
+        self.model_outputs.append(model_output)
+        self.timesteps.append(float(time_value))
+        while len(self.model_outputs) > int(self.max_order):
+            self.model_outputs.pop(0)
+            self.timesteps.pop(0)
+
+    def clear(self) -> None:
+        self.model_outputs.clear()
+        self.timesteps.clear()
+
+    @property
+    def order(self) -> int:
+        return len(self.model_outputs)
+
+
+def _lam(alpha: float, sigma: float) -> float:
+    return math.log(max(alpha, 1e-12)) - math.log(max(sigma, 1e-12))
+
+
+def dpmpp_update(
+    *,
+    x: torch.Tensor,
+    x0_pred: torch.Tensor,
+    alpha_cur: float,
+    sigma_cur: float,
+    alpha_next: float,
+    sigma_next: float,
+    state: SolverState,
+    order: int = 2,
+    eta: float = 0.0,
+    noise: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, SolverState]:
+    """One DPM-Solver++ step (orders 1-3; ``eta`` > 0 only up to order 2) from the current to the next level.
+
+    A step onto ``sigma_next == 0`` returns the data prediction: lambda is infinite there, and the
+    first-order update is exact (diffusers' ``final_sigmas_type="zero"``).
+    """
+    lam_c = _lam(alpha_cur, sigma_cur)
+    state.push(x0_pred.detach(), lam_c)
+    if sigma_next <= 0.0:
+        return x0_pred, state
+    use = min(int(order), state.order)
+    if eta > 0.0 and use > 2:
+        raise ValueError("the DPM-Solver++ SDE update is implemented up to order 2")
+    h = max(_lam(alpha_next, sigma_next) - lam_c, 1e-8)
+    eh = float(eta) * h
+    phi = -math.expm1(-h - eh)
+    d0 = x0_pred
+    x_next = (sigma_next / max(sigma_cur, 1e-12)) * math.exp(-eh) * x + alpha_next * phi * d0
+    if use >= 2:
+        r0 = max((lam_c - state.timesteps[-2]) / h, 1e-6)
+        d1_0 = (d0 - state.model_outputs[-2]) / r0
+        if use == 2:
+            x_next = x_next + 0.5 * alpha_next * phi * d1_0
+        else:
+            r1 = max((state.timesteps[-2] - state.timesteps[-3]) / h, 1e-6)
+            d1_1 = (state.model_outputs[-2] - state.model_outputs[-3]) / r1
+            d1 = d1_0 + (r0 / (r0 + r1)) * (d1_0 - d1_1)
+            d2 = (d1_0 - d1_1) / (r0 + r1)
+            x_next = x_next + alpha_next * (1.0 - phi / h) * d1 - alpha_next * ((h - phi) / h**2 - 0.5) * d2
+    if eh > 0.0:
+        z = torch.randn_like(x) if noise is None else noise
+        x_next = x_next + sigma_next * math.sqrt(-math.expm1(-2.0 * eh)) * z
+    return x_next, state
+
+
+def _vp_alpha_sigma(alpha_bar) -> tuple[float, float]:
+    """``(sqrt(abar), sqrt(1 - abar))`` from the first element of ``alpha_bar`` (uniform over the batch)."""
+    ab = float(torch.as_tensor(alpha_bar).reshape(-1)[0])
+    return math.sqrt(ab), math.sqrt(max(1.0 - ab, 0.0))
+
+
+def vp_dpmpp_update(
+    *,
+    x: torch.Tensor,
+    x0_pred: torch.Tensor,
+    alpha_bar_cur: torch.Tensor | float,
+    alpha_bar_next: torch.Tensor | float,
+    state: SolverState,
+    order: int = 2,
+    eta: float = 0.0,
+    noise: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, SolverState]:
+    """DPM-Solver++ on the VP schedule; ``order`` 1, 2 (2M) or 3 (3M). ᾱ is uniform over the batch."""
+    alpha_cur, sigma_cur = _vp_alpha_sigma(alpha_bar_cur)
+    alpha_next, sigma_next = _vp_alpha_sigma(alpha_bar_next)
+    return dpmpp_update(
+        x=x,
+        x0_pred=x0_pred,
+        alpha_cur=alpha_cur,
+        sigma_cur=sigma_cur,
+        alpha_next=alpha_next,
+        sigma_next=sigma_next,
+        state=state,
+        order=order,
+        eta=eta,
+        noise=noise,
+    )
+
+
+def flow_dpmpp_2m_update(
+    *,
+    x: torch.Tensor,
+    velocity: torch.Tensor,
+    s_cur: float,
+    s_next: float,
+    state: SolverState,
+    eta: float = 0.0,
+    noise: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, SolverState]:
+    """DPM-Solver++(2M) on rectified flow ``x = (1-s)*x0 + s*eps``; the first step reduces to Euler."""
+    s_c, s_n = float(s_cur), float(s_next)
+    return dpmpp_update(
+        x=x,
+        x0_pred=x - s_c * velocity,
+        alpha_cur=1.0 - s_c,
+        sigma_cur=s_c,
+        alpha_next=1.0 - s_n,
+        sigma_next=s_n,
+        state=state,
+        order=2,
+        eta=eta,
+        noise=noise,
+    )
+
+
+def unipc_correct(
+    *,
+    x_prev: torch.Tensor,
+    x0_new: torch.Tensor,
+    alpha_prev: float,
+    sigma_prev: float,
+    alpha_cur: float,
+    sigma_cur: float,
+    state: SolverState,
+    order: int = 2,
+) -> torch.Tensor:
+    """UniC: corrected sample at the current level from ``x_prev`` (the predictor's input) and ``x0_new``.
+
+    ``state`` must still end with the data prediction at the previous level (call before pushing ``x0_new``).
+    """
+    m0, lam0 = state.model_outputs[-1], state.timesteps[-1]
+    h = max(_lam(alpha_cur, sigma_cur) - lam0, 1e-8)
+    phi = -math.expm1(-h)
+    x_next = (sigma_cur / max(sigma_prev, 1e-12)) * x_prev + alpha_cur * phi * m0
+    d_t = x0_new - m0
+    if order < 2 or state.order < 2:
+        return x_next + 0.5 * alpha_cur * phi * d_t
+    r1 = min((state.timesteps[-2] - lam0) / h, -1e-6)
+    d1 = (state.model_outputs[-2] - m0) / r1
+    b_h = math.expm1(-h)
+    k1 = b_h / -h - 1.0
+    b0 = k1 / b_h
+    b1 = 2.0 * (k1 / -h - 0.5) / b_h
+    rho0 = (b0 - b1) / (1.0 - r1)
+    rho1 = b0 - rho0
+    return x_next + alpha_cur * phi * (rho0 * d1 + rho1 * d_t)
+
+
+def vp_unipc_correct(
+    *,
+    x_prev: torch.Tensor,
+    x0_new: torch.Tensor,
+    alpha_bar_prev,
+    alpha_bar_cur,
+    state: SolverState,
+    order: int = 2,
+) -> torch.Tensor:
+    """``unipc_correct`` on the VP schedule (ᾱ uniform over the batch)."""
+    alpha_prev, sigma_prev = _vp_alpha_sigma(alpha_bar_prev)
+    alpha_cur, sigma_cur = _vp_alpha_sigma(alpha_bar_cur)
+    return unipc_correct(
+        x_prev=x_prev,
+        x0_new=x0_new,
+        alpha_prev=alpha_prev,
+        sigma_prev=sigma_prev,
+        alpha_cur=alpha_cur,
+        sigma_cur=sigma_cur,
+        state=state,
+        order=order,
+    )
+
+
+def phase_weight(progress: float) -> float:
+    """Relative step size at ``progress`` in [0, 1] (noisy → clean); peaks in the mid band."""
+    p = max(0.0, min(1.0, float(progress)))
+    mid = math.exp(-((p - 0.42) ** 2) / (2 * 0.18**2))
+    late = 0.35 * math.exp(-((p - 0.82) ** 2) / (2 * 0.12**2))
+    early = 0.45 + 0.25 * (1.0 - p)
+    return float(early + 1.35 * mid + late)
+
+
+def _apex_density_curve(n: int, *, rho: float = 7.0) -> np.ndarray:
+    """Normalized step sizes for ``n`` intervals (sums to 1)."""
+    n = max(1, int(n))
+    u = (np.arange(n, dtype=np.float64) + 0.5) / float(n)
+    karras = u ** (1.0 / float(max(rho, 1.0)))
+    dens = np.array([phase_weight(float(ui)) for ui in u], dtype=np.float64) * (0.65 + 0.35 * karras)
+    dens = np.maximum(dens, 1e-8)
+    return dens / dens.sum()
+
+
+def _enforce_desc(idx: np.ndarray, num_train: int) -> np.ndarray:
+    """Coerce knots to a *strictly* descending integer schedule ending at 0.
+
+    λ(t) saturates near the clean end, so many density targets round onto the
+    same low indices (0/1/2). Forcing descent with a single forward pass turns
+    that pile-up into a run of zeros — repeated t=0 steps that burn NFE on a
+    zero-length interval. Reserving room from the tail first (``idx[j] >=
+    n-1-j``) keeps every step on a distinct timestep, which is feasible
+    whenever ``n <= num_train``.
+    """
+    arr = np.clip(np.asarray(idx, dtype=np.int64).reshape(-1), 0, max(int(num_train) - 1, 0))
+    n = int(arr.size)
+    if n <= 1:
+        return np.zeros(n, dtype=np.int64)
+    if n > int(num_train):
+        # Distinct knots are impossible: fall back to an even spread rather than a zero run.
+        return np.clip(np.round(np.linspace(num_train - 1, 0, n)).astype(np.int64), 0, num_train - 1)
+    out = np.maximum(arr, np.arange(n - 1, -1, -1, dtype=np.int64))  # step j needs n-1-j knots below it
+    for j in range(1, n):
+        if out[j] >= out[j - 1]:
+            out[j] = out[j - 1] - 1  # stays >= n-1-j because out[j-1] >= n-j
+    out[-1] = 0
+    return out
+
+
+def build_apex_vp_indices(
+    num_train: int,
+    num_infer: int,
+    alpha_cumprod: np.ndarray,
+    *,
+    rho: float = 7.0,
+) -> np.ndarray:
+    """Static APEX VP schedule: ``max(2, num_infer)`` descending integer indices (noisy → clean)."""
+    T = int(num_train)
+    N = max(2, int(num_infer))
+    ac = np.clip(np.asarray(alpha_cumprod, dtype=np.float64).reshape(-1)[:T], 1e-12, 1.0 - 1e-12)
+    # λ(t) = ½ log(ᾱ/(1-ᾱ)); t=0 clean (high λ), t=T-1 noisy (low λ)
+    lam = 0.5 * np.log(ac / (1.0 - ac))
+    lam_noisy, lam_clean = float(lam[-1]), float(lam[0])
+    if abs(lam_clean - lam_noisy) < 1e-12:
+        return np.linspace(T - 1, 0, N, dtype=np.int64)
+    cum = np.concatenate([[0.0], np.cumsum(_apex_density_curve(N - 1, rho=rho))])
+    lam_targets = lam_noisy + cum * (lam_clean - lam_noisy)
+    idx = np.abs(lam[None, :] - lam_targets[:, None]).argmin(axis=1)
+    return _enforce_desc(idx, T)
+
+
+def build_apex_flow_s_grid(
+    num_steps: int,
+    *,
+    s_start: float = 1.0,
+    s_end: float = 0.0,
+    rho: float = 7.0,
+) -> np.ndarray:
+    """Continuous flow ``s`` grid (``num_steps + 1`` knots) with the APEX three-phase density."""
+    cum = np.concatenate([[0.0], np.cumsum(_apex_density_curve(num_steps, rho=rho))])
+    grid = float(s_start) + (float(s_end) - float(s_start)) * cum
+    # cumsum lands on 1±eps, which can push the final knot just past ``s_end``. Pin both ends.
+    grid[0] = float(s_start)
+    grid[-1] = float(s_end)
+    return grid
+
+
+def redistribute_remaining_vp_indices(
+    t_cur: int,
+    remaining_steps: int,
+    num_train: int,
+    alpha_cumprod: np.ndarray,
+    *,
+    difficulty: float = 1.0,
+    rho: float = 7.0,
+) -> np.ndarray:
+    """Rebuild the ``remaining_steps`` indices strictly below ``t_cur`` down to 0.
+
+    ``difficulty`` > 1 enlarges the steps right after ``t_cur`` and shrinks the late ones (< 1 the reverse).
+    ``alpha_cumprod`` is unused: the tail is spaced in index space.
+    """
+    T = int(num_train)
+    t0 = int(np.clip(t_cur, 1, T - 1))
+    # Every knot must be distinct and strictly below ``t_cur``, so only ``t0`` of them can fit.
+    # Returning the shorter feasible tail lets the caller keep its existing schedule (it checks
+    # the length) instead of getting duplicate zeros or knots above the current time.
+    rem = min(max(1, int(remaining_steps)), t0)
+    if rem <= 1:
+        return np.asarray([0], dtype=np.int64)
+    d = float(max(difficulty, 0.25))
+    dens = _apex_density_curve(rem - 1, rho=rho) * np.linspace(d, 1.0 / max(d, 1e-3), rem - 1)
+    cum = np.concatenate([[0.0], np.cumsum(dens / dens.sum())])
+    idx = np.round(t0 - cum * t0).astype(np.int64)
+    idx[0] = min(int(idx[0]), t0 - 1)
+    return _enforce_desc(idx, T)
+
+
+@dataclass
+class ApexController:
+    """Error/difficulty tracker shared across the steps of one APEX sampling run."""
+
+    atol: float = 0.0078
+    rtol: float = 0.05
+    err_exp: float = 0.5
+    grow: float = 1.35
+    shrink: float = 0.5
+    e_hi: float = 1.0
+    e_lo: float = 0.25
+    max_order: int = 3
+    use_spatial: bool = True
+    spatial_topk: float = 0.15
+    last_error: float = 0.0
+    last_curvature: float = 0.0
+    last_velocity: float = 0.0
+    last_difficulty: float = 1.0
+    last_phase: str = "reconstruction"
+    step_scale: float = 1.0
+    history_x0: list = field(default_factory=list)
+    accepted: int = 0
+    rejected_soft: int = 0
+
+    @staticmethod
+    def phase_name(progress: float) -> str:
+        if progress < 0.28:
+            return "structure"
+        if progress < 0.72:
+            return "reconstruction"
+        return "refinement"
+
+    def recommend_order(self, progress: float, hist_len: int) -> int:
+        self.last_phase = self.phase_name(progress)
+        cap = int(self.max_order) if self.last_phase == "reconstruction" else 2
+        return min(cap, max(1, hist_len))
+
+    def normalized_error(self, x_hi: torch.Tensor, x_lo: torch.Tensor, x: torch.Tensor) -> float:
+        diff = (x_hi.float() - x_lo.float()).reshape(x.shape[0], -1).norm(dim=-1)
+        scale = self.atol + self.rtol * x.float().reshape(x.shape[0], -1).norm(dim=-1).clamp(min=1e-6)
+        self.last_error = float(diff.div(scale).mean().item())
+        return self.last_error
+
+    def spatial_difficulty(self, x0_cur: torch.Tensor, x0_prev: torch.Tensor | None) -> float:
+        """Top-k / median ratio of the per-pixel ‖Δx0‖², mapped to [0.5, 3]."""
+        if not self.use_spatial or x0_prev is None:
+            return 1.0
+        flat = (x0_cur.float() - x0_prev.float()).pow(2).mean(dim=1).reshape(x0_cur.shape[0], -1)
+        k = max(1, int(self.spatial_topk * flat.shape[-1]))
+        topv, _ = flat.topk(k, dim=-1)
+        med = flat.median(dim=-1).values.clamp(min=1e-8)
+        score = float((topv.mean(dim=-1) / med).mean().item())
+        return max(0.5, min(3.0, 0.5 + score))
+
+    def update_difficulty(
+        self,
+        *,
+        error: float,
+        curvature: float,
+        velocity: float,
+        spatial: float,
+        progress: float,
+    ) -> float:
+        wp = {"structure": 0.85, "reconstruction": 1.25, "refinement": 1.0}[self.phase_name(progress)]
+        d = 1.0 + 0.85 * error + 0.45 * curvature + 0.35 * velocity + 0.25 * (spatial - 1.0) + 0.15 * wp
+        d = float(max(0.35, min(4.0, d)))
+        self.last_difficulty = d
+        self.last_curvature = float(curvature)
+        self.last_velocity = float(velocity)
+        if error > self.e_hi:
+            self.step_scale = max(0.35, self.step_scale * self.shrink)
+            self.rejected_soft += 1
+        elif error < self.e_lo:
+            self.step_scale = min(2.0, self.step_scale * self.grow)
+        else:
+            factor = float(np.clip((0.5 / max(error, 1e-6)) ** self.err_exp, 0.6, 1.4))
+            self.step_scale = float(np.clip(self.step_scale * factor, 0.35, 2.0))
+        self.accepted += 1
+        return d
+
+
+@dataclass
+class ApexStepResult:
+    x_next: torch.Tensor
+    state: SolverState
+    controller: ApexController
+    error: float
+    order_used: int
+    used_safe_blend: bool = False
+
+
+def _safe_blend(x_hi: torch.Tensor, x_lo: torch.Tensor, err: float, e_hi: float) -> torch.Tensor:
+    """Pull a high-error step toward the first-order update (at most 85% of the way)."""
+    w = float(np.clip((err - e_hi) / max(err, 1e-6), 0.0, 0.85))
+    return (1.0 - w) * x_hi + w * x_lo
+
+
+def _rms(x: torch.Tensor) -> float:
+    return float(x.float().norm().item()) / math.sqrt(max(x.numel(), 1))
+
+
+def vp_apex_update(
+    *,
+    x: torch.Tensor,
+    x0_pred: torch.Tensor,
+    alpha_bar_cur: torch.Tensor | float,
+    alpha_bar_next: torch.Tensor | float,
+    state: SolverState,
+    controller: ApexController,
+    progress: float = 0.5,
+) -> ApexStepResult:
+    """Embedded order-1 vs phase-order VP step from one ``x0`` prediction (no extra NFE); updates ``state``."""
+    order = controller.recommend_order(progress, hist_len=state.order + 1)
+    step = {"x": x, "x0_pred": x0_pred, "alpha_bar_cur": alpha_bar_cur, "alpha_bar_next": alpha_bar_next}
+    x_lo, _ = vp_dpmpp_update(**step, state=SolverState(max_order=1), order=1)
+    x_hi, state = vp_dpmpp_update(**step, state=state, order=order)
+    err = controller.normalized_error(x_hi, x_lo, x)
+
+    hist = controller.history_x0
+    vel = curv = 0.0
+    if hist:
+        delta = x0_pred.float() - hist[-1].float()
+        vel = _rms(delta)
+        if len(hist) >= 2:
+            curv = _rms(delta - (hist[-1].float() - hist[-2].float()))
+    spatial = controller.spatial_difficulty(x0_pred, hist[-1] if hist else None)
+    controller.update_difficulty(error=err, curvature=curv, velocity=vel, spatial=spatial, progress=progress)
+    hist.append(x0_pred.detach())
+    if len(hist) > 4:
+        hist.pop(0)
+
+    used_safe = err > controller.e_hi and order > 1
+    x_next = _safe_blend(x_hi, x_lo, err, controller.e_hi) if used_safe else x_hi
+    return ApexStepResult(
+        x_next=x_next.to(dtype=x.dtype),
+        state=state,
+        controller=controller,
+        error=err,
+        order_used=order,
+        used_safe_blend=used_safe,
+    )
+
+
+def flow_apex_update(
+    *,
+    x: torch.Tensor,
+    velocity: torch.Tensor,
+    s_cur: float,
+    s_next: float,
+    state: SolverState,
+    controller: ApexController,
+    progress: float = 0.5,
+) -> ApexStepResult:
+    """Flow APEX: Euler vs DPM++(2M) embedded error from the same velocity (no extra NFE); updates ``state``."""
+    x_lo = x + velocity * (float(s_next) - float(s_cur))
+    x_hi, state = flow_dpmpp_2m_update(x=x, velocity=velocity, s_cur=s_cur, s_next=s_next, state=state)
+    err = controller.normalized_error(x_hi, x_lo, x)
+    controller.update_difficulty(error=err, curvature=0.0, velocity=_rms(velocity), spatial=1.0, progress=progress)
+    used_safe = err > controller.e_hi
+    x_next = _safe_blend(x_hi, x_lo, err, controller.e_hi) if used_safe else x_hi
+    return ApexStepResult(
+        x_next=x_next.to(dtype=x.dtype),
+        state=state,
+        controller=controller,
+        error=err,
+        order_used=2,
+        used_safe_blend=used_safe,
+    )
+
+
+_INDICES_PREFIX = "indices:"
+_KARRAS_RHO_DEFAULT = 7.0
+# Schedules whose shape is warped by ``karras_rho``.
+_RHO_SCHEDULES = frozenset({"karras_rho", "apex"})
+
+EDM_SIGMA_MIN = 0.002
+EDM_SIGMA_MAX = 80.0
+
+
+def parse_indices_timestep_schedule(name: str) -> np.ndarray | None:
+    """Explicit indices ``indices:999,800,...,0`` (noisy -> clean), or ``None`` for any other name.
+
+    The prefix avoids clashing with the comma-separated training ``timestep_respacing`` strings.
+    """
+    raw = str(name).strip()
+    if not raw.lower().startswith(_INDICES_PREFIX):
+        return None
+    body = raw[len(_INDICES_PREFIX) :].strip()
+    parts = [p.strip() for p in body.split(",") if p.strip()]
+    if not parts:
+        return None
+    try:
+        return np.asarray([int(float(p)) for p in parts], dtype=np.int64)
+    except ValueError:
+        raise ValueError(f"indices: schedule contains non-integers: {body!r}") from None
+
+
+def _enforce_strict_descending(idx: np.ndarray, num_train: int) -> np.ndarray:
+    """Clip to the index range and force strict descent, dropping steps once 0 is reached."""
+    idx = np.clip(np.asarray(idx, dtype=np.int64), 0, num_train - 1)
+    if idx.size == 0:
+        return np.array([num_train - 1, 0], dtype=np.int64)
+    out = [int(idx[0])]
+    for v in idx[1:]:
+        v = min(int(v), out[-1] - 1)
+        if v < 0:
+            break
+        out.append(v)
+    return np.array(out, dtype=np.int64)
+
+
+def _resample_length_numpy(desc: np.ndarray, target_len: int, num_train: int) -> np.ndarray:
+    """Resample a descending index path to ``target_len > 0`` points."""
+    d = _enforce_strict_descending(desc, num_train)
+    if d.size == target_len:
+        return d
+    if d.size > target_len:
+        pos = np.round(np.linspace(0, d.size - 1, target_len)).astype(np.int64)
+        return _enforce_strict_descending(d[pos], num_train)
+    if d.size == 1:
+        return np.linspace(num_train - 1, 0, target_len, dtype=np.int64)
+    vals = np.interp(np.linspace(0.0, 1.0, target_len), np.linspace(0.0, 1.0, d.size), d.astype(np.float64))
+    return _enforce_strict_descending(np.round(vals).astype(np.int64), num_train)
+
+
+def _resample_length(desc: np.ndarray, target_len: int, num_train: int) -> np.ndarray:
+    """Use the optional native ``sdx_inference_timesteps`` finalizer when built, else NumPy."""
+    if target_len <= 0:
+        return np.array([0], dtype=np.int64)
+    try:
+        from sdx_native.ffi import finalize_inference_timesteps_native
+    except ImportError:
+        pass
+    else:
+        got = finalize_inference_timesteps_native(desc, target_len, num_train)
+        if got is not None:
+            return got
+    return _resample_length_numpy(desc, target_len, num_train)
+
+
+ScheduleFn = Callable[..., np.ndarray]
+
+INFERENCE_TIMESTEP_SCHEDULES: dict[str, ScheduleFn] = {}
+
+
+def register_timestep_schedule(name: str):
+    def deco(fn: ScheduleFn) -> ScheduleFn:
+        INFERENCE_TIMESTEP_SCHEDULES[name.lower()] = fn
+        return fn
+
+    return deco
+
+
+def _log_snr(alpha_cumprod: np.ndarray) -> np.ndarray:
+    ac = np.clip(np.asarray(alpha_cumprod, dtype=np.float64), 1e-9, 1.0 - 1e-9)
+    return np.log(ac) - np.log(1.0 - ac)
+
+
+def _nearest_indices(values: np.ndarray, targets: np.ndarray) -> np.ndarray:
+    """Index of the entry of ``values`` closest to each target (first on ties)."""
+    return np.abs(values[None, :] - np.asarray(targets)[:, None]).argmin(axis=1).astype(np.int64)
+
+
+@register_timestep_schedule("ddim")
+def _schedule_ddim(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    step = max(1, num_train // max(num_infer, 1))
+    return np.arange(0, num_train, step, dtype=np.int64)[::-1]
+
+
+@register_timestep_schedule("euler")
+def _schedule_euler(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    return np.linspace(0, num_train - 1, num_infer, dtype=np.int64)[::-1]
+
+
+def karras_sigmas(sigma_max: float, sigma_min: float, n: int, rho: float = _KARRAS_RHO_DEFAULT) -> np.ndarray:
+    """Karras et al. 2022 (EDM, Eq. 5): ``n`` noise levels from ``sigma_max`` to ``sigma_min``, uniform in sigma**(1/rho)."""
+    ramp = np.linspace(0.0, 1.0, max(1, int(n)))
+    hi, lo = float(sigma_max) ** (1.0 / rho), float(sigma_min) ** (1.0 / rho)
+    return (hi + ramp * (lo - hi)) ** rho
+
+
+@register_timestep_schedule("karras_rho")
+def _schedule_karras_rho(
+    num_train: int, num_infer: int, alpha_cumprod: np.ndarray, rho: float = _KARRAS_RHO_DEFAULT
+) -> np.ndarray:
+    """EDM rho-spacing in sigma = sqrt((1-abar)/abar), each level snapped to the nearest training index (log-sigma)."""
+    if num_infer <= 1:
+        return np.array([num_train - 1], dtype=np.int64)
+    ac = np.clip(np.asarray(alpha_cumprod, dtype=np.float64), 1e-12, 1.0 - 1e-12)
+    log_sig = 0.5 * (np.log1p(-ac) - np.log(ac))
+    target = karras_sigmas(np.exp(log_sig[-1]), np.exp(log_sig[0]), num_infer, rho=float(rho))
+    return np.round(np.interp(np.log(target), log_sig, np.arange(num_train))).astype(np.int64)
+
+
+@register_timestep_schedule("snr_uniform")
+def _schedule_snr_uniform(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    """Approximately uniform spacing in log-SNR."""
+    if num_infer <= 1:
+        return np.array([num_train - 1], dtype=np.int64)
+    logsnr = _log_snr(alpha_cumprod)
+    return _nearest_indices(logsnr, np.linspace(logsnr[-1], logsnr[0], num_infer))
+
+
+@register_timestep_schedule("quad_cosine")
+def _schedule_quad_cosine(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    """Denser near pure noise and near clean (cosine-warped uniform grid)."""
+    if num_infer <= 1:
+        return np.array([num_train - 1], dtype=np.int64)
+    w = 0.5 - 0.5 * np.cos(np.pi * np.linspace(0.0, 1.0, num_infer))
+    return np.round(w * (num_train - 1)).astype(np.int64)[::-1]
+
+
+def ays_progress_knots(variant: str) -> np.ndarray:
+    """Normalized progress 0 (noise) -> 1 (clean) for Align-Your-Steps style grids."""
+    if variant == "ays_dit":
+        # Denser in the mid-SNR band, the hardest denoising region for the DiT.
+        knots = [0.0, 0.04, 0.10, 0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88, 0.94, 0.98, 1.0]
+    else:
+        knots = [0.0, 0.05, 0.12, 0.22, 0.35, 0.50, 0.65, 0.78, 0.88, 0.94, 0.98, 1.0]
+    return np.array(knots, dtype=np.float64)
+
+
+def _schedule_ays_family(num_train: int, num_infer: int, alpha_cumprod: np.ndarray, *, variant: str) -> np.ndarray:
+    """Place the AYS progress knots on the log-SNR path and snap ``num_infer`` resampled points to indices."""
+    if num_infer <= 1:
+        return np.array([num_train - 1], dtype=np.int64)
+    logsnr = _log_snr(alpha_cumprod)
+    ls_clean, ls_noise = float(logsnr[0]), float(logsnr[-1])
+    knots = ays_progress_knots(variant)
+    target_ls = ls_noise + knots * (ls_clean - ls_noise)
+    target = np.interp(np.linspace(0.0, 1.0, num_infer), np.linspace(0.0, 1.0, len(knots)), target_ls)
+    idx = _nearest_indices(logsnr, target)
+    return idx[::-1].copy() if idx[0] < idx[-1] else idx
+
+
+@register_timestep_schedule("ays")
+def _schedule_ays(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    return _schedule_ays_family(num_train, num_infer, alpha_cumprod, variant="ays")
+
+
+@register_timestep_schedule("ays_dit")
+def _schedule_ays_dit(num_train: int, num_infer: int, alpha_cumprod: np.ndarray) -> np.ndarray:
+    return _schedule_ays_family(num_train, num_infer, alpha_cumprod, variant="ays_dit")
+
+
+@register_timestep_schedule("apex")
+def _schedule_apex(
+    num_train: int, num_infer: int, alpha_cumprod: np.ndarray, rho: float = _KARRAS_RHO_DEFAULT
+) -> np.ndarray:
+    """APEX three-phase density on the lambda path."""
+
+    return build_apex_vp_indices(num_train, num_infer, alpha_cumprod, rho=rho)
+
+
+def build_inference_timesteps(
+    name: str,
+    num_train_timesteps: int,
+    num_inference_steps: int,
+    alpha_cumprod: np.ndarray,
+    *,
+    karras_rho: float = _KARRAS_RHO_DEFAULT,
+) -> np.ndarray:
+    """``(num_inference_steps,)`` int64 indices, noisy -> clean, for a registered schedule or ``indices:...``.
+
+    ``karras_rho`` warps the ``karras_rho`` and ``apex`` schedules.
+    """
+    explicit = parse_indices_timestep_schedule(name)
+    if explicit is not None:
+        clipped = np.clip(explicit, 0, int(num_train_timesteps) - 1)
+        return _resample_length(clipped, num_inference_steps, num_train_timesteps)
+
+    key = str(name).strip().lower()
+    fn = INFERENCE_TIMESTEP_SCHEDULES.get(key)
+    if fn is None:
+        raise ValueError(f"Unknown timestep schedule {name!r}. Choose one of: {', '.join(list_timestep_schedules())}")
+    if key in _RHO_SCHEDULES:
+        raw = fn(num_train_timesteps, num_inference_steps, alpha_cumprod, rho=float(karras_rho))
+    else:
+        raw = fn(num_train_timesteps, num_inference_steps, alpha_cumprod)
+    return _resample_length(raw, num_inference_steps, num_train_timesteps)
+
+
+def list_timestep_schedules() -> list[str]:
+    return sorted(INFERENCE_TIMESTEP_SCHEDULES)
+
+
+def build_flow_s_grid(
+    name: str,
+    num_steps: int,
+    *,
+    s_start: float = 1.0,
+    s_end: float = 0.0,
+    karras_rho: float = 7.0,
+    shift: float = 1.0,
+) -> np.ndarray:
+    """``num_steps + 1`` continuous flow times from ``s_start`` to ``s_end``.
+
+    ``linear`` is uniform in s; ``karras`` is EDM rho-spacing in sigma = s/(1-s); ``ays`` / ``ays_dit`` place
+    Align-Your-Steps knots in s; ``apex`` is the APEX three-phase density.
+
+    ``shift`` != 1 applies the SD3 resolution shift (``diffusion.schedules.time_shift``): the schedule runs
+    between the unshifted endpoints and is then shifted, so the endpoints stay ``s_start`` / ``s_end``.
+    """
+    if float(shift) == 1.0:
+        return _unshifted_flow_s_grid(name, num_steps, float(s_start), float(s_end), float(karras_rho))
+    a = float(shift)
+    base = _unshifted_flow_s_grid(
+        name, num_steps, inverse_time_shift(float(s_start), a), inverse_time_shift(float(s_end), a), float(karras_rho)
+    )
+    out = time_shift(base, a)
+    out[0], out[-1] = float(s_start), float(s_end)
+    return out
+
+
+def _unshifted_flow_s_grid(name: str, num_steps: int, s0: float, s1: float, karras_rho: float) -> np.ndarray:
+    n = max(1, int(num_steps))
+    key = str(name).lower().strip()
+    if key in ("", "linear", "uniform"):
+        return np.linspace(s0, s1, n + 1, dtype=np.float64)
+
+    if key in ("karras", "karras_rho"):
+        # EDM rho-ramp on the flow's EDM noise level sigma = s/(1-s); s=1 (sigma=inf) is capped at EDM sigma_max.
+        hi = min(s0 / max(1.0 - s0, 1e-12), EDM_SIGMA_MAX)
+        lo = s1 / max(1.0 - s1, 1e-12) if s1 > 0.0 else EDM_SIGMA_MIN
+        if hi <= lo:
+            return np.linspace(s0, s1, n + 1, dtype=np.float64)
+        to_zero = s1 <= 0.0
+        sig = karras_sigmas(hi, lo, n if to_zero else n + 1, rho=float(karras_rho))
+        s = np.append(sig / (1.0 + sig), [0.0] if to_zero else [])
+        s[0], s[-1] = s0, s1
+        return s
+
+    if key in ("ays", "ays_dit"):
+        knots = ays_progress_knots(key)
+        prog = np.interp(np.linspace(0.0, 1.0, n + 1), np.linspace(0.0, 1.0, len(knots)), knots)
+        return (s0 + (s1 - s0) * prog).astype(np.float64)
+
+    if key == "apex":
+        return build_apex_flow_s_grid(n, s_start=s0, s_end=s1, rho=float(karras_rho))
+
+    raise ValueError(f"Unknown flow schedule {name!r}; use {', '.join(list_flow_schedules())}")
+
+
+def list_flow_schedules() -> tuple[str, ...]:
+    return ("linear", "karras", "ays", "ays_dit", "apex")
+
+
+__all__ = [
+    "ApexController",
+    "ApexStepResult",
+    "build_apex_vp_indices",
+    "build_apex_flow_s_grid",
+    "phase_weight",
+    "vp_apex_update",
+    "flow_apex_update",
+    "redistribute_remaining_vp_indices",
+    "INFERENCE_TIMESTEP_SCHEDULES",
+    "build_inference_timesteps",
+    "list_timestep_schedules",
+    "register_timestep_schedule",
+]

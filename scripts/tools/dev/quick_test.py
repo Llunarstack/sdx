@@ -32,10 +32,9 @@ def main():
     with open(os.devnull, "w") as devnull:
         with redirect_stderr(devnull):
             import torch
+            from config import TrainConfig, get_dit_build_kwargs
             from diffusion import create_diffusion
             from models import DiT_models_text
-
-            from config import TrainConfig, get_dit_build_kwargs
 
     cfg = TrainConfig(
         data_path="",

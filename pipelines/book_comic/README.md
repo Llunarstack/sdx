@@ -40,22 +40,22 @@ out/my_volume/
 | [scripts/generate_book.py](scripts/generate_book.py) | Multi-page generator: front/back covers, inpaint chains, MDM masks, OCR repair |
 | [scripts/train_book_model.py](scripts/train_book_model.py) | Optional wrapper (same as `train.py --book-train-preset …`) |
 | [scripts/prepare_and_train_book.py](scripts/prepare_and_train_book.py) | One command: optional HF export -> optional caption normalization -> book trainer |
-| [book_project.py](book_project.py) | `book.json` + `covers/` + `pages/` layout helpers |
-| [book_helpers.py](book_helpers.py) | Presets (`--book-accuracy`), pick-best wiring, post-process (sharpen / naturalize) |
-| [book_training_helpers.py](book_training_helpers.py) | Training presets, train command builder, Rust/Zig manifest diagnostics |
-| [consistency_helpers.py](consistency_helpers.py) | Character / prop / vehicle / setting / lettering prompt cues + optional JSON spec |
+| [render.py](render.py) | `book.json` + `covers/` + `pages/` layout helpers |
+| [render.py](render.py) | Presets (`--book-accuracy`), pick-best wiring, post-process (sharpen / naturalize) |
+| [training.py](training.py) | Training presets, train command builder, Rust/Zig manifest diagnostics |
+| [story.py](story.py) | Character / prop / vehicle / setting / lettering prompt cues + optional JSON spec |
 | [prompt_lexicon.py](prompt_lexicon.py) | Style snippets (shonen/webtoon/…), merged negatives, aspect presets, tategaki/SFX hints |
-| [../../docs/BOOK_COMIC_TECH.md](../../docs/guides/BOOK_COMIC_TECH.md) | Tech survey + SDX mapping + **best output checklist** (data, training, production tier) |
-| [../../scripts/tools/book_scene_split.py](../../scripts/tools/book_scene_split.py) | Split `## Page N` script → one line per page for `--prompts-file` |
+| [../../docs/GUIDES.md](../../docs/GUIDES.md#book--comic--manga-techniques-and-how-sdx-maps-to-them) | Tech survey + SDX mapping + **best output checklist** (data, training, production tier) |
+| [../../scripts/tools/book.py](../../scripts/tools/book.py) | Split `## Page N` script → one line per page for `--prompts-file` |
 
 ### Accuracy & consistency (uses shared repo tools)
 
 - **`utils/quality/test_time_pick.py`** — via `sample.py --pick-best clip|edge|ocr|combo` and `--num` candidates per page.
 - **`data/caption_utils.prepend_quality_if_short`** — when `--book-accuracy balanced|maximum|production` or `--prepend-quality-if-short`.
-- **`config/defaults/ai_image_shortcomings.py`** — wired through `generate_book.py` to sample.py (`--shortcomings-mitigation`, `--shortcomings-2d`) for photoreal, digital art, CG, and optional 2D-anime mitigation packs.
-- **`config/defaults/art_mediums.py`** — wired through `generate_book.py` to sample.py (`--art-guidance-mode`, `--anatomy-guidance`) for artist-medium + anatomy/proportion guidance.
-- **`config/defaults/style_guidance.py`** — wired through `generate_book.py` to sample.py (`--style-guidance-mode`) for anime/comic/editorial/concept/game/photo style-language guidance.
-- **`utils/quality/quality.py`** — optional post-pass: sharpen + naturalize (film grain / micro-contrast) after each PNG.
+- **`config/prompts.py`** — wired through `generate_book.py` to sample.py (`--shortcomings-mitigation`, `--shortcomings-2d`) for photoreal, digital art, CG, and optional 2D-anime mitigation packs.
+- **`config/styles.py`** — wired through `generate_book.py` to sample.py (`--art-guidance-mode`, `--anatomy-guidance`) for artist-medium + anatomy/proportion guidance.
+- **`config/styles.py`** — wired through `generate_book.py` to sample.py (`--style-guidance-mode`) for anime/comic/editorial/concept/game/photo style-language guidance.
+- **`utils/quality/quality.py`** — optional post-pass: sharpen + naturalize (density-space film grain / micro-contrast) after each PNG.
 - **`sample.py`** — `--boost-quality`, `--subject-first`, `--save-prompt`, `--cfg-scale` / `--cfg-rescale`, `--vae-tiling`, `--text-in-image`.
 
 Recommended starting point:
@@ -65,7 +65,7 @@ python pipelines/book_comic/scripts/generate_book.py --ckpt path/to/best.pt --ou
   --book-type manga --prompts-file pages.txt --book-accuracy balanced --text-in-image
 ```
 
-Use `--book-accuracy maximum` for 4 candidates, or **`production`** for 6 candidates + stricter merged negatives (`prompt_lexicon.PRODUCTION_TIER_NEGATIVE_ADDON`). See **[../../docs/BOOK_COMIC_TECH.md](../../docs/guides/BOOK_COMIC_TECH.md)** (*Best output checklist*) for data, training, and inference quality notes.
+Use `--book-accuracy maximum` for 4 candidates, or **`production`** for 6 candidates + stricter merged negatives (`prompt_lexicon.PRODUCTION_TIER_NEGATIVE_ADDON`). See **[../../docs/GUIDES.md](../../docs/GUIDES.md#book--comic--manga-techniques-and-how-sdx-maps-to-them)** (*Best output checklist*) for data, training, and inference quality notes.
 
 ### Extra CLI (continuity, layout, manifest)
 
@@ -127,15 +127,15 @@ Training still uses root `train.py` with your **book/comic/manga** dataset (line
 You can use `pipelines/book_comic/scripts/train_book_model.py` to apply book-oriented training presets and optional native preflight (`Rust sdx-jsonl-tools` + `Zig sdx-linecrc` when built) before launching `train.py`.
 For fully automated runs, `pipelines/book_comic/scripts/prepare_and_train_book.py` can export from Hugging Face, normalize captions with book guidance packs, then launch the trainer in one flow.
 When using caption normalization in that flow, `--train-humanize-pack` can apply anti-synthetic training presets (`lite`, `balanced`, `strong`).
-Book trainers now expose AR controls directly: `--ar-profile auto|none|layout|strong|zorder|vit_layout|vit_strong|comic_snake|cinema_spiral`, plus explicit `--num-ar-blocks` / `--ar-block-order` overrides (`raster|zorder|snake|spiral`) (see [../../docs/AR.md](../../docs/AR.md)).
-Use JSONL fields such as `parts` / `region_captions` when you need layout-aware text—see [docs/REGION_CAPTIONS.md](../../docs/reference/REGION_CAPTIONS.md).
+Book trainers now expose AR controls directly: `--ar-profile auto|none|layout|strong|zorder|vit_layout|vit_strong|comic_snake|cinema_spiral`, plus explicit `--num-ar-blocks` / `--ar-block-order` overrides (`raster|zorder|snake|spiral`) (see [../../docs/MODEL_STACK.md](../../docs/MODEL_STACK.md#block-wise-autoregressive-ar-generation)).
+Use JSONL fields such as `parts` / `region_captions` when you need layout-aware text—see [docs/PROMPT_STACK.md](../../docs/PROMPT_STACK.md#regional--layout-captions-jsonl).
 
 ## Related utilities
 
 | Area | Location |
 |------|----------|
 | Text rendering / OCR hooks | `utils/generation/text_rendering.py` |
-| Prompt + typography hints | `config/prompt_domains.py`, [docs/PROMPT_COOKBOOK.md](../../docs/PROMPT_COOKBOOK.md) |
+| Prompt + typography hints | `config/prompt_domains.py`, [docs/PROMPT_STACK.md](../../docs/PROMPT_STACK.md#prompt-cookbook-copypaste-recipes-using-sdx-features) |
 
 ## Checkpoint layout
 

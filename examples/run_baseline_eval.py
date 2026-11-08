@@ -4,9 +4,7 @@ Run `sample.py` over `examples/eval_prompts_baseline.json` (or another pack).
 
 Dry-run default (prints commands). Pass ``--execute`` to actually invoke sample.
 
-We load ``eval_prompt_pack`` via ``importlib`` so this script does **not** import
-``utils.generation`` at all (even its ``__init__.py`` is intentionally light, but
-explicit ``importlib`` keeps this script decoupled).
+Pack schema: a JSON array of prompt strings, or of objects with a ``"prompt"`` string and an optional ``"id"``.
 
 Usage (repo root)::
 
@@ -17,34 +15,35 @@ Usage (repo root)::
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import json
 import subprocess
 import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 
 
-def _load_eval_prompt_records_fn() -> Callable[..., Any]:
-    path = _REPO_ROOT / "utils" / "generation" / "eval_prompt_pack.py"
-    name = "_sdx_eval_prompt_pack_standalone"
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load eval prompt pack from {path}")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    fn = getattr(mod, "load_eval_prompt_records", None)
-    if fn is None or not callable(fn):
-        raise ImportError("load_eval_prompt_records missing from eval_prompt_pack")
-    return fn
-
-
-load_eval_prompt_records = _load_eval_prompt_records_fn()
+def load_eval_prompts(path: Path | str) -> list[tuple[str, str]]:
+    """``(id, prompt)`` per pack entry; ids default to ``p<index>``."""
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError("eval prompt pack root must be a JSON array")
+    out: list[tuple[str, str]] = []
+    for i, item in enumerate(raw):
+        if isinstance(item, str):
+            if item.strip():
+                out.append((f"p{i}", item.strip()))
+        elif isinstance(item, dict):
+            prompt = item.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise ValueError(f"item {i}: missing non-empty string 'prompt'")
+            eid = item.get("id")
+            out.append((eid.strip() if isinstance(eid, str) and eid.strip() else f"p{i}", prompt.strip()))
+        else:
+            raise ValueError(f"item {i}: expected str or object, got {type(item).__name__}")
+    if not out:
+        raise ValueError("eval prompt pack is empty")
+    return out
 
 
 def main() -> int:
@@ -75,10 +74,7 @@ def main() -> int:
     if extra and extra[0] == "--":
         extra = extra[1:]
 
-    records = load_eval_prompt_records(pack)
-    for r in records:
-        eid = r.id
-        prompt = r.prompt
+    for eid, prompt in load_eval_prompts(pack):
         dest = out_dir / f"{eid}.png"
         cmd = [
             sys.executable,

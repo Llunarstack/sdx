@@ -1,44 +1,227 @@
 #!/usr/bin/env python3
+"""Train the ViT quality + adherence model on an SDX manifest (``python -m vit_quality.train``)."""
+
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import sys
-import textwrap
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from utils.runtime.jsonutil import dumps as json_dumps
-from utils.runtime.plain_dict import to_plain_dict as _config_to_plain_dict
+from utils.modeling.architecture import ar_conditioning_vector, parse_num_ar_blocks_from_row
+from utils.runtime import json_dumps, json_loads
+from utils.runtime import to_plain_dict as _config_to_plain_dict
+
+from vit_quality.model import (
+    DEFAULT_CLIP_MODEL_ID,
+    ViTConfig,
+    binary_focal_loss_with_logits,
+    build_text_featurizer,
+    build_vit_model,
+    pairwise_ranking_loss,
+    text_feature_vector,
+)
+
+_BACKBONE_HELP = """Suggested --model-name values (timm):
+  vit_small_patch16_224                 fast baseline, less capacity
+  vit_base_patch16_224                  default speed/quality tradeoff
+  vit_large_patch16_224                 stronger ViT, more VRAM
+  vit_base_patch16_reg4_dinov2.lvd142m  register tokens (DINOv2-style)
+  vit_base_patch16_clipl.laion2b        CLIP-pretrained backbone (check --image-size)
+  swin_small_patch4_window7_224         hierarchical attention, local texture
+"""
 
 
-def seed_all(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+def seed_everything(seed: int) -> None:
+    """Seed ``random``, NumPy and torch (CPU + CUDA)."""
+    s = int(seed)
+    random.seed(s)
+    os.environ["PYTHONHASHSEED"] = str(s)
+    np.random.seed(s)
+    torch.manual_seed(s)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+        torch.cuda.manual_seed_all(s)
+
+
+class ViTManifestDataset(Dataset):
+    """
+    Manifest dataset for ViT quality + adherence heads.
+
+    ``text_featurizer`` replaces the legacy 8-D caption vector; its embeddings are computed once for all
+    captions at construction.
+    """
+
+    def __init__(
+        self,
+        manifest_jsonl: str,
+        image_root: str = "",
+        image_size: int = 224,
+        *,
+        training_augment: bool = False,
+        text_featurizer: Any = None,
+    ):
+        self.manifest_path = Path(manifest_jsonl)
+        self.image_root = Path(image_root) if image_root else None
+        self.samples: list[dict[str, object]] = []
+        if training_augment:
+            self.transform = transforms.Compose(
+                [
+                    transforms.RandomResizedCrop(
+                        image_size,
+                        scale=(0.85, 1.0),
+                        ratio=(0.9, 1.1),
+                        interpolation=transforms.InterpolationMode.BILINEAR,
+                    ),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.ColorJitter(brightness=0.08, contrast=0.08, saturation=0.08, hue=0.02),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                ]
+            )
+        else:
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize((image_size, image_size), interpolation=transforms.InterpolationMode.BILINEAR),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                ]
+            )
+        self._load()
+        self.text_feat_dim = int(
+            text_featurizer.dim if text_featurizer is not None else text_feature_vector("").numel()
+        )
+        self._text_features = None
+        if text_featurizer is not None and self.samples:
+            self._text_features = text_featurizer.embed_many([str(s["caption"]) for s in self.samples]).float()
+
+    def _resolve_path(self, p: str) -> Path:
+        path = Path(p)
+        if self.image_root is not None:
+            path = self.image_root / path
+        if not path.is_absolute():
+            path = (self.manifest_path.parent / path).resolve()
+        return path
+
+    def _load(self) -> None:
+        with self.manifest_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                t = line.strip()
+                if not t:
+                    continue
+                try:
+                    row = json_loads(t)
+                except Exception:
+                    continue
+                p = row.get("image_path") or row.get("path") or row.get("image")
+                cap = row.get("caption") or row.get("text") or ""
+                if not isinstance(p, str) or not p.strip():
+                    continue
+                p_res = self._resolve_path(p.strip())
+                if not p_res.exists():
+                    continue
+                q = row.get("quality_label", row.get("quality"))
+                a = row.get("adherence_score", row.get("prompt_adherence"))
+                ar_b = parse_num_ar_blocks_from_row(row)
+                sample = {
+                    "image_path": str(p_res),
+                    "caption": str(cap),
+                    "quality_label": None if q is None else float(q),
+                    "adherence_score": None if a is None else float(a),
+                    "num_ar_blocks": int(ar_b),
+                }
+                self.samples.append(sample)
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> dict[str, object]:
+        s = self.samples[idx]
+        with Image.open(s["image_path"]) as img:
+            x = self.transform(img.convert("RGB"))
+        cap = str(s["caption"])
+        tf = self._text_features[idx] if self._text_features is not None else text_feature_vector(cap)
+        quality_label = s["quality_label"]
+        adherence_score = s["adherence_score"]
+        ar_vec = ar_conditioning_vector(int(s["num_ar_blocks"]), dtype=torch.float32)
+        return {
+            "image": x,
+            "caption": cap,
+            "text_features": tf,
+            "ar_conditioning": ar_vec,
+            "quality_label": None if quality_label is None else torch.tensor(float(quality_label), dtype=torch.float32),
+            "adherence_score": None
+            if adherence_score is None
+            else torch.tensor(float(adherence_score), dtype=torch.float32),
+            "image_path": s["image_path"],
+        }
+
+
+def collate_vit_batch(batch: list[dict[str, object]]) -> dict[str, object]:
+    images = torch.stack([b["image"] for b in batch], dim=0)
+    text_features = torch.stack([b["text_features"] for b in batch], dim=0)
+    ar_conditioning = torch.stack([b["ar_conditioning"] for b in batch], dim=0)
+    out: dict[str, object] = {
+        "images": images,
+        "text_features": text_features,
+        "ar_conditioning": ar_conditioning,
+        "captions": [b["caption"] for b in batch],
+        "image_paths": [b["image_path"] for b in batch],
+    }
+    q_vals: list[torch.Tensor | None] = [b["quality_label"] for b in batch]
+    a_vals: list[torch.Tensor | None] = [b["adherence_score"] for b in batch]
+    if all(v is not None for v in q_vals):
+        out["quality_labels"] = torch.stack([v for v in q_vals if v is not None], dim=0)
+    else:
+        out["quality_labels"] = None
+    if all(v is not None for v in a_vals):
+        out["adherence_scores"] = torch.stack([v for v in a_vals if v is not None], dim=0)
+    else:
+        out["adherence_scores"] = None
+    return out
+
+
+class ModelEMA:
+    """EMA of the floating-point state-dict entries."""
+
+    def __init__(self, model: torch.nn.Module, decay: float = 0.999):
+        self.decay = float(decay)
+        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items() if v.dtype.is_floating_point}
+
+    @torch.no_grad()
+    def update(self, model: torch.nn.Module) -> None:
+        live = model.state_dict()
+        keys = [k for k in self.shadow if k in live]
+        shadows = [self.shadow[k] for k in keys]
+        torch._foreach_mul_(shadows, self.decay)
+        torch._foreach_add_(shadows, [live[k].detach() for k in keys], alpha=1.0 - self.decay)
+
+    @torch.no_grad()
+    def copy_to(self, model: torch.nn.Module) -> None:
+        for k, v in model.state_dict().items():
+            if k in self.shadow:
+                v.copy_(self.shadow[k])
+
+    def state_dict(self) -> dict[str, torch.Tensor]:
+        return {k: v.clone() for k, v in self.shadow.items()}
 
 
 def main() -> int:
-    from vit_quality.backbone_presets import describe_presets_for_help
-    from vit_quality.config import ViTConfig
-    from vit_quality.dataset import ViTManifestDataset, collate_vit_batch
-    from vit_quality.ema import ModelEMA
-    from vit_quality.losses import binary_focal_loss_with_logits, pairwise_ranking_loss
-    from vit_quality.model import build_vit_model
-
     p = argparse.ArgumentParser(
         description="Train ViT quality+adherence model on SDX manifest",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent(describe_presets_for_help()),
+        epilog=_BACKBONE_HELP,
     )
     p.add_argument("--manifest-jsonl", required=True)
     p.add_argument("--image-root", default="")
@@ -48,7 +231,7 @@ def main() -> int:
     p.add_argument(
         "--model-name",
         default="vit_base_patch16_224",
-        help="timm backbone for ViTQualityAdherenceModel (see vit_quality/backbone_presets.py).",
+        help="timm backbone for ViTQualityAdherenceModel (see the list below).",
     )
     p.add_argument("--no-pretrained", action="store_true")
     p.add_argument("--lr", type=float, default=3e-4)
@@ -104,6 +287,13 @@ def main() -> int:
         default="",
         help='Optional JSON object for timm.create_model kwargs (advanced), e.g. {"qk_norm": true}',
     )
+    p.add_argument(
+        "--text-embed-mode",
+        choices=("handcrafted", "clip"),
+        default="handcrafted",
+        help="Caption features for the adherence head: legacy 8-D stats or frozen CLIP text embeddings.",
+    )
+    p.add_argument("--text-encoder-model-id", default=DEFAULT_CLIP_MODEL_ID, help="CLIP id for --text-embed-mode clip")
     p.add_argument("--device", default="cuda")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out-dir", default="vit_runs")
@@ -144,15 +334,20 @@ def main() -> int:
         seed=args.seed,
         out_dir=args.out_dir,
         use_ar_conditioning=not args.no_ar_conditioning,
+        text_embed_mode=args.text_embed_mode,
+        text_encoder_model_id=args.text_encoder_model_id,
     )
-    seed_all(cfg.seed)
+    seed_everything(cfg.seed)
 
     device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
+    featurizer = build_text_featurizer(cfg.text_embed_mode, cfg.text_encoder_model_id, device)
+    cfg.text_feat_dim = int(featurizer.dim)
     ds = ViTManifestDataset(
         cfg.manifest_jsonl,
         image_root=cfg.image_root,
         image_size=cfg.image_size,
         training_augment=cfg.training_augment,
+        text_featurizer=featurizer,
     )
     if len(ds) == 0:
         print("Dataset is empty after filtering valid rows.", file=sys.stderr)
@@ -164,6 +359,7 @@ def main() -> int:
         num_workers=cfg.num_workers,
         collate_fn=collate_vit_batch,
         pin_memory=torch.cuda.is_available(),
+        persistent_workers=cfg.num_workers > 0 and cfg.epochs > 1,
     )
 
     model = build_vit_model(
@@ -193,7 +389,7 @@ def main() -> int:
 
     for epoch in range(cfg.epochs):
         model.train()
-        running = 0.0
+        running = torch.zeros((), device=device)
         n = 0
         for b in dl:
             images = b["images"].to(device, non_blocking=True)
@@ -242,10 +438,10 @@ def main() -> int:
             opt.step()
             ema.update(model)
 
-            running += float(loss.item())
+            running += loss.detach()
             n += 1
 
-        avg_loss = running / max(1, n)
+        avg_loss = running.item() / max(1, n)
         history.append({"epoch": epoch + 1, "loss": avg_loss})
         print(f"[ViT] epoch {epoch + 1}/{cfg.epochs} loss={avg_loss:.6f}")
 

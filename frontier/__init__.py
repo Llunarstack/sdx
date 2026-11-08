@@ -1,10 +1,4 @@
-"""
-Frontier: generation ideas outside the usual prompt–latent–decode box.
-
-See ``frontier/README.md`` for the concept map.
-"""
-
-__version__ = "12.0.0"
+"""Frontier: generation ideas outside the usual prompt-latent-decode box (concept map in ``frontier/README.md``)."""
 
 from .engine import FrontierEngine, FrontierPlan, analyze_prompt
 

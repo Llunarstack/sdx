@@ -25,7 +25,7 @@ ruff check .
    python -m scripts.tools quick_test
    ```
 4. **Manual sanity** (when you touch training/sampling/core utils): run a minimal `python -m py_compile` on changed modules and/or a short `sample.py` / `train.py` invocation with your new flags if applicable.
-5. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/reference/FILES.md` when it helps others find the change.
+5. **Docs** — If you add flags or new modules, update `README.md` and/or `docs/FILES.md` when it helps others find the change.
 6. **Doc links** (if you edit cross-links in markdown)
    ```bash
    python -m scripts.tools verify_doc_links
@@ -37,11 +37,11 @@ ruff check .
    ```bash
    pip install basedpyright
    OUT=/tmp/basedpyright.json
-   python -m basedpyright --outputjson native/_experimental/python/sdx_native/diffusion_sigma_fast.py utils/generation/run_artifacts.py diffusion/snr_utils.py utils/generation/inference_stages.py utils/generation/eval_prompt_pack.py examples/run_baseline_eval.py utils/terminal.py training/train_cli_parser.py utils/generation/sample_cli_parser.py utils/generation/sample_helpers.py > "$OUT" || true
+   python -m basedpyright --outputjson native/_experimental/python/sdx_native/native_tools.py diffusion/schedules.py examples/run_baseline_eval.py utils/runtime.py training/cli.py utils/generation/sample_cli_parser.py utils/generation/sample_core.py > "$OUT" || true
    python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); s=d.get('summary') or {}; sys.exit(1 if int(s.get('errorCount',0)) else 0)" "$OUT"
    ```
 
-   Full mirror: [docs/recipes/local_ci_mirror.md](docs/recipes/local_ci_mirror.md).
+   Full mirror: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md#mirror-github-ci-locally).
 
 8. **Optional pre-commit** — [`.pre-commit-config.yaml`](.pre-commit-config.yaml): `pip install pre-commit && pre-commit install`.
 
@@ -49,12 +49,12 @@ ruff check .
 
 - **Ruff** is the source of truth (`pyproject.toml`).
 - Prefer **clear names** and **small focused functions** over clever one-liners.
-- For large features, a short note in `docs/` or an entry in `docs/research/IMPROVEMENTS.md` is welcome.
+- For large features, a short note in `docs/` or an entry in `docs/RESEARCH.md` is welcome.
 
 ## Engineering standards
 
 - **Truthful smoke/doc gates** — Do not skip live packages as archived. Smoke tests and doc-link checks must reflect what is actually shipped and importable.
-- **Thin CLIs** — Keep entrypoints thin; extract argparse/parsers into focused modules (e.g. `training/train_cli_parser.py`). Avoid new mega-files that mix parsing, I/O, and domain logic.
+- **Thin CLIs** — Keep entrypoints thin; extract argparse/parsers into focused modules (e.g. `training/cli.py`). Avoid new mega-files that mix parsing, I/O, and domain logic.
 - **Type allowlist** — When you touch a module under the basedpyright/CI spot-check set, expand the allowlist so the changed surface stays typechecked.
 - **Tools dispatcher** — Prefer `python -m scripts.tools <command>` over adding new root-level CLI scripts.
 

@@ -1,23 +1,37 @@
-# Gaussian diffusion for DiT: SD/SDXL-style features (offset noise, min-SNR, ε/v/x0-pred, DDIM, CFG).
-from collections.abc import Callable
+"""VP Gaussian diffusion for the DiT: training losses (offset noise, min-SNR, eps/v/x0 prediction) and the
+sampling loop (VP solvers and rectified flow, CFG and the guidance stack), plus the per-step CFG scale
+schedules and the latent post-processing it uses (thresholding, blur, unsharp mask).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable, Iterable
 
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from .inference_timesteps import build_inference_timesteps
-from .losses.timestep_loss_weight import get_timestep_loss_weight
-from .respace import space_timesteps
-from .sampling_utils import norm_thresholding, spatial_norm_thresholding
-from .schedules import get_beta_schedule
-from .spectral_sfp import spectral_sfp_per_sample_loss
+from .flow_matching import spectral_sfp_per_sample_loss
+from .schedules import (
+    alpha_cumprod_from_betas,
+    get_beta_schedule,
+    get_timestep_loss_weight,
+    snr_from_alpha_cumprod,
+    space_timesteps,
+)
+from .solvers import build_inference_timesteps
 
-# Canonical VP update backends inside ``sample_loop`` (extended via aliases below).
+# Canonical VP update backends of ``sample_loop``; ``INFERENCE_SOLVER_ALIASES`` maps CLI names onto them.
 _SOLVER_DDIM = "ddim"
 _SOLVER_HEUN = "heun"
 _SOLVER_DPMPP_2M = "dpmpp_2m"
+_SOLVER_DPMPP_2M_SDE = "dpmpp_2m_sde"
 _SOLVER_DPMPP_3M = "dpmpp_3m"
 _SOLVER_UNIPC = "unipc"
+_SOLVER_APEX = "apex"
+_SOLVER_APEX_ADAPTIVE = "apex_adaptive"
 
 
 def _build_block_cache(
@@ -32,7 +46,7 @@ def _build_block_cache(
     if float(threshold) <= 0.0:
         return None
     if bool(taylor):
-        from utils.superior.taylor_cache import TaylorBlockCache, TaylorCacheConfig
+        from utils.modeling.architecture import TaylorBlockCache, TaylorCacheConfig
 
         return TaylorBlockCache(
             TaylorCacheConfig(
@@ -43,7 +57,7 @@ def _build_block_cache(
                 cache_interval=max(1, int(taylor_interval)),
             )
         )
-    from utils.superior.block_cache import BlockCacheConfig, BlockDiTCache
+    from utils.modeling.architecture import BlockCacheConfig, BlockDiTCache
 
     return BlockDiTCache(
         BlockCacheConfig(
@@ -59,15 +73,20 @@ INFERENCE_SOLVERS = (
     _SOLVER_DDIM,
     _SOLVER_HEUN,
     _SOLVER_DPMPP_2M,
+    _SOLVER_DPMPP_2M_SDE,
     _SOLVER_DPMPP_3M,
     _SOLVER_UNIPC,
+    _SOLVER_APEX,
+    _SOLVER_APEX_ADAPTIVE,
 )
-FLOW_INFERENCE_SOLVERS = ("euler", "heun", "midpoint", "dpmpp_2m")
+# Solvers that inject noise when eta > 0; eta defaults to 1 for the SDE solvers and 0 otherwise.
+_VP_STOCHASTIC = (_SOLVER_DDIM, _SOLVER_HEUN, _SOLVER_DPMPP_2M_SDE)
+_FLOW_STOCHASTIC = (_SOLVER_DPMPP_2M_SDE,)
+_SDE_SOLVERS = (_SOLVER_DPMPP_2M_SDE,)
 
-# Canonical backends — ``dpmsolver_pp_1`` now maps to real DPM++ 2M (was a fake→DDIM alias).
 INFERENCE_SOLVER_ALIASES: dict[str, str] = {
     "ddim": _SOLVER_DDIM,
-    # Legacy name: historically aliased to DDIM (not EDM Euler). Kept for CLI compat.
+    # These names have always meant DDIM on the VP path (not EDM Euler); kept for CLI compatibility.
     "euler": _SOLVER_DDIM,
     "euler_explicit": _SOLVER_DDIM,
     "euler_explicit_1": _SOLVER_DDIM,
@@ -80,6 +99,10 @@ INFERENCE_SOLVER_ALIASES: dict[str, str] = {
     "dpmsolver++_2m": _SOLVER_DPMPP_2M,
     "dpmsolver_pp_2m": _SOLVER_DPMPP_2M,
     "dpmsolver_pp_1": _SOLVER_DPMPP_2M,
+    "dpmpp_2m_sde": _SOLVER_DPMPP_2M_SDE,
+    "dpm++_2m_sde": _SOLVER_DPMPP_2M_SDE,
+    "dpm++2m_sde": _SOLVER_DPMPP_2M_SDE,
+    "dpmsolver++_2m_sde": _SOLVER_DPMPP_2M_SDE,
     "dpmpp_3m": _SOLVER_DPMPP_3M,
     "dpm++_3m": _SOLVER_DPMPP_3M,
     "dpm++3m": _SOLVER_DPMPP_3M,
@@ -96,6 +119,8 @@ INFERENCE_SOLVER_ALIASES: dict[str, str] = {
     "pc": _SOLVER_HEUN,
     "pc2": _SOLVER_HEUN,
     "rk2": _SOLVER_HEUN,
+    "apex": _SOLVER_APEX,
+    "apex_adaptive": _SOLVER_APEX_ADAPTIVE,
 }
 
 FLOW_SOLVER_ALIASES = {
@@ -112,27 +137,42 @@ FLOW_SOLVER_ALIASES = {
     "dpmpp_2m": "dpmpp_2m",
     "dpm++_2m": "dpmpp_2m",
     "dpmsolver++_2m": "dpmpp_2m",
+    "dpmpp_2m_sde": "dpmpp_2m_sde",
+    "dpm++_2m_sde": "dpmpp_2m_sde",
+    "dpmsolver++_2m_sde": "dpmpp_2m_sde",
+    "apex": "apex",
 }
 
 
+def _canonicalize(name: str, aliases: dict[str, str], kind: str) -> str:
+    key = str(name).lower().strip()
+    if key not in aliases:
+        raise ValueError(f"Unknown {kind} {name!r}. Known aliases: {', '.join(sorted(aliases))}")
+    return aliases[key]
+
+
 def canonicalize_vp_solver(name: str) -> str:
-    raw = str(name).lower().strip()
-    if raw in INFERENCE_SOLVER_ALIASES:
-        return INFERENCE_SOLVER_ALIASES[raw]
-    keys = ", ".join(sorted(INFERENCE_SOLVER_ALIASES.keys()))
-    raise ValueError(f"Unknown VP inference solver {name!r}. Known aliases: {keys}")
-
-
-def list_inference_solver_aliases() -> tuple:
-    return tuple(sorted(INFERENCE_SOLVER_ALIASES.keys()))
+    return _canonicalize(name, INFERENCE_SOLVER_ALIASES, "VP inference solver")
 
 
 def canonicalize_flow_solver(name: str) -> str:
-    raw = str(name).lower().strip()
-    if raw in FLOW_SOLVER_ALIASES:
-        return FLOW_SOLVER_ALIASES[raw]
-    keys = ", ".join(sorted(FLOW_SOLVER_ALIASES.keys()))
-    raise ValueError(f"Unknown flow solver {name!r}. Known aliases: {keys}")
+    return _canonicalize(name, FLOW_SOLVER_ALIASES, "flow solver")
+
+
+def _autocast_prediction(fn: Callable, device, enabled: bool, dtype: torch.dtype | None) -> Callable:
+    """Run a model-prediction closure under CUDA autocast and hand back the input dtype.
+
+    Off-GPU this is a no-op: CPU autocast is bf16-only and usually slower than fp32 here.
+    """
+    if not enabled or torch.device(device).type != "cuda":
+        return fn
+    amp_dtype = dtype or (torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16)
+
+    def run(x_in: torch.Tensor, *args):
+        with torch.autocast("cuda", dtype=amp_dtype):
+            return fn(x_in, *args).to(x_in.dtype)
+
+    return run
 
 
 def _control_guidance_scale_for_step(
@@ -144,26 +184,23 @@ def _control_guidance_scale_for_step(
     end: float = 1.0,
     decay_power: float = 1.0,
 ) -> float:
-    """Compute step-wise control scale over denoising progress."""
+    """ControlNet scale at a step: ``base_scale`` decaying as ``(1-u)^decay_power`` across the progress window
+    ``[start, end]`` (``u`` is the position inside it) and 0 outside; a zero-width window applies only to step 0."""
     b = float(base_scale)
     if b <= 0.0 or total_steps <= 0:
         return 0.0
-    s = float(max(0.0, min(1.0, start)))
-    e = float(max(0.0, min(1.0, end)))
-    if e < s:
-        s, e = e, s
+    s, e = sorted((max(0.0, min(1.0, float(start))), max(0.0, min(1.0, float(end)))))
     if e <= s:
         return b if step_index <= 0 else 0.0
-    p = 0.0 if total_steps <= 1 else float(step_index) / float(max(total_steps - 1, 1))
+    p = 0.0 if total_steps <= 1 else step_index / (total_steps - 1)
     if p < s or p > e:
         return 0.0
-    u = (p - s) / max(1e-8, e - s)
-    pow_v = max(1e-6, float(decay_power))
-    w = (1.0 - u) ** pow_v
-    return b * max(0.0, min(1.0, w))
+    u = (p - s) / (e - s)
+    return b * max(0.0, min(1.0, (1.0 - u) ** max(1e-6, float(decay_power))))
 
 
 def _scale_control_value(control_scale, factor: float):
+    """Scale a control / adapter strength that may be a tensor, a per-control list or a scalar."""
     f = float(factor)
     if torch.is_tensor(control_scale):
         return control_scale * f
@@ -171,8 +208,17 @@ def _scale_control_value(control_scale, factor: float):
         return [float(x) * f for x in control_scale]
     try:
         return float(control_scale) * f
-    except Exception:
+    except (TypeError, ValueError):
         return control_scale
+
+
+def offset_noise(noise: torch.Tensor, noise_offset: float) -> torch.Tensor:
+    """Noise offset (Guttenberg 2023): add ``noise_offset * N(0, 1)`` constant per sample and channel, so the model
+    learns to move each channel's mean (overall brightness / colour cast) instead of keeping it at the data mean."""
+    if noise_offset <= 0:
+        return noise
+    shape = noise.shape[:2] + (1,) * (noise.ndim - 2)
+    return noise + float(noise_offset) * torch.randn(shape, device=noise.device, dtype=noise.dtype)
 
 
 def create_diffusion(
@@ -182,11 +228,11 @@ def create_diffusion(
     loss_type: str = "mse",
     prediction_type: str = "epsilon",
 ):
-    """Create GaussianDiffusion. prediction_type: 'epsilon' (default), 'v' (velocity, SD2-style),
-    or 'x0' (direct clean-latent prediction; use same type at train and sample time).
-    timestep_respacing: "" = use all steps; int string (e.g. "50") = that many evenly spaced;
-    "ddim50" = DDIM striding for 50 steps; "10,15,20" = section-based step counts."""
-    use_timesteps = None
+    """``GaussianDiffusion`` with ``prediction_type`` ``epsilon`` | ``v`` | ``x0`` (use the same at train and sample time).
+
+    ``timestep_respacing``: "" = all steps; "50" = that many evenly spaced; "ddim50" = DDIM striding;
+    "10,15,20" = per-section step counts. Only the ``ddim``/section forms change sampling (``set_timesteps``).
+    """
     respacing_str = None
     if not timestep_respacing:
         use_timesteps = np.arange(num_timesteps)
@@ -226,25 +272,8 @@ class GaussianDiffusion:
         self.loss_type = loss_type
         self.prediction_type = prediction_type  # "epsilon" | "v" | "x0"
         beta = get_beta_schedule(beta_schedule, num_timesteps)
-        alpha = 1.0 - beta
-        # Use Rust cdylib when built — avoids NumPy cumprod overhead at startup.
-        # ``maybe_alpha_cumprod_rust`` expects betas (it computes Π(1 − βₜ)); do not pass (1 − β).
-        try:
-            from sdx_native.diffusion_math_native import maybe_alpha_cumprod_rust
-
-            beta_f64 = np.asarray(beta, dtype=np.float64)
-            _ac = maybe_alpha_cumprod_rust(beta_f64)
-            alpha_cumprod = _ac if _ac is not None else np.cumprod(1.0 - beta_f64)
-        except Exception:
-            alpha_cumprod = np.cumprod(alpha)
-        # Use Rust SNR computation when available.
-        try:
-            from sdx_native.diffusion_math_native import maybe_snr_from_alpha_cumprod_rust
-
-            _snr = maybe_snr_from_alpha_cumprod_rust(alpha_cumprod)
-            snr = _snr if _snr is not None else alpha_cumprod / (1.0 - alpha_cumprod + 1e-8)
-        except Exception:
-            snr = alpha_cumprod / (1.0 - alpha_cumprod + 1e-8)
+        alpha_cumprod = alpha_cumprod_from_betas(beta)
+        snr = snr_from_alpha_cumprod(alpha_cumprod)
         alpha_cumprod_prev = np.concatenate([[1.0], alpha_cumprod[:-1]])
         self.beta = torch.from_numpy(beta).float()
         self.alpha_cumprod = torch.from_numpy(alpha_cumprod).float()
@@ -252,28 +281,58 @@ class GaussianDiffusion:
         self.sqrt_alpha_cumprod = torch.from_numpy(np.sqrt(alpha_cumprod)).float()
         self.sqrt_one_minus_alpha_cumprod = torch.from_numpy(np.sqrt(1.0 - alpha_cumprod)).float()
         self.snr = torch.from_numpy(snr).float()
+        # Host copy of the float32 abar table: solver coefficients read it without a device sync.
+        self._abar_host = self.alpha_cumprod.numpy()
+
+    _BUFFERS = (
+        "beta",
+        "alpha_cumprod",
+        "alpha_cumprod_prev",
+        "sqrt_alpha_cumprod",
+        "sqrt_one_minus_alpha_cumprod",
+        "snr",
+    )
 
     def _to_device(self, device):
-        self.beta = self.beta.to(device)
-        self.alpha_cumprod = self.alpha_cumprod.to(device)
-        self.alpha_cumprod_prev = self.alpha_cumprod_prev.to(device)
-        self.sqrt_alpha_cumprod = self.sqrt_alpha_cumprod.to(device)
-        self.sqrt_one_minus_alpha_cumprod = self.sqrt_one_minus_alpha_cumprod.to(device)
-        if hasattr(self, "snr"):
-            self.snr = self.snr.to(device)
+        for name in self._BUFFERS:
+            setattr(self, name, getattr(self, name).to(device))
 
-    def q_sample(self, x_start, t, noise=None, noise_offset=0.0):
-        """Forward diffusion: x_0 -> x_t. noise_offset (SD-style): shift noise for better light/dark balance."""
+    def _coef(self, name: str, t, x: torch.Tensor) -> torch.Tensor:
+        """Schedule buffer ``name`` at ``t`` on ``x``'s device, shaped to broadcast against ``x``."""
+        self._to_device(x.device)
+        return getattr(self, name)[t][(...,) + (None,) * (x.ndim - 1)]
+
+    def q_sample(self, x_start, t, noise=None):
+        """Forward diffusion ``x_t = sqrt(abar) x_0 + sqrt(1 - abar) noise`` (pass the exact training noise)."""
         if noise is None:
-            noise = torch.randn_like(x_start, device=x_start.device, dtype=x_start.dtype)
-        if noise_offset > 0:
-            noise = noise + noise_offset * torch.randn(
-                x_start.shape[0], 1, 1, 1, device=noise.device, dtype=noise.dtype
-            ).expand_as(noise)
-        self._to_device(x_start.device)
-        sqrt_alpha = self.sqrt_alpha_cumprod.to(x_start.device)[t][(...,) + (None,) * (x_start.ndim - 1)]
-        sqrt_one_minus = self.sqrt_one_minus_alpha_cumprod.to(x_start.device)[t][(...,) + (None,) * (x_start.ndim - 1)]
-        return sqrt_alpha * x_start + sqrt_one_minus * noise
+            noise = torch.randn_like(x_start)
+        return (
+            self._coef("sqrt_alpha_cumprod", t, x_start) * x_start
+            + self._coef("sqrt_one_minus_alpha_cumprod", t, x_start) * noise
+        )
+
+    def training_target(self, x_start, noise, t):
+        """Regression target for ``prediction_type``: ``noise`` (eps), ``sqrt(abar) noise - sqrt(1-abar) x_0`` (v) or ``x_0``."""
+        if self.prediction_type == "x0":
+            return x_start
+        if self.prediction_type != "v":
+            return noise
+        return (
+            self._coef("sqrt_alpha_cumprod", t, x_start) * noise
+            - self._coef("sqrt_one_minus_alpha_cumprod", t, x_start) * x_start
+        )
+
+    def timestep_loss_weight(self, t, loss_weighting="min_snr", min_snr_gamma=5.0, loss_weighting_sigma_data=0.5):
+        """``(B,)`` weight for the per-sample MSE at ``t`` (see ``diffusion.schedules.get_timestep_loss_weight``)."""
+        self._to_device(t.device)
+        return get_timestep_loss_weight(
+            loss_weighting,
+            snr=self.snr[t],
+            alpha_cumprod=self.alpha_cumprod[t],
+            min_snr_gamma=min_snr_gamma,
+            loss_weighting_sigma_data=loss_weighting_sigma_data,
+            prediction_type=self.prediction_type,
+        )
 
     def per_sample_training_losses(
         self,
@@ -295,29 +354,22 @@ class GaussianDiffusion:
     ):
         """
         Same forward as ``training_losses`` but returns per-row loss ``(B,)`` before batch mean.
-        Used for Diffusion-DPO and other per-example objectives.
+        Used for Diffusion-DPO and other per-example objectives. ``noise_offset`` is applied once to ``noise``
+        (see :func:`offset_noise`), so ``x_t`` and the target see the same noise.
         """
-        if model_kwargs is None:
-            model_kwargs = {}
-        B = x_start.shape[0]
         device = x_start.device
         if refinement_prob > 0 and refinement_max_t > 0 and torch.rand(1, device=device).item() < refinement_prob:
-            t = torch.randint(0, min(refinement_max_t, self.num_timesteps), (B,), device=device, dtype=t.dtype)
+            t = torch.randint(
+                0, min(refinement_max_t, self.num_timesteps), (x_start.shape[0],), device=device, dtype=t.dtype
+            )
         if noise is None:
-            noise = torch.randn_like(x_start, device=device, dtype=x_start.dtype)
-        x_t = self.q_sample(x_start, t, noise=noise, noise_offset=noise_offset)
-        model_out = model(x_t, t, **model_kwargs)
+            noise = torch.randn_like(x_start)
+        noise = offset_noise(noise, noise_offset)
+        x_t = self.q_sample(x_start, t, noise=noise)
+        model_out = model(x_t, t, **(model_kwargs or {}))
         if model_out.shape != x_start.shape and model_out.shape[1] > x_start.shape[1]:
             model_out = model_out[:, : x_start.shape[1]]
-        self._to_device(device)
-        sqrt_alpha = self.sqrt_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
-        sqrt_one = self.sqrt_one_minus_alpha_cumprod.to(device)[t][(...,) + (None,) * (x_start.ndim - 1)]
-        if self.prediction_type == "v":
-            target = sqrt_alpha * noise - sqrt_one * x_start
-        elif self.prediction_type == "x0":
-            target = x_start
-        else:
-            target = noise
+        target = self.training_target(x_start, noise, t)
         if use_spectral_sfp_loss:
             loss = spectral_sfp_per_sample_loss(
                 model_out,
@@ -331,76 +383,38 @@ class GaussianDiffusion:
         else:
             loss = nn.functional.mse_loss(model_out, target, reduction="none")
             loss = loss.mean(dim=tuple(range(1, loss.ndim)))
-        snr_t = self.snr.to(device)[t] if hasattr(self, "snr") else None
-        alpha = self.alpha_cumprod.to(device)[t]
-        weight = get_timestep_loss_weight(
-            loss_weighting,
-            snr=snr_t,
-            alpha_cumprod=alpha,
-            min_snr_gamma=min_snr_gamma,
-            loss_weighting_sigma_data=loss_weighting_sigma_data,
-        )
-        return loss * weight
+        return loss * self.timestep_loss_weight(t, loss_weighting, min_snr_gamma, loss_weighting_sigma_data)
 
-    def training_losses(
-        self,
-        model,
-        x_start,
-        t,
-        model_kwargs=None,
-        noise=None,
-        refinement_prob=0.0,
-        refinement_max_t=150,
-        noise_offset=0.0,
-        min_snr_gamma=5.0,
-        sample_weights=None,
-        loss_weighting="min_snr",
-        loss_weighting_sigma_data=0.5,
-        use_spectral_sfp_loss=False,
-        spectral_sfp_low_sigma=0.22,
-        spectral_sfp_high_sigma=0.22,
-        spectral_sfp_tau_power=1.0,
-    ):
-        """
-        Compute training loss. SD/SDXL-style: offset noise; epsilon, v-, or x0-prediction.
-        loss_weighting: "min_snr" (default) | "min_snr_soft" | "unit" | "edm" | "v" | "eps".
-        sample_weights: (B,) optional; per-sample loss weight (e.g. aesthetic score).
-        use_spectral_sfp_loss: if True, replace spatial MSE with frequency-weighted FFT loss
-        (see diffusion/spectral_sfp.py); **not** used with MDM masked loss in train.py.
-        """
-        if model_kwargs is None:
-            model_kwargs = {}
-        device = x_start.device
-        loss = self.per_sample_training_losses(
-            model,
-            x_start,
-            t,
-            model_kwargs=model_kwargs,
-            noise=noise,
-            refinement_prob=refinement_prob,
-            refinement_max_t=refinement_max_t,
-            noise_offset=noise_offset,
-            min_snr_gamma=min_snr_gamma,
-            loss_weighting=loss_weighting,
-            loss_weighting_sigma_data=loss_weighting_sigma_data,
-            use_spectral_sfp_loss=use_spectral_sfp_loss,
-            spectral_sfp_low_sigma=spectral_sfp_low_sigma,
-            spectral_sfp_high_sigma=spectral_sfp_high_sigma,
-            spectral_sfp_tau_power=spectral_sfp_tau_power,
-        )
+    def training_losses(self, model, x_start, t, model_kwargs=None, noise=None, *, sample_weights=None, **loss_kwargs):
+        """``{"loss": scalar}``: the batch mean of :meth:`per_sample_training_losses` (``loss_kwargs``: offset noise,
+        refinement, ``loss_weighting`` min_snr | min_snr_soft | unit | edm | v | eps, spectral SFP), weighted by the
+        optional ``(B,)`` ``sample_weights`` (e.g. aesthetic score)."""
+        loss = self.per_sample_training_losses(model, x_start, t, model_kwargs=model_kwargs, noise=noise, **loss_kwargs)
         if sample_weights is not None and sample_weights.shape[0] == loss.shape[0]:
-            sample_weights = sample_weights.to(device, dtype=loss.dtype)
-            loss = (loss * sample_weights).sum() / (sample_weights.sum() + 1e-8)
+            sample_weights = sample_weights.to(loss.device, dtype=loss.dtype)
+            return {"loss": (loss * sample_weights).sum() / (sample_weights.sum() + 1e-8)}
+        return {"loss": loss.mean()}
+
+    def _guidance_space(self, t: torch.Tensor, ndim: int, *, flow: bool, need_sigma: bool):
+        """``((a, b), sigma)`` for the guidance stack: ``x0 = a*x_t + b*model_out`` for this parameterisation,
+        and the step's EDM noise level (VP ``sqrt((1-abar)/abar)``, flow ``s/(1-s)``) when ``need_sigma``."""
+        shape = (-1,) + (1,) * (ndim - 1)
+        if flow:
+            s = t.to(torch.float32).view(shape) / float(max(self.num_timesteps - 1, 1))
+            affine = (1.0, -s)
+            noise = s / (1.0 - s).clamp_min(1e-12)
         else:
-            loss = loss.mean()
-        return {"loss": loss}
+            self._to_device(t.device)
+            abar = self.alpha_cumprod[t].view(shape)
+            sa, so = abar.sqrt(), (1.0 - abar).sqrt()
+            affine = {"v": (sa, -so), "x0": (0.0, 1.0)}.get(self.prediction_type, (1.0 / sa, -so / sa))
+            noise = so / sa
+        return affine, (float(noise.flatten()[0]) if need_sigma else None)
 
     def _predict_x0_and_noise(self, model_out, x_t, t):
         """Convert model output (epsilon, v, or x0) to x_0 and implied noise."""
-        self._to_device(x_t.device)
-        alpha = self.alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
-        sigma = self.sqrt_one_minus_alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
-        sqrt_alpha = self.sqrt_alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
+        sigma = self._coef("sqrt_one_minus_alpha_cumprod", t, x_t)
+        sqrt_alpha = self._coef("sqrt_alpha_cumprod", t, x_t)
         if self.prediction_type == "v":
             pred_noise = (sqrt_alpha * model_out + sigma * x_t) / (sigma + 1e-8)
             x_0_pred = sqrt_alpha * x_t - sigma * model_out
@@ -409,25 +423,23 @@ class GaussianDiffusion:
             pred_noise = (x_t - sqrt_alpha * x_0_pred) / (sigma + 1e-8)
         else:
             pred_noise = model_out
-            x_0_pred = (x_t - sigma * pred_noise) / (alpha.sqrt() + 1e-8)
+            x_0_pred = (x_t - sigma * pred_noise) / (sqrt_alpha + 1e-8)
         return x_0_pred, pred_noise
 
     def p_step(self, model, x_t, t, model_kwargs=None):
-        """Single DDPM denoising step: x_t -> x_{t-1}. Returns (x_0_pred, x_prev)."""
-        if model_kwargs is None:
-            model_kwargs = {}
-        out = model(x_t, t, **model_kwargs)
+        """Deterministic (DDIM, eta=0) step ``x_t -> x_{t-1}``; returns ``(x_0_pred, x_prev)``."""
+        out = model(x_t, t, **(model_kwargs or {}))
         if out.shape != x_t.shape and out.shape[1] > x_t.shape[1]:
             out = out[:, : x_t.shape[1]]
-        x_0_pred, pred_noise = self._predict_x0_and_noise(out, x_t, t)
-        self._to_device(x_t.device)
-        sqrt_alpha = self.sqrt_alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
-        sigma = self.sqrt_one_minus_alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
-        noise_impl = (x_t - sqrt_alpha * x_0_pred) / (sigma + 1e-8)
+        x_0_pred, _ = self._predict_x0_and_noise(out, x_t, t)
+        noise_impl = (x_t - self._coef("sqrt_alpha_cumprod", t, x_t) * x_0_pred) / (
+            self._coef("sqrt_one_minus_alpha_cumprod", t, x_t) + 1e-8
+        )
         t_prev = (t - 1).clamp(min=0)
-        alpha_prev = self.alpha_cumprod.to(x_t.device)[t_prev][(...,) + (None,) * (x_t.ndim - 1)]
-        sigma_prev = self.sqrt_one_minus_alpha_cumprod.to(x_t.device)[t_prev][(...,) + (None,) * (x_t.ndim - 1)]
-        x_prev = alpha_prev.sqrt() * x_0_pred + sigma_prev * noise_impl
+        x_prev = (
+            self._coef("sqrt_alpha_cumprod", t_prev, x_t) * x_0_pred
+            + self._coef("sqrt_one_minus_alpha_cumprod", t_prev, x_t) * noise_impl
+        )
         return x_0_pred, x_prev
 
     def set_timesteps(
@@ -438,41 +450,27 @@ class GaussianDiffusion:
         scheduler: str | None = None,
         karras_rho: float = 7.0,
     ):
-        """
-        Set ``self.timesteps`` (high noise → low). ``timestep_schedule`` selects the index path;
-        ``scheduler`` is a legacy alias for ``timestep_schedule`` when provided.
-
-        Registered schedules: see ``diffusion.inference_timesteps.list_timestep_schedules()`` —
-        includes ``ddim``, ``euler``, ``karras_rho``, ``snr_uniform``, ``quad_cosine``.
-        If ``timestep_respacing_str`` was set at construction (e.g. ``ddim50``) and the
-        requested name is ``ddim``, respacing from ``space_timesteps`` is used (same as
-        legacy behavior). Other schedule names ignore respacing (e.g. ``euler`` with respacing
-        still uses the euler index path).
+        """Set and return ``self.timesteps`` (noisy -> clean) for a schedule in
+        ``diffusion.solvers.list_timestep_schedules()`` or ``indices:...``; ``scheduler`` is a legacy
+        alias for ``timestep_schedule``. ``ddim`` uses the construction-time respacing (e.g. ``ddim50``) when one
+        was given; every other schedule ignores it.
         """
         raw = str(scheduler if scheduler is not None else timestep_schedule).strip()
-        name_lc = raw.lower()
-        ts_resp = getattr(self, "timestep_respacing_str", None)
-        if ts_resp and name_lc == "ddim" and not name_lc.startswith("indices:"):
-            steps = space_timesteps(self.num_timesteps, ts_resp)
-            self.timesteps = torch.from_numpy(steps[::-1].copy().astype(np.int64))
-            return self.timesteps
-        ac = self.alpha_cumprod.detach().cpu().numpy()
-        steps = build_inference_timesteps(
-            raw,
-            self.num_timesteps,
-            num_inference_steps,
-            ac,
-            karras_rho=float(karras_rho),
-        )
-        self.timesteps = torch.from_numpy(np.asarray(steps, dtype=np.int64).copy())
+        if self.timestep_respacing_str and raw.lower() == "ddim":
+            steps = space_timesteps(self.num_timesteps, self.timestep_respacing_str)[::-1]
+        else:
+            steps = build_inference_timesteps(
+                raw, self.num_timesteps, num_inference_steps, self._abar_host, karras_rho=float(karras_rho)
+            )
+        self.timesteps = torch.from_numpy(np.array(steps, dtype=np.int64))
         return self.timesteps
 
     def set_timesteps_from(self, num_inference_steps: int, t_start: int):
         """Img2img / from-z: timesteps from t_start down to 0 (FLUX/SD-style)."""
         t_start = min(max(0, int(t_start)), self.num_timesteps - 1)
-        # High noise → low: first index must be near t_start (matches img2img / hires second pass).
-        steps = np.linspace(t_start, 0, num_inference_steps, endpoint=True)
-        self.timesteps = torch.from_numpy(steps.astype(np.int64).copy())
+        # High noise -> low, strictly decreasing: repeated indices would be zero-length solver steps.
+        steps = np.unique(np.round(np.linspace(t_start, 0, num_inference_steps)).astype(np.int64))[::-1]
+        self.timesteps = torch.from_numpy(steps.copy())
         return self.timesteps
 
     def _dynamic_threshold(
@@ -482,524 +480,54 @@ class GaussianDiffusion:
         threshold_type: str = "percentile",
         threshold_value: float = 0.0,
     ) -> torch.Tensor:
-        """Apply dynamic thresholding to x0 to reduce oversaturation. Types: percentile (quantile clamp), norm, spatial_norm (ControlNet-style)."""
+        """Threshold an x0 prediction. ``percentile``: Imagen dynamic thresholding with data range
+        ``threshold_value`` (default 1, the pixel range; use the latent range for VAE latents).
+        ``norm`` / ``spatial_norm``: cap the per-sample / per-location RMS at ``threshold_value``."""
         if threshold_type == "norm" and threshold_value > 0:
             return norm_thresholding(x, threshold_value)
         if threshold_type == "spatial_norm" and threshold_value > 0:
             return spatial_norm_thresholding(x, threshold_value)
-        if threshold_type == "percentile" and percentile > 0 and percentile < 100:
-            b = x.shape[0]
-            q_val = percentile / 100.0
-            # Use native CUDA percentile clamp when available.
-            try:
-                from sdx_native.percentile_clamp_native import maybe_percentile_clamp_cuda
-
-                row_len = x.numel() // b
-                x_np = x.detach().float().cpu().numpy().reshape(b, row_len)
-                result = maybe_percentile_clamp_cuda(x_np, q_val, 0.0)
-                if result is not None:
-                    return torch.from_numpy(result).reshape(x.shape).to(device=x.device, dtype=x.dtype)
-            except Exception:
-                pass
-            # PyTorch fallback.
-            x_flat = x.reshape(b, -1)
-            q = torch.quantile(x_flat.float(), q_val, dim=1, keepdim=True)
-            q = q.reshape(b, *([1] * (x.ndim - 1))).to(x.dtype)
-            return torch.where(x > q, q, torch.where(x < -q, -q, x))
+        if threshold_type == "percentile" and 0 < percentile < 100:
+            return dynamic_threshold(x, percentile / 100.0, threshold_value if threshold_value > 0 else 1.0)
         return x
 
-    def step_with_pred(
-        self,
-        x_t,
-        t,
-        t_next,
-        pred_out,
-        eta=0.0,
-        dynamic_threshold_percentile=0.0,
-        dynamic_threshold_type="percentile",
-        dynamic_threshold_value=0.0,
-        # PBFM (physics/perceptual guidance) - lightweight edge/high-pass drift.
-        pbfm_edge_boost: float = 0.0,
-        pbfm_edge_kernel: int = 3,
-        step_noise_scale: float = 1.0,
-    ):
-        """DDIM-style step using pre-computed model output (for CFG). pred_out = ε, v, or x0 per prediction_type."""
-        x_0_pred, _ = self._predict_x0_and_noise(pred_out, x_t, t)
-        # PBFM: add a high-pass ("edge") drift to x_0_pred before DDIM update.
-        # This is a heuristic implementation intended to reduce oversmoothing.
-        if pbfm_edge_boost and float(pbfm_edge_boost) != 0.0:
-            k = int(pbfm_edge_kernel)
-            k = max(3, k | 1)  # odd >=3
-            hp = x_0_pred - torch.nn.functional.avg_pool2d(x_0_pred, kernel_size=k, stride=1, padding=k // 2)
-            x_0_pred = x_0_pred + float(pbfm_edge_boost) * hp
-        if dynamic_threshold_percentile > 0 or (dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0):
-            x_0_pred = self._dynamic_threshold(
-                x_0_pred,
-                percentile=dynamic_threshold_percentile,
-                threshold_type=dynamic_threshold_type,
-                threshold_value=dynamic_threshold_value,
-            )
-        self._to_device(x_t.device)
-        alpha = self.alpha_cumprod.to(x_t.device)[t][(...,) + (None,) * (x_t.ndim - 1)]
-        alpha_next = self.alpha_cumprod.to(x_t.device)[t_next][(...,) + (None,) * (x_t.ndim - 1)]
-        sigma = eta * ((1 - alpha_next) / (1 - alpha + 1e-8) * (1 - alpha / (alpha_next + 1e-8))).clamp(0).sqrt()
-        dir_xt = (
-            (1 - alpha_next - sigma**2).clamp(0).sqrt() * (x_t - alpha.sqrt() * x_0_pred) / (1 - alpha + 1e-8).sqrt()
-        )
-        x_next = alpha_next.sqrt() * x_0_pred + dir_xt
-        if eta > 0:
-            noise = torch.randn_like(x_t, device=x_t.device, dtype=x_t.dtype)
-            if step_noise_scale is not None and float(step_noise_scale) != 1.0:
-                noise = noise * float(step_noise_scale)
-            x_next = x_next + sigma * noise
-        return x_next, x_0_pred
+    def _abar(self, t) -> float:
+        """abar at ``t`` (an int, or the first element of a tensor; pass ints in loops to avoid a device sync)."""
+        return float(self._abar_host[int(t.reshape(-1)[0]) if torch.is_tensor(t) else int(t)])
 
-    def _sample_loop_flow_matching(
+    def _ddim_step(self, x: torch.Tensor, t, t_next, x0: torch.Tensor, eta: float = 0.0) -> torch.Tensor:
+        """DDIM (Song et al. 2021) from ``t`` to ``t_next`` given the data prediction; ``eta`` > 0 adds DDPM-style noise."""
+        a, a_n = self._abar(t), self._abar(t_next)
+        eps = (x - a**0.5 * x0) / (1.0 - a) ** 0.5
+        sig = float(eta) * max((1.0 - a_n) / (1.0 - a) * (1.0 - a / a_n), 0.0) ** 0.5
+        x_next = a_n**0.5 * x0 + max(1.0 - a_n - sig * sig, 0.0) ** 0.5 * eps
+        return x_next + sig * torch.randn_like(x) if sig > 0.0 else x_next
+
+    def restart(
         self,
-        model,
-        shape,
-        model_kwargs_cond=None,
-        model_kwargs_uncond=None,
+        x0: torch.Tensor,
+        solve: Callable[[torch.Tensor, int], torch.Tensor],
         *,
-        cfg_scale: float = 7.5,
-        cfg_rescale: float = 0.0,
-        num_inference_steps: int = 50,
-        flow_solver: str = "euler",
-        flow_schedule: str = "linear",
-        flow_karras_rho: float = 7.0,
-        device="cuda",
-        dtype=torch.float32,
-        x_init=None,
-        start_timestep=None,
-        speculative_draft_cfg_scale: float = 0.0,
-        speculative_close_thresh: float = 0.0,
-        speculative_blend: float = 0.35,
-        dynamic_threshold_percentile: float = 0.0,
-        dynamic_threshold_type: str = "percentile",
-        dynamic_threshold_value: float = 0.0,
-        flow_init_noise: torch.Tensor | None = None,
-        control_guidance_start: float = 0.0,
-        control_guidance_end: float = 1.0,
-        control_guidance_decay: float = 1.0,
-        holy_grail_enable: bool = False,
-        holy_grail_cfg_early_ratio: float = 0.72,
-        holy_grail_cfg_late_ratio: float = 1.0,
-        holy_grail_control_mult: float = 1.0,
-        holy_grail_adapter_mult: float = 1.0,
-        holy_grail_frontload_control: bool = True,
-        holy_grail_late_adapter_boost: float = 1.15,
-        holy_grail_cads_strength: float = 0.0,
-        holy_grail_cads_min_strength: float = 0.0,
-        holy_grail_cads_power: float = 1.0,
-        holy_grail_unsharp_sigma: float = 0.0,
-        holy_grail_unsharp_amount: float = 0.0,
-        holy_grail_clamp_quantile: float = 0.0,
-        holy_grail_clamp_floor: float = 1.0,
-        cfg_guidance_schedule: str | None = None,
-        cfg_guidance_linear_start_multiplier: float = 0.7,
-        cfg_guidance_linear_end_multiplier: float = 1.0,
-        cfg_guidance_cosine_min_multiplier: float = 0.65,
-        cfg_guidance_cosine_max_multiplier: float = 1.0,
-        fdg_cfg_strength: float = 0.0,
-        fdg_cutoff_frac: float = 0.15,
-        feature_cache_delta_threshold: float = 0.0,
-        feature_cache_max_reuse: int = 2,
-        block_cache_threshold: float = 0.0,
-        block_cache_recompute_every: int = 4,
-        taylor_cache: bool = False,
-        taylor_cache_order: int = 1,
-        taylor_cache_interval: int = 4,
-        apg_parallel_eta: float = -1.0,
-        rcfgpp_tangent: float = 0.0,
-        zeresfdg_strength: float = 0.0,
-        cfg_zero_star: bool = False,
-        cfg_zero_init_frac: float = 0.04,
-        cfg_pp_lambda: float = 0.0,
-        cfg_skip_early_frac: float = 0.0,
-        cfg_skip_late_frac: float = 0.0,
-        qsilk_micrograin: float = 0.0,
-        dynamic_dit_width: bool = False,
-        dynamic_dit_early: float = 0.88,
-        dynamic_sdt: bool = False,
-        apg_momentum_beta: float = 0.0,
-        tcfg_damping: float = 0.0,
-        slg_scale: float = 0.0,
-        slg_skip_blocks: str = "",
-        slg_start_frac: float = 0.01,
-        slg_stop_frac: float = 0.30,
-        cfg_rejection_rerank: bool = False,
-        dbc_separate_cfg: bool = True,
-        regional_cfg_plan=None,
+        t_max: int,
+        cycles: int = 2,
+        flow: bool = False,
     ) -> torch.Tensor:
+        """Restart sampling (Xu et al., NeurIPS 2023) from the end of the trajectory.
+
+        Each cycle forward-noises the clean estimate to ``t_max`` with fresh noise (VP ``q_sample``;
+        flow ``(1-s)*x0 + s*z``) and runs ``solve(x_t, t_max)``, a backward ODE solve back to t=0. The
+        added noise contracts the error accumulated by the main solve.
         """
-        Sample to match ``diffusion.flow_matching.flow_matching_per_sample_losses`` training:
-
-        - Interpolation ``x = (1-s) x_0 + s \\epsilon`` with ``s \\in [0,1]``, ``t = \\mathrm{round}(s(T-1))``.
-        - Model predicts velocity ``v \\approx \\epsilon - x_0``; integrate ``\\mathrm{d}x/\\mathrm{d}s = v``
-          from ``s=1`` (noise) to ``s=0`` (clean).
-
-        Returns the final latent (estimated ``x_0``). CFG and optional speculative CFG match ``sample_loop``.
-        """
-        model_kwargs_cond = model_kwargs_cond or {}
-        model_kwargs_uncond = model_kwargs_uncond or {}
-        T = int(self.num_timesteps)
-        denom = max(T - 1, 1)
-        n = max(1, int(num_inference_steps))
-        B = int(shape[0])
-        cg_gs_fm = str(cfg_guidance_schedule).strip() if cfg_guidance_schedule else ""
-        fs = canonicalize_flow_solver(flow_solver)
-        from diffusion.solvers import SolverState, build_flow_s_grid, flow_dpmpp_2m_update, flow_midpoint_update
-
-        if x_init is not None and start_timestep is not None:
-            t0 = int(start_timestep)
-            t0 = max(0, min(T - 1, t0))
-            s0 = float(t0) / float(denom)
-            x0_hint = x_init.to(device=device, dtype=dtype)
-            z = torch.randn(shape, device=device, dtype=dtype)
-            if x0_hint.shape != z.shape:
-                raise ValueError("flow_matching_sample: x_init must match sample shape for img2img-style start.")
-            x = (1.0 - s0) * x0_hint + s0 * z
-            s_vals_np = build_flow_s_grid(
-                flow_schedule,
-                n,
-                s_start=s0,
-                s_end=0.0,
-                karras_rho=float(flow_karras_rho),
-            )
-        else:
-            if flow_init_noise is not None:
-                x = flow_init_noise.to(device=device, dtype=dtype)
-                if tuple(x.shape) != tuple(shape):
-                    raise ValueError(f"flow_init_noise shape {tuple(x.shape)} != sample shape {tuple(shape)}")
+        t_max = max(1, min(int(t_max), self.num_timesteps - 1))
+        for _ in range(max(1, int(cycles))):
+            z = torch.randn_like(x0)
+            if flow:
+                s = t_max / max(self.num_timesteps - 1, 1)
+                x_t = (1.0 - s) * x0 + s * z
             else:
-                x = torch.randn(shape, device=device, dtype=dtype)
-            s_vals_np = build_flow_s_grid(
-                flow_schedule,
-                n,
-                s_start=1.0,
-                s_end=0.0,
-                karras_rho=float(flow_karras_rho),
-            )
-        s_vals = torch.as_tensor(s_vals_np, device=device, dtype=torch.float64)
-        flow_state = SolverState(max_order=3)
-
-        cfg_box = [float(cfg_scale)]
-        feat_cache = None
-        if float(feature_cache_delta_threshold) > 0.0:
-            from utils.superior.feature_cache import FeatureCacheConfig, FeatureCachePolicy
-
-            feat_cache = FeatureCachePolicy(
-                FeatureCacheConfig(
-                    delta_threshold=float(feature_cache_delta_threshold),
-                    max_reuse_streak=max(1, int(feature_cache_max_reuse)),
-                )
-            )
-        block_cache = _build_block_cache(
-            block_cache_threshold,
-            block_cache_recompute_every,
-            taylor=taylor_cache,
-            taylor_order=taylor_cache_order,
-            taylor_interval=taylor_cache_interval,
-            dbc_separate_cfg=bool(dbc_separate_cfg),
-        )
-        from utils.generation.zeresfdg import SpectralGuidanceEMA
-
-        _spectral_ema = SpectralGuidanceEMA() if float(zeresfdg_strength) > 0.0 else None
-        _guidance_sess = None
-        if float(apg_momentum_beta) > 0.0 and float(apg_parallel_eta) >= 0.0:
-            from utils.generation.guidance_session import GuidanceSession
-
-            _guidance_sess = GuidanceSession(apg_momentum_beta=float(apg_momentum_beta))
-        _guidance_probe = None
-        if bool(cfg_rejection_rerank):
-            from utils.generation.guidance_probe import GuidanceProbe
-
-            _guidance_probe = GuidanceProbe()
-            self._last_guidance_probe = _guidance_probe
-        from utils.generation.slg_guidance import parse_skip_blocks
-
-        _slg_blocks = parse_skip_blocks(
-            str(slg_skip_blocks or ""),
-            depth=len(getattr(model, "blocks", [])) or 28,
-        )
-        spec_draft = float(speculative_draft_cfg_scale)
-        spec_thr = float(speculative_close_thresh)
-        spec_blend = float(speculative_blend)
-        use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
-        has_control = "control_image" in model_kwargs_cond
-        base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
-        hg_enabled = bool(holy_grail_enable)
-        if hg_enabled:
-            from diffusion.sampling import (
-                HolyGrailRecipe,
-                apply_condition_noise,
-                build_holy_grail_step_plan,
-                cads_noise_std,
-            )
-
-            hg_recipe = HolyGrailRecipe(
-                base_cfg=float(cfg_scale),
-                cfg_early_ratio=float(holy_grail_cfg_early_ratio),
-                cfg_late_ratio=float(holy_grail_cfg_late_ratio),
-                control_base_scale=float(holy_grail_control_mult),
-                adapter_base_scale=float(holy_grail_adapter_mult),
-                frontload_control=bool(holy_grail_frontload_control),
-                late_adapter_boost=float(holy_grail_late_adapter_boost),
-            )
-
-        def _flow_guided_cs(step_idx: int, t_batch_bt: torch.Tensor) -> float:
-            from diffusion.cfg_schedulers import (
-                cfg_scale_cosine_ramp,
-                cfg_scale_linear,
-                cfg_scale_piecewise,
-                cfg_scale_snr_aware_multiplier,
-            )
-
-            vr = float(cfg_box[0]) / float(max(abs(float(cfg_scale)), 1e-8))
-            if cg_gs_fm:
-                gn0 = cg_gs_fm.lower()
-                bs_f = float(cfg_scale)
-                tot_steps = n
-                if gn0 == "linear":
-                    sa = cfg_scale_linear(
-                        bs_f,
-                        step_idx,
-                        tot_steps,
-                        start_multiplier=float(cfg_guidance_linear_start_multiplier),
-                        end_multiplier=float(cfg_guidance_linear_end_multiplier),
-                    )
-                elif gn0 in ("cosine", "cosine_ramp"):
-                    sa = cfg_scale_cosine_ramp(
-                        bs_f,
-                        step_idx,
-                        tot_steps,
-                        min_multiplier=float(cfg_guidance_cosine_min_multiplier),
-                        max_multiplier=float(cfg_guidance_cosine_max_multiplier),
-                    )
-                elif gn0 == "piecewise":
-                    sa = cfg_scale_piecewise(bs_f, step_idx, tot_steps)
-                elif gn0 in ("snr", "snr_aware"):
-                    t_ix = int(t_batch_bt.reshape(-1)[0].detach().cpu().item())
-                    ac_a = float(self.alpha_cumprod[t_ix])
-                    mu = cfg_scale_snr_aware_multiplier(ac_a)
-                    sa = bs_f * mu
-                else:
-                    raise ValueError(
-                        "Unknown cfg_guidance_schedule "
-                        f"{cfg_guidance_schedule!r}; use linear, cosine, piecewise, snr (or unset)."
-                    )
-                return float(sa) * vr
-            return float(cfg_scale) * vr
-
-        def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor, step_idx: int) -> torch.Tensor:
-            if feat_cache is not None and feat_cache.should_skip_forward(x_in):
-                return feat_cache.cached_prediction()
-            mk_c = model_kwargs_cond
-            mk_u = model_kwargs_uncond
-            plan = None
-            p = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
-            if hg_enabled:
-                plan = build_holy_grail_step_plan(recipe=hg_recipe, step_index=step_idx, total_steps=n)
-                dyn = 1.0 if float(cfg_scale) == 0.0 else float(cfg_box[0]) / float(cfg_scale)
-                cs = float(plan.cfg_scale) * dyn
-            else:
-                cs = _flow_guided_cs(step_idx, t_batch)
-            if has_control:
-                sf = _control_guidance_scale_for_step(
-                    1.0,
-                    step_idx,
-                    n,
-                    start=float(control_guidance_start),
-                    end=float(control_guidance_end),
-                    decay_power=float(control_guidance_decay),
-                )
-                mk_c = dict(model_kwargs_cond)
-                if hg_enabled:
-                    sf = sf * float(plan.control_scale)
-                mk_c["control_scale"] = _scale_control_value(base_control_scale, sf)
-                if hg_enabled and "adapter_scale" in mk_c:
-                    mk_c["adapter_scale"] = _scale_control_value(mk_c.get("adapter_scale", 1.0), plan.adapter_scale)
-                if mk_u and ("control_image" in mk_u or "control_scale" in mk_u):
-                    mk_u = dict(mk_u)
-                    mk_u["control_scale"] = _scale_control_value(mk_u.get("control_scale", base_control_scale), sf)
-                    if hg_enabled and "adapter_scale" in mk_u:
-                        mk_u["adapter_scale"] = _scale_control_value(mk_u.get("adapter_scale", 1.0), plan.adapter_scale)
-            if hg_enabled and float(holy_grail_cads_strength) > 0.0 and "encoder_hidden_states" in mk_c:
-                emb = mk_c.get("encoder_hidden_states", None)
-                if torch.is_tensor(emb):
-                    mk_c = dict(mk_c)
-                    sig = cads_noise_std(
-                        progress=p,
-                        base_strength=float(holy_grail_cads_strength),
-                        min_strength=float(holy_grail_cads_min_strength),
-                        power=float(holy_grail_cads_power),
-                    )
-                    mk_c["encoder_hidden_states"] = apply_condition_noise(emb, std=sig)
-            if use_spec_cfg and cs != 1.0 and mk_u:
-                from utils.generation.speculative_denoise import speculative_cfg_prediction
-
-                out = speculative_cfg_prediction(
-                    model,
-                    x_in,
-                    t_batch,
-                    model_kwargs_cond=mk_c,
-                    model_kwargs_uncond=mk_u,
-                    cfg_scale=cs,
-                    draft_cfg_scale=spec_draft,
-                    cfg_rescale=float(cfg_rescale),
-                    close_thresh=spec_thr,
-                    blend_on_close=spec_blend,
-                )
-            elif regional_cfg_plan is not None and cs != 1.0 and mk_u:
-                from utils.generation.regional_box_prompting import regional_cfg_forward
-
-                out = regional_cfg_forward(
-                    model,
-                    x_in,
-                    t_batch,
-                    model_kwargs_cond=mk_c,
-                    model_kwargs_uncond=mk_u,
-                    plan=regional_cfg_plan,
-                    cfg_scale=float(cs),
-                    cfg_rescale=float(cfg_rescale),
-                    zeresfdg_strength=float(zeresfdg_strength),
-                    fdg_strength=float(fdg_cfg_strength),
-                    fdg_cutoff_frac=float(fdg_cutoff_frac),
-                    apg_parallel_eta=float(apg_parallel_eta),
-                    block_cache=block_cache,
-                    rcfgpp_tangent=float(rcfgpp_tangent),
-                    cfg_zero_star=bool(cfg_zero_star),
-                    cfg_pp_lambda=float(cfg_pp_lambda),
-                    tcfg_damping=float(tcfg_damping),
-                    cfg_skip_early_frac=float(cfg_skip_early_frac),
-                    cfg_skip_late_frac=float(cfg_skip_late_frac),
-                    sample_step=int(step_idx),
-                    total_steps=int(n),
-                    cfg_zero_init_frac=float(cfg_zero_init_frac),
-                )
-            elif cs != 1.0 and mk_u:
-                from utils.generation.cfg_batched import batched_cfg_forward
-
-                _prog = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
-                _slg_on = float(slg_start_frac) <= _prog <= float(slg_stop_frac)
-                out = batched_cfg_forward(
-                    model,
-                    x_in,
-                    t_batch,
-                    model_kwargs_cond=mk_c,
-                    model_kwargs_uncond=mk_u,
-                    cfg_scale=float(cs),
-                    cfg_rescale=float(cfg_rescale),
-                    zeresfdg_strength=float(zeresfdg_strength),
-                    fdg_strength=float(fdg_cfg_strength),
-                    fdg_cutoff_frac=float(fdg_cutoff_frac),
-                    apg_parallel_eta=float(apg_parallel_eta),
-                    block_cache=block_cache,
-                    rcfgpp_tangent=float(rcfgpp_tangent),
-                    cfg_zero_star=bool(cfg_zero_star),
-                    cfg_pp_lambda=float(cfg_pp_lambda),
-                    tcfg_damping=float(tcfg_damping),
-                    cfg_skip_early_frac=float(cfg_skip_early_frac),
-                    cfg_skip_late_frac=float(cfg_skip_late_frac),
-                    sample_step=int(step_idx),
-                    total_steps=int(n),
-                    cfg_zero_init_frac=float(cfg_zero_init_frac),
-                    spectral_ema=_spectral_ema,
-                    guidance_session=_guidance_sess,
-                    slg_scale=float(slg_scale),
-                    slg_skip_blocks=_slg_blocks,
-                    slg_active=bool(_slg_on),
-                    guidance_probe=_guidance_probe,
-                    dbc_separate_cfg=bool(dbc_separate_cfg),
-                )
-            else:
-                o = model(x_in, t_batch, block_cache=block_cache, **mk_c)
-                if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
-                    o = o[:, : x_in.shape[1]]
-                out = o
-            if bool(dynamic_dit_width) or bool(dynamic_sdt):
-                from utils.superior.dynamic_dit import apply_dynamic_width, apply_sdt_latent_blend
-
-                prog = 1.0 if n <= 1 else float(step_idx) / float(max(n - 1, 1))
-                if bool(dynamic_sdt):
-                    out = apply_sdt_latent_blend(x_in, out)
-                if bool(dynamic_dit_width):
-                    out = apply_dynamic_width(out, prog, early=float(dynamic_dit_early))
-            if feat_cache is not None:
-                feat_cache.note_fresh(x_in, out)
-            return out
-
-        def _t_batch_from_s(s: float) -> torch.Tensor:
-            ti = int(round(float(s) * float(denom)))
-            ti = max(0, min(T - 1, ti))
-            return torch.full((B,), ti, device=device, dtype=torch.long)
-
-        for i in range(n):
-            s_cur = float(s_vals[i].item())
-            s_next = float(s_vals[i + 1].item())
-            ds = s_next - s_cur
-            t_b = _t_batch_from_s(s_cur)
-            v1 = _model_prediction(x, t_b, i)
-            if fs == "heun":
-                x_pred = x + v1 * ds
-                t_b2 = _t_batch_from_s(s_next)
-                v2 = _model_prediction(x_pred, t_b2, min(i + 1, n - 1))
-                x = x + 0.5 * (v1 + v2) * ds
-            elif fs == "midpoint":
-                t_b2 = _t_batch_from_s(0.5 * (s_cur + s_next))
-
-                def _mf(xin, tb, si):
-                    return _model_prediction(xin, tb, si)
-
-                x = flow_midpoint_update(
-                    x=x,
-                    velocity=v1,
-                    s_cur=s_cur,
-                    s_next=s_next,
-                    model_fn=_mf,
-                    t_next_batch=t_b2,
-                    step_idx=min(i + 1, n - 1),
-                )
-            elif fs == "dpmpp_2m":
-                x, flow_state = flow_dpmpp_2m_update(
-                    x=x,
-                    velocity=v1,
-                    s_cur=s_cur,
-                    s_next=s_next,
-                    state=flow_state,
-                )
-            else:
-                x = x + v1 * ds
-
-        if dynamic_threshold_percentile > 0 or (dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0):
-            x = self._dynamic_threshold(
-                x,
-                percentile=dynamic_threshold_percentile,
-                threshold_type=dynamic_threshold_type,
-                threshold_value=dynamic_threshold_value,
-            )
-        if hg_enabled:
-            if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
-                from diffusion.sampling import unsharp_mask_latent
-
-                x = unsharp_mask_latent(
-                    x,
-                    sigma=float(holy_grail_unsharp_sigma),
-                    amount=float(holy_grail_unsharp_amount),
-                )
-            if float(holy_grail_clamp_quantile) > 0.0:
-                from diffusion.sampling import dynamic_percentile_clamp
-
-                x = dynamic_percentile_clamp(
-                    x,
-                    quantile=float(holy_grail_clamp_quantile),
-                    floor=float(holy_grail_clamp_floor),
-                )
-        if float(qsilk_micrograin) > 0.0:
-            from utils.generation.micrograin_stabilizer import qsilk_micrograin_stabilize
-
-            x = qsilk_micrograin_stabilize(x, detail_amount=float(qsilk_micrograin))
-        return x
+                x_t = self.q_sample(x0, torch.full((x0.shape[0],), t_max, device=x0.device, dtype=torch.long), noise=z)
+            x0 = solve(x_t, t_max)
+        return x0
 
     def sample_loop(
         self,
@@ -1009,7 +537,7 @@ class GaussianDiffusion:
         model_kwargs_uncond=None,
         cfg_scale=7.5,
         num_inference_steps=50,
-        eta=0.0,
+        eta: float | None = None,
         device="cuda",
         dtype=torch.float32,
         x_init=None,
@@ -1027,37 +555,23 @@ class GaussianDiffusion:
         cfg_guidance_linear_end_multiplier: float = 1.0,
         cfg_guidance_cosine_min_multiplier: float = 0.65,
         cfg_guidance_cosine_max_multiplier: float = 1.0,
-        # Optional: masked/inpainting-style freezing of known regions.
-        # This approximates MDM-style "fill the blanks" behavior at inference:
-        # after each denoise step, unmasked latents are reset to q_sample(x0_known, t).
         inpaint_mask=None,
         inpaint_x0=None,
         inpaint_noise=None,
         inpaint_freeze_known=False,
-        # AdaGen-style early exit: stop when latent updates get small.
         ada_early_exit_delta_threshold: float = 0.0,
         ada_early_exit_patience: int = 0,
         ada_early_exit_min_steps: int = 0,
-        # PBFM guidance
-        pbfm_edge_boost: float = 0.0,
-        pbfm_edge_kernel: int = 3,
-        # Blur-based self-attention guidance (heuristic): extra model forward on Gaussian-blurred x;
-        # amplifies high-frequency structure vs a smoothed baseline. Costs ~2× forwards when enabled.
         sag_blur_sigma: float = 0.0,
         sag_scale: float = 0.0,
         volatile_cfg_boost: float = 0.0,
         volatile_cfg_quantile: float = 0.72,
         volatile_cfg_window: int = 6,
-        # Optional: decode x0_pred periodically (caller supplies CLIP/VLM fn) and boost CFG when score is low.
         periodic_alignment_interval: int = 0,
         periodic_alignment_threshold: float = 0.0,
         periodic_alignment_cfg_boost: float = 0.0,
         periodic_alignment_fn: Callable[[int, torch.Tensor], float] | None = None,
         periodic_alignment_rewind_strength: float = 0.0,
-        # Speculative CFG: second forward at draft_cfg_scale; blend if |full-draft| mean < close_thresh.
-        speculative_draft_cfg_scale: float = 0.0,
-        speculative_close_thresh: float = 0.0,
-        speculative_blend: float = 0.35,
         control_guidance_start: float = 0.0,
         control_guidance_end: float = 1.0,
         control_guidance_decay: float = 1.0,
@@ -1075,15 +589,14 @@ class GaussianDiffusion:
         holy_grail_unsharp_amount: float = 0.0,
         holy_grail_clamp_quantile: float = 0.0,
         holy_grail_clamp_floor: float = 1.0,
-        # Rectified-flow path (matches diffusion.flow_matching training); mutually exclusive with VP DDIM updates below.
         flow_matching_sample: bool = False,
         flow_solver: str = "euler",
         flow_schedule: str = "linear",
         flow_karras_rho: float = 7.0,
+        flow_shift: float = 1.0,
+        flow_shift_ref_hw: tuple[int, int] | None = None,
         flow_init_noise: torch.Tensor | None = None,
         return_intermediate_state: bool = False,
-        fdg_cfg_strength: float = 0.0,
-        fdg_cutoff_frac: float = 0.15,
         feature_cache_delta_threshold: float = 0.0,
         feature_cache_max_reuse: int = 2,
         block_cache_threshold: float = 0.0,
@@ -1092,201 +605,164 @@ class GaussianDiffusion:
         taylor_cache_order: int = 1,
         taylor_cache_interval: int = 4,
         apg_parallel_eta: float = -1.0,
-        rcfgpp_tangent: float = 0.0,
-        zeresfdg_strength: float = 0.0,
+        apg_momentum_beta: float = 0.0,
+        apg_norm_threshold: float = 0.0,
+        fdg_low: float = 1.0,
+        fdg_high: float = 1.0,
         cfg_zero_star: bool = False,
         cfg_zero_init_frac: float = 0.04,
-        cfg_pp_lambda: float = 0.0,
-        cfg_skip_early_frac: float = 0.0,
-        cfg_skip_late_frac: float = 0.0,
-        qsilk_micrograin: float = 0.0,
-        dynamic_dit_width: bool = False,
-        dynamic_dit_early: float = 0.88,
-        dynamic_sdt: bool = False,
-        apg_momentum_beta: float = 0.0,
+        cfg_interval=None,
         tcfg_damping: float = 0.0,
+        pag_scale: float = 0.0,
+        pag_blocks: str = "auto",
         slg_scale: float = 0.0,
         slg_skip_blocks: str = "",
         slg_start_frac: float = 0.01,
         slg_stop_frac: float = 0.30,
+        qsilk_micrograin: float = 0.0,
+        dynamic_dit_width: bool = False,
+        dynamic_dit_early: float = 0.88,
+        dynamic_sdt: bool = False,
         cfg_rejection_rerank: bool = False,
         dbc_separate_cfg: bool = True,
         regional_cfg_plan=None,
         step_noise_scales=None,
+        sde_band=None,
+        eps_scale: float = 1.0,
+        eps_scale_k: float = 0.0,
+        attention_layout_plan=None,
+        inference_amp: bool = False,
+        inference_amp_dtype: torch.dtype | None = None,
     ):
         """
-        Full sampling loop with CFG (SD/SDXL-style). Returns x_0 (denoised latent).
+        Sampling loop with CFG for VP diffusion (returns the final x0 prediction) or, with
+        ``flow_matching_sample``, rectified flow (integrates dx/ds = v from s=1 to s=0, matching
+        ``diffusion.flow_matching`` training; returns the latent at s=0).
 
-        When ``flow_matching_sample=True``, runs Euler/Heun integration in ``s`` (see
-        ``_sample_loop_flow_matching``); VP ``scheduler`` / ``solver`` (ddim/heun) are not used.
+        **Timesteps** (VP; ``timestep_schedule`` overrides ``scheduler``): see ``diffusion.solvers.build_inference_timesteps``
+        (``karras_rho`` is EDM rho-spacing; ``indices:999,...,0`` is explicit). Flow grids: ``flow_schedule``
+        in ``diffusion.solvers.list_flow_schedules``, SD3-shifted by ``flow_shift``; with ``flow_shift_ref_hw``
+        (the latent grid ``flow_shift`` was tuned for) the shift scales by ``sqrt(H*W / ref_area)`` for the
+        sampled ``shape`` (``diffusion.schedules.sd3_resolution_shift``).
 
-        **Timestep placement** (``scheduler`` or ``timestep_schedule``): chooses discrete
-        training indices — ``ddim``, ``euler``, ``karras_rho``, ``snr_uniform``, ``quad_cosine``
-        (see ``diffusion.inference_timesteps``). ``timestep_schedule`` overrides ``scheduler``
-        when set.
+        **Solvers**: VP ``ddim``, ``heun`` (EDM Heun on the eps-ODE), ``dpmpp_2m``, ``dpmpp_2m_sde``,
+        ``dpmpp_3m``, ``unipc`` (UniPC-2, one forward per step), ``apex``, ``apex_adaptive``; flow ``euler``,
+        ``heun``, ``midpoint``, ``dpmpp_2m``, ``dpmpp_2m_sde``, ``apex``.
 
-        **Solver** (``solver``): canonical backends ``ddim`` (single DDIM update) and ``heun``
-        (two evals per step); many aliases are accepted (see ``canonicalize_vp_solver``, ``list_inference_solver_aliases``).
+        **Stochasticity**: ``eta`` (default 1 for ``dpmpp_2m_sde``, else 0) drives ``ddim``/``heun`` (VP)
+        and the ``dpmpp_2m_sde`` solvers. ``sde_band="lo,hi"`` limits noise injection to EDM noise levels
+        in [lo, hi] (VP ``sqrt((1-abar)/abar)``, flow ``s/(1-s)``); ``step_noise_scales`` multiplies eta per
+        step. Asking for noise from an ODE solver raises ``ValueError``.
 
-        **CFG over time**: ``cfg_guidance_schedule`` in {``linear``, ``cosine``, ``piecewise``, ``snr``}
-        ramps effective CFG vs denoise progress (ignored when ``holy_grail_enable``; incompatible with HG).
+        **x0 post-processing** on every model evaluation: epsilon scaling against exposure bias (Ning et al.,
+        ICLR 2024; ``eps / (eps_scale + eps_scale_k * t)``, off at 1.0), then dynamic thresholding
+        (``dynamic_threshold_*``, see ``_dynamic_threshold``).
 
-        **Timesteps**: besides registered names (``ddim``, ``euler``, ``karras_rho``, …), use
-        ``indices:999,950,...,0`` for an explicit descending index path (see ``diffusion.inference_timesteps``).
+        **Guidance** (``utils.generation.guidance``; every enabled term composes): cfg_rescale, apg_*,
+        fdg_low/fdg_high, cfg_zero_star, cfg_interval, tcfg_damping, pag_*, slg_*. ``cfg_guidance_schedule``
+        (linear, cosine, piecewise, snr) or the holy-grail ramp scales CFG per step. ``sag_*``: blur
+        self-attention guidance. ``attention_layout_plan``: Dense Diffusion layout bias on the cross-attention
+        of the plan's steps.
 
-        cfg_rescale: ComfyUI-style; if > 0, rescale CFG delta to reduce over-saturation (e.g. 0.7).
-        dynamic_threshold_percentile: if > 0, clamp x_0_pred to this percentile (e.g. 99.5).
-        dynamic_threshold_type: "percentile" | "norm" | "spatial_norm" (ControlNet-style).
-        dynamic_threshold_value: min norm for norm/spatial_norm (e.g. 1.0).
+        **Loop policies** (VP and flow): volatile CFG; periodic alignment (``periodic_alignment_fn(step, x0)``
+        below the threshold boosts CFG and optionally rewinds); AdaGen-style early exit. Inpaint freezing is VP only.
 
-        volatile_cfg_boost: if > 0, when the latest latent update exceeds a quantile of recent
-        updates, multiply CFG on subsequent steps by (1 + volatile_cfg_boost).
-
-        periodic_alignment_interval: if > 0 and ``periodic_alignment_fn`` is set, every N completed
-        steps call ``fn(step_index, x_0_pred)`` expecting a CLIP-like cosine in roughly [-1, 1].
-        If the value is **below** ``periodic_alignment_threshold``, multiply CFG by
-        (1 + ``periodic_alignment_cfg_boost``) for subsequent steps (multiplicative on current CFG).
-        If ``periodic_alignment_rewind_strength`` > 0, also apply a *soft rewind* to the latent by
-        mixing the post-step latent with the pre-step latent: ``x = (1-s)*x + s*x_prev``.
-
-        speculative_draft_cfg_scale: if >0 and uncond kwargs exist, run draft CFG forward then full CFG;
-        when predictions are close (mean abs diff < speculative_close_thresh), blend toward draft.
-
-        flow_matching_sample: if True, use rectified-flow sampler (``flow_solver`` = euler | heun).
-
-        flow_init_noise: optional latent at ``s=1`` (same as training ``epsilon``); default is standard Gaussian noise.
-
-        return_intermediate_state: if True, return a tuple ``(x_t, x0_pred, t_start)`` where ``x_t`` is the
-        *current* latent at the end of this loop, and ``t_start`` is the timestep index you can pass back into
-        ``start_timestep`` to resume sampling from ``x_init=x_t``. This is intended for beam-style partial denoise.
+        ``x_init`` with ``start_timestep`` is the already-noised latent at that timestep (img2img).
+        ``return_intermediate_state`` (VP): return ``(x_t, x0_pred, t_next)`` to resume with ``x_init=x_t``.
         """
         model_kwargs_cond = model_kwargs_cond or {}
         model_kwargs_uncond = model_kwargs_uncond or {}
+        flow = bool(flow_matching_sample)
         do_inpaint = bool(
             inpaint_freeze_known and inpaint_mask is not None and inpaint_x0 is not None and inpaint_noise is not None
         )
         hg_enabled = bool(holy_grail_enable)
-        cg_sched = str(cfg_guidance_schedule).strip() if cfg_guidance_schedule else ""
+        cg_sched = str(cfg_guidance_schedule).strip().lower() if cfg_guidance_schedule else ""
         if hg_enabled and cg_sched:
             raise ValueError(
                 "cfg_guidance_schedule cannot be combined with holy_grail_enable; disable one or the other."
             )
-        if flow_matching_sample:
-            if return_intermediate_state:
-                raise ValueError("return_intermediate_state is not supported for flow_matching_sample")
-            if do_inpaint:
-                raise ValueError(
-                    "flow_matching_sample is not compatible with inpaint_freeze_known (VP q_sample trajectory). "
-                    "Use VP sampling or disable structured inpaint."
-                )
-            fs_flow = canonicalize_flow_solver(flow_solver)
-            if fs_flow not in FLOW_INFERENCE_SOLVERS:
-                raise ValueError(f"flow_solver must be one of {FLOW_INFERENCE_SOLVERS}, got {flow_solver!r}")
-            return self._sample_loop_flow_matching(
-                model,
-                shape,
-                model_kwargs_cond=model_kwargs_cond,
-                model_kwargs_uncond=model_kwargs_uncond,
-                cfg_scale=float(cfg_scale),
-                cfg_rescale=float(cfg_rescale),
-                num_inference_steps=int(num_inference_steps),
-                flow_solver=fs_flow,
-                flow_schedule=str(flow_schedule or "linear"),
-                flow_karras_rho=float(flow_karras_rho),
-                device=device,
-                dtype=dtype,
-                x_init=x_init,
-                start_timestep=start_timestep,
-                speculative_draft_cfg_scale=float(speculative_draft_cfg_scale),
-                speculative_close_thresh=float(speculative_close_thresh),
-                speculative_blend=float(speculative_blend),
-                dynamic_threshold_percentile=float(dynamic_threshold_percentile),
-                dynamic_threshold_type=str(dynamic_threshold_type),
-                dynamic_threshold_value=float(dynamic_threshold_value),
-                flow_init_noise=flow_init_noise,
-                control_guidance_start=float(control_guidance_start),
-                control_guidance_end=float(control_guidance_end),
-                control_guidance_decay=float(control_guidance_decay),
-                holy_grail_enable=bool(holy_grail_enable),
-                holy_grail_cfg_early_ratio=float(holy_grail_cfg_early_ratio),
-                holy_grail_cfg_late_ratio=float(holy_grail_cfg_late_ratio),
-                holy_grail_control_mult=float(holy_grail_control_mult),
-                holy_grail_adapter_mult=float(holy_grail_adapter_mult),
-                holy_grail_frontload_control=bool(holy_grail_frontload_control),
-                holy_grail_late_adapter_boost=float(holy_grail_late_adapter_boost),
-                holy_grail_cads_strength=float(holy_grail_cads_strength),
-                holy_grail_cads_min_strength=float(holy_grail_cads_min_strength),
-                holy_grail_cads_power=float(holy_grail_cads_power),
-                holy_grail_unsharp_sigma=float(holy_grail_unsharp_sigma),
-                holy_grail_unsharp_amount=float(holy_grail_unsharp_amount),
-                holy_grail_clamp_quantile=float(holy_grail_clamp_quantile),
-                holy_grail_clamp_floor=float(holy_grail_clamp_floor),
-                cfg_guidance_schedule=cg_sched or None,
-                cfg_guidance_linear_start_multiplier=float(cfg_guidance_linear_start_multiplier),
-                cfg_guidance_linear_end_multiplier=float(cfg_guidance_linear_end_multiplier),
-                cfg_guidance_cosine_min_multiplier=float(cfg_guidance_cosine_min_multiplier),
-                cfg_guidance_cosine_max_multiplier=float(cfg_guidance_cosine_max_multiplier),
-                fdg_cfg_strength=float(fdg_cfg_strength),
-                fdg_cutoff_frac=float(fdg_cutoff_frac),
-                feature_cache_delta_threshold=float(feature_cache_delta_threshold),
-                feature_cache_max_reuse=int(feature_cache_max_reuse),
-                block_cache_threshold=float(block_cache_threshold),
-                block_cache_recompute_every=int(block_cache_recompute_every),
-                taylor_cache=bool(taylor_cache),
-                taylor_cache_order=int(taylor_cache_order),
-                taylor_cache_interval=int(taylor_cache_interval),
-                apg_parallel_eta=float(apg_parallel_eta),
-                rcfgpp_tangent=float(rcfgpp_tangent),
-                zeresfdg_strength=float(zeresfdg_strength),
-                cfg_zero_star=bool(cfg_zero_star),
-                cfg_zero_init_frac=float(cfg_zero_init_frac),
-                cfg_pp_lambda=float(cfg_pp_lambda),
-                cfg_skip_early_frac=float(cfg_skip_early_frac),
-                cfg_skip_late_frac=float(cfg_skip_late_frac),
-                qsilk_micrograin=float(qsilk_micrograin),
-                dynamic_dit_width=bool(dynamic_dit_width),
-                dynamic_dit_early=float(dynamic_dit_early),
-                dynamic_sdt=bool(dynamic_sdt),
-                apg_momentum_beta=float(apg_momentum_beta),
-                tcfg_damping=float(tcfg_damping),
-                slg_scale=float(slg_scale),
-                slg_skip_blocks=str(slg_skip_blocks or ""),
-                slg_start_frac=float(slg_start_frac),
-                slg_stop_frac=float(slg_stop_frac),
-                cfg_rejection_rerank=bool(cfg_rejection_rerank),
-                dbc_separate_cfg=bool(dbc_separate_cfg),
-                regional_cfg_plan=regional_cfg_plan,
+        if flow and return_intermediate_state:
+            raise ValueError("return_intermediate_state is not supported for flow_matching_sample")
+        if flow and do_inpaint:
+            raise ValueError(
+                "flow_matching_sample is not compatible with inpaint_freeze_known (VP q_sample trajectory). "
+                "Use VP sampling or disable structured inpaint."
             )
-        ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).strip()
-        sol_backend = canonicalize_vp_solver(solver)
-        if do_inpaint:
-            inpaint_mask = inpaint_mask.to(device=device, dtype=dtype)
-            inpaint_x0 = inpaint_x0.to(device=device, dtype=dtype)
-            inpaint_noise = inpaint_noise.to(device=device, dtype=dtype)
-        if x_init is not None and start_timestep is not None:
-            x = x_init.to(device=device, dtype=dtype)
-            timesteps = self.set_timesteps_from(num_inference_steps, start_timestep).to(device)
-        else:
-            x = torch.randn(shape, device=device, dtype=dtype)
-            timesteps = self.set_timesteps(
-                num_inference_steps,
-                timestep_schedule=ts_name,
-                karras_rho=float(karras_rho),
-            ).to(device)
-        x_0_pred = None
-        last_t_next_val: int = 0
-        early_exit_enabled = float(ada_early_exit_delta_threshold) > 0.0 and int(ada_early_exit_patience) > 0
-        early_exit_patience = int(ada_early_exit_patience)
-        early_exit_min_steps = int(ada_early_exit_min_steps)
-        early_exit_counter = 0
-        from diffusion.solvers import SolverState, vp_dpmpp_update, vp_unipc_update
+        sol = canonicalize_flow_solver(flow_solver) if flow else canonicalize_vp_solver(solver)
+        stochastic = _FLOW_STOCHASTIC if flow else _VP_STOCHASTIC
+        eta_v = (1.0 if sol in _SDE_SOLVERS else 0.0) if eta is None else float(eta)
+        sns = [float(v) for v in step_noise_scales] if step_noise_scales else []
+        if eta_v > 0.0 and sol not in stochastic:
+            raise ValueError(
+                f"eta={eta_v} needs a stochastic solver ({', '.join(stochastic)}); {sol!r} is an ODE solver."
+            )
+        if sns and eta_v <= 0.0:
+            raise ValueError(
+                f"step_noise_scales (e.g. frontier serendipity curves) scale injected noise: "
+                f"use eta > 0 with one of {', '.join(stochastic)}."
+            )
+        from utils.generation.guidance import GuidanceConfig, GuidanceState, parse_sigma_interval
 
-        multistep_state = SolverState(max_order=3)
-        use_multistep = sol_backend in (_SOLVER_DPMPP_2M, _SOLVER_DPMPP_3M, _SOLVER_UNIPC)
-        dpm_order = 3 if sol_backend == _SOLVER_DPMPP_3M else 2
+        band = parse_sigma_interval(sde_band)
+        g = GuidanceConfig.build(
+            depth=len(getattr(model, "blocks", [])) or 28,
+            interval=cfg_interval,
+            pag_blocks=pag_blocks if float(pag_scale) else "",
+            slg_blocks=slg_skip_blocks if float(slg_scale) else "",
+            rescale=float(cfg_rescale),
+            apg_eta=float(apg_parallel_eta),
+            apg_momentum=float(apg_momentum_beta),
+            apg_norm_threshold=float(apg_norm_threshold),
+            fdg_low=float(fdg_low),
+            fdg_high=float(fdg_high),
+            cfg_zero_star=bool(cfg_zero_star),
+            cfg_zero_init_frac=float(cfg_zero_init_frac),
+            tcfg_damping=float(tcfg_damping),
+            pag_scale=float(pag_scale),
+            slg_scale=float(slg_scale),
+            slg_window=(float(slg_start_frac), float(slg_stop_frac)),
+        )
+        denom = float(max(self.num_timesteps - 1, 1))
+        resume = x_init is not None and start_timestep is not None
+        if flow:
+            s0 = max(0, min(self.num_timesteps - 1, int(start_timestep))) / denom if resume else 1.0
+            init = x_init if resume else flow_init_noise
+            x = torch.randn(shape, device=device, dtype=dtype) if init is None else init.to(device=device, dtype=dtype)
+            if tuple(x.shape) != tuple(shape):
+                raise ValueError(f"initial flow latent shape {tuple(x.shape)} != sample shape {tuple(shape)}")
+            from diffusion.schedules import sd3_resolution_shift
+            from diffusion.solvers import build_flow_s_grid
+
+            shift = float(flow_shift)
+            if flow_shift_ref_hw is not None:
+                ref_area = int(flow_shift_ref_hw[0]) * int(flow_shift_ref_hw[1])
+                shift = sd3_resolution_shift(int(shape[-2]) * int(shape[-1]), ref_area, shift)
+            grid = build_flow_s_grid(
+                str(flow_schedule or "linear"),
+                max(1, int(num_inference_steps)),
+                s_start=s0,
+                s_end=0.0,
+                karras_rho=float(flow_karras_rho),
+                shift=shift,
+            )
+            n_steps = len(grid) - 1
+        else:
+            if resume:
+                x = x_init.to(device=device, dtype=dtype)
+                timesteps = self.set_timesteps_from(num_inference_steps, start_timestep).to(device)
+            else:
+                x = torch.randn(shape, device=device, dtype=dtype)
+                ts_name = str(timestep_schedule if timestep_schedule is not None else scheduler).strip()
+                timesteps = self.set_timesteps(
+                    num_inference_steps, timestep_schedule=ts_name, karras_rho=float(karras_rho)
+                ).to(device)
+            n_steps = len(timesteps)
+        self._to_device(device)
+
         feat_cache = None
         if float(feature_cache_delta_threshold) > 0.0:
-            from utils.superior.feature_cache import FeatureCacheConfig, FeatureCachePolicy
+            from utils.modeling.architecture import FeatureCacheConfig, FeatureCachePolicy
 
             feat_cache = FeatureCachePolicy(
                 FeatureCacheConfig(
@@ -1302,40 +778,19 @@ class GaussianDiffusion:
             taylor_interval=taylor_cache_interval,
             dbc_separate_cfg=bool(dbc_separate_cfg),
         )
-        from utils.generation.zeresfdg import SpectralGuidanceEMA
-
-        _spectral_ema_vp = SpectralGuidanceEMA() if float(zeresfdg_strength) > 0.0 else None
-        _guidance_sess_vp = None
-        if float(apg_momentum_beta) > 0.0 and float(apg_parallel_eta) >= 0.0:
-            from utils.generation.guidance_session import GuidanceSession
-
-            _guidance_sess_vp = GuidanceSession(apg_momentum_beta=float(apg_momentum_beta))
-        _guidance_probe_vp = None
+        gstate = GuidanceState()
+        probe = None
         if bool(cfg_rejection_rerank):
-            from utils.generation.guidance_probe import GuidanceProbe
+            from utils.generation.guidance import GuidanceProbe
 
-            _guidance_probe_vp = GuidanceProbe()
-            self._last_guidance_probe = _guidance_probe_vp
-        from utils.generation.slg_guidance import parse_skip_blocks
+            probe = GuidanceProbe()
+            self._last_guidance_probe = probe
+        layout = None
+        if attention_layout_plan is not None:
+            from frontier.layout import region_masks_from_boxes
 
-        _slg_blocks_vp = parse_skip_blocks(
-            str(slg_skip_blocks or ""),
-            depth=len(getattr(model, "blocks", [])) or 28,
-        )
-        cfg_box = [float(cfg_scale)]
-        vol_deltas: list = []
-        v_boost = float(volatile_cfg_boost)
-        v_q = float(volatile_cfg_quantile)
-        v_win = max(2, int(volatile_cfg_window))
-        p_int = int(periodic_alignment_interval)
-        p_thr = float(periodic_alignment_threshold)
-        p_boost = float(periodic_alignment_cfg_boost)
-        p_fn = periodic_alignment_fn
-        p_rewind = float(periodic_alignment_rewind_strength)
-        spec_draft = float(speculative_draft_cfg_scale)
-        spec_thr = float(speculative_close_thresh)
-        spec_blend = float(speculative_blend)
-        use_spec_cfg = spec_draft > 0.0 and model_kwargs_uncond is not None
+            masks = region_masks_from_boxes(attention_layout_plan.boxes, shape[-2], shape[-1], device=device)
+            model = layout = _LayoutModel(model, attention_layout_plan, masks, int(shape[0]))
         has_control = "control_image" in model_kwargs_cond
         base_control_scale = model_kwargs_cond.get("control_scale", 1.0)
         if hg_enabled:
@@ -1355,131 +810,86 @@ class GaussianDiffusion:
                 frontload_control=bool(holy_grail_frontload_control),
                 late_adapter_boost=float(holy_grail_late_adapter_boost),
             )
-        for i in range(len(timesteps)):
-            t = timesteps[i].expand(shape[0])
-            _sns = 1.0
-            if step_noise_scales is not None:
-                _scales = list(step_noise_scales)
-                if _scales:
-                    _sns = float(_scales[min(i, len(_scales) - 1)])
-            t_next = (
-                timesteps[i + 1].expand(shape[0])
-                if i + 1 < len(timesteps)
-                else torch.zeros(shape[0], device=device, dtype=torch.long)
-            )
-            try:
-                last_t_next_val = int(t_next[0].detach().item())
-            except Exception:
-                last_t_next_val = int(t_next[0])
-            x_prev = x
+        cfg_box = [float(cfg_scale)]
 
-            def _vp_guided_cs(step_idx: int, t_batch_bt: torch.Tensor) -> float:
-                from diffusion.cfg_schedulers import (
-                    cfg_scale_cosine_ramp,
-                    cfg_scale_linear,
-                    cfg_scale_piecewise,
-                    cfg_scale_snr_aware_multiplier,
+        def scheduled_cfg(i: int, t_batch: torch.Tensor) -> float:
+            if not cg_sched:
+                return float(cfg_scale)
+            if cg_sched == "linear":
+                return cfg_scale_linear(
+                    float(cfg_scale),
+                    i,
+                    n_steps,
+                    start_multiplier=float(cfg_guidance_linear_start_multiplier),
+                    end_multiplier=float(cfg_guidance_linear_end_multiplier),
                 )
-
-                vr = float(cfg_box[0]) / float(max(abs(float(cfg_scale)), 1e-8))
-                if cg_sched:
-                    gn0 = cg_sched.lower()
-                    bs_f = float(cfg_scale)
-                    tot_steps = len(timesteps)
-                    if gn0 == "linear":
-                        sa = cfg_scale_linear(
-                            bs_f,
-                            step_idx,
-                            tot_steps,
-                            start_multiplier=float(cfg_guidance_linear_start_multiplier),
-                            end_multiplier=float(cfg_guidance_linear_end_multiplier),
-                        )
-                    elif gn0 in ("cosine", "cosine_ramp"):
-                        sa = cfg_scale_cosine_ramp(
-                            bs_f,
-                            step_idx,
-                            tot_steps,
-                            min_multiplier=float(cfg_guidance_cosine_min_multiplier),
-                            max_multiplier=float(cfg_guidance_cosine_max_multiplier),
-                        )
-                    elif gn0 == "piecewise":
-                        sa = cfg_scale_piecewise(bs_f, step_idx, tot_steps)
-                    elif gn0 in ("snr", "snr_aware"):
-                        t_ix = int(t_batch_bt.reshape(-1)[0].detach().cpu().item())
-                        ac_a = float(self.alpha_cumprod[t_ix])
-                        mu = cfg_scale_snr_aware_multiplier(ac_a)
-                        sa = bs_f * mu
-                    else:
-                        raise ValueError(
-                            "Unknown cfg_guidance_schedule "
-                            f"{cfg_guidance_schedule!r}; use linear, cosine, piecewise, snr (or unset)."
-                        )
-                    return float(sa) * vr
-                return float(cfg_scale) * vr
-
-            def _model_prediction(x_in: torch.Tensor, t_batch: torch.Tensor) -> torch.Tensor:
-                if feat_cache is not None and feat_cache.should_skip_forward(x_in):
-                    return feat_cache.cached_prediction()
-                mk_c = model_kwargs_cond
-                mk_u = model_kwargs_uncond
-                plan = None
-                p = 1.0 if len(timesteps) <= 1 else float(i) / float(max(len(timesteps) - 1, 1))
-                if hg_enabled:
-                    plan = build_holy_grail_step_plan(recipe=hg_recipe, step_index=i, total_steps=len(timesteps))
-                    dyn = 1.0 if float(cfg_scale) == 0.0 else float(cfg_box[0]) / float(cfg_scale)
-                    cs = float(plan.cfg_scale) * dyn
+            if cg_sched in ("cosine", "cosine_ramp"):
+                return cfg_scale_cosine_ramp(
+                    float(cfg_scale),
+                    i,
+                    n_steps,
+                    min_multiplier=float(cfg_guidance_cosine_min_multiplier),
+                    max_multiplier=float(cfg_guidance_cosine_max_multiplier),
+                )
+            if cg_sched == "piecewise":
+                return cfg_scale_piecewise(float(cfg_scale), i, n_steps)
+            if cg_sched in ("snr", "snr_aware"):
+                if flow:
+                    # Flow SNR is ((1-s)/s)^2; pass the abar with the same SNR.
+                    s = float(t_batch.reshape(-1)[0]) / denom
+                    abar = (1.0 - s) ** 2 / ((1.0 - s) ** 2 + s**2)
                 else:
-                    cs = _vp_guided_cs(i, t_batch)
-                if has_control:
-                    sf = _control_guidance_scale_for_step(
-                        1.0,
-                        i,
-                        len(timesteps),
-                        start=float(control_guidance_start),
-                        end=float(control_guidance_end),
-                        decay_power=float(control_guidance_decay),
-                    )
-                    mk_c = dict(model_kwargs_cond)
-                    if hg_enabled:
-                        sf = sf * float(plan.control_scale)
-                    mk_c["control_scale"] = _scale_control_value(base_control_scale, sf)
-                    if hg_enabled and "adapter_scale" in mk_c:
-                        mk_c["adapter_scale"] = _scale_control_value(mk_c.get("adapter_scale", 1.0), plan.adapter_scale)
-                    if mk_u and ("control_image" in mk_u or "control_scale" in mk_u):
-                        mk_u = dict(mk_u)
-                        mk_u["control_scale"] = _scale_control_value(mk_u.get("control_scale", base_control_scale), sf)
-                        if hg_enabled and "adapter_scale" in mk_u:
-                            mk_u["adapter_scale"] = _scale_control_value(
-                                mk_u.get("adapter_scale", 1.0), plan.adapter_scale
-                            )
-                if hg_enabled and float(holy_grail_cads_strength) > 0.0 and "encoder_hidden_states" in mk_c:
-                    emb = mk_c.get("encoder_hidden_states", None)
-                    if torch.is_tensor(emb):
-                        mk_c = dict(mk_c)
-                        sig = cads_noise_std(
-                            progress=p,
-                            base_strength=float(holy_grail_cads_strength),
-                            min_strength=float(holy_grail_cads_min_strength),
-                            power=float(holy_grail_cads_power),
-                        )
-                        mk_c["encoder_hidden_states"] = apply_condition_noise(emb, std=sig)
-                if use_spec_cfg and cs != 1.0 and mk_u:
-                    from utils.generation.speculative_denoise import speculative_cfg_prediction
+                    abar = self._abar(t_batch)
+                return float(cfg_scale) * cfg_scale_snr_aware_multiplier(abar)
+            raise ValueError(
+                f"Unknown cfg_guidance_schedule {cfg_guidance_schedule!r}; use linear, cosine, piecewise, snr (or unset)."
+            )
 
-                    out = speculative_cfg_prediction(
-                        model,
-                        x_in,
-                        t_batch,
-                        model_kwargs_cond=mk_c,
-                        model_kwargs_uncond=mk_u,
-                        cfg_scale=cs,
-                        draft_cfg_scale=spec_draft,
-                        cfg_rescale=float(cfg_rescale),
-                        close_thresh=spec_thr,
-                        blend_on_close=spec_blend,
-                    )
-                elif regional_cfg_plan is not None and cs != 1.0 and mk_u:
-                    from utils.generation.regional_box_prompting import regional_cfg_forward
+        def guided(x_in: torch.Tensor, t_batch: torch.Tensor, i: int) -> torch.Tensor:
+            if feat_cache is not None and feat_cache.should_skip_forward(x_in):
+                return feat_cache.cached_prediction()
+            if layout is not None:
+                layout.step = i
+            mk_c, mk_u = model_kwargs_cond, model_kwargs_uncond
+            boost = 1.0 if float(cfg_scale) == 0.0 else cfg_box[0] / float(cfg_scale)
+            plan = (
+                build_holy_grail_step_plan(recipe=hg_recipe, step_index=i, total_steps=n_steps) if hg_enabled else None
+            )
+            cs = (float(plan.cfg_scale) if hg_enabled else scheduled_cfg(i, t_batch)) * boost
+            if has_control:
+                sf = _control_guidance_scale_for_step(
+                    1.0,
+                    i,
+                    n_steps,
+                    start=float(control_guidance_start),
+                    end=float(control_guidance_end),
+                    decay_power=float(control_guidance_decay),
+                )
+                if hg_enabled:
+                    sf *= float(plan.control_scale)
+                mk_c = dict(mk_c)
+                mk_c["control_scale"] = _scale_control_value(base_control_scale, sf)
+                if hg_enabled and "adapter_scale" in mk_c:
+                    mk_c["adapter_scale"] = _scale_control_value(mk_c["adapter_scale"], plan.adapter_scale)
+                if mk_u and ("control_image" in mk_u or "control_scale" in mk_u):
+                    mk_u = dict(mk_u)
+                    mk_u["control_scale"] = _scale_control_value(mk_u.get("control_scale", base_control_scale), sf)
+                    if hg_enabled and "adapter_scale" in mk_u:
+                        mk_u["adapter_scale"] = _scale_control_value(mk_u["adapter_scale"], plan.adapter_scale)
+            emb = mk_c.get("encoder_hidden_states")
+            if hg_enabled and float(holy_grail_cads_strength) > 0.0 and torch.is_tensor(emb):
+                sig = cads_noise_std(
+                    progress=1.0 if n_steps <= 1 else i / (n_steps - 1),
+                    base_strength=float(holy_grail_cads_strength),
+                    min_strength=float(holy_grail_cads_min_strength),
+                    power=float(holy_grail_cads_power),
+                )
+                mk_c = {**mk_c, "encoder_hidden_states": apply_condition_noise(emb, std=sig)}
+            use_cfg = cs != 1.0 and bool(mk_u)
+            if use_cfg or g.pag or g.slg_active(i, n_steps) or g.zero_init_active(i, n_steps, flow=flow):
+                affine, sigma = self._guidance_space(t_batch, x_in.ndim, flow=flow, need_sigma=g.interval is not None)
+                if regional_cfg_plan is not None and use_cfg:
+                    from utils.generation.regional import regional_cfg_forward
 
                     out = regional_cfg_forward(
                         model,
@@ -1489,27 +899,15 @@ class GaussianDiffusion:
                         model_kwargs_uncond=mk_u,
                         plan=regional_cfg_plan,
                         cfg_scale=float(cs),
-                        cfg_rescale=float(cfg_rescale),
-                        zeresfdg_strength=float(zeresfdg_strength),
-                        fdg_strength=float(fdg_cfg_strength),
-                        fdg_cutoff_frac=float(fdg_cutoff_frac),
-                        apg_parallel_eta=float(apg_parallel_eta),
                         block_cache=block_cache,
-                        rcfgpp_tangent=float(rcfgpp_tangent),
-                        cfg_zero_star=bool(cfg_zero_star),
-                        cfg_pp_lambda=float(cfg_pp_lambda),
-                        tcfg_damping=float(tcfg_damping),
-                        cfg_skip_early_frac=float(cfg_skip_early_frac),
-                        cfg_skip_late_frac=float(cfg_skip_late_frac),
                         sample_step=int(i),
-                        total_steps=len(timesteps),
-                        cfg_zero_init_frac=float(cfg_zero_init_frac),
+                        guidance=g,
+                        x0_affine=affine,
+                        sigma=sigma,
                     )
-                elif cs != 1.0 and mk_u:
-                    from utils.generation.cfg_batched import batched_cfg_forward
+                else:
+                    from utils.generation.guidance import batched_cfg_forward
 
-                    _prog_vp = float(i) / float(max(len(timesteps) - 1, 1))
-                    _slg_on_vp = float(slg_start_frac) <= _prog_vp <= float(slg_stop_frac)
                     out = batched_cfg_forward(
                         model,
                         x_in,
@@ -1517,239 +915,425 @@ class GaussianDiffusion:
                         model_kwargs_cond=mk_c,
                         model_kwargs_uncond=mk_u,
                         cfg_scale=float(cs),
-                        cfg_rescale=float(cfg_rescale),
-                        zeresfdg_strength=float(zeresfdg_strength),
-                        fdg_strength=float(fdg_cfg_strength),
-                        fdg_cutoff_frac=float(fdg_cutoff_frac),
-                        apg_parallel_eta=float(apg_parallel_eta),
+                        guidance=g,
+                        state=gstate,
+                        x0_affine=affine,
+                        sigma=sigma,
+                        step=int(i),
+                        total_steps=n_steps,
+                        flow=flow,
                         block_cache=block_cache,
-                        rcfgpp_tangent=float(rcfgpp_tangent),
-                        cfg_zero_star=bool(cfg_zero_star),
-                        cfg_pp_lambda=float(cfg_pp_lambda),
-                        tcfg_damping=float(tcfg_damping),
-                        cfg_skip_early_frac=float(cfg_skip_early_frac),
-                        cfg_skip_late_frac=float(cfg_skip_late_frac),
-                        sample_step=int(i),
-                        total_steps=len(timesteps),
-                        cfg_zero_init_frac=float(cfg_zero_init_frac),
-                        spectral_ema=_spectral_ema_vp,
-                        guidance_session=_guidance_sess_vp,
-                        slg_scale=float(slg_scale),
-                        slg_skip_blocks=_slg_blocks_vp,
-                        slg_active=bool(_slg_on_vp),
-                        guidance_probe=_guidance_probe_vp,
+                        guidance_probe=probe,
                         dbc_separate_cfg=bool(dbc_separate_cfg),
                     )
-                else:
-                    o = model(x_in, t_batch, block_cache=block_cache, **mk_c)
-                    if o.shape != x_in.shape and o.shape[1] > x_in.shape[1]:
-                        o = o[:, : x_in.shape[1]]
-                    out = o
-                if bool(dynamic_dit_width) or bool(dynamic_sdt):
-                    from utils.superior.dynamic_dit import apply_dynamic_width, apply_sdt_latent_blend
-
-                    prog = 1.0 if len(timesteps) <= 1 else float(i) / float(max(len(timesteps) - 1, 1))
-                    if bool(dynamic_sdt):
-                        out = apply_sdt_latent_blend(x_in, out)
-                    if bool(dynamic_dit_width):
-                        out = apply_dynamic_width(out, prog, early=float(dynamic_dit_early))
-                if feat_cache is not None:
-                    feat_cache.note_fresh(x_in, out)
-                return out
-
-            def _apply_sag(x_in: torch.Tensor, t_batch: torch.Tensor, base_out: torch.Tensor) -> torch.Tensor:
-                if float(sag_scale) > 0.0 and float(sag_blur_sigma) > 0.0:
-                    from .sampling_utils import gaussian_blur_latent
-
-                    x_b = gaussian_blur_latent(x_in, float(sag_blur_sigma))
-                    out_b = _model_prediction(x_b, t_batch)
-                    return base_out + float(sag_scale) * (base_out - out_b)
-                return base_out
-
-            out1 = _apply_sag(x, t, _model_prediction(x, t))
-            if i + 1 < len(timesteps):
-                if use_multistep:
-                    x0_pred, _noise = self._predict_x0_and_noise(out1, x, t)
-                    if dynamic_threshold_percentile > 0 or (
-                        dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
-                    ):
-                        x0_pred = self._dynamic_threshold(
-                            x0_pred,
-                            percentile=dynamic_threshold_percentile,
-                            threshold_type=dynamic_threshold_type,
-                            threshold_value=dynamic_threshold_value,
-                        )
-                    self._to_device(device)
-                    ab_cur = self.alpha_cumprod.to(device)[t]
-                    ab_next = self.alpha_cumprod.to(device)[t_next]
-                    if sol_backend == _SOLVER_UNIPC:
-                        x_pred, multistep_state, need_corr = vp_unipc_update(
-                            x=x,
-                            x0_pred=x0_pred,
-                            alpha_bar_cur=ab_cur,
-                            alpha_bar_next=ab_next,
-                            state=multistep_state,
-                            corrector_x0=None,
-                        )
-                        if need_corr:
-                            out_corr = _apply_sag(x_pred, t_next, _model_prediction(x_pred, t_next))
-                            x0_corr, _ = self._predict_x0_and_noise(out_corr, x_pred, t_next)
-                            if dynamic_threshold_percentile > 0 or (
-                                dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
-                            ):
-                                x0_corr = self._dynamic_threshold(
-                                    x0_corr,
-                                    percentile=dynamic_threshold_percentile,
-                                    threshold_type=dynamic_threshold_type,
-                                    threshold_value=dynamic_threshold_value,
-                                )
-                            x, multistep_state, _ = vp_unipc_update(
-                                x=x,
-                                x0_pred=x0_pred,
-                                alpha_bar_cur=ab_cur,
-                                alpha_bar_next=ab_next,
-                                state=multistep_state,
-                                corrector_x0=x0_corr,
-                            )
-                        else:
-                            x = x_pred
-                    else:
-                        x, multistep_state = vp_dpmpp_update(
-                            x=x,
-                            x0_pred=x0_pred,
-                            alpha_bar_cur=ab_cur,
-                            alpha_bar_next=ab_next,
-                            state=multistep_state,
-                            order=dpm_order,
-                        )
-                    x_0_pred = x0_pred
-                elif sol_backend == _SOLVER_HEUN:
-                    x_euler, _ = self.step_with_pred(
-                        x,
-                        t,
-                        t_next,
-                        out1,
-                        eta=eta,
-                        dynamic_threshold_percentile=dynamic_threshold_percentile,
-                        dynamic_threshold_type=dynamic_threshold_type,
-                        dynamic_threshold_value=dynamic_threshold_value,
-                        pbfm_edge_boost=pbfm_edge_boost,
-                        pbfm_edge_kernel=pbfm_edge_kernel,
-                        step_noise_scale=_sns,
-                    )
-                    out2 = _apply_sag(x_euler, t_next, _model_prediction(x_euler, t_next))
-                    out = 0.5 * (out1 + out2)
-                    x, x_0_pred = self.step_with_pred(
-                        x,
-                        t,
-                        t_next,
-                        out,
-                        eta=eta,
-                        dynamic_threshold_percentile=dynamic_threshold_percentile,
-                        dynamic_threshold_type=dynamic_threshold_type,
-                        dynamic_threshold_value=dynamic_threshold_value,
-                        pbfm_edge_boost=pbfm_edge_boost,
-                        pbfm_edge_kernel=pbfm_edge_kernel,
-                        step_noise_scale=_sns,
-                    )
-                else:
-                    out = out1
-                    x, x_0_pred = self.step_with_pred(
-                        x,
-                        t,
-                        t_next,
-                        out,
-                        eta=eta,
-                        dynamic_threshold_percentile=dynamic_threshold_percentile,
-                        dynamic_threshold_type=dynamic_threshold_type,
-                        dynamic_threshold_value=dynamic_threshold_value,
-                        pbfm_edge_boost=pbfm_edge_boost,
-                        pbfm_edge_kernel=pbfm_edge_kernel,
-                        step_noise_scale=_sns,
-                    )
-                if v_boost > 0.0:
-                    delta_lat_v = (x - x_prev).abs().mean()
-                    try:
-                        dv = float(delta_lat_v.detach().cpu().item())
-                    except Exception:
-                        dv = float(delta_lat_v.detach().mean().item())
-                    vol_deltas.append(dv)
-                    while len(vol_deltas) > v_win:
-                        vol_deltas.pop(0)
-                    if len(vol_deltas) >= 2:
-                        qclip = float(np.clip(v_q, 0.05, 0.95))
-                        thr = float(np.quantile(np.asarray(vol_deltas[:-1], dtype=np.float64), qclip))
-                        if vol_deltas[-1] > thr:
-                            cfg_box[0] = float(cfg_scale) * (1.0 + v_boost)
-                        else:
-                            cfg_box[0] = float(cfg_scale)
-                if p_int > 0 and p_fn is not None and p_boost > 0.0 and x_0_pred is not None and (i + 1) % p_int == 0:
-                    try:
-                        sim = float(p_fn(int(i), x_0_pred))
-                        if sim < p_thr:
-                            cfg_box[0] = float(cfg_box[0]) * (1.0 + p_boost)
-                            if p_rewind > 0.0:
-                                s = float(min(1.0, max(0.0, p_rewind)))
-                                x = (1.0 - s) * x + s * x_prev
-                    except Exception:
-                        pass
-                if do_inpaint:
-                    # Keep known/unmasked regions consistent with the forward noising trajectory.
-                    x_known_next = self.q_sample(inpaint_x0, t_next, noise=inpaint_noise, noise_offset=0.0)
-                    x = inpaint_mask * x + (1.0 - inpaint_mask) * x_known_next
-
-                    # Ensure returned x0_pred also respects context for early-exit/return consistency.
-                    if early_exit_enabled and i >= early_exit_min_steps and (i + 1) < len(timesteps):
-                        x_0_pred = inpaint_mask * x_0_pred + (1.0 - inpaint_mask) * inpaint_x0
-
-                if early_exit_enabled and i >= early_exit_min_steps:
-                    # Heuristic: stop when average absolute latent change is below threshold for a few steps.
-                    delta_lat = (x - x_prev).abs().mean()
-                    try:
-                        delta_val = float(delta_lat.detach().cpu().item())
-                    except Exception:
-                        delta_val = float(delta_lat.detach().mean().item())
-                    if delta_val < float(ada_early_exit_delta_threshold):
-                        early_exit_counter += 1
-                    else:
-                        early_exit_counter = 0
-                    if early_exit_counter >= early_exit_patience:
-                        break
             else:
-                x_0_pred, _ = self._predict_x0_and_noise(out1, x, t)
-                if dynamic_threshold_percentile > 0 or (
-                    dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
-                ):
-                    x_0_pred = self._dynamic_threshold(
-                        x_0_pred,
-                        percentile=dynamic_threshold_percentile,
-                        threshold_type=dynamic_threshold_type,
-                        threshold_value=dynamic_threshold_value,
-                    )
-                if do_inpaint:
-                    # Force final x0 for known/unmasked regions to match the provided context.
-                    x_0_pred = inpaint_mask * x_0_pred + (1.0 - inpaint_mask) * inpaint_x0
-        if hg_enabled and x_0_pred is not None:
-            if float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
-                from diffusion.sampling import unsharp_mask_latent
+                # Only pass block_cache when caching is on: class-conditioned DiTs do not accept it.
+                kw = mk_c if block_cache is None else {**mk_c, "block_cache": block_cache}
+                out = model(x_in, t_batch, **kw)[:, : x_in.shape[1]]
+            if bool(dynamic_sdt) or bool(dynamic_dit_width):
+                from utils.modeling.architecture import apply_dynamic_width, apply_sdt_latent_blend
 
-                x_0_pred = unsharp_mask_latent(
-                    x_0_pred,
-                    sigma=float(holy_grail_unsharp_sigma),
-                    amount=float(holy_grail_unsharp_amount),
+                if bool(dynamic_sdt):
+                    out = apply_sdt_latent_blend(x_in, out)
+                if bool(dynamic_dit_width):
+                    prog = 1.0 if n_steps <= 1 else i / (n_steps - 1)
+                    out = apply_dynamic_width(out, prog, early=float(dynamic_dit_early))
+            if feat_cache is not None:
+                feat_cache.note_fresh(x_in, out)
+            return out
+
+        guided = _autocast_prediction(guided, device, inference_amp, inference_amp_dtype)
+        sag_on = float(sag_scale) > 0.0 and float(sag_blur_sigma) > 0.0
+
+        def predict(x_in: torch.Tensor, t_batch: torch.Tensor, i: int) -> torch.Tensor:
+            out = guided(x_in, t_batch, i)
+            if sag_on:
+                out_blur = guided(gaussian_blur_latent(x_in, float(sag_blur_sigma)), t_batch, i)
+                out = out + float(sag_scale) * (out - out_blur)
+            return out
+
+        threshold_on = dynamic_threshold_percentile > 0 or (
+            dynamic_threshold_type != "percentile" and dynamic_threshold_value > 0
+        )
+
+        def refine_x0(x0: torch.Tensor, x_in: torch.Tensor, alpha: float, t_val: int) -> torch.Tensor:
+            """Epsilon scaling then thresholding of the data prediction of ``x_in = alpha*x0 + sigma*eps``
+            (``t_val``: the step's timestep index as a host int)."""
+            lam = float(eps_scale) + float(eps_scale_k) * float(t_val)
+            if lam != 1.0 and alpha > 0.0:
+                # x0 re-derived from eps/lam with x fixed: (x - sigma*eps/lam)/alpha.
+                x0 = x0 / lam + x_in * ((1.0 - 1.0 / lam) / alpha)
+            if threshold_on:
+                x0 = self._dynamic_threshold(
+                    x0,
+                    percentile=dynamic_threshold_percentile,
+                    threshold_type=dynamic_threshold_type,
+                    threshold_value=dynamic_threshold_value,
                 )
-            if float(holy_grail_clamp_quantile) > 0.0:
-                from diffusion.sampling import dynamic_percentile_clamp
+            return x0
 
-                x_0_pred = dynamic_percentile_clamp(
-                    x_0_pred,
-                    quantile=float(holy_grail_clamp_quantile),
-                    floor=float(holy_grail_clamp_floor),
-                )
-        if float(qsilk_micrograin) > 0.0 and x_0_pred is not None:
-            from utils.generation.micrograin_stabilizer import qsilk_micrograin_stabilize
+        def eta_at(i: int, sigma: float) -> float:
+            if eta_v <= 0.0 or (band is not None and not band[0] <= sigma <= band[1]):
+                return 0.0
+            return eta_v * (sns[min(i, len(sns) - 1)] if sns else 1.0)
 
-            x_0_pred = qsilk_micrograin_stabilize(x_0_pred, detail_amount=float(qsilk_micrograin))
+        vol_deltas: list[float] = []
+        exit_streak = [0]
+
+        def after_step(i: int, x_prev: torch.Tensor, x_new: torch.Tensor, x0: torch.Tensor):
+            if float(volatile_cfg_boost) > 0.0:
+                vol_deltas.append(float((x_new - x_prev).abs().mean()))
+                del vol_deltas[: -max(2, int(volatile_cfg_window))]
+                if len(vol_deltas) >= 2:
+                    thr = float(np.quantile(vol_deltas[:-1], float(np.clip(volatile_cfg_quantile, 0.05, 0.95))))
+                    boosted = vol_deltas[-1] > thr
+                    cfg_box[0] = float(cfg_scale) * (1.0 + float(volatile_cfg_boost)) if boosted else float(cfg_scale)
+            p_int = int(periodic_alignment_interval)
+            p_due = p_int > 0 and (i + 1) % p_int == 0 and float(periodic_alignment_cfg_boost) > 0.0
+            if p_due and periodic_alignment_fn is not None:
+                if float(periodic_alignment_fn(int(i), x0)) < float(periodic_alignment_threshold):
+                    cfg_box[0] *= 1.0 + float(periodic_alignment_cfg_boost)
+                    rw = min(1.0, max(0.0, float(periodic_alignment_rewind_strength)))
+                    x_new = (1.0 - rw) * x_new + rw * x_prev
+            stop = False
+            if float(ada_early_exit_delta_threshold) > 0.0 and int(ada_early_exit_patience) > 0:
+                if i >= int(ada_early_exit_min_steps):
+                    small = float((x_new - x_prev).abs().mean()) < float(ada_early_exit_delta_threshold)
+                    exit_streak[0] = exit_streak[0] + 1 if small else 0
+                    stop = exit_streak[0] >= int(ada_early_exit_patience)
+            return x_new, stop
+
+        loop_kw = dict(predict=predict, refine_x0=refine_x0, solver=sol, eta_at=eta_at, after_step=after_step)
+        if flow:
+            out = self._flow_loop(x, grid, **loop_kw)
+        else:
+            inpaint = None
+            if do_inpaint:
+                inpaint = tuple(v.to(device=device, dtype=dtype) for v in (inpaint_mask, inpaint_x0, inpaint_noise))
+            x_t, out, t_next = self._vp_loop(x, timesteps, inpaint=inpaint, karras_rho=float(karras_rho), **loop_kw)
+        if hg_enabled and float(holy_grail_unsharp_amount) > 0.0 and float(holy_grail_unsharp_sigma) > 0.0:
+            out = unsharp_mask_latent(
+                out, sigma=float(holy_grail_unsharp_sigma), amount=float(holy_grail_unsharp_amount)
+            )
+        if hg_enabled and float(holy_grail_clamp_quantile) > 0.0:
+            out = dynamic_threshold(out, float(holy_grail_clamp_quantile), float(holy_grail_clamp_floor), rescale=False)
+        if float(qsilk_micrograin) > 0.0:
+            from utils.generation.guidance import qsilk_micrograin_stabilize
+
+            out = qsilk_micrograin_stabilize(out, detail_amount=float(qsilk_micrograin))
         if return_intermediate_state:
-            return x, x_0_pred, int(last_t_next_val)
-        return x_0_pred
+            return x_t, out, int(t_next)
+        return out
+
+    def _vp_loop(self, x, timesteps, *, predict, refine_x0, solver, eta_at, after_step, inpaint, karras_rho):
+        """VP sampling over discrete ``timesteps``; returns ``(x_t, x0_pred, t_next)``."""
+        from diffusion.solvers import (
+            ApexController,
+            SolverState,
+            redistribute_remaining_vp_indices,
+            vp_apex_update,
+            vp_dpmpp_update,
+            vp_unipc_correct,
+        )
+
+        B = x.shape[0]
+        state = SolverState(max_order=3)
+        apex_ctrl = ApexController()
+        unipc_prev = None
+        x0 = None
+        t_next_val = 0
+
+        def denoise(x_in: torch.Tensor, t: torch.Tensor, t_val: int, i: int) -> torch.Tensor:
+            x0_raw, _ = self._predict_x0_and_noise(predict(x_in, t, i), x_in, t)
+            return refine_x0(x0_raw, x_in, self._abar(t_val) ** 0.5, t_val)
+
+        ts = [int(v) for v in timesteps.tolist()]  # host copy: per-step coefficients never sync the device
+        for i in range(len(ts)):
+            t = timesteps[i].expand(B)
+            last = i + 1 == len(ts)
+            t_next = torch.zeros_like(t) if last else timesteps[i + 1].expand(B)
+            t_val, t_next_val = ts[i], 0 if last else ts[i + 1]
+            x0 = denoise(x, t, t_val, i)
+            if unipc_prev is not None:
+                x = vp_unipc_correct(
+                    x_prev=unipc_prev[0],
+                    x0_new=x0,
+                    alpha_bar_prev=self._abar(unipc_prev[1]),
+                    alpha_bar_cur=self._abar(t_val),
+                    state=state,
+                    order=unipc_prev[2],
+                )
+            if last:
+                break
+            x_prev = x
+            a, a_n = self._abar(t_val), self._abar(t_next_val)
+            eta_i = eta_at(i, ((1.0 - a) / a) ** 0.5)
+            if solver in (_SOLVER_DPMPP_2M, _SOLVER_DPMPP_2M_SDE, _SOLVER_DPMPP_3M, _SOLVER_UNIPC):
+                order = 3 if solver == _SOLVER_DPMPP_3M else 2
+                x, state = vp_dpmpp_update(
+                    x=x, x0_pred=x0, alpha_bar_cur=a, alpha_bar_next=a_n, state=state, order=order, eta=eta_i
+                )
+                if solver == _SOLVER_UNIPC:
+                    unipc_prev = (x_prev, t_val, min(2, state.order))
+            elif solver in (_SOLVER_APEX, _SOLVER_APEX_ADAPTIVE):
+                res = vp_apex_update(
+                    x=x,
+                    x0_pred=x0,
+                    alpha_bar_cur=a,
+                    alpha_bar_next=a_n,
+                    state=state,
+                    controller=apex_ctrl,
+                    progress=i / max(len(ts) - 1, 1),
+                )
+                x, state = res.x_next, res.state
+                rem = len(ts) - (i + 2)
+                if solver == _SOLVER_APEX_ADAPTIVE and rem > 0:
+                    # Same NFE budget; re-space the knots still ahead by measured difficulty.
+                    tail = redistribute_remaining_vp_indices(
+                        t_next_val,
+                        rem,
+                        self.num_timesteps,
+                        self._abar_host,
+                        difficulty=apex_ctrl.last_difficulty,
+                        rho=karras_rho,
+                    )
+                    if len(tail) == rem:
+                        tail_t = torch.as_tensor(tail, device=timesteps.device, dtype=timesteps.dtype)
+                        timesteps = torch.cat([timesteps[: i + 2], tail_t])
+                        ts = ts[: i + 2] + [int(v) for v in tail]
+            elif solver == _SOLVER_HEUN:
+                x_e = self._ddim_step(x, t_val, t_next_val, x0)
+                x0_e = denoise(x_e, t_next, t_next_val, i + 1)
+                eps = 0.5 * ((x - a**0.5 * x0) / (1.0 - a) ** 0.5 + (x_e - a_n**0.5 * x0_e) / (1.0 - a_n) ** 0.5)
+                x0 = (x - (1.0 - a) ** 0.5 * eps) / a**0.5
+                x = self._ddim_step(x, t_val, t_next_val, x0, eta=eta_i)
+            else:
+                x = self._ddim_step(x, t_val, t_next_val, x0, eta=eta_i)
+            x, stop = after_step(i, x_prev, x, x0)
+            if inpaint is not None:
+                mask, x0_known, noise_known = inpaint
+                x = mask * x + (1.0 - mask) * self.q_sample(x0_known, t_next, noise=noise_known)
+            if stop:
+                break
+        if inpaint is not None:
+            x0 = inpaint[0] * x0 + (1.0 - inpaint[0]) * inpaint[1]
+        return x, x0, t_next_val
+
+    def _flow_loop(self, x, grid, *, predict, refine_x0, solver, eta_at, after_step):
+        """Rectified-flow sampling over the s-grid (``grid[0]`` -> 0); returns the latent at s=0."""
+        from diffusion.solvers import ApexController, SolverState, flow_apex_update, flow_dpmpp_2m_update
+
+        B = x.shape[0]
+        T = int(self.num_timesteps)
+        n = len(grid) - 1
+        state = SolverState(max_order=3)
+        apex_ctrl = ApexController()
+
+        def velocity(x_in: torch.Tensor, s: float, i: int) -> torch.Tensor:
+            t_val = max(0, min(T - 1, round(s * (T - 1))))
+            t_b = torch.full((B,), t_val, device=x_in.device, dtype=torch.long)
+            v = predict(x_in, t_b, i)
+            x0 = x_in - s * v
+            x0_ref = refine_x0(x0, x_in, 1.0 - s, t_val)
+            return v if x0_ref is x0 or s <= 0.0 else (x_in - x0_ref) / s
+
+        for i in range(n):
+            s, s_n = float(grid[i]), float(grid[i + 1])
+            ds = s_n - s
+            x_prev = x
+            v = velocity(x, s, i)
+            x0 = x - s * v
+            if solver == "heun" and s_n > 0.0:
+                v2 = velocity(x + ds * v, s_n, min(i + 1, n - 1))
+                x = x + 0.5 * ds * (v + v2)
+            elif solver == "midpoint":
+                s_m = 0.5 * (s + s_n)
+                x = x + ds * velocity(x + (s_m - s) * v, s_m, i)
+            elif solver in ("dpmpp_2m", "dpmpp_2m_sde"):
+                eta_i = eta_at(i, s / max(1.0 - s, 1e-12))
+                x, state = flow_dpmpp_2m_update(x=x, velocity=v, s_cur=s, s_next=s_n, state=state, eta=eta_i)
+            elif solver == "apex":
+                res = flow_apex_update(
+                    x=x, velocity=v, s_cur=s, s_next=s_n, state=state, controller=apex_ctrl, progress=i / max(n - 1, 1)
+                )
+                x, state = res.x_next, res.state
+            else:
+                # Euler, and Heun's last step: EDM (Alg. 2) skips the correction when sigma_next = 0.
+                x = x + ds * v
+            x, stop = after_step(i, x_prev, x, x0)
+            if stop:
+                return x0
+        return x
+
+
+class _LayoutModel:
+    """Model proxy that turns on the Dense Diffusion layout bias (``models.attention.set_layout_attn``) per call.
+
+    The sampler sets ``step``; cross-attention biases the first ``batch`` rows (the conditional branch).
+    """
+
+    def __init__(self, model, plan, region_masks: torch.Tensor, batch: int):
+        self.model, self.plan, self.region_masks, self.batch, self.step = model, plan, region_masks, batch, 0
+
+    def __getattr__(self, name: str):
+        return getattr(self.model, name)
+
+    def __call__(self, x, t, **kwargs):
+        from models.attention import clear_layout_attn, set_layout_attn
+
+        set_layout_attn(
+            plan=self.plan,
+            region_masks=self.region_masks,
+            step_index=self.step,
+            cond_batch_size=self.batch,
+            num_patch_tokens=(x.shape[-2] * x.shape[-1]) // int(getattr(self.model, "patch_size", 1)) ** 2,
+        )
+        try:
+            return self.model(x, t, **kwargs)
+        finally:
+            clear_layout_attn()
+
+
+def _progress(step_index: int, total_steps: int) -> float:
+    """Sampling progress in ``[0, 1]``: 0 is the first (noisiest) step, 1 the last."""
+    if total_steps <= 1:
+        return 1.0
+    return max(0.0, min(1.0, step_index / (total_steps - 1)))
+
+
+def cfg_scale_linear(
+    base_cfg: float,
+    step_index: int,
+    total_steps: int,
+    *,
+    start_multiplier: float = 0.7,
+    end_multiplier: float = 1.0,
+) -> float:
+    """Linear ramp from ``start_multiplier`` to ``end_multiplier``."""
+    p = _progress(step_index, total_steps)
+    return float(base_cfg) * (start_multiplier + (end_multiplier - start_multiplier) * p)
+
+
+def cfg_scale_cosine_ramp(
+    base_cfg: float,
+    step_index: int,
+    total_steps: int,
+    *,
+    min_multiplier: float = 0.65,
+    max_multiplier: float = 1.0,
+) -> float:
+    """Cosine ease-in/ease-out ramp; avoids the visible knee of a linear ramp."""
+    e = 0.5 * (1.0 - math.cos(math.pi * _progress(step_index, total_steps)))
+    return float(base_cfg) * (min_multiplier + (max_multiplier - min_multiplier) * e)
+
+
+def cfg_scale_piecewise(
+    base_cfg: float,
+    step_index: int,
+    total_steps: int,
+    *,
+    stage_multipliers: Iterable[float] = (0.75, 1.0, 0.9),
+) -> float:
+    """Three flat stages over the early / middle / late thirds of sampling.
+
+    The default eases in, peaks while structure forms, then backs off so the final low-noise
+    steps don't over-sharpen.
+    """
+    vals = [float(v) for v in stage_multipliers]
+    if len(vals) != 3:
+        raise ValueError("stage_multipliers must have exactly 3 values")
+    p = _progress(step_index, total_steps)
+    stage = 0 if p < 1.0 / 3.0 else 1 if p < 2.0 / 3.0 else 2
+    return float(base_cfg) * vals[stage]
+
+
+def cfg_scale_snr_aware_multiplier(
+    alpha_cumprod: float,
+    *,
+    low_noise_multiplier: float = 0.9,
+    high_noise_multiplier: float = 0.7,
+) -> float:
+    """Multiplier keyed on the timestep's noise level rather than its step index.
+
+    Interpolates by ``sigmoid(log SNR)``, which for VP equals ``alpha_cumprod``: pure noise
+    gives ``high_noise_multiplier``, a clean signal gives ``low_noise_multiplier``.
+    """
+    z = max(0.0, min(1.0, float(alpha_cumprod)))
+    return high_noise_multiplier + (low_noise_multiplier - high_noise_multiplier) * z
+
+
+def append_dims(x: torch.Tensor, target_dims: int) -> torch.Tensor:
+    """Append trailing singleton dims so ``x`` has ``target_dims`` (k-diffusion)."""
+    dims_to_append = target_dims - x.ndim
+    if dims_to_append < 0:
+        raise ValueError(f"input has {x.ndim} dims but target_dims is {target_dims}")
+    return x[(...,) + (None,) * dims_to_append]
+
+
+def norm_thresholding(x0: torch.Tensor, value: float) -> torch.Tensor:
+    """Scale each sample down so its RMS is at most ``value`` (reduces oversaturation)."""
+    if value <= 0:
+        return x0
+    s = append_dims(x0.pow(2).flatten(1).mean(1).sqrt().clamp(min=value), x0.ndim)
+    return x0 * (value / s)
+
+
+def spatial_norm_thresholding(x0: torch.Tensor, value: float) -> torch.Tensor:
+    """Like ``norm_thresholding`` but per spatial location (RMS over channels)."""
+    if value <= 0:
+        return x0
+    s = x0.pow(2).mean(1, keepdim=True).sqrt().clamp(min=value)
+    return x0 * (value / s)
+
+
+def dynamic_threshold(
+    x: torch.Tensor, quantile: float, data_range: float = 1.0, *, rescale: bool = True
+) -> torch.Tensor:
+    """Dynamic thresholding (Saharia et al. 2022, Imagen Sec. 2.3), per sample.
+
+    ``s = max(quantile(|x|), data_range)``; ``x`` is clipped to ``[-s, s]`` and, with ``rescale``, mapped back
+    onto ``[-data_range, data_range]`` (Imagen: ``data_range = 1``, divide by ``s``). A no-op while ``x``
+    stays inside the data range. ``rescale=False`` only clips outliers.
+    """
+    q = torch.quantile(x.detach().flatten(1).abs().float(), float(quantile), dim=1)
+    s = append_dims(q.clamp_min(float(data_range)).to(x.dtype), x.ndim)
+    x = torch.maximum(torch.minimum(x, s), -s)
+    return x * (float(data_range) / s) if rescale else x
+
+
+def _gaussian_blur_torch(x: torch.Tensor, sigma: float) -> torch.Tensor:
+    """Depthwise Gaussian blur with a kernel radius of ``2 * sigma`` clamped to ``[1, 7]``."""
+    c = x.shape[1]
+    r = min(7, max(1, int(sigma * 2)))
+    k = 2 * r + 1
+    coords = torch.arange(-r, r + 1, device=x.device, dtype=torch.float32)
+    g1d = torch.exp(-(coords**2) / (2.0 * sigma * sigma + 1e-8))
+    g1d = g1d / g1d.sum()
+    kernel = torch.outer(g1d, g1d).view(1, 1, k, k).expand(c, 1, k, k).to(dtype=x.dtype)
+    return F.conv2d(x, kernel, padding=r, groups=c)
+
+
+def gaussian_blur_latent(x: torch.Tensor, sigma: float) -> torch.Tensor:
+    """Depthwise Gaussian blur of a ``(B, C, H, W)`` latent; ``sigma`` in latent pixels (typically 0.2-1.0).
+
+    CPU tensors use the native CUDA kernel (``sdx_cuda_gaussian_blur``) when it is built; GPU tensors stay on
+    the device (a host round trip per sampler step would cost more than the conv).
+    """
+    s = float(sigma)
+    if s <= 0.0 or x.dim() != 4:
+        return x
+    if x.device.type == "cpu":
+        try:
+            from sdx_native.ffi import maybe_gaussian_blur_cuda
+
+            result = maybe_gaussian_blur_cuda(x.detach().float().numpy(), s)
+        except (ImportError, OSError, RuntimeError):
+            result = None
+        if result is not None:
+            return torch.from_numpy(result).to(dtype=x.dtype)
+    return _gaussian_blur_torch(x, s)
+
+
+def unsharp_mask_latent(x: torch.Tensor, *, sigma: float = 0.6, amount: float = 0.25) -> torch.Tensor:
+    """``x + amount * (x - blur(x))``: mild high-frequency lift for the final latent (holy-grail recipe)."""
+    return x + float(amount) * (x - gaussian_blur_latent(x, sigma=float(sigma)))

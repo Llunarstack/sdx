@@ -24,11 +24,6 @@ OPTIONAL_HEAVY_DEPS = (
     "cv2",
 )
 
-# Note: These are now also in ARCHIVED_MODULE_TEST_BASENAMES
-TORCH_DEPENDENT_TEST_BASENAMES = {
-    "test_hybrid_dit_vit_generate.py",
-}
-
 # Kept as an escape hatch: list test basenames here to skip them before
 # import (e.g. while a module is being archived or replatformed).
 # ``sdx_native`` resolves from native/_experimental/python via pythonpath.
@@ -39,7 +34,7 @@ def pytest_ignore_collect(collection_path, config) -> bool:  # type: ignore[no-u
     """Pre-import skip for test modules that depend on archived modules or missing deps.
 
     Skips:
-    1. Torch-dependent tests (when torch unavailable)
+    1. Torch-dependent tests (when torch unavailable; any file mentioning torch)
     2. Tests listed in ARCHIVED_MODULE_TEST_BASENAMES
     """
     p = Path(str(collection_path))
@@ -48,10 +43,6 @@ def pytest_ignore_collect(collection_path, config) -> bool:  # type: ignore[no-u
 
     # Always skip tests depending on archived modules
     if p.name in ARCHIVED_MODULE_TEST_BASENAMES:
-        return True
-
-    # Skip torch-dependent tests when torch unavailable
-    if not TORCH_AVAILABLE and p.name in TORCH_DEPENDENT_TEST_BASENAMES:
         return True
 
     if not TORCH_AVAILABLE:

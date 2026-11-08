@@ -1,8 +1,12 @@
-"""Resolve local `pretrained/` paths vs Hugging Face hub IDs."""
+"""Where models live: local pretrained/ folders vs Hugging Face hub ids, the HF scaffold registry and config-only downloads, and the HF token lookup."""
 
 from __future__ import annotations
 
+import os
+import re
+from collections import Counter
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -119,14 +123,6 @@ def default_dinov3_vitl16_path() -> str:
     )
 
 
-def default_repa_vision_path() -> str:
-    """Vision teacher for REPA / feature alignment — prefer DINOv3-L, else DINOv2-L."""
-    return resolve_prefer(
-        ("DINOv3-ViT-L16", "DINOv3-ViT-Large", "DINOv2-Large"),
-        "facebook/dinov3-vitl16-pretrain-lvd1689m",
-    )
-
-
 def default_siglip_path() -> str:
     """Prefer SigLIP2; fall back to SigLIP SO400M local folder if present."""
     return resolve_prefer(
@@ -196,7 +192,7 @@ def default_image_reward_path() -> str:
 
 
 def default_pickscore_path() -> str:
-    return resolve_model_path("PickScore_v1", "yuvalkirstain/PickScore_v1")
+    return resolve_model_path_require_weights("PickScore_v1", "yuvalkirstain/PickScore_v1")
 
 
 def default_grounding_dino_base_path() -> str:
@@ -220,19 +216,6 @@ def default_depth_anything_v2_large_path() -> str:
     return resolve_model_path_require_weights(
         "Depth-Anything-V2-Large",
         "depth-anything/Depth-Anything-V2-Large",
-    )
-
-
-def default_depth_anything_path() -> str:
-    """Primary depth model — prefer DA3, else V2 Large local/hub."""
-    return resolve_prefer(
-        (
-            "Depth-Anything-V3-Large",
-            "DA3-LARGE-1.1",
-            "DA3-LARGE",
-            "Depth-Anything-V2-Large",
-        ),
-        "depth-anything/DA3-LARGE-1.1",
     )
 
 
@@ -312,7 +295,6 @@ def default_hpsv2_path() -> str:
 
 
 # Preferred name — same resolver as legacy ``default_hpsv2_path``.
-default_hps_path = default_hpsv2_path
 
 
 def default_hpsv3_path() -> str:
@@ -606,7 +588,7 @@ def default_sam_vit_base_path() -> str:
 def default_cafe_aesthetic_path() -> str:
     return resolve_model_path_require_weights(
         "CAFE-Aesthetic",
-        "cafeai/cafe_aesthetic_classifier",
+        "cafeai/cafe_aesthetic",
     )
 
 
@@ -1237,7 +1219,7 @@ def pretrained_catalog() -> list[dict[str, str]]:
         ("OwlViT-large-patch14", "google/owlvit-large-patch14", default_owlvit_large_path()),
         ("TrOCR-base-handwritten", "microsoft/trocr-base-handwritten", default_trocr_base_handwritten_path()),
         ("SAM-ViT-Base", "facebook/sam-vit-base", default_sam_vit_base_path()),
-        ("CAFE-Aesthetic", "cafeai/cafe_aesthetic_classifier", default_cafe_aesthetic_path()),
+        ("CAFE-Aesthetic", "cafeai/cafe_aesthetic", default_cafe_aesthetic_path()),
         ("ControlNet-MLSD", "lllyasviel/sd-controlnet-mlsd", default_controlnet_mlsd_path()),
         ("ControlNet-SoftEdge", "lllyasviel/sd-controlnet-softedge", default_controlnet_softedge_path()),
         ("ControlNet-Seg", "lllyasviel/sd-controlnet-seg", default_controlnet_seg_path()),
@@ -1382,3 +1364,536 @@ def verify_gen_searcher_8b_local(path: str) -> dict[str, object]:
         "missing": missing,
         "found_shards": found_shards,
     }
+
+
+# Video foundation models (pipelines/video/neural_sample.py). Config scaffolds live in
+# pretrained/<folder>; weights stay on the hub until downloaded.
+
+
+def default_video_foundation_path() -> str:
+    """Default video foundation: Wan 2.2 TI2V-5B (text+image to video, fits one consumer GPU)."""
+
+    return resolve_model_path("Wan2.2-TI2V-5B", "Wan-AI/Wan2.2-TI2V-5B")
+
+
+def default_wan_t2v_path() -> str:
+    return resolve_model_path("Wan2.2-T2V-A14B", "Wan-AI/Wan2.2-T2V-A14B")
+
+
+def default_wan_i2v_path() -> str:
+    return resolve_model_path("Wan2.2-I2V-A14B", "Wan-AI/Wan2.2-I2V-A14B")
+
+
+def default_ltx_video_path() -> str:
+    return resolve_model_path("LTX-2.3", "Lightricks/LTX-2.3")
+
+
+def default_cogvideox_path() -> str:
+    return resolve_model_path("CogVideoX-5B", "THUDM/CogVideoX-5b")
+
+
+def default_cogvideox_i2v_path() -> str:
+    return resolve_model_path("CogVideoX-5B-I2V", "THUDM/CogVideoX-5b-I2V")
+
+
+def default_hunyuan_video_path() -> str:
+    return resolve_model_path("HunyuanVideo", "tencent/HunyuanVideo")
+
+
+def default_hunyuan_i2v_path() -> str:
+    return resolve_model_path("HunyuanVideo-I2V", "tencent/HunyuanVideo-I2V")
+
+
+def default_mochi_path() -> str:
+    return resolve_model_path("Mochi-1", "genmo/mochi-1-preview")
+
+
+def default_open_sora_path() -> str:
+    return resolve_model_path("Open-Sora-v2", "hpcai-tech/Open-Sora-v2")
+
+
+def default_svd_path() -> str:
+    return resolve_model_path("Stable-Video-Diffusion-XT-1-1", "stabilityai/stable-video-diffusion-img2vid-xt-1-1")
+
+
+def default_vace_path() -> str:
+    """VACE all-in-one video edit / control."""
+
+    return resolve_model_path("Wan2.1-VACE-14B", "Wan-AI/Wan2.1-VACE-14B")
+
+
+def default_v2v_path() -> str:
+    """Video-to-video restyle."""
+
+    return resolve_model_path("SkyReels-V3-V2V-14B", "Skywork/SkyReels-V3-V2V-14B")
+
+
+def default_flf2v_foundation_path() -> str:
+    """First-last-frame to video."""
+
+    return resolve_model_path("Wan2.1-FLF2V-14B-720P", "Wan-AI/Wan2.1-FLF2V-14B-720P")
+
+
+def default_wan_animate_path() -> str:
+    return resolve_model_path("Wan2.2-Animate-14B", "Wan-AI/Wan2.2-Animate-14B")
+
+
+def default_live_portrait_path() -> str:
+    return resolve_model_path("LivePortrait", "KwaiVGI/LivePortrait")
+
+
+# Small files only — no weight checkpoints.
+# Include both root-level (`*.json`) and nested (`**/*.json`) patterns:
+# huggingface_hub's allow_patterns often miss root files when only `**/…` is used.
+CONFIG_ONLY_ALLOW: tuple[str, ...] = (
+    "*.json",
+    "*.jinja",
+    "*.yaml",
+    "*.yml",
+    "*.txt",
+    "*.md",
+    ".gitattributes",
+    "tokenizer.model",
+    "spiece.model",
+    "vocab.json",
+    "merges.txt",
+    "**/*.json",
+    "**/*.jinja",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.txt",
+    "**/*.md",
+    "**/.gitattributes",
+    "**/tokenizer.model",
+    "**/spiece.model",
+    "**/vocab.json",
+    "**/merges.txt",
+    "**/special_tokens_map.json",
+    "**/tokenizer_config.json",
+    "**/preprocessor_config.json",
+    "**/processor_config.json",
+    "**/generation_config.json",
+    "**/model_index.json",
+)
+
+CONFIG_ONLY_IGNORE: tuple[str, ...] = (
+    "*.safetensors",
+    "**/*.safetensors",
+    "*.bin",
+    "**/*.bin",
+    "*.pt",
+    "**/*.pt",
+    "*.pth",
+    "**/*.pth",
+    "*.ckpt",
+    "**/*.ckpt",
+    "*.onnx",
+    "**/*.onnx",
+    "*.gguf",
+    "**/*.gguf",
+    "*.h5",
+    "**/*.h5",
+    "*.zip",
+    "**/*.zip",
+    "*.tar",
+    "**/*.tar",
+    "*.tar.gz",
+    "**/*.tar.gz",
+)
+
+_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
+
+
+@dataclass(frozen=True, slots=True)
+class HFModelEntry:
+    """One row in the SDX HF scaffold registry."""
+
+    name: str
+    repo_id: str
+    role: str
+    local_folder: str
+
+
+def _entry(name: str, repo_id: str, role: str) -> HFModelEntry:
+    return HFModelEntry(name=name, repo_id=repo_id, role=role, local_folder=name)
+
+
+# Curated stack: core + boost models wired through model_paths / hf_loaders.
+# 2026 defaults prefer Qwen3 / Qwen3-VL / DINOv3 / SigLIP2 / HPSv3 / moondream3.
+# Legacy Qwen2.5 / DINOv2 / HPSv2 / moondream2 rows stay for local-folder compatibility.
+HF_SCAFFOLD_REGISTRY: tuple[HFModelEntry, ...] = (
+    # Text / CLIP — modern T2I text encoders first
+    _entry("Qwen3-8B", "Qwen/Qwen3-8B", "text_encoder"),
+    _entry("Qwen3-4B", "Qwen/Qwen3-4B", "text_encoder"),
+    _entry("T5-XXL", "google/t5-v1_1-xxl", "text_encoder"),
+    _entry("UMT5-XXL", "google/umt5-xxl", "text_encoder"),
+    _entry("CLIP-ViT-L-14", "openai/clip-vit-large-patch14", "text_encoder"),
+    _entry("CLIP-ViT-bigG-14", "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", "text_encoder"),
+    _entry("CLIP-ViT-H-14", "laion/CLIP-ViT-H-14-laion2B-s32B-b79K", "text_encoder"),
+    _entry("LongCLIP-L", "creative-graphic-design/LongCLIP-L", "text_encoder"),
+    _entry("SigLIP2-SO400M", "google/siglip2-so400m-patch16-384", "vision_encoder"),
+    _entry("SigLIP-SO400M", "google/siglip-so400m-patch14-384", "vision_encoder"),
+    _entry("SigLIP-base-patch16-224", "google/siglip-base-patch16-224", "vision_encoder"),
+    # Vision backbones — DINOv3 preferred for REPA / dense features
+    _entry("DINOv3-ViT-L16", "facebook/dinov3-vitl16-pretrain-lvd1689m", "vision_encoder"),
+    _entry("DINOv3-ViT-B16", "facebook/dinov3-vitb16-pretrain-lvd1689m", "vision_encoder"),
+    _entry("DINOv3-ViT-S16", "facebook/dinov3-vits16-pretrain-lvd1689m", "vision_encoder"),
+    _entry("DINOv2-Large", "facebook/dinov2-large", "vision_encoder"),
+    _entry("DINOv2-Giant", "facebook/dinov2-giant", "vision_encoder"),
+    _entry("DINOv2-Base", "facebook/dinov2-base", "vision_encoder"),
+    _entry("DINOv2-Small", "facebook/dinov2-small", "vision_encoder"),
+    _entry("ConvNeXtV2-Large", "facebook/convnextv2-large-22k-384", "vision_encoder"),
+    _entry("MobileCLIP-S2", "apple/MobileCLIP-S2", "vision_encoder"),
+    # LLM / VLM — Qwen3 family
+    _entry("Qwen3-14B", "Qwen/Qwen3-14B", "llm"),
+    _entry("Qwen3-8B-Instruct", "Qwen/Qwen3-8B", "llm"),
+    _entry("Qwen2.5-14B-Instruct", "Qwen/Qwen2.5-14B-Instruct", "llm"),
+    _entry("Qwen3-VL-8B-Instruct", "Qwen/Qwen3-VL-8B-Instruct", "vlm"),
+    _entry("Qwen3-VL-4B-Instruct", "Qwen/Qwen3-VL-4B-Instruct", "vlm"),
+    _entry("Qwen2.5-VL-7B-Instruct", "Qwen/Qwen2.5-VL-7B-Instruct", "vlm"),
+    _entry("Qwen2.5-VL-3B-Instruct", "Qwen/Qwen2.5-VL-3B-Instruct", "vlm"),
+    _entry("Qwen-Image", "Qwen/Qwen-Image", "t2i_foundation"),
+    _entry("Qwen-Image-2512", "Qwen/Qwen-Image-2512", "t2i_foundation"),
+    _entry("FLUX.2-klein-9B", "black-forest-labs/FLUX.2-klein-9B", "t2i_foundation"),
+    _entry("FLUX.2-klein-4B", "black-forest-labs/FLUX.2-klein-4B", "t2i_foundation"),
+    _entry("FLUX.2-dev", "black-forest-labs/FLUX.2-dev", "t2i_foundation"),
+    _entry("GenSearcher-8B", "GenSearcher/Gen-Searcher-8B", "vlm"),
+    _entry("moondream3-preview", "moondream/moondream3-preview", "vlm"),
+    _entry("moondream2", "vikhyatk/moondream2", "vlm"),
+    _entry("InternVL3-8B", "OpenGVLab/InternVL3-8B-hf", "vlm"),
+    _entry("Gemma-3-4B-IT", "google/gemma-3-4b-it", "vlm"),
+    _entry("Qwen2-VL-2B-Instruct", "Qwen/Qwen2-VL-2B-Instruct", "vlm"),
+    _entry("MiniCPM-V-2", "openbmb/MiniCPM-V-2", "vlm"),
+    _entry("Kosmos-2-patch14-224", "microsoft/kosmos-2-patch14-224", "vlm"),
+    _entry("Florence-2-base", "microsoft/Florence-2-base", "vlm"),
+    _entry("Florence-2-large", "microsoft/Florence-2-large", "vlm"),
+    _entry("BLIP-image-captioning-base", "Salesforce/blip-image-captioning-base", "caption"),
+    _entry("BLIP-image-captioning-large", "Salesforce/blip-image-captioning-large", "caption"),
+    _entry("BLIP2-opt-2.7b", "Salesforce/blip2-opt-2.7b", "caption"),
+    _entry("InstructBLIP-Vicuna-7B", "Salesforce/instructblip-vicuna-7b", "caption"),
+    _entry("vit-gpt2-image-captioning", "nlpconnect/vit-gpt2-image-captioning", "caption"),
+    _entry("SmolVLM-256M-Instruct", "HuggingFaceTB/SmolVLM-256M-Instruct", "vlm"),
+    _entry("PaliGemma-3B", "google/paligemma-3b-pt-224", "vlm"),
+    _entry("MiniCPM-Llama3-V-2_5", "openbmb/MiniCPM-Llama3-V-2_5", "vlm"),
+    _entry("SmolVLM2-2B-Instruct", "HuggingFaceTB/SmolVLM2-2B-Instruct", "vlm"),
+    _entry("Qwen2-VL-7B-Instruct", "Qwen/Qwen2-VL-7B-Instruct", "vlm"),
+    _entry("Phi-3.5-vision-instruct", "microsoft/Phi-3.5-vision-instruct", "vlm"),
+    _entry("Florence-2-base-ft", "microsoft/Florence-2-base-ft", "vlm"),
+    _entry("GIT-base-coco", "microsoft/git-base-coco", "caption"),
+    _entry("GIT-large-coco", "microsoft/git-large-coco", "caption"),
+    _entry("BLIP2-Flan-T5-XL", "Salesforce/blip2-flan-t5-xl", "caption"),
+    _entry("LLaVA-1.5-7B", "llava-hf/llava-1.5-7b-hf", "vlm"),
+    _entry("InternVL2-2B", "OpenGVLab/InternVL2-2B", "vlm"),
+    _entry("Phi-3-vision-128k-instruct", "microsoft/Phi-3-vision-128k-instruct", "vlm"),
+    _entry("LLaVA-v1.6-Mistral-7B", "llava-hf/llava-v1.6-mistral-7b-hf", "vlm"),
+    _entry("InternVL2-1B", "OpenGVLab/InternVL2-1B", "vlm"),
+    _entry("PaliGemma2-3B", "google/paligemma2-3b-pt-224", "vlm"),
+    _entry("Florence-2-large-ft", "microsoft/Florence-2-large-ft", "vlm"),
+    _entry("MiniCPM-V-2_6", "openbmb/MiniCPM-V-2_6", "vlm"),
+    _entry("Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-7B-Instruct", "llm"),
+    _entry("Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-3B-Instruct", "llm"),
+    _entry("SmolLM2-360M-Instruct", "HuggingFaceTB/SmolLM2-360M-Instruct", "llm"),
+    _entry("T5-XL", "google/t5-v1_1-xl", "text_encoder"),
+    _entry("T5-Large", "google/t5-v1_1-large", "text_encoder"),
+    _entry("CLIP-ViT-B-32", "openai/clip-vit-base-patch32", "text_encoder"),
+    _entry("LongCLIP-B", "creative-graphic-design/LongCLIP-B", "text_encoder"),
+    _entry("CLIP-ViT-B-16", "openai/clip-vit-base-patch16", "text_encoder"),
+    # Quality / preference — HPSv3 preferred
+    _entry("HPSv3", "MizzenAI/HPSv3", "reward"),
+    _entry("ImageReward", "zai-org/ImageReward", "reward"),
+    _entry("PickScore_v1", "yuvalkirstain/PickScore_v1", "reward"),
+    _entry("HPSv2-hf", "adams-story/HPSv2-hf", "reward"),
+    _entry("PerceptCLIP_IQA", "PerceptCLIP/PerceptCLIP_IQA", "reward"),
+    _entry("LAION-Aesthetic-v2", "camenduru/improved-aesthetic-predictor", "reward"),
+    _entry("OneAlign", "Q-Future/OneAlign", "reward"),
+    _entry("CAFE-Aesthetic", "cafeai/cafe_aesthetic", "reward"),
+    _entry("MUSIQ", "chengaz/MUSIQ", "reward"),
+    _entry("CLIP-IQA", "djghosh/aesthetics-scorer", "reward"),
+    # Vision encoders (alignment / REPA experiments)
+    _entry("MetaCLIP-B16", "facebook/metaclip-b16-fullcc2.5b", "vision_encoder"),
+    _entry("AIMv2-Large", "apple/aimv2-large-patch14-384", "vision_encoder"),
+    _entry("AltCLIP-ViT-H-14", "BAAI/AltCLIP-ViT-H-14", "vision_encoder"),
+    _entry("EVA02-CLIP-L-14", "BAAI/EVA02-CLIP-L-14", "vision_encoder"),
+    _entry("EVA02-CLIP-bigE-14", "BAAI/EVA02-CLIP-bigE-14", "vision_encoder"),
+    _entry("CLIP-ViT-L-336", "openai/clip-vit-large-patch14-336", "text_encoder"),
+    _entry("CLIP-ViT-L-laion2B", "laion/CLIP-ViT-L-14-laion2B-s32B-b82K", "text_encoder"),
+    # Detection / OCR / layout
+    _entry("GroundingDINO-Base", "IDEA-Research/grounding-dino-base", "detector"),
+    _entry("GroundingDINO-Tiny", "IDEA-Research/grounding-dino-tiny", "detector"),
+    _entry("GroundingDINO-SwinT", "IDEA-Research/grounding-dino-swint-ogc", "detector"),
+    _entry("GroundingDINO-1.5-SwinT", "IDEA-Research/grounding-dino-1.5-swint-ogc", "detector"),
+    _entry("CountGD", "nikigoli/CountGD", "detector"),
+    _entry("OwlViT-base-patch32", "google/owlvit-base-patch32", "detector"),
+    _entry("OWLv2-base-patch16-ensemble", "google/owlv2-base-patch16-ensemble", "detector"),
+    _entry("OwlViT-large-patch14", "google/owlvit-large-patch14", "detector"),
+    _entry("OWLv2-Large", "google/owlv2-large-patch14-ensemble", "detector"),
+    _entry("Table-Transformer-Detection", "microsoft/table-transformer-detection", "detector"),
+    _entry("TrOCR-Large-Printed", "microsoft/trocr-large-printed", "ocr"),
+    _entry("TrOCR-base-handwritten", "microsoft/trocr-base-handwritten", "ocr"),
+    _entry("TrOCR-small-printed", "microsoft/trocr-small-printed", "ocr"),
+    _entry("GOT-OCR2", "stepfun-ai/GOT-OCR2_0", "ocr"),
+    _entry("CRAFT-text-detector", "boomb0om/CRAFT-text-detector", "ocr"),
+    _entry("Donut-base", "naver-clova-ix/donut-base", "ocr"),
+    _entry("Donut-docvqa", "naver-clova-ix/donut-base-finetuned-docvqa", "ocr"),
+    _entry("LayoutLMv3-base", "microsoft/layoutlmv3-base", "ocr"),
+    _entry("TrOCR-large-handwritten", "microsoft/trocr-large-handwritten", "ocr"),
+    _entry("TrOCR-base-printed", "microsoft/trocr-base-printed", "ocr"),
+    _entry("Pix2Struct-base", "google/pix2struct-base", "ocr"),
+    _entry("DePlot", "google/deplot", "ocr"),
+    _entry("vit-gpt2-coco", "nlpconnect/vit-gpt2-image-captioning-finetuned-coco", "caption"),
+    _entry("NSFW-Detector", "Falconsai/nsfw_image_detection", "safety"),
+    _entry("NSFW-Alt-Detector", "AdamCodd/vit-base-nsfw-detector", "safety"),
+    _entry("Watermark-Detector", "prithivMLmods/Watermark-Detection-Model-10K-v1", "qa"),
+    # Depth / control / segmentation
+    _entry("Depth-Anything-V3-Large", "depth-anything/DA3-LARGE-1.1", "depth"),
+    _entry("Depth-Anything-V2-Large", "depth-anything/Depth-Anything-V2-Large", "depth"),
+    _entry("Depth-Anything-V2-Small", "depth-anything/Depth-Anything-V2-Small-hf", "depth"),
+    _entry("Marigold-Depth-v1-1", "prs-eth/marigold-depth-v1-1", "depth"),
+    _entry("Marigold-Normals-v1-1", "prs-eth/marigold-normals-v1-1", "normals"),
+    _entry("ControlNet-Canny", "lllyasviel/sd-controlnet-canny", "control"),
+    _entry("ControlNet-Depth", "lllyasviel/sd-controlnet-depth", "control"),
+    _entry("ControlNet-OpenPose", "lllyasviel/sd-controlnet-openpose", "control"),
+    _entry("ControlNet-Lineart", "lllyasviel/sd-controlnet-lineart", "control"),
+    _entry("ControlNet-Scribble", "lllyasviel/sd-controlnet-scribble", "control"),
+    _entry("ControlNet-MLSD", "lllyasviel/sd-controlnet-mlsd", "control"),
+    _entry("ControlNet-SoftEdge", "lllyasviel/sd-controlnet-softedge", "control"),
+    _entry("ControlNet-Seg", "lllyasviel/sd-controlnet-seg", "control"),
+    _entry("ControlNet-Normal", "lllyasviel/sd-controlnet-normal", "control"),
+    _entry("ControlNet-HED", "lllyasviel/sd-controlnet-hed", "control"),
+    _entry("ControlNet-Canny-SDXL", "diffusers/controlnet-canny-sdxl-1.0", "control"),
+    _entry("ControlNet-Depth-SDXL", "diffusers/controlnet-depth-sdxl-1.0", "control"),
+    _entry("ControlNet-OpenPose-SDXL", "diffusers/controlnet-openpose-sdxl-1.0", "control"),
+    _entry("ControlNet-Union-SDXL", "xinsir/controlnet-union-sdxl-1.0-promax", "control"),
+    _entry("InstantX-FLUX-ControlNet-Union", "InstantX/FLUX.1-dev-Controlnet-Union", "control"),
+    _entry("DPT-Hybrid-Midas", "Intel/dpt-hybrid-midas", "depth"),
+    _entry("DPT-Large", "Intel/dpt-large", "depth"),
+    _entry("Depth-Anything-V2-Base", "depth-anything/Depth-Anything-V2-Base-hf", "depth"),
+    _entry("ZoeDepth", "Intel/zoedepth-nyu-kitti", "depth"),
+    _entry("Metric3D-ViT-Small", "JUGGHM/Metric3D", "depth"),
+    _entry("SAM2-Hiera-Large", "facebook/sam2-hiera-large-hf", "segmentation"),
+    _entry("SAM2-Hiera-Base", "facebook/sam2-hiera-base-plus-hf", "segmentation"),
+    _entry("SAM2-Hiera-Small", "facebook/sam2-hiera-small-hf", "segmentation"),
+    _entry("SAM2-Hiera-Tiny", "facebook/sam2-hiera-tiny-hf", "segmentation"),
+    _entry("SAM-ViT-Base", "facebook/sam-vit-base", "segmentation"),
+    _entry("SAM-ViT-Huge", "facebook/sam-vit-huge", "segmentation"),
+    _entry("DETR-ResNet50", "facebook/detr-resnet-50", "detector"),
+    _entry("Mask2Former-Swin-Base", "facebook/mask2former-swin-base-coco-panoptic", "segmentation"),
+    # VAE / decode / restore
+    _entry("StableCascade-Prior", "stabilityai/stable-cascade-prior", "cascade"),
+    _entry("StableCascade-Decoder", "stabilityai/stable-cascade", "cascade"),
+    _entry("DC-AE-f32c32", "mit-han-lab/dc-ae-f32c32-mix-1.0", "vae"),
+    _entry("TAESD", "madebyollin/taesd", "vae"),
+    _entry("TAESDXL", "madebyollin/taesdxl", "vae"),
+    _entry("sd-vae-ft-mse", "stabilityai/sd-vae-ft-mse", "vae"),
+    _entry("sd-vae-ft-ema", "stabilityai/sd-vae-ft-ema", "vae"),
+    _entry("sdxl-vae", "stabilityai/sdxl-vae", "vae"),
+    _entry("sdxl-vae-fp16-fix", "madebyollin/sdxl-vae-fp16-fix", "vae"),
+    _entry("Consistency-Decoder", "openai/consistency-decoder", "vae"),
+    _entry("CodeFormer", "sczhou/CodeFormer", "face_restore"),
+    _entry("GFPGAN", "TencentARC/GFPGAN", "face_restore"),
+    _entry("Real-ESRGAN", "ai-forever/Real-ESRGAN", "upscale"),
+    _entry("SwinIR-classical-x2", "caidas/swin2SR-classical-sr-x2-64", "upscale"),
+    _entry("AnyDoor-Ref", "camenduru/AnyDoor", "reference"),
+)
+
+
+def scaffold_registry() -> list[HFModelEntry]:
+    return list(HF_SCAFFOLD_REGISTRY)
+
+
+def has_local_weights(local_dir: str | Path) -> bool:
+    p = Path(local_dir)
+    if not p.is_dir():
+        return False
+    for _root, _dirs, files in os.walk(p):
+        for fname in files:
+            if fname.endswith(_WEIGHT_SUFFIXES):
+                return True
+    return False
+
+
+def download_scaffold_entry(
+    entry: HFModelEntry,
+    *,
+    model_root: str | Path | None = None,
+    max_workers: int = 4,
+    skip_existing: bool = True,
+) -> str:
+    """Download config-only scaffold for one registry entry."""
+    from huggingface_hub import snapshot_download
+
+    root = Path(model_root) if model_root is not None else model_dir()
+    local_dir = root / entry.local_folder
+    os.makedirs(local_dir, exist_ok=True)
+    if skip_existing and local_dir.is_dir() and any(local_dir.iterdir()):
+        print(f"Skipping (folder exists): {entry.repo_id} -> {local_dir}")
+        return str(local_dir)
+    print(f"Scaffold (config-only): {entry.repo_id} -> {local_dir}")
+    snapshot_download(
+        repo_id=entry.repo_id,
+        local_dir=str(local_dir),
+        allow_patterns=list(CONFIG_ONLY_ALLOW),
+        ignore_patterns=list(CONFIG_ONLY_IGNORE),
+        max_workers=max_workers,
+    )
+    return str(local_dir)
+
+
+def download_scaffold_batch(
+    entries: Sequence[HFModelEntry],
+    *,
+    model_root: str | Path | None = None,
+    max_workers: int = 4,
+    skip_existing: bool = True,
+    continue_on_error: bool = True,
+) -> dict[str, object]:
+    ok: list[str] = []
+    failed: list[str] = []
+    for entry in entries:
+        try:
+            download_scaffold_entry(
+                entry,
+                model_root=model_root,
+                max_workers=max_workers,
+                skip_existing=skip_existing,
+            )
+            ok.append(entry.name)
+        except Exception as exc:
+            msg = f"{entry.name} ({entry.repo_id}): {exc}"
+            failed.append(msg)
+            if not continue_on_error:
+                raise
+    return {
+        "ok": ok,
+        "failed": failed,
+        "model_root": str(model_root or model_dir()),
+        "repo_root": str(repo_root()),
+    }
+
+
+def resolve_entries(
+    *,
+    names: Sequence[str] | None = None,
+    roles: Sequence[str] | None = None,
+) -> list[HFModelEntry]:
+    entries = list(HF_SCAFFOLD_REGISTRY)
+    if roles:
+        role_set = {str(r).strip().lower() for r in roles}
+        entries = [e for e in entries if e.role.lower() in role_set]
+    if names:
+        name_set = {str(n).strip() for n in names}
+        entries = [e for e in entries if e.name in name_set]
+    return entries
+
+
+# Post-process models (name -> local path resolver) reported by eval summaries.
+UPSCALE_MODELS = {"Real-ESRGAN": default_realesrgan_path, "SwinIR-classical-x2": default_swinir_classical_path}
+FACE_RESTORE_MODELS = {"CodeFormer": default_codeformer_path, "GFPGAN": default_gfpgan_path}
+
+
+def role_counts() -> dict[str, int]:
+    return dict(sorted(Counter(e.role for e in HF_SCAFFOLD_REGISTRY).items()))
+
+
+def registry_summary() -> dict[str, object]:
+    """Registry size, per-role counts and how many entries have a local folder / real weights."""
+    exists = weights = 0
+    for e in HF_SCAFFOLD_REGISTRY:
+        fp = model_dir() / e.name
+        if fp.is_dir() and any(fp.iterdir()):
+            exists += 1
+            weights += has_local_weights(fp)
+    return {
+        "total_registry": len(HF_SCAFFOLD_REGISTRY),
+        "role_counts": role_counts(),
+        "local_folders": exists,
+        "with_weights": weights,
+        "config_only": exists - weights,
+    }
+
+
+_ENV_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_HUB_TOKEN")
+_BARE_HF_TOKEN = re.compile(r"^hf_[A-Za-z0-9]{20,}$")
+_TOKEN_LINE = re.compile(
+    r"^(?:hf[_-]?token|huggingface[_-]?token|token)\s*[:=]\s*(\S+)",
+    re.IGNORECASE,
+)
+
+
+def hf_token_from_env() -> str | None:
+    for key in _ENV_KEYS:
+        val = os.environ.get(key, "").strip()
+        if val:
+            return val
+    return None
+
+
+def hf_token_from_secrets(path: str | os.PathLike[str] | None = None) -> str | None:
+    p = Path(path or os.environ.get("SDX_SECRETS_FILE", "/workspace/secret.txt"))
+    if not p.is_file():
+        return None
+    in_hf_section = False
+    for raw in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        head = line.rstrip(":").strip().lower()
+        if head in ("huggingface", "hf", "hugging face"):
+            in_hf_section = True
+            continue
+        if in_hf_section and ":" not in line and not _TOKEN_LINE.match(line):
+            in_hf_section = False
+        m = _TOKEN_LINE.match(line)
+        if m:
+            return m.group(1).strip()
+        if _BARE_HF_TOKEN.match(line):
+            return line
+        if in_hf_section and ":" in line:
+            k, _, v = line.partition(":")
+            if k.strip().lower() in ("token", "api", "key") and v.strip():
+                return v.strip()
+    return None
+
+
+def _reject_placeholder(tok: str | None) -> str | None:
+    if not tok:
+        return None
+    if "YOUR_TOKEN" in tok.upper() or tok.endswith("_HERE"):
+        return None
+    return tok
+
+
+def hf_token_from_hub() -> str | None:
+    """Token from ``huggingface-cli login`` (~/.cache/huggingface/token)."""
+    try:
+        from huggingface_hub import get_token
+
+        return _reject_placeholder(get_token())
+    except Exception:
+        return None
+
+
+def get_hf_token() -> str | None:
+    return (
+        _reject_placeholder(hf_token_from_env()) or _reject_placeholder(hf_token_from_secrets()) or hf_token_from_hub()
+    )
+
+
+def hf_auth_source() -> str:
+    """Where auth came from: env | secret | cli | none."""
+    if _reject_placeholder(hf_token_from_env()):
+        return "env"
+    if _reject_placeholder(hf_token_from_secrets()):
+        return "secret"
+    if hf_token_from_hub():
+        return "cli"
+    return "none"
+
+
+def apply_hf_token_to_env() -> bool:
+    tok = get_hf_token()
+    if tok:
+        os.environ.setdefault("HF_TOKEN", tok)
+        os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", tok)
+        return True
+    return False

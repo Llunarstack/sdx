@@ -1,32 +1,41 @@
-# Text-to-image dataset: tag-board style prompts + ReVe-style long/complex captions.
+"""Text-to-image training dataset (image folders or JSONL manifests), its collate function, the aspect-bucket
+batch sampler and the EnhancedDiT annotation dataset."""
+
+import json
+import math
 import random
 import struct
+from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
-from models.controlnet import control_type_to_id
+from config.styles import extract_style_from_text
+from models.conditioning import control_type_to_id
 from PIL import Image
-from torch.utils.data import Dataset
-from utils.training.part_aware_training import (
+from torch.utils.data import Dataset, Sampler
+from utils.safety.minor_guard import reasons as minor_guard_reasons
+from utils.training.objectives import (
     PartAwareCaptionConfig,
     apply_part_aware_caption_pipeline,
     foveated_random_crop_box,
 )
 
-from .caption_truncate import truncate_caption_at_comma_boundary
 from .caption_utils import (
     add_anti_blending_and_count,
     apply_tag_emphasis,
+    apply_training_guidance_to_caption_pair,
     boost_domain_tags,
     boost_hard_style_tags,
     boost_quality_tags,
     merge_region_captions_into_caption,
     normalize_tag_order,
     prepend_adherence_boost,
+    truncate_caption_at_comma_boundary,
 )
-from .manifest_utils import negative_caption_from_row
+from .manifest_utils import iter_manifest_rows, manifest_row_text, negative_caption_from_row
 
 try:
     from sdx_native.text_hygiene import normalize_caption_for_training as _normalize_caption_unicode
@@ -40,10 +49,10 @@ _SKIP_IMAGE_LOAD_ERRORS: tuple[type[BaseException], ...] = (
     ValueError,
     struct.error,
     Image.UnidentifiedImageError,
+    Image.DecompressionBombError,
 )
-_decompression_bomb_error = getattr(Image, "DecompressionBombError", None)
-if _decompression_bomb_error is not None:
-    _SKIP_IMAGE_LOAD_ERRORS = _SKIP_IMAGE_LOAD_ERRORS + (_decompression_bomb_error,)
+
+CropOffset = tuple[float, float] | None
 
 
 def _looks_like_trainable_image(path: str) -> bool:
@@ -58,151 +67,73 @@ def _open_train_image(path: str) -> Image.Image:
         raise Image.UnidentifiedImageError(f"failed to load image: {path}") from exc
 
 
-def _center_crop(pil_image, image_size: int):
-    """Center crop to image_size (ADM-style)."""
-    w, h = pil_image.size
-    while min(w, h) >= 2 * image_size:
-        pil_image = pil_image.resize((w // 2, h // 2), resample=Image.BOX)
-        w, h = pil_image.size
-    scale = image_size / min(w, h)
-    pil_image = pil_image.resize((round(w * scale), round(h * scale)), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    crop_y = (h - image_size) // 2
-    crop_x = (w - image_size) // 2
-    return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
+def _cover_crop(pil_image: Image.Image, H: int, W: int, offset: CropOffset = None) -> Image.Image:
+    """BOX-halve while the image is at least twice the target, bicubic-resize to cover ``H x W``, then crop.
 
-
-def _random_crop(pil_image, image_size: int):
-    """Random crop to image_size (data augmentation)."""
-    w, h = pil_image.size
-    while min(w, h) >= 2 * image_size:
-        pil_image = pil_image.resize((w // 2, h // 2), resample=Image.BOX)
-        w, h = pil_image.size
-    scale = image_size / min(w, h)
-    pil_image = pil_image.resize((round(w * scale), round(h * scale)), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    if h == image_size and w == image_size:
-        return Image.fromarray(arr)
-    crop_y = random.randint(0, max(0, h - image_size))
-    crop_x = random.randint(0, max(0, w - image_size))
-    return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
-
-
-def _largest_center_crop(pil_image, image_size: int):
-    """Resize so short side = image_size (cover), then center crop. Preserves aspect; no stretch."""
-    w, h = pil_image.size
-    while min(w, h) >= 2 * image_size:
-        pil_image = pil_image.resize((w // 2, h // 2), resample=Image.BOX)
-        w, h = pil_image.size
-    scale = image_size / min(w, h)  # scale so min(w,h) = image_size
-    new_w, new_h = round(w * scale), round(h * scale)
-    pil_image = pil_image.resize((new_w, new_h), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    crop_y = (h - image_size) // 2
-    crop_x = (w - image_size) // 2
-    return Image.fromarray(arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size])
-
-
-# --- IMPROVEMENTS §1.1: rectangular targets (H, W) for resolution / aspect buckets ---
-def _cover_center_crop_hw(pil_image: Image.Image, H: int, W: int) -> Image.Image:
-    """Resize to cover (W,H), then center-crop to exactly H×W."""
-    iw, ih = pil_image.size
-    while min(iw, ih) >= 2 * min(H, W):
-        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
-        iw, ih = pil_image.size
-    scale = max(W / iw, H / ih)
-    nw, nh = round(iw * scale), round(ih * scale)
-    pil_image = pil_image.resize((nw, nh), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    cy = max(0, (h - H) // 2)
-    cx = max(0, (w - W) // 2)
-    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
-
-
-def _cover_random_crop_hw(pil_image: Image.Image, H: int, W: int) -> Image.Image:
-    iw, ih = pil_image.size
-    while min(iw, ih) >= 2 * min(H, W):
-        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
-        iw, ih = pil_image.size
-    scale = max(W / iw, H / ih)
-    nw, nh = round(iw * scale), round(ih * scale)
-    pil_image = pil_image.resize((nw, nh), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    cy = random.randint(0, max(0, h - H))
-    cx = random.randint(0, max(0, w - W))
-    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
-
-
-def _largest_center_crop_hw(pil_image: Image.Image, H: int, W: int) -> Image.Image:
-    """Match short-side scaling idea for non-square targets: min side -> min(H,W), then center crop."""
-    iw, ih = pil_image.size
-    target_min = min(H, W)
-    while min(iw, ih) >= 2 * target_min:
-        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
-        iw, ih = pil_image.size
-    imin = min(iw, ih)
-    scale = target_min / max(1, imin)
-    nw, nh = round(iw * scale), round(ih * scale)
-    pil_image = pil_image.resize((nw, nh), resample=Image.BICUBIC)
-    arr = np.array(pil_image)
-    h, w = arr.shape[:2]
-    cy = max(0, (h - H) // 2)
-    cx = max(0, (w - W) // 2)
-    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
-
-
-def _crop_to_hw(pil_image: Image.Image, H: int, W: int, crop_mode: str) -> Image.Image:
+    ``offset`` is the relative ``(y, x)`` crop position in ``[0, 1)``; ``None`` centres the crop.
+    """
     if H <= 0 or W <= 0:
         raise ValueError(f"Invalid crop size H={H}, W={W}")
-    if crop_mode == "random":
-        return _cover_random_crop_hw(pil_image, H, W)
-    if crop_mode == "largest_center":
-        return _largest_center_crop_hw(pil_image, H, W)
-    return _cover_center_crop_hw(pil_image, H, W)
+    iw, ih = pil_image.size
+    while min(iw, ih) >= 2 * min(H, W):
+        pil_image = pil_image.resize((iw // 2, ih // 2), resample=Image.BOX)
+        iw, ih = pil_image.size
+    scale = max(W / iw, H / ih)
+    arr = np.array(pil_image.resize((round(iw * scale), round(ih * scale)), resample=Image.BICUBIC))
+    dy, dx = max(0, arr.shape[0] - H), max(0, arr.shape[1] - W)
+    if offset is None:
+        cy, cx = dy // 2, dx // 2
+    else:
+        cy, cx = int(offset[0] * (dy + 1)), int(offset[1] * (dx + 1))
+    return Image.fromarray(arr[cy : cy + H, cx : cx + W])
 
 
-def normalize_to_latent_range(x: torch.Tensor, scale: float = 0.18215) -> torch.Tensor:
-    """Scale pixel tensor for VAE latent (e.g. SD convention)."""
-    return x * scale
+def center_crop(pil_image: Image.Image, image_size: int) -> Image.Image:
+    """Square ADM-style center crop (resize to cover, keep the middle)."""
+    return _cover_crop(pil_image, image_size, image_size)
 
 
-# --- Tag-board prompts (comma-separated, optional parenthesis emphasis) ---
-def format_as_tags(tokens: list[str], emphasis: bool = False) -> str:
-    """Format list of tokens as comma-separated tags. Optionally wrap in () for emphasis."""
-    if emphasis and random.random() < 0.3:
-        return ", ".join(f"({t})" if random.random() < 0.4 else t for t in tokens)
-    return ", ".join(tokens)
+def _to_tensor(pil_image: Image.Image) -> torch.Tensor:
+    """RGB image -> ``(3, H, W)`` float tensor in ``[-1, 1]``."""
+    arr = np.asarray(pil_image, dtype=np.float32)  # fresh float copy, safe to modify in place
+    arr /= 255.0
+    arr -= 0.5
+    arr /= 0.5
+    return torch.from_numpy(arr).permute(2, 0, 1)
 
 
-def structured_caption(parts: dict[str, str], order: list[str] | None = None) -> str:
-    """ReVe/DetailMaster-style: structured caption for better adherence.
-    order e.g. ['subject', 'setting', 'style', 'camera'].
-    """
-    if order is None:
-        order = ["subject", "setting", "aesthetics", "style", "camera"]
-    return ", ".join(parts.get(k, "") for k in order if parts.get(k))
+def nearest_aspect_bucket(width: int, height: int, buckets: list[tuple[int, int]]) -> int:
+    """Aspect-ratio bucketing (NovelAI 2022; SDXL, Podell et al. 2023): index of the ``(H, W)`` bucket nearest to the
+    image in log aspect ratio, so the cover-crop removes as little of the frame as possible (no beheaded portraits).
+    Among buckets of that aspect: the largest the image fills without upscaling, else the smallest."""
+    ar = math.log(max(width, 1) / max(height, 1))
+    dist = [abs(math.log(w / h) - ar) for h, w in buckets]
+    same = [i for i, d in enumerate(dist) if d - min(dist) < 1e-6]
+    fits = [i for i in same if buckets[i][0] <= height and buckets[i][1] <= width]
+    area = lambda i: buckets[i][0] * buckets[i][1]  # noqa: E731
+    return max(fits, key=area) if fits else min(same, key=area)
 
 
 class Text2ImageDataset(Dataset):
+    """Image/caption pairs from either a folder or a JSONL manifest.
+
+    - Folder: ``data_path`` (and its direct subdirectories) holding ``img.png`` + ``img.txt`` / ``img.caption``;
+      line 1 of the caption file is the caption, line 2 the optional negative.
+    - Manifest: JSONL rows with ``image_path``/``path``/``image`` and ``caption``/``text`` plus optional
+      negative, style, control, init image, regions, grounding and layout fields.
+
+    Rows whose text involves minors are dropped at scan time (``n_blocked``). ``crop_mode`` is
+    ``center`` | ``random`` | ``largest_center`` (cover-resize, then centre crop; same as ``center``).
     """
-    Expects either:
-    - data_path = dir with subdirs, each containing images + captions (same name .txt or .caption)
-    - Or a manifest: JSONL with keys {"image_path": "...", "caption": "..."} or {"path", "text"}
-    """
+
+    # Manifest fields copied verbatim onto each sample (subclasses add their annotations here).
+    _extra_row_keys: tuple[str, ...] = ()
 
     def __init__(
         self,
         data_path: str,
         image_size: int = 256,
-        normalize_latent_scale: float = 0.18215,
         caption_ext: str = ".txt",
-        use_struct: bool = False,
-        tag_style_prob: float = 0.5,
         max_caption_length: int | None = None,
         shuffle_caption_parts: bool = False,
         use_tag_emphasis: bool = True,
@@ -219,14 +150,11 @@ class Text2ImageDataset(Dataset):
         caption_unicode_normalize: bool = False,
         use_anti_blending: bool = True,
         latent_cache_dir: str | None = None,
-        crop_mode: str = "center",  # "center" | "random" | "largest_center" (IMPROVEMENTS 1.2)
-        extract_style_from_caption: bool = True,  # Auto-fill style from artist/style tags (e.g. Danbooru)
-        region_caption_mode: str = "append",  # "append" | "prefix" | "off" — merge JSONL regions/parts into T5 caption
+        crop_mode: str = "center",
+        extract_style_from_caption: bool = True,
+        region_caption_mode: str = "append",
         region_layout_tag: str = "[layout]",
         resolution_buckets: list[tuple[int, int]] | None = None,
-        bucket_seed: int = 42,
-        bucket_fixed_assign: bool = False,
-        # Part-aware / grounding (JSONL: grounding_mask, caption_global, caption_local, entity_captions)
         use_hierarchical_captions: bool = False,
         hierarchical_caption_separator: str = " | ",
         hierarchical_drop_global_p: float = 0.0,
@@ -243,12 +171,7 @@ class Text2ImageDataset(Dataset):
         self.latent_cache_dir = Path(latent_cache_dir) if latent_cache_dir else None
         self.crop_mode = crop_mode
         self.resolution_buckets = resolution_buckets or []
-        self.bucket_seed = int(bucket_seed)
-        self.bucket_fixed_assign = bool(bucket_fixed_assign)
-        self.normalize_latent_scale = normalize_latent_scale
         self.caption_ext = caption_ext
-        self.use_struct = use_struct
-        self.tag_style_prob = tag_style_prob
         self.max_caption_length = max_caption_length
         self.shuffle_caption_parts = shuffle_caption_parts
         self.use_tag_emphasis = use_tag_emphasis
@@ -264,9 +187,6 @@ class Text2ImageDataset(Dataset):
         self.train_style_guidance_artists = bool(train_style_guidance_artists)
         self.caption_unicode_normalize = caption_unicode_normalize
         self.use_anti_blending = use_anti_blending
-        self._crop_fn = {"center": _center_crop, "random": _random_crop, "largest_center": _largest_center_crop}.get(
-            crop_mode, _center_crop
-        )
         self.region_caption_mode = region_caption_mode
         self.region_layout_tag = region_layout_tag
         self.use_hierarchical_captions = bool(use_hierarchical_captions)
@@ -288,35 +208,32 @@ class Text2ImageDataset(Dataset):
         )
         self.samples: list[dict[str, Any]] = []
         self._scan()
-        self._bucket_assign: list[int] = [0] * len(self.samples)
-        self.set_epoch(0)
+        self._bucket_assign: list[int] = (
+            [self._aspect_bucket(s) for s in self.samples] if self.resolution_buckets else []
+        )
 
-    def set_epoch(self, epoch: int = 0) -> None:
-        """Refresh per-index bucket ids when using ``resolution_buckets`` (IMPROVEMENTS §1.1)."""
-        if not self.resolution_buckets:
-            return
-        nb = len(self.resolution_buckets)
-        e = int(epoch)
-        for i in range(len(self.samples)):
-            if self.bucket_fixed_assign:
-                self._bucket_assign[i] = (i * 100003 + self.bucket_seed) % nb
-            else:
-                self._bucket_assign[i] = (i * 100003 + e * 10007 + self.bucket_seed) % nb
+    def _aspect_bucket(self, sample: dict[str, Any]) -> int:
+        """Fixed bucket of a sample from its image size (manifest ``width``/``height`` or the file header)."""
+        size = sample.get("size")
+        if size is None:
+            try:
+                with Image.open(self._resolve_media_path(sample["path"])) as img:
+                    size = img.size
+            except _SKIP_IMAGE_LOAD_ERRORS:
+                size = (self.image_size, self.image_size)
+        return nearest_aspect_bucket(int(size[0]), int(size[1]), self.resolution_buckets)
 
     def _hw_for_index(self, idx: int) -> tuple[int, int]:
         if self.resolution_buckets:
-            b = self._bucket_assign[idx]
-            return self.resolution_buckets[b]
+            return self.resolution_buckets[self._bucket_assign[idx]]
         return (self.image_size, self.image_size)
 
-    def _crop_image(self, pil: Image.Image, idx: int) -> Image.Image:
+    def _crop_image(self, pil: Image.Image, idx: int, offset: CropOffset = None) -> Image.Image:
         H, W = self._hw_for_index(idx)
-        if H == self.image_size and W == self.image_size and not self.resolution_buckets:
-            return self._crop_fn(pil, self.image_size)
-        return _crop_to_hw(pil, H, W, self.crop_mode)
+        return _cover_crop(pil, H, W, offset)
 
     def _resolve_media_path(self, rel: str | Path | None) -> Path | None:
-        """Resolve manifest-relative paths against ``data_root`` (e.g. SDX_DATA)."""
+        """Resolve manifest-relative paths: as given, then ``data_root`` (e.g. SDX_DATA), then the manifest dir."""
         if rel is None:
             return None
         s = str(rel).strip()
@@ -324,7 +241,7 @@ class Text2ImageDataset(Dataset):
             return None
         p = Path(s)
         if p.is_absolute():
-            return p if p.is_file() else p
+            return p
         if p.is_file():
             return p.resolve()
         if self.data_root is not None:
@@ -339,119 +256,122 @@ class Text2ImageDataset(Dataset):
             return (self.data_root / p).resolve()
         return (self.data_path / p).resolve() if self.data_path.is_dir() else p.resolve()
 
-    def _resolve_aux_path(self, rel: str | Path | None) -> Path | None:
-        return self._resolve_media_path(rel)
-
-    def _crop_mask_pil(self, pil_l: Image.Image, idx: int) -> Image.Image:
-        return self._crop_image(pil_l.convert("RGB"), idx).split()[0]
-
     def _maybe_foveate(
         self,
         pil: Image.Image,
         mask_l: Image.Image | None,
         idx: int,
+        offset: CropOffset,
         *,
         skip_foveate: bool = False,
     ) -> tuple[Image.Image, Image.Image | None]:
-        H, W = self._hw_for_index(idx)
+        """Crop image and mask together: usually the regular crop, with ``foveated_train_prob`` a random sub-region."""
         if skip_foveate or self.foveated_train_prob <= 0 or random.random() >= self.foveated_train_prob:
-            return self._crop_image(pil, idx), (self._crop_mask_pil(mask_l, idx) if mask_l is not None else None)
-        arr = np.array(pil.convert("RGB"))
-        ih, iw = arr.shape[:2]
-        y0, x0, y1, x1 = foveated_random_crop_box(ih, iw, crop_frac=self.foveated_crop_frac)
-        crop = arr[y0:y1, x0:x1]
-        pil_out = Image.fromarray(crop).resize((W, H), Image.BICUBIC)
-        mask_out: Image.Image | None = None
-        if mask_l is not None:
-            ma = np.array(mask_l.convert("L")).astype(np.float32) / 255.0
-            mc = ma[y0:y1, x0:x1]
-            mask_out = Image.fromarray((np.clip(mc, 0.0, 1.0) * 255.0).astype(np.uint8), mode="L")
-            mask_out = mask_out.resize((W, H), Image.NEAREST)
+            mask = self._crop_image(mask_l, idx, offset) if mask_l is not None else None
+            return self._crop_image(pil, idx, offset), mask
+        H, W = self._hw_for_index(idx)
+        y0, x0, y1, x1 = foveated_random_crop_box(pil.height, pil.width, crop_frac=self.foveated_crop_frac)
+        box = (x0, y0, x1, y1)
+        pil_out = pil.convert("RGB").crop(box).resize((W, H), Image.BICUBIC)
+        mask_out = mask_l.convert("L").crop(box).resize((W, H), Image.NEAREST) if mask_l is not None else None
         return pil_out, mask_out
 
     def _mask_image_to_tensor(self, mask_l: Image.Image) -> torch.Tensor:
         m = np.array(mask_l).astype(np.float32) / 255.0
-        if self.grounding_mask_soft:
-            m = np.clip(m, 0.0, 1.0)
-        else:
-            m = (m > 0.5).astype(np.float32)
+        m = np.clip(m, 0.0, 1.0) if self.grounding_mask_soft else (m > 0.5).astype(np.float32)
         return torch.from_numpy(m).unsqueeze(0)
 
-    def _load_grounding_mask_tensor(
-        self, idx: int, image_path: str, mask_rel: str, *, skip_foveate: bool = False
-    ) -> torch.Tensor | None:
-        rp = self._resolve_aux_path(mask_rel)
+    def _open_mask(self, mask_rel: str) -> Image.Image | None:
+        rp = self._resolve_media_path(mask_rel)
         if rp is None or not rp.exists():
             return None
         try:
-            pil = Image.open(image_path).convert("RGB")
-            mask_l = Image.open(rp).convert("L")
-            pil, mask_l = self._maybe_foveate(pil, mask_l, idx, skip_foveate=skip_foveate)
-            del pil  # spatial alignment only
-            return self._mask_image_to_tensor(mask_l)
-        except Exception:
+            with Image.open(rp) as mask:
+                return mask.convert("L")
+        except _SKIP_IMAGE_LOAD_ERRORS:
+            return None
+
+    def _aux_image_tensor(self, path: str, idx: int, offset: CropOffset) -> torch.Tensor | None:
+        """Control / init image cropped exactly like the main image; ``None`` when it cannot be read."""
+        try:
+            with Image.open(path) as img:
+                return _to_tensor(self._crop_image(img.convert("RGB"), idx, offset))
+        except _SKIP_IMAGE_LOAD_ERRORS:
             return None
 
     def _scan(self):
-        if self.data_path.suffix.lower() == ".jsonl":
-            import json
+        self.n_blocked = 0
+        self._scan_rows()
+        if self.n_blocked:
+            print(f"Text2ImageDataset: dropped {self.n_blocked} row(s) whose captions involve minors.")
 
-            with open(self.data_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    d = json.loads(line)
-                    path = d.get("image_path") or d.get("path") or d.get("image")
-                    cap = d.get("caption") or d.get("text") or d.get("caption")
-                    parts = d.get("parts")
-                    rc = d.get("region_captions") or d.get("segments")
-                    regions: Any = None
-                    if isinstance(parts, dict) and rc is not None:
-                        regions = {"parts": parts, "region_captions": rc}
-                    elif isinstance(parts, dict):
-                        regions = parts
-                    else:
-                        regions = rc
-                    if path and cap:
-                        neg = negative_caption_from_row(d)
-                        style = d.get("style") or ""
-                        ctrl = d.get("control_image") or d.get("control_path") or ""
-                        ctrl_type = d.get("control_type") or d.get("control_kind") or d.get("controlnet_type") or ""
-                        w = float(d.get("weight", d.get("aesthetic_score", 1.0)))
-                        init_img = d.get("init_image") or d.get("init_image_path") or d.get("source_image") or ""
-                        difficulty = float(d.get("difficulty", 0.5))
-                        gmask = d.get("grounding_mask") or d.get("mask_path") or ""
-                        cg = d.get("caption_global")
-                        cl = d.get("caption_local")
-                        ec = d.get("entity_captions")
-                        pl_inline = d.get("prompt_layout")
-                        pl_path = d.get("prompt_layout_path") or ""
-                        if not isinstance(pl_inline, dict):
-                            pl_inline = None
-                        self.samples.append(
-                            {
-                                "path": path,
-                                "caption": cap,
-                                "negative_caption": neg,
-                                "style": style,
-                                "control_image": ctrl,
-                                "control_type": ctrl_type,
-                                "init_image": init_img,
-                                "weight": w,
-                                "difficulty": difficulty,
-                                "regions": regions,
-                                "grounding_mask": gmask if isinstance(gmask, str) else "",
-                                "caption_global": cg if isinstance(cg, str) else None,
-                                "caption_local": cl if isinstance(cl, str) else None,
-                                "entity_captions": ec if isinstance(ec, dict) else None,
-                                "prompt_layout": pl_inline,
-                                "prompt_layout_path": pl_path if isinstance(pl_path, str) else "",
-                            }
-                        )
+    def _scan_rows(self):
+        if self.data_path.suffix.lower() == ".jsonl":
+            for d in iter_manifest_rows(self.data_path):
+                if not isinstance(d, dict):
+                    continue
+                path = d.get("image_path") or d.get("path") or d.get("image")
+                cap = d.get("caption") or d.get("text") or d.get("instruction")  # edit rows: instruction
+                if not (path and cap):
+                    continue
+                neg = negative_caption_from_row(d)
+                screened = manifest_row_text(d)
+                pl_inline = d.get("prompt_layout")
+                pl_file = self._resolve_media_path(d.get("prompt_layout_path"))
+                if pl_file is not None and pl_file.is_file():
+                    pl_text = pl_file.read_text(encoding="utf-8", errors="ignore")
+                    screened += ", " + pl_text
+                    if not isinstance(pl_inline, dict):
+                        try:  # parsed once here instead of on every __getitem__
+                            pl_inline = json.loads(pl_text)
+                        except ValueError:
+                            pass
+                if minor_guard_reasons(screened, neg, training=True):
+                    self.n_blocked += 1
+                    continue
+                parts = d.get("parts")
+                rc = d.get("region_captions") or d.get("segments")
+                if isinstance(parts, dict):
+                    regions: Any = {"parts": parts, "region_captions": rc} if rc is not None else parts
+                else:
+                    regions = rc
+                gmask = d.get("grounding_mask") or d.get("mask_path") or ""
+                cg, cl, ec = d.get("caption_global"), d.get("caption_local"), d.get("entity_captions")
+                pl_path = d.get("prompt_layout_path") or ""
+                size = (d.get("width"), d.get("height"))
+                self.samples.append(
+                    {
+                        "path": path,
+                        "caption": cap,
+                        "negative_caption": neg,
+                        "style": d.get("style") or "",
+                        "control_image": d.get("control_image") or d.get("control_path") or "",
+                        "control_type": d.get("control_type")
+                        or d.get("control_kind")
+                        or d.get("controlnet_type")
+                        or "",
+                        "init_image": d.get("init_image")
+                        or d.get("init_image_path")
+                        or d.get("source_image")
+                        or d.get("source_image_path")
+                        or "",
+                        "weight": float(d.get("weight", d.get("aesthetic_score", 1.0))),
+                        "difficulty": float(d.get("difficulty", 0.5)),
+                        "regions": regions,
+                        "grounding_mask": gmask if isinstance(gmask, str) else "",
+                        "caption_global": cg if isinstance(cg, str) else None,
+                        "caption_local": cl if isinstance(cl, str) else None,
+                        "entity_captions": ec if isinstance(ec, dict) else None,
+                        "prompt_layout": pl_inline if isinstance(pl_inline, dict) else None,
+                        "prompt_layout_path": pl_path if isinstance(pl_path, str) else "",
+                        "size": tuple(map(int, size))
+                        if all(isinstance(v, (int, float)) and v > 0 for v in size)
+                        else None,
+                        **{k: d[k] for k in self._extra_row_keys if k in d},
+                    }
+                )
             return
-        # Accept both layouts: data_path/<subdir>/img+caption and a flat
-        # data_path/img+caption folder (README quick start uses the latter).
+        # Both layouts work: data_path/<subdir>/img+caption and a flat data_path/img+caption folder.
         scan_dirs = [self.data_path] + [d for d in self.data_path.iterdir() if d.is_dir()]
         for subdir in scan_dirs:
             for img_path in subdir.glob("*"):
@@ -463,9 +383,12 @@ class Text2ImageDataset(Dataset):
                 if not cap_path.exists():
                     continue
                 lines = cap_path.read_text(encoding="utf-8", errors="ignore").strip().split("\n")
-                caption = lines[0].strip() if lines else ""
+                caption = lines[0].strip()
                 negative_caption = lines[1].strip() if len(lines) > 1 else ""
                 if not caption:
+                    continue
+                if minor_guard_reasons(caption, negative_caption, training=True):
+                    self.n_blocked += 1
                     continue
                 self.samples.append(
                     {
@@ -498,12 +421,12 @@ class Text2ImageDataset(Dataset):
             caption = apply_tag_emphasis(caption)
         if self.use_tag_order:
             caption = normalize_tag_order(caption)
-        caption = boost_hard_style_tags(caption, repeat_factor=3)
+        caption = boost_hard_style_tags(caption)
         if self.use_quality_boost:
-            caption = boost_quality_tags(caption, repeat_factor=3)
-        caption = boost_domain_tags(caption, repeat_factor=2)
+            caption = boost_quality_tags(caption)
+        caption = boost_domain_tags(caption)
         if self.use_adherence_boost:
-            caption = prepend_adherence_boost(caption, repeat_factor=2)
+            caption = prepend_adherence_boost(caption)
         if self.use_anti_blending:
             caption, negative_caption = add_anti_blending_and_count(caption, negative_caption)
         if (
@@ -512,8 +435,6 @@ class Text2ImageDataset(Dataset):
             or self.train_anatomy_guidance in ("lite", "strong")
             or self.train_style_guidance_mode in ("auto", "all")
         ):
-            from .caption_utils import apply_training_guidance_to_caption_pair
-
             caption, negative_caption = apply_training_guidance_to_caption_pair(
                 caption,
                 negative_caption,
@@ -525,34 +446,43 @@ class Text2ImageDataset(Dataset):
                 style_guidance_artists=self.train_style_guidance_artists,
                 include_art_guidance_photography=self.train_art_guidance_photography,
             )
-        if self.max_caption_length:
+        if self.shuffle_caption_parts:
             parts = [p.strip() for p in caption.split(",") if p.strip()]
-            if self.shuffle_caption_parts and len(parts) > 1:
-                random.shuffle(parts)
-                caption = ", ".join(parts)
+            random.shuffle(parts)
+            caption = ", ".join(parts)
+        if self.max_caption_length:
             caption = truncate_caption_at_comma_boundary(caption, self.max_caption_length)
         return caption.strip(), (negative_caption or "").strip()
 
     def _latent_path(self, path: str) -> Path | None:
-        """Cache key: same name as image but .pt in latent_cache_dir."""
+        """Cache file of a precomputed latent: the image stem + ``.pt`` inside ``latent_cache_dir``."""
         if not self.latent_cache_dir:
             return None
-        name = Path(path).stem + ".pt"
-        return self.latent_cache_dir / name
+        return self.latent_cache_dir / (Path(path).stem + ".pt")
 
     def __getitem__(self, idx: int) -> dict[str, Any]:
         last_err: BaseException | None = None
         n = len(self.samples)
         for off in range(min(32, n)):
             try:
-                return self._getitem_impl((idx + off) % n)
+                # A replacement for an unreadable file is cropped to *this* index's bucket so the batch still stacks.
+                return self._getitem_impl((idx + off) % n, hw_idx=idx)
             except Exception as exc:
                 # Scraped datasets include corrupt PNGs, zips, truncated files, etc.
                 last_err = exc
-                continue
         raise RuntimeError(f"could not load any image near dataset index {idx}") from last_err
 
-    def _getitem_impl(self, idx: int) -> dict[str, Any]:
+    def _load_latent(self, path: str) -> torch.Tensor | None:
+        lp = self._latent_path(path)
+        if lp is None or not lp.exists() or self.resolution_buckets:
+            return None
+        try:
+            return torch.load(lp, map_location="cpu", weights_only=True)
+        except Exception:  # a corrupt cache entry falls back to encoding the pixels
+            return None
+
+    def _getitem_impl(self, idx: int, hw_idx: int | None = None) -> dict[str, Any]:
+        hw_idx = idx if hw_idx is None else hw_idx
         s = self.samples[idx]
         resolved = self._resolve_media_path(s["path"])
         path = str(resolved if resolved is not None else s["path"])
@@ -561,15 +491,14 @@ class Text2ImageDataset(Dataset):
         raw_caption = s["caption"]
         if self._partaware_caption_cfg is not None:
             raw_caption = apply_part_aware_caption_pipeline(raw_caption, s, self._partaware_caption_cfg, rng=random)
-        regions = s.get("regions")
         raw_caption = merge_region_captions_into_caption(
             raw_caption,
-            regions,
+            s.get("regions"),
             mode=self.region_caption_mode,
             layout_tag=self.region_layout_tag,
         )
         caption, negative_caption = self._process_caption(raw_caption, s.get("negative_caption", ""))
-        out = {
+        out: dict[str, Any] = {
             "caption": caption,
             "negative_caption": negative_caption,
             "path": path,
@@ -577,34 +506,24 @@ class Text2ImageDataset(Dataset):
             "difficulty": s.get("difficulty", 0.5),
         }
         style_text = s.get("style", "")
-        # Auto-fill style from caption when missing (artist/style tags from tag boards, etc.)
         if not style_text and self.extract_style_from_caption:
-            try:
-                from config.defaults.style_artists import extract_style_from_text
-
-                style_text = extract_style_from_text(s.get("caption", "")) or ""
-            except Exception:
-                pass
+            style_text = extract_style_from_text(s.get("caption", "")) or ""
         if style_text:
             out["style"] = style_text
         pl = s.get("prompt_layout")
         if isinstance(pl, dict):
             out["prompt_layout"] = pl
         else:
-            pl_rel = (s.get("prompt_layout_path") or "").strip()
-            if pl_rel:
-                rp = self._resolve_aux_path(pl_rel)
-                if rp is not None and rp.is_file():
-                    try:
-                        import json
+            rp = self._resolve_media_path(s.get("prompt_layout_path"))
+            if rp is not None and rp.is_file():
+                try:
+                    raw = json.loads(rp.read_text(encoding="utf-8", errors="ignore"))
+                except (OSError, ValueError):
+                    raw = None
+                if isinstance(raw, dict):
+                    out["prompt_layout"] = raw
 
-                        raw = json.loads(rp.read_text(encoding="utf-8", errors="ignore"))
-                        if isinstance(raw, dict):
-                            out["prompt_layout"] = raw
-                    except Exception:
-                        pass
         ctrl_path = s.get("control_image", "")
-        ctrl_type = s.get("control_type", "")
         if ctrl_path:
             rp = self._resolve_media_path(ctrl_path)
             ctrl_path = str(rp) if rp is not None else ctrl_path
@@ -615,93 +534,49 @@ class Text2ImageDataset(Dataset):
             init_path = str(rp) if rp is not None else init_path
             out["init_image_path"] = init_path
         mask_rel = s.get("grounding_mask") or ""
-        skip_fov = bool(ctrl_path) or bool(init_path)
-        # Latent cache: load precomputed latent to skip VAE encode
-        lp = self._latent_path(path)
-        h_i, w_i = self._hw_for_index(idx)
-        if lp is not None and lp.exists() and not self.resolution_buckets:
-            try:
-                latent = torch.load(lp, map_location="cpu", weights_only=True)
-                out["latent_values"] = latent
-                out["pixel_values"] = torch.zeros(3, h_i, w_i)
-                if init_path:
-                    try:
-                        with Image.open(init_path) as _init:
-                            init_pil = self._crop_image(_init.convert("RGB"), idx)
-                        init_arr = np.array(init_pil).astype(np.float32) / 255.0
-                        init_arr = (init_arr - 0.5) / 0.5
-                        out["init_pixel_values"] = torch.from_numpy(init_arr).permute(2, 0, 1)
-                    except Exception:
-                        pass
-                if ctrl_path:
-                    try:
-                        with Image.open(ctrl_path) as _ctrl:
-                            ctrl_pil = self._crop_image(_ctrl.convert("RGB"), idx)
-                        ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
-                        ctrl_arr = (ctrl_arr - 0.5) / 0.5
-                        out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
-                        out["control_type_id"] = int(control_type_to_id(ctrl_type))
-                    except Exception:
-                        pass
-                if mask_rel:
-                    gm = self._load_grounding_mask_tensor(idx, path, mask_rel, skip_foveate=skip_fov)
-                    if gm is not None:
-                        out["grounding_mask"] = gm
-                return out
-            except Exception:
-                pass
-        pil = _open_train_image(path)
-        mask_l: Image.Image | None = None
-        if mask_rel:
-            rp = self._resolve_aux_path(mask_rel)
-            if rp is not None and rp.exists():
-                try:
-                    with Image.open(rp) as _mask:
-                        mask_l = _mask.convert("L")
-                except Exception:
-                    mask_l = None
-        pil, mask_l = self._maybe_foveate(pil, mask_l, idx, skip_foveate=skip_fov)
-        img = np.array(pil).astype(np.float32) / 255.0
-        img = (img - 0.5) / 0.5
-        img = torch.from_numpy(img).permute(2, 0, 1)
-        out["pixel_values"] = img
-        if mask_l is not None:
-            out["grounding_mask"] = self._mask_image_to_tensor(mask_l)
+
+        latent = self._load_latent(path)
+        if latent is not None:
+            # Cached latents are full-frame centre crops, so every aux input is centre-cropped and never foveated.
+            offset: CropOffset = None
+            h_i, w_i = self._hw_for_index(hw_idx)
+            out["latent_values"] = latent
+            out["pixel_values"] = torch.zeros(3, h_i, w_i)
+            mask_l = self._open_mask(mask_rel) if mask_rel else None
+            if mask_l is not None:
+                out["grounding_mask"] = self._mask_image_to_tensor(self._crop_image(mask_l, hw_idx))
+        else:
+            # One random offset for every input so image, mask, control and init stay pixel-aligned.
+            offset = (random.random(), random.random()) if self.crop_mode == "random" else None
+            pil = _open_train_image(path)
+            mask_l = self._open_mask(mask_rel) if mask_rel else None
+            # Control / init inputs are not foveated, so their presence disables it to keep them aligned.
+            skip_foveate = bool(ctrl_path) or bool(init_path)
+            pil, mask_l = self._maybe_foveate(pil, mask_l, hw_idx, offset, skip_foveate=skip_foveate)
+            out["pixel_values"] = _to_tensor(pil)
+            if mask_l is not None:
+                out["grounding_mask"] = self._mask_image_to_tensor(mask_l)
+
         if init_path:
-            try:
-                with Image.open(init_path) as _init:
-                    init_pil = self._crop_image(_init.convert("RGB"), idx)
-                init_arr = np.array(init_pil).astype(np.float32) / 255.0
-                init_arr = (init_arr - 0.5) / 0.5
-                out["init_pixel_values"] = torch.from_numpy(init_arr).permute(2, 0, 1)
-            except Exception:
-                pass
+            init = self._aux_image_tensor(init_path, hw_idx, offset)
+            if init is not None:
+                out["init_pixel_values"] = init
         if ctrl_path:
-            try:
-                with Image.open(ctrl_path) as _ctrl:
-                    ctrl_pil = self._crop_image(_ctrl.convert("RGB"), idx)
-                ctrl_arr = np.array(ctrl_pil).astype(np.float32) / 255.0
-                ctrl_arr = (ctrl_arr - 0.5) / 0.5
-                out["control_image"] = torch.from_numpy(ctrl_arr).permute(2, 0, 1)
-                out["control_type_id"] = int(control_type_to_id(ctrl_type))
-            except Exception:
-                pass
+            ctrl = self._aux_image_tensor(ctrl_path, hw_idx, offset)
+            if ctrl is not None:
+                out["control_image"] = ctrl
+                out["control_type_id"] = int(control_type_to_id(s.get("control_type", "")))
         return out
 
 
 def collate_t2i(batch: list[dict]) -> dict[str, Any]:
-    """Stack pixel_values and/or latent_values; leave captions as lists; include style, control_image when present."""
-    pixel_values = torch.stack([b["pixel_values"] for b in batch])
-    captions = [b["caption"] for b in batch]
-    negative_captions = [b.get("negative_caption", "") for b in batch]
-    styles = [b.get("style", "") for b in batch]
-    weights = torch.tensor([b.get("weight", 1.0) for b in batch], dtype=torch.float32)
+    """Stack pixel/latent/control/init tensors (when every item has them); captions and styles stay lists."""
     out = {
-        "pixel_values": pixel_values,
-        "captions": captions,
-        "negative_captions": negative_captions,
-        "styles": styles,
-        "sample_weights": weights,
+        "pixel_values": torch.stack([b["pixel_values"] for b in batch]),
+        "captions": [b["caption"] for b in batch],
+        "negative_captions": [b.get("negative_caption", "") for b in batch],
+        "styles": [b.get("style", "") for b in batch],
+        "sample_weights": torch.tensor([b.get("weight", 1.0) for b in batch], dtype=torch.float32),
     }
     if all("difficulty" in b for b in batch):
         out["difficulty"] = torch.tensor([b["difficulty"] for b in batch], dtype=torch.float32)
@@ -714,17 +589,160 @@ def collate_t2i(batch: list[dict]) -> dict[str, Any]:
         out["init_pixel_values"] = torch.stack([b["init_pixel_values"] for b in batch])
     if any("grounding_mask" in b for b in batch):
         _, h, w = batch[0]["pixel_values"].shape
-        masks: list[torch.Tensor] = []
-        valid: list[bool] = []
-        for b in batch:
-            if "grounding_mask" in b:
-                masks.append(b["grounding_mask"])
-                valid.append(True)
-            else:
-                masks.append(torch.zeros(1, h, w, dtype=torch.float32))
-                valid.append(False)
-        out["grounding_mask"] = torch.stack(masks)
-        out["grounding_mask_valid"] = torch.tensor(valid, dtype=torch.bool)
+        empty = torch.zeros(1, h, w, dtype=torch.float32)
+        out["grounding_mask"] = torch.stack([b.get("grounding_mask", empty) for b in batch])
+        out["grounding_mask_valid"] = torch.tensor(["grounding_mask" in b for b in batch], dtype=torch.bool)
     if any("prompt_layout" in b for b in batch):
         out["prompt_layout"] = [b.get("prompt_layout") for b in batch]
+    return out
+
+
+class ResolutionBucketBatchSampler(Sampler[list[int]]):
+    """Yields index batches that share a bucket id, so ``collate_t2i`` can stack them."""
+
+    def __init__(
+        self,
+        dataset: Text2ImageDataset,
+        batch_size: int,
+        *,
+        drop_last: bool = True,
+        shuffle_batches: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        if not getattr(dataset, "resolution_buckets", None):
+            raise ValueError("ResolutionBucketBatchSampler requires dataset.resolution_buckets")
+        self.dataset = dataset
+        self.batch_size = int(batch_size)
+        self.drop_last = drop_last
+        self.shuffle_batches = shuffle_batches
+        self.generator = generator
+        groups: defaultdict[int, list[int]] = defaultdict(list)
+        for i, bucket in enumerate(dataset._bucket_assign):
+            groups[bucket].append(i)
+        self._groups = dict(groups)
+
+    def __len__(self) -> int:
+        bs = self.batch_size
+        return sum(len(idxs) // bs if self.drop_last else -(-len(idxs) // bs) for idxs in self._groups.values())
+
+    def _shuffled(self, items: list) -> list:
+        perm = torch.randperm(len(items), generator=self.generator).tolist()
+        return [items[j] for j in perm]
+
+    def __iter__(self) -> Iterator[list[int]]:
+        batches: list[list[int]] = []
+        for idxs in self._groups.values():
+            idxs = self._shuffled(idxs)
+            for j in range(0, len(idxs), self.batch_size):
+                chunk = idxs[j : j + self.batch_size]
+                if len(chunk) == self.batch_size or not self.drop_last:
+                    batches.append(chunk)
+        if self.shuffle_batches:
+            batches = self._shuffled(batches)
+        yield from batches
+
+
+_ENHANCED_KEYS = ("spatial_layout", "anatomy_mask", "text_tokens", "text_positions", "character_id", "style_id")
+
+
+class EnhancedT2IDataset(Text2ImageDataset):
+    """Adds the optional enhanced annotations to each item; samples without them simply omit those keys.
+
+    Extra JSONL fields (all optional):
+      "spatial_layout":   [[x1, y1, x2, y2], ...]  normalised bbox per object
+      "anatomy_mask":     path to a grayscale mask (white = human region)
+      "text_tokens":      ["word1", "word2", ...]  strings rendered in the image
+      "text_positions":   [[cx, cy], ...]  normalised centre per text token
+      "character_id":     int  character slot index (consistency training)
+      "style_id":         int  style slot index
+    """
+
+    _extra_row_keys = _ENHANCED_KEYS
+
+    def __init__(self, *args, max_objects: int = 10, max_text_tokens: int = 8, **kwargs):
+        self.max_objects = int(max_objects)
+        self.max_text_tokens = int(max_text_tokens)
+        super().__init__(*args, **kwargs)
+
+    def _load_spatial_layout(self, raw: Any) -> torch.Tensor | None:
+        """``(max_objects, 4)`` zero-padded boxes, or ``None`` when absent or malformed."""
+        if not raw:
+            return None
+        try:
+            bboxes = [[float(v) for v in box[:4]] for box in raw[: self.max_objects]]
+        except (TypeError, ValueError):
+            return None
+        if not bboxes:
+            return None
+        t = torch.zeros(self.max_objects, 4, dtype=torch.float32)
+        t[: len(bboxes)] = torch.tensor(bboxes, dtype=torch.float32)
+        return t
+
+    def _load_anatomy_mask(self, mask_rel: str, idx: int) -> torch.Tensor | None:
+        """Binary ``(1, H, W)`` mask cropped with the image's (centre) crop geometry."""
+        mask_l = self._open_mask(mask_rel)
+        if mask_l is None:
+            return None
+        m = np.array(self._crop_image(mask_l, idx), dtype=np.float32) / 255.0
+        return torch.from_numpy((m > 0.5).astype(np.float32)).unsqueeze(0)
+
+    def _load_text_tokens(self, tokens: Any, positions: Any) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        """``(ids, positions)``: string length as a tokenizer-free id proxy (capped at 255) and ``(cx, cy)`` centres."""
+        if not tokens:
+            return None, None
+        try:
+            tok_list = [str(t) for t in tokens[: self.max_text_tokens]]
+            pos_list = positions[: len(tok_list)] if positions else []
+        except (TypeError, AttributeError):
+            return None, None
+        ids = torch.zeros(self.max_text_tokens, dtype=torch.int64)
+        pos = torch.zeros(self.max_text_tokens, 2, dtype=torch.float32)
+        for i, tok in enumerate(tok_list):
+            ids[i] = min(len(tok), 255)
+        for i, p in enumerate(pos_list):
+            try:
+                pos[i, 0] = float(p[0])
+                pos[i, 1] = float(p[1])
+            except (TypeError, ValueError, IndexError):
+                pass
+        return ids, pos
+
+    def _getitem_impl(self, idx: int, hw_idx: int | None = None) -> dict[str, Any]:
+        # Annotations come from the sample actually loaded (``idx``), cropped to the requested bucket (``hw_idx``).
+        out = super()._getitem_impl(idx, hw_idx)
+        hw_idx = idx if hw_idx is None else hw_idx
+        s = self.samples[idx]
+        layout = self._load_spatial_layout(s.get("spatial_layout"))
+        if layout is not None:
+            out["spatial_layout"] = layout
+        anat_rel = str(s.get("anatomy_mask") or "").strip()
+        if anat_rel:
+            anat = self._load_anatomy_mask(anat_rel, hw_idx)
+            if anat is not None:
+                out["anatomy_mask"] = anat
+        tok_ids, tok_pos = self._load_text_tokens(s.get("text_tokens"), s.get("text_positions"))
+        if tok_ids is not None:
+            out["text_tokens"] = tok_ids
+            out["text_positions"] = tok_pos
+        for key in ("character_id", "style_id"):
+            try:
+                out[key] = int(s[key])
+            except (KeyError, TypeError, ValueError):
+                pass
+        return out
+
+
+def collate_enhanced(batch: list[dict[str, Any]]) -> dict[str, Any]:
+    """:func:`collate_t2i` plus the enhanced tensors; a partly annotated batch is zero-padded with a ``*_valid`` mask."""
+    out = collate_t2i(batch)
+    for key in ("spatial_layout", "anatomy_mask", "text_tokens", "text_positions"):
+        if all(key in b for b in batch):
+            out[key] = torch.stack([b[key] for b in batch])
+        elif any(key in b for b in batch):
+            ref = next(b[key] for b in batch if key in b)
+            out[key] = torch.stack([b.get(key, torch.zeros_like(ref)) for b in batch])
+            out[f"{key}_valid"] = torch.tensor([key in b for b in batch], dtype=torch.bool)
+    for key in ("character_id", "style_id"):
+        if any(key in b for b in batch):
+            out[key] = torch.tensor([b.get(key, -1) for b in batch], dtype=torch.long)
     return out

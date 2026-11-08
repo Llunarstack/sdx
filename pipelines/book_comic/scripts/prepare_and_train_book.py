@@ -4,8 +4,9 @@ End-to-end book dataset prep + training launcher.
 
 Pipeline:
 1) (Optional) Export from Hugging Face dataset -> SDX manifest
-2) (Optional) Normalize captions for book-focused guidance
-3) Launch book trainer wrapper (which can run native preflight + train.py)
+2) (Optional) manifest_gate, then data_quality filter/dedupe
+3) (Optional) Normalize captions for book-focused guidance
+4) Launch the book trainer wrapper (which can run native preflight + train.py)
 
 Pass any extra train.py args after ``--``.
 """
@@ -21,11 +22,39 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipelines.book_comic.book_training_helpers import (  # noqa: E402
+from pipelines.book_comic.scripts.train_book_model import (  # noqa: E402
+    AR_PROFILES,
+    add_manifest_gate_args,
+    manifest_gate_command,
+    split_passthrough,
+)
+from pipelines.book_comic.training import (  # noqa: E402
     build_caption_normalize_command,
     build_hf_export_command,
     resolve_train_humanization_pack,
 )
+
+TRAIN_WRAPPER = Path(__file__).resolve().with_name("train_book_model.py")
+
+# Trainer options forwarded to train_book_model.py under the same flag name (``--`` + dest with dashes).
+_FORWARD_TEXT = ("model", "ar_profile", "ar_block_order", "ar_curriculum_mode", "ar_order_mix", "resume", "init_from")
+_FORWARD_SWITCHES = ("dry_run", "no_compile", "no_xformers", "native_preflight", "strict_native")
+# Numeric options forwarded only when above their "keep the preset/default" sentinel.
+_FORWARD_NUMERIC = {
+    "image_size": 0,
+    "global_batch_size": 0,
+    "lr": 0.0,
+    "passes": -1,
+    "num_ar_blocks": -1,
+    "ar_curriculum_warmup_steps": 0,
+    "ar_curriculum_ramp_start": 0,
+    "ar_curriculum_ramp_end": 0,
+    "ar_curriculum_start_blocks": -1,
+    "ar_curriculum_target_blocks": -1,
+    "num_workers": -1,
+    "manifest_min_caption_len": 0,
+    "manifest_max_caption_len": 0,
+}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -40,7 +69,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out-dir", type=str, default="data/book_train_run", help="Export directory when using --dataset.")
     p.add_argument("--results-dir", type=str, default="results/book_train_run")
 
-    # HF export mode (optional)
     p.add_argument("--dataset", type=str, default="", help="HF dataset id to export before training.")
     p.add_argument("--config", type=str, default="", help="HF config name.")
     p.add_argument("--split", type=str, default="train")
@@ -52,7 +80,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--streaming", action="store_true")
     p.add_argument("--shuffle-seed", type=int, default=None)
 
-    # Caption normalization stage
     p.add_argument("--normalize-captions", action="store_true", help="Run normalize_captions before training.")
     p.add_argument("--normalized-manifest-name", type=str, default="manifest_book_norm.jsonl")
     p.add_argument(
@@ -71,15 +98,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run manifest_gate (prompt lint + hygiene + optional image QC) before filtering/normalizing.",
     )
-    p.add_argument("--manifest-gate-image-qc", action="store_true")
-    p.add_argument("--manifest-gate-image-root", type=str, default="")
-    p.add_argument("--manifest-gate-sample", type=int, default=0)
-    p.add_argument("--manifest-gate-min-sharpness", type=float, default=0.0)
-    p.add_argument("--manifest-gate-min-contrast", type=float, default=0.0)
-    p.add_argument("--manifest-gate-max-caption-tokens", type=int, default=0)
-    p.add_argument("--manifest-gate-fail-on-overlap", action="store_true")
-    p.add_argument("--manifest-gate-report-dups", action="store_true")
-    p.add_argument("--manifest-gate-fail-on-dup-groups", type=int, default=0)
+    add_manifest_gate_args(p)
 
     p.add_argument(
         "--filter-manifest",
@@ -98,7 +117,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default="none",
         choices=["none", "lite", "balanced", "strong"],
-        help="Preset normalization bundle to reduce synthetic/AI-looking caption bias.",
+        help="Preset normalization bundle to reduce synthetic/AI-looking caption bias (overrides the flags below).",
     )
     p.add_argument("--shortcomings-mitigation", type=str, default="auto", choices=["none", "auto", "all"])
     p.add_argument("--shortcomings-2d", action="store_true")
@@ -108,7 +127,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--style-guidance-mode", type=str, default="auto", choices=["none", "auto", "all"])
     p.add_argument("--no-style-guidance-artists", action="store_true")
 
-    # Book trainer options (forwarded to train_book_model.py)
+    # Forwarded to train_book_model.py.
     p.add_argument("--book-train-preset", type=str, default="balanced", choices=["fast", "balanced", "production"])
     p.add_argument("--model", type=str, default="")
     p.add_argument("--image-size", type=int, default=0)
@@ -120,18 +139,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ar-profile",
         type=str,
         default="auto",
-        choices=[
-            "auto",
-            "none",
-            "layout",
-            "strong",
-            "zorder",
-            "vit_layout",
-            "vit_strong",
-            "comic_snake",
-            "cinema_spiral",
-        ],
-        help="Book trainer AR preset (classic + upgraded ViT-aligned traversal presets).",
+        choices=AR_PROFILES,
+        help="Book trainer AR preset (classic + ViT-aligned traversal presets).",
     )
     p.add_argument("--num-ar-blocks", type=int, default=-1, choices=[-1, 0, 2, 4])
     p.add_argument("--ar-block-order", type=str, default="", choices=["", "raster", "zorder", "snake", "spiral"])
@@ -150,238 +159,154 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strict-native", action="store_true")
     p.add_argument("--manifest-min-caption-len", type=int, default=0)
     p.add_argument("--manifest-max-caption-len", type=int, default=0)
-    p.add_argument("--resume", type=str, default="", help="Forwarded to book trainer → train.py --resume.")
+    p.add_argument("--resume", type=str, default="", help="Forwarded to book trainer -> train.py --resume.")
     p.add_argument(
         "--init-from",
         type=str,
         dest="init_from",
         default="",
-        help="Forwarded to book trainer → train.py --init-from (SDX base weights, fresh optimizer).",
+        help="Forwarded to book trainer -> train.py --init-from (SDX base weights, fresh optimizer).",
     )
     return p
 
 
-def _run(cmd: list[str], *, cwd: Path, label: str) -> int:
+def _run(cmd: list[str], *, label: str) -> int:
     print(f"[book_prepare_train] {label}: {' '.join(cmd)}")
-    return subprocess.run(cmd, cwd=cwd).returncode
+    return subprocess.run(cmd, cwd=ROOT).returncode
 
 
-def main() -> int:
-    raw = sys.argv[1:]
-    if "--" in raw:
-        i = raw.index("--")
-        own_argv = raw[:i]
-        passthrough_train_args = raw[i + 1 :]
-    else:
-        own_argv = raw
-        passthrough_train_args = []
+def _cli_flag(dest: str) -> str:
+    return "--" + dest.replace("_", "-")
 
-    args = _build_parser().parse_args(own_argv)
-    py = sys.executable
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+def _data_quality_command(args: argparse.Namespace, manifest: Path, out: Path) -> list[str]:
+    cmd = [sys.executable, "-m", "scripts.tools", "data_quality", str(manifest), "--out", str(out)]
+    if args.filter_dedup:
+        cmd += ["--dedup", args.filter_dedup]
+    if args.filter_min_caption_len > 0:
+        cmd += ["--min-caption-len", str(args.filter_min_caption_len)]
+    if args.filter_max_caption_len > 0:
+        cmd += ["--max-caption-len", str(args.filter_max_caption_len)]
+    bad_words = args.filter_bad_words.strip()
+    if bad_words:
+        cmd += ["--bad-words", bad_words]
+    if args.filter_min_weight > 0:
+        cmd += ["--min-weight", str(args.filter_min_weight)]
+    if args.filter_native_validate:
+        cmd.append("--native-validate")
+    return cmd
 
-    manifest = Path(args.manifest_jsonl) if str(args.manifest_jsonl).strip() else None
-    data_path = str(args.data_path).strip()
 
-    # Stage 1: optional HF export
-    if str(args.dataset).strip():
-        export_cmd = build_hf_export_command(
-            root=ROOT,
-            python_exe=py,
-            dataset=str(args.dataset).strip(),
-            out_dir=out_dir,
-            image_field=str(args.image_field),
-            caption_field=str(args.caption_field),
-            split=str(args.split),
-            config=str(args.config).strip(),
-            revision=str(args.revision).strip(),
-            manifest_name=str(args.manifest_name),
-            max_samples=int(args.max_samples),
-            streaming=bool(args.streaming),
-            shuffle_seed=args.shuffle_seed,
-        )
-        rc = _run(export_cmd, cwd=ROOT, label="HF export")
-        if rc != 0:
-            return rc
-        manifest = out_dir / str(args.manifest_name)
-        if not data_path:
-            data_path = str(out_dir)
+def _normalize_command(args: argparse.Namespace, manifest: Path, out: Path) -> list[str]:
+    caption_opts = {
+        "shortcomings_mitigation": args.shortcomings_mitigation,
+        "shortcomings_2d": args.shortcomings_2d,
+        "art_guidance_mode": args.art_guidance_mode,
+        "art_guidance_photography": not args.no_art_guidance_photography,
+        "anatomy_guidance": args.anatomy_guidance,
+        "style_guidance_mode": args.style_guidance_mode,
+        "style_guidance_artists": not args.no_style_guidance_artists,
+    }
+    caption_opts.update(resolve_train_humanization_pack(args.train_humanize_pack))
+    return build_caption_normalize_command(
+        root=ROOT,
+        python_exe=sys.executable,
+        inp_manifest=manifest,
+        out_manifest=out,
+        unicode_normalize=args.normalize_captions_unicode,
+        workers=args.normalize_captions_workers,
+        **caption_opts,
+    )
 
-    if manifest is None:
-        if not str(args.manifest_jsonl).strip():
-            print("Error: provide --manifest-jsonl, or --dataset for export mode.", file=sys.stderr)
-            return 2
-        manifest = Path(args.manifest_jsonl)
 
-    # Stage 2a: optional manifest gate + filter/dedupe
-    if bool(getattr(args, "manifest_gate", False)):
-        gate_cmd: list[str] = [
-            py,
-            "-m",
-            "scripts.tools",
-            "manifest_gate",
-            str(manifest),
-            "--min-caption-len-chars",
-            str(int(args.manifest_min_caption_len) if hasattr(args, "manifest_min_caption_len") else 0),
-            "--max-caption-tokens",
-            str(int(getattr(args, "manifest_gate_max_caption_tokens", 0) or 0)),
-        ]
-        if bool(getattr(args, "manifest_gate_fail_on_overlap", False)):
-            gate_cmd.append("--fail-on-overlap")
-        if bool(getattr(args, "manifest_gate_report_dups", False)):
-            gate_cmd.append("--report-dups")
-        if int(getattr(args, "manifest_gate_fail_on_dup_groups", 0) or 0) > 0:
-            gate_cmd.extend(["--fail-on-dup-groups", str(int(args.manifest_gate_fail_on_dup_groups))])
-        if bool(getattr(args, "manifest_gate_image_qc", False)):
-            gate_cmd.append("--image-qc")
-            if str(getattr(args, "manifest_gate_image_root", "") or "").strip():
-                gate_cmd.extend(["--image-root", str(args.manifest_gate_image_root).strip()])
-            if int(getattr(args, "manifest_gate_sample", 0) or 0) > 0:
-                gate_cmd.extend(["--sample", str(int(args.manifest_gate_sample))])
-            if float(getattr(args, "manifest_gate_min_sharpness", 0.0) or 0.0) > 0.0:
-                gate_cmd.extend(["--min-sharpness", str(float(args.manifest_gate_min_sharpness))])
-            if float(getattr(args, "manifest_gate_min_contrast", 0.0) or 0.0) > 0.0:
-                gate_cmd.extend(["--min-contrast", str(float(args.manifest_gate_min_contrast))])
-        rc = _run(gate_cmd, cwd=ROOT, label="Manifest gate")
-        if rc != 0:
-            return rc
-
-    if bool(getattr(args, "filter_manifest", False)):
-        filtered_manifest = out_dir / str(getattr(args, "filter_out_name", "manifest_quality.jsonl"))
-        dq_cmd: list[str] = [
-            py,
-            "-m",
-            "scripts.tools",
-            "data_quality",
-            str(manifest),
-            "--out",
-            str(filtered_manifest),
-        ]
-        if str(getattr(args, "filter_dedup", "") or "").strip():
-            dq_cmd.extend(["--dedup", str(args.filter_dedup).strip()])
-        if int(getattr(args, "filter_min_caption_len", 0) or 0) > 0:
-            dq_cmd.extend(["--min-caption-len", str(int(args.filter_min_caption_len))])
-        if int(getattr(args, "filter_max_caption_len", 0) or 0) > 0:
-            dq_cmd.extend(["--max-caption-len", str(int(args.filter_max_caption_len))])
-        if str(getattr(args, "filter_bad_words", "") or "").strip():
-            dq_cmd.extend(["--bad-words", str(args.filter_bad_words).strip()])
-        if float(getattr(args, "filter_min_weight", 0.0) or 0.0) > 0.0:
-            dq_cmd.extend(["--min-weight", str(float(args.filter_min_weight))])
-        if bool(getattr(args, "filter_native_validate", False)):
-            dq_cmd.append("--native-validate")
-        rc = _run(dq_cmd, cwd=ROOT, label="Manifest filter/dedupe")
-        if rc != 0:
-            return rc
-        manifest = filtered_manifest
-
-    # Stage 2: optional caption normalization
-    if bool(args.normalize_captions):
-        _humanize = resolve_train_humanization_pack(str(getattr(args, "train_humanize_pack", "none") or "none"))
-        shortcomings_mitigation = str(_humanize.get("shortcomings_mitigation", args.shortcomings_mitigation))
-        shortcomings_2d = bool(_humanize.get("shortcomings_2d", bool(args.shortcomings_2d)))
-        art_guidance_mode = str(_humanize.get("art_guidance_mode", args.art_guidance_mode))
-        art_guidance_photography = bool(
-            _humanize.get("art_guidance_photography", not bool(args.no_art_guidance_photography))
-        )
-        anatomy_guidance = str(_humanize.get("anatomy_guidance", args.anatomy_guidance))
-        style_guidance_mode = str(_humanize.get("style_guidance_mode", args.style_guidance_mode))
-        style_guidance_artists = bool(_humanize.get("style_guidance_artists", not bool(args.no_style_guidance_artists)))
-
-        normalized_manifest = out_dir / str(args.normalized_manifest_name)
-        normalize_cmd = build_caption_normalize_command(
-            root=ROOT,
-            python_exe=py,
-            inp_manifest=manifest,
-            out_manifest=normalized_manifest,
-            unicode_normalize=bool(getattr(args, "normalize_captions_unicode", False)),
-            workers=int(getattr(args, "normalize_captions_workers", 0) or 0),
-            shortcomings_mitigation=shortcomings_mitigation,
-            shortcomings_2d=shortcomings_2d,
-            art_guidance_mode=art_guidance_mode,
-            art_guidance_photography=art_guidance_photography,
-            anatomy_guidance=anatomy_guidance,
-            style_guidance_mode=style_guidance_mode,
-            style_guidance_artists=style_guidance_artists,
-        )
-        rc = _run(normalize_cmd, cwd=ROOT, label="Caption normalize")
-        if rc != 0:
-            return rc
-        manifest = normalized_manifest
-        if not data_path:
-            data_path = str(out_dir)
-
-    # Stage 3: book trainer wrapper
-    train_wrapper = ROOT / "pipelines" / "book_comic" / "scripts" / "train_book_model.py"
-    train_cmd: list[str] = [
-        py,
-        str(train_wrapper),
+def _trainer_command(args: argparse.Namespace, manifest: Path, data_path: str, passthrough: list[str]) -> list[str]:
+    cmd = [
+        sys.executable,
+        str(TRAIN_WRAPPER),
         "--results-dir",
-        str(args.results_dir),
+        args.results_dir,
         "--book-train-preset",
-        str(args.book_train_preset),
+        args.book_train_preset,
         "--manifest-jsonl",
         str(manifest),
     ]
     if data_path:
-        train_cmd.extend(["--data-path", data_path])
-    if str(args.model).strip():
-        train_cmd.extend(["--model", str(args.model).strip()])
-    if int(args.image_size) > 0:
-        train_cmd.extend(["--image-size", str(int(args.image_size))])
-    if int(args.global_batch_size) > 0:
-        train_cmd.extend(["--global-batch-size", str(int(args.global_batch_size))])
-    if float(args.lr) > 0:
-        train_cmd.extend(["--lr", str(float(args.lr))])
-    if int(args.passes) >= 0:
-        train_cmd.extend(["--passes", str(int(args.passes))])
-    if int(args.max_steps_train) >= 0:
-        train_cmd.extend(["--max-steps", str(int(args.max_steps_train))])
-    if str(args.ar_profile).strip():
-        train_cmd.extend(["--ar-profile", str(args.ar_profile).strip()])
-    if int(args.num_ar_blocks) in (0, 2, 4):
-        train_cmd.extend(["--num-ar-blocks", str(int(args.num_ar_blocks))])
-    if str(args.ar_block_order).strip() in ("raster", "zorder", "snake", "spiral"):
-        train_cmd.extend(["--ar-block-order", str(args.ar_block_order).strip()])
-    if str(args.ar_curriculum_mode).strip() in ("none", "step", "linear"):
-        train_cmd.extend(["--ar-curriculum-mode", str(args.ar_curriculum_mode).strip()])
-    if int(args.ar_curriculum_warmup_steps) > 0:
-        train_cmd.extend(["--ar-curriculum-warmup-steps", str(int(args.ar_curriculum_warmup_steps))])
-    if int(args.ar_curriculum_ramp_start) > 0:
-        train_cmd.extend(["--ar-curriculum-ramp-start", str(int(args.ar_curriculum_ramp_start))])
-    if int(args.ar_curriculum_ramp_end) > 0:
-        train_cmd.extend(["--ar-curriculum-ramp-end", str(int(args.ar_curriculum_ramp_end))])
-    if int(args.ar_curriculum_start_blocks) in (0, 2, 4):
-        train_cmd.extend(["--ar-curriculum-start-blocks", str(int(args.ar_curriculum_start_blocks))])
-    if int(args.ar_curriculum_target_blocks) in (0, 2, 4):
-        train_cmd.extend(["--ar-curriculum-target-blocks", str(int(args.ar_curriculum_target_blocks))])
-    if str(args.ar_order_mix).strip():
-        train_cmd.extend(["--ar-order-mix", str(args.ar_order_mix).strip()])
-    if int(args.num_workers) >= 0:
-        train_cmd.extend(["--num-workers", str(int(args.num_workers))])
-    if bool(args.dry_run):
-        train_cmd.append("--dry-run")
-    if bool(args.no_compile):
-        train_cmd.append("--no-compile")
-    if bool(args.no_xformers):
-        train_cmd.append("--no-xformers")
-    if bool(args.native_preflight):
-        train_cmd.append("--native-preflight")
-    if bool(args.strict_native):
-        train_cmd.append("--strict-native")
-    if int(args.manifest_min_caption_len) > 0:
-        train_cmd.extend(["--manifest-min-caption-len", str(int(args.manifest_min_caption_len))])
-    if int(args.manifest_max_caption_len) > 0:
-        train_cmd.extend(["--manifest-max-caption-len", str(int(args.manifest_max_caption_len))])
-    if str(getattr(args, "resume", "") or "").strip():
-        train_cmd.extend(["--resume", str(args.resume).strip()])
-    if str(getattr(args, "init_from", "") or "").strip():
-        train_cmd.extend(["--init-from", str(args.init_from).strip()])
+        cmd += ["--data-path", data_path]
+    for dest in _FORWARD_TEXT:
+        value = getattr(args, dest).strip()
+        if value:
+            cmd += [_cli_flag(dest), value]
+    for dest, sentinel in _FORWARD_NUMERIC.items():
+        value = getattr(args, dest)
+        if value > sentinel:
+            cmd += [_cli_flag(dest), str(value)]
+    if args.max_steps_train >= 0:
+        cmd += ["--max-steps", str(args.max_steps_train)]
+    cmd += [_cli_flag(dest) for dest in _FORWARD_SWITCHES if getattr(args, dest)]
+    if passthrough:
+        cmd += ["--", *passthrough]
+    return cmd
 
-    if passthrough_train_args:
-        train_cmd.extend(["--", *passthrough_train_args])
-    return _run(train_cmd, cwd=ROOT, label="Book train")
+
+def main() -> int:
+    own_argv, passthrough_train_args = split_passthrough(sys.argv[1:])
+    args = _build_parser().parse_args(own_argv)
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_arg = args.manifest_jsonl.strip()
+    manifest = Path(manifest_arg) if manifest_arg else None
+    data_path = args.data_path.strip()
+
+    dataset = args.dataset.strip()
+    if dataset:
+        export_cmd = build_hf_export_command(
+            root=ROOT,
+            python_exe=sys.executable,
+            dataset=dataset,
+            out_dir=out_dir,
+            image_field=args.image_field,
+            caption_field=args.caption_field,
+            split=args.split,
+            config=args.config.strip(),
+            revision=args.revision.strip(),
+            manifest_name=args.manifest_name,
+            max_samples=args.max_samples,
+            streaming=args.streaming,
+            shuffle_seed=args.shuffle_seed,
+        )
+        rc = _run(export_cmd, label="HF export")
+        if rc != 0:
+            return rc
+        manifest = out_dir / args.manifest_name
+        data_path = data_path or str(out_dir)
+
+    if manifest is None:
+        print("Error: provide --manifest-jsonl, or --dataset for export mode.", file=sys.stderr)
+        return 2
+
+    if args.manifest_gate:
+        rc = _run(manifest_gate_command(args, manifest), label="Manifest gate")
+        if rc != 0:
+            return rc
+
+    if args.filter_manifest:
+        filtered = out_dir / args.filter_out_name
+        rc = _run(_data_quality_command(args, manifest, filtered), label="Manifest filter/dedupe")
+        if rc != 0:
+            return rc
+        manifest = filtered
+
+    if args.normalize_captions:
+        normalized = out_dir / args.normalized_manifest_name
+        rc = _run(_normalize_command(args, manifest, normalized), label="Caption normalize")
+        if rc != 0:
+            return rc
+        manifest = normalized
+        data_path = data_path or str(out_dir)
+
+    return _run(_trainer_command(args, manifest, data_path, passthrough_train_args), label="Book train")
 
 
 if __name__ == "__main__":

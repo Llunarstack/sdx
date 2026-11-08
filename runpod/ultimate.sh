@@ -13,14 +13,12 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
-source "$HERE/lib/ensure_repo.sh"
+source "$HERE/lib.sh"
 sdx_ensure_repo || exit 1
 
 ROOT="$SDX_ROOT"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
-# shellcheck source=/dev/null
-source "$ROOT/runpod/lib/hf_sites.sh"
 cd "$ROOT"
 
 PHASE_SETUP=1
@@ -83,7 +81,7 @@ fi
 
 if [ "$PHASE_MODELS" = 1 ]; then
   echo "==> [2/8] Pretrained models (profile=$SDX_MODEL_PROFILE)"
-  python setup/download_pretrained.py \
+  python setup/download.py pretrained \
     --dest "$SDX_PRETRAINED" \
     --profile "$SDX_MODEL_PROFILE" \
     --workers "${SDX_DL_WORKERS:-16}"
@@ -109,7 +107,7 @@ if [ "$PHASE_TRAIN_BASE" = 1 ]; then
     SDX_MANIFEST="${SDX_DATA}/combined/manifest.jsonl"
   fi
   export SDX_MANIFEST
-  bash "$ROOT/runpod/train_h100.sh" "${EXTRA[@]}"
+  SDX_TRAIN_PROFILE=h100 bash "$ROOT/runpod/train.sh" "${EXTRA[@]}"
   # Auto-pick best base for LoRA bank unless user set SDX_INIT_CKPT
   if [ -z "${SDX_INIT_CKPT:-}" ]; then
     BEST=""
