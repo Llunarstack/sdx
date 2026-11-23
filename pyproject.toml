@@ -1,7 +1,7 @@
 [project]
 name = "sdx"
-# PEP 440 package version; docs/README brand the line as **v13**.
-version = "13.0.0"
+# PEP 440 package version; docs/README brand the line as **v14**.
+version = "14.0.0"
 description = "Diffusion Transformer text-to-image training and sampling (DiT, T5, optional triple CLIP)."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -129,13 +129,10 @@ markers = [
     "slow: slow tests skipped by default (run with -m slow)",
 ]
 
-# Pyright / Pylance / basedpyright: ``sdx_native`` lives under ``native/_experimental/python`` (also on ``sys.path`` at runtime).
-[tool.pyright]
-extraPaths = ["native/_experimental/python", "."]
-pythonVersion = "3.10"
+# Pyright / Pylance / basedpyright settings live in pyrightconfig.json (it takes precedence over a [tool.pyright] table).
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 pretty = true
 show_error_codes = true
 warn_unused_ignores = true

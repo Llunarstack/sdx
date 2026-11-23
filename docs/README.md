@@ -14,9 +14,9 @@
 | [GLOSSARY.md](GLOSSARY.md) | Plain-English jargon & acronym reference |
 | [FILES.md](FILES.md) | Per-file map of the current tree (generated) + external reference repos |
 | [RESEARCH.md](RESEARCH.md) | Roadmaps, industry snapshots, competitive analysis, design notes — not needed day to day |
-| [CHANGELOG.md](CHANGELOG.md) | Release notes, newest first (v13 → v0.1) |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes, newest first (v14 → v0.1) |
 
-Elsewhere: [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) (generated tree), [../DEPRECATIONS.md](../DEPRECATIONS.md) (removed paths), [../frontier/README.md](../frontier/README.md), [../pipelines/README.md](../pipelines/README.md).
+Elsewhere: [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) (generated tree), [DEPRECATIONS.md](DEPRECATIONS.md) (removed paths), [../frontier/README.md](../frontier/README.md), [../pipelines/README.md](../pipelines/README.md).
 
 ## Maintenance
 

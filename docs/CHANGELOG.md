@@ -6,16 +6,17 @@ Release notes, newest first. Each version keeps its full notes followed by the s
 
 ## SDX Version Comparison
 
-### v1 → v13 at a glance
+### v1 → v14 at a glance
 
-| | **v1** (foundation) | **v13** (current) |
+| | **v1** (foundation) | **v14** (current) |
 |---|---------------------|-------------------|
-| **What it was** | Train + sample DiT on your data | Image + video + RSI + Invention Lab |
-| **Entry points** | `train.py`, `sample.py` | + video CLI, VIDEOMAX, feedback / rsi_loop |
-| **Training modes** | Diffusion, flow, DPO | + GRPO, agentic loops, **user-feedback DPO** |
-| **Video** | None | Scene-graph TI2V + **VIDEOMAX** |
+| **What it was** | Train + sample DiT on your data | Image + video + RSI + verified natural finish + 100 benchmarkable techniques |
+| **Entry points** | `train.py`, `sample.py` | + video CLI, VIDEOMAX, feedback / rsi_loop, readiness, bench ablate, local UI |
+| **Training modes** | Diffusion, flow, DPO | + GRPO, agentic loops, user-feedback DPO, **readiness-gated, bit-exact resume** |
+| **Video** | None | Scene-graph TI2V + VIDEOMAX |
 | **Self-improve** | None | RSI feedback bus → flywheel → DPO |
-| **Tests** | Handful | **1700+** |
+| **Native code** | None | Rust / C++ / CUDA / Go / Zig, Rust image kernels built in CI |
+| **Tests** | Handful | **1750+** |
 
 #### Capability timeline
 
@@ -29,13 +30,15 @@ Release notes, newest first. Each version keeps its full notes followed by the s
 | **v10** | `v10.0.0` | ELIQ, explainable quality |
 | **v11** | `v11.0.0` | Regional layout, frontier |
 | **v12** | `v12.0.0` | AI film studio video pipeline |
-| **v13** | `v13.0.0` | **VIDEOMAX, RSI, Invention waves, 1700+ tests** |
+| **v13** | `v13.0.0` | VIDEOMAX, RSI, Invention waves, 1700+ tests |
+| **v14** | `v14.0.0` | **Natural-look pass, 100 techniques, Rust kernels, readiness gate, 1750+ tests** |
 
 ### Release notes index
 
 | Version | Tag | Document |
 |---------|-----|----------|
-| **v13** | `v13.0.0` | [v13.md](#sdx-v13--videomax-rsi-feedback--invention-waves) · [GitHub](#sdx-v1300--videomax-rsi--invention-waves) |
+| **v14** | `v14.0.0` | [v14.md](#sdx-v14--natural-look-100-techniques-rust-kernels--training-readiness) · [GitHub](#sdx-v1400--natural-look-100-techniques-rust-kernels--training-readiness) |
+| v13 | `v13.0.0` | [v13.md](#sdx-v13--videomax-rsi-feedback--invention-waves) · [GitHub](#sdx-v1300--videomax-rsi--invention-waves) |
 | v12 | `v12.0.0` | [v12.md](#sdx-v12--ai-film-studio-video-pipeline--frontier-horizon) · [GitHub](#sdx-v1200--ai-film-studio--frontier-horizon) |
 | v11 | `v11.0.0` | [v11.md](#sdx-v11--layout-control-frontier-research--package-restructure) |
 | v10 | `v10.0.0` | [v10.md](#sdx-v10-advanced-quality--explainability-release) |
@@ -43,6 +46,180 @@ Release notes, newest first. Each version keeps its full notes followed by the s
 | v8 | `v8.0.0` | [v8.md](#sdx-v8--style-genome-and-unified-prompt-pipeline) |
 
 Earlier releases: [v7](#sdx-v7--production-quality-and-research-infrastructure) · [v6](#sdx-v6--native-acceleration-and-book-generation-pipeline) · [v5](#sdx-v5--inference-scaling-and-quality-optimization) · [v4](#sdx-v4--smart-quality-filtering-and-advanced-models) · [v3](#sdx-v3--automated-quality-improvement-and-benchmarking) · [v0.2](#sdx-v020--advanced-training-methods-flow-matching-dpo-distillation) · [v0.1](#sdx-v010--baseline-text-to-image-training-framework)
+
+---
+
+## SDX v14 — Natural Look, 100 Techniques, Rust Kernels & Training Readiness
+
+Version **14** is the **prove-it** release. Images that measure as natural; every new technique switchable and
+benchmarkable; native speed-ups where Python is slow; training that proves itself on a tiny run before a long one; and
+a codebase a third of its old size.
+
+**Versioning:** Docs/README brand **v14**. `pyproject.toml` **14.0.0**. Git tag: **`v14.0.0`**. This is a source
+release: no trained checkpoint ships with it ([MODEL_LINES_AND_RELEASES.md](MODEL_LINES_AND_RELEASES.md)).
+
+---
+
+### In One Sentence
+
+v14 makes SDX measure what it changes: each AI-look tell is fixed only when the detectors confirm it, each of 100 new
+techniques can be scored against the baseline, and a training setup must pass a readiness gate before a long run.
+
+---
+
+### What's New
+
+#### Natural-look pass (`--natural`)
+A closed loop on every saved image ([`utils/quality/natural.py`](../utils/quality/natural.py)). It scores each tell
+with `ai_look_score`: decoder grid, missing or flat noise floor, detail spectrum, over-smoothing, oversaturation, halos,
+plastic skin and waxy highlights. Then, weakest tell first, it tries the matching fixes at three strengths:
+- subtract the folded decoder fingerprint
+- Poisson-Gaussian sensor noise in linear light
+- a 1/f² spectrum match
+- texture re-injection and wavelet detail
+- an OKLab chroma scale or chroma knee
+- halo reduction, specular taming and highlight roll-off
+
+A fix is kept only when that tell improves, pooled naturalness improves, and blurred OKLab lightness barely moves.
+Cleanups are also tried with a sensor-noise top-up, because they strip the noise a capture has. Fixes are judged on a
+512 px crop; the full frame is scored before and after, and the pass is undone if it got worse. Last comes a blue-noise
+dither to 8 bit. On a synthetic decoder-grid test image, naturalness went from 0.41 to 0.98.
+
+#### 100 opt-in techniques (`--ideas`)
+[`utils/ideas/`](../utils/ideas/__init__.py): one registry and six hooks wired into `GaussianDiffusion.sample_loop` and the
+final image:
+
+| Hook | Count |
+|---|---|
+| Initial noise | 15 |
+| CFG scale | 3 |
+| Guidance direction | 15 |
+| Clean estimate | 11 |
+| Per step | 10 |
+| Final image | 46 |
+
+All are off by default, strength `0` is an exact no-op, and `--list-ideas` prints the catalogue.
+`bench ablate --ideas-each [hook]` builds one variant per technique.
+
+#### Rust image kernels
+`native/rust` gains five multi-threaded image kernels (at most four threads), loaded through ctypes with NumPy fallbacks
+and parity tests. On a 1024² image:
+
+| Kernel | Speed-up |
+|---|---|
+| Floyd-Steinberg error diffusion | ~460x vs pure Python |
+| Kuwahara | 36x vs NumPy |
+| Bilateral | 12x vs NumPy |
+| 3x3 median | 9x vs NumPy |
+| Void-and-cluster blue noise | 2x vs NumPy |
+
+CI now builds the crate and runs `cargo test`.
+
+#### Training you can trust
+- **Readiness gate** (`python -m scripts.tools readiness dataset|check`). It runs a dataset audit, an architecture shape
+  check, forward/backward with finite gradients, an overfit test, a checkpoint round-trip, an interrupted-run resume
+  that must match exactly, sampling from the saved checkpoint, and a throughput check. `train.py` refuses runs longer
+  than `--readiness-min-steps` (default 2000) without a READY report for the same commit, config and dataset.
+- **Bulletproof checkpoints.** Optimizer, GradScaler, step / epoch / batch position, every RNG state, config and argv.
+  Writes are atomic (`last.pt`, `best.pt`, `<step>.pt`), the final step is always saved, and resume is bit-exact
+  (tested).
+- **Diagnostics.**
+  - A NaN/Inf guard skips bad steps and aborts after `--max-nonfinite-steps`.
+  - Logs gain pre-clip grad norm, LR, step time, images/s and peak VRAM.
+  - Fixed-seed previews and validation leave the training RNG untouched.
+  - `run_manifest.json` records versions, GPU, git state and a dataset fingerprint.
+- **Math tests:** flow and VP targets, timestep distributions, caption dropout, gradient flow and VAE latent scaling.
+- **Fix:** `--refinement-prob` defaulted to 0.25, which trained a quarter of VP steps on low noise only. It is now 0.
+
+#### Sampling
+- Tiled MultiDiffusion hires-fix (`--hires-tiled`, `--tile-overlap`) and outpainting (`--outpaint L,T,R,B`).
+- Detail control (`--detail-amount`, `--detail-start`, `--detail-end`): the model sees a scaled timestep mid-sampling
+  while the solver keeps the real one.
+- Every run reports per-stage seconds and peak VRAM (`timing_s`, `peak_vram_gb`).
+
+#### Measurement & tools
+- `bench ablate` on [`examples/bench_pack_v1.json`](../examples/bench_pack_v1.json) (150 prompts, 10 categories). It
+  reports per-variant score, per-category deltas, paired win-rate, slowdown and VRAM, and can resume.
+- `tests/test_e2e.py`: a tiny DiT trains three steps and samples through `sample.py` on CPU, with no downloads.
+- Local web UI: `python -m scripts.tools ui`, localhost only, no new dependencies.
+- `scripts/tools/dev/commit-msg`: a git hook that drops Claude / Cursor `Co-authored-by` lines.
+
+#### Codebase
+- **Consolidation.** About 970 to 330 project files (about 200 Python), 131 to 25 test files, 76 to 14 docs; dead
+  modules removed. Also in this line: the art-only RSI loop, the game / pixel-art pipeline, realism shot specs and
+  hard-prompt layouts.
+- **The minor-safety guard is unconditional**: always on and cannot be disabled.
+- **Python 3.11+** (3.10 is end-of-life), `StrEnum`, `datetime.UTC`.
+- **CI:** Python 3.13, actions v7, ruff pinned to 0.17.4.
+- **Fixed:**
+  - A test that loaded every cached reward model into RAM and crashed the suite.
+  - Halo-free clamps on sharpening and deconvolution.
+  - Stale docs and broken links.
+
+#### Tests
+**1750+** pytest cases (1758 at release), plus Rust unit tests.
+
+---
+
+### Migration (v13 → v14)
+
+- **Python 3.11+** is required.
+- **Module layout changed** with the consolidation (for example `utils/generation/sample_main.py` is now
+  `sample_run.py`, `sample_core.py`, `sample_prompt.py` and `sample_cli_parser.py`). Update imports from removed
+  modules; [FILES.md](FILES.md) maps the tree and [DEPRECATIONS.md](DEPRECATIONS.md) lists removed paths.
+- **Training:** `--refinement-prob` defaults to `0`. Pass `0.25` for the v13 behaviour.
+- **Long runs** need a READY readiness report, or `--skip-readiness-gate`.
+- **Checkpoints** now carry optimizer, scaler, RNG and data position. v13 checkpoints still load (with warnings).
+- **Dev tooling:** `scripts/tools/dev/prepare-commit-msg` is now `commit-msg`, and `cursorfix.sh` is removed (use
+  `strip_ai_contributors.py`). `DEPRECATIONS.md` moved to `docs/`.
+
+---
+
+### See also
+
+[v14 GitHub release](#sdx-v1400--natural-look-100-techniques-rust-kernels--training-readiness) · [QUALITY.md](QUALITY.md) ·
+[GETTING_STARTED.md](GETTING_STARTED.md#before-you-train-readiness-gate) · [native/README.md](../native/README.md)
+
+---
+
+## SDX v14.0.0 — Natural Look, 100 Techniques, Rust Kernels & Training Readiness
+
+**Release date:** November 2026  
+**Tag:** [`v14.0.0`](https://github.com/Llunarstack/sdx/releases/tag/v14.0.0)
+
+### Highlights
+
+- **Natural-look pass**: `--natural` fixes each measured AI-look tell and keeps a fix only when the detectors confirm it
+- **100 opt-in techniques**: `--ideas` at six hooks, each one measurable with `bench ablate --ideas-each`
+- **Rust image kernels**: 9-36x faster than NumPy (~460x for error diffusion), built and tested in CI
+- **Training readiness**: a dataset audit, overfit, checkpoint and resume gate before long runs; bit-exact resume
+- **Tiled hires-fix and outpainting**, detail control, a local web UI and a 150-prompt benchmark pack
+- **Leaner codebase**: about 970 to 330 files, Python 3.11+, **1750+ tests**
+
+### Quick start
+
+```bash
+git clone https://github.com/Llunarstack/sdx.git && cd sdx
+pip install -r requirements.txt
+(cd native/rust && cargo build --release)          # optional Rust kernels
+
+python -m scripts.tools make_smoke_dataset --out smoke --count 16 --size 256
+python -m scripts.tools readiness check --data-path smoke/train --results-dir results --image-size 256
+
+python sample.py --ckpt results/<run>/checkpoints/best.pt --prompt "a rainy street at dusk, 35mm photo" --natural
+python sample.py --list-ideas
+python -m scripts.tools bench ablate --ckpt results/<run>/checkpoints/best.pt --ideas-each --dry-run
+```
+
+### Breaking changes
+
+Python 3.11+; module paths changed with the consolidation; `--refinement-prob` now defaults to 0; long training runs
+need a READY readiness report. See [Migration](#migration-v13--v14).
+
+### Full notes
+
+[v14.md](#sdx-v14--natural-look-100-techniques-rust-kernels--training-readiness) · [QUALITY.md](QUALITY.md) ·
+[native/README.md](../native/README.md)
 
 ---
 
@@ -300,7 +477,7 @@ See README **Contributing** section.
 
 ## SDX v11 — Layout Control, Frontier Research & Package Restructure
 
-> **Historical note:** Describes v11 as shipped. Paths such as `innovations/` and `diffusion.sampling_extras` were later removed; see [DEPRECATIONS.md](../DEPRECATIONS.md) and [CODEBASE.md](CODEBASE.md) for current layout.
+> **Historical note:** Describes v11 as shipped. Paths such as `innovations/` and `diffusion.sampling_extras` were later removed; see [DEPRECATIONS.md](DEPRECATIONS.md) and [CODEBASE.md](CODEBASE.md) for current layout.
 
 Version **11** is the **spatial layout + research expansion** release: Ideogram-style regional box prompting, the `frontier/` research layer (Omost canvas, dynamic CFG, LAMIC schedules), a clean `innovations/` package split, and consolidated `diffusion/sampling/` with backward-compatible shims.
 
@@ -450,7 +627,7 @@ pytest tests/ -q
 
 ## SDX v11.0.0 — Layout Control & Research Expansion
 
-> **Historical note:** Snapshot of the v11 release. Paths like `innovations/` were later removed; see [DEPRECATIONS.md](../DEPRECATIONS.md).
+> **Historical note:** Snapshot of the v11 release. Paths like `innovations/` were later removed; see [DEPRECATIONS.md](DEPRECATIONS.md).
 
 **Release date:** June 2026  
 **Tag:** [`v11.0.0`](https://github.com/Llunarstack/sdx/releases/tag/v11.0.0)
@@ -531,7 +708,7 @@ sdx/
 
 - [Full release notes](#sdx-v11--layout-control-frontier-research--package-restructure)
 - [Frontier README](../frontier/README.md)
-- [Innovations README](../DEPRECATIONS.md)
+- [Innovations README](DEPRECATIONS.md)
 
 ---
 
@@ -546,7 +723,7 @@ python -m ruff check .  # clean
 
 ## SDX v10: Advanced Quality & Explainability Release
 
-> **Historical note:** Describes v10 as shipped. Quality agents previously under `innovations.agentic` now map to `utils.agentic` / `utils.quality` / `utils.superior` — see [DEPRECATIONS.md](../DEPRECATIONS.md).
+> **Historical note:** Describes v10 as shipped. Quality agents previously under `innovations.agentic` now map to `utils.agentic` / `utils.quality` / `utils.superior` — see [DEPRECATIONS.md](DEPRECATIONS.md).
 
 Version **10** is the **production quality assurance + explainability + real-time optimization** release: five advanced quality systems delivering +25-35% quality improvement, label-free adaptive assessment, surgical artifact detection, semantic drift prevention, real-time quality monitoring with early stopping, and fully explainable quality scoring with human-readable diagnostics.
 
@@ -1023,7 +1200,7 @@ if not early_stop["early_stop_recommended"]:
 
 ## SDX v10.0.0 GitHub Release
 
-> **Historical note:** Snapshot of the v10 release. See [DEPRECATIONS.md](../DEPRECATIONS.md) for current module paths.
+> **Historical note:** Snapshot of the v10 release. See [DEPRECATIONS.md](DEPRECATIONS.md) for current module paths.
 
 **Production Quality & Explainability Release**
 
