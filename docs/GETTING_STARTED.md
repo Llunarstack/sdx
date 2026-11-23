@@ -131,6 +131,22 @@ Checks:
 - VRAM (minimum 16GB recommended)
 - Library installation
 
+### Before you train: readiness gate
+
+Prove the pipeline on your exact config before a long run. Both commands take the same flags as `train.py`:
+
+```bash
+# Dataset audit: unreadable/corrupt files, rows the loader drops, alpha/16-bit modes, images smaller than the
+# training size, extreme crops, short/empty/over-limit captions, exact + near duplicates, train/val leaks.
+python -m scripts.tools readiness dataset --data-path my_dataset/ --image-size 256 [--limit 5000] [--json-out audit.json]
+
+# Full gate (CPU is fine; add --device cpu while the GPU is busy): env, dataset audit, architecture shapes,
+# forward/backward + gradient reach, overfit, checkpoint round trip, resume, sampling, GPU throughput.
+python -m scripts.tools readiness check --data-path my_dataset/ --results-dir results/ --flow-matching-training
+```
+
+`check` prints a PASS/FAIL/SKIP table and writes `results/readiness/<config>-<dataset>.json`. Critical checks (dataset, forward_backward, finite, overfit, checkpoint_roundtrip, resume, sampling) must all pass for READY. Learning checks use a tiny copy of your DiT class with locally built T5/VAE stand-ins (no downloads); `--real-model` overfits the full architecture instead. `train.py` refuses runs longer than `--readiness-min-steps` (default 2000) without a READY report for the same git commit, config hash (run length, logging and `--resume` excluded) and dataset fingerprint; `--skip-readiness-gate` starts anyway with a loud warning. During training, rows the loader replaces because they could not be read show up as `load_skips=N/M` in the step log.
+
 ### Step 3: Start Training
 
 ```bash
@@ -145,13 +161,23 @@ Training process:
 1. Images loaded and encoded to latent space
 2. Model initialized
 3. Training loop executes (loss decreases over time)
-4. Checkpoints saved every 100 steps
-5. Best checkpoint saved to results/best.pt
+4. Checkpoints go to `results/<run>/checkpoints/`: `last.pt` (overwritten), `<step>.pt` every `--ckpt-every` steps (default 5000), `best.pt`
+5. `run_manifest.json` + `config.train.json` record the command, config, git commit, package versions, GPUs and a dataset fingerprint
 
 Timeline:
 - 100 images on RTX 3090: ~20 hours
 - 100 images on RTX 4090: ~5 hours
 - Scales with number of images and GPU capability
+
+#### Resuming & diagnostics
+
+- **Resume:** `python train.py <same flags> --resume results/<run>/checkpoints/last.pt`. A checkpoint holds the model, EMA, optimizer, GradScaler, step, epoch + position in the epoch, every RNG (Python, NumPy, torch CPU/CUDA) and the full config, so a resumed run continues the same data order without repeating or skipping batches. Older checkpoints still load; whatever they lack (optimizer, scaler, RNG) is logged as a warning and starts fresh. The LR schedule is a function of the step, so it needs no state. A missing `--resume` path is an error, not a silent fresh start.
+- **Save often on rented GPUs:** `--save-every-steps 500` rewrites `last.pt` every 500 steps; every write is atomic (temp file + rename), so a crash mid-save keeps the previous file. The final step is always saved.
+- **NaN/Inf guard:** a non-finite loss or gradient norm skips that optimizer step (logged and counted); `--max-nonfinite-steps 20` (default) aborts after 20 in a row with a clear error, `0` never aborts.
+- **Logged every `--log-every` steps** (console, TensorBoard, WandB): loss, LR, pre-clip `grad_norm`, `step_time_s`, `img_per_sec`, `peak_vram_gb`, `nonfinite_skipped`.
+- **Previews:** `--sample-every N` (alias of `--log-images-every`) renders `--log-images-prompt` with the EMA model on a fixed seed into `results/<run>/samples/`.
+- **Validation:** `--val-split 0.05 --val-every 2000` holds out data; its loss uses a fixed seed, so evaluations compare, and drives `best.pt` / `--early-stopping-patience`.
+- Only rank 0's RNG is stored: a multi-GPU resume keeps the data order exact, but the other ranks reseed their noise.
 
 ### Step 4: Generate Images
 

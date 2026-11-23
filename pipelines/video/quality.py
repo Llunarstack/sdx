@@ -894,11 +894,6 @@ def _structure_distance_centered(ga: np.ndarray, gb: np.ndarray) -> float:
     return 1.0 - min(1.0, max(0.0, (corr + 1.0) * 0.5))
 
 
-def _structure_distance(a: np.ndarray, b: np.ndarray) -> float:
-    """1 - rescaled luma correlation (cheap SSIM stand-in)."""
-    return _structure_distance_centered(_centered_luma(a), _centered_luma(b))
-
-
 def _drift_from_parts(h_cur, g_cur, h_ref, g_ref, h_prev) -> float:
     score = 0.55 * _histogram_distance(h_cur, h_ref) + 0.45 * _structure_distance_centered(g_cur, g_ref)
     if h_prev is not None:

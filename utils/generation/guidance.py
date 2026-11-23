@@ -32,6 +32,7 @@ class GuidanceConfig:
     slg_scale: float = 0.0
     slg_blocks: tuple[int, ...] = ()
     slg_window: tuple[float, float] = (0.01, 0.30)
+    ideas: Any = None  # utils.ideas.IdeaStack; its "delta" ideas reshape the CFG direction
 
     @classmethod
     def build(
@@ -226,11 +227,14 @@ def combine_guided_prediction(
                 out_uncond = tcfg_uncond(out_cond, out_uncond, damping=g.tcfg_damping)
             if g.cfg_zero_star:
                 out_uncond = out_uncond * cfg_zero_star_scale(out_cond, out_uncond)
-        a, b = _x0_coeffs(x0_affine if (g.apg or g.rescale > 0.0) else None, x)
+        ideas = g.ideas if g.ideas is not None and g.ideas.has("delta") else None
+        a, b = _x0_coeffs(x0_affine if (g.apg or g.rescale > 0.0 or ideas is not None) else None, x)
         d_cond = a * x + b * out_cond
         guided = d_cond
         if out_uncond is not None and w != 1.0:
             delta = d_cond - (a * x + b * out_uncond)
+            if ideas is not None:
+                delta = ideas.delta(delta, d_cond, w)
             if g.apg:
                 delta = _apg_accumulate(delta, g, state)
             if g.fdg:

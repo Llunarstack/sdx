@@ -18,7 +18,7 @@ from scripts.tools.evals import CATEGORIES, SUITE, evaluate, suite_as_manifest_r
 from utils.agentic.quality_loop import build_markdown_report
 
 # ==================================================================================================
-# test_eval_prompt_pack: test_eval_prompt_pack
+# test_eval_prompt_pack
 # ==================================================================================================
 
 _REPO_EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "eval_prompts_baseline.json"
@@ -45,7 +45,7 @@ def test_reject_bad_root(tmp_path: Path) -> None:
 
 
 # ==================================================================================================
-# test_eval_report: test_eval_report
+# test_eval_report
 # ==================================================================================================
 
 

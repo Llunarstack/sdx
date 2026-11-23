@@ -293,6 +293,14 @@ def build_sample_parser() -> argparse.ArgumentParser:
     parser.add_argument("--init-latent", type=str, default="", help="Start from saved latent .pt (from-z)")
     parser.add_argument("--mask", type=str, default="", help="Inpainting: path to mask (white=inpaint)")
     parser.add_argument(
+        "--outpaint",
+        type=str,
+        default="",
+        metavar="L,T,R,B",
+        help="Outpaint --init-image by these pixels per side: edge-extend + blur fill, mask the new border (plus a "
+        "feathered band into the original) and inpaint (mdm, strength 1 unless set). Large canvases denoise tiled.",
+    )
+    parser.add_argument(
         "--dissect-refs",
         type=str,
         default="",
@@ -619,6 +627,18 @@ def build_sample_parser() -> argparse.ArgumentParser:
         type=float,
         default=-1.0,
         help="CFG during hires pass; <0 means use same as --cfg-scale.",
+    )
+    parser.add_argument(
+        "--hires-tiled",
+        action="store_true",
+        help="Hires pass denoises overlapping native-size tiles blended with cosine weights (MultiDiffusion). "
+        "Auto-on past 1.5x the native token count.",
+    )
+    parser.add_argument(
+        "--tile-overlap",
+        type=int,
+        default=0,
+        help="Tiled denoising overlap in pixels; 0 = a quarter tile.",
     )
     parser.add_argument(
         "--dynamic-threshold-percentile",
@@ -1038,6 +1058,34 @@ def build_sample_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="QSilk micrograin latent stabilizer strength at end of sampling (0=off, 0.12 typical).",
     )
+    parser.add_argument(
+        "--ideas",
+        type=str,
+        default="",
+        metavar="NAME[=S],...",
+        help="Opt-in techniques from utils/ideas (noise, CFG, guidance, x0, step and image hooks), in order; "
+        "strength 1 = suggested, 0 = off. See --list-ideas; measure with `bench ablate --ideas-each`.",
+    )
+    parser.add_argument("--list-ideas", action="store_true", help="Print every --ideas technique and exit.")
+    parser.add_argument(
+        "--natural",
+        action="store_true",
+        help="Critic-gated natural pass on every saved image: measure each AI-look tell (decoder grid, flat or "
+        "missing noise, detail spectrum, smoothing, oversaturation, halos, plastic skin, waxy highlights), apply "
+        "the fix for it, keep a fix only when the detectors confirm it without moving the content; then "
+        "blue-noise dither to 8 bit (skipped with --save-16bit). Prints and reports before/after naturalness.",
+    )
+    parser.add_argument(
+        "--detail-amount",
+        type=float,
+        default=0.0,
+        help="Detail Daemon: under-report the noise level to the model mid-sampling so it adds fine detail "
+        "(0=off, 0.1-0.3 typical; negative = smoother). The solver keeps the real schedule.",
+    )
+    parser.add_argument(
+        "--detail-start", type=float, default=0.2, help="--detail-amount window start (fraction of steps)."
+    )
+    parser.add_argument("--detail-end", type=float, default=0.8, help="--detail-amount window end (fraction of steps).")
     parser.add_argument(
         "--dynamic-dit-width",
         action="store_true",

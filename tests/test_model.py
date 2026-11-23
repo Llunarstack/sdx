@@ -280,7 +280,7 @@ class TestLatentGeometry:
 
 
 # ==================================================================================================
-# test_model_paths_gen_searcher: test_model_paths_gen_searcher
+# test_model_paths_gen_searcher
 # ==================================================================================================
 
 
@@ -1280,7 +1280,7 @@ def test_analyze_checkpoint_non_tensor_weight_skipped(tmp_path: Path) -> None:
 
 
 # ==================================================================================================
-# test_hf_control: test_hf_control
+# test_hf_control
 # ==================================================================================================
 
 
@@ -1309,7 +1309,7 @@ def test_pil_softedge_proxy(tmp_path: Path):
 
 
 # ==================================================================================================
-# test_hf_loaders: test_hf_loaders
+# test_hf_loaders
 # ==================================================================================================
 
 
@@ -1323,13 +1323,16 @@ def test_caption_chain_heuristic_fallback(tmp_path: Path):
     assert backend == ""
 
 
-def test_score_hpsv2_returns_none_without_model():
+def test_score_hpsv2_returns_none_without_model(monkeypatch):
+    import utils.modeling.hf_loaders as hfl
+
+    monkeypatch.setattr(hfl, "_has_weights_at", lambda _path: False)
     rgb = np.zeros((8, 8, 3), dtype=np.uint8)
     assert score_hpsv2(rgb, "a cat", device="cpu") is None
 
 
 # ==================================================================================================
-# test_hf_reward: test_hf_reward
+# test_hf_reward
 # ==================================================================================================
 
 
@@ -1343,15 +1346,21 @@ def test_hf_reward_panel_empty_backends():
     assert bd.parts == {}
 
 
-def test_hf_reward_panel_score_without_models():
+def test_hf_reward_panel_score_without_models(monkeypatch):
+    import utils.modeling.hf_loaders as hfl
+
+    def _missing(key, _loader):
+        raise OSError(f"{key}: weights not available")
+
+    # Without this the panel loads every cached reward model (several GB) onto the CPU.
+    monkeypatch.setattr(hfl._CACHE, "get_or_load", _missing)
     panel = HFRewardPanel(device="cpu")
     rgb = np.zeros((8, 8, 3), dtype=np.uint8)
-    s = panel.score(rgb, prompt="a cat")
-    assert 0.0 <= s <= 1.0
+    assert panel.score(rgb, prompt="a cat") == 0.5
 
 
 # ==================================================================================================
-# test_hf_scaffold: test_hf_scaffold
+# test_hf_scaffold
 # ==================================================================================================
 
 

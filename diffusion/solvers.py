@@ -773,8 +773,28 @@ def list_flow_schedules() -> tuple[str, ...]:
     return ("linear", "karras", "ays", "ays_dit", "apex")
 
 
+def detail_multipliers(n_steps: int, amount: float, start: float = 0.2, end: float = 0.8) -> list[float]:
+    """Detail Daemon: per-step factor on the timestep fed to the model (the solver keeps the real one).
+
+    ``1 - amount * sin(pi*u)**2`` with ``u`` the step's position inside ``[start, end]`` (fraction of steps), 1
+    outside. ``amount > 0`` under-reports the noise level so the model adds fine detail; ``< 0`` smooths.
+    Empty (off) when ``amount == 0``.
+    """
+    a, n = float(amount), int(n_steps)
+    lo, hi = max(0.0, float(start)), min(1.0, float(end))
+    if a == 0.0 or n <= 0 or hi <= lo:
+        return []
+    out = []
+    for i in range(n):
+        p = i / max(n - 1, 1)
+        u = (p - lo) / (hi - lo)
+        out.append(max(0.0, 1.0 - a * math.sin(math.pi * u) ** 2) if 0.0 < u < 1.0 else 1.0)
+    return out
+
+
 __all__ = [
     "ApexController",
+    "detail_multipliers",
     "ApexStepResult",
     "build_apex_vp_indices",
     "build_apex_flow_s_grid",

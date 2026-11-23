@@ -642,3 +642,76 @@ def test_signature_novelty_increases_with_distance() -> None:
     mem = [sig((10, 10, 10))]
     assert signature_novelty(sig((220, 210, 215)), mem) > signature_novelty(sig((12, 11, 10)), mem)
     assert signature_novelty(sig((12, 11, 10)), []) == 1.0
+
+
+def test_bench_pack_v1_loads_with_categories_and_expectations():
+    from scripts.tools.bench import BENCH_PACK, _load_suite
+
+    cases = _load_suite(BENCH_PACK)
+    cats = {c.category for c in cases}
+    assert len(cases) == 150 and len(cats) == 10 and len({c.name for c in cases}) == 150
+    assert all(c.expected_text for c in cases if c.category == "text")
+    assert all(c.expected_count > 0 for c in cases if c.category == "counting")
+
+
+def test_bench_ablate_parse_variants(tmp_path: Path):
+    from scripts.tools.bench import _parse_variants
+
+    vj = tmp_path / "v.json"
+    vj.write_text(json.dumps({"cfg9": ["--cfg-scale", "9"]}), encoding="utf-8")
+    v = _parse_variants(["baseline=", "hires=--hires-fix --hires-scale 1.5"], str(vj))
+    assert v == {"cfg9": ["--cfg-scale", "9"], "baseline": [], "hires": ["--hires-fix", "--hires-scale", "1.5"]}
+
+
+def test_bench_ablate_summary_deltas_winrate_slowdown():
+    from scripts.tools.bench import _ablation_markdown, _summarize_ablation
+
+    def row(variant, case, seed, cat, score, secs, vram=None):
+        return dict(
+            variant=variant, case=case, seed=seed, category=cat, composite=score, seconds=secs, peak_vram_gb=vram
+        )
+
+    rows = [
+        row("baseline", "a", 1, "text", 0.5, 10.0, 4.0),
+        row("baseline", "a", 2, "text", 0.5, 10.0, 4.0),
+        row("baseline", "b", 1, "count", 0.6, 10.0, 4.0),
+        row("hires", "a", 1, "text", 0.7, 20.0, 6.0),
+        row("hires", "a", 2, "text", 0.5, 20.0, 6.5),
+        row("hires", "b", 1, "count", 0.4, 20.0, 6.0),
+    ]
+    s = _summarize_ablation(rows, "baseline")
+    h = s["hires"]
+    assert h["runs"] == 3 and h["paired_runs"] == 3
+    assert abs(h["delta_vs_baseline"]["text"] - 0.1) < 1e-9
+    assert abs(h["delta_vs_baseline"]["count"] + 0.2) < 1e-9
+    assert h["win_rate_vs_baseline"] == 0.5  # one win, one tie, one loss
+    assert h["slowdown_vs_baseline"] == 2.0 and h["peak_vram_gb"] == 6.5
+    assert s["baseline"]["win_rate_vs_baseline"] == 0.5 and s["baseline"]["slowdown_vs_baseline"] == 1.0
+    md = _ablation_markdown(s, "baseline", {"gpu": "cpu"})
+    assert "| hires | 3 |" in md and "2.00x" in md and "-0.200" in md
+
+
+def test_bench_ablate_runs_scores_and_resumes(tmp_path: Path, monkeypatch):
+    from scripts.tools import bench
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check):
+        calls.append(cmd)
+        out = Path(cmd[cmd.index("--out") + 1])
+        out.write_bytes(b"png")
+        rep = {"timing_s": {"total": 2.0 if "--hires-fix" in cmd else 1.0}, "peak_vram_gb": None}
+        Path(cmd[cmd.index("--pick-report-json") + 1]).write_text(json.dumps(rep), encoding="utf-8")
+
+    monkeypatch.setattr(bench.subprocess, "run", fake_run)
+    monkeypatch.setattr(bench, "_env_info", lambda ckpt: {"ckpt_sha256": "abc", "gpu": "cpu", "torch": "x"})
+    monkeypatch.setattr(bench, "_score_image", lambda case, p, **kw: {"composite": 0.5})
+    argv = ["--ckpt", "c.pt", "--out-dir", str(tmp_path), "--limit", "1", "--category", "text", "--category", "style"]
+    argv += ["--seed-list", "1,2", "--variant", "baseline=", "--variant", "hires=--hires-fix"]
+    assert bench._ablate_main(argv) == 0
+    assert len(calls) == 8
+    summary = json.loads((tmp_path / "ablation.json").read_text(encoding="utf-8"))["variants"]
+    assert summary["hires"]["slowdown_vs_baseline"] == 2.0 and summary["hires"]["win_rate_vs_baseline"] == 0.5
+    assert (tmp_path / "ablation.md").is_file()
+    assert bench._ablate_main(argv) == 0 and len(calls) == 8  # resumed: nothing re-run
+    assert len((tmp_path / "runs.jsonl").read_text(encoding="utf-8").splitlines()) == 8

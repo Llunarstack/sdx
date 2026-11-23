@@ -7,6 +7,7 @@ import logging
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from utils.generation.sample_core import (
     renoise_for_grid,
 )
 from utils.generation.sample_prompt import build_prompt_plan, compose_prompt_additions, compose_user_prompt
+from utils.generation.tiled import maybe_tiled
 from utils.quality.finishing import save_rgb
 from utils.safety.minor_guard import is_sexual, require_allowed, require_image_allowed
 
@@ -797,6 +799,7 @@ class Sampler:
             cfg_guidance_cosine_min_multiplier=float(getattr(args, "guidance_schedule_cosine_min", 0.65)),
             cfg_guidance_cosine_max_multiplier=float(getattr(args, "guidance_schedule_cosine_max", 1.0)),
             regional_cfg_plan=getattr(args, "_regional_cfg_plan", None),
+            ideas=_idea_stack(args, m),
             **holy,
             **_guidance_stack_kwargs(args),
         )
@@ -845,14 +848,19 @@ class Sampler:
             periodic_alignment_rewind_strength=_f(args, "clip_monitor_rewind", 0.0),
         )
 
-    def run(self, shape: tuple, **kw: Any) -> Any:
+    def run(self, shape: tuple, model: Any = None, **kw: Any) -> Any:
+        """``model`` overrides ``m.model`` (e.g. a ``TiledModel`` proxy for large grids)."""
         with torch.inference_mode():
-            return self.m.diffusion.sample_loop(self.m.model, shape, **{**self.common, **kw})
+            model = self.m.model if model is None else model
+            return self.m.diffusion.sample_loop(model, shape, **{**self.common, **kw})
 
-    def resolve_from(self, x_t: torch.Tensor, t_s: int, n_steps: int, cfg: float | None = None) -> torch.Tensor:
+    def resolve_from(
+        self, x_t: torch.Tensor, t_s: int, n_steps: int, cfg: float | None = None, model: Any = None
+    ) -> torch.Tensor:
         """Backward solve from the noised latent ``x_t`` at timestep ``t_s`` with the run's sampler settings."""
         return self.run(
             x_t.shape,
+            model,
             cfg_scale=self.cfg_scale if cfg is None else cfg,
             num_inference_steps=max(4, int(n_steps)),
             x_init=x_t,
@@ -866,7 +874,9 @@ class Sampler:
             x0, lambda x_t, t: self.resolve_from(x_t, t, n_steps), t_max=t_s, cycles=cycles, flow=self.init.flow
         )
 
-    def renoise_refine(self, x_lo: torch.Tensor, lh: int, lw: int, strength: float, n_steps: int, cfg: float):
+    def renoise_refine(
+        self, x_lo: torch.Tensor, lh: int, lw: int, strength: float, n_steps: int, cfg: float, model: Any = None
+    ):
         """Upscale + re-noise a clean latent for the ``lh x lw`` grid, then denoise it (hires-fix, dual-stage)."""
         x_t, t0 = renoise_for_grid(
             self.m.diffusion,
@@ -878,7 +888,7 @@ class Sampler:
             flow=self.init.flow,
         )
         print(f"Refine pass at latent {lh}x{lw}: t_start={t0}, {n_steps} steps, cfg={cfg}.", file=sys.stderr)
-        return self.resolve_from(x_t, t0, n_steps, cfg)
+        return self.resolve_from(x_t, t0, n_steps, cfg, model)
 
     def pick_preview(self, x0_pred: torch.Tensor, metric: str) -> tuple[int, list[float]]:
 
@@ -905,6 +915,17 @@ def _holy_grail_kwargs(args: Any) -> dict:
     )
 
 
+def _idea_stack(args: Any, m: Any) -> Any:
+    """``--ideas``: the run's :class:`utils.ideas.IdeaStack` (``None`` when no idea is enabled)."""
+    if not str(getattr(args, "ideas", "") or "").strip():
+        return None
+    from utils.ideas import idea_stack_from_args
+
+    stack = idea_stack_from_args(args, native=int(getattr(m, "latent_size", 0) or 0))
+    print(f"Ideas: {', '.join(stack.names()) or 'none'}", file=sys.stderr)
+    return stack or None
+
+
 def _guidance_stack_kwargs(args: Any) -> dict:
     """APG / FDG / CFG-Zero* / interval / TCFG / PAG / SLG, feature + block caches, QSilk, dynamic width."""
     return dict(
@@ -922,6 +943,9 @@ def _guidance_stack_kwargs(args: Any) -> dict:
         cfg_zero_star=bool(getattr(args, "cfg_zero_star", False)),
         cfg_zero_init_frac=float(getattr(args, "cfg_zero_init_frac", 0.04)),
         qsilk_micrograin=_f(args, "qsilk_micrograin", 0.0),
+        detail_amount=_f(args, "detail_amount", 0.0),
+        detail_start=_f(args, "detail_start", 0.2),
+        detail_end=_f(args, "detail_end", 0.8),
         dynamic_dit_width=bool(getattr(args, "dynamic_dit_width", False)),
         dynamic_dit_early=_f(args, "dynamic_dit_early", 0.88),
         dynamic_sdt=bool(getattr(args, "dynamic_sdt", False)),
@@ -1076,8 +1100,11 @@ def _denoise(s: Sampler, report: dict) -> torch.Tensor:
     print(f"Sampling (steps={args.steps}, num={s.plan.num_gen}, cfg_scale={s.cfg_scale})...")
     steps_main = int(args.steps) - _beam_search(s, report)
     steps_main = _micro_beam(s, max(1, steps_main), report)
+    outpaint = bool(str(getattr(args, "outpaint", "") or "").strip())
+    overlap_px = int(getattr(args, "tile_overlap", 0) or 0)
     return s.run(
         (s.plan.num_gen, s.m.latent_channels, s.m.lat_h, s.m.lat_w),
+        maybe_tiled(s.m, s.m.lat_h, s.m.lat_w, overlap_px=overlap_px) if outpaint else None,
         num_inference_steps=steps_main,
         x_init=init.x_init,
         start_timestep=init.start_timestep,
@@ -1192,6 +1219,8 @@ def _hires_fix(s: Sampler, x0: torch.Tensor) -> torch.Tensor:
         print(f"Hires-fix skipped: latent already {x0.shape[-2]}x{x0.shape[-1]} (target {tlh}x{tlw}).", file=sys.stderr)
         return x0
     cfg_h = float(getattr(args, "hires_cfg_scale", -1.0))
+    force = bool(getattr(args, "hires_tiled", False))
+    tiled = maybe_tiled(m, tlh, tlw, force=force, overlap_px=int(getattr(args, "tile_overlap", 0) or 0))
     with torch.no_grad():
         return s.renoise_refine(
             x0,
@@ -1200,6 +1229,7 @@ def _hires_fix(s: Sampler, x0: torch.Tensor) -> torch.Tensor:
             float(getattr(args, "hires_strength", 0.35)),
             max(1, int(getattr(args, "hires_steps", 15))),
             float(s.cfg_scale) if cfg_h < 0 else cfg_h,
+            tiled,
         )
 
 
@@ -1405,6 +1435,24 @@ def sample_one_image_pil(
     return pil
 
 
+def lap(timing: dict, stage: str, since: float, device: torch.device) -> float:
+    """Record ``stage``'s wall seconds once the GPU queue drains; returns the new mark."""
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    now = time.perf_counter()
+    timing[stage] = round(now - since, 3)
+    return now
+
+
+def run_summary(report: dict) -> str:
+    """One line: per-stage seconds and peak VRAM (``timing_s`` / ``peak_vram_gb`` in the report)."""
+    timing = dict(report.get("timing_s") or {})
+    total = timing.pop("total", sum(timing.values()))
+    stages = ", ".join(f"{k} {v:.1f}s" for k, v in timing.items())
+    peak = report.get("peak_vram_gb")
+    return f"Run: {total:.1f}s ({stages}); peak VRAM {'n/a (CPU)' if peak is None else f'{peak:.2f} GB'}"
+
+
 def explicit_flags(parser: Any, argv: list[str]) -> frozenset[str]:
     """Destinations of the options the user typed (``--flag``, ``--flag=v``, unique ``--fl`` prefixes)."""
     options = {opt: action.dest for action in parser._actions for opt in action.option_strings}
@@ -1471,6 +1519,13 @@ def parse_args(parser: Any, argv: list[str]) -> Any:
 
 def run_early_exit(args: Any, argv: list[str]) -> bool:
     """``--export-comfy-workflow`` and ``--auto-refine N`` (N child runs of ``sample.py``); True when handled."""
+    if str(getattr(args, "ideas", "") or "").strip():
+        from utils.ideas import parse_ideas
+
+        try:
+            parse_ideas(args.ideas)
+        except ValueError as e:
+            raise SystemExit(f"--ideas: {e}") from None
     if str(getattr(args, "export_comfy_workflow", "") or "").strip():
         from utils.generation.sample_argv import sample_args_to_comfy_workflow, write_comfy_workflow
 
@@ -1561,6 +1616,11 @@ def resolve_quality_defaults(args: Any, report: dict) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if "--list-ideas" in argv:  # before parsing: needs no --ckpt
+        from utils.ideas import ideas_table
+
+        print(ideas_table())
+        return
     parser = build_sample_parser()
     args = parse_args(parser, argv)
     jobs = str(getattr(args, "jobs_jsonl", "") or "").strip()
@@ -1581,13 +1641,20 @@ def main(argv: list[str] | None = None) -> None:
 
 def _generate(parser: Any, args: Any, argv: list[str], m: Any = None) -> Any:
     """One generation; pass ``m`` from a previous call to skip reloading checkpoint and encoders."""
+    start = time.perf_counter()
+    timing: dict[str, float] = {}
     report: dict = {
         "prompt": str(getattr(args, "prompt", "") or ""),
         "negative_prompt": str(getattr(args, "negative_prompt", "") or ""),
         "seed": int(getattr(args, "seed", 0) or 0),
         "steps": int(getattr(args, "steps", 0) or 0),
         "num": int(getattr(args, "num", 0) or 0),
+        "timing_s": timing,
+        "peak_vram_gb": None,
     }
+    dev = m.device if m is not None else torch.device(str(getattr(args, "device", "cuda") or "cuda"))
+    if dev.type == "cuda" and torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats(dev)
     expand_presets(args)
     if run_early_exit(args, argv):
         return m
@@ -1599,22 +1666,37 @@ def _generate(parser: Any, args: Any, argv: list[str], m: Any = None) -> Any:
     compose_user_prompt(args, parser)
     resolve_quality_defaults(args, report)
     extras = compose_prompt_additions(args)
+    from utils.generation.editing import apply_outpaint_args
+
+    apply_outpaint_args(args)
     if m is None:
         m = load_models(args)
     else:
         torch.manual_seed(int(args.seed))  # load_models seeds the first job; noise comes from the global RNG
+    t = lap(timing, "load", start, m.device)
     with torch.inference_mode():
         plan = build_prompt_plan(args, m, extras)
         cond = encode_conditioning(args, m, plan)
+        t = lap(timing, "encode", t, m.device)
         init = prepare_init_latents(args, m, plan.num_gen)
         x0 = sample_latents(args, m, plan, cond, init, report)
         export_attention(args, m, cond, x0)
+        t = lap(timing, "denoise", t, m.device)
 
         images, out_size, fit = decode_images(args, m, x0)
+        t = lap(timing, "decode", t, m.device)
         processed = postprocess(args, plan, images, out_size, fit)
         metric, best = choose_best(args, m, plan, processed, report)
         finals = capture_finish(args, plan, processed, report)
         finals, natives = game_finish(args, finals, report)
+        if str(getattr(args, "ideas", "") or "").strip():
+            from utils.ideas import apply_image_ideas
+
+            finals = apply_image_ideas(args, finals)
+        if getattr(args, "natural", False):
+            from utils.quality.natural import natural_pass_all
+
+            finals = natural_pass_all(args, finals, report)
     require_image_allowed(finals, sexual=cond.sexual)  # reads RGB of RGBA sprites, so nothing hides under alpha
     rgb_finals = [f[..., :3] for f in finals]
     for i, path, label in save_targets(args, plan.num_gen, metric, best):
@@ -1626,5 +1708,10 @@ def _generate(parser: Any, args: Any, argv: list[str], m: Any = None) -> Any:
             seed=int(args.seed) + i,
         )
         print(f"{label}: {path}")
+    lap(timing, "post", t, m.device)
+    timing["total"] = round(time.perf_counter() - start, 3)
+    if m.device.type == "cuda":
+        report["peak_vram_gb"] = round(torch.cuda.max_memory_allocated(m.device) / 2**30, 3)
     after_save(args, plan, metric, best, rgb_finals, report)
+    print(run_summary(report))
     return m

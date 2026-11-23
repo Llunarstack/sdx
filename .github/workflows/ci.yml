@@ -58,5 +58,11 @@ jobs:
       - name: Verify doc links
         run: python -m scripts.tools verify_doc_links
 
+      # Rust image kernels (utils/ideas): built so the Rust-vs-NumPy parity tests run instead of skipping.
+      - name: Build Rust kernels
+        run: |
+          cargo build --release --lib --manifest-path native/rust/Cargo.toml
+          cargo test --release --lib --manifest-path native/rust/Cargo.toml
+
       - name: Pytest
         run: python -m pytest tests/ -q --tb=short

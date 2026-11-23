@@ -2,10 +2,14 @@
 validation, sample logging and run bookkeeping. Distillation / DPO / GRPO scripts reuse them.
 """
 
+import contextlib
+import hashlib
+import importlib.metadata
 import itertools
 import json
 import logging
 import math
+import os
 import platform
 import random
 import subprocess
@@ -22,6 +26,7 @@ from diffusion.gaussian_diffusion import offset_noise
 from diffusion.schedules import sample_training_timesteps, sd3_resolution_shift
 from models.attention import create_block_causal_mask_2d
 from models.conditioning import RAELatentBridge
+from torch.utils.data.distributed import DistributedSampler
 from utils.modeling.encoders import encode_kwargs_for_captions, encode_text, prepare_multi_encoder_kwargs
 from utils.runtime import json_dumps, to_plain_dict
 from utils.safety.minor_guard import NegativeText, is_sexual, require_image_allowed
@@ -232,15 +237,72 @@ def _safe_git_info(repo_root: Path) -> dict:
     }
 
 
+_CAPTION_SUFFIXES = (".txt", ".caption", ".json", ".jsonl", ".tags")
+_MANIFEST_PACKAGES = (
+    "torch", "torchvision", "numpy", "diffusers", "transformers", "accelerate", "safetensors", "tokenizers",
+    "xformers", "timm", "pillow", "wandb", "tensorboard",
+)  # fmt: skip
+
+
+def dataset_fingerprint(path: str | Path | None) -> dict:
+    """Cheap identity of the training data, without opening images: for a folder the file count plus a SHA-256 over the
+    sorted relative paths, with size + mtime of caption/metadata files; for a manifest file, its row count and content
+    hash."""
+    if not path:
+        return {}
+    p = Path(path)
+    h = hashlib.sha256()
+    if p.is_file():
+        rows = 0
+        with open(p, "rb") as f:
+            for line in f:
+                h.update(line)
+                rows += bool(line.strip())
+        return {"path": str(p), "kind": "manifest", "rows": rows, "sha256": h.hexdigest()}
+    if not p.is_dir():
+        return {"path": str(p), "missing": True}
+    rels = sorted(Path(root, n).relative_to(p).as_posix() for root, _, names in os.walk(p) for n in names)
+    for rel in rels:
+        h.update(rel.encode("utf-8", "surrogateescape"))
+        if rel.lower().endswith(_CAPTION_SUFFIXES):
+            st = (p / rel).stat()
+            h.update(f"\0{st.st_size}\0{st.st_mtime_ns}".encode())
+        h.update(b"\n")
+    return {"path": str(p), "kind": "folder", "files": len(rels), "sha256": h.hexdigest()}
+
+
+def _package_versions() -> dict:
+    out = {}
+    for name in _MANIFEST_PACKAGES:
+        try:
+            out[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            out[name] = None
+    return out
+
+
 def write_run_manifest(exp_dir: Path, cfg: TrainConfig, logger: logging.Logger) -> None:
-    """Write ``config.train.json`` and ``run_manifest.json`` (command, environment, git state) for reproducibility."""
+    """Write ``config.train.json`` and ``run_manifest.json`` (command, environment, packages, GPUs, git state, dataset
+    fingerprint, resolved config) for reproducibility."""
+    from utils.training.monitoring import log_system_info
+
     repo_root = Path(__file__).resolve().parents[1]
     cfg_out = exp_dir / "config.train.json"
     manifest_out = exp_dir / "run_manifest.json"
-    cfg_out.write_text(json_dumps(to_plain_dict(cfg), indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
+    cfg_dict = to_plain_dict(cfg)
+    cfg_out.write_text(json_dumps(cfg_dict, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
+    try:
+        data_fp = dataset_fingerprint(getattr(cfg, "manifest_jsonl", None) or getattr(cfg, "data_path", None))
+    except OSError as e:
+        data_fp = {"error": str(e)}
     manifest = {
         "created_utc": datetime.now(UTC).isoformat(),
         "command": " ".join(sys.argv),
+        "argv": list(sys.argv),
+        "packages": _package_versions(),
+        "system": log_system_info(),
+        "dataset": data_fp,
+        "config": cfg_dict,
         "cwd": str(Path.cwd()),
         "python": sys.version,
         "platform": platform.platform(),
@@ -603,7 +665,7 @@ def conditioning_kwargs(
         model_kwargs["style_strength"] = getattr(cfg, "style_strength", 0.7)
     control_images = batch.get("control_image")
     if control_images is not None:
-        model_kwargs["control_image"] = control_images.to(device, non_blocking=True).to(torch.bfloat16)
+        model_kwargs["control_image"] = control_images.to(device=device, dtype=latents.dtype, non_blocking=True)
         model_kwargs["control_scale"] = getattr(cfg, "control_scale", 0.85)
         control_type_ids = batch.get("control_type_id")
         if control_type_ids is not None:
@@ -611,9 +673,9 @@ def conditioning_kwargs(
     if getattr(cfg, "creativity_embed_dim", 0) > 0:
         creativity_max = getattr(cfg, "creativity_max", 1.0)
         b = latents.shape[0]
-        cre = torch.rand(b, device=device, dtype=torch.bfloat16) * creativity_max
+        cre = torch.rand(b, device=device, dtype=latents.dtype) * creativity_max
         if creativity_jitter_std > 0:
-            jitter = torch.randn(b, device=device, dtype=torch.bfloat16) * creativity_jitter_std
+            jitter = torch.randn(b, device=device, dtype=latents.dtype) * creativity_jitter_std
             cre = (cre + jitter).clamp(0.0, creativity_max)
         model_kwargs["creativity"] = cre
     if int(getattr(cfg, "size_embed_dim", 0) or 0) > 0:
@@ -656,14 +718,17 @@ def eval_val_loss(
         captions = batch["captions"]
         negative_captions = batch.get("negative_captions") or [""] * len(captions)
         styles = batch.get("styles") or [""] * len(captions)
+        train_dtype = torch.bfloat16 if cfg.use_bf16 else torch.float32
         with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
             if "latent_values" in batch:
-                latents = to_train_device(batch["latent_values"], device, dtype=torch.bfloat16)
+                latents = to_train_device(batch["latent_values"], device, dtype=train_dtype)
             else:
-                latents = encode_images_vae(pixel_values, vae, latent_scale)
+                latents = encode_images_vae(pixel_values, vae, latent_scale).to(dtype=train_dtype)
             if rae_bridge is not None and latents.shape[1] != 4:
                 latents = rae_bridge.rae_to_dit(latents)
             edit_latents = edit_source_latents(cfg, batch, vae, latent_scale, device, dropout=0.0)
+            if edit_latents is not None:
+                edit_latents = edit_latents.to(dtype=train_dtype)
             train_pe = bool(getattr(cfg, "train_prompt_emphasis", False))
             pos_caps = captions
             token_weights = None
@@ -675,7 +740,7 @@ def eval_val_loss(
                     tokenizer,
                     max_caption_len,
                     device=device,
-                    dtype=torch.bfloat16,
+                    dtype=train_dtype,
                     text_bundle=text_bundle,
                 )
 
@@ -687,7 +752,7 @@ def eval_val_loss(
                     tokenizer,
                     text_encoder,
                     device,
-                    dtype=torch.bfloat16,
+                    dtype=train_dtype,
                     max_length=max_caption_len,
                     text_bundle=text_bundle,
                     train_fusion=False,
@@ -751,12 +816,105 @@ def seed_dataloader_worker(worker_id: int, base_seed: int) -> None:
     torch.manual_seed(base_seed + worker_id)
 
 
-def repeat_epochs(loader, sampler=None):
-    """Endless batches for step-based training: a fresh pass (new shuffle, crops, DDP epoch) each time.
+class ResumableSampler(DistributedSampler):
+    """Seeded per-epoch shuffle (``set_epoch``), sharded across DDP ranks (``num_replicas=1`` on one GPU), whose next
+    pass can start ``skip`` samples in -- so a resumed run neither repeats nor skips data."""
+
+    skip = 0
+
+    def __iter__(self):
+        skip, self.skip = self.skip, 0
+        return itertools.islice(super().__iter__(), skip, None)
+
+
+def trainer_state(opt, scaler, *, steps: int, steps_per_epoch: int) -> dict:
+    """Everything besides the weights that ``--resume`` needs: optimizer, GradScaler, step, data position, RNG."""
+    from utils.modeling.checkpoints import rng_state
+
+    epoch, batch_in_epoch = divmod(int(steps), max(1, int(steps_per_epoch)))
+    return {
+        "opt": opt.state_dict(),
+        "scaler": scaler.state_dict(),
+        "steps": int(steps),
+        "epoch": epoch,
+        "batch_in_epoch": batch_in_epoch,
+        "rng": rng_state(),
+    }
+
+
+def restore_trainer_state(ckpt: dict, opt, scaler, logger: logging.Logger) -> None:
+    """Load optimizer + GradScaler state from a checkpoint; anything missing (older checkpoints) warns and stays fresh.
+    The RNG (``ckpt["rng"]``) is restored separately, right before the first step."""
+    if ckpt.get("opt"):
+        try:
+            opt.load_state_dict(ckpt["opt"])
+        except (ValueError, KeyError) as e:
+            logger.warning(f"Optimizer state not restored (fresh optimizer): {e}")
+    else:
+        logger.warning("Checkpoint has no optimizer state: fresh optimizer.")
+    if ckpt.get("scaler"):
+        scaler.load_state_dict(ckpt["scaler"])
+    elif scaler.is_enabled():
+        logger.warning("Checkpoint has no GradScaler state: loss scale restarts.")
+    if not ckpt.get("rng"):
+        logger.warning("Checkpoint has no RNG state: noise/dropout draws differ from an uninterrupted run.")
+
+
+def resume_position(ckpt: dict, steps_per_epoch: int) -> tuple[int, int]:
+    """``(epoch, batch_in_epoch)`` to resume at: stored by :func:`trainer_state`, else derived from ``steps``."""
+    if "batch_in_epoch" in ckpt:
+        return int(ckpt["epoch"]), int(ckpt["batch_in_epoch"])
+    return divmod(int(ckpt.get("steps", 0)), max(1, int(steps_per_epoch)))
+
+
+class NonFiniteGuard:
+    """Decides whether an optimizer step may run: a NaN/Inf loss or grad norm skips it; ``max_consecutive`` skips in a
+    row (0 = never) abort the run."""
+
+    def __init__(self, max_consecutive: int) -> None:
+        self.max_consecutive = int(max_consecutive)
+        self.consecutive = 0
+        self.skipped = 0
+
+    def ok(self, loss, grad_norm, step: int) -> bool:
+        loss, grad_norm = float(loss), float(grad_norm)
+        if math.isfinite(loss) and math.isfinite(grad_norm):
+            self.consecutive = 0
+            return True
+        self.consecutive += 1
+        self.skipped += 1
+        if 0 < self.max_consecutive <= self.consecutive:
+            raise FloatingPointError(
+                f"{self.consecutive} consecutive non-finite steps (step {step}: loss={loss}, grad_norm={grad_norm}). "
+                "Lower --lr, check the data / latent cache, or resume from an earlier checkpoint "
+                "(--max-nonfinite-steps 0 disables the abort)."
+            )
+        return False
+
+
+@contextlib.contextmanager
+def fixed_seed(seed: int):
+    """Run a block (preview samples, validation) on a fixed seed, then put every RNG back so training is unaffected."""
+    import numpy as np
+    from utils.modeling.checkpoints import rng_state, set_rng_state
+
+    saved = rng_state()
+    random.seed(seed)
+    np.random.seed(seed % 2**32)
+    torch.manual_seed(seed)  # seeds every CUDA device too
+    try:
+        yield
+    finally:
+        set_rng_state(saved)
+
+
+def repeat_epochs(loader, sampler=None, start_epoch: int = 0):
+    """Endless batches for step-based training: a fresh pass (new shuffle, crops, DDP epoch) each time, from
+    ``start_epoch`` on a resume.
 
     ``itertools.cycle`` would replay -- and keep in memory -- the first epoch's batches forever.
     """
-    epoch = 0
+    epoch = int(start_epoch)
     while True:
         if sampler is not None and hasattr(sampler, "set_epoch"):
             sampler.set_epoch(epoch)
@@ -801,6 +959,18 @@ def get_scheduled_caption_dropout(step: int, schedule) -> float:
     return float(schedule[-1][1])
 
 
+def drop_captions(captions: list, p_drop: float, layouts: list | None = None) -> tuple[list, list | None]:
+    """Per-sample caption dropout to ``""`` (with its layout spec): the empty prompt is exactly the uncond
+    ``sample.py`` encodes for CFG, through the same tokenizer / encoders / fusion."""
+    if p_drop <= 0:
+        return captions, layouts
+    drop = (torch.rand(len(captions)) < p_drop).tolist()
+    captions = ["" if d else c for c, d in zip(captions, drop, strict=True)]
+    if layouts is not None:
+        layouts = [None if d else spec for spec, d in zip(layouts, drop, strict=True)]
+    return captions, layouts
+
+
 def log_sample_image(
     ema_model,
     diffusion,
@@ -814,8 +984,9 @@ def log_sample_image(
     rae_bridge=None,
     text_bundle=None,
     wandb_run=None,
+    out_dir: Path | None = None,
 ):
-    """Generate one sample with the EMA model and log it to TensorBoard / the WandB run."""
+    """Generate one sample with the EMA model and log it to TensorBoard / the WandB run / ``out_dir`` as a PNG."""
     was_training = ema_model.training
     ema_model.eval()
     try:
@@ -880,6 +1051,11 @@ def log_sample_image(
         import wandb
 
         wandb_run.log({"sample": wandb.Image(img)}, step=steps)
+    if out_dir is not None:
+        from PIL import Image
+
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        Image.fromarray(img).save(Path(out_dir) / f"sample_{int(steps):07d}.png")
 
 
 def create_logger(log_dir):

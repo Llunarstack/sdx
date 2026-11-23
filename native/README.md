@@ -23,7 +23,7 @@ pytest gets the same path from `pyproject.toml` (`pythonpath`).
 
 | Library / tool | Used by |
 |----------------|---------|
-| `sdx_rs` (Rust cdylib) | `diffusion/schedules.py` (alpha_cumprod, SNR, beta schedules), style token Jaccard (`utils/prompt/style.py`), highlight-clip fraction (`utils/native.quality_highlight_frac`), blob counting (eval count-adherence scorer) |
+| `sdx_rs` (Rust cdylib) | `diffusion/schedules.py` (alpha_cumprod, SNR, beta schedules), style token Jaccard (`utils/prompt/style.py`), highlight-clip fraction (`utils/native.quality_highlight_frac`), blob counting (eval count-adherence scorer), image kernels for `utils/ideas` (Floyd-Steinberg error diffusion, void-and-cluster blue noise, bilateral, 3x3 median, Kuwahara) |
 | `sdx-jsonl-tools` | `stats`, `validate`, `prompt-lint`, `image-paths`, `dup-image-paths`, `file-fnv`, `file-md5`, `caption-len-buckets`; data QA tools, op preflight, book pipeline, image dedup MD5 |
 | `sdx-noise-schedule` | linear / cosine VP-DDPM schedule CSV (noise-schedule export tool) |
 | `sdx_cpu` | latent / patch-token geometry (`dit_variant_compare`), inference timestep finalization, squared-cosine betas, image metrics + component count (test-time pick), mask -> patch weights (part-aware training) |
@@ -56,6 +56,23 @@ cd native/_experimental/zig/sdx-linecrc && zig build -Doptimize=ReleaseFast   # 
 
 Outputs stay where the loaders look: `native/rust/target/{release,debug}`, `native/cpp/build[/Release|/Debug]`,
 the Go binary next to its source, Zig in `zig-out/bin`. All are gitignored.
+
+### Image kernels vs the NumPy fallbacks
+
+`utils/ideas/kernels.py` calls these when `sdx_rs` is built and falls back to NumPy otherwise (same results;
+`tests/test_ideas.py` checks parity, and CI builds the crate so those tests run). One 1024x1024 RGB float image,
+four threads, Windows desktop CPU (2026-11-22):
+
+| Kernel | Rust | NumPy | Speed-up |
+|--------|------|-------|----------|
+| Bilateral, radius 3 | 113 ms | 1319 ms | 12x |
+| 3x3 median | 41 ms | 365 ms | 9x |
+| Kuwahara, radius 3 | 20 ms | 704 ms | 36x |
+| Floyd-Steinberg to 8 bit | 16 ms | ~7.1 s (pure Python) | ~460x |
+| Blue-noise mask 64x64 (cached once) | 35 ms | 62 ms | 2x |
+
+Floyd-Steinberg has no NumPy form (each pixel depends on the last), so without the build `img_error_diffusion`
+uses the blue-noise dither instead.
 
 ## Manifest conventions
 

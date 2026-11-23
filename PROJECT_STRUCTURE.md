@@ -6,7 +6,7 @@
 > python -m scripts.tools update_project_structure
 > ```
 >
-> Generated: **2026-11-08 02:44:14 UTC** · max depth: **5** · repo root: `sdx/`
+> Generated: **2026-11-23 04:46:21 UTC** · max depth: **5** · repo root: `sdx/`
 >
 > Skipped directories: **enhanced_dit, external, model** (see `--help` to include).
 
@@ -20,6 +20,7 @@ sdx/
 │   └── styles.json
 ├── checkpoints/
 ├── config/
+│   ├── defaults/
 │   ├── __init__.py
 │   ├── presets.py
 │   ├── prompts.py
@@ -31,6 +32,7 @@ sdx/
 │   ├── style_genomes/
 │   │   └── explore_manifest.jsonl
 │   ├── __init__.py
+│   ├── audit.py
 │   ├── caption_utils.py
 │   ├── manifest_utils.py
 │   ├── t2i_dataset.py
@@ -51,11 +53,13 @@ sdx/
 │   │   └── gallery/
 │   ├── CHANGELOG.md
 │   ├── CODEBASE.md
+│   ├── DEPRECATIONS.md
 │   ├── FILES.md
 │   ├── GETTING_STARTED.md
 │   ├── GLOSSARY.md
 │   ├── GUIDES.md
 │   ├── HOW_GENERATION_WORKS.md
+│   ├── MODEL_LINES_AND_RELEASES.md
 │   ├── MODEL_STACK.md
 │   ├── PROMPT_STACK.md
 │   ├── QUALITY.md
@@ -63,6 +67,7 @@ sdx/
 │   └── RESEARCH.md
 ├── examples/
 │   ├── __init__.py
+│   ├── bench_pack_v1.json
 │   ├── book_visual_memory.example.json
 │   ├── box_layout.example.json
 │   ├── box_layout_library_hall.example.json
@@ -136,6 +141,19 @@ sdx/
 │   │   │   │   ├── sdx-jsonl-tools.rs
 │   │   │   │   └── sdx-noise-schedule.rs
 │   │   │   └── lib.rs
+│   │   ├── target/
+│   │   │   ├── release/
+│   │   │   │   ├── build/
+│   │   │   │   ├── deps/
+│   │   │   │   ├── examples/
+│   │   │   │   ├── incremental/
+│   │   │   │   ├── libsdx_rs.d
+│   │   │   │   ├── libsdx_rs.rlib
+│   │   │   │   ├── sdx_rs.d
+│   │   │   │   ├── sdx_rs.dll.exp
+│   │   │   │   ├── sdx_rs.dll.lib
+│   │   │   │   └── sdx_rs.pdb
+│   │   │   └── CACHEDIR.TAG
 │   │   ├── build.rs
 │   │   ├── Cargo.lock
 │   │   └── Cargo.toml
@@ -213,9 +231,9 @@ sdx/
 │   │   ├── dev/
 │   │   │   ├── __init__.py
 │   │   │   ├── architecture_themes.py
+│   │   │   ├── commit-msg
 │   │   │   ├── generate_sdx_architecture_diagram.py
 │   │   │   ├── integration_smoke.py
-│   │   │   ├── prepare-commit-msg
 │   │   │   ├── quick_test.py
 │   │   │   ├── smoke_imports.py
 │   │   │   ├── strip_ai_contributors.py
@@ -235,7 +253,6 @@ sdx/
 │   │   │   ├── clean_repo_artifacts.py
 │   │   │   ├── update_project_structure.py
 │   │   │   └── verify_doc_links.py
-│   │   ├── training/
 │   │   ├── __init__.py
 │   │   ├── __main__.py
 │   │   ├── _repo_bootstrap.py
@@ -250,11 +267,12 @@ sdx/
 │   │   ├── generate.py
 │   │   ├── manifest.py
 │   │   ├── prompts.py
+│   │   ├── readiness.py
 │   │   ├── README.md
 │   │   ├── status.py
 │   │   ├── superior.py
-│   │   └── trainers.py
-│   ├── training/
+│   │   ├── trainers.py
+│   │   └── ui.py
 │   ├── __init__.py
 │   ├── README.md
 │   ├── run_pipeline.py
@@ -270,9 +288,12 @@ sdx/
 │   ├── test_agentic.py
 │   ├── test_book.py
 │   ├── test_data.py
+│   ├── test_detail_control.py
 │   ├── test_diffusion.py
+│   ├── test_e2e.py
 │   ├── test_eval.py
 │   ├── test_frontier.py
+│   ├── test_ideas.py
 │   ├── test_image.py
 │   ├── test_internal_imports.py
 │   ├── test_minor_guard.py
@@ -286,6 +307,7 @@ sdx/
 │   ├── test_style.py
 │   ├── test_tools.py
 │   ├── test_training.py
+│   ├── test_ui_tool.py
 │   ├── test_video.py
 │   └── test_vit.py
 ├── toolkit/
@@ -295,15 +317,18 @@ sdx/
 │   ├── __init__.py
 │   ├── cli.py
 │   ├── enhanced_trainer.py
-│   └── loop.py
+│   ├── loop.py
+│   └── readiness.py
 ├── utils/
 │   ├── agentic/
 │   │   ├── __init__.py
 │   │   ├── agent.py
 │   │   ├── interview.py
 │   │   └── quality_loop.py
+│   ├── ai_accel/
 │   ├── eval/
 │   ├── generation/
+│   │   ├── inventions/
 │   │   ├── __init__.py
 │   │   ├── editing.py
 │   │   ├── guidance.py
@@ -314,7 +339,13 @@ sdx/
 │   │   ├── sample_cli_parser.py
 │   │   ├── sample_core.py
 │   │   ├── sample_prompt.py
-│   │   └── sample_run.py
+│   │   ├── sample_run.py
+│   │   └── tiled.py
+│   ├── ideas/
+│   │   ├── __init__.py
+│   │   ├── image.py
+│   │   ├── kernels.py
+│   │   └── latent.py
 │   ├── modeling/
 │   │   ├── __init__.py
 │   │   ├── architecture.py
@@ -323,6 +354,8 @@ sdx/
 │   │   ├── hf_loaders.py
 │   │   └── model_paths.py
 │   ├── prompt/
+│   │   ├── stack/
+│   │   │   └── stages/
 │   │   ├── __init__.py
 │   │   ├── art_direction.py
 │   │   ├── content_controls.py
@@ -339,6 +372,7 @@ sdx/
 │   │   ├── architecture_consistency.py
 │   │   ├── critics.py
 │   │   ├── finishing.py
+│   │   ├── natural.py
 │   │   ├── pixel_art.py
 │   │   ├── realism.py
 │   │   └── test_time_pick.py
@@ -368,7 +402,6 @@ sdx/
 ├── compile_flags.txt
 ├── CONTRIBUTING.md
 ├── demo.py
-├── DEPRECATIONS.md
 ├── inference.py
 ├── LICENSE
 ├── pretrained_status.json

@@ -466,7 +466,10 @@ class Text2ImageDataset(Dataset):
         for off in range(min(32, n)):
             try:
                 # A replacement for an unreadable file is cropped to *this* index's bucket so the batch still stacks.
-                return self._getitem_impl((idx + off) % n, hw_idx=idx)
+                out = self._getitem_impl((idx + off) % n, hw_idx=idx)
+                if off:  # counted per item so the count survives DataLoader worker processes
+                    out["load_skips"] = off
+                return out
             except Exception as exc:
                 # Scraped datasets include corrupt PNGs, zips, truncated files, etc.
                 last_err = exc
@@ -578,6 +581,9 @@ def collate_t2i(batch: list[dict]) -> dict[str, Any]:
         "styles": [b.get("style", "") for b in batch],
         "sample_weights": torch.tensor([b.get("weight", 1.0) for b in batch], dtype=torch.float32),
     }
+    skips = sum(b.get("load_skips", 0) for b in batch)
+    if skips:
+        out["load_skips"] = skips
     if all("difficulty" in b for b in batch):
         out["difficulty"] = torch.tensor([b["difficulty"] for b in batch], dtype=torch.float32)
     if all("latent_values" in b for b in batch):
@@ -616,10 +622,17 @@ class ResolutionBucketBatchSampler(Sampler[list[int]]):
         self.drop_last = drop_last
         self.shuffle_batches = shuffle_batches
         self.generator = generator
+        self._seed = generator.initial_seed() if generator is not None else None
+        self.skip = 0  # batches to drop from the next pass (resume mid-epoch)
         groups: defaultdict[int, list[int]] = defaultdict(list)
         for i, bucket in enumerate(dataset._bucket_assign):
             groups[bucket].append(i)
         self._groups = dict(groups)
+
+    def set_epoch(self, epoch: int) -> None:
+        """Reseed the shuffle to ``seed + epoch``, so any epoch's batch order can be rebuilt on resume."""
+        if self.generator is not None:
+            self.generator.manual_seed(self._seed + int(epoch))
 
     def __len__(self) -> int:
         bs = self.batch_size
@@ -639,7 +652,8 @@ class ResolutionBucketBatchSampler(Sampler[list[int]]):
                     batches.append(chunk)
         if self.shuffle_batches:
             batches = self._shuffled(batches)
-        yield from batches
+        skip, self.skip = self.skip, 0
+        yield from batches[skip:]
 
 
 _ENHANCED_KEYS = ("spatial_layout", "anatomy_mask", "text_tokens", "text_positions", "character_id", "style_id")

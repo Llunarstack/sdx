@@ -1536,3 +1536,42 @@ def test_sample_one_image_pil_smoke(mock_encode: MagicMock) -> None:
     assert mock_encode.call_count == 1
     assert len(mock_encode.call_args[0][0]) == 2
     diffusion.sample_loop.assert_called_once()
+
+
+# ==================================================================================================
+# Run report: per-stage timing and peak VRAM.
+# ==================================================================================================
+
+
+def test_generate_reports_stage_timing() -> None:
+    parser = build_sample_parser()
+    args = sm.parse_args(parser, ["--ckpt", "x.pt", "--prompt", "a lighthouse", "--device", "cpu"])
+    m = SimpleNamespace(device=torch.device("cpu"))
+    saved: dict = {}
+    img = np.zeros((2, 2, 3), dtype=np.float32)
+    with patch.multiple(
+        sm,
+        compose_user_prompt=MagicMock(),
+        resolve_quality_defaults=MagicMock(),
+        compose_prompt_additions=MagicMock(return_value=None),
+        build_prompt_plan=MagicMock(return_value=SimpleNamespace(num_gen=1)),
+        encode_conditioning=MagicMock(return_value=SimpleNamespace(sexual=False)),
+        prepare_init_latents=MagicMock(),
+        sample_latents=MagicMock(return_value=torch.zeros(1, 4, 2, 2)),
+        export_attention=MagicMock(),
+        decode_images=MagicMock(return_value=(torch.zeros(1, 3, 2, 2), (2, 2), False)),
+        postprocess=MagicMock(return_value=[img]),
+        choose_best=MagicMock(return_value=("none", 0)),
+        capture_finish=MagicMock(return_value=[img]),
+        game_finish=MagicMock(return_value=([img], [None])),
+        require_image_allowed=MagicMock(),
+        save_targets=MagicMock(return_value=[]),
+        after_save=MagicMock(side_effect=lambda *a: saved.update(a[-1])),
+    ):
+        sm._generate(parser, args, [], m)
+    assert set(saved["timing_s"]) == {"load", "encode", "denoise", "decode", "post", "total"}
+    assert all(v >= 0.0 for v in saved["timing_s"].values())
+    assert saved["peak_vram_gb"] is None  # CPU
+    line = sm.run_summary(saved)
+    assert line.startswith("Run: ") and "denoise" in line and "n/a (CPU)" in line
+    assert "12.30 GB" in sm.run_summary({"timing_s": {"denoise": 1.0, "total": 2.0}, "peak_vram_gb": 12.3})

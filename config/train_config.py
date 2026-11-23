@@ -236,7 +236,7 @@ class TrainConfig:
     val_max_batches: int | None = None  # cap val batches per eval (None = full set)
 
     # Refinement
-    refinement_prob: float = 0.25  # probability of sampling small-t refinement steps
+    refinement_prob: float = 0.0  # experimental: probability of sampling small-t refinement steps (VP only)
     refinement_max_t: int = 150  # upper bound for refinement timestep range
 
     # Img2img training
@@ -281,6 +281,8 @@ class TrainConfig:
     results_dir: str = "results"
     log_every: int = 50
     ckpt_every: int = 5000
+    save_every_steps: int = 0  # overwrite checkpoints/last.pt every N steps (0 = at every ckpt_every)
+    max_nonfinite_steps: int = 20  # abort after N consecutive NaN/Inf steps (0 = never)
     global_seed: int = 42
     resume: str | None = None  # path to checkpoint to resume from
     # Load model/EMA (and aux modules) from checkpoint but start step 0 with a fresh optimizer.

@@ -256,9 +256,323 @@ pub fn count_blobs(g: &[f32], h: usize, w: usize, min_area_frac: f32) -> i64 {
     count
 }
 
+// ---------------------------------------------------------------------------------------------
+// Image kernels on float32 HWC buffers (values nominally in [0, 1]), used by `utils.ideas`.
+// Return 0 on success, -2 on bad arguments. Parallel kernels use at most four threads.
+// ---------------------------------------------------------------------------------------------
+
+/// Call `f(y, row)` for every output row of `dst` (`row_len` floats per row), in up to four row bands.
+fn par_rows<F: Fn(usize, &mut [f32]) + Sync>(dst: &mut [f32], h: usize, row_len: usize, f: F) {
+    let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 4).min(h.max(1));
+    let band = h.div_ceil(workers).max(1);
+    std::thread::scope(|scope| {
+        for (k, chunk) in dst.chunks_mut(band * row_len).enumerate() {
+            let f = &f;
+            scope.spawn(move || {
+                for (r, row) in chunk.chunks_mut(row_len).enumerate() {
+                    f(k * band + r, row);
+                }
+            });
+        }
+    });
+}
+
+/// In-place Floyd-Steinberg (serpentine when `serpentine != 0`) quantisation of each channel to `levels` steps;
+/// `amount` in [0, 1] scales the diffused error (0 = plain rounding).
+#[no_mangle]
+pub unsafe extern "C" fn sdx_error_diffuse_f32(
+    img: *mut f32,
+    h: usize,
+    w: usize,
+    c: usize,
+    levels: u32,
+    amount: f32,
+    serpentine: i32,
+) -> i32 {
+    if img.is_null() || h == 0 || w == 0 || c == 0 || levels < 2 {
+        return -2;
+    }
+    let buf = slice::from_raw_parts_mut(img, h * w * c);
+    let q = (levels - 1) as f32;
+    let amt = amount.clamp(0.0, 1.0);
+    for y in 0..h {
+        let rev = serpentine != 0 && y % 2 == 1;
+        let (fwd, back): (isize, isize) = if rev { (-1, 1) } else { (1, -1) };
+        for k in 0..w {
+            let x = if rev { w - 1 - k } else { k };
+            for ch in 0..c {
+                let i = (y * w + x) * c + ch;
+                let old = buf[i];
+                let new = (old * q).round().clamp(0.0, q) / q;
+                buf[i] = new;
+                let err = (old - new) * amt;
+                for (dx, dy, wgt) in [(fwd, 0usize, 7.0f32), (back, 1, 3.0), (0, 1, 5.0), (fwd, 1, 1.0)] {
+                    let nx = x as isize + dx;
+                    if nx >= 0 && (nx as usize) < w && y + dy < h {
+                        buf[((y + dy) * w + nx as usize) * c + ch] += err * wgt / 16.0;
+                    }
+                }
+            }
+        }
+    }
+    0
+}
+
+/// `n x n` blue-noise threshold map in (0, 1) by void-and-cluster (Ulichney 1993) on a torus, Gaussian `sigma`.
+#[no_mangle]
+pub unsafe extern "C" fn sdx_blue_noise_f32(out: *mut f32, n: usize, sigma: f32, seed: u64) -> i32 {
+    if out.is_null() || !(4..=256).contains(&n) || !(sigma > 0.0) {
+        return -2;
+    }
+    let ranks = void_and_cluster(n, sigma, seed);
+    let size = (n * n) as f32;
+    for (o, &r) in slice::from_raw_parts_mut(out, n * n).iter_mut().zip(&ranks) {
+        *o = (r as f32 + 0.5) / size;
+    }
+    0
+}
+
+fn void_and_cluster(n: usize, sigma: f32, seed: u64) -> Vec<u32> {
+    let size = n * n;
+    let mut kern = vec![0f32; size];
+    for dy in 0..n {
+        for dx in 0..n {
+            let (a, b) = (dy.min(n - dy) as f32, dx.min(n - dx) as f32);
+            kern[dy * n + dx] = (-(a * a + b * b) / (2.0 * sigma * sigma)).exp();
+        }
+    }
+    let splat = |energy: &mut [f32], p: usize, sign: f32| {
+        let (py, px) = (p / n, p % n);
+        for y in 0..n {
+            let row = &kern[((y + n - py) % n) * n..][..n];
+            for x in 0..n {
+                energy[y * n + x] += sign * row[(x + n - px) % n];
+            }
+        }
+    };
+    let pick = |pattern: &[bool], energy: &[f32], ones: bool| -> usize {
+        let mut best = usize::MAX;
+        for p in 0..size {
+            if pattern[p] == ones
+                && (best == usize::MAX || (ones && energy[p] > energy[best]) || (!ones && energy[p] < energy[best]))
+            {
+                best = p;
+            }
+        }
+        best
+    };
+    let mut s = seed ^ 0x9E37_79B9_7F4A_7C15;
+    let mut rand = move || {
+        s ^= s >> 12;
+        s ^= s << 25;
+        s ^= s >> 27;
+        s.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    };
+    let mut pattern = vec![false; size];
+    let mut energy = vec![0f32; size];
+    let mut ones = 0;
+    while ones < (size / 10).max(1) {
+        let p = (rand() % size as u64) as usize;
+        if !pattern[p] {
+            pattern[p] = true;
+            splat(&mut energy, p, 1.0);
+            ones += 1;
+        }
+    }
+    for _ in 0..size {
+        let cluster = pick(&pattern, &energy, true);
+        pattern[cluster] = false;
+        splat(&mut energy, cluster, -1.0);
+        let void = pick(&pattern, &energy, false);
+        pattern[void] = true;
+        splat(&mut energy, void, 1.0);
+        if void == cluster {
+            break;
+        }
+    }
+    let mut rank = vec![0u32; size];
+    let (mut proto, mut e) = (pattern.clone(), energy.clone());
+    for r in (0..ones).rev() {
+        let p = pick(&proto, &e, true);
+        proto[p] = false;
+        splat(&mut e, p, -1.0);
+        rank[p] = r as u32;
+    }
+    let (mut proto, mut e) = (pattern, energy);
+    for r in ones..size {
+        let p = pick(&proto, &e, false);
+        proto[p] = true;
+        splat(&mut e, p, 1.0);
+        rank[p] = r as u32;
+    }
+    rank
+}
+
+fn clamp_at(v: isize, hi: usize) -> usize {
+    v.clamp(0, hi as isize - 1) as usize
+}
+
+/// Edge-preserving bilateral filter: spatial Gaussian `sigma_s` (px) times range Gaussian `sigma_r` on the
+/// colour distance, over a `(2 * radius + 1)^2` window with clamped borders.
+#[no_mangle]
+pub unsafe extern "C" fn sdx_bilateral_f32(
+    src: *const f32,
+    dst: *mut f32,
+    h: usize,
+    w: usize,
+    c: usize,
+    radius: usize,
+    sigma_s: f32,
+    sigma_r: f32,
+) -> i32 {
+    if src.is_null() || dst.is_null() || h == 0 || w == 0 || !(1..=4).contains(&c) || !(sigma_s > 0.0 && sigma_r > 0.0) {
+        return -2;
+    }
+    let src = slice::from_raw_parts(src, h * w * c);
+    let dst = slice::from_raw_parts_mut(dst, h * w * c);
+    let r = radius as isize;
+    let spatial: Vec<f32> = (-r..=r)
+        .flat_map(|dy| (-r..=r).map(move |dx| (-((dx * dx + dy * dy) as f32) / (2.0 * sigma_s * sigma_s)).exp()))
+        .collect();
+    let inv = 1.0 / (2.0 * sigma_r * sigma_r);
+    par_rows(dst, h, w * c, |y, row| {
+        for x in 0..w {
+            let center = &src[(y * w + x) * c..][..c];
+            let (mut acc, mut norm, mut k) = ([0f32; 4], 0f32, 0usize);
+            for dy in -r..=r {
+                let yy = clamp_at(y as isize + dy, h);
+                for dx in -r..=r {
+                    let p = &src[(yy * w + clamp_at(x as isize + dx, w)) * c..][..c];
+                    let d2: f32 = p.iter().zip(center).map(|(a, b)| (a - b) * (a - b)).sum();
+                    let wgt = spatial[k] * (-d2 * inv).exp();
+                    k += 1;
+                    for ch in 0..c {
+                        acc[ch] += wgt * p[ch];
+                    }
+                    norm += wgt;
+                }
+            }
+            for ch in 0..c {
+                row[x * c + ch] = acc[ch] / norm;
+            }
+        }
+    });
+    0
+}
+
+/// 3x3 median per channel with clamped borders.
+#[no_mangle]
+pub unsafe extern "C" fn sdx_median3_f32(src: *const f32, dst: *mut f32, h: usize, w: usize, c: usize) -> i32 {
+    if src.is_null() || dst.is_null() || h == 0 || w == 0 || c == 0 {
+        return -2;
+    }
+    let src = slice::from_raw_parts(src, h * w * c);
+    let dst = slice::from_raw_parts_mut(dst, h * w * c);
+    par_rows(dst, h, w * c, |y, row| {
+        let mut win = [0f32; 9];
+        for x in 0..w {
+            for ch in 0..c {
+                let mut k = 0;
+                for dy in -1..=1isize {
+                    let yy = clamp_at(y as isize + dy, h);
+                    for dx in -1..=1isize {
+                        win[k] = src[(yy * w + clamp_at(x as isize + dx, w)) * c + ch];
+                        k += 1;
+                    }
+                }
+                win.select_nth_unstable_by(4, |a, b| a.total_cmp(b));
+                row[x * c + ch] = win[4];
+            }
+        }
+    });
+    0
+}
+
+/// Kuwahara filter: each pixel takes the mean colour of whichever of its four `(radius + 1)^2` quadrants has the
+/// lowest luma variance (summed-area tables, so O(1) per pixel).
+#[no_mangle]
+pub unsafe extern "C" fn sdx_kuwahara_f32(src: *const f32, dst: *mut f32, h: usize, w: usize, c: usize, radius: usize) -> i32 {
+    if src.is_null() || dst.is_null() || h == 0 || w == 0 || c == 0 || radius == 0 {
+        return -2;
+    }
+    let src = slice::from_raw_parts(src, h * w * c);
+    let dst = slice::from_raw_parts_mut(dst, h * w * c);
+    let (iw, planes) = (w + 1, c + 2);
+    let mut sat = vec![0f64; (h + 1) * iw * planes];
+    for y in 0..h {
+        for x in 0..w {
+            let p = &src[(y * w + x) * c..][..c];
+            let l = if c >= 3 { 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2] } else { p[0] } as f64;
+            for k in 0..planes {
+                let v = if k < c { p[k] as f64 } else if k == c { l } else { l * l };
+                let at = |yy: usize, xx: usize| ((yy * iw) + xx) * planes + k;
+                sat[at(y + 1, x + 1)] = v + sat[at(y, x + 1)] + sat[at(y + 1, x)] - sat[at(y, x)];
+            }
+        }
+    }
+    let rect = |k: usize, y0: usize, x0: usize, y1: usize, x1: usize| {
+        let at = |yy: usize, xx: usize| sat[((yy * iw) + xx) * planes + k];
+        at(y1 + 1, x1 + 1) - at(y0, x1 + 1) - at(y1 + 1, x0) + at(y0, x0)
+    };
+    par_rows(dst, h, w * c, |y, row| {
+        for x in 0..w {
+            let (ylo, yhi) = (y.saturating_sub(radius), (y + radius).min(h - 1));
+            let (xlo, xhi) = (x.saturating_sub(radius), (x + radius).min(w - 1));
+            let mut best = (f64::INFINITY, (y, x, y, x));
+            for q in [(ylo, xlo, y, x), (ylo, x, y, xhi), (y, xlo, yhi, x), (y, x, yhi, xhi)] {
+                let n = ((q.2 - q.0 + 1) * (q.3 - q.1 + 1)) as f64;
+                let mean = rect(c, q.0, q.1, q.2, q.3) / n;
+                let var = rect(c + 1, q.0, q.1, q.2, q.3) / n - mean * mean;
+                if var < best.0 {
+                    best = (var, q);
+                }
+            }
+            let q = best.1;
+            let n = ((q.2 - q.0 + 1) * (q.3 - q.1 + 1)) as f64;
+            for ch in 0..c {
+                row[x * c + ch] = (rect(ch, q.0, q.1, q.2, q.3) / n) as f32;
+            }
+        }
+    });
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_diffusion_preserves_mean_and_quantises() {
+        let (h, w) = (32, 32);
+        let mut img = vec![0.3f32; h * w];
+        assert_eq!(unsafe { sdx_error_diffuse_f32(img.as_mut_ptr(), h, w, 1, 2, 1.0, 1) }, 0);
+        assert!(img.iter().all(|&v| v == 0.0 || v == 1.0));
+        let mean = img.iter().sum::<f32>() / (h * w) as f32;
+        assert!((mean - 0.3).abs() < 0.02, "mean {mean}");
+    }
+
+    #[test]
+    fn blue_noise_ranks_are_a_permutation() {
+        let mut out = vec![0f32; 16 * 16];
+        assert_eq!(unsafe { sdx_blue_noise_f32(out.as_mut_ptr(), 16, 1.5, 3) }, 0);
+        let mut ranks: Vec<u32> = out.iter().map(|v| (v * 256.0) as u32).collect();
+        ranks.sort_unstable();
+        assert_eq!(ranks, (0..256).collect::<Vec<u32>>());
+    }
+
+    #[test]
+    fn median_removes_a_hot_pixel_and_kuwahara_keeps_flat() {
+        let (h, w) = (5, 5);
+        let mut src = vec![0.5f32; h * w];
+        src[12] = 1.0;
+        let mut dst = vec![0f32; h * w];
+        assert_eq!(unsafe { sdx_median3_f32(src.as_ptr(), dst.as_mut_ptr(), h, w, 1) }, 0);
+        assert_eq!(dst[12], 0.5);
+        let flat = vec![0.25f32; h * w * 3];
+        let mut out = vec![0f32; h * w * 3];
+        assert_eq!(unsafe { sdx_kuwahara_f32(flat.as_ptr(), out.as_mut_ptr(), h, w, 3, 2) }, 0);
+        assert!(out.iter().all(|v| (v - 0.25).abs() < 1e-6));
+    }
 
     fn make_blobs(h: usize, w: usize, n: usize) -> Vec<f32> {
         let mut g = vec![1.0f32; h * w];

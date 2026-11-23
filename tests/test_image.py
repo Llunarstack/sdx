@@ -241,7 +241,7 @@ def test_wd_tagger_input_format_and_categories(tmp_path, monkeypatch) -> None:
 
 
 # ==================================================================================================
-# test_image_dissection: test_image_dissection
+# test_image_dissection
 # ==================================================================================================
 
 
@@ -355,3 +355,180 @@ def test_fit_saliency_crop_prefers_bright_region():
     # Right-biased bright block should survive saliency crop better than center crop.
     ctr = fit_image_to_size(img, 40, 40, mode="center_crop")
     assert float(out.mean()) >= float(ctr.mean())
+
+
+# --- tiled denoising (MultiDiffusion) + outpainting --------------------------------------------------------
+
+
+def _blur3(x, t, **_):
+    return torch.nn.functional.avg_pool2d(torch.nn.functional.pad(x, (1, 1, 1, 1), mode="replicate"), 3, 1)
+
+
+@pytest.mark.parametrize("length,tile,overlap,align", [(56, 16, 4, 2), (40, 16, 8, 2), (33, 16, 4, 1), (16, 16, 4, 2)])
+def test_tile_starts_cover_aligned(length, tile, overlap, align):
+    from utils.generation.tiled import tile_starts
+
+    starts = tile_starts(length, tile, overlap, align)
+    assert starts[0] == 0 and starts[-1] == max(0, length - tile)
+    assert all(s % align == 0 for s in starts[:-1])
+    assert all(b - a <= tile - overlap + align for a, b in zip(starts, starts[1:], strict=False))
+
+
+@pytest.mark.parametrize("h,w,tile,overlap,align", [(40, 56, 16, 8, 2), (32, 48, 16, 4, 2), (16, 40, 16, 4, 1)])
+def test_tile_blend_weights_sum_to_one(h, w, tile, overlap, align):
+    from utils.generation.tiled import tile_layout
+
+    total = torch.zeros(h, w)
+    for y, x, wt in tile_layout(h, w, tile, overlap, align):
+        assert wt.min() > 0
+        total[y : y + min(tile, h), x : x + min(tile, w)] += wt
+    assert torch.allclose(total, torch.ones(h, w), atol=1e-6)
+
+
+def test_tiled_identity_constant_and_kwargs():
+    from utils.generation.tiled import TiledModel
+
+    x, t = torch.randn(2, 4, 40, 56), torch.tensor([5, 5])
+    assert torch.allclose(TiledModel(lambda x, t, **_: x, 16, 4, align=2)(x, t), x, atol=1e-6)
+    const = TiledModel(lambda x, t, **_: torch.full((x.shape[0], 8, *x.shape[-2:]), 3.0), 16, 4, align=2)
+    out = const(x, t)
+    assert out.shape == (2, 8, 40, 56) and torch.allclose(out, torch.full_like(out, 3.0))
+
+    def model(x, t, encoder_hidden_states, control_image, block_cache=None):
+        assert block_cache is None and t.shape[0] == x.shape[0] == encoder_hidden_states.shape[0]
+        assert control_image.shape[-2:] == (8 * x.shape[-2], 8 * x.shape[-1])
+        pooled = torch.nn.functional.avg_pool2d(control_image, 8)[:, :1]
+        return x + pooled + encoder_hidden_states.mean(dim=(1, 2)).view(-1, 1, 1, 1)
+
+    kw = dict(encoder_hidden_states=torch.randn(2, 7, 5), control_image=torch.randn(2, 3, 320, 448))
+    full = model(x, t, **kw)
+    tiled = TiledModel(model, 16, 4, align=2, max_batch=3)(x, t, block_cache=object(), **kw)
+    assert torch.allclose(tiled, full, atol=1e-5)
+
+
+def test_tiled_local_model_close_to_full_frame():
+    from utils.generation.tiled import TiledModel
+
+    torch.manual_seed(0)
+    x = torch.randn(2, 4, 40, 56)
+    full = _blur3(x, None)
+    blended = (TiledModel(_blur3, 16, 8, align=2)(x, torch.zeros(2)) - full).abs().max()
+    hard = (TiledModel(_blur3, 16, 0, align=2)(x, torch.zeros(2)) - full).abs().max()
+    assert blended < 0.03 and blended < 0.2 * hard
+
+
+def test_tiled_prediction_continuous_across_tiles():
+    from utils.generation.tiled import TiledModel
+
+    ramp = torch.linspace(0, 1, 56).expand(1, 1, 40, 56).contiguous()
+    tile_mean = TiledModel(lambda x, t, **_: x.mean(dim=(-2, -1), keepdim=True).expand_as(x), 16, 8, align=2)
+    out = tile_mean(ramp, torch.zeros(1))
+    jump = 8 / 55  # a hard cut steps by the difference of neighbouring tile means
+    assert out.diff(dim=-1).abs().max() < 0.25 * jump
+    assert out.diff(dim=-2).abs().max() < 1e-6
+
+
+@pytest.mark.parametrize("flow", [False, True])
+def test_tiled_model_inside_sample_loop_matches_full(flow):
+    from diffusion.gaussian_diffusion import create_diffusion
+    from utils.generation.tiled import TiledModel
+
+    def model(x, t, encoder_hidden_states=None, **_):
+        return 0.1 * x + encoder_hidden_states.mean(dim=(1, 2)).view(-1, 1, 1, 1)
+
+    extra = dict(flow_matching_sample=True, flow_solver="euler") if flow else dict(solver="ddim", scheduler="ddim")
+    kw = dict(
+        model_kwargs_cond={"encoder_hidden_states": torch.ones(1, 3, 4)},
+        model_kwargs_uncond={"encoder_hidden_states": torch.zeros(1, 3, 4)},
+        cfg_scale=4.0,
+        num_inference_steps=4,
+        device="cpu",
+        **extra,
+    )
+    outs = []
+    for mdl in (model, TiledModel(model, 16, 4, align=2)):
+        torch.manual_seed(0)
+        outs.append(create_diffusion().sample_loop(mdl, (1, 4, 24, 40), **kw))
+    assert torch.allclose(outs[0], outs[1], atol=1e-5)
+
+
+def test_maybe_tiled_auto_threshold_and_force():
+    from utils.generation.tiled import TiledModel, maybe_tiled
+
+    m = SimpleNamespace(latent_size=32, model=SimpleNamespace(patch_size=2))
+    assert maybe_tiled(m, 32, 32, force=True) is None
+    assert maybe_tiled(m, 32, 48) is None  # 1.5x native tokens: full attention is still fine
+    assert isinstance(maybe_tiled(m, 32, 48, force=True), TiledModel)
+    tm = maybe_tiled(m, 48, 64, overlap_px=60)
+    assert isinstance(tm, TiledModel) and (tm.tile, tm.overlap, tm.align) == (32, 6, 2)
+    assert maybe_tiled(m, 48, 64).overlap == 8
+
+
+def test_hires_fix_passes_tiled_model():
+    from utils.generation import sample_run as sm
+    from utils.generation.tiled import TiledModel
+
+    def run(width, **flags):
+        args = SimpleNamespace(
+            hires_fix=True, mask="", init_image="", init_latent="", width=width, height=width, **flags
+        )
+        m = SimpleNamespace(ae_type="kl", req_h=width, req_w=width, latent_size=32, model=SimpleNamespace(patch_size=2))
+        s = SimpleNamespace(args=args, m=m, cfg_scale=5.0, renoise_refine=MagicMock(return_value="ok"))
+        assert sm._hires_fix(s, torch.zeros(1, 4, 32, 32)) == "ok"
+        return s.renoise_refine.call_args[0][-1]
+
+    assert run(304) is None  # 38x38 latent is under 1.5x the native tokens
+    assert isinstance(run(304, hires_tiled=True), TiledModel)
+    assert isinstance(run(512), TiledModel)
+
+
+def test_outpaint_flags_parse():
+    from utils.generation.editing import parse_outpaint
+    from utils.generation.sample_cli_parser import build_sample_parser
+
+    args = build_sample_parser().parse_args(
+        ["--ckpt", "x.pt", "--outpaint", "64,0,32,16", "--hires-tiled", "--tile-overlap", "48"]
+    )
+    assert (args.outpaint, args.hires_tiled, args.tile_overlap) == ("64,0,32,16", True, 48)
+    assert parse_outpaint(args.outpaint) == (64, 0, 32, 16)
+    for bad in ("1,2,3", "0,0,0,0", "-1,0,0,4", "a,b,c,d"):
+        with pytest.raises(ValueError):
+            parse_outpaint(bad)
+
+
+def test_outpaint_canvas_geometry():
+    from utils.generation.editing import outpaint_canvas
+
+    canvas, mask = outpaint_canvas(Image.new("RGB", (100, 80), (200, 30, 40)), (40, 0, 20, 10), feather=12)
+    assert canvas.size == mask.size == (160, 90)
+    rgb, mk = np.asarray(canvas).astype(int), np.asarray(mask)
+    assert (rgb[0:80, 40:140] == (200, 30, 40)).all()  # original kept
+    assert np.abs(rgb[:, :40] - (200, 30, 40)).max() <= 2  # fill is the extended colour, not black
+    assert (mk[:, :25] > 250).all() and (mk[:, 148:] > 250).all() and (mk[85:] > 250).all()
+    assert (mk[0:45, 75:105] < 5).all()  # original interior stays known
+    assert (mk[40, 40:50] >= 128).all() and (mk[40, 55:125] < 128).all()  # feather band into the original
+    assert (mk[0, 60:120] < 128).all()  # top had no padding: its original edge stays known
+
+
+def test_apply_outpaint_args(tmp_path):
+    from utils.generation.editing import apply_outpaint_args
+
+    src = tmp_path / "in.png"
+    Image.new("RGB", (100, 80), (10, 20, 30)).save(src)
+    base = dict(outpaint="40,0,20,10", mask="", init_latent="", width=0, height=0, inpaint_mode="legacy")
+    args = SimpleNamespace(**base, init_image=str(src), strength=0.75, _explicit_flags=frozenset())
+    apply_outpaint_args(args)
+    assert (args.width, args.height, args.inpaint_mode, args.strength) == (160, 90, "mdm", 1.0)
+    assert Image.open(args.init_image).size == Image.open(args.mask).size == (160, 90)
+    typed = SimpleNamespace(**base, init_image=str(src), strength=0.6, _explicit_flags=frozenset({"strength"}))
+    apply_outpaint_args(typed)
+    assert typed.strength == 0.6
+    with pytest.raises(SystemExit):
+        apply_outpaint_args(SimpleNamespace(outpaint="8,8,8,8", init_image=str(src), mask="m.png", init_latent=""))
+
+
+def test_outpaint_canvas_snaps_to_stride_without_area_cap():
+    from diffusion.sampling import sampling_canvas_hw
+
+    h, w = sampling_canvas_hw(490, 660, native_px=256, stride_px=16, max_area_ratio=float("inf"))
+    assert (h % 16, w % 16) == (0, 0) and abs(h - 490) <= 8 and abs(w - 660) <= 8

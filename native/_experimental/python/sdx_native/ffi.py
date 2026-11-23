@@ -48,6 +48,11 @@ _SIGNATURES: dict[str, dict[str, tuple[list, type]]] = {
         "sdx_token_jaccard_utf8": ([_P, _SZ, _P, _SZ], ctypes.c_int32),
         "sdx_quality_highlight_frac_u8": ([_P, _SZ, _SZ, _F32], _F64),
         "sdx_count_blobs_f32": ([_P, _SZ, _SZ, _F32], _I64),
+        "sdx_error_diffuse_f32": ([_P, _SZ, _SZ, _SZ, ctypes.c_uint32, _F32, _I], ctypes.c_int32),
+        "sdx_blue_noise_f32": ([_P, _SZ, _F32, ctypes.c_uint64], ctypes.c_int32),
+        "sdx_bilateral_f32": ([_P, _P, _SZ, _SZ, _SZ, _SZ, _F32, _F32], ctypes.c_int32),
+        "sdx_median3_f32": ([_P, _P, _SZ, _SZ, _SZ], ctypes.c_int32),
+        "sdx_kuwahara_f32": ([_P, _P, _SZ, _SZ, _SZ, _SZ], ctypes.c_int32),
     },
 }
 
@@ -293,3 +298,60 @@ def maybe_pick_best_style_embedding(
     if rc != 0:
         return None
     return int(out_i.value), float(out_s.value)
+
+
+# ------------------------------------------------------------------ image kernels (utils.ideas)
+
+
+def _hwc_f32(img: np.ndarray) -> np.ndarray:
+    if img.ndim != 3:
+        raise ValueError("expected an (H, W, C) image")
+    return np.ascontiguousarray(img, dtype=np.float32)
+
+
+def _rust_image(fn: str, img: np.ndarray, *params) -> np.ndarray | None:
+    lib = _lib("sdx_rs")
+    if lib is None:
+        return None
+    src = _hwc_f32(img)
+    dst = np.empty_like(src)
+    rc = getattr(lib, fn)(_ptr(src), _ptr(dst), *src.shape, *params)
+    if rc != 0:
+        raise RuntimeError(f"{fn} failed (rc={rc})")
+    return dst
+
+
+def maybe_error_diffuse_rust(img: np.ndarray, levels: int = 256, amount: float = 1.0) -> np.ndarray | None:
+    """Floyd-Steinberg (serpentine) quantisation of an (H, W, C) float image in [0, 1] to ``levels`` steps."""
+    lib = _lib("sdx_rs")
+    if lib is None:
+        return None
+    out = _hwc_f32(img).copy()
+    rc = lib.sdx_error_diffuse_f32(_ptr(out), *out.shape, int(levels), float(amount), 1)
+    if rc != 0:
+        raise RuntimeError(f"sdx_error_diffuse_f32 failed (rc={rc})")
+    return out
+
+
+def maybe_blue_noise_rust(n: int = 64, sigma: float = 1.5, seed: int = 0) -> np.ndarray | None:
+    """(n, n) void-and-cluster blue-noise threshold map in (0, 1)."""
+    lib = _lib("sdx_rs")
+    if lib is None:
+        return None
+    out = np.empty((n, n), dtype=np.float32)
+    rc = lib.sdx_blue_noise_f32(_ptr(out), int(n), float(sigma), int(seed) % 2**64)
+    if rc != 0:
+        raise RuntimeError(f"sdx_blue_noise_f32 failed (rc={rc})")
+    return out
+
+
+def maybe_bilateral_rust(img: np.ndarray, radius: int, sigma_s: float, sigma_r: float) -> np.ndarray | None:
+    return _rust_image("sdx_bilateral_f32", img, int(radius), float(sigma_s), float(sigma_r))
+
+
+def maybe_median3_rust(img: np.ndarray) -> np.ndarray | None:
+    return _rust_image("sdx_median3_f32", img)
+
+
+def maybe_kuwahara_rust(img: np.ndarray, radius: int) -> np.ndarray | None:
+    return _rust_image("sdx_kuwahara_f32", img, int(radius))

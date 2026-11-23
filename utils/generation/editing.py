@@ -6,6 +6,8 @@ import difflib
 import json
 import logging
 import re
+import sys
+import tempfile
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -1863,3 +1865,58 @@ def run_editing_phase(
         output_path=out_p,
         piece_dir=str(pieces_dir),
     )
+
+
+def parse_outpaint(spec: str) -> tuple[int, int, int, int]:
+    """``--outpaint L,T,R,B``: pixels added per side (non-negative, at least one positive)."""
+    parts = str(spec).split(",")
+    if len(parts) != 4:
+        raise ValueError(f"--outpaint expects L,T,R,B pixels, got {spec!r}")
+    pads = tuple(int(p) for p in parts)
+    if min(pads) < 0 or max(pads) == 0:
+        raise ValueError(f"--outpaint needs non-negative pixels with at least one side > 0, got {spec!r}")
+    return pads  # type: ignore[return-value]
+
+
+def outpaint_canvas(
+    image: Image.Image, pads: tuple[int, int, int, int], *, feather: int = 24
+) -> tuple[Image.Image, Image.Image]:
+    """Padded RGB (edge-extended, then blurred so the fill carries colour, not streaks) and its ``L`` mask
+    (white = generate): the new border plus a ``feather``-px blurred band into the original on each padded side."""
+    left, top, right, bottom = pads
+    rgb = image.convert("RGB")
+    w, h = rgb.size
+    arr = np.pad(np.asarray(rgb), ((top, bottom), (left, right), (0, 0)), mode="edge")
+    canvas = Image.fromarray(arr).filter(ImageFilter.GaussianBlur(max(pads) / 4))
+    canvas.paste(rgb, (left, top))
+    f = max(0, min(int(feather), w // 4, h // 4))
+    x0, y0 = left + (f if left else 0), top + (f if top else 0)
+    x1, y1 = left + w - (f if right else 0), top + h - (f if bottom else 0)
+    mask = Image.new("L", canvas.size, 255)
+    ImageDraw.Draw(mask).rectangle((x0, y0, x1 - 1, y1 - 1), fill=0)
+    if f:
+        mask = mask.filter(ImageFilter.GaussianBlur(f / 2))
+    return canvas, mask
+
+
+def apply_outpaint_args(args: Any) -> None:
+    """``--outpaint``: pad ``--init-image``, write it with its border mask, and route the run through inpainting
+    (``mdm`` mode, strength 1 unless typed) at the padded size."""
+    spec = str(getattr(args, "outpaint", "") or "").strip()
+    if not spec:
+        return
+    if not getattr(args, "init_image", "") or getattr(args, "mask", "") or getattr(args, "init_latent", ""):
+        raise SystemExit("--outpaint needs --init-image and no --mask / --init-latent.")
+    pads = parse_outpaint(spec)
+    canvas, mask = outpaint_canvas(Image.open(args.init_image), pads)
+    out = Path(tempfile.mkdtemp(prefix="sdx_outpaint_"))
+    canvas.save(out / "init.png")
+    mask.save(out / "mask.png")
+    args.init_image, args.mask = str(out / "init.png"), str(out / "mask.png")
+    args.width, args.height = canvas.size
+    typed = getattr(args, "_explicit_flags", frozenset())
+    if "inpaint_mode" not in typed:
+        args.inpaint_mode = "mdm"
+    if "strength" not in typed:
+        args.strength = 1.0
+    print(f"Outpaint {pads} -> {canvas.size[0]}x{canvas.size[1]} canvas ({out}).", file=sys.stderr)

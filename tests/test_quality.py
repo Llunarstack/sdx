@@ -1730,3 +1730,68 @@ def test_extend_sample_argv_domain_path():
     cmd: list[str] = []
     extend_sample_argv_visual_design(cmd, ns)
     assert cmd == ["--visual-design-domain", "stem", "--visual-design-intensity", "strong"]
+
+
+# ==================================================================================================
+# test_natural: --natural, the critic-gated pass that fixes measurable AI-look tells.
+# ==================================================================================================
+
+
+def _natural_field(h: int = 384, w: int = 512, seed: int = 0) -> np.ndarray:
+    """1/f^2 (natural-statistics) colour field in [0, 255]."""
+    rng = np.random.default_rng(seed)
+    f = np.hypot(np.fft.fftfreq(h)[:, None], np.fft.fftfreq(w)[None, :])
+    f[0, 0] = 1.0
+    z = np.real(np.fft.ifft2(np.fft.fft2(rng.standard_normal((h, w))) / f))
+    z = (z - z.min()) / (z.max() - z.min())
+    return np.clip(np.stack([z * 0.9, z**1.2 * 0.8, z**0.8 * 0.7], -1) * 235 + 10, 0, 255).astype(np.float32)
+
+
+def test_natural_pass_removes_decoder_grid_and_restores_sensor_noise():
+    from utils.quality.critics import GRID_PERIOD
+    from utils.quality.natural import _drift, natural_pass
+
+    clean = _natural_field()
+    fp = np.random.default_rng(1).normal(0, 2.0, (GRID_PERIOD, GRID_PERIOD, 3))
+    ai = np.clip(clean + np.tile(fp, (clean.shape[0] // GRID_PERIOD, clean.shape[1] // GRID_PERIOD, 1)), 0, 255)
+    out, rep = natural_pass(ai.astype(np.float32), "a photo of rolling hills", seed=1)
+    assert rep.tells_before["grid"] < 0.2 and rep.tells_after["grid"] > 0.8
+    assert rep.after >= rep.before + 0.2 and not rep.reverted
+    assert any(t == "grid" for t, _, _ in rep.fixes)
+    assert out.dtype == np.uint8 and out.shape == ai.shape
+    assert _drift(ai, out.astype(np.float32)) < 0.02  # content kept
+
+
+def test_natural_pass_leaves_a_camera_like_image_alone():
+    from utils.quality.natural import natural_pass, sensor_noise
+
+    photo = sensor_noise(_natural_field(seed=3), 1.0, 5)
+    out, rep = natural_pass(photo, "a photo of rolling hills", seed=2, dither=False)
+    assert rep.after >= rep.before - 1e-9
+    if not rep.fixes:
+        assert np.array_equal(out, photo)
+
+
+def test_natural_pass_gives_illustrations_no_sensor_noise_and_never_ends_worse():
+    from utils.quality.natural import natural_pass
+
+    art = _natural_field(seed=4)
+    _, rep = natural_pass(art, "anime illustration of rolling hills, cel shading", seed=3)
+    assert not any("sensor_noise" in f for _, f, _ in rep.fixes)
+    assert rep.after >= rep.before - 1e-9
+
+
+def test_natural_flag_and_rgba_passthrough():
+    from utils.generation.sample_argv import append_sample_repair_passthrough
+    from utils.generation.sample_cli_parser import build_sample_parser
+    from utils.quality.natural import natural_pass_all
+
+    args = build_sample_parser().parse_args(["--ckpt", "x.pt", "--prompt", "a photo of hills", "--natural"])
+    assert args.natural
+    cmd: list[str] = []
+    append_sample_repair_passthrough(cmd, args)
+    assert "--natural" in cmd
+    sprite = np.zeros((32, 32, 4), np.uint8)
+    report: dict = {}
+    out = natural_pass_all(args, [sprite, _natural_field(64, 64)], report)
+    assert out[0] is sprite and out[1].dtype == np.uint8 and len(report["natural"]) == 1

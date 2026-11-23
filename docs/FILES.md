@@ -37,7 +37,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 |------|-------------|
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | PR checklist. |
 | [demo.py](../demo.py) | SDX one-command demo — download weights and generate a sample image. |
-| [DEPRECATIONS.md](../DEPRECATIONS.md) | Removed paths and migrations. |
+| [DEPRECATIONS.md](DEPRECATIONS.md) | Removed paths and migrations. |
 | [inference.py](../inference.py) | Load a checkpoint and optionally smoke-test one latent refinement step (``--verify``, random latents). |
 | [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | Generated ASCII tree (`python -m scripts.tools update_project_structure`). |
 | [pyproject.toml](../pyproject.toml) | Package metadata, ruff + pytest config. |
@@ -62,6 +62,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | File | Description |
 |------|-------------|
 | [data/__init__.py](../data/__init__.py) | Dataset loaders for text-to-image training. |
+| [data/audit.py](../data/audit.py) | Streaming audit of the training dataset (unreadable rows, modes, sizes, crops, captions, duplicates, train/val leaks). |
 | [data/caption_utils.py](../data/caption_utils.py) | Training-caption helpers: tag emphasis, person-descriptor ordering, tag front-loading, anti-blending, |
 | [data/manifest_utils.py](../data/manifest_utils.py) | Shared manifest helpers for scrape -> enrich -> train and the JSONL CLI tools. |
 | [data/t2i_dataset.py](../data/t2i_dataset.py) | Text-to-image training dataset (image folders or JSONL manifests), its collate function, the aspect-bucket |
@@ -97,6 +98,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [training/cli.py](../training/cli.py) | ``train.py`` command line: the argparse parser, its book/comic preset and the mapping to ``TrainConfig``. |
 | [training/enhanced_trainer.py](../training/enhanced_trainer.py) | Enhanced training system for advanced DiT models. |
 | [training/loop.py](../training/loop.py) | Helpers of the ``train.py`` loop: losses (VP / flow / MDM / REPA / bridge), conditioning kwargs, EMA, schedules, |
+| [training/readiness.py](../training/readiness.py) | Training-readiness gate: tiny-rig learning checks, READY/NOT READY report, and the `train.py` long-run gate. |
 
 ### `utils/` — Shared library: prompt, generation, quality, modeling, training, agentic
 
@@ -117,6 +119,11 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/generation/sample_core.py](../utils/generation/sample_core.py) | ``sample.py`` models and conditioning: spec parsing, checkpoint / encoder loading, Krea controls, the quality policy, text embeddings and init late… |
 | [utils/generation/sample_prompt.py](../utils/generation/sample_prompt.py) | ``sample.py`` prompt phases: feature planners (frontier, Krea, attention layout, auto-refine), the user's prompt, additions and the final encoder t… |
 | [utils/generation/sample_run.py](../utils/generation/sample_run.py) | ``sample.py`` run: flag resolution, the denoising passes and latent refinement, decode / post / pick-best / save, and programmatic text-to-image. |
+| [utils/ideas/__init__.py](../utils/ideas/__init__.py) | `--ideas` registry and `IdeaStack`: 100 opt-in techniques at six hooks (noise, scale, delta, x0, step, image); strength 0 = exact no-op. |
+| [utils/ideas/latent.py](../utils/ideas/latent.py) | The 54 latent-space ideas: initial-noise shaping, CFG schedules, guidance-direction edits, x0 and per-step trajectory edits. |
+| [utils/ideas/image.py](../utils/ideas/image.py) | The 46 image ideas run after every other finish: dithering, optics, OKLab colour, tone, detail, retouch and looks. |
+| [utils/ideas/kernels.py](../utils/ideas/kernels.py) | Image kernels for the ideas: Rust (`sdx_rs`) when built, NumPy fallback otherwise. |
+| [utils/generation/tiled.py](../utils/generation/tiled.py) | MultiDiffusion-style tiled denoising: a model proxy that predicts large latents as overlapping native-size tiles blended with cosine weights (hires-fix, outpaint). |
 | [utils/modeling/architecture.py](../utils/modeling/architecture.py) | DiT architecture helpers: variant profiling, block-AR conditioning for the ViT scorer, training-free block caches and the 2026 architecture theme map. |
 | [utils/modeling/checkpoints.py](../utils/modeling/checkpoints.py) | DiT checkpoint loading, checkpoint diffs / LoRA extraction, and the LoRA bank registry. |
 | [utils/modeling/encoders.py](../utils/modeling/encoders.py) | Text-encoder bundles (T5 / triple / penta), their readiness checks and caption routing, and the training/sampling autoencoder. |
@@ -136,6 +143,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [utils/quality/architecture_consistency.py](../utils/quality/architecture_consistency.py) | Architecture / perspective **consistency lock**. |
 | [utils/quality/critics.py](../utils/quality/critics.py) | Image critics: AI-look tells, art direction, human-likeness, scene physics, hands, counts, contact shadows, seed variation, and training-manifest c… |
 | [utils/quality/finishing.py](../utils/quality/finishing.py) | Image finishing: deterministic sRGB helpers (contrast, saturation, grades, filters), the lens / sensor / film capture finish, artistic and human-ma… |
+| [utils/quality/natural.py](../utils/quality/natural.py) | `--natural`: critic-gated pass that fixes each measured AI-look tell (grid, noise floor, spectrum, smoothing, saturation, halos, skin, highlights), verified per fix, then blue-noise dither. |
 | [utils/quality/pixel_art.py](../utils/quality/pixel_art.py) | Exact-pixel finishing for game imagery: grid snap, palette, transparent background, seamless tiles, critics. |
 | [utils/quality/realism.py](../utils/quality/realism.py) | Photoreal critics and finishing: plastic-skin and waxy-highlight detectors (pooled into |
 | [utils/quality/test_time_pick.py](../utils/quality/test_time_pick.py) | Best-of-N candidate scoring for ``sample.py --pick-best`` (and every other ranker in the repo). |
@@ -213,6 +221,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [scripts/tools/dev/integration_smoke.py](../scripts/tools/dev/integration_smoke.py) | End-to-end integration smoke test before RunPod spend. |
 | [scripts/tools/dev/quick_test.py](../scripts/tools/dev/quick_test.py) | Smoke test: one forward pass (no training). Verifies imports, config, and model run. |
 | [scripts/tools/dev/smoke_imports.py](../scripts/tools/dev/smoke_imports.py) | Smoke test: import all *internal* SDX modules to catch broken links early. |
+| [scripts/tools/dev/commit-msg](../scripts/tools/dev/commit-msg) | Git hook (copy to `.git/hooks/`): strips Claude / Cursor attribution lines from each commit message. |
 | [scripts/tools/dev/strip_ai_contributors.py](../scripts/tools/dev/strip_ai_contributors.py) | Strip AI Co-authored-by trailers from all commits in the current repo. |
 | [scripts/tools/dev/strip_ai_git_trailers.py](../scripts/tools/dev/strip_ai_git_trailers.py) | Git --msg-filter helper: drop AI attribution lines from commit messages. |
 | [scripts/tools/dev/test_style_native_stack.py](../scripts/tools/dev/test_style_native_stack.py) | Smoke-test Style Genome + native stack (Rust / CUDA / Go). |
@@ -225,12 +234,14 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [scripts/tools/native/build_native.sh](../scripts/tools/native/build_native.sh) | Build SDX native C++ (optional CUDA) and Rust tools when cargo exists. |
 | [scripts/tools/native/clean_native_builds.ps1](../scripts/tools/native/clean_native_builds.ps1) | .\scripts\tools\native\clean_native_builds.ps1 |
 | [scripts/tools/prompts.py](../scripts/tools/prompts.py) | Prompt tooling: preview, compose, diff, research, style invention, taste and scene planning. |
+| [scripts/tools/readiness.py](../scripts/tools/readiness.py) | `readiness dataset` / `readiness check` CLI for the training-readiness gate. |
 | [scripts/tools/repo/clean_repo_artifacts.py](../scripts/tools/repo/clean_repo_artifacts.py) | Delete local generated artifacts from the repository tree. |
 | [scripts/tools/repo/update_project_structure.py](../scripts/tools/repo/update_project_structure.py) | Write PROJECT_STRUCTURE.md at the repo root: an ASCII tree of the SDX codebase. |
 | [scripts/tools/repo/verify_doc_links.py](../scripts/tools/repo/verify_doc_links.py) | Verify relative markdown links in key docs point to existing files. |
 | [scripts/tools/status.py](../scripts/tools/status.py) | Environment / model status reports: pretrained, readiness, inventory, gen-searcher. |
 | [scripts/tools/superior.py](../scripts/tools/superior.py) | Self-improvement stack: Superior generation, preference mining, DPO loops, RSI and human feedback. |
 | [scripts/tools/trainers.py](../scripts/tools/trainers.py) | Fine-tuning / distillation trainers and training-prep commands. |
+| [scripts/tools/ui.py](../scripts/tools/ui.py) | Local web UI for `sample.py` (stdlib only, bound to 127.0.0.1): form, live log, results and history. |
 
 ### `setup/` — Download, manifest and index builders
 
@@ -260,6 +271,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 |------|-------------|
 | [examples/example_character_consistency.py](../examples/example_character_consistency.py) | Character consistency example: build character profiles, score an image against one, and wire the |
 | [examples/run_baseline_eval.py](../examples/run_baseline_eval.py) | Run `sample.py` over `examples/eval_prompts_baseline.json` (or another pack). |
+| [examples/bench_pack_v1.json](../examples/bench_pack_v1.json) | 150-prompt benchmark pack (10 categories, OCR/count expectations); default pack of `bench ablate`. |
 
 ### `runpod/` — RunPod deployment scripts
 
@@ -293,8 +305,11 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [tests/test_agentic.py](../tests/test_agentic.py) | Tests for utils.agentic: agentic stack, perfect-gen loop, visual brain, superior stack. |
 | [tests/test_book.py](../tests/test_book.py) | Tests for book challenging-content prompt fragments. |
 | [tests/test_data.py](../tests/test_data.py) | Tests for data/: T2I dataset, caption utils, manifests, reverse search. |
+| [tests/test_detail_control.py](../tests/test_detail_control.py) | Detail Daemon (`--detail-amount`): model sees a scaled timestep mid-sampling, the solver keeps the real one. |
 | [tests/test_diffusion.py](../tests/test_diffusion.py) | Unit tests for diffusion preference DPO surrogate loss. |
+| [tests/test_e2e.py](../tests/test_e2e.py) | CPU end-to-end smoke: train a tiny DiT 3 steps on local stub encoders, save, sample via sample.py's entry point. |
 | [tests/test_eval.py](../tests/test_eval.py) | Also holds what used to be: test_eval_prompt_pack, test_eval_report, test_eval_harness, test_run_baseline_eval, test_benchmark_suite_tool, test_aut… |
+| [tests/test_ideas.py](../tests/test_ideas.py) | utils.ideas: registry, every idea on real inputs, exact no-op at strength 0, sampler wiring (VP and flow), Rust-vs-NumPy kernel parity. |
 | [tests/test_frontier.py](../tests/test_frontier.py) | Tests for frontier outside-the-box generation modules. |
 | [tests/test_image.py](../tests/test_image.py) | Image layer of the minor guard (zero-shot CLIP age check) and the WD-tag manifest screen. |
 | [tests/test_internal_imports.py](../tests/test_internal_imports.py) | Every ``from <internal module> import name`` (at any nesting level) names something that exists. |
@@ -309,6 +324,7 @@ End-to-end flow: **manifest/images → train.py (T5/triple + VAE/RAE + DiT + dif
 | [tests/test_style.py](../tests/test_style.py) | Tests for config.styles extraction helpers. |
 | [tests/test_tools.py](../tests/test_tools.py) | Tests for scripts.tools CLIs and the core CLI entry points. |
 | [tests/test_training.py](../tests/test_training.py) | Training data conditioning: aspect-ratio buckets, bucket batches, caption tag front-loading, caption dropout. |
+| [tests/test_ui_tool.py](../tests/test_ui_tool.py) | `python -m scripts.tools ui`: argv building, validation, file serving and the one-at-a-time runner. |
 | [tests/test_video.py](../tests/test_video.py) | Tests for prompt/image understanding on T2V / I2V / V2V paths. |
 | [tests/test_vit.py](../tests/test_vit.py) | Tests for vit_quality: scorer, text encoder, naming compat. |
 

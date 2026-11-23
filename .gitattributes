@@ -3,3 +3,4 @@
 runpod/** text eol=lf
 scripts/**/*.sh text eol=lf
 runpod/env.defaults text eol=lf
+scripts/tools/dev/commit-msg text eol=lf

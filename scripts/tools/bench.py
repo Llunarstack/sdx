@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Checkpoint benchmarks and sample.py sweeps: suite, history, prompts, seeds, gallery.
+"""Checkpoint benchmarks and sample.py sweeps: suite, ablate, history, prompts, seeds, gallery.
 
     python -m scripts.tools bench suite --ckpt results/a/best.pt results/b/best.pt --preset sdxl
+    python -m scripts.tools bench ablate --ckpt best.pt --variant baseline= --variant apg="--apg-parallel-eta 0" --dry-run
     python -m scripts.tools bench history --leaderboard benchmark_out/leaderboard.json
     python -m scripts.tools bench prompts --ckpt best.pt --preset sdxl --op-mode portrait
     python -m scripts.tools bench seeds --ckpt best.pt --prompt "..." --rows 2 --cols 4
@@ -15,9 +16,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -49,6 +53,7 @@ class PromptCase:
     width: int = 1024
     height: int = 1024
     prompt_layout: str = ""  # optional JSON path for --prompt-layout (penta/triple CLIP routing)
+    category: str = ""
 
 
 DEFAULT_SUITE: list[PromptCase] = [
@@ -194,7 +199,7 @@ def _load_suite(path: Path | None, suite_pack: str = "standard_v1") -> list[Prom
         raise ValueError("suite JSON must be a list of objects")
     out = [
         PromptCase(
-            name=str(row.get("name", "case")).strip() or "case",
+            name=str(row.get("name") or row.get("id") or "case").strip() or "case",
             prompt=str(row.get("prompt", "")).strip(),
             expected_text=str(row.get("expected_text", "") or ""),
             expected_count=int(row.get("expected_count", 0) or 0),
@@ -203,6 +208,7 @@ def _load_suite(path: Path | None, suite_pack: str = "standard_v1") -> list[Prom
             width=int(row.get("width", 1024) or 1024),
             height=int(row.get("height", 1024) or 1024),
             prompt_layout=str(row.get("prompt_layout", "") or row.get("prompt_layout_path", "") or ""),
+            category=str(row.get("category", "") or ""),
         )
         for row in data
         if isinstance(row, dict)
@@ -291,6 +297,10 @@ def _score_image(
 
 
 def _run_sample(ckpt: Path, out_png: Path, case: PromptCase, args: argparse.Namespace) -> None:
+    subprocess.run(_sample_cmd(ckpt, out_png, case, args), check=True)
+
+
+def _sample_cmd(ckpt: Path, out_png: Path, case: PromptCase, args: argparse.Namespace) -> list[str]:
     cmd: list[str] = [
         sys.executable,
         str(SAMPLE_PY),
@@ -336,8 +346,7 @@ def _run_sample(ckpt: Path, out_png: Path, case: PromptCase, args: argparse.Name
             layout_path = REPO / pl
         if layout_path.is_file():
             cmd += ["--prompt-layout", str(layout_path)]
-    cmd += [str(tok) for tok in args.sample_arg]
-    subprocess.run(cmd, check=True)
+    return cmd + [str(tok) for tok in args.sample_arg]
 
 
 def _write_preference_jsonl(
@@ -628,6 +637,248 @@ def _suite_main(argv: list[str]) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- ablate
+
+BENCH_PACK = REPO / "examples" / "bench_pack_v1.json"
+
+
+def _parse_variants(specs: list[str], variants_json: str = "") -> dict[str, list[str]]:
+    """``name=extra sample.py args`` specs (plus a JSON ``{name: "args" | [args]}``) -> ``{name: argv}``."""
+    raw: dict[str, Any] = json.loads(Path(variants_json).read_text(encoding="utf-8")) if variants_json else {}
+    for spec in specs:
+        name, sep, extra = spec.partition("=")
+        if not sep or not name.strip():
+            raise ValueError(f"--variant must be name=args, got {spec!r}")
+        raw[name.strip()] = extra
+    return {str(k): (shlex.split(v) if isinstance(v, str) else [str(t) for t in v]) for k, v in raw.items()}
+
+
+def _idea_variants(hook: str = "all") -> dict[str, list[str]]:
+    """One ``--ideas NAME`` variant per registered idea (``hook`` = ``all`` or one of ``utils.ideas.HOOKS``)."""
+    from utils.ideas import HOOKS, IDEAS
+
+    if hook != "all" and hook not in HOOKS:
+        raise SystemExit(f"--ideas-each: unknown hook {hook!r}; expected all or one of {', '.join(HOOKS)}")
+    return {name: ["--ideas", name] for name, i in IDEAS.items() if hook in ("all", i.hook)}
+
+
+def _mean(vals: list[float]) -> float | None:
+    return float(np.mean(vals)) if vals else None
+
+
+def _summarize_ablation(rows: list[dict[str, Any]], baseline: str) -> dict[str, Any]:
+    """Per variant: mean composite, per-category delta and paired win-rate vs ``baseline``, seconds, slowdown, VRAM."""
+    by_var: dict[str, dict[tuple[str, int], dict[str, Any]]] = {}
+    for r in rows:
+        by_var.setdefault(r["variant"], {})[(r["case"], int(r["seed"]))] = r
+    base = by_var.get(baseline, {})
+    base_secs = _mean([float(r["seconds"]) for r in base.values() if r.get("seconds") is not None])
+    out: dict[str, Any] = {}
+    for name, runs in by_var.items():
+        secs = [float(r["seconds"]) for r in runs.values() if r.get("seconds") is not None]
+        vram = [float(r["peak_vram_gb"]) for r in runs.values() if r.get("peak_vram_gb") is not None]
+        cats: dict[str, list[float]] = {}
+        base_cats: dict[str, list[float]] = {}
+        wins = 0.0
+        pairs = 0
+        for key, r in runs.items():
+            cat = str(r.get("category") or "uncategorized")
+            cats.setdefault(cat, []).append(float(r["composite"]))
+            b = base.get(key)
+            if b is None:
+                continue
+            base_cats.setdefault(cat, []).append(float(b["composite"]))
+            pairs += 1
+            d = float(r["composite"]) - float(b["composite"])
+            wins += 1.0 if d > 0 else 0.5 if d == 0 else 0.0
+        mean_s = _mean(secs)
+        out[name] = {
+            "runs": len(runs),
+            "mean_composite": _mean([float(r["composite"]) for r in runs.values()]),
+            "delta_vs_baseline": {
+                c: float(np.mean(v) - np.mean(base_cats[c])) for c, v in sorted(cats.items()) if c in base_cats
+            },
+            "category_mean": {c: float(np.mean(v)) for c, v in sorted(cats.items())},
+            "win_rate_vs_baseline": wins / pairs if pairs else None,
+            "paired_runs": pairs,
+            "mean_seconds": mean_s,
+            "slowdown_vs_baseline": mean_s / base_secs if mean_s is not None and base_secs else None,
+            "peak_vram_gb": max(vram) if vram else None,
+        }
+    return out
+
+
+def _fmt(v: Any, spec: str = ".3f") -> str:
+    return "-" if v is None else format(v, spec)
+
+
+def _ablation_markdown(summary: dict[str, Any], baseline: str, env: dict[str, Any]) -> str:
+    lines = [
+        f"# Ablation vs `{baseline}`",
+        "",
+        " · ".join(f"{k}: `{v}`" for k, v in env.items()),
+        "",
+        "| variant | runs | mean score | win-rate | mean s | slowdown | peak VRAM GB |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for name, s in summary.items():
+        lines.append(
+            f"| {name} | {s['runs']} | {_fmt(s['mean_composite'])} | {_fmt(s['win_rate_vs_baseline'], '.0%')} | "
+            f"{_fmt(s['mean_seconds'], '.1f')} | {_fmt(s['slowdown_vs_baseline'], '.2f')}x | "
+            f"{_fmt(s['peak_vram_gb'], '.2f')} |"
+        )
+    cats = sorted({c for s in summary.values() for c in s["category_mean"]})
+    lines += ["", "## Delta vs baseline per category", "", "| variant | " + " | ".join(cats) + " |"]
+    lines.append("|---|" + "---:|" * len(cats))
+    for name, s in summary.items():
+        lines.append(f"| {name} | " + " | ".join(_fmt(s["delta_vs_baseline"].get(c), "+.3f") for c in cats) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def _env_info(ckpt: Path) -> dict[str, Any]:
+    import torch
+
+    h = hashlib.sha256()
+    with ckpt.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 24), b""):
+            h.update(chunk)
+    gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
+    return {"ckpt_sha256": h.hexdigest()[:12], "gpu": gpu, "torch": torch.__version__}
+
+
+def _ablate_main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(
+        prog="bench ablate",
+        description="Run every prompt x seed x variant through sample.py with shared seeds, score each image, "
+        "and report per-variant score deltas, win-rate, time and VRAM against the baseline variant.",
+    )
+    ap.add_argument("--ckpt", required=True)
+    ap.add_argument("--suite-json", default=str(BENCH_PACK), help="Prompt pack JSON ('' = --suite-pack).")
+    ap.add_argument("--suite-pack", default="standard_v1", choices=sorted(SUITE_PACKS))
+    ap.add_argument("--category", action="append", default=[], help="Only these categories; repeat as needed.")
+    ap.add_argument("--limit", type=int, default=0, help="Max prompts per category (0 = all).")
+    ap.add_argument(
+        "--variant",
+        action="append",
+        default=[],
+        help='name=extra sample.py args, e.g. --variant baseline= --variant hires="--hires-fix". Repeat as needed.',
+    )
+    ap.add_argument("--variants-json", default="", help='JSON {"name": "args" | ["args"]}; merged with --variant.')
+    ap.add_argument(
+        "--ideas-each",
+        nargs="?",
+        const="all",
+        default="",
+        metavar="HOOK",
+        help="Add a baseline plus one '--ideas NAME' variant per registered idea (optionally only one hook: "
+        "noise, scale, delta, x0, step, image).",
+    )
+    ap.add_argument("--baseline", default="", help="Variant to compare against (default: 'baseline' or the first).")
+    ap.add_argument("--seed-list", default="42,123")
+    ap.add_argument("--out-dir", default="ablation_out")
+    ap.add_argument("--preset", default="sdxl")
+    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--steps", type=int, default=30)
+    ap.add_argument("--num", type=int, default=1)
+    ap.add_argument("--pick-best", default="none")
+    ap.add_argument("--include-clip-score", action="store_true")
+    ap.add_argument("--clip-model", default="openai/clip-vit-base-patch32")
+    ap.add_argument("--auto-expected-text", action="store_true", default=True)
+    ap.add_argument("--no-auto-expected-text", action="store_false", dest="auto_expected_text")
+    ap.add_argument("--sample-arg", action="append", default=[], help="Extra sample.py token for every variant.")
+    ap.add_argument("--dry-run", action="store_true", help="Print the sample.py commands and exit.")
+    args = ap.parse_args(argv)
+    args.local_rag_jsonl = args.pick_vit_ckpt = ""
+
+    variants = _parse_variants(args.variant, args.variants_json)
+    if args.ideas_each:
+        variants = {"baseline": [], **variants, **_idea_variants(args.ideas_each)}
+    variants = variants or {"baseline": []}
+    baseline = args.baseline or ("baseline" if "baseline" in variants else next(iter(variants)))
+    if baseline not in variants:
+        raise SystemExit(f"--baseline {baseline!r} is not a variant: {', '.join(variants)}")
+    cases = _load_suite(Path(args.suite_json) if args.suite_json else None, suite_pack=args.suite_pack)
+    if args.category:
+        cases = [c for c in cases if c.category in set(args.category)]
+    if args.limit > 0:
+        per_cat: dict[str, int] = {}
+        picked = []
+        for c in cases:
+            per_cat[c.category] = per_cat.get(c.category, 0) + 1
+            if per_cat[c.category] <= args.limit:
+                picked.append(c)
+        cases = picked
+    if not cases:
+        raise SystemExit("No prompt cases selected.")
+    seeds = _parse_seeds(42, args.seed_list)
+    ckpt = Path(args.ckpt)
+    out_dir = Path(args.out_dir)
+    runs_path = out_dir / "runs.jsonl"
+    done: dict[tuple[str, str, int], dict[str, Any]] = {}
+    if runs_path.is_file():
+        for line in runs_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                done[(r["variant"], r["case"], int(r["seed"]))] = r
+    env: dict[str, Any] = {} if args.dry_run else _env_info(ckpt)
+    total = len(variants) * len(cases) * len(seeds)
+    print(f"[ablate] {len(variants)} variants x {len(cases)} prompts x {len(seeds)} seeds = {total} runs")
+    for name, extra in variants.items():
+        for i, case in enumerate(cases):
+            for seed in seeds:
+                key = (name, case.name, int(seed))
+                out_png = out_dir / name / f"{i:03d}_{case.name}_s{int(seed)}.png"
+                report = out_png.with_suffix(".json")
+                args.seed = int(seed)
+                cmd = [*_sample_cmd(ckpt, out_png, case, args), "--pick-report-json", str(report), *extra]
+                if args.dry_run:
+                    print(subprocess.list2cmdline(cmd))
+                    continue
+                if key in done and out_png.is_file():
+                    continue
+                wall = None
+                if not out_png.is_file():
+                    out_png.parent.mkdir(parents=True, exist_ok=True)
+                    print(f"[ablate] {name} :: {case.name} :: seed={seed}")
+                    t0 = time.perf_counter()
+                    subprocess.run(cmd, check=True)
+                    wall = round(time.perf_counter() - t0, 3)
+                rep = json.loads(report.read_text(encoding="utf-8")) if report.is_file() else {}
+                gen_s = (rep.get("timing_s") or {}).get("total")
+                met = _score_image(
+                    case, out_png, include_clip=args.include_clip_score, clip_model=args.clip_model, device=args.device
+                )
+                row = {
+                    "variant": name,
+                    "case": case.name,
+                    "category": case.category,
+                    "seed": int(seed),
+                    "prompt": case.prompt,
+                    "output": str(out_png),
+                    "extra_args": extra,
+                    "wall_s": wall,
+                    "gen_s": gen_s,
+                    "seconds": gen_s if gen_s is not None else wall,
+                    "peak_vram_gb": rep.get("peak_vram_gb"),
+                    **env,
+                    **met,
+                }
+                done[key] = row
+                runs_path.parent.mkdir(parents=True, exist_ok=True)
+                with runs_path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    if args.dry_run:
+        return 0
+
+    summary = _summarize_ablation(list(done.values()), baseline)
+    (out_dir / "ablation.json").write_text(
+        json.dumps({"baseline": baseline, "env": env, "variants": summary}, indent=2), encoding="utf-8"
+    )
+    (out_dir / "ablation.md").write_text(_ablation_markdown(summary, baseline, env), encoding="utf-8")
+    print(f"[ablate] wrote {out_dir / 'ablation.md'}")
+    return 0
+
+
 # ---------------------------------------------------------------- history
 
 
@@ -850,6 +1101,7 @@ def _gallery_main(argv: list[str]) -> int:
 
 COMMANDS = {
     "suite": _suite_main,
+    "ablate": _ablate_main,
     "history": _history_main,
     "prompts": _prompts_main,
     "seeds": _seeds_main,

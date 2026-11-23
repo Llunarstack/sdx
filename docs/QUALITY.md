@@ -60,6 +60,7 @@ python sample.py --ckpt .../best.pt --prompt "..." --cfg-scale 7 --cfg-rescale 0
 - **Positive cues** — In the prompt, describe hands in context: e.g. “holding a cup”, “hands on keyboard”, “correct hands, five fingers”.
 - **Simpler poses** — “Arms crossed”, “hands in pockets” tend to work better than complex hand poses.
 - **Inpainting** — For a single image, use `--init-image` + `--mask` to inpaint only the hand/face area at 0.4–0.5 strength.
+- **Outpainting** — `--init-image in.png --outpaint L,T,R,B` adds that many pixels per side: the border is edge-extended + blurred, masked (with a feathered band into the original) and inpainted (`mdm`, strength 1 unless set); output is the original plus padding, and large canvases denoise tiled.
 
 
 ---
@@ -157,6 +158,7 @@ See [docs/PROMPT_STACK.md](PROMPT_STACK.md#generating-3d-realistic-interiorexter
 
 - Use `--hires-fix`: compose at the native area, then upscale the latent and re-denoise at the full size (the start noise is SD3-shifted for the larger grid), and
 - `--vae-tiling` for large decodes.
+- Past 1.5× the native token count the hires pass denoises overlapping native-size tiles blended with cosine weights (MultiDiffusion), so attention memory stays per tile; `--hires-tiled` forces it, `--tile-overlap PX` sets the overlap (default a quarter tile).
 
 ---
 
@@ -206,6 +208,7 @@ See [docs/PROMPT_STACK.md](PROMPT_STACK.md#generating-3d-realistic-interiorexter
 **Fixes:**
 
 - **`--naturalize`** — One flag that: (1) adds an **anti-AI-look negative** (plastic skin, oversmooth, airbrushed, waxy, doll-like, synthetic, CGI, uncanny, etc.) so the model is steered away from those traits; (2) prepends **natural-look positive** hints (natural skin texture, subtle imperfections, raw photo, natural lighting) to the prompt; (3) after best-of-N selection, runs the **capture finish** (`utils/quality/finishing.py`): photos go through a linear-light lens (cos^4 vignette, radial lateral CA, optical blur), Poisson-Gaussian sensor noise on a Bayer mosaic with Malvar-He-Cutler demosaic, camera tone curve, sharpening and JPEG 4:2:0; film prompts get density-space emulsion grain instead; anime, illustration, painting and 3D get no photographic texture.
+- **`--natural`** — a closed-loop pass on every saved image ([`utils/quality/natural.py`](../utils/quality/natural.py)). It scores each tell with `critics.ai_look_score` (decoder grid, missing or flat noise floor, detail spectrum, over-smoothing, oversaturation, halos, plastic skin, waxy highlights). Then, weakest tell first, it tries the fixes for that tell at three strengths: degridding by subtracting the folded fingerprint, Poisson-Gaussian sensor noise in linear light, 1/f² spectrum match, texture re-injection, OKLab chroma scaling, halo cleanup, specular taming and highlight roll-off. A fix is kept only when that tell's score rises, pooled naturalness rises, and blurred OKLab lightness barely moves (so no fix can win by repainting). Cleanups are also tried with a sensor-noise top-up, because degridding or smoothing strips the noise a capture has. Fixes are judged on a centred 512 px crop; the full frame is scored before and after, and the pass is undone if it got worse. Then a blue-noise dither takes it to 8 bit. Illustration, anime and 3D prompts skip the capture tells, so they never get sensor noise. Each run prints `Natural pass: naturalness 0.41 -> 0.98; fixes: ...` and stores it under `natural` in `--pick-report-json`. It removes *measurable* tells only: wrong hands, garbled text or impossible physics come from the checkpoint and the prompt, not the finish.
 - **`--naturalize-grain 0`** — prompt/negative changes only, no capture finish (any positive value keeps it on; noise comes from the camera/film model).
 - **`--camera-isp auto|none|phone|dslr|compact|film`**, **`--camera-iso`**, **`--camera-jpeg-quality`** — force or tune the capture finish; **`--save-16bit`** writes 16-bit PNG from the float pipeline (8-bit output is TPDF-dithered).
 - **`--num 4 --pick-best combo_natural`** (or `combo_art`) — rank candidates *before* the capture finish with the critics in `utils/quality/critics.py` (decoder-grid residual, noise-floor shape, 1/f² spectral slope, oversmoothing, gamut-hugging chroma, HDR halos, mirror symmetry) and `utils/quality/critics.py` (saliency composition, horizon tilt, subject cropping, exposure / key, local contrast, hue-template harmony). Every metric aggregates by weighted Borda count, and the critics read the prompt's intent: a requested teal-orange or other grade, low-/high-key exposure, centred or symmetric layout, or dutch angle is never penalised. `superior_composite` also adds any HF reward model (CAFE, PickScore, HPS, ImageReward) whose weights are on disk.
@@ -906,6 +909,54 @@ python -m scripts.tools feedback sync-taste    # immediate inference bias: sampl
 
 Every round mixes the pairs from `outputs/feedback/feedback.jsonl` into training (`--from-feedback ''` turns that off).
 Video frames can be rated with `--media-type video`, but RSI trains on images only.
+
+---
+
+## Benchmark & ablations
+
+[`examples/bench_pack_v1.json`](../examples/bench_pack_v1.json) holds 150 prompts in 10 categories (photorealism,
+anatomy, text, counting, spatial, binding, multi_subject, composition, style, lighting); text and counting rows carry
+`expected_text` / `expected_count`. `bench ablate` runs every prompt x seed x variant through `sample.py` with the same
+seeds, scores each image with the `bench suite` scorers, and reads `timing_s` / `peak_vram_gb` from `--pick-report-json`:
+
+```bash
+python -m scripts.tools bench ablate --ckpt results/run/best.pt --seed-list 42,123 \
+  --variant baseline= --variant hires="--hires-fix" --variant apg="--apg-parallel-eta 0" --dry-run
+python -m scripts.tools bench ablate --ckpt best.pt --variants-json variants.json --category text --limit 5
+```
+
+Output in `--out-dir` (default `ablation_out/`): `runs.jsonl` (one row per image: score, seconds, VRAM, checkpoint
+sha256, GPU, torch), `ablation.json` and `ablation.md` (per variant: mean score, delta vs baseline per category,
+paired win-rate, mean seconds, slowdown, peak VRAM). Re-running resumes: runs with a PNG and a row are skipped.
+The quality policy stays on in every variant; add `--sample-arg=--no-quality-defaults` to measure features alone.
+Variant args are split shell-style, so give Windows paths with `/` or use the JSON list form.
+
+---
+
+## Ideas: 100 opt-in techniques (`--ideas`)
+
+[`utils/ideas/`](../utils/ideas/__init__.py) holds 100 small, training-free techniques, each one function at one
+hook of the sampler or the final image. Every idea is off unless named; strength `1` is the suggested amount and `0`
+is an exact no-op (tests check the baseline is bit-identical with no ideas enabled).
+
+```bash
+python sample.py --list-ideas                                    # the catalogue, grouped by hook
+python sample.py --ckpt best.pt --prompt "..." --ideas noise_orthogonal_batch,delta_channel_center=0.7,img_blue_noise_dither
+python -m scripts.tools bench ablate --ckpt best.pt --ideas-each delta --seed-list 1,2,3 --limit 3
+```
+
+| Hook | Count | Examples |
+|------|-------|----------|
+| `noise` (initial noise) | 15 | pyramid / spectral-tilt / phase-whitened noise, orthogonal or Sobol-QMC batches, shared-layout variations, symmetry and rule-of-thirds layout priors |
+| `scale` (CFG per step) | 3 | bell schedule, resolution-aware CFG, prompt-density CFG |
+| `delta` (guidance direction) | 15 | norm clip, per-channel centring (no CFG colour cast), spatial focus/even, sign consensus, sparse and low-rank guidance, auto-ratio CFG |
+| `x0` (clean estimate) | 11 | tanh soft clip, contrast / mean anchors, composition lock after 40%, mid-step sharpening, symmetry pulls |
+| `step` (trajectory) | 10 | particle repulsion (diverse batch), late churn, momentum, variance and divergence guards, detail noise |
+| `image` (after every finish) | 46 | blue-noise / Floyd-Steinberg dither, deband, halation, bloom, OKLab vibrance and gamut, white balance, dehaze, retinex, Richardson-Lucy, wavelet detail, 1/f spectrum match, noise consistency, Kuwahara / watercolour / halftone / cel looks |
+
+None of these is proven to improve a trained SDX checkpoint yet: run `bench ablate --ideas-each` on your checkpoint
+and keep the ones that win on your prompts. The image kernels use the Rust build when present
+([native/README.md](../native/README.md#image-kernels-vs-the-numpy-fallbacks)).
 
 ---
 

@@ -32,6 +32,7 @@ from utils.training.objectives import (
 from utils.training.perf import (
     dataloader_perf_kwargs,
     encode_text_multi_group,
+    optimal_num_workers,
     parallel_train_torchrun_example,
     resolve_training_num_workers,
     training_perf_hints,
@@ -435,6 +436,34 @@ def test_resolve_training_num_workers_auto() -> None:
     assert resolve_training_num_workers(6, 10_000, 32, auto=False) == 6
 
 
+@pytest.mark.parametrize("cpu_count, expected", [(1, 0), (2, 0), (3, 1), (8, 6)])
+def test_auto_workers_respect_cpu_capacity(monkeypatch, cpu_count: int, expected: int) -> None:
+    monkeypatch.setattr("utils.training.perf.os.cpu_count", lambda: cpu_count)
+    assert optimal_num_workers(10_000, 32) == expected
+    assert optimal_num_workers(10_000, 32, max_workers=1, min_workers=4) == min(expected, 1)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_conditioning_kwargs_match_latent_dtype(dtype: torch.dtype) -> None:
+    from training.loop import conditioning_kwargs
+
+    latents = torch.zeros((2, 4, 8, 8), dtype=dtype)
+    cfg = SimpleNamespace(creativity_embed_dim=8, creativity_max=1.0)
+    result = conditioning_kwargs(
+        cfg,
+        {"control_image": torch.zeros((2, 3, 8, 8))},
+        latents,
+        torch.device("cpu"),
+        encoder_hidden=torch.zeros((2, 4, 8), dtype=dtype),
+        encoder_hidden_neg=None,
+        style_embedding=None,
+        token_weights=None,
+        creativity_jitter_std=0.1,
+    )
+    assert result["control_image"].dtype == dtype
+    assert result["creativity"].dtype == dtype
+
+
 def test_encode_text_multi_group() -> None:
     calls: list = []
 
@@ -571,3 +600,454 @@ def test_empty_schedule_uses_flat_config() -> None:
     )
     kw = resolve_timestep_kwargs_for_step(cfg, 999)
     assert kw["mode"] == "low_noise"
+
+
+# --- Resumable checkpoints, non-finite guard, run manifest, baseline defaults ---
+
+
+def _tiny_run(ckpt_path: Path, total: int, *, stop_at: int | None = None, resume: bool = False):
+    """train.py's resume path in miniature: fresh objects, checkpoint restore, sampler skip, RNG restore."""
+    import copy
+    import logging
+    import random as pyrandom
+
+    from torch.utils.data import DataLoader, TensorDataset
+    from training.loop import (
+        ResumableSampler,
+        repeat_epochs,
+        restore_trainer_state,
+        resume_position,
+        trainer_state,
+        update_ema,
+    )
+    from utils.modeling.checkpoints import atomic_torch_save, load_checkpoint_file, set_rng_state
+
+    torch.manual_seed(0)
+    pyrandom.seed(0)
+    np.random.seed(0)
+    model = torch.nn.Linear(4, 2)
+    ema = copy.deepcopy(model).requires_grad_(False)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    scaler = torch.amp.GradScaler("cpu", enabled=False)
+    g = torch.Generator().manual_seed(123)
+    data = TensorDataset(torch.randn(10, 4, generator=g), torch.randn(10, 2, generator=g))
+    sampler = ResumableSampler(data, num_replicas=1, rank=0, shuffle=True, seed=7)
+    loader = DataLoader(data, batch_size=3, sampler=sampler, drop_last=True, generator=torch.Generator().manual_seed(7))
+    spe = len(loader)
+    steps, epoch = 0, 0
+    if resume:
+        ckpt = load_checkpoint_file(ckpt_path)
+        model.load_state_dict(ckpt["model"])
+        ema.load_state_dict(ckpt["ema"])
+        restore_trainer_state(ckpt, opt, scaler, logging.getLogger("test"))
+        steps = ckpt["steps"]
+        epoch, batch = resume_position(ckpt, spe)
+        sampler.skip = batch * 3
+        set_rng_state(ckpt["rng"])
+    for x, y in repeat_epochs(loader, sampler, epoch):
+        noise = torch.randn_like(x) * 0.1 + pyrandom.random() * 0.01 + float(np.random.rand()) * 0.01
+        loss = ((model(x + noise) - y) ** 2).mean()
+        loss.backward()
+        opt.step()
+        opt.zero_grad(set_to_none=True)
+        update_ema(ema, model, 0.9)
+        steps += 1
+        if steps == stop_at:
+            state = trainer_state(opt, scaler, steps=steps, steps_per_epoch=spe)
+            atomic_torch_save({"model": model.state_dict(), "ema": ema.state_dict(), **state}, ckpt_path)
+            return None
+        if steps == total:
+            return model, ema
+
+
+def test_resume_matches_uninterrupted_run(tmp_path):
+    straight = _tiny_run(tmp_path / "unused.pt", 8)
+    ckpt = tmp_path / "last.pt"
+    _tiny_run(ckpt, 8, stop_at=4)  # stops mid-epoch (3 batches per epoch)
+    resumed = _tiny_run(ckpt, 8, resume=True)
+    for a, b in zip(straight, resumed, strict=True):
+        for pa, pb in zip(a.state_dict().values(), b.state_dict().values(), strict=True):
+            assert torch.equal(pa, pb)
+
+
+def test_atomic_save_keeps_previous_checkpoint_when_write_crashes(tmp_path, monkeypatch):
+    from utils.modeling.checkpoints import atomic_torch_save
+
+    path = tmp_path / "last.pt"
+    atomic_torch_save({"steps": 1}, path)
+
+    def crash(obj, f):
+        f.write(b"partial")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(torch, "save", crash)
+    with pytest.raises(OSError):
+        atomic_torch_save({"steps": 2}, path)
+    monkeypatch.undo()
+    assert torch.load(path)["steps"] == 1
+    assert [p.name for p in tmp_path.iterdir()] == ["last.pt"]
+
+
+def test_old_checkpoint_resumes_with_warnings(caplog):
+    import logging
+
+    from training.loop import restore_trainer_state, resume_position
+
+    model = torch.nn.Linear(2, 2)
+    opt = torch.optim.AdamW(model.parameters())
+    scaler = torch.amp.GradScaler("cpu", enabled=True)
+    old = {"model": model.state_dict(), "ema": model.state_dict(), "steps": 7}  # pre-resume-state checkpoint
+    with caplog.at_level(logging.WARNING):
+        restore_trainer_state(old, opt, scaler, logging.getLogger("test"))
+    text = caplog.text
+    assert "no optimizer state" in text and "no GradScaler state" in text and "no RNG state" in text
+    assert resume_position(old, 3) == (2, 1)
+
+
+def test_bucket_sampler_rebuilds_any_epoch_and_skips():
+    ds = SimpleNamespace(resolution_buckets=[(64, 64)], _bucket_assign=[0] * 6 + [1] * 4)
+    s = ResolutionBucketBatchSampler(ds, 2, generator=torch.Generator().manual_seed(3))
+    s.set_epoch(2)
+    full = list(s)
+    list(s)  # the generator moved on; set_epoch rebuilds the same order
+    s.set_epoch(2)
+    s.skip = 2
+    assert list(s) == full[2:]
+    assert len(list(s)) == len(full)  # skip applies to one pass only
+
+
+def test_nonfinite_guard_skips_then_aborts():
+    from training.loop import NonFiniteGuard
+
+    guard = NonFiniteGuard(3)
+    assert guard.ok(torch.tensor(1.0), torch.tensor(2.0), 1)
+    assert not guard.ok(torch.tensor(float("nan")), torch.tensor(2.0), 2)
+    assert not guard.ok(torch.tensor(1.0), torch.tensor(float("inf")), 3)
+    assert guard.ok(1.0, 1.0, 4) and guard.consecutive == 0 and guard.skipped == 2
+    guard.ok(float("nan"), 1.0, 5)
+    guard.ok(float("nan"), 1.0, 6)
+    with pytest.raises(FloatingPointError, match="3 consecutive"):
+        guard.ok(float("nan"), 1.0, 7)
+    assert NonFiniteGuard(0).ok(float("nan"), 1.0, 1) is False  # 0 = never abort
+
+
+def test_fixed_seed_repeats_draws_and_restores_training_rng():
+    from training.loop import fixed_seed
+
+    torch.manual_seed(5)
+    expected = torch.rand(3)
+    torch.manual_seed(5)
+    with fixed_seed(1):
+        a = torch.rand(2)
+    with fixed_seed(1):
+        b = torch.rand(2)
+    assert torch.equal(a, b)
+    assert torch.equal(torch.rand(3), expected)
+
+
+def test_run_manifest_records_environment_and_dataset(tmp_path):
+    import logging
+
+    from config.train_config import TrainConfig
+    from training.loop import dataset_fingerprint, write_run_manifest
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "a.png").write_bytes(b"x")
+    (data / "a.txt").write_text("a cat", encoding="utf-8")
+    write_run_manifest(tmp_path, TrainConfig(data_path=str(data)), logging.getLogger("test"))
+    m = json.loads((tmp_path / "run_manifest.json").read_text(encoding="utf-8"))
+    assert m["packages"]["torch"] and m["dataset"]["files"] == 2 and m["config"]["data_path"] == str(data)
+    assert {"git", "argv", "system", "seed", "cudnn_version"} <= m.keys()
+    before = dataset_fingerprint(data)["sha256"]
+    (data / "a.txt").write_text("a black cat", encoding="utf-8")
+    assert dataset_fingerprint(data)["sha256"] != before
+
+
+def test_experimental_training_features_default_off():
+    from training.cli import build_train_arg_parser, build_train_config_from_args
+
+    cfg = build_train_config_from_args(build_train_arg_parser().parse_args(["--data-path", "x"]))
+    off = (
+        "refinement_prob img2img_prob edit_conditioning mdm_mask_ratio mdm_mask_schedule moe_num_experts "
+        "moe_balance_loss_weight num_ar_blocks ar_order_mix style_embed_dim control_cond_dim creativity_embed_dim "
+        "creativity_jitter_std size_embed_dim patch_se curriculum_difficulty_steps curriculum_caption_steps repa_weight "
+        "ssm_every_n num_register_tokens use_rope token_routing_enabled drop_path_rate layerscale_init qk_norm "
+        "lora_train noise_offset spectral_sfp_loss ot_noise_pair_reg flow_matching_training bridge_aux_weight "
+        "timestep_curriculum_schedule caption_dropout_schedule resolution_buckets boost_adherence_caption "
+        "caption_unicode_normalize train_prompt_emphasis attn_grounding_loss_weight attn_token_coverage_loss_weight "
+        "prompt_reinject_every_n prompt_reinject_alpha prompt_timestep_schedule_enabled use_hierarchical_captions "
+        "hierarchical_caption_drop_global_p hierarchical_caption_drop_local_p foveated_train_prob "
+        "train_originality_augment_prob save_polyak"
+    ).split()
+    assert [k for k in off if getattr(cfg, k)] == []
+    none_modes = (
+        "ar_curriculum_mode train_shortcomings_mitigation train_art_guidance_mode train_anatomy_guidance "
+        "train_style_guidance_mode"
+    ).split()
+    assert [k for k in none_modes if getattr(cfg, k) != "none"] == []
+    assert (cfg.kv_merge_factor, cfg.token_keep_ratio, cfg.timestep_sample_mode) == (1, 1.0, "uniform")
+    assert (cfg.beta_schedule, cfg.autoencoder_type, cfg.text_encoder_mode) == ("linear", "kl", "t5")
+
+
+# ==================================================================================================
+# Training readiness: objective math, timestep sampling, caption dropout, gradient reach, latent scaling,
+# dataset audit, loader skip counting and the readiness gate (training/readiness.py, data/audit.py).
+# ==================================================================================================
+
+
+def _train_cfg(*argv: str):
+    from training.cli import build_train_arg_parser, build_train_config_from_args
+
+    return build_train_config_from_args(build_train_arg_parser().parse_args(list(argv)))
+
+
+class _FlowOracle(torch.nn.Module):
+    """Exact velocity of the straight path through a known ``x0``: ``(x_t - x0) / s``."""
+
+    def __init__(self, x0, T):
+        super().__init__()
+        self.x0, self.T = x0, T
+
+    def forward(self, x_t, t, **kw):
+        s = (t.float() / (self.T - 1)).view(-1, 1, 1, 1).clamp_min(1e-6)
+        return (x_t - self.x0) / s
+
+
+def test_flow_interpolation_target_and_sampler_agree():
+    from diffusion.flow_matching import flow_matching_per_sample_losses
+
+    torch.manual_seed(0)
+    T, x0, eps = 1000, torch.randn(3, 4, 8, 8), torch.randn(3, 4, 8, 8)
+    seen = {}
+
+    class _Probe(torch.nn.Module):
+        def forward(self, x_t, t, **kw):
+            seen[int(t[0])] = x_t
+            return eps - x0
+
+    for t in (0, 400, 999):  # x_t is the straight line from x0 (t=0) to eps (t=T-1); its slope is the target
+        loss = flow_matching_per_sample_losses(_Probe(), x0, eps, T, {}, t_idx=torch.full((3,), t))
+        assert float(loss.max()) == 0.0
+    torch.testing.assert_close(seen[0], x0)
+    torch.testing.assert_close(seen[999], eps)
+    torch.testing.assert_close((seen[999] - seen[400]) / (599 / 999), eps - x0, rtol=1e-4, atol=1e-4)
+    # The sampler integrates the same convention: an exact velocity field lands on x0.
+    d = create_diffusion(num_timesteps=T)
+    out = d.sample_loop(
+        _FlowOracle(x0[:1], T),
+        (1, 4, 8, 8),
+        model_kwargs_cond={},
+        cfg_scale=1.0,
+        num_inference_steps=20,
+        device="cpu",
+        flow_matching_sample=True,
+        timestep_schedule="euler",
+    )
+    torch.testing.assert_close(out, x0[:1], rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("pred", ["epsilon", "v", "x0"])
+def test_vp_q_sample_target_and_inversion_are_consistent(pred):
+    torch.manual_seed(0)
+    d = create_diffusion(num_timesteps=1000, prediction_type=pred)
+    x0, eps = torch.randn(4, 4, 8, 8), torch.randn(4, 4, 8, 8)
+    t = torch.tensor([0, 250, 600, 999])
+    x_t = d.q_sample(x0, t, noise=eps)
+    a, s = d.sqrt_alpha_cumprod[t].view(-1, 1, 1, 1), d.sqrt_one_minus_alpha_cumprod[t].view(-1, 1, 1, 1)
+    torch.testing.assert_close(x_t, a * x0 + s * eps)
+    target = d.training_target(x0, eps, t)
+    x0_hat, eps_hat = d._predict_x0_and_noise(target, x_t, t)
+    torch.testing.assert_close(x0_hat[1:3], x0[1:3], rtol=1e-3, atol=1e-3)
+    torch.testing.assert_close(eps_hat[1:3], eps[1:3], rtol=1e-3, atol=1e-3)
+
+    class _Perfect(torch.nn.Module):
+        def forward(self, x, tt, **kw):
+            return target
+
+    loss = d.per_sample_training_losses(_Perfect(), x0, t, noise=eps, loss_weighting="min_snr")
+    assert float(loss.max()) == 0.0
+
+
+def test_training_timesteps_follow_configured_distribution():
+    from training.loop import flow_shift_for_latents, step_timesteps
+
+    torch.manual_seed(0)
+    T, n = 1000, 40000
+    cfg = SimpleNamespace(timestep_sample_mode="logit_normal", timestep_logit_mean=0.5, timestep_logit_std=0.7)
+    t = step_timesteps(cfg, T, n, torch.device("cpu")).float()
+    assert t.min() >= 0 and t.max() <= T - 1
+    u = (t / (T - 1)).clamp(1e-3, 1 - 1e-3)
+    logit = torch.log(u / (1 - u))
+    assert abs(float(logit.mean()) - 0.5) < 0.02 and abs(float(logit.std()) - 0.7) < 0.02
+    uni = step_timesteps(SimpleNamespace(timestep_sample_mode="uniform"), T, n, torch.device("cpu")).float()
+    assert abs(float(uni.mean()) - (T - 1) / 2) < 10 and abs(float(uni.std()) - T / 12**0.5) < 5
+    flow = SimpleNamespace(image_size=256, flow_shift=3.0)
+    assert flow_shift_for_latents(flow, torch.zeros(1, 4, 32, 32)) == pytest.approx(3.0)
+    assert flow_shift_for_latents(flow, torch.zeros(1, 4, 64, 64)) == pytest.approx(6.0)  # sqrt(4x tokens)
+
+
+def test_caption_dropout_rate_and_null_prompt():
+    from training.loop import drop_captions
+
+    torch.manual_seed(0)
+    caps = [f"cap {i}" for i in range(20000)]
+    layouts = [{"i": i} for i in range(20000)]
+    out, lay = drop_captions(caps, 0.1, layouts)
+    dropped = [c == "" for c in out]
+    assert abs(sum(dropped) / len(caps) - 0.1) < 0.008
+    assert all((c == "") == (spec is None) for c, spec in zip(out, lay, strict=True))
+    assert all(c in ("", orig) for c, orig in zip(out, caps, strict=True))
+    assert drop_captions(caps, 0.0) == (caps, None)
+    # The dropped prompt is the sampler's CFG uncond: sample.py encodes the (default empty) negative prompt.
+    from utils.generation.sample_cli_parser import build_sample_parser
+
+    assert build_sample_parser().get_default("negative_prompt") == ""
+
+
+def test_gradients_reach_every_trainable_parameter():
+    from config.train_config import get_dit_build_kwargs
+    from models.dit_text import DiT_Text
+    from training.loop import conditioning_kwargs, diffusion_step_loss, step_timesteps, training_noise
+
+    torch.manual_seed(0)
+    cfg = _train_cfg("--data-path", "x", "--image-size", "64")
+    kw = {**get_dit_build_kwargs(cfg, class_dropout_prob=0.0), "text_dim": 32}
+    model = DiT_Text(**kw, depth=2, hidden_size=64, num_heads=2, patch_size=2)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    d = create_diffusion(num_timesteps=1000)
+    lat, enc = torch.randn(4, 4, 8, 8), torch.randn(4, 7, 32)
+    seen = {n: 0.0 for n, p in model.named_parameters() if p.requires_grad}
+    for step in range(4):  # adaLN-Zero gates are zero at init, so upstream grads appear after the first steps
+        mk = conditioning_kwargs(
+            cfg, {}, lat, "cpu", encoder_hidden=enc, encoder_hidden_neg=None, style_embedding=None, token_weights=None
+        )
+        t = step_timesteps(cfg, 1000, 4, torch.device("cpu"), global_step=step)
+        loss = diffusion_step_loss(
+            cfg, d, model, lat, t, mk, None, training_noise(cfg, lat), refinement_prob=0.0, refinement_max_t=0
+        )
+        assert torch.isfinite(loss)
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        for n, p in model.named_parameters():
+            if p.requires_grad:
+                assert p.grad is None or torch.isfinite(p.grad).all(), n
+                seen[n] += 0.0 if p.grad is None else float(p.grad.abs().sum())
+        opt.step()
+    assert [n for n, v in seen.items() if v == 0.0] == []
+
+
+def test_latent_scale_applied_on_encode_and_inverted_on_decode():
+    from training.loop import encode_images_vae
+    from utils.generation.guidance import decode_latent_preview_rgb
+    from utils.modeling.encoders import ShiftedAutoencoder
+
+    class _IdVAE(torch.nn.Module):  # latent == image, decode == latent
+        def encode(self, x):
+            return SimpleNamespace(latent_dist=SimpleNamespace(sample=lambda g=None: x.clone()))
+
+        def decode(self, z):
+            return SimpleNamespace(sample=z)
+
+    x = torch.rand(1, 3, 8, 8) * 2 - 1
+    z = encode_images_vae(x, _IdVAE(), 0.13)
+    torch.testing.assert_close(z, x * 0.13)
+    img = decode_latent_preview_rgb(z, vae=_IdVAE(), latent_scale=0.13, ae_type="kl", rae_bridge=None)
+    torch.testing.assert_close(img, (x[0] * 0.5 + 0.5).clamp(0, 1))
+    shifted = ShiftedAutoencoder(_IdVAE(), 0.2)  # FLUX/SD3 VAEs: encode subtracts the shift, decode adds it back
+    torch.testing.assert_close(encode_images_vae(x, shifted, 0.5), (x - 0.2) * 0.5)
+    torch.testing.assert_close(shifted.decode(encode_images_vae(x, shifted, 0.5) / 0.5).sample, x)
+
+
+def _png(path: Path, size=(96, 96), mode="RGB", seed=0, caption: str | None = "a red cube on a wooden table"):
+    rng = np.random.default_rng(seed)
+    arr = rng.integers(0, 255, (size[1], size[0], len(mode)), dtype=np.uint8)
+    Image.fromarray(arr.squeeze(), mode=mode).save(path)
+    if caption is not None:
+        path.with_suffix(".txt").write_text(caption, encoding="utf-8")
+
+
+def test_dataset_audit_finds_planted_problems(tmp_path):
+    from data.audit import audit_dataset
+
+    d = tmp_path / "data"
+    d.mkdir()
+    for i in range(6):
+        _png(d / f"ok{i}.png", seed=i)
+    (d / "dup.png").write_bytes((d / "ok0.png").read_bytes())
+    (d / "dup.txt").write_text("a copy", encoding="utf-8")
+    arr = np.asarray(Image.open(d / "ok1.png")).astype(np.int16)
+    Image.fromarray(np.clip(arr + 3, 0, 255).astype(np.uint8)).save(d / "near.png")  # same picture, re-encoded
+    (d / "near.txt").write_text("almost a copy", encoding="utf-8")
+    (d / "corrupt.png").write_bytes((d / "ok2.png").read_bytes()[:200])
+    (d / "corrupt.txt").write_text("broken file", encoding="utf-8")
+    _png(d / "alpha.png", mode="RGBA", seed=7)
+    _png(d / "small.png", size=(20, 20), seed=8)
+    _png(d / "wide.png", size=(400, 80), seed=9)
+    _png(d / "nocap.png", seed=10, caption=None)
+    _png(d / "short.png", seed=11, caption="cat")
+    cfg = _train_cfg("--data-path", str(d), "--image-size", "64")
+    rep = audit_dataset(cfg, max_bad_frac=0.5)
+    c = rep["counts"]
+    assert c["missing_caption"] == 1 and c["corrupt"] == 1 and c["loader_failed"] == 1
+    assert c["exact_duplicate_rows"] == 1 and c["near_duplicate_rows"] == 1
+    assert c["alpha_flattened"] == 1 and c["upscaled_small_image"] == 1 and c["extreme_aspect_crop"] == 1
+    assert c["short_caption"] == 1
+    assert rep["ok"] and rep["rows_total"] == 14
+    assert not audit_dataset(cfg, max_bad_frac=0.01)["ok"]  # 2 of 14 rows are dropped or unreadable
+
+
+def test_loader_counts_silently_replaced_samples(tmp_path):
+    from data import collate_t2i
+
+    _png(tmp_path / "a.png")
+    (tmp_path / "b.png").write_bytes(b"not an image")
+    (tmp_path / "b.txt").write_text("broken", encoding="utf-8")
+    ds = Text2ImageDataset(str(tmp_path), image_size=32)
+    items = [ds[i] for i in range(len(ds))]
+    assert collate_t2i(items)["load_skips"] == 1
+    assert "load_skips" not in collate_t2i([i for i in items if "load_skips" not in i])
+
+
+def test_readiness_gate_blocks_long_runs_without_ready_report(tmp_path, monkeypatch):
+    from training import readiness
+
+    d = tmp_path / "data"
+    d.mkdir()
+    _png(d / "a.png")
+    monkeypatch.setattr(readiness, "git_info", lambda: {"commit": "abc", "dirty": False})
+    base = ("--data-path", str(d), "--results-dir", str(tmp_path / "res"))
+    readiness.enforce_readiness_gate(_train_cfg(*base, "--max-steps", "500"), min_steps=2000, skip=False)
+    readiness.enforce_readiness_gate(_train_cfg(*base, "--dry-run"), min_steps=2000, skip=False)
+    long_cfg = _train_cfg(*base, "--max-steps", "50000")
+    with pytest.raises(SystemExit, match="readiness check"):
+        readiness.enforce_readiness_gate(long_cfg, min_steps=2000, skip=False)
+    readiness.enforce_readiness_gate(long_cfg, min_steps=2000, skip=True)
+    from data.audit import dataset_fingerprint
+
+    path = readiness.report_path(long_cfg, readiness.config_hash(long_cfg), dataset_fingerprint(long_cfg))
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"ready": True, "git": {"commit": "abc"}}), encoding="utf-8")
+    readiness.enforce_readiness_gate(long_cfg, min_steps=2000, skip=False)
+    # Run length does not change the identity; the objective does.
+    assert readiness.config_hash(_train_cfg(*base, "--max-steps", "9")) == readiness.config_hash(long_cfg)
+    assert readiness.config_hash(_train_cfg(*base, "--lr", "3e-3")) != readiness.config_hash(long_cfg)
+    monkeypatch.setattr(readiness, "git_info", lambda: {"commit": "def", "dirty": False})
+    with pytest.raises(SystemExit, match="another git commit"):
+        readiness.enforce_readiness_gate(long_cfg, min_steps=2000, skip=False)
+
+
+def test_readiness_check_end_to_end_on_cpu(tmp_path):
+    pytest.importorskip("diffusers")
+    pytest.importorskip("tokenizers")
+    from training.readiness import run_readiness
+
+    d = tmp_path / "data"
+    d.mkdir()
+    for i in range(4):
+        _png(d / f"img{i}.png", size=(64, 64), seed=i, caption=f"a red cube number {i} on a table")
+    cfg = _train_cfg("--data-path", str(d), "--image-size", "64", "--results-dir", str(tmp_path / "res"))
+    rep = run_readiness(cfg, device="cpu", overfit_steps=120, overfit_samples=4)
+    status = {c["name"]: c["status"] for c in rep["checks"]}
+    assert rep["ready"], status
+    assert status["throughput"] == "SKIP" and Path(rep["path"]).is_file()

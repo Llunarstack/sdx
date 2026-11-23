@@ -545,6 +545,14 @@ Aliases such as `dpm++_2m`, `dpmsolver_pp_1`, `uni_pc` resolve to the real backe
 λ_t = eps_scale + eps_scale_k·t at every evaluation (epsilon scaling, Ning et al., ICLR 2024).
 Off by default; it costs no extra forwards.
 
+### Detail control (`--detail-amount`)
+
+Detail Daemon: between `--detail-start` and `--detail-end` (fraction of steps, default 0.2 / 0.8) the
+timestep fed to the model is scaled by `1 - amount·sin²(πu)` (a smooth bell over the window), so the model
+believes there is less noise and adds fine detail. The solver and the x0 conversion keep the real timestep.
+`0.1`–`0.3` counters the over-smooth "plastic" look; negative values smooth an over-busy image. Off (and
+bit-identical) at 0; works on VP and flow, no extra forwards (`diffusion.solvers.detail_multipliers`).
+
 ### Refinement (`--refine`)
 
 Off by default. `--refine restart` runs Restart sampling (Xu et al., NeurIPS 2023) on the

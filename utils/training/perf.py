@@ -313,9 +313,9 @@ def optimal_num_workers(
     - For small datasets (<1000 samples), fewer workers avoids overhead
     - For large datasets, scale with CPU count
     """
-    cpu_count = os.cpu_count() or 4
-    # Leave 1-2 CPUs for the main process and OS
-    available = max(1, cpu_count - 2)
+    cpu_count = os.cpu_count() or 1
+    # Leave up to two CPUs for the main process and OS. On small hosts, use no workers.
+    available = max(0, cpu_count - 2)
     # Scale: more workers for larger datasets
     if dataset_size < 500:
         suggested = min(2, available)
@@ -323,7 +323,7 @@ def optimal_num_workers(
         suggested = min(4, available)
     else:
         suggested = min(available, max_workers)
-    return max(min_workers, min(suggested, max_workers))
+    return min(available, max(0, max_workers), max(0, min_workers, suggested))
 
 
 # ---------------------------------------------------------------------------

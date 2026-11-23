@@ -1431,13 +1431,15 @@ def load_models(args: Any) -> Models:
     if ae_type == "rae":
         canvas_h = canvas_w = image_size  # the RAE latent grid is fixed
     else:
-        # Hires-fix composes at the native pixel area and reaches the requested size in its own pass.
+        # Hires-fix composes at the native pixel area and reaches the requested size in its own pass; outpaint
+        # keeps the padded size (snapped to the patch stride) and denoises it tiled when large.
+        ratio = 1.0 if getattr(args, "hires_fix", False) else 2.0
         canvas_h, canvas_w = sampling_canvas_hw(
             req_h,
             req_w,
             native_px=image_size,
             stride_px=dit_rgb_stride_px(model),
-            max_area_ratio=1.0 if getattr(args, "hires_fix", False) else 2.0,
+            max_area_ratio=float("inf") if str(getattr(args, "outpaint", "") or "").strip() else ratio,
         )
     if (canvas_w, canvas_h) != (image_size, image_size):
         print(f"Sampling canvas {canvas_w}x{canvas_h} (latent {canvas_h // 8}x{canvas_w // 8}).", file=sys.stderr)

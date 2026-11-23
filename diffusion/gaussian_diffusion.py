@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable
+from typing import Any
 
 import numpy as np
 import torch
@@ -416,7 +417,7 @@ class GaussianDiffusion:
         sigma = self._coef("sqrt_one_minus_alpha_cumprod", t, x_t)
         sqrt_alpha = self._coef("sqrt_alpha_cumprod", t, x_t)
         if self.prediction_type == "v":
-            pred_noise = (sqrt_alpha * model_out + sigma * x_t) / (sigma + 1e-8)
+            pred_noise = sqrt_alpha * model_out + sigma * x_t  # eps = a*v + s*x_t since a^2 + s^2 = 1
             x_0_pred = sqrt_alpha * x_t - sigma * model_out
         elif self.prediction_type == "x0":
             x_0_pred = model_out
@@ -620,11 +621,15 @@ class GaussianDiffusion:
         slg_start_frac: float = 0.01,
         slg_stop_frac: float = 0.30,
         qsilk_micrograin: float = 0.0,
+        detail_amount: float = 0.0,
+        detail_start: float = 0.2,
+        detail_end: float = 0.8,
         dynamic_dit_width: bool = False,
         dynamic_dit_early: float = 0.88,
         dynamic_sdt: bool = False,
         cfg_rejection_rerank: bool = False,
         dbc_separate_cfg: bool = True,
+        ideas: Any = None,
         regional_cfg_plan=None,
         step_noise_scales=None,
         sde_band=None,
@@ -663,6 +668,10 @@ class GaussianDiffusion:
         (linear, cosine, piecewise, snr) or the holy-grail ramp scales CFG per step. ``sag_*``: blur
         self-attention guidance. ``attention_layout_plan``: Dense Diffusion layout bias on the cross-attention
         of the plan's steps.
+
+        **Detail control** (``detail_amount``, Detail Daemon): between ``detail_start`` and ``detail_end`` (fraction
+        of steps) the timestep fed to the model is scaled by ``diffusion.solvers.detail_multipliers`` while the
+        solver and x0 conversion keep the real one; ``> 0`` adds fine detail, ``< 0`` smooths, 0 is off.
 
         **Loop policies** (VP and flow): volatile CFG; periodic alignment (``periodic_alignment_fn(step, x0)``
         below the threshold boosts CFG and optionally rewinds); AdaGen-style early exit. Inpaint freezing is VP only.
@@ -721,6 +730,7 @@ class GaussianDiffusion:
             tcfg_damping=float(tcfg_damping),
             pag_scale=float(pag_scale),
             slg_scale=float(slg_scale),
+            ideas=ideas or None,
             slg_window=(float(slg_start_frac), float(slg_stop_frac)),
         )
         denom = float(max(self.num_timesteps - 1, 1))
@@ -758,6 +768,10 @@ class GaussianDiffusion:
                     num_inference_steps, timestep_schedule=ts_name, karras_rho=float(karras_rho)
                 ).to(device)
             n_steps = len(timesteps)
+        if ideas:
+            ideas.begin(n_steps, shape)
+            if not resume:
+                x = ideas.noise(x)
         self._to_device(device)
 
         feat_cache = None
@@ -811,6 +825,9 @@ class GaussianDiffusion:
                 late_adapter_boost=float(holy_grail_late_adapter_boost),
             )
         cfg_box = [float(cfg_scale)]
+        from diffusion.solvers import detail_multipliers
+
+        detail = detail_multipliers(n_steps, detail_amount, detail_start, detail_end)
 
         def scheduled_cfg(i: int, t_batch: torch.Tensor) -> float:
             if not cg_sched:
@@ -846,6 +863,8 @@ class GaussianDiffusion:
             )
 
         def guided(x_in: torch.Tensor, t_batch: torch.Tensor, i: int) -> torch.Tensor:
+            if ideas:
+                ideas.at(i)
             if feat_cache is not None and feat_cache.should_skip_forward(x_in):
                 return feat_cache.cached_prediction()
             if layout is not None:
@@ -856,6 +875,8 @@ class GaussianDiffusion:
                 build_holy_grail_step_plan(recipe=hg_recipe, step_index=i, total_steps=n_steps) if hg_enabled else None
             )
             cs = (float(plan.cfg_scale) if hg_enabled else scheduled_cfg(i, t_batch)) * boost
+            if ideas:
+                cs = ideas.scale(cs)
             if has_control:
                 sf = _control_guidance_scale_for_step(
                     1.0,
@@ -886,6 +907,8 @@ class GaussianDiffusion:
                 )
                 mk_c = {**mk_c, "encoder_hidden_states": apply_condition_noise(emb, std=sig)}
             use_cfg = cs != 1.0 and bool(mk_u)
+            dm = detail[min(i, len(detail) - 1)] if detail else 1.0
+            t_model = t_batch if dm == 1.0 else t_batch * dm
             if use_cfg or g.pag or g.slg_active(i, n_steps) or g.zero_init_active(i, n_steps, flow=flow):
                 affine, sigma = self._guidance_space(t_batch, x_in.ndim, flow=flow, need_sigma=g.interval is not None)
                 if regional_cfg_plan is not None and use_cfg:
@@ -894,7 +917,7 @@ class GaussianDiffusion:
                     out = regional_cfg_forward(
                         model,
                         x_in,
-                        t_batch,
+                        t_model,
                         model_kwargs_cond=mk_c,
                         model_kwargs_uncond=mk_u,
                         plan=regional_cfg_plan,
@@ -911,7 +934,7 @@ class GaussianDiffusion:
                     out = batched_cfg_forward(
                         model,
                         x_in,
-                        t_batch,
+                        t_model,
                         model_kwargs_cond=mk_c,
                         model_kwargs_uncond=mk_u,
                         cfg_scale=float(cs),
@@ -929,7 +952,7 @@ class GaussianDiffusion:
             else:
                 # Only pass block_cache when caching is on: class-conditioned DiTs do not accept it.
                 kw = mk_c if block_cache is None else {**mk_c, "block_cache": block_cache}
-                out = model(x_in, t_batch, **kw)[:, : x_in.shape[1]]
+                out = model(x_in, t_model, **kw)[:, : x_in.shape[1]]
             if bool(dynamic_sdt) or bool(dynamic_dit_width):
                 from utils.modeling.architecture import apply_dynamic_width, apply_sdt_latent_blend
 
@@ -970,7 +993,7 @@ class GaussianDiffusion:
                     threshold_type=dynamic_threshold_type,
                     threshold_value=dynamic_threshold_value,
                 )
-            return x0
+            return ideas.x0(x0) if ideas else x0
 
         def eta_at(i: int, sigma: float) -> float:
             if eta_v <= 0.0 or (band is not None and not band[0] <= sigma <= band[1]):
@@ -981,6 +1004,9 @@ class GaussianDiffusion:
         exit_streak = [0]
 
         def after_step(i: int, x_prev: torch.Tensor, x_new: torch.Tensor, x0: torch.Tensor):
+            if ideas:
+                ideas.at(i)
+                x_new = ideas.step(x_new, x_prev, x0)
             if float(volatile_cfg_boost) > 0.0:
                 vol_deltas.append(float((x_new - x_prev).abs().mean()))
                 del vol_deltas[: -max(2, int(volatile_cfg_window))]

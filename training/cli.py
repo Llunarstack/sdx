@@ -130,7 +130,19 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         help="torch.compile mode when compile is enabled",
     )
     parser.add_argument("--log-every", type=int, default=50)
-    parser.add_argument("--ckpt-every", type=int, default=5000)
+    parser.add_argument("--ckpt-every", type=int, default=5000, help="Keep a numbered checkpoint every N steps")
+    parser.add_argument(
+        "--save-every-steps",
+        type=int,
+        default=0,
+        help="Overwrite checkpoints/last.pt every N steps for --resume (0 = at every --ckpt-every)",
+    )
+    parser.add_argument(
+        "--max-nonfinite-steps",
+        type=int,
+        default=20,
+        help="NaN/Inf loss or grad norm skips the optimizer step; abort after N in a row (0 = never abort)",
+    )
     parser.add_argument("--no-bf16", action="store_true", help="Disable bf16")
     parser.add_argument("--no-compile", action="store_true", help="Disable torch.compile")
     parser.add_argument("--no-grad-checkpoint", action="store_true")
@@ -203,7 +215,10 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-lr", type=float, default=1e-6, help="Min LR for cosine schedule")
     parser.add_argument("--lr-warmup-steps", type=int, default=500)
     parser.add_argument(
-        "--refinement-prob", type=float, default=0.25, help="Prob of training on fix-imperfection (small t)"
+        "--refinement-prob",
+        type=float,
+        default=0.0,
+        help="Experimental (VP only): prob of training on fix-imperfection small t (0=off)",
     )
     parser.add_argument("--refinement-max-t", type=int, default=150)
     parser.add_argument(
@@ -830,6 +845,16 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tensorboard-dir", type=str, default=None, help="TensorBoard log dir (enables TensorBoard)")
     parser.add_argument("--dry-run", action="store_true", help="Run 1 step and exit (verify setup)")
     parser.add_argument(
+        "--readiness-min-steps",
+        type=int,
+        default=2000,
+        help="Runs longer than this need a READY report from `python -m scripts.tools readiness check` "
+        "for the same git commit, config and dataset.",
+    )
+    parser.add_argument(
+        "--skip-readiness-gate", action="store_true", help="Start a long run without a READY readiness report."
+    )
+    parser.add_argument(
         "--no-save-run-manifest",
         action="store_true",
         help="Disable writing run_manifest.json/config.train.json in results dir.",
@@ -840,7 +865,11 @@ def build_train_arg_parser() -> argparse.ArgumentParser:
         help="Treat project UserWarning/FutureWarning as errors during training.",
     )
     parser.add_argument(
-        "--log-images-every", type=int, default=0, help="Log a sample image to WandB/TB every N steps (0=off)"
+        "--log-images-every",
+        "--sample-every",
+        type=int,
+        default=0,
+        help="Fixed-seed EMA sample every N steps: <run>/samples/*.png + WandB/TB (0=off)",
     )
     parser.add_argument(
         "--log-images-prompt", type=str, default="a photo of a cat", help="Prompt for --log-images-every sample"
@@ -972,6 +1001,8 @@ def build_train_config_from_args(args) -> TrainConfig:
         compile_mode=str(getattr(args, "compile_mode", "reduce-overhead") or "reduce-overhead"),
         log_every=args.log_every,
         ckpt_every=args.ckpt_every,
+        save_every_steps=int(getattr(args, "save_every_steps", 0) or 0),
+        max_nonfinite_steps=int(getattr(args, "max_nonfinite_steps", 20)),
         use_bf16=not args.no_bf16,
         use_compile=not args.no_compile,
         grad_checkpointing=not args.no_grad_checkpoint,

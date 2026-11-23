@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -25,6 +26,45 @@ def load_checkpoint_file(path: str | Path) -> dict[str, Any]:
         return torch.load(path, map_location="cpu", weights_only=False, mmap=True)
     except RuntimeError:  # legacy (non-zip) serialization cannot be mmapped
         return torch.load(path, map_location="cpu", weights_only=False)
+
+
+def atomic_torch_save(obj: Any, path: str | Path) -> None:
+    """``torch.save`` to ``<path>.tmp``, fsync, then ``os.replace``: a crash mid-write leaves the old file intact."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with open(tmp, "wb") as f:
+            torch.save(obj, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def rng_state() -> dict[str, Any]:
+    """Python, NumPy, torch CPU and every CUDA device's RNG state (for resumable checkpoints)."""
+    import numpy as np
+
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+    }
+
+
+def set_rng_state(state: dict[str, Any]) -> None:
+    """Restore :func:`rng_state` output; extra CUDA states (checkpoint from a bigger machine) are ignored."""
+    import numpy as np
+
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    n_dev = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    for i, s in enumerate(list(state.get("cuda") or [])[:n_dev]):
+        torch.cuda.set_rng_state(s, i)
 
 
 def load_dit_text_checkpoint(

@@ -7,6 +7,7 @@ Train the text-conditioned DiT (VP diffusion, rectified flow or masked MDM), on 
 
 import os
 import pickle
+import shutil
 import sys
 import warnings
 from copy import deepcopy
@@ -33,9 +34,10 @@ from diffusion import create_diffusion
 from models import DiT_models_text
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, random_split
-from torch.utils.data.distributed import DistributedSampler
 from training.cli import apply_book_train_preset_to_args, build_train_arg_parser, build_train_config_from_args
 from training.loop import (
+    NonFiniteGuard,
+    ResumableSampler,
     apply_runtime_ar,
     bridge_aux_loss,
     build_rae_bridge,
@@ -44,12 +46,14 @@ from training.loop import (
     conditioning_kwargs,
     create_logger,
     diffusion_step_loss,
+    drop_captions,
     edit_source_latents,
     ema_decay_at,
     ema_update_state,
     encode_images_vae,
     encode_kw_for_batch,
     eval_val_loss,
+    fixed_seed,
     get_curriculum_max_length,
     get_lr_cosine,
     get_scheduled_caption_dropout,
@@ -60,14 +64,18 @@ from training.loop import (
     repa_alignment_loss,
     repa_features,
     repeat_epochs,
+    restore_trainer_state,
+    resume_position,
     seed_dataloader_worker,
     set_tf32,
     setup_lora_training,
     step_timesteps,
+    trainer_state,
     training_noise,
     update_ema,
     write_run_manifest,
 )
+from utils.modeling.checkpoints import atomic_torch_save, set_rng_state
 from utils.modeling.encoders import encode_kwargs_for_captions, encode_text, load_text_encoder_bundle
 from utils.runtime import to_plain_dict
 from utils.training.monitoring import (
@@ -219,7 +227,7 @@ def main(cfg: TrainConfig):
         from models.lora import lora_state_dict
 
         adapter_path = Path(ckpt_path).with_name(Path(ckpt_path).stem + "_lora.pt")
-        torch.save(lora_state_dict(raw_model), adapter_path)
+        atomic_torch_save(lora_state_dict(raw_model), adapter_path)
         logger.info(f"LoRA adapter saved: {adapter_path}")
 
     raw_model = model
@@ -277,11 +285,8 @@ def main(cfg: TrainConfig):
         if load_dit_weights(raw_model, ckpt.get("model", ckpt.get("ema")), allow_new_edit_embed=new_edit):
             logger.info("Text-to-image checkpoint -> edit model: edit_type_embed initialised fresh.")
         load_dit_weights(ema, ckpt.get("ema") or raw_model.state_dict(), allow_new_edit_embed=new_edit)
-        if load_optimizer and ckpt.get("opt"):
-            try:
-                opt.load_state_dict(ckpt["opt"])
-            except (ValueError, KeyError) as e:
-                logger.warning(f"Optimizer state not restored (fresh optimizer): {e}")
+        if load_optimizer:
+            restore_trainer_state(ckpt, opt, scaler, logger)
         for key, live, shadow in (
             ("rae_latent_bridge", rae_bridge, ema_bridge),
             ("text_encoder_fusion", fusion, ema_fusion),
@@ -299,9 +304,12 @@ def main(cfg: TrainConfig):
         ckpt = {
             "model": raw_model.state_dict(),
             "ema": ema.state_dict(),
-            "opt": opt.state_dict(),
-            "steps": step,
+            **trainer_state(opt, scaler, steps=step, steps_per_epoch=steps_per_epoch),
             "config": cfg,
+            "argv": list(sys.argv),
+            "best_loss": best_loss,
+            "best_val_loss": best_val_loss,
+            "no_improvement_count": no_improvement_count,
             **extra,
         }
         if rae_bridge is not None:
@@ -312,14 +320,19 @@ def main(cfg: TrainConfig):
             ckpt["ema_text_encoder_fusion"] = ema_fusion.state_dict()
         return ckpt
 
+    resume_meta: dict = {}  # data position, RNG and val bookkeeping applied once the loader exists
     if getattr(cfg, "resume", None):
         resume_path = Path(cfg.resume)
-        if resume_path.exists():
-            ckpt = _load_ckpt_file(resume_path)
-            _apply_train_checkpoint(ckpt, load_optimizer=True)
-            start_step = ckpt.get("steps", 0)
-            best_loss = ckpt.get("best_loss", float("inf"))
-            logger.info(f"Resumed from {resume_path} at step {start_step}")
+        if not resume_path.is_file():
+            raise FileNotFoundError(f"--resume checkpoint not found: {resume_path}")
+        ckpt = _load_ckpt_file(resume_path)
+        _apply_train_checkpoint(ckpt, load_optimizer=True)
+        start_step = int(ckpt.get("steps", 0))
+        best_loss = ckpt.get("best_loss", float("inf"))
+        keys = ("steps", "epoch", "batch_in_epoch", "rng", "best_val_loss", "no_improvement_count")
+        resume_meta = {k: ckpt[k] for k in keys if k in ckpt}
+        del ckpt
+        logger.info(f"Resumed from {resume_path} at step {start_step}")
     elif getattr(cfg, "init_from", None):
         init_path = Path(cfg.init_from)
         if not init_path.is_file():
@@ -425,13 +438,9 @@ def main(cfg: TrainConfig):
     else:
         val_dataset = None
 
-    sampler = (
-        DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=cfg.global_seed)
-        if use_ddp
-        else None
-    )
+    # Every epoch's order is a function of (seed, epoch), so a resume can rebuild it and skip what was consumed.
     if res_buckets:
-        bucket_sampler = ResolutionBucketBatchSampler(
+        sampler = ResolutionBucketBatchSampler(
             train_dataset,
             cfg.per_device_batch_size,
             drop_last=True,
@@ -440,23 +449,29 @@ def main(cfg: TrainConfig):
         )
         loader = DataLoader(
             train_dataset,
-            batch_sampler=bucket_sampler,
+            batch_sampler=sampler,
             collate_fn=collate_t2i,
             **dl_common,
         )
     else:
+        sampler = ResumableSampler(
+            train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=cfg.global_seed
+        )
         loader = DataLoader(
             train_dataset,
             batch_size=cfg.per_device_batch_size,
-            shuffle=(sampler is None),
             sampler=sampler,
             drop_last=True,
             collate_fn=collate_t2i,
-            generator=torch.Generator().manual_seed(cfg.global_seed + rank)
-            if getattr(cfg, "deterministic", False)
-            else None,
+            # Worker seeds come from this generator, not the global RNG the training step draws from.
+            generator=torch.Generator().manual_seed(cfg.global_seed + rank),
             **dl_common,
         )
+    steps_per_epoch = max(1, len(loader))
+    start_epoch, start_batch = resume_position(resume_meta, steps_per_epoch) if resume_meta else (0, 0)
+    sampler.skip = start_batch * (1 if res_buckets else cfg.per_device_batch_size)
+    if start_step and rank == 0:
+        logger.info(f"Data position: epoch {start_epoch}, batch {start_batch}/{steps_per_epoch}")
     loader = maybe_cuda_prefetch_dataloader(loader, device, enabled=cuda_prefetch)
     logger.info(f"Train size: {len(train_dataset)}, batch per device: {cfg.per_device_batch_size}")
 
@@ -464,10 +479,6 @@ def main(cfg: TrainConfig):
     max_steps = getattr(cfg, "max_steps", 0)
     passes = getattr(cfg, "passes", 0)
     if passes > 0:
-        if res_buckets:
-            steps_per_epoch = max(1, len(loader))
-        else:
-            steps_per_epoch = max(1, len(train_dataset) // cfg.global_batch_size)
         steps_from_passes = passes * steps_per_epoch
         max_steps = steps_from_passes if max_steps <= 0 else min(steps_from_passes, max_steps)
         logger.info(
@@ -475,7 +486,7 @@ def main(cfg: TrainConfig):
         )
     use_step_based = max_steps > 0
     if use_step_based:
-        loader = repeat_epochs(loader, sampler)
+        loader = repeat_epochs(loader, sampler, start_epoch)
         logger.info(f"Step-based training: max_steps={max_steps}, cosine LR to min_lr={getattr(cfg, 'min_lr', 1e-6)}")
     else:
         logger.info(f"Epoch-based training: epochs={cfg.epochs}")
@@ -558,6 +569,7 @@ def main(cfg: TrainConfig):
 
     steps = start_step
     log_steps = 0
+    load_skips = samples_seen = 0  # unreadable rows the dataset silently replaced with a neighbour
     running_loss_t: torch.Tensor | None = None
     running_ag_sum_t: torch.Tensor | None = None
     running_ag_count = 0
@@ -572,9 +584,12 @@ def main(cfg: TrainConfig):
     val_every = getattr(cfg, "val_every", 2000)
     early_stopping_patience = getattr(cfg, "early_stopping_patience", 0)
     use_val_for_best = val_loader is not None
-    best_val_loss = float("inf")
-    no_improvement_count = 0
-    epoch = -1
+    best_val_loss = float(resume_meta.get("best_val_loss", float("inf")))
+    no_improvement_count = int(resume_meta.get("no_improvement_count", 0))
+    epoch = start_epoch - 1
+    guard = NonFiniteGuard(int(getattr(cfg, "max_nonfinite_steps", 20)))
+    grad_norm_sum, grad_norm_count = 0.0, 0
+    save_last_every = int(getattr(cfg, "save_every_steps", 0) or 0) or int(cfg.ckpt_every)
     save_polyak = int(getattr(cfg, "save_polyak", 0) or 0)
     polyak_buf = None  # running average of the last ~save_polyak weight snapshots (rank 0)
     tb_writer = None
@@ -596,13 +611,33 @@ def main(cfg: TrainConfig):
         except Exception as e:  # missing package, login or network: train without WandB
             logger.warning(f"WandB not available: {e}")
 
+    def _save_last(step: int, *, numbered: bool) -> None:
+        """Atomically write ``last.pt``; a ``--ckpt-every`` step also keeps it as ``<step>.pt`` (hardlink, else copy)."""
+        last = ckpt_dir / "last.pt"
+        atomic_torch_save(_checkpoint_dict(step), last)
+        _maybe_save_lora_adapter(raw_model, last)
+        logger.info(f"Checkpoint saved: {last} (step {step})")
+        if numbered:
+            path = ckpt_dir / f"{step:07d}.pt"
+            path.unlink(missing_ok=True)
+            try:
+                os.link(last, path)
+            except OSError:
+                shutil.copy2(last, path)
+            _maybe_save_lora_adapter(raw_model, path)
+            logger.info(f"Checkpoint kept: {path}")
+
+    if resume_meta.get("rng"):
+        set_rng_state(resume_meta["rng"])
+        if rank > 0:  # ponytail: only rank 0's RNG is saved; other ranks reseed (store per-rank states for exact DDP)
+            torch.manual_seed(cfg.global_seed + rank + 1_000_003 * start_step)
+
     while True:
         if not use_step_based:
             epoch += 1
             if epoch >= cfg.epochs:
                 break
-            if use_ddp:
-                sampler.set_epoch(epoch)
+            sampler.set_epoch(epoch)
 
         for batch in loader:
             last_attn_grounding_t: torch.Tensor | None = None
@@ -647,31 +682,28 @@ def main(cfg: TrainConfig):
             max_caption_len = (
                 get_curriculum_max_length(steps, curriculum_steps, curriculum_lengths) if curriculum_steps else 300
             )
-            layout_batch = batch.get("prompt_layout")
-            # Per-sample caption dropout to the empty prompt: exactly the uncond sample.py encodes for CFG,
-            # through the same tokenizer/encoders/fusion (a zero vector would leave that uncond untrained).
+            # Caption dropout to the empty prompt, the CFG uncond (a zero vector would leave that uncond untrained).
             cap_drop_schedule = getattr(cfg, "caption_dropout_schedule", None)
             p_drop = (
                 get_scheduled_caption_dropout(steps, cap_drop_schedule)
                 if cap_drop_schedule
                 else float(getattr(cfg, "caption_dropout_prob", 0.0) or 0.0)
             )
-            if p_drop > 0:
-                drop = (torch.rand(len(captions)) < p_drop).tolist()
-                captions = ["" if d else c for c, d in zip(captions, drop, strict=True)]
-                if layout_batch is not None:
-                    layout_batch = [None if d else spec for spec, d in zip(layout_batch, drop, strict=True)]
+            captions, layout_batch = drop_captions(captions, p_drop, batch.get("prompt_layout"))
+            load_skips += int(batch.get("load_skips", 0))
+            samples_seen += len(captions)
 
+            train_dtype = torch.bfloat16 if cfg.use_bf16 else torch.float32
             with torch.amp.autocast("cuda", enabled=cfg.use_bf16, dtype=torch.bfloat16):
                 with torch.no_grad():
                     if "latent_values" in batch:
-                        latents = to_train_device(batch["latent_values"], device, dtype=torch.bfloat16)
+                        latents = to_train_device(batch["latent_values"], device, dtype=train_dtype)
                     else:
-                        latents = encode_images_vae(pixel_values, vae, effective_latent_scale)
+                        latents = encode_images_vae(pixel_values, vae, effective_latent_scale).to(dtype=train_dtype)
                     # Img2img training: sometimes start from the row's init image so the model learns to edit it.
                     init_pixel_values = batch.get("init_pixel_values")
                     if init_pixel_values is not None and getattr(cfg, "img2img_prob", 0) > 0:
-                        use_init = torch.rand(latents.shape[0], device=device, dtype=torch.bfloat16) < cfg.img2img_prob
+                        use_init = torch.rand(latents.shape[0], device=device) < cfg.img2img_prob
                         if use_init.any():
                             nbc = device.type == "cuda"
                             idx = use_init.nonzero(as_tuple=False).view(-1)
@@ -690,6 +722,8 @@ def main(cfg: TrainConfig):
                         device,
                         dropout=float(getattr(cfg, "edit_source_dropout", 0.1)),
                     )
+                    if edit_latents is not None:
+                        edit_latents = edit_latents.to(dtype=train_dtype)
                     train_pe = bool(getattr(cfg, "train_prompt_emphasis", False))
                     pos_caps = captions
                     token_weights = None
@@ -701,7 +735,7 @@ def main(cfg: TrainConfig):
                             tokenizer,
                             max_caption_len,
                             device=device,
-                            dtype=torch.bfloat16,
+                            dtype=train_dtype,
                             text_bundle=text_bundle,
                         )
                     # Frozen encoders run without grad inside the bundle; the fusion layers need it to train.
@@ -711,7 +745,7 @@ def main(cfg: TrainConfig):
                             tokenizer,
                             text_encoder,
                             device,
-                            dtype=torch.bfloat16,
+                            dtype=train_dtype,
                             max_length=max_caption_len,
                             text_bundle=text_bundle,
                             train_fusion=True,
@@ -725,7 +759,7 @@ def main(cfg: TrainConfig):
                             tokenizer,
                             text_encoder,
                             device,
-                            dtype=torch.bfloat16,
+                            dtype=train_dtype,
                             max_length=max_caption_len,
                             text_bundle=text_bundle,
                             train_fusion=True,
@@ -855,13 +889,26 @@ def main(cfg: TrainConfig):
 
             scaler.scale(loss).backward()
 
+            stepped = False
             if (steps + 1) % cfg.grad_accum_steps == 0:
-                if cfg.max_grad_norm > 0:
-                    scaler.unscale_(opt)
-                    torch.nn.utils.clip_grad_norm_(opt_params, cfg.max_grad_norm)
-                scaler.step(opt)
-                scaler.update()
+                scaler.unscale_(opt)
+                # Pre-clip norm; max_norm=inf only measures it.
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    opt_params, cfg.max_grad_norm if cfg.max_grad_norm > 0 else float("inf")
+                )
+                if guard.ok(loss.detach(), grad_norm, steps + 1):  # one host sync per optimizer step, as GradScaler
+                    grad_norm_sum += float(grad_norm)
+                    grad_norm_count += 1
+                    scaler.step(opt)
+                    stepped = True
+                else:
+                    logger.warning(
+                        f"Non-finite loss/grad norm at step {steps + 1}: optimizer step skipped "
+                        f"({guard.consecutive} in a row, {guard.skipped} total)"
+                    )
+                scaler.update()  # unscale_ recorded any inf/nan, so an fp16 loss scale still backs off
                 opt.zero_grad(set_to_none=True)
+            if stepped:
                 decay = ema_decay_at((steps + 1) // cfg.grad_accum_steps, cfg.ema_decay)
                 for live, shadow in ema_pairs:
                     update_ema(shadow, live, decay)
@@ -900,8 +947,25 @@ def main(cfg: TrainConfig):
                     avg_loss = loss_sum.item() / world_size
                 lr_val = opt.param_groups[0]["lr"] if opt.param_groups else 0.0
                 lr_str = f" lr={lr_val:.2e}" if use_step_based else ""
-                scalars = {"loss": avg_loss, "lr": lr_val}
+                scalars = {
+                    "loss": avg_loss,
+                    "lr": lr_val,
+                    "step_time_s": elapsed / max(1, log_steps),
+                    "img_per_sec": steps_per_sec * cfg.global_batch_size,
+                    "nonfinite_skipped": guard.skipped,
+                }
                 aux_bits = []
+                if grad_norm_count:
+                    scalars["grad_norm"] = grad_norm_sum / grad_norm_count
+                    aux_bits.append(f"grad_norm={scalars['grad_norm']:.3f}")
+                    grad_norm_sum, grad_norm_count = 0.0, 0
+                if device.type == "cuda":
+                    scalars["peak_vram_gb"] = torch.cuda.max_memory_allocated(device) / 1024**3
+                    torch.cuda.reset_peak_memory_stats(device)
+                    aux_bits.append(f"peak_vram={scalars['peak_vram_gb']:.1f}GB")
+                aux_bits.append(f"img/s={scalars['img_per_sec']:.1f}")
+                if guard.skipped:
+                    aux_bits.append(f"nonfinite_skipped={guard.skipped}")
                 if running_ag_count > 0 and running_ag_sum_t is not None:
                     scalars["attn_grounding_aux"] = (running_ag_sum_t / running_ag_count).item()
                     aux_bits.append(f"attn_grnd={scalars['attn_grounding_aux']:.4f}")
@@ -909,6 +973,8 @@ def main(cfg: TrainConfig):
                     scalars["attn_token_coverage_aux"] = (running_cov_sum_t / running_cov_count).item()
                     aux_bits.append(f"attn_cov={scalars['attn_token_coverage_aux']:.4f}")
                 aux_str = "".join(f" {b}" for b in aux_bits)
+                if load_skips:
+                    aux_str += f" load_skips={load_skips}/{samples_seen}"
                 logger.info(
                     f"step={steps:07d} epoch={epoch} loss={avg_loss:.4f} steps/s={steps_per_sec:.2f}{lr_str}{aux_str}"
                 )
@@ -926,15 +992,26 @@ def main(cfg: TrainConfig):
                         tb_writer.add_scalar(name, value, steps)
                 if wandb_run is not None:
                     wandb_run.log({**scalars, "step": steps}, step=steps)
-                log_images_every = getattr(cfg, "log_images_every", 0)
-                if (
-                    rank == 0
-                    and log_images_every > 0
-                    and steps > 0
-                    and steps % log_images_every == 0
-                    and (tb_writer is not None or wandb_run is not None)
-                ):
-                    try:
+                # Save best by train loss only when not using validation (when using val, best is by val loss)
+                if save_best and rank == 0 and not use_val_for_best and avg_loss < best_loss:
+                    best_loss = avg_loss
+                    path = ckpt_dir / "best.pt"
+                    atomic_torch_save(_checkpoint_dict(steps, best_loss=best_loss), path)
+                    _maybe_save_lora_adapter(raw_model, path)
+                    logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
+                if running_loss_t is not None:
+                    running_loss_t.zero_()
+                running_ag_sum_t = None
+                running_ag_count = 0
+                running_cov_sum_t = None
+                running_cov_count = 0
+                log_steps = 0
+                start_time = time()
+
+            log_images_every = int(getattr(cfg, "log_images_every", 0) or 0)
+            if rank == 0 and log_images_every > 0 and steps % log_images_every == 0:
+                try:
+                    with fixed_seed(cfg.global_seed):  # same noise every time, training RNG untouched
                         log_sample_image(
                             ema,
                             diffusion,
@@ -948,62 +1025,47 @@ def main(cfg: TrainConfig):
                             rae_bridge=rae_bridge,
                             text_bundle=text_bundle,
                             wandb_run=wandb_run,
+                            out_dir=exp_dir / "samples",
                         )
-                    except Exception as e:  # a failed preview must not stop training
-                        logger.warning(f"Log sample image failed: {e}")
-                # Save best by train loss only when not using validation (when using val, best is by val loss)
-                if save_best and rank == 0 and not use_val_for_best and avg_loss < best_loss:
-                    best_loss = avg_loss
-                    path = ckpt_dir / "best.pt"
-                    torch.save(_checkpoint_dict(steps, best_loss=best_loss), path)
-                    _maybe_save_lora_adapter(raw_model, path)
-                    logger.info(f"Best checkpoint saved: {path} (train loss={best_loss:.4f})")
-                if running_loss_t is not None:
-                    running_loss_t.zero_()
-                running_ag_sum_t = None
-                running_ag_count = 0
-                running_cov_sum_t = None
-                running_cov_count = 0
-                log_steps = 0
-                start_time = time()
+                except Exception as e:  # a failed preview must not stop training
+                    logger.warning(f"Log sample image failed: {e}")
 
-            if steps > 0 and steps % cfg.ckpt_every == 0 and rank == 0:
-                path = ckpt_dir / f"{steps:07d}.pt"
-                torch.save(_checkpoint_dict(steps), path)
-                _maybe_save_lora_adapter(raw_model, path)
-                logger.info(f"Checkpoint saved: {path}")
+            if rank == 0 and (steps % save_last_every == 0 or steps % cfg.ckpt_every == 0):
+                _save_last(steps, numbered=steps % cfg.ckpt_every == 0)
+            if steps % cfg.ckpt_every == 0 and rank == 0:
                 if polyak_buf is not None:
                     polyak_ckpt = {"model": polyak_buf, "ema": polyak_buf, "steps": steps, "config": cfg}
-                    torch.save(polyak_ckpt, ckpt_dir / "polyak.pt")
+                    atomic_torch_save(polyak_ckpt, ckpt_dir / "polyak.pt")
                     logger.info(f"Polyak checkpoint saved: {ckpt_dir / 'polyak.pt'}")
 
             # Validation + early stopping: save best by val loss, stop when no improvement
             should_stop = False
             if val_loader is not None and steps > 0 and steps % val_every == 0 and rank == 0:
-                val_loss = eval_val_loss(
-                    ema,
-                    diffusion,
-                    val_loader,
-                    tokenizer,
-                    text_encoder,
-                    vae,
-                    device,
-                    cfg,
-                    refinement_prob=refinement_prob,
-                    refinement_max_t=refinement_max_t,
-                    max_caption_len=curriculum_lengths[-1] if curriculum_lengths else 300,
-                    max_batches=getattr(cfg, "val_max_batches", None),
-                    rae_bridge=rae_bridge,
-                    latent_scale=effective_latent_scale,
-                    text_bundle=text_bundle,
-                    global_step=steps,
-                )
+                with fixed_seed(cfg.global_seed):  # same t / noise every eval, so val losses compare
+                    val_loss = eval_val_loss(
+                        ema,
+                        diffusion,
+                        val_loader,
+                        tokenizer,
+                        text_encoder,
+                        vae,
+                        device,
+                        cfg,
+                        refinement_prob=refinement_prob,
+                        refinement_max_t=refinement_max_t,
+                        max_caption_len=curriculum_lengths[-1] if curriculum_lengths else 300,
+                        max_batches=getattr(cfg, "val_max_batches", None),
+                        rae_bridge=rae_bridge,
+                        latent_scale=effective_latent_scale,
+                        text_bundle=text_bundle,
+                        global_step=steps,
+                    )
                 logger.info(f"Val loss @ step {steps}: {val_loss:.4f}")
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     no_improvement_count = 0
                     path = ckpt_dir / "best.pt"
-                    torch.save(_checkpoint_dict(steps, best_loss=best_val_loss), path)
+                    atomic_torch_save(_checkpoint_dict(steps, best_loss=best_val_loss), path)
                     _maybe_save_lora_adapter(raw_model, path)
                     logger.info(f"Best checkpoint saved: {path} (val loss={best_val_loss:.4f})")
                 else:
@@ -1024,6 +1086,9 @@ def main(cfg: TrainConfig):
         if use_step_based and steps >= max_steps:
             break
 
+    final_unsaved = steps > start_step and steps % save_last_every and steps % cfg.ckpt_every
+    if rank == 0 and final_unsaved and not getattr(cfg, "dry_run", False):
+        _save_last(steps, numbered=False)  # the final weights, unless this step was just saved
     if dashboard is not None:
         dashboard.close()
     if use_ddp:
@@ -1042,6 +1107,9 @@ if __name__ == "__main__":
         args = parser.parse_args()
         apply_book_train_preset_to_args(args)
         cfg = build_train_config_from_args(args)
+        from training.readiness import enforce_readiness_gate
+
+        enforce_readiness_gate(cfg, min_steps=args.readiness_min_steps, skip=args.skip_readiness_gate)
         main(cfg)
 
     if _pcfg is not None:
