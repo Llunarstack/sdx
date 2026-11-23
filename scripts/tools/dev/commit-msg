@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Strip Claude / Cursor Co-authored-by and Made-with lines so AI tools never show up as GitHub contributors.
+# Install once per clone: cp scripts/tools/dev/commit-msg .git/hooks/commit-msg
+f="$(git rev-parse --show-toplevel)/scripts/tools/dev/strip_ai_git_trailers.py"
+[ -f "$f" ] || exit 0
+out="$(python "$f" < "$1")" && [ -n "$out" ] && printf '%s\n' "$out" > "$1"
+exit 0

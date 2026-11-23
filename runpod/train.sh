@@ -6,70 +6,139 @@
 #
 # Modes: full | lora | control | lora_control
 # Set SDX_FULL_TRAIN_FEATURES=0 for baseline DiT only.
+#
+# H100-max profile (full mode only): merged manifest + latent cache + big batches + torch.compile.
+#   SDX_TRAIN_PROFILE=h100 bash runpod/train.sh
+#   nohup env SDX_TRAIN_PROFILE=h100 bash runpod/train.sh > /workspace/train.log 2>&1 &
+#   3× H100: SDX_TRAIN_PROFILE=h100 SDX_NPROC_PER_NODE=3 SDX_GLOBAL_BATCH_SIZE=36 bash runpod/train.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 source "$ROOT/runpod/env.defaults"
 # shellcheck source=/dev/null
-source "$ROOT/runpod/lib/train_features.sh"
+source "$ROOT/runpod/lib.sh"
 cd "$ROOT"
 
 MODE="${SDX_TRAIN_MODE:-full}"
 ENRICHED="${SDX_ENRICHED_MANIFEST:-$SDX_DATA/enriched/manifest.jsonl}"
 MANIFEST="${SDX_MANIFEST:-$SDX_DATA/combined/manifest.jsonl}"
 EPOCHS="${SDX_EPOCHS:-20}"
-BATCH="${SDX_GLOBAL_BATCH_SIZE:-4}"
 IMAGE_SIZE="${SDX_IMAGE_SIZE:-512}"
 MAX_STEPS="${SDX_MAX_STEPS:-}"
 INIT="${SDX_INIT_CKPT:-}"
 NPROC="${SDX_NPROC_PER_NODE:-1}"
 
 EXTRA=()
+PROFILE_ARGS=()
 FEATURE_ARGS=()
 sdx_build_train_feature_args FEATURE_ARGS
 
 if [ -n "$MAX_STEPS" ]; then EXTRA+=(--max-steps "$MAX_STEPS"); fi
-if [ -n "$INIT" ]; then EXTRA+=(--init-from "$INIT"); fi
 
-case "$MODE" in
-  full|lora)
-    if [ -z "${SDX_MANIFEST:-}" ] && [ -f "$ENRICHED" ] && [ -s "$ENRICHED" ]; then
-      MANIFEST="$ENRICHED"
-    fi
-    if [ "$MODE" = "lora" ]; then
-      EXTRA+=(--lora-train --lora-rank "${SDX_LORA_RANK:-32}" --lora-alpha "${SDX_LORA_ALPHA:-32}")
-      if [ -z "$INIT" ]; then
-        echo "WARN: SDX_INIT_CKPT not set — LoRA trains from random init." >&2
+if [ "${SDX_TRAIN_PROFILE:-}" = "h100" ]; then
+  export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+  export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+
+  if [ -z "${SDX_MANIFEST:-}" ] && [ -f "$ENRICHED" ] && [ -s "$ENRICHED" ]; then
+    MANIFEST="$ENRICHED"
+  fi
+  LATENTS="${SDX_LATENT_CACHE:-$SDX_DATA/latent_cache}"
+
+  if [ "${SDX_H100_AGGRESSIVE:-1}" = "1" ]; then
+    BATCH="${SDX_GLOBAL_BATCH_SIZE:-24}"
+    WORKERS="${SDX_NUM_WORKERS:-48}"
+    PREFETCH="${SDX_PREFETCH_FACTOR:-8}"
+    PRECOMPUTE_BS="${SDX_PRECOMPUTE_BATCH:-64}"
+    GRAD_CKPT=(--no-grad-checkpoint)
+  else
+    BATCH="${SDX_GLOBAL_BATCH_SIZE:-12}"
+    WORKERS="${SDX_NUM_WORKERS:-24}"
+    PREFETCH="${SDX_PREFETCH_FACTOR:-4}"
+    PRECOMPUTE_BS="${SDX_PRECOMPUTE_BATCH:-32}"
+    GRAD_CKPT=()
+  fi
+  if [ "${SDX_USE_GRAD_CHECKPOINT:-1}" = "1" ]; then
+    GRAD_CKPT=()
+  fi
+  [ -n "${SDX_RESUME:-}" ] && EXTRA+=(--resume "$SDX_RESUME")
+
+  echo "==> H100 full train: batch=$BATCH gpus=$NPROC workers=$WORKERS features=${SDX_FULL_TRAIN_FEATURES:-1}"
+
+  python setup/download.py t5
+  python setup/download.py repa
+
+  echo "==> Merge + sanitize manifest"
+  python setup/manifests.py merge --data-root "$SDX_DATA" --out "$MANIFEST"
+  python setup/manifests.py sanitize --manifest "$MANIFEST" --data-root "$SDX_DATA" --backup --verify-images
+
+  ROWS=$(wc -l <"$MANIFEST")
+  CACHED=$(find "$LATENTS" -name '*.pt' 2>/dev/null | wc -l || echo 0)
+  NEED=$((ROWS * 90 / 100))
+  if [ "$CACHED" -lt "$NEED" ]; then
+    echo "==> Precompute latents ($CACHED / $ROWS) -> $LATENTS"
+    python -m scripts.tools precompute_latents \
+      --manifest-jsonl "$MANIFEST" \
+      --data-root "$SDX_DATA" \
+      --out-dir "$LATENTS" \
+      --image-size "$IMAGE_SIZE" \
+      --batch-size "$PRECOMPUTE_BS" \
+      --num-workers "$WORKERS"
+  else
+    echo "==> Latent cache OK ($CACHED files)"
+  fi
+
+  PROFILE_ARGS=(
+    --latent-cache-dir "$LATENTS"
+    --num-workers "$WORKERS"
+    --prefetch-factor "$PREFETCH"
+    --compile-mode "${SDX_COMPILE_MODE:-max-autotune}"
+    "${GRAD_CKPT[@]}"
+  )
+  echo "==> Train DiT-XL on $ROWS rows"
+else
+  BATCH="${SDX_GLOBAL_BATCH_SIZE:-4}"
+  if [ -n "$INIT" ]; then EXTRA+=(--init-from "$INIT"); fi
+
+  case "$MODE" in
+    full|lora)
+      if [ -z "${SDX_MANIFEST:-}" ] && [ -f "$ENRICHED" ] && [ -s "$ENRICHED" ]; then
+        MANIFEST="$ENRICHED"
       fi
-    fi
+      if [ "$MODE" = "lora" ]; then
+        EXTRA+=(--lora-train --lora-rank "${SDX_LORA_RANK:-32}" --lora-alpha "${SDX_LORA_ALPHA:-32}")
+        if [ -z "$INIT" ]; then
+          echo "WARN: SDX_INIT_CKPT not set — LoRA trains from random init." >&2
+        fi
+      fi
+      ;;
+    control)
+      MANIFEST="${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
     ;;
-  control)
-    MANIFEST="${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
-  ;;
-  lora_control)
-    MANIFEST="${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
-    EXTRA+=(
-      --lora-train --lora-rank "${SDX_LORA_RANK:-32}" --lora-alpha "${SDX_LORA_ALPHA:-32}"
-    )
-  ;;
-  *)
-    echo "Unknown SDX_TRAIN_MODE=$MODE (use full|lora|control|lora_control)" >&2
-    exit 2
+    lora_control)
+      MANIFEST="${SDX_CONTROL_MANIFEST:-$SDX_DATA/control/manifest.jsonl}"
+      EXTRA+=(
+        --lora-train --lora-rank "${SDX_LORA_RANK:-32}" --lora-alpha "${SDX_LORA_ALPHA:-32}"
+      )
     ;;
-esac
+    *)
+      echo "Unknown SDX_TRAIN_MODE=$MODE (use full|lora|control|lora_control)" >&2
+      exit 2
+      ;;
+  esac
 
-if [ ! -f "$MANIFEST" ]; then
-  echo "Manifest not found: $MANIFEST — run bash runpod/download.sh first." >&2
-  exit 1
+  if [ ! -f "$MANIFEST" ]; then
+    echo "Manifest not found: $MANIFEST — run bash runpod/download.sh first." >&2
+    exit 1
+  fi
+
+  echo "Training mode=$MODE manifest=$MANIFEST features=${SDX_FULL_TRAIN_FEATURES:-1} gpus=$NPROC"
+
+  python setup/download.py t5
+  python setup/download.py repa
+
+  python setup/manifests.py sanitize --manifest "$MANIFEST" --data-root "$SDX_DATA" --backup --verify-images
 fi
-
-echo "Training mode=$MODE manifest=$MANIFEST features=${SDX_FULL_TRAIN_FEATURES:-1} gpus=$NPROC"
-
-python setup/ensure_t5_safetensors.py
-python setup/ensure_repa_encoder.py
-
-python setup/sanitize_manifest.py --manifest "$MANIFEST" --data-root "$SDX_DATA" --backup --verify-images
 
 TRAIN_ARGS=(
   train.py
@@ -81,6 +150,7 @@ TRAIN_ARGS=(
   --epochs "$EPOCHS"
   --global-batch-size "$BATCH"
   --image-size "$IMAGE_SIZE"
+  "${PROFILE_ARGS[@]}"
   "${FEATURE_ARGS[@]}"
   "${EXTRA[@]}"
   "$@"

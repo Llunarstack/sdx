@@ -31,17 +31,17 @@ from typing import Any
 
 import numpy as np
 
+from utils.prompt.text import append_unique
+from utils.quality.finishing import rgb_to_luminance
+
 __all__ = [
     "ArchitectureProfile",
     "prompt_needs_architecture_lock",
     "prompt_asks_novel_view",
     "infer_architecture_profile",
     "build_story_box_layout",
-    "story_box_layout_dict",
-    "write_story_box_layout",
     "synthetic_story_depth_map",
     "write_synthetic_depth_control",
-    "estimate_depth_control_from_image",
     "architecture_prompt_fragments",
     "score_vanishing_symmetry",
     "score_horizon_level",
@@ -340,20 +340,6 @@ def build_story_box_layout(
     }
 
 
-def story_box_layout_dict(prompt: str, **kwargs: Any) -> dict[str, Any]:
-    """Alias for ``build_story_box_layout`` (public naming)."""
-    return build_story_box_layout(prompt, **kwargs)
-
-
-def write_story_box_layout(prompt: str, path: str | Path, **kwargs: Any) -> Path:
-    data = build_story_box_layout(prompt, **kwargs)
-    data.pop("_architecture_profile", None)
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    return out
-
-
 def synthetic_story_depth_map(
     height: int,
     width: int,
@@ -422,46 +408,6 @@ def write_synthetic_depth_control(
     return out
 
 
-def estimate_depth_control_from_image(
-    image_path: str | Path,
-    output_path: str | Path,
-    *,
-    device: str = "cuda",
-    prefer: str = "small",
-) -> Path:
-    """
-    Generate → estimate-depth → re-sample helper.
-
-    Prefer Depth-Anything / Marigold when installed; fall back to a story-shaped
-    synthetic map so the control path always returns a usable PNG.
-    """
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        from utils.modeling.hf_loaders import depth_map
-
-        depth_map(str(image_path), str(out), device=device, prefer=prefer)
-        if out.is_file():
-            return out
-    except Exception:
-        pass
-    try:
-        from utils.modeling.hf_loaders import marigold_depth_map
-
-        marigold_depth_map(str(image_path), str(out), device=device)
-        if out.is_file():
-            return out
-    except Exception:
-        pass
-    # Fallback: keep architecture prior rather than failing open.
-    from PIL import Image
-
-    with Image.open(image_path) as im:
-        w, h = im.size
-    write_synthetic_depth_control(out, height=h, width=w, stories=2)
-    return out
-
-
 _ARCH_POSITIVE = (
     "coherent perspective",
     "stable vanishing point",
@@ -510,11 +456,9 @@ def score_vanishing_symmetry(rgb_uint8: np.ndarray) -> float:
     img = np.asarray(rgb_uint8)
     if img.ndim != 3 or img.shape[0] < 16 or img.shape[1] < 16:
         return 0.5
-    gray = (0.299 * img[..., 0] + 0.587 * img[..., 1] + 0.114 * img[..., 2]).astype(np.float32)
-    # Simple gradient magnitude.
+    gray = rgb_to_luminance(img)
     gx = np.abs(gray[:, 1:] - gray[:, :-1])
     gy = np.abs(gray[1:, :] - gray[:-1, :])
-    # Pad to align.
     edge = np.zeros_like(gray)
     edge[:, :-1] += gx
     edge[:-1, :] += gy
@@ -532,7 +476,7 @@ def score_horizon_level(rgb_uint8: np.ndarray) -> float:
     img = np.asarray(rgb_uint8)
     if img.ndim != 3 or img.shape[0] < 16:
         return 0.5
-    gray = (0.299 * img[..., 0] + 0.587 * img[..., 1] + 0.114 * img[..., 2]).astype(np.float32)
+    gray = rgb_to_luminance(img)
     gy = np.abs(gray[1:, :] - gray[:-1, :])
     h, w = gy.shape
     left = gy[:, : w // 2]
@@ -630,16 +574,6 @@ def _soft_set(args: Any, name: str, value: Any, unset: tuple[Any, ...]) -> bool:
     return False
 
 
-def _append_csv(base: str, additions: tuple[str, ...]) -> str:
-    existing = {t.strip().lower() for t in (base or "").split(",") if t.strip()}
-    out = [t.strip() for t in (base or "").split(",") if t.strip()]
-    for a in additions:
-        if a.strip().lower() not in existing:
-            out.append(a.strip())
-            existing.add(a.strip().lower())
-    return ", ".join(out)
-
-
 def apply_architecture_consistency(args: Any, *, prompt: str | None = None) -> dict[str, Any]:
     """
     Soft-wire architecture lock into sample args.
@@ -660,7 +594,6 @@ def apply_architecture_consistency(args: Any, *, prompt: str | None = None) -> d
         meta["skipped"] = "prompt_not_architectural"
         return meta
     if mode not in ("auto", "on", "true", "1", "force", "hall", "strict"):
-        # Unknown → treat as auto
         if not needs:
             meta["skipped"] = "prompt_not_architectural"
             return meta
@@ -688,18 +621,16 @@ def apply_architecture_consistency(args: Any, *, prompt: str | None = None) -> d
     }
     args._architecture_profile = prof
 
-    # Prompt fragments
     pos, neg = architecture_prompt_fragments(prof)
     if _soft_set(args, "anti_perspective_drift", True, (False,)):
         meta["applied"].append("anti_perspective_drift")
     if hasattr(args, "prompt"):
-        args.prompt = _append_csv(str(getattr(args, "prompt", "") or ""), pos)
+        args.prompt = append_unique(str(getattr(args, "prompt", "") or ""), pos)
         meta["applied"].append("prompt_fragments")
     if hasattr(args, "negative_prompt"):
-        args.negative_prompt = _append_csv(str(getattr(args, "negative_prompt", "") or ""), neg)
+        args.negative_prompt = append_unique(str(getattr(args, "negative_prompt", "") or ""), neg)
         meta["applied"].append("negative_fragments")
 
-    # Domain / composition soft-fills
     if _soft_set(args, "scene_domain", "architecture", ("none", "", None)):
         meta["applied"].append("scene_domain")
     if _soft_set(args, "artist_composition", "perspective", ("none", "", None)):
@@ -719,7 +650,7 @@ def apply_architecture_consistency(args: Any, *, prompt: str | None = None) -> d
         serial = {k: v for k, v in layout.items() if not k.startswith("_")}
         layout_path.write_text(json.dumps(serial, indent=2), encoding="utf-8")
         try:
-            from utils.generation.regional_box_prompting import parse_box_layout
+            from utils.generation.regional import parse_box_layout
 
             spec = parse_box_layout(serial)
             args._box_layout_spec = spec
@@ -765,8 +696,7 @@ def apply_architecture_consistency(args: Any, *, prompt: str | None = None) -> d
 
     if prof.novel_view:
         meta["novel_view_hint"] = (
-            "For a true same-scene novel view, pass --init-image of the first shot "
-            "plus this architecture lock (or wire frontier/multiview)."
+            "For a true same-scene novel view, pass --init-image of the first shot plus this architecture lock."
         )
 
     return meta

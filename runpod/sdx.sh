@@ -14,15 +14,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
-source "$HERE/lib/ensure_repo.sh"
+source "$HERE/lib.sh"
 sdx_ensure_repo || exit 1
 
-# shellcheck source=/dev/null
-source "$HERE/lib/load_secrets.sh"
-# shellcheck source=/dev/null
-source "$HERE/lib/hf_sites.sh"
-# shellcheck source=/dev/null
-source "$HERE/lib/turbo_hf.sh"
 sdx_apply_turbo_hf
 sdx_load_hf_token || echo "WARN: run hf auth login for gated HF datasets" >&2
 
@@ -65,7 +59,7 @@ Re-download pack:   export SDX_HF_FORCE=1
 
 Pod stuck on old code / pipefail error:
   cd /workspace/sdx && git fetch origin && git reset --hard origin/feat/runpod-readiness-scraper-lora
-  sed -i 's/\r$//' runpod/sdx.sh runpod/lib/*.sh
+  sed -i 's/\r$//' runpod/*.sh
   bash runpod/sdx.sh datasets --fg
 EOF
 }
@@ -100,7 +94,7 @@ EOF
 _sdx_run_models() {
   export SDX_MODEL_PROFILE="${SDX_MODEL_PROFILE:-ultimate}"
   echo "==> Pretrained models only (profile=$SDX_MODEL_PROFILE)"
-  python setup/download_pretrained.py \
+  python setup/download.py pretrained \
     --dest "${SDX_PRETRAINED:-/workspace/pretrained}" \
     --profile "$SDX_MODEL_PROFILE" \
     --workers "${SDX_DL_WORKERS:-4}"

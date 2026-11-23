@@ -7,9 +7,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
-source "$HERE/lib/ensure_repo.sh"
-# shellcheck source=/dev/null
-source "$HERE/lib/fix_shell.sh"
+source "$HERE/lib.sh"
 
 export SDX_ROOT="${SDX_ROOT:-/workspace/sdx}"
 export SDX_REPO_REF="${SDX_REPO_REF:-feat/runpod-readiness-scraper-lora}"

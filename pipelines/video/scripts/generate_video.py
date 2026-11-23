@@ -14,6 +14,9 @@ if str(_REPO) not in sys.path:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        # Legacy Windows code pages (cp1252) cannot encode the arrows/dashes in engine and module notes.
+        sys.stdout.reconfigure(errors="replace")
     p = argparse.ArgumentParser(
         description=__doc__,
         epilog="Tip: use --scene examples/scene.example.json so you only edit ONE file.",
@@ -42,6 +45,7 @@ def main() -> int:
     p.add_argument("--keyframe-interval", type=int, default=6)
     p.add_argument("--dry-run", action="store_true", help="Skip sample.py; motion+interpolate only")
     p.add_argument("--control-help", action="store_true", help="Print control mode reference and exit")
+    p.add_argument("--list-engines", action="store_true", help="List style render engines and exit")
     p.add_argument("--list-frontier", action="store_true", help="List novel frontier video modules and exit")
     p.add_argument("--plan-only", action="store_true", help="Print shot plan JSON and exit")
     p.add_argument("--validate-scene", action="store_true", help="Validate scene JSON and exit")
@@ -59,7 +63,7 @@ def main() -> int:
         return 0
 
     if args.list_engines:
-        from pipelines.video.style_engines import list_engines
+        from pipelines.video.studio import list_engines
 
         for e in list_engines():
             print(f"  {e.id.value}: {e.title} — {e.pipeline_notes or e.positive[:60]}")
@@ -73,10 +77,10 @@ def main() -> int:
         return 0
 
     if args.scene:
-        from pipelines.video.scene_graph import compile_scene_file, load_scene_graph, validate_scene_graph
+        from pipelines.video.scene import compile_scene_file, load_scene_graph, validate_scene_graph
 
         if args.preflight:
-            from pipelines.video.scene_preflight import format_preflight_report, run_preflight
+            from pipelines.video.scene import format_preflight_report, run_preflight
 
             report = run_preflight(args.scene, ckpt=args.ckpt, require_ckpt=bool(args.ckpt))
             print(format_preflight_report(report))
@@ -85,7 +89,7 @@ def main() -> int:
         graph = load_scene_graph(args.scene)
         issues = validate_scene_graph(graph)
         if args.validate_continuity:
-            from pipelines.video.continuity_validators import (
+            from pipelines.video.scene import (
                 format_continuity_report,
                 parse_validator_config,
                 run_continuity_validation,
@@ -101,7 +105,7 @@ def main() -> int:
         if args.thumbnail_plan:
             from dataclasses import asdict
 
-            from pipelines.video.thumbnail_rehearsal import parse_thumbnail_config, plan_thumbnails
+            from pipelines.video.studio import parse_thumbnail_config, plan_thumbnails
 
             thumb_cfg = parse_thumbnail_config(
                 graph.continuity,
@@ -110,7 +114,7 @@ def main() -> int:
             )
             shots = list(graph.shots) if graph.shots else []
             if not shots:
-                from pipelines.video.scene_graph import compile_scene_graph
+                from pipelines.video.scene import compile_scene_graph
 
                 try:
                     compiled = compile_scene_graph(graph)
@@ -185,28 +189,26 @@ def main() -> int:
 
     if not args.prompt:
         p.error("Provide --prompt or --scene")
-        from pipelines.video.helpers import preview_shot_plan
 
-        plan = preview_shot_plan(
+    if args.plan_only:
+        from dataclasses import asdict
+
+        from pipelines.video.scene import VideoMode, plan_video_from_prompt
+
+        plan = plan_video_from_prompt(
             args.prompt,
-            mode=args.mode,
+            mode=VideoMode(args.mode),
             duration_sec=args.duration,
             fps=args.fps,
+            width=args.width,
+            height=args.height,
         )
-        print(
-            json.dumps(
-                {
-                    "mode": plan.mode.value,
-                    "timeline": plan.timeline.__dict__,
-                    "shots": [s.__dict__ for s in plan.shots],
-                },
-                indent=2,
-            )
-        )
+        payload = {"mode": plan.mode.value, "timeline": asdict(plan.timeline), "shots": [asdict(s) for s in plan.shots]}
+        print(json.dumps(payload, indent=2, default=str))
         return 0
 
     if args.preview_retrieval:
-        from pipelines.video.helpers import preview_retrieval_rankings
+        from pipelines.video.pipeline import preview_retrieval_rankings
 
         print(
             json.dumps(

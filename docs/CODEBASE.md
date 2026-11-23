@@ -14,14 +14,14 @@ Canonical folder classification: this document (`CODEBASE.md`).
 | **Config** | `config/` | `TrainConfig`, model presets, domain/style tag tables |
 | **Data** | `data/` | `Text2ImageDataset`, caption parsing, JSONL → tensors |
 | **Diffusion** | `diffusion/` | Noise schedules, `GaussianDiffusion`, sampling utilities |
-| **Models** | `models/` | DiT, ControlNet, MoE, RAE bridge, multimodal fusion; shared blocks in [`model_enhancements.py`](../models/model_enhancements.py) — see [MODEL_STACK.md](MODEL_STACK.md) |
+| **Models** | `models/` | DiT, ControlNet, MoE, RAE bridge, video DiT; shared blocks in [`dit.py`](../models/dit.py) — see [MODEL_STACK.md](MODEL_STACK.md) |
 | **Utils** | `utils/` | Checkpoints, text encoders, REPA, pick-best, **`utils/prompt/`** (content controls, neg filter, blueprint, RAG), lint, LLM client |
 | **ViT-style QA** | it_quality/ | **Separate** from the generator: quality scoring, ranking, prompt tools |
 | **Pipelines** | `pipelines/` | **image_gen** vs **book_comic** docs; book workflow script (`pipelines/book_comic/scripts/generate_book.py`); not a second copy of DiT |
 | **Scripts** | `scripts/` | Downloads, training helpers, and `python -m scripts.tools` utilities (not imported by `train.py` at import time) |
-| **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) |
-| **Toolkit** | `toolkit/` | QoL: env report, seeds, manifest digest, timing, optional-lib hints — [toolkit/README.md](../toolkit/README.md) |
-End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](reference/FILES.md).
+| **Native** | `native/` | Optional Rust/Zig/C++/Go CLIs + `libsdx_latent`; see [native/README.md](../native/README.md) and [NATIVE_AND_SYSTEM_LIBS.md](MODEL_STACK.md#native--lower-level-libraries--quality-training-prompt-adherence) |
+| **Toolkit** | `toolkit/` | QoL: env report (incl. optional-lib versions) — `python -m toolkit.env_health` |
+End-to-end flow and diagrams: [README § Architecture and pipeline](../README.md#architecture-and-pipeline) and [FILES.md](FILES.md).
 
 ---
 
@@ -55,12 +55,12 @@ Weights and HF cache live under `pretrained/` (gitignored); paths resolve via `u
 | Goal | Start here |
 |:-----|:-----------|
 | Training hyperparameters / DiT flags | `config/train_config.py`, `train.py` argparse |
-| Caption & JSONL behavior | `data/t2i_dataset.py`, `data/caption_utils.py`; Unicode hygiene [`native/_experimental/python/sdx_native/text_hygiene.py`](../native/_experimental/python/sdx_native/text_hygiene.py), CLI [`scripts/tools/data/caption_hygiene.py`](../scripts/tools/data/caption_hygiene.py), `train.py --caption-unicode-normalize` |
-| Diffusion / schedulers | `diffusion/gaussian_diffusion.py`, `diffusion/respace.py` |
-| DiT architecture | `models/dit_text.py`, `models/dit_text_variants.py` |
+| Caption & JSONL behavior | `data/t2i_dataset.py`, `data/caption_utils.py`; Unicode hygiene [`native/_experimental/python/sdx_native/text_hygiene.py`](../native/_experimental/python/sdx_native/text_hygiene.py), CLI [`scripts/tools/captions.py`](../scripts/tools/captions.py), `train.py --caption-unicode-normalize` |
+| Diffusion / schedulers | `diffusion/gaussian_diffusion.py`, `diffusion/schedules.py` |
+| DiT architecture | `models/dit.py`, `models/dit_text.py` |
 | Sampling CLI | `sample.py` |
-| Prompt scaffolding (SFW/NSFW, quality, de-AI, LoRA hints) | `utils/prompt/content_controls.py`, `utils/prompt/neg_filter.py` — overview [PROMPT_STACK.md](PROMPT_STACK.md) |
-| Checkpoint load / fusion | `utils/checkpoint/checkpoint_loading.py`, `utils/modeling/text_encoder_bundle.py` |
+| Prompt scaffolding (SFW/NSFW, quality, de-AI, LoRA hints) | `utils/prompt/content_controls.py`, `utils/prompt/art_direction.py`, `utils/prompt/text.py` — overview [PROMPT_STACK.md](PROMPT_STACK.md) |
+| Checkpoint load / fusion | `utils/modeling/checkpoints.py`, `utils/modeling/encoders.py` |
 
 ---
 
@@ -77,7 +77,7 @@ sdx/
 │   └── reference/                      # Canonical prompt catalogs & presets (shim *.py at config/ root)
 ├── data/                               # Datasets, caption pipeline
 ├── diffusion/                          # Gaussian diffusion, timestep sampling, cascaded scaffold
-│   └── losses/                         # Timestep loss weights (shim loss_weighting at diffusion/ root)
+│   └── losses/                         # Timestep loss weights (prediction-type aware)
 ├── models/                             # DiT, ControlNet, MoE, RAE bridge, multimodal scaffolds
 ├── utils/                              # Checkpoints, text encoders, quality, pick-best, …
 ├── training/                       # Training CLI helpers (args/parser, enhanced trainer hooks)
@@ -108,15 +108,15 @@ Run from **repo root** so `config`, `data`, `models`, `utils` resolve without ex
 
 | Path | Role |
 |------|------|
-| **`scripts/download/`** | Pull T5, VAE, CLIP, LLM, optional stacks into `pretrained/` |
+| **`setup/download.py`** | Pull T5, VAE, CLIP, LLM, optional stacks into `pretrained/` |
 | **`scripts/setup/`** | Clone upstream repos into `external/` (reference only) |
-| **`scripts/training/`** | HF → JSONL, precompute latents, `hf_download_and_train`, … |
+| **`scripts/training/`** | HF → JSONL, precompute latents, `manifest hf-train`, … |
 | **`scripts/tools/`** | Utilities — grouped entrypoints (`dev/`, `data/`, `prompt/`, `ops/`, `export/`, `repo/`) + **`python -m scripts.tools <cmd>`** dispatcher — **[scripts/tools/README.md](../scripts/tools/README.md)** |
 | **`pipelines/book_comic/scripts/`** | Book/comic train and generate entrypoints |
 | **`scripts/enhanced/`** | **EnhancedDiT** training, sampling, setup, checkpoint seed — optional path parallel to main `train.py` |
-| **`scripts/cascade_generate.py`** | Stable Cascade stub (optional) |
+| **`scripts/tools/generate.py`** | Stable Cascade stub (optional) |
 
-See **[scripts/README.md](../scripts/README.md)** and **[scripts/enhanced/README.md](../scripts/enhanced/README.md)**.
+See **[scripts/README.md](../scripts/README.md)**.
 
 ### Product lines (same engine, different docs)
 
@@ -127,7 +127,7 @@ See **[scripts/README.md](../scripts/README.md)** and **[scripts/enhanced/README
 
 ### Full file index
 
-Per-path descriptions: **[FILES.md](reference/FILES.md)**. Machine-generated tree: **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** (`python -m scripts.tools update_project_structure`).
+Per-path descriptions: **[FILES.md](FILES.md)**. Machine-generated tree: **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** (`python -m scripts.tools update_project_structure`).
 
 ---
 
@@ -166,10 +166,10 @@ Keep new work in predictable places so imports and docs stay stable.
 |-----------------|----------|-------|
 | New DiT block / attention | `models/` | Register in `models/__init__.py` if new public API |
 | Loss / schedule / diffusion math | `diffusion/` | Keep `GaussianDiffusion` API stable when possible |
-| New prompt lists / presets (not train hyperparams) | `config/defaults/` | |
+| New prompt lists / presets (not train hyperparams) | `config/prompts.py` / `styles.py` / `presets.py` | |
 | Dataset field or collate | `data/` | Update `t2i_dataset.py` + docs for JSONL fields |
 | Training flag / config field | `config/train_config.py` + `get_dit_build_kwargs` | Mirror in `sample.py` / checkpoint if needed |
-| Sampling or checkpoint behavior | `sample.py`, `utils/checkpoint/checkpoint_loading.py` | |
+| Sampling or checkpoint behavior | `sample.py`, `utils/modeling/checkpoints.py` | |
 | Standalone maintenance CLI | `scripts/tools/` (prefer `python -m scripts.tools <cmd>`) | Add row to [scripts/tools/README.md](../scripts/tools/README.md) |
 | Multi-page / book workflow | `pipelines/book_comic/` | Canonical script: `pipelines/book_comic/scripts/generate_book.py` |
 | Optional EnhancedDiT workflow | `scripts/enhanced/` | Parallel to main `train.py` |
@@ -185,10 +185,9 @@ Keep new work in predictable places so imports and docs stay stable.
 
 ## See also
 
-- [FILES.md](reference/FILES.md) — per-file map  
+- [FILES.md](FILES.md) — per-file map  
 - [HOW_GENERATION_WORKS.md](HOW_GENERATION_WORKS.md) — diagram + config ↔ checkpoint ↔ sample  
 - [PROMPT_STACK.md](PROMPT_STACK.md) — inference prompt pipeline before T5  
-- [NATIVE_AND_SYSTEM_LIBS.md](NATIVE_AND_SYSTEM_LIBS.md) — native tools + C/Rust ecosystem for data quality & training adjacency  
+- [NATIVE_AND_SYSTEM_LIBS.md](MODEL_STACK.md#native--lower-level-libraries--quality-training-prompt-adherence) — native tools + C/Rust ecosystem for data quality & training adjacency  
 - [MODEL_STACK.md](MODEL_STACK.md) — local weights + RMSNorm, FiLM, cross-attn fusion, cascade blend, RAE scales  
-- [../toolkit/README.md](../toolkit/README.md) — training QoL modules (`env_health`, `manifest_digest`, seeds, timing)  
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — PR expectations  

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dump ``utils.architecture.architecture_map`` themes as JSON or Markdown."""
+"""Dump ``utils.modeling.architecture`` themes as JSON or Markdown."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from utils.architecture.architecture_map import summary_table_md, themes_as_dict  # noqa: E402
+from utils.modeling.architecture import summary_table_md, themes_as_dict  # noqa: E402
 
 
 def main() -> int:

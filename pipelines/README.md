@@ -1,4 +1,4 @@
-# Pipelines (two product lines)
+# Pipelines
 
 SDX trains **one shared diffusion core** (`diffusion/`, `models/`, `data/`, `utils/`, `train.py`, `sample.py`).  
 We split **workflows and documentation** by **target use case**, not by duplicating the engine.
@@ -9,6 +9,8 @@ We split **workflows and documentation** by **target use case**, not by duplicat
 | **[book_comic/](book_comic/README.md)** | Books, comics, manga, storyboards | Multi-page coherence, text-in-panel, line art, OCR loops | [README](book_comic/README.md) |
 | **[video/](video/)** | Text/image → video (retrieve, edit, stitch) | Reference clips, keyframe SDX edits, temporal harmonize | `python -m scripts.tools video_generate` |
 
-**Rule of thumb:** both pipelines use the **same** `train.py` / checkpoints; you may train **two separate checkpoints** (e.g. `results/general/` vs `results/book_comic/`) with different datasets and caption styles. The split here is **where to look** for scripts and conventions—not a second copy of DiT code.
+**Rule of thumb:** image and book/comic workflows share `train.py` and the image model code, but can use separate checkpoints and datasets. The video pipeline can use image outputs and also has an optional VideoDiT path. Spatial/3D remains experimental under `frontier/multiview.py`. These modules share utilities rather than duplicating the core.
 
-See also: [docs/REGION_CAPTIONS.md](../docs/reference/REGION_CAPTIONS.md) (layout-friendly JSONL), [docs/LANDSCAPE_2026.md](../docs/research/LANDSCAPE_2026.md) (industry context).
+See [model lines and release gates](../docs/MODEL_LINES_AND_RELEASES.md) for branch and release plans.
+
+See also: [docs/PROMPT_STACK.md](../docs/PROMPT_STACK.md#regional--layout-captions-jsonl) (layout-friendly JSONL), [docs/RESEARCH.md](../docs/RESEARCH.md#image-generation-landscape-architecture-and-workflows-2026) (industry context).

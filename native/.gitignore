@@ -1,10 +1,9 @@
-# CMake outputs (always under native/cpp, never commit)
+# Local build outputs (see README.md "Build")
 cpp/build/
-cpp/build-compile-db/
+cpp/build-*/
 cpp/cmake-build-*/
-
-# Zig artifact dirs (per-crate zig-out is already under zig/*/zig-out)
-zig/**/.zig-cache/
-
-# Stray / mistyped Cargo target dirs
-**/targetB1KiDT/
+rust/target/
+_experimental/zig/**/.zig-cache/
+_experimental/zig/**/zig-out/
+go/sdx-manifest/sdx-manifest
+go/sdx-manifest/sdx-manifest.exe

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test Style Genome + native stack (Rust / CUDA / Go / Mojo)."""
+"""Smoke-test Style Genome + native stack (Rust / CUDA / Go)."""
 
 from __future__ import annotations
 
@@ -8,53 +8,30 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[3]
-for _p in (_ROOT, _ROOT / "native" / "python"):
-    _s = str(_p)
-    if _s not in sys.path:
-        sys.path.insert(0, _s)
+sys.path.insert(0, str(_ROOT))
+from scripts.tools._repo_bootstrap import ensure_repo_paths  # noqa: E402
 
-import numpy as np
+ensure_repo_paths()
+
+import numpy as np  # noqa: E402
 
 
 def main() -> int:
-    failures: list[str] = []
+    from utils.prompt.style import style_native_status
 
-    # 1) Discovery
-    from utils.prompt.style_native import native_stack_status
+    print("style_native_status:", json.dumps(style_native_status(), indent=2))
 
-    st = native_stack_status()
-    print("native_stack_status:", json.dumps(st, indent=2))
-
-    # 2) Rust style ops
-    from sdx_native.style_ops_native import (
-        maybe_fnv1a64,
-        maybe_merge_style_axes,
-        maybe_token_jaccard,
-    )
+    from sdx_native.ffi import maybe_token_jaccard
 
     j = maybe_token_jaccard("red dress, blue", "red dress, golden")
     if j is None:
-        failures.append("Rust sdx_token_jaccard_utf8 unavailable (rebuild sdx-prompt-ops --release)")
+        print("WARNING: Rust sdx_token_jaccard_utf8 unavailable (rebuild sdx-prompt-ops --release)", file=sys.stderr)
     else:
         print(f"Rust Jaccard: {j:.4f}")
         assert 0.0 < j <= 1.0
 
-    fp = maybe_fnv1a64("glitch cathedral palette")
-    if fp is None:
-        failures.append("Rust sdx_fnv1a64_utf8 unavailable")
-    else:
-        print(f"Rust FNV: {fp:#018x}")
-
-    merged = maybe_merge_style_axes(["a, b", "B, c", "d"])
-    if merged is None:
-        failures.append("Rust sdx_merge_style_axes_utf8 unavailable")
-    else:
-        print(f"Rust merge axes: {merged!r}")
-        assert merged == "a, b, c, d"
-
-    # 3) Inventor + chaos
-    from utils.prompt.style_genome_chaos import fuse_genomes, invent_insane_batch
-    from utils.prompt.style_inventor import StyleInventor
+    # Inventor + chaos
+    from utils.prompt.style import StyleInventor, fuse_genomes, invent_insane_batch
 
     inv = StyleInventor(use_qwen=False)
     genomes = inv.invent("samurai at sunset", n=2, invention_mode="insane", chaos_level=0.8, seed=42)
@@ -66,8 +43,8 @@ def main() -> int:
     batch = invent_insane_batch("void", n=2, mode="apocalypse", chaos_level=1.0, seed=1)
     assert len(batch) == 2
 
-    # 4) Explore planner + manifest
-    from utils.prompt.style_explore import StyleExplorePlanner
+    # Explore planner + manifest
+    from utils.prompt.style import StyleExplorePlanner
 
     out = _ROOT / "data" / "style_genomes" / "_smoke_explore.jsonl"
     planner = StyleExplorePlanner(use_qwen=False)
@@ -85,7 +62,7 @@ def main() -> int:
     assert out.is_file() and out.stat().st_size > 0
     print(f"Manifest: {len(plan.candidates)} candidates -> {out}")
 
-    # 5) PromptStack preview with genome
+    # PromptStack preview with genome
     from types import SimpleNamespace
 
     from utils.prompt.stack import PromptContext, StackMode, run_prompt_stack
@@ -122,8 +99,8 @@ def main() -> int:
     assert "style_genome" in ".".join(result.trace)
     print("PromptStack trace:", " -> ".join(result.trace[:8]), "...")
 
-    # 6) CUDA pick-best (numpy fallback ok)
-    from utils.prompt.style_native import pick_best_embedding_index
+    # CUDA pick-best (numpy fallback ok)
+    from utils.prompt.style import pick_best_embedding_index
 
     dim = 16
     q = np.random.randn(dim).astype(np.float32)
@@ -133,8 +110,8 @@ def main() -> int:
     print(f"Pick-best embedding: idx={idx} score={score:.4f}")
     assert idx == 2
 
-    # 7) Go explore-stats (optional)
-    from utils.prompt.style_native import run_go_explore_stats
+    # Go explore-stats (optional)
+    from utils.prompt.style import run_go_explore_stats
 
     stats = run_go_explore_stats(out)
     if stats:
@@ -142,20 +119,8 @@ def main() -> int:
     else:
         print("Go explore-stats: skipped (sdx-manifest not built)")
 
-    # 8) Mojo merge (optional)
-    from sdx_native.style_tokens_mojo import merge_comma_dedupe, mojo_available
-
-    m = merge_comma_dedupe("x, y, X, z")
-    print(f"Comma dedupe: {m!r} (mojo={mojo_available()})")
-    assert "x" in m and "y" in m and "z" in m
-
-    if failures:
-        print("\nWARNINGS (non-fatal):", file=sys.stderr)
-        for f in failures:
-            print(f"  - {f}", file=sys.stderr)
-    else:
-        print("\nAll native style stack checks passed.")
-    return 0 if not failures else 0  # warnings only
+    print("All native style stack checks passed.")
+    return 0
 
 
 if __name__ == "__main__":

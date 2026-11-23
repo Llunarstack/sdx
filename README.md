@@ -1,54 +1,57 @@
+<h1 align="center">SDX</h1>
+
 <p align="center">
-  <strong>SDX</strong> · Stable Diffusion Transformer eXtended<br/>
-  <sub>Train, layout, direct, and improve your own image &amp; video models — fully open.</sub>
+  <b>Stable Diffusion Transformer eXtended</b><br/>
+  Train, direct, measure and improve your own image &amp; video models. Fully open, end to end.
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
-  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  <a href="docs/releases/v13.md"><img src="https://img.shields.io/badge/release-v13.0.0-0ea5e9?style=flat-square" alt="v13"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=flat-square" alt="License"/></a>
-  <img src="https://img.shields.io/badge/tests-1700%2B-22c55e?style=flat-square" alt="Tests"/>
+  <a href="https://github.com/Llunarstack/sdx/actions/workflows/ci.yml"><img src="https://github.com/Llunarstack/sdx/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://github.com/Llunarstack/sdx/releases"><img src="https://img.shields.io/badge/release-v14.0.0-0ea5e9?style=flat-square" alt="Release v14.0.0"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+"/></a>
+  <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.x"/></a>
+  <a href="native/README.md"><img src="https://img.shields.io/badge/Rust-kernels-B7410E?style=flat-square&logo=rust&logoColor=white" alt="Rust kernels"/></a>
+  <img src="https://img.shields.io/badge/tests-1750%2B-22c55e?style=flat-square" alt="1750+ tests"/>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=flat-square" alt="Apache 2.0"/></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
-  <a href="#why-sdx">Why SDX</a> ·
+  <a href="#whats-new-in-v14">What's new</a> ·
+  <a href="#natural-looking-images">Natural look</a> ·
+  <a href="#100-opt-in-techniques">100 techniques</a> ·
+  <a href="#train-with-confidence">Training</a> ·
   <a href="#how-sdx-compares">Compare</a> ·
-  <a href="#what-you-get">Features</a> ·
-  <a href="#pipelines">Pipelines</a> ·
-  <a href="#new-in-v13">v13</a> ·
-  <a href="#documentation">Docs</a> ·
-  <a href="#glossary">Glossary</a>
+  <a href="#documentation">Docs</a>
 </p>
+
+> [!TIP]
+> **v14 is out.** A measure-fix-verify **natural-look pass**, **100 opt-in sampling and finishing techniques**,
+> **Rust image kernels** (9-36x faster than NumPy), a **training-readiness gate**, resumable training and a codebase
+> cut from ~970 to ~330 files. [What's new](#whats-new-in-v14) · [Release notes](docs/CHANGELOG.md#sdx-v14--natural-look-100-techniques-rust-kernels--training-readiness)
 
 ---
 
 ## What is SDX?
 
-**SDX** is an open research framework for building **your own** text-to-image and text/image-to-video systems. It is not a hosted model, not an API wrapper, and not a scoreboard of someone else's weights.
-
-You own the training loop, the sampling stack, the layout controls, the video director, the quality critics, and the feedback-to-DPO RSI loop — end to end, on your hardware.
+**SDX is an open framework for building your own text-to-image and text/image-to-video systems.** It is not a hosted
+model, an API wrapper, or a leaderboard of someone else's weights. You own every stage: the training loop, the sampler,
+layout control, the quality critics, the video director and the loop that improves the model from feedback.
 
 ```
-your data  →  train.py  →  checkpoint  →  sample.py / video studio  →  images & clips
+your images + captions ──► train.py ──► checkpoint ──► sample.py / video studio ──► images & clips
+        ▲                     │ readiness gate             │ critics · --natural · --ideas      │
+        └──── feedback · RSI · DPO / GRPO ◄────────── bench ablate (measure every change) ◄─────┘
 ```
 
----
-
-## Why SDX
-
-Most products give you **pixels**. SDX gives you the **pipeline**.
-
-| You need… | Typical path | With SDX |
-|-----------|--------------|----------|
-| Model on *your* data | Fine-tune scripts + glue | One `train.py` path (flow, DPO, GRPO) |
-| Layout you can inspect | Vendor UI or plugin zoo | Regional box JSON + scene graphs |
-| Quality that retries | Single-shot generate | TCIS critic loop + pick-best |
-| Video you can direct | Closed APIs / black boxes | Open scene JSON → plan → stitch |
-| Reproducible science | Varies by repo | Metadata, provenance, **1700+** tests |
-
-If you want a pretty demo button, use a hosted API. If you want to **train, measure, and ship** your own system, use SDX.
+| | |
+|---|---|
+| **Train** | Diffusion Transformer (DiT) on VAE latents: flow matching or VP diffusion, LoRA / DoRA, DPO and GRPO preference training, resumable bit-exact checkpoints. |
+| **Generate** | PromptStack prompt cleanup, adaptive CFG (Holy Grail), APG / CFG-Zero* / PAG / guidance intervals, tiled hires-fix, outpainting, detail control. |
+| **Control** | Regional box layouts, scene graphs, ControlNet-style conditioning, style references, Style Genome. |
+| **Look natural** | AI-look critics plus `--natural`, which fixes each measured tell and verifies every fix. |
+| **Measure** | 150-prompt benchmark, `bench ablate` (score, win-rate, slowdown, VRAM per variant), CPU end-to-end tests. |
+| **Video** | One scene JSON in, a directed multi-shot clip out: retrieval, keyframes, motion, continuity, VIDEOMAX. |
 
 ---
 
@@ -57,35 +60,266 @@ If you want a pretty demo button, use a hosted API. If you want to **train, meas
 ```bash
 git clone https://github.com/Llunarstack/sdx.git && cd sdx
 pip install -r requirements.txt
-
-# Image (demo checkpoint)
-python demo.py
-
-# Train on your folder
-python train.py --data-path images/ --flow-matching-training --epochs 20
-
-# Sample
-python sample.py --ckpt outputs/best.pt --prompt "your prompt" --out result.png --invention-stack auto --log-feedback
-
-# Rate: python -m scripts.tools feedback like result.png --prompt "..."
-
-# Video — plan from one scene file
-python -m scripts.tools video_generate --scene examples/scene_frontier.example.json --plan-only
+(cd native/rust && cargo build --release)       # optional: Rust image kernels (NumPy fallback otherwise)
+python -m toolkit.env_health                    # CUDA, VRAM, packages
 ```
 
-**Health check:** `python -m toolkit.training.env_health` · **Tests:** `pytest tests/ -q` · **RSI:** [docs/guides/RSI_FEEDBACK.md](docs/guides/RSI_FEEDBACK.md)
+Prove the pipeline on a tiny dataset before spending GPU hours:
+
+```bash
+python -m scripts.tools make_smoke_dataset --out smoke --count 16 --size 256
+python -m scripts.tools readiness check --data-path smoke/train --results-dir results --image-size 256
+```
+
+Then train and sample:
+
+```bash
+python train.py --data-path my_dataset/ --results-dir results/ --flow-matching-training --epochs 20
+
+python sample.py --ckpt results/<run>/checkpoints/best.pt --prompt "a rainy street at dusk, 35mm photo" \
+  --out street.png --natural
+
+python -m scripts.tools ui                      # local web UI at http://127.0.0.1:7860
+```
+
+> [!NOTE]
+> SDX ships the framework, not trained weights: train on your data (or bring a compatible checkpoint). The tests,
+> the readiness check and the smoke dataset all run on CPU.
+
+---
+
+## What's new in v14
+
+| | What you get | Try it |
+|---|---|---|
+| 🌿 **Natural-look pass** | Measures each AI-look tell, applies the fix meant for it, keeps the fix only if the detectors confirm it. | `--natural` |
+| 🧪 **100 opt-in techniques** | Noise shaping, CFG schedules, guidance edits, trajectory guards and 46 image finishes, all off by default. | `--ideas`, `--list-ideas` |
+| 🦀 **Rust image kernels** | Error diffusion, blue noise, bilateral, median, Kuwahara: 9-36x NumPy, ~460x pure Python. | `cargo build --release` |
+| 🚦 **Training-readiness gate** | Dataset audit, overfit, checkpoint round-trip and resume checks; long runs need a READY report. | `scripts.tools readiness` |
+| 💾 **Bulletproof training** | Atomic checkpoints with optimizer, scaler, RNG and data position; bit-exact resume; NaN/Inf guard; run manifest. | `--resume`, `--save-every-steps` |
+| 🖼️ **Big canvases** | Tiled (MultiDiffusion) hires-fix and outpainting at any size. | `--hires-tiled`, `--outpaint` |
+| ✨ **Detail control** | Tell the model there is less noise mid-sampling: more fine detail, or smoother with a negative amount. | `--detail-amount 0.2` |
+| 📊 **Benchmark & ablations** | 150 prompts in 10 categories; per-variant score, category deltas, win-rate, slowdown and VRAM. | `bench ablate --ideas-each` |
+| 🖥️ **Local web UI** | A browser form over `sample.py` with live logs and history, bound to localhost, no new dependencies. | `scripts.tools ui` |
+| 🧹 **Leaner codebase** | ~970 to ~330 files, 131 test files to 25, Python 3.11+, CI now builds and tests the Rust crate. | |
+
+[Full v14 notes](docs/CHANGELOG.md#sdx-v14--natural-look-100-techniques-rust-kernels--training-readiness) ·
+[Breaking changes](docs/CHANGELOG.md#migration-v13--v14)
+
+---
+
+## Natural-looking images
+
+The AI look is mostly a handful of **measurable** tells. `--natural` checks every saved image for them, fixes them one at
+a time and verifies each fix with the same detectors:
+
+| Tell | What gives it away | Fix it tries |
+|---|---|---|
+| Decoder grid | A faint repeating 8/16 px pattern from the VAE | Subtract the folded periodic fingerprint |
+| Noise floor | Too clean, or flat grain where cameras have signal-dependent noise | Poisson-Gaussian sensor noise in linear light |
+| Detail spectrum | Power spectrum far from natural 1/f² | Spectrum match, wavelet detail |
+| Over-smoothing | Plastic surfaces with no texture | Band-limited texture, wavelet detail |
+| Oversaturation | Gamut-hugging, glossy colour | Chroma knee, OKLab chroma scale |
+| Halos | Bright or dark rims at edges | Halo reduction |
+| Plastic skin / waxy highlights | Airbrushed skin, specular hot spots | Texture re-injection, specular taming, highlight roll-off |
+
+A fix is kept only when **that tell improves, overall naturalness improves, and the image content does not move**
+(blurred OKLab lightness), so nothing can "win" by repainting. If the full frame scores worse afterwards, the pass is
+undone. It ends with a blue-noise dither to 8 bit (no banding) and prints what it did:
+
+```
+Natural pass: naturalness 0.41 -> 0.98; fixes: grid via degrid+sensor_noise 1
+```
+
+Illustration, anime and 3-D prompts skip the camera tells, so they never get sensor noise. `--natural` removes
+measurable tells; wrong hands, garbled text and impossible physics come from the checkpoint and the prompt. More levers:
+[docs/QUALITY.md § 13](docs/QUALITY.md#13-making-images-look-less-ai-generated).
+
+---
+
+## 100 opt-in techniques
+
+Each technique is one small function at one hook of the sampler or the final image. Strength `1` is the suggested amount
+and `0` is an exact no-op; the baseline stays bit-identical when none are enabled.
+
+| Hook | # | Examples |
+|---|:-:|---|
+| **Initial noise** | 15 | Pyramid / phase-whitened noise, orthogonal or Sobol-QMC batches, shared-layout variations, symmetry and rule-of-thirds priors |
+| **CFG scale** | 3 | Bell schedule, resolution-aware CFG, prompt-density CFG |
+| **Guidance direction** | 15 | Norm clip, per-channel centring (no CFG colour cast), subject focus, sign consensus, sparse and low-rank guidance, auto-CFG |
+| **Clean estimate** | 11 | Soft clip, colour and contrast anchors, composition lock, mid-step sharpening |
+| **Per step** | 10 | Particle repulsion (diverse batches), late churn, momentum, variance and divergence guards |
+| **Final image** | 46 | Blue-noise / Floyd-Steinberg dither, deband, halation, bloom, OKLab vibrance, white balance, dehaze, retinex, deconvolution, Kuwahara, watercolour, halftone, cel shading |
+
+```bash
+python sample.py --list-ideas
+python sample.py --ckpt best.pt --prompt "..." --ideas noise_orthogonal_batch,delta_channel_center=0.7
+python -m scripts.tools bench ablate --ckpt best.pt --ideas-each delta --seed-list 1,2,3
+```
+
+None of these is proven on a trained SDX checkpoint yet: `bench ablate --ideas-each` scores every one against the
+baseline on your prompts, so you keep the ones that win. Catalogue: [docs/QUALITY.md](docs/QUALITY.md#ideas-100-opt-in-techniques---ideas).
+
+---
+
+## Train with confidence
+
+GPU time is expensive; SDX makes a long run prove itself on a tiny one first.
+
+| Check | What it proves |
+|---|---|
+| **Dataset audit** | Unreadable images, odd modes, tiny or extreme-aspect images, empty or over-long captions, exact and near duplicates, train/val overlap, rows the loader silently skips |
+| **Architecture** | Image to latent to patch grid to position embeddings, text-encoder width to conditioning width |
+| **Learning** | One forward/backward with finite loss and gradients reaching every parameter, then an overfit on 8-16 samples |
+| **Recovery** | Checkpoint round-trip and a stop-and-resume run that must match an uninterrupted one exactly |
+| **Sampling** | `sample.py` renders an image from the checkpoint it just saved |
+| **Throughput** | Images per second and peak VRAM (on GPU) |
+
+```bash
+python -m scripts.tools readiness dataset --data-path my_dataset/ --image-size 256
+python -m scripts.tools readiness check --data-path my_dataset/ --results-dir results/ --flow-matching-training
+```
+
+`train.py` refuses a run longer than `--readiness-min-steps` until a READY report exists for the same commit, config and
+dataset (`--skip-readiness-gate` to override). Every run also writes `run_manifest.json` (command, git commit, package
+versions, GPU, dataset fingerprint), saves checkpoints atomically, skips NaN/Inf steps and logs grad norm, LR, images/s
+and peak VRAM. Guide: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md#before-you-train-readiness-gate).
+
+---
+
+## Measure, don't guess
+
+```bash
+python -m scripts.tools bench ablate --ckpt best.pt --seed-list 42,123 \
+  --variant baseline= --variant hires="--hires-fix" --variant natural="--natural"
+```
+
+`bench ablate` runs the [150-prompt pack](examples/bench_pack_v1.json) (photorealism, anatomy, text, counting, spatial,
+binding, multi-subject, composition, style, lighting) for every variant with the same seeds, then writes per-variant mean
+score, delta vs baseline per category, paired win-rate, mean seconds, slowdown and peak VRAM, plus each run's checkpoint
+hash, GPU and torch version. Interrupted runs resume. Details: [docs/QUALITY.md](docs/QUALITY.md#benchmark--ablations).
+
+---
+
+## Everything else in the box
+
+<details open>
+<summary><b>Image generation</b> — <code>train.py</code>, <code>sample.py</code></summary>
+
+- DiT + VAE latent diffusion; flow matching and VP; DPO and the GRPO family; LoRA / DoRA / LyCORIS adapters
+- Holy Grail adaptive CFG, APG, CFG-Zero*, FDG, PAG / SLG, guidance intervals, SAG, detail control
+- Solvers and schedules: DPM++, UniPC, AYS, Karras, APEX; block / Taylor feature caches
+- TCIS critic committee, pick-best metrics (`natural`, `combo_vit_realism`, ...), OCR repair, auto-refine
+- Realism: shot specs (camera, ISO, focal length) and a camera / film capture finish
+- Game art and pixel art: grid snap, palettes, transparent backgrounds, seamless tiles
+
+</details>
+
+<details>
+<summary><b>Layout &amp; control</b></summary>
+
+- Regional box layouts (JSON with per-region prompts), prompt-to-layout planning, glyph canvas for text
+- Scene graphs, ControlNet-style conditioning, style references, Style Genome (new styles without artist names)
+- Invention stack: prompt passes for counting, attribute binding, negation and anatomy
+
+</details>
+
+<details>
+<summary><b>Video studio</b> — <code>pipelines/video/</code></summary>
+
+One **scene JSON**: retrieve, edit keyframes, add motion, polish, stitch.
+
+- **VIDEOMAX** (`video_quality: max`): strong keyframes, per-medium motion grammar, segment gates and retry
+- Engine router (realistic, anime, voxel, ...), director mode, character and world bibles
+- Elements, motion brush, first/last-frame interpolation (FLF2V), storyboard cuts, continuity checks
+- 25 frontier filmmaker modules (tension curve, causal ripples, witness lens, ...)
+
+```bash
+python -m scripts.tools video_generate --list-frontier
+python -m scripts.tools video_generate --scene examples/scene_studio.example.json --preflight
+```
+
+</details>
+
+<details>
+<summary><b>Self-improvement</b> — RSI</summary>
+
+`sample.py --log-feedback`, then `python -m scripts.tools feedback like|dislike|pair`, then `rsi_loop`: the model paints,
+judges its art, trains on its own best-vs-worst pairs plus your ratings, and keeps a checkpoint only if held-out scores
+rise. Guide: [docs/QUALITY.md](docs/QUALITY.md#rsi-your-model-teaches-itself-to-make-better-art).
+
+</details>
+
+<details>
+<summary><b>Safety</b></summary>
+
+An unconditional guard in [`utils/safety/`](utils/safety/minor_guard.py) blocks sexual content involving minors in
+prompts, conditioning images and outputs. It cannot be turned off.
+
+</details>
+
+---
+
+## How it works
+
+<table>
+<tr><th>Training — <code>train.py</code></th><th>Sampling — <code>sample.py</code></th></tr>
+<tr valign="top"><td>
+
+| # | Step |
+|:-:|------|
+| 1 | Load images + captions (folder or JSONL) |
+| 2 | VAE-encode to latents |
+| 3 | Noise at a sampled timestep (flow or VP) |
+| 4 | DiT predicts noise / velocity |
+| 5 | Loss + backward (optional DPO / GRPO) |
+| 6 | NaN guard, optimizer step, EMA |
+| 7 | Atomic checkpoint + run manifest |
+
+</td><td>
+
+| # | Step |
+|:-:|------|
+| 1 | PromptStack cleans and expands the prompt |
+| 2 | Optional box layout to regional masks |
+| 3 | T5 / CLIP encode the conditioning |
+| 4 | Denoise: adaptive CFG, `--ideas` hooks, tiling |
+| 5 | VAE decode, pick the best candidate |
+| 6 | Capture finish, `--natural`, dither |
+| 7 | Safety guard, save, report |
+
+</td></tr>
+</table>
 
 ---
 
 ## How SDX compares
 
-SDX is a **framework you train** — not a hosted model scoreboard. Leaders below are compared on *capability classes* (landscape snapshot: mid‑2026). Names and versions move weekly; the structural gaps usually do not.
+SDX is a **framework you train**, not a hosted model. It is compared on capability classes (mid-2026 snapshot), not on
+aesthetics: names and versions move weekly, the structural gaps usually do not.
 
-Legend: **✓** strong / built-in · **◐** partial / LoRA-only / plugin · **ext** community extensions · **✗** not available · **n/a** wrong product shape
+**✓** strong / built in · **◐** partial / LoRA-only / plugin · **ext** community extensions · **✗** not available · **n/a** wrong product shape
 
-Full research tables + sources → [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md)
+| Capability | GPT Image | Midjourney | Ideogram | FLUX.2 | SD3.5 | Qwen-Image | Comfy | **SDX** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Best-in-class hosted aesthetics | ✓ | **✓** | ◐ | ✓ | ◐ | ◐ | n/a | n/a¹ |
+| Text-in-image | **✓** | ◐ | **✓** | ✓ | ◐ | **✓** | ext | ◐² |
+| Download / run weights | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | **✓** |
+| LoRA / adapter fine-tune | ✗ | ✗ | ✓ | ✓ | **✓** | ◐ | **✓** | **✓** |
+| Full train loop on *your* folder | ✗ | ✗ | ✗ | ◐ | ◐ | ◐ | ext | **✓** |
+| DPO / GRPO preference training | ✗ | ✗ | ✗ | ✗ | ext | ✗ | ext | **✓** |
+| Regional box layout (native) | ◐ | ◐ | ✓ | ext | ext | ext | ext | **✓** |
+| Self-critique + retry (TCIS / pick-best) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
+| Verified natural-look finishing | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ext | **✓** |
+| Ablation harness for every option | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
+| Open scene-graph video director | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ext | **✓** |
+| Air-gap + reproducible metadata | ✗ | ✗ | ◐ | ◐ | ◐ | ◐ | ◐ | **✓** |
 
-### Landscape: what the leaders are actually good at
+¹ SDX is not a published aesthetics checkpoint: you train (or bring) weights.
+² Glyph canvas + OCR pick-best help; typography specialists still lead raw text rendering.
+
+<details>
+<summary><b>The full landscape</b>: closed APIs, open weights, video (click to expand)</summary>
 
 #### Closed image APIs
 
@@ -120,193 +354,43 @@ Full research tables + sources → [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITI
 | **Luma Ray / Seedance** | I2V atmosphere / multi-shot narrative | Closed; limited reproducibility |
 | **Wan / LTX** (open-ish) | Self-hostable video weights emerging | Still model-centric; little open *scene-graph film studio* |
 
-### Capability matrix (image)
-
-| Capability | GPT Image | Midjourney | Ideogram | FLUX.2 | SD3.5 | Qwen-Image | Comfy | **SDX** |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Best-in-class hosted aesthetics | ✓ | **✓** | ◐ | ✓ | ◐ | ◐ | n/a | n/a¹ |
-| Text-in-image | **✓** | ◐ | **✓** | ✓ | ◐ | **✓** | ext | ◐² |
-| Conversational / API edit | **✓** | ◐ | ◐ | ✓ | ext | ✓ | ext | ◐ |
-| Download / run weights | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | **✓** |
-| LoRA / adapter fine-tune | ✗ | ✗ | ✓ | ✓ | **✓** | ◐ | **✓** | **✓** |
-| Full train loop on *your* folder | ✗ | ✗ | ✗ | ◐ | ◐ | ◐ | ext | **✓** |
-| Flow matching in-tree | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ext | **✓** |
-| DPO / GRPO preference train | ✗ | ✗ | ✗ | ✗ | ext | ✗ | ext | **✓** |
-| Regional box layout (native) | ◐ | ◐ | ✓ | ext | ext | ext | ext | **✓** |
-| Self-critique + retry (TCIS / pick-best) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
-| Adaptive CFG stack (Holy Grail) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ext | **✓** |
-| Style invention (Style Genome) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Open scene-graph video director | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ext | **✓** |
-| Continuity / filmmaker modules | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
-| Air-gap + reproducible metadata | ✗ | ✗ | ◐ | ◐ | ◐ | ◐ | ◐ | **✓** |
-| Research horizon registry | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
-
-¹ SDX is not a published aesthetics leaderboard checkpoint — you train (or bring) weights.  
-² Glyph canvas + OCR pick-best help; closed typography specialists still lead raw OCR demos.
-
-### Capability matrix (video)
-
-| Capability | Veo | Kling | Runway | Luma | Wan / LTX | **SDX** |
+| Capability (video) | Veo | Kling | Runway | Luma | Wan / LTX | **SDX** |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Hosted clip quality / audio | **✓** | **✓** | ✓ | ✓ | ◐ | n/a¹ |
-| Motion brush / editor UX | ◐ | ◐ | **✓** | ◐ | ✗ | ◐ |
 | Multi-shot storyboard | ✓ | **✓** | ✓ | ◐ | ◐ | **✓** |
 | Open scene JSON → plan → stitch | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
 | Identity / continuity validators | ◐ | ◐ | ✓ | ◐ | ✗ | **✓** |
-| Segment critic + retry | ✗ | ✗ | ◐ | ✗ | ✗ | **✓** |
 | Trainable / forkable pipeline | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
-| Self-host entire director stack | ✗ | ✗ | ✗ | ✗ | ◐ | **✓** |
 
-¹ Default SDX video path is an open **compositional studio** (retrieve → keyframe → motion → polish). Optional VideoDiT exists; frontier clip quality still belongs to hosted Veo/Kling/Runway unless you train.
-
-### What SDX can do that *they* generally cannot
-
-These are structural — hard for a closed API or a weights-only release to match without becoming a different product:
-
-| SDX edge | Why others miss it |
-|----------|--------------------|
-| **End-to-end `train.py` on your data** (flow + VP + LoRA/DoRA) | Closed APIs forbid it; Flux/SD mostly ship **LoRA recipes**, not one readable research loop |
-| **In-tree DPO + GRPO family** | Preference / RL fine-tune lives as scattered papers + third-party scripts elsewhere |
-| **TCIS closed loop** — generate → multi-scorer critique → disagree → retry | Hosted models are almost always **single-shot**; Comfy can approximate with hand-built graphs |
-| **Holy Grail adaptive sampling** as first-class presets | CFG schedules exist as lore/nodes, not an owned stack with tests |
-| **Style Genome** — invent style axes without artist-name cloning | Competitors lock “house style” or rely on artist LoRAs |
-| **Regional boxes + prompt→layout + glyph canvas** in one repo | Ideogram-class layout is closed or plugin-glued |
-| **Open scene-graph film studio** (JSON director, continuity, frontier filmmakers) | Veo/Kling/Runway are products; Wan/LTX are weights — neither is an open director OS |
-| **`frontier/` idea registry** — cinema / narrative / realism experiments | No major vendor ships a browsable research horizon next to production entry points |
-| **Foreign adapter bridge** (sniff LoRA/LyCORIS → DiT roles) | Cross-arch weight reuse is usually “start over in Comfy” |
-| **Air-gap + 1700+ tests + provenance metadata** | SaaS cannot be air-gapped; many FOSS UIs skip scientific reproducibility |
-
-### Where they still win (be honest)
-
-| They win | Prefer |
-|----------|--------|
-| Zero-ops pretty defaults | Midjourney, GPT Image, Veo |
-| Absolute text-in-image demos | Ideogram, GPT Image, Qwen-Image |
-| Deepest node ecosystem today | ComfyUI + SD/FLUX weights |
-| Hosted video fidelity + native audio | Veo, Kling, Runway |
-| Adobe / enterprise creative suite | Firefly |
-
-Use those when you need **pixels tomorrow**. Use SDX when you need to **own the loop**: data → train → sample → critique → direct.
-
-### What this is *not*
-
-| Claim we avoid | Reality |
-|----------------|---------|
-| “Beats Midjourney on aesthetics” | No bake-off claimed; taste is subjective and APIs churn |
-| “Drop-in Flux / Veo replacement” | Different shape: framework + training + director, not one mega-checkpoint |
-| “One demo ckpt does everything” | You train or bring weights; SDX supplies the stack |
-
-Deeper strategy + weakness→fix map: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) · field notes: [docs/research/LANDSCAPE_2026.md](docs/research/LANDSCAPE_2026.md)
-
----
-
-## What you get
-
-<details open>
-<summary><strong>Image generation</strong> — train.py + sample.py</summary>
-
-- DiT + VAE latent diffusion, flow matching, DPO, GRPO family
-- Holy Grail adaptive CFG, TCIS committee scoring, Style Genome
-- Regional box prompting (layout JSON with per-region prompts)
-- Agentic quality: pick-best / critics, artifacts, drift repair, eval harness
+¹ The default SDX video path is an open **compositional studio** (retrieve → keyframe → motion → polish); an optional
+VideoDiT exists. Frontier clip quality still belongs to hosted Veo / Kling / Runway unless you train.
 
 </details>
 
-<details open>
-<summary><strong>Video studio (v13)</strong> — pipelines/video/</summary>
+**Where they still win.** Zero-setup pretty defaults (Midjourney, GPT Image, Veo), raw text-in-image demos (Ideogram,
+GPT Image, Qwen-Image), the deepest node ecosystem (ComfyUI with SD / FLUX weights), hosted video with native audio (Veo,
+Kling, Runway). Use those when you need pixels tomorrow; use SDX when you need to **own the loop**.
 
-One **scene JSON** → retrieve → keyframe edit → motion → polish → stitch.
-
-- **VIDEOMAX:** one-flag identity / permanence / physics / occlusion / shot-chain consistency
-- **Studio:** engine router (realistic / anime / voxel / …), director mode, character & world bibles
-- **Controls:** elements, motion brush, FLF2V, storyboard cuts
-- **Continuity:** eyeline, props, light motivation, thumbnail rehearsal
-- **Frontier:** 25 filmmaker modules (tension curve, causal ripples, witness lens, …)
-
-```bash
-python -m scripts.tools video_generate --list-frontier
-python -m scripts.tools video_generate --scene examples/scene_studio.example.json --preflight
-```
-
-</details>
-
-<details>
-<summary><strong>Frontier research</strong> — frontier/</summary>
-
-80+ experimental modules: layout, guidance, narrative, realism, cinema, fusion. Browse the registry:
-
-```python
-from frontier.registry import list_ideas
-
-implemented = list_ideas(status="implemented")
-```
-
-</details>
+**What we don't claim.** No "beats Midjourney on aesthetics" (no bake-off is claimed), no drop-in Flux / Veo replacement
+(different product shape), no single demo checkpoint that does everything. Strategy and the weakness→fix map:
+[docs/RESEARCH.md](docs/RESEARCH.md#competitive-analysis--solution-roadmap).
 
 ---
 
-## Pipelines
+## Performance & native code
 
-Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile and dark mode.
+Hot CPU paths have optional native builds that fall back to NumPy / PyTorch when absent, with parity tests that CI runs.
 
-### Training (`train.py`)
+| Kernel (1024 x 1024 RGB, 4 threads) | Rust | NumPy | Speed-up |
+|---|---:|---:|---:|
+| Kuwahara, radius 3 | 20 ms | 704 ms | **36x** |
+| Bilateral, radius 3 | 113 ms | 1319 ms | **12x** |
+| 3x3 median | 41 ms | 365 ms | **9x** |
+| Floyd-Steinberg to 8 bit | 16 ms | ~7.1 s (pure Python) | **~460x** |
 
-| Step | What happens |
-|------|----------------|
-| 1 | Load images + captions |
-| 2 | VAE encode → latent space |
-| 3 | Add noise @ timestep (flow or VP) |
-| 4 | DiT predicts noise / velocity |
-| 5 | Loss + backward (optional DPO / GRPO aux) |
-| 6 | Checkpoint + metadata |
-
-### Sampling (`sample.py`)
-
-| Step | What happens |
-|------|----------------|
-| 1 | PromptStack cleans & expands prompt |
-| 2 | Optional box layout → regional masks |
-| 3 | T5 / CLIP encode conditioning |
-| 4 | Denoise loop (Holy Grail CFG, regional blend) |
-| 5 | VAE decode → image |
-
-### Video (`pipelines/video/`)
-
-| Step | What happens |
-|------|----------------|
-| 1 | `compile_scene_graph()` — studio + frontier layers |
-| 2 | Shot plan + per-segment overrides |
-| 3 | Retrieve reference clips |
-| 4 | Keyframe img2img edits |
-| 5 | Motion transfer, FLF2V, polish stack |
-| 6 | Stitch + provenance |
-
----
-
-## New in v13
-
-| Area | Highlights |
-|------|------------|
-| **VIDEOMAX** | One-flag consistency: identity, permanence, physics, occlusion, shot chain |
-| **Invention Lab** | artwave / maxwave / videowave; stacks union (no clobber) |
-| **Ops packs** | ALPHACUT, GAMEASSETS, PHOTOOPS, STYLECAST |
-| **RSI feedback** | feedback like/dislike/pair to DPO; --log-feedback; rsi_loop |
-| **Quality policy** | Compete soft-defaults, CFG-Zero, pick-best num sync |
-| **Tests** | **1700+** pytest cases |
-
-[Full v13 release notes](docs/releases/v13.md) · [RSI](docs/guides/RSI_FEEDBACK.md) · [VIDEOMAX](docs/guides/VIDEOMAX.md)
-
-### v1 to v13
-
-| | v1 | **v13** |
-|---|---|---|
-| Scope | Train + sample | Image + video + RSI + inventions |
-| Video | no | Scene JSON + VIDEOMAX |
-| Feedback | no | Thumbs to flywheel to DPO |
-| Tests | few | **1700+** |
-
-[Full comparison](docs/releases/VERSION_COMPARISON.md)
-
+Also native: VP schedule math, token Jaccard, blob counting (Rust); latent geometry, image metrics, mask→patch weights
+(C++); latent blur and luma stats (CUDA); manifest merge (Go); fingerprints (Zig). Build: [native/README.md](native/README.md).
+Every sampling run prints per-stage seconds and peak VRAM (`timing_s` / `peak_vram_gb` in `--pick-report-json`).
 
 ---
 
@@ -314,41 +398,60 @@ Diagrams use **tables** (not Mermaid) so they render cleanly on GitHub mobile an
 
 ```
 sdx/
-├── train.py · sample.py · demo.py     # Image entry points
-├── models/ · diffusion/               # DiT, schedulers, sampling
-├── frontier/                          # Experimental research
-├── pipelines/video/                   # Scene-graph studio + VIDEOMAX
-├── utils/generation/                  # Layout, CFG, sample, RSI feedback
-└── tests/                             # 1700+ tests
+├── train.py · sample.py · demo.py · inference.py    entry points
+├── config/        presets, prompt / style registries, train config
+├── data/          datasets, captions, dataset audit
+├── diffusion/     flow + VP objectives, schedules, solvers, sampling loop
+├── models/        DiT variants, attention, conditioning, LoRA, video DiT
+├── training/      train CLI, loop, readiness gate
+├── utils/
+│   ├── generation/   sampler, guidance, layout, tiling, editing
+│   ├── ideas/        the 100 opt-in techniques + kernels
+│   ├── prompt/       PromptStack, realism, game, scene
+│   ├── quality/      critics, natural pass, finishing, realism, pixel art
+│   └── safety/       minor guard (always on)
+├── frontier/      research: layout, multiview / 3-D, imagination
+├── pipelines/     book / comic, image_gen, video studio
+├── native/        Rust · C++ / CUDA · Go · Zig accelerators
+├── scripts/tools/ python -m scripts.tools <command> (bench, readiness, ui, ...)
+└── tests/         1750+ tests
 ```
+
+Per-file map: [docs/FILES.md](docs/FILES.md) · generated tree: [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
 
 ---
 
 ## System requirements
 
 | | Minimum | Recommended |
-|---|---------|-------------|
-| Python | 3.10 | 3.11+ |
-| PyTorch | 2.0 | 2.2+ |
-| GPU VRAM | 16 GB | 24 GB+ |
+|---|---|---|
+| Python | 3.11 | 3.13 |
+| PyTorch | 2.x | 2.11 + CUDA 12.8 |
+| GPU, sampling | 24 GB (default T5-XXL encoder is ~19 GB in fp32) | 40 GB+ |
+| GPU, training | 40 GB | 80 GB class (A100 / H100), cloud is fine (see `runpod/`) |
+| Rust | — | stable toolchain, for the image kernels |
+
+GPU figures are estimates for the default encoders; measure yours with the readiness check and `bench ablate`. CPU is
+enough for the test suite, the readiness check and the smoke dataset.
 
 ---
 
 ## Documentation
 
 | Topic | Link |
-|-------|------|
-| Getting started | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
-| **v13 release** | [docs/releases/v13.md](docs/releases/v13.md) |
-| RSI / user feedback | [docs/guides/RSI_FEEDBACK.md](docs/guides/RSI_FEEDBACK.md) |
-| VIDEOMAX | [docs/guides/VIDEOMAX.md](docs/guides/VIDEOMAX.md) |
-| Codebase map | [docs/CODEBASE.md](docs/CODEBASE.md) |
-| Video pipeline | [pipelines/video/README.md](pipelines/video/README.md) |
-| Frontier | [frontier/README.md](frontier/README.md) |
-| Competitive notes | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) |
-| v12 release | [docs/releases/v12.md](docs/releases/v12.md) |
-| v1 → v13 | [docs/releases/VERSION_COMPARISON.md](docs/releases/VERSION_COMPARISON.md) |
-| **Jargon & acronyms** | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
+|---|---|
+| Getting started, hardware, readiness gate | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
+| **v14 release notes** | [docs/CHANGELOG.md](docs/CHANGELOG.md#sdx-v14--natural-look-100-techniques-rust-kernels--training-readiness) |
+| Quality: natural look, 100 techniques, ablations, RSI | [docs/QUALITY.md](docs/QUALITY.md) |
+| How generation works (pipeline, CFG, solvers, detail control) | [docs/HOW_GENERATION_WORKS.md](docs/HOW_GENERATION_WORKS.md) |
+| Prompts and models | [docs/PROMPT_STACK.md](docs/PROMPT_STACK.md) · [docs/MODEL_STACK.md](docs/MODEL_STACK.md) |
+| Guides: captions, datasets, book / comic, VIDEOMAX | [docs/GUIDES.md](docs/GUIDES.md) |
+| Codebase map · file index | [docs/CODEBASE.md](docs/CODEBASE.md) · [docs/FILES.md](docs/FILES.md) |
+| Native accelerators | [native/README.md](native/README.md) |
+| Video pipeline · frontier | [pipelines/video/README.md](pipelines/video/README.md) · [frontier/README.md](frontier/README.md) |
+| Model lines and release gates | [docs/MODEL_LINES_AND_RELEASES.md](docs/MODEL_LINES_AND_RELEASES.md) |
+| Research and competitive notes | [docs/RESEARCH.md](docs/RESEARCH.md) |
+| **Jargon and acronyms** | [docs/GLOSSARY.md](docs/GLOSSARY.md) |
 
 ---
 
@@ -357,45 +460,37 @@ sdx/
 ```bash
 ruff check . --fix && ruff format .
 pytest tests/ -q
+cp scripts/tools/dev/commit-msg .git/hooks/commit-msg    # keeps AI tools off the contributor list
 ```
 
-### Are Cursor / Claude permanent contributors?
-
-**No.** GitHub's contributor graph only counts **git commit author names**. AI assistants are not collaborators unless their name appears on commits.
-
-To keep the graph human-only:
-
-1. **Hook (recommended):** copy `scripts/tools/dev/prepare-commit-msg` to `.git/hooks/prepare-commit-msg` — strips `Co-authored-by: Cursor` / Claude trailers before each commit.
-2. **Rewrite history (once):** `scripts/tools/dev/cursorfix.sh` reattributes old Cursor-authored commits to you.
-3. **Policy:** do not add AI `Co-authored-by` lines (see README in dev scripts).
+Full checklist (CI mirror, type check, docs): [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## Version history
 
-| Version | Focus | Notes |
-|---------|--------|--------|
-| **[v13](docs/releases/v13.md)** | VIDEOMAX, RSI feedback, Invention Lab, 1700+ tests | **Current** · tag `v13.0.0` |
-| [v12](docs/releases/v12.md) | AI film studio video, frontier horizon | `v12.0.0` |
-| [v11](docs/releases/v11.md) | Regional box layout, frontier research, package restructure | `v11.0.0` |
-| [v10](docs/releases/v10.md) | ELIQ, artifacts, explainable quality | `v10.0.0` |
-| [v9](docs/releases/v9.md) | GRPO family, Superior Stack, agentic training | `v9.0.0` |
-| [v8](docs/releases/v8.md) | Style Genome, unified PromptStack | `v8.0.0` |
-| [v7](docs/releases/v7.md) | CI, reproducibility, security, benchmarks | `v7.0.0` |
-| [v6](docs/releases/v6.md) | Native acceleration, book/comic pipeline | `v6.0.0` |
-| [v5](docs/releases/v5.md) | Inference scaling, beam search, data curation | `v5.0.0` |
-| [v4](docs/releases/v4.md) | Smart quality filtering, adaptive iteration | `v4` |
-| [v3](docs/releases/v3.md) | Hard-case detection, benchmark training loops | `v3` |
-| [v0.2](docs/releases/v0.2.0.md) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
-| [v0.1](docs/releases/v0.1.0.md) | Foundation train + sample framework | `v0.1.0` |
-
-[Full timeline & v1 → v13 comparison →](docs/releases/VERSION_COMPARISON.md) · **[What does this jargon mean? →](docs/GLOSSARY.md)**
+| Version | Focus | Tag |
+|---|---|---|
+| **[v14](docs/CHANGELOG.md#sdx-v14--natural-look-100-techniques-rust-kernels--training-readiness)** | Natural-look pass, 100 techniques, Rust kernels, readiness gate, resumable training, leaner codebase | **Current** · `v14.0.0` |
+| [v13](docs/CHANGELOG.md#sdx-v13--videomax-rsi-feedback--invention-waves) | VIDEOMAX, RSI feedback, Invention Lab, 1700+ tests | `v13.0.0` |
+| [v12](docs/CHANGELOG.md#sdx-v12--ai-film-studio-video-pipeline--frontier-horizon) | AI film studio video, frontier horizon | `v12.0.0` |
+| [v11](docs/CHANGELOG.md#sdx-v11--layout-control-frontier-research--package-restructure) | Regional box layout, frontier research, package restructure | `v11.0.0` |
+| [v10](docs/CHANGELOG.md#sdx-v10-advanced-quality--explainability-release) | ELIQ, artifacts, explainable quality | `v10.0.0` |
+| [v9](docs/CHANGELOG.md#sdx-v9-source-release) | GRPO family, Superior Stack, agentic training | `v9.0.0` |
+| [v8](docs/CHANGELOG.md#sdx-v8--style-genome-and-unified-prompt-pipeline) | Style Genome, unified PromptStack | `v8.0.0` |
+| [v7](docs/CHANGELOG.md#sdx-v7--production-quality-and-research-infrastructure) | CI, reproducibility, security, benchmarks | `v7.0.0` |
+| [v6](docs/CHANGELOG.md#sdx-v6--native-acceleration-and-book-generation-pipeline) | Native acceleration, book/comic pipeline | `v6.0.0` |
+| [v5](docs/CHANGELOG.md#sdx-v5--inference-scaling-and-quality-optimization) | Inference scaling, beam search, data curation | `v5.0.0` |
+| [v4](docs/CHANGELOG.md#sdx-v4--smart-quality-filtering-and-advanced-models) | Smart quality filtering, adaptive iteration | `v4` |
+| [v3](docs/CHANGELOG.md#sdx-v3--automated-quality-improvement-and-benchmarking) | Hard-case detection, benchmark training loops | `v3` |
+| [v0.2](docs/CHANGELOG.md#sdx-v020--advanced-training-methods-flow-matching-dpo-distillation) | Flow matching, DPO, knowledge distillation | `v0.2.0` |
+| [v0.1](docs/CHANGELOG.md#sdx-v010--baseline-text-to-image-training-framework) | Foundation train + sample framework | `v0.1.0` |
 
 <details>
-<summary><strong>Version history in plain English</strong> (click to expand)</summary>
+<summary><b>Version history in plain English</b> (click to expand)</summary>
 
 | Version | What it actually means |
-|---------|------------------------|
+|---|---|
 | **v0.1** | First SDX: train your own image model from your data, generate from text. |
 | **v0.2** | Faster training (flow matching), learn from preferences (DPO), compress models (distillation). |
 | **v3** | Auto-find weak prompts/images, benchmark, retrain in a loop to improve. |
@@ -409,6 +504,7 @@ To keep the graph human-only:
 | **v11** | Draw boxes on the image for per-region prompts; reorganized code folders. |
 | **v12** | Full video pipeline from one JSON scene; 25+ director rules; 1300+ tests. |
 | **v13** | VIDEOMAX consistency, RSI thumbs to DPO, Invention Lab waves, 1700+ tests. |
+| **v14** | Images that measure as natural; 100 techniques you can switch on and benchmark; Rust speed-ups; training that proves itself before it costs money. |
 
 </details>
 
@@ -416,27 +512,24 @@ To keep the graph human-only:
 
 ## Glossary
 
-Short definitions for terms used above. [Full glossary with every acronym →](docs/GLOSSARY.md)
+Short definitions for terms used above. [Full glossary →](docs/GLOSSARY.md)
 
 | Term | Plain English |
-|------|----------------|
+|---|---|
 | **DiT** | The transformer network that generates images by removing noise step by step. |
 | **VAE / latent** | Compresses images to a smaller grid for fast training; expands back to pixels at the end. |
 | **CFG** | How tightly the image follows your prompt (higher = more literal). |
 | **Flow matching** | A modern training method, often faster than classic diffusion. |
-| **DPO** | Train from “A is better than B” preference pairs. |
-| **GRPO** | Generate several outputs, rank them, train toward the winners (RL-style). |
-| **Holy Grail** | SDX’s adaptive CFG — strong guidance late, looser early. |
-| **TCIS** | Generate multiple images; scorers vote for the best match to your prompt. |
-| **Style Genome** | Recipe system for inventing new visual styles (not copying artists). |
-| **PromptStack** | Cleans and expands prompts the same way in training and sampling. |
-| **ELIQ** | Scores image quality without needing human ratings. |
+| **DPO / GRPO** | Train from "A is better than B" pairs / from ranked groups of outputs (RL-style). |
+| **Holy Grail** | SDX's adaptive CFG: looser early, stronger where it helps. |
+| **TCIS** | Generate several images; scorers vote for the best match to your prompt. |
+| **AI-look tell** | A measurable trace that gives a generated image away (decoder grid, missing sensor noise, plastic skin). |
+| **Ablation** | Run the same prompts and seeds with and without one change, to see what that change actually does. |
+| **Readiness gate** | Small checks a training setup must pass before a long, expensive run is allowed. |
+| **Dither** | Tiny noise added when converting to 8 bit so smooth gradients don't show bands. |
 | **Regional box layout** | Put prompts in rectangles on the canvas (character here, sky there). |
-| **Frontier** | Experimental folder — new ideas live here before going production. |
-| **Agentic** | Several small AI tools (score, refine, validate) instead of one black box. |
-| **TI2V / scene graph** | Text or image in → video out, directed by one JSON scene file. |
+| **Frontier** | Experimental folder: new ideas live here before going to production. |
 | **FLF2V** | You set the first and last frame; SDX fills in the motion between. |
-| **CI / ruff / pytest** | Auto tests and style checks that run when you push code. |
 
 ---
 
@@ -444,16 +537,16 @@ Short definitions for terms used above. [Full glossary with every acronym →](d
 
 ```bibtex
 @software{sdx_2026,
-  title={SDX: Advanced Text-to-Image and Video Generation Framework},
-  author={Llunarstack},
-  year={2026},
-  version={12.0.0},
-  url={https://github.com/Llunarstack/sdx}
+  title   = {SDX: Stable Diffusion Transformer eXtended},
+  author  = {Llunarstack},
+  year    = {2026},
+  version = {14.0.0},
+  url     = {https://github.com/Llunarstack/sdx}
 }
 ```
 
 ---
 
 <p align="center">
-  <sub>Apache 2.0 · <a href="https://github.com/Llunarstack/sdx/issues">Issues</a> · <a href="https://github.com/Llunarstack/sdx/releases">Releases</a></sub>
+  <sub>Apache 2.0 · <a href="https://github.com/Llunarstack/sdx/issues">Issues</a> · <a href="https://github.com/Llunarstack/sdx/releases">Releases</a> · <a href="CONTRIBUTING.md">Contributing</a></sub>
 </p>

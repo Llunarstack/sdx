@@ -91,7 +91,7 @@ What each release actually added, without the buzzwords.
 
 | Term | Stands for / means | What it does in SDX |
 |------|--------------------|---------------------|
-| **`utils/agentic/`**, **`utils/quality/`**, **`utils/superior/`** | — | Production quality, agentic orchestration, and inference tool stacks. |
+| **`utils/agentic/`**, **`utils/quality/`**, **`utils/agentic/quality_loop.py`** | — | Production quality, agentic orchestration, and inference tool stacks. |
 | **`frontier/`** | — | Experimental ideas — try here first; promote to production when stable. |
 | **Agentic** | — | Multiple specialized “agents” (scorers, refiners, validators) working together, not one monolithic model. |
 | **Superior Stack** | Marketing name in v9 | Bundle of best inference optimizations (caching, CFG tricks, ensembles, etc.). |
@@ -121,5 +121,5 @@ What each release actually added, without the buzzwords.
 
 - [GETTING_STARTED.md](GETTING_STARTED.md) — install and first run  
 - [CODEBASE.md](CODEBASE.md) — where code lives  
-- [releases/VERSION_COMPARISON.md](releases/VERSION_COMPARISON.md) — feature matrix across versions  
+- [releases/VERSION_COMPARISON.md](CHANGELOG.md#sdx-version-comparison) — feature matrix across versions  
 - [pipelines/video/README.md](../pipelines/video/README.md) — video pipeline details  

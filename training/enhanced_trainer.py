@@ -27,16 +27,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.enhanced_dit import EnhancedDiT
-from utils.architecture.enhanced_utils import (
-    create_anatomy_correction_system,
-    create_consistency_system,
-    create_precision_control_system,
-    create_text_rendering_pipeline,
+from models.dit_variants import EnhancedDiT
+from utils.consistency import (
+    BodyEncoder,
+    CharacterDatabase,
+    CharacterProfile,
+    ConsistencyLossManager,
+    FaceEncoder,
+    create_style_harmonization_system,
 )
-from utils.consistency.character_consistency import BodyEncoder, CharacterDatabase, CharacterProfile, FaceEncoder
-from utils.consistency.consistency_losses import ConsistencyLossManager
-from utils.consistency.style_harmonization import create_style_harmonization_system
+from utils.generation.editing import TextRenderingEngine
 
 
 @dataclass(slots=True)
@@ -313,16 +313,7 @@ class EnhancedTrainer:
         # Style harmonization system
         self.style_harmonizer = create_style_harmonization_system()
 
-        # Feature extractors for validation
-        precision_system = create_precision_control_system()
-        anatomy_system = create_anatomy_correction_system()
-        text_system = create_text_rendering_pipeline()
-        consistency_system = create_consistency_system()
-
-        self.scene_composer = precision_system["scene_composer"]
-        self.anatomy_validator = anatomy_system["anatomy_validator"]
-        self.text_engine = text_system["engine"]
-        self.consistency_manager = consistency_system["consistency_manager"]
+        self.text_engine = TextRenderingEngine()
 
     def compute_enhanced_loss(
         self,
@@ -413,12 +404,10 @@ class EnhancedTrainer:
         else:
             predicted_noise = model_output
 
-        # Optional: provide approximate generated images for character-consistency loss.
+        # Character consistency is scored on the model's one-step clean estimate (with gradients), not on x_0.
         generated_images = None
         if batch.character_profiles is not None:
-            with torch.no_grad():
-                # Full denoising would be expensive during training; use x_0 as proxy.
-                generated_images = x_0
+            generated_images = self.predict_x0(x_t, predicted_noise, t)
 
         # Single compute_enhanced_loss call with the correctly-shaped noise prediction.
         losses = self.compute_enhanced_loss(batch, predicted_noise, noise, generated_images)
@@ -444,10 +433,21 @@ class EnhancedTrainer:
         """
         if self.diffusion is not None:
             return self.diffusion.q_sample(x_0, t, noise=noise)
-        # Cosine-schedule fallback: normalise integer timestep indices to [0, 1]
+        alpha_t = self._alpha_bar(t, num_timesteps).view(-1, 1, 1, 1)
+        return torch.sqrt(alpha_t) * x_0 + torch.sqrt(1 - alpha_t) * noise
+
+    def _alpha_bar(self, t: torch.Tensor, num_timesteps: int = 1000) -> torch.Tensor:
+        """``alpha_bar(t)`` of the configured diffusion, else of the cosine fallback schedule used by :meth:`add_noise`."""
+        if self.diffusion is not None:
+            self.diffusion._to_device(t.device)
+            return self.diffusion.alpha_cumprod[t]
         t_norm = t.float() / max(num_timesteps - 1, 1)
-        alpha_t = torch.cos(t_norm * np.pi / 2) ** 2
-        return torch.sqrt(alpha_t).view(-1, 1, 1, 1) * x_0 + torch.sqrt(1 - alpha_t).view(-1, 1, 1, 1) * noise
+        return torch.cos(t_norm * np.pi / 2) ** 2
+
+    def predict_x0(self, x_t: torch.Tensor, predicted_noise: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """One-step clean estimate ``(x_t - sqrt(1 - abar) eps_hat) / sqrt(abar)`` (differentiable in ``eps_hat``)."""
+        alpha_t = self._alpha_bar(t).view(-1, 1, 1, 1).clamp(min=1e-4)
+        return (x_t - torch.sqrt(1 - alpha_t) * predicted_noise) / torch.sqrt(alpha_t)
 
     def validate_generation(self, generated_images: torch.Tensor, batch: EnhancedTrainingBatch) -> dict[str, float]:
         """Validate generated images against enhanced features."""

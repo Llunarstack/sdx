@@ -1,9 +1,9 @@
-# Parenthesis/tag emphasis and ReVe-style caption normalization for strong prompt adherence.
-# Quality tags (10x boost), anti-blending, count-aware.
+"""Training-caption helpers: tag emphasis, person-descriptor ordering, tag front-loading, anti-blending,
+regional captions and comma-safe truncation (torch-free)."""
+
 import re
 from typing import Any
 
-# Quality tags that should strongly improve output when present (repeat/boost in caption)
 QUALITY_TAGS = [
     "masterpiece",
     "best quality",
@@ -18,7 +18,7 @@ QUALITY_TAGS = [
     "perfect composition",
 ]
 
-# Person descriptors: order for prompt_from_tags / normalize_tag_order (subject → age → height → build → anatomy → rest).
+# Person-descriptor buckets, in the order prompt_from_tags / normalize_tag_order put them (unmatched tags go last).
 SUBJECT_PREFIXES = (
     "1girl",
     "1boy",
@@ -143,8 +143,7 @@ BODY_PART_TAGS = (
     "arm up",
 )
 
-# Domain tags that many models struggle with — boost when present so our model learns them well.
-# Use these in training captions and at inference for 3D, realistic, interior/exterior, etc.
+# Domain tags models commonly under-learn; front-loaded when a caption contains them.
 DOMAIN_TAGS = {
     "3d": [
         "3d render",
@@ -204,7 +203,6 @@ DOMAIN_TAGS = {
         "complex composition",
         "depth of field",
     ],
-    # Text in image: legible text, signs, labels (many models render text poorly; boost when present).
     "text_in_image": [
         "legible text",
         "clear text",
@@ -222,7 +220,6 @@ DOMAIN_TAGS = {
         "correct spelling",
         "readable",
     ],
-    # Things other models famously suck at — boost so we learn them (research: SD/SDXL/FLUX limitations)
     "anatomy": [
         "correct anatomy",
         "correct hands",
@@ -245,7 +242,6 @@ DOMAIN_TAGS = {
         "well proportioned",
         "coherent",
     ],
-    # Concept bleeding (SDXL etc.): colors/objects bleeding together; boost so model keeps distinct colors/edges.
     "concept_bleed": [
         "distinct colors",
         "separate colors",
@@ -257,7 +253,6 @@ DOMAIN_TAGS = {
         "clean edges",
         "sharp boundaries",
     ],
-    # Complex prompts: multi-element, detailed, long captions (boost for better adherence).
     "complex": [
         "complex composition",
         "multiple elements",
@@ -269,7 +264,6 @@ DOMAIN_TAGS = {
         "full detail",
         "ultra detailed",
     ],
-    # Challenging / surreal / abstract / weird (boost so model learns these; no censorship).
     "challenging": [
         "surreal",
         "abstract",
@@ -283,7 +277,6 @@ DOMAIN_TAGS = {
         "masterpiece",
         "best quality",
     ],
-    # Style / artist tags (Danbooru-style boards, etc.): strong style conditioning.
     "style_artist": [
         "oil painting",
         "watercolor",
@@ -303,17 +296,13 @@ DOMAIN_TAGS = {
         "digital art",
         "official art",
     ],
-    # Person descriptors: height, age, body size/build, anatomy & body parts — order and boost for consistent adherence.
     "person_descriptors": (
         list(AGE_TAGS) + list(HEIGHT_TAGS) + list(BUILD_BODY_TAGS) + list(ANATOMY_FRAMING_TAGS) + list(BODY_PART_TAGS)
     ),
 }
-# Flat list for "boost when present" (so model learns these domains strongly)
 DOMAIN_TAGS_FLAT = [t for tags in DOMAIN_TAGS.values() for t in tags]
 
-# Hard styles: 3D, photorealistic, and style mixes that most AI image models struggle with.
-# Boosted more strongly than general domain tags so the model learns 3D/realistic/mixed looks.
-# See config/defaults/prompt_domains.py for recommended prompts and negatives per hard style.
+# 3D / photoreal / style-mix tags; front-loaded before quality and domain tags so the style anchors the caption.
 HARD_STYLE_TAGS = {
     "3d": [
         "3d render",
@@ -351,7 +340,6 @@ HARD_STYLE_TAGS = {
         "depth of field",
         "bokeh",
     ],
-    # Style mixes: 2.5D, semi-realistic, anime+realistic, etc. — models often blur these.
     "style_mix": [
         "2.5d",
         "2.5d style",
@@ -374,24 +362,8 @@ HARD_STYLE_TAGS = {
 }
 HARD_STYLE_TAGS_FLAT = [t for tags in HARD_STYLE_TAGS.values() for t in tags]
 
-# Universal negative prompt snippets that help avoid common diffusion-model failures.
-# Use at inference or append to training negative_caption when relevant (hands, anatomy, double head, etc.)
-NEGATIVE_ANATOMY = "bad anatomy, bad hands, missing fingers, extra fingers, fused fingers, mutated hands, poorly drawn hands, deformed hands, extra limbs, missing limbs, malformed limbs, disfigured"
-NEGATIVE_FACE = (
-    "bad face, deformed face, ugly face, distorted eyes, asymmetric eyes, wrong eyes, blurry face, mutated face"
-)
-NEGATIVE_COMPOSITION = "duplicate, duplicate head, two heads, merged subjects, cropped, out of frame, bad composition, cut off, missing body parts"
-NEGATIVE_QUALITY = (
-    "blurry, low quality, worst quality, jpeg artifacts, distorted, oversaturated, underexposed, overexposed"
-)
-# Use when you want to avoid bad/unwanted text but NOT when you want text in the image.
-NEGATIVE_TEXT = "garbled text, misspelled text, unreadable text, wrong text, watermark, signature"
-# When generating images that should contain text, use this (avoids bad text, keeps desired text possible).
-NEGATIVE_BAD_TEXT_ONLY = "garbled text, misspelled, wrong spelling, illegible, watermark, signature"
-# Combined for "maximum safety" when generating people/anatomy
-NEGATIVE_ANATOMY_FULL = f"{NEGATIVE_ANATOMY}, {NEGATIVE_FACE}, {NEGATIVE_COMPOSITION}, {NEGATIVE_QUALITY}"
 
-# Phrases that imply multiple people/crowd — we add anti-blending and respect count
+# Phrases that imply several people; such captions get the anti-blending pair.
 MULTI_PERSON_PHRASES = (
     "2girls",
     "2boys",
@@ -410,127 +382,81 @@ ANTI_BLEND_POSITIVE = "distinct characters, no character blending, clear separat
 ANTI_BLEND_NEGATIVE = "character blending, merged figures, fused characters, blur between people"
 
 
-def normalize_tag(tag: str) -> str:
-    """Normalize a single tag: strip, optional underscore to space (for Danbooru-style)."""
-    t = tag.strip()
-    # Keep underscore for tokenizer consistency with tag boards; optionally normalize to space
-    return t
-
-
-def normalize_tags_string(tags_str: str, underscore_to_space: bool = False) -> str:
-    """
-    Normalize a comma-separated tag string: strip each tag, optionally replace _ with space.
-    Returns a single string "tag1, tag2, tag3" for use in prompts.
-    """
-    if not (tags_str and tags_str.strip()):
-        return ""
-    parts = [p.strip() for p in tags_str.split(",") if p.strip()]
-    if underscore_to_space:
-        parts = [p.replace("_", " ") for p in parts]
-    return ", ".join(parts)
+_DESCRIPTOR_BUCKETS = (AGE_TAGS, HEIGHT_TAGS, BUILD_BODY_TAGS, ANATOMY_FRAMING_TAGS, BODY_PART_TAGS)
 
 
 def _person_descriptor_bucket(tag: str) -> int:
-    """
-    Return sort key for person-descriptor ordering: 0=subject, 1=age, 2=height, 3=build, 4=anatomy/framing, 5=body parts, 6=other.
-    Used so prompts consistently order subject → age → height → size/build → anatomy/body parts → rest.
-    """
+    """Sort key: 0 subject, 1 age, 2 height, 3 build, 4 anatomy/framing, 5 body parts, 6 anything else."""
     t = tag.lower().strip()
     if any(t.startswith(p) for p in SUBJECT_PREFIXES):
         return 0
-    buckets = [(1, AGE_TAGS), (2, HEIGHT_TAGS), (3, BUILD_BODY_TAGS), (4, ANATOMY_FRAMING_TAGS), (5, BODY_PART_TAGS)]
-    for bucket_id, term_list in buckets:
-        for term in term_list:
+    for bucket_id, terms in enumerate(_DESCRIPTOR_BUCKETS, start=1):
+        for term in terms:
             if t == term or t.startswith(term + " ") or t.replace("_", " ") == term:
                 return bucket_id
     return 6
 
 
+def _order_person_first(tags: list[str]) -> str:
+    return ", ".join(sorted(tags, key=_person_descriptor_bucket))
+
+
 def prompt_from_tags(tags: list[str], subject_first: bool = True) -> str:
-    """
-    Build a prompt string from a list of tags (e.g. from --tags or a tag file).
-    When subject_first=True, orders tags: subject → age → height → build/size → anatomy/framing → body parts → rest.
-    """
-    if not tags:
-        return ""
-    tags = [normalize_tag(t) for t in tags if normalize_tag(t)]
-    if not subject_first or len(tags) <= 1:
-        return ", ".join(tags)
-    # Stable sort by person-descriptor bucket: subject → age → height → build → anatomy → body parts → other
-    indexed = [(t, i) for i, t in enumerate(tags)]
-    ordered = sorted(indexed, key=lambda ti: (_person_descriptor_bucket(ti[0]), ti[1]))
-    return ", ".join(t[0] for t in ordered)
+    """Join tags into a prompt; ``subject_first`` stable-sorts them subject -> age -> height -> build ->
+    anatomy/framing -> body parts -> rest."""
+    tags = [t.strip() for t in tags or () if t.strip()]
+    return _order_person_first(tags) if subject_first else ", ".join(tags)
 
 
 def apply_tag_emphasis(caption: str, expand_emphasis: bool = True, expand_deemphasis: bool = False) -> str:
-    """
-    Danbooru-style: (tag) or ((tag)) = emphasize; [tag] = de-emphasize.
-    expand_emphasis: (tag) -> repeat tag 1x for stronger focus; ((tag)) -> repeat 2x.
-    expand_deemphasis: [tag] -> remove or keep once (we keep once by default).
+    """Expand Danbooru-style emphasis into repetition T5 can see.
+
+    ``((tag))`` -> three copies and ``(tag)`` -> two (just the tag when ``expand_emphasis`` is off);
+    ``[tag]`` is kept once, or dropped when ``expand_deemphasis`` is on.
     """
     if not caption.strip():
         return caption
 
-    # ((word)) -> duplicate twice for strong emphasis
-    def replace_double(m):
-        t = m.group(1).strip()
-        return ", ".join([t] * 3) if expand_emphasis else t
+    def repeat(n: int):
+        return lambda m: ", ".join([m.group(1).strip()] * (n if expand_emphasis else 1))
 
-    caption = re.sub(r"\(\(\s*([^)]+)\s*\)\)", replace_double, caption, flags=re.IGNORECASE)
-
-    # (word) -> duplicate once for emphasis
-    def replace_single(m):
-        t = m.group(1).strip()
-        return f"{t}, {t}" if expand_emphasis else t
-
-    caption = re.sub(r"\(\s*([^)]+)\s*\)", replace_single, caption, flags=re.IGNORECASE)
-
-    # [word] -> de-emphasize: keep once (or remove if expand_deemphasis)
-    def replace_bracket(m):
-        t = m.group(1).strip()
-        return "" if expand_deemphasis else t
-
-    caption = re.sub(r"\[\s*([^]]+)\s*\]", replace_bracket, caption, flags=re.IGNORECASE)
-
-    # Normalize commas and spaces
+    caption = re.sub(r"\(\(\s*([^)]+)\s*\)\)", repeat(3), caption)
+    caption = re.sub(r"\(\s*([^)]+)\s*\)", repeat(2), caption)
+    caption = re.sub(r"\[\s*([^]]+)\s*\]", lambda m: "" if expand_deemphasis else m.group(1).strip(), caption)
     caption = re.sub(r"\s*,\s*", ", ", caption)
-    caption = re.sub(r"\s+", " ", caption).strip()
-    return caption
-
-
-def structured_to_tags(parts: dict, order: list[str] | None = None) -> str:
-    """ReVe-style: build caption from structured parts (subject, setting, style, etc.)."""
-    if order is None:
-        order = ["subject", "setting", "style", "aesthetics", "camera", "extra"]
-    return ", ".join(parts.get(k, "").strip() for k in order if parts.get(k, "").strip())
+    return re.sub(r"\s+", " ", caption).strip()
 
 
 def normalize_tag_order(caption: str, put_subject_first: bool = True) -> str:
-    """
-    Order comma-separated tags for better adherence. When put_subject_first=True, uses full person-descriptor order:
-    subject → age → height → build/size → anatomy/framing → body parts → other (same as prompt_from_tags).
-    """
+    """Reorder a comma-separated caption in person-descriptor order (same order as :func:`prompt_from_tags`)."""
     if not put_subject_first or "," not in caption:
         return caption
-    tags = [t.strip() for t in caption.split(",") if t.strip()]
-    indexed = [(t, i) for i, t in enumerate(tags)]
-    ordered = sorted(indexed, key=lambda ti: (_person_descriptor_bucket(ti[0]), ti[1]))
-    return ", ".join(t[0] for t in ordered)
+    return _order_person_first([t.strip() for t in caption.split(",") if t.strip()])
 
 
-def boost_hard_style_tags(caption: str, repeat_factor: int = 3) -> str:
-    """
-    When 3D, photorealistic, or style-mix tags are present, prepend them (repeated) so the model
-    strongly learns these hard styles. Use before boost_quality_tags so style anchors the prompt.
-    """
-    if not caption.strip():
-        return caption
-    caption_lower = caption.lower()
-    found = [t for t in HARD_STYLE_TAGS_FLAT if t in caption_lower]
-    if not found:
-        return caption
-    extra = ", ".join(found * repeat_factor)
-    return f"{extra}, {caption}".strip()
+def front_load_tags(caption: str, vocab) -> str:
+    """Move the caption's comma-separated tags found in ``vocab`` (whole tag, case-insensitive) to the front, once
+    each; the other tags keep their order. Nothing is repeated: repetition burns encoder tokens and binds boilerplate
+    tags to whatever images happen to carry them."""
+    vocab_l = {v.lower() for v in vocab}
+    head: list[str] = []
+    tail: list[str] = []
+    seen: set[str] = set()
+    for tag in (t.strip() for t in caption.split(",")):
+        if not tag:
+            continue
+        key = tag.lower()
+        if key not in vocab_l:
+            tail.append(tag)
+        elif key not in seen:
+            seen.add(key)
+            head.append(tag)
+    return ", ".join(head + tail) if head else caption
+
+
+def boost_hard_style_tags(caption: str) -> str:
+    """Front-load 3D / photoreal / style-mix tags (:data:`HARD_STYLE_TAGS`) so the style anchors the prompt."""
+    return front_load_tags(caption, HARD_STYLE_TAGS_FLAT)
 
 
 # Prepended during training when ``use_adherence_boost`` is on — nudges T5 toward literal caption following.
@@ -541,16 +467,11 @@ ADHERENCE_TAGS: tuple[str, ...] = (
 )
 
 
-def prepend_adherence_boost(caption: str, repeat_factor: int = 2) -> str:
-    """
-    Prepend short adherence-oriented tags so long/complex captions anchor on literal conditioning.
-    Use after quality/domain boosts; ``repeat_factor`` duplicates the tag block (default 2 = one repeat).
-    """
+def prepend_adherence_boost(caption: str) -> str:
+    """Prepend the adherence tags once so long/complex captions anchor on literal conditioning."""
     if not caption.strip():
         return caption
-    r = max(1, int(repeat_factor))
-    extra = ", ".join(list(ADHERENCE_TAGS) * r)
-    return f"{extra}, {caption}".strip()
+    return f"{', '.join(ADHERENCE_TAGS)}, {caption}".strip()
 
 
 def apply_training_guidance_to_caption_pair(
@@ -565,12 +486,8 @@ def apply_training_guidance_to_caption_pair(
     style_guidance_artists: bool = True,
     include_art_guidance_photography: bool = True,
 ) -> tuple[str, str]:
-    """
-    Apply training guidance (shortcomings, art medium, style) via PromptStack.
-
-    Single code path shared with ``t2i_dataset``, ``normalize_captions``, and inference stack.
-    """
-    from utils.prompt.stack.stages.guidance import apply_training_guidance_pair
+    """Shortcomings / art-medium / anatomy / style guidance on a caption pair (PromptStack guidance stage)."""
+    from utils.prompt.stack import apply_training_guidance_pair
 
     return apply_training_guidance_pair(
         caption,
@@ -585,106 +502,17 @@ def apply_training_guidance_to_caption_pair(
     )
 
 
-def apply_shortcomings_to_caption_pair(
-    caption: str,
-    negative_caption: str,
-    *,
-    mode: str,
-    include_2d: bool,
-) -> tuple[str, str]:
-    """
-    Append positive/negative fragments from ``config.defaults.ai_image_shortcomings`` (same taxonomy as
-    ``sample.py --shortcomings-mitigation``). ``mode`` is ``none``, ``auto``, or ``all``.
-    """
-    return apply_training_guidance_to_caption_pair(
-        caption,
-        negative_caption,
-        shortcomings_mode=mode,
-        shortcomings_2d=include_2d,
-        art_guidance_mode="none",
-        anatomy_guidance="none",
-        style_guidance_mode="none",
-    )
+def boost_quality_tags(caption: str) -> str:
+    """Front-load the caption's own quality tags (:data:`QUALITY_TAGS`), deduplicated."""
+    return front_load_tags(caption, QUALITY_TAGS)
 
 
-def apply_art_guidance_to_caption_pair(
-    caption: str,
-    negative_caption: str,
-    *,
-    mode: str,
-    include_photography: bool,
-    anatomy_mode: str,
-) -> tuple[str, str]:
-    """
-    Append medium-specific positive/negative fragments from ``config.defaults.art_mediums``.
-    Mirrors ``sample.py --art-guidance-mode`` and ``--anatomy-guidance`` behavior.
-    """
-    return apply_training_guidance_to_caption_pair(
-        caption,
-        negative_caption,
-        shortcomings_mode="none",
-        art_guidance_mode=mode,
-        anatomy_guidance=anatomy_mode,
-        include_art_guidance_photography=include_photography,
-        style_guidance_mode="none",
-    )
+def boost_domain_tags(caption: str) -> str:
+    """Front-load the caption's domain tags (3D, realistic, interior, anatomy...; :data:`DOMAIN_TAGS`), deduplicated."""
+    return front_load_tags(caption, DOMAIN_TAGS_FLAT)
 
 
-def apply_style_guidance_to_caption_pair(
-    caption: str,
-    negative_caption: str,
-    *,
-    mode: str,
-    include_artist_refs: bool,
-) -> tuple[str, str]:
-    """
-    Append style-domain fragments from ``config.defaults.style_guidance`` plus
-    ``style_artists`` bucket/facet hints (merged inside ``style_guidance_fragments``).
-    When ``mode`` is ``none``, only artist-reference lines (if any) and style-tag hints apply.
-    """
-    return apply_training_guidance_to_caption_pair(
-        caption,
-        negative_caption,
-        shortcomings_mode="none",
-        art_guidance_mode="none",
-        style_guidance_mode=mode,
-        style_guidance_artists=include_artist_refs,
-    )
-
-
-def boost_quality_tags(caption: str, repeat_factor: int = 3) -> str:
-    """
-    When quality tags are present, repeat them at the start so the model strongly associates
-    them with high-quality output (10x-style improvement). repeat_factor=3 means prepend 2 extra copies.
-    """
-    if not caption.strip():
-        return caption
-    caption_lower = caption.lower()
-    found = [q for q in QUALITY_TAGS if q in caption_lower]
-    if not found:
-        return caption
-    # Prepend repeated quality tags so they dominate the sequence
-    extra = ", ".join(found * repeat_factor)
-    return f"{extra}, {caption}".strip()
-
-
-def boost_domain_tags(caption: str, repeat_factor: int = 2) -> str:
-    """
-    When domain tags (3D, realistic, interior, exterior, etc.) are present, repeat them
-    so the model learns these hard-to-generate domains well. repeat_factor=2 means prepend 1 extra copy.
-    """
-    if not caption.strip():
-        return caption
-    caption_lower = caption.lower()
-    found = [t for t in DOMAIN_TAGS_FLAT if t in caption_lower]
-    if not found:
-        return caption
-    extra = ", ".join(found * repeat_factor)
-    return f"{extra}, {caption}".strip()
-
-
-# --- Regional / layout captions (JSONL: segment + label → richer T5 conditioning) ---
-# Order hints for dict-style "parts" so subject/clothing/background stay consistent.
+# Key order for dict-style JSONL ``parts`` so subject / clothing / background stay consistent.
 REGION_PART_ORDER: tuple[str, ...] = (
     "subject",
     "person",
@@ -704,13 +532,11 @@ REGION_PART_ORDER: tuple[str, ...] = (
 )
 
 
+_REGION_RANK = {name: i for i, name in enumerate(REGION_PART_ORDER)}
+
+
 def _region_sort_key(key: str) -> tuple[int, str]:
-    kl = key.lower().strip()
-    try:
-        idx = next(i for i, x in enumerate(REGION_PART_ORDER) if x == kl)
-    except StopIteration:
-        idx = len(REGION_PART_ORDER)
-    return (idx, key)
+    return _REGION_RANK.get(key.lower().strip(), len(REGION_PART_ORDER)), key
 
 
 def format_parts_dict(parts: dict, order: list[str] | None = None) -> str:
@@ -721,12 +547,7 @@ def format_parts_dict(parts: dict, order: list[str] | None = None) -> str:
         keys = [k for k in order if k in parts and str(parts[k]).strip()]
     else:
         keys = sorted(parts.keys(), key=_region_sort_key)
-    bits: list[str] = []
-    for k in keys:
-        v = str(parts[k]).strip()
-        if v:
-            bits.append(f"{k}: {v}")
-    return " | ".join(bits)
+    return " | ".join(f"{k}: {str(parts[k]).strip()}" for k in keys if str(parts[k]).strip())
 
 
 def _normalize_region_item(item: Any) -> str:
@@ -738,37 +559,24 @@ def _normalize_region_item(item: Any) -> str:
     if isinstance(item, dict):
         label = (item.get("label") or item.get("name") or item.get("region") or "").strip()
         text = (item.get("text") or item.get("caption") or item.get("description") or "").strip()
-        if not text:
-            return ""
-        if label:
-            return f"{label}: {text}"
-        return text
+        return f"{label}: {text}" if text and label else text
     return str(item).strip()
 
 
 def format_region_captions_block(regions: Any) -> str:
-    """
-    Normalize region_captions / parts / mixed structures into one block.
-    - list[str] or list[dict] → 'a: x | b: y'
-    - dict (parts) → ordered key: value
-    - {'parts': {...}, 'region_captions': [...]} → merged
-    """
+    """One ``a: x | b: y`` block from ``region_captions`` lists, a ``parts`` dict, or ``{parts, region_captions}``."""
     if regions is None:
         return ""
     if isinstance(regions, dict) and "parts" in regions and "region_captions" in regions:
-        a = format_parts_dict(regions["parts"]) if isinstance(regions.get("parts"), dict) else ""
-        b = format_region_captions_block(regions.get("region_captions"))
-        if a and b:
-            return f"{a} | {b}"
-        return a or b
+        a = format_parts_dict(regions["parts"]) if isinstance(regions["parts"], dict) else ""
+        b = format_region_captions_block(regions["region_captions"])
+        return " | ".join(x for x in (a, b) if x)
     if isinstance(regions, dict) and "region_captions" in regions and isinstance(regions.get("region_captions"), list):
         return format_region_captions_block(regions["region_captions"])
     if isinstance(regions, dict):
         return format_parts_dict(regions)
     if isinstance(regions, list):
-        bits = [_normalize_region_item(x) for x in regions]
-        bits = [b for b in bits if b]
-        return " | ".join(bits)
+        return " | ".join(b for b in map(_normalize_region_item, regions) if b)
     return str(regions).strip()
 
 
@@ -779,10 +587,7 @@ def merge_region_captions_into_caption(
     mode: str = "append",
     layout_tag: str = "[layout]",
 ) -> str:
-    """
-    Combine global caption with regional labels for stronger spatial/semantic grounding.
-    mode: 'append' → base then layout block; 'prefix' → layout block then base; 'off' → base only.
-    """
+    """Join the global caption and the ``layout_tag``-prefixed region block (``mode``: append | prefix | off)."""
     if mode == "off" or not regions:
         return base_caption
     block = format_region_captions_block(regions)
@@ -795,34 +600,48 @@ def merge_region_captions_into_caption(
     return f"{base_caption}. {tagged}".strip() if base_caption else tagged
 
 
-# Default quality prefix for challenging/short prompts (inference or data).
 QUALITY_PREFIX = "masterpiece, best quality, "
 
 
 def prepend_quality_if_short(caption: str, min_tag_count: int = 4) -> str:
-    """
-    If caption has fewer than min_tag_count comma-separated tags, prepend QUALITY_PREFIX
-    so short or vague prompts get stronger adherence. Use in data pipeline or inference.
-    """
-    if not caption.strip():
-        return caption
-    tags = [t.strip() for t in caption.split(",") if t.strip()]
-    if len(tags) >= min_tag_count:
+    """Prepend :data:`QUALITY_PREFIX` to captions with fewer than ``min_tag_count`` comma-separated tags."""
+    if not caption.strip() or sum(1 for t in caption.split(",") if t.strip()) >= min_tag_count:
         return caption
     return f"{QUALITY_PREFIX}{caption}".strip()
 
 
+# Booru-style head counts ("2girls", "1girl, 1boy", "3 people"); two or more means several people.
+_HEAD_COUNT_RE = re.compile(r"(?<!\d)(\d+)\s*(?:girls?|boys?|persons?|people)\b")
+
+
 def add_anti_blending_and_count(caption: str, negative_prompt: str) -> tuple[str, str]:
-    """
-    For multi-person prompts: add anti-blending to positive and blending to negative
-    so the model learns to avoid character bleed and respect "room full of people" etc.
-    Returns (augmented_caption, augmented_negative_prompt).
-    """
+    """For multi-person captions, add the anti-blending positive and the blending terms to the negative."""
     c_lower = caption.lower()
-    is_multi = any(p in c_lower for p in MULTI_PERSON_PHRASES) or re.search(r"\d+\s*(girl|boy|person|people)", c_lower)
-    if not is_multi:
+    head_count = sum(int(n) for n in _HEAD_COUNT_RE.findall(c_lower))
+    if head_count < 2 and not any(p in c_lower for p in MULTI_PERSON_PHRASES):
         return caption, negative_prompt
-    # Add anti-blend to positive; add blend terms to negative
-    new_cap = f"{caption}, {ANTI_BLEND_POSITIVE}".strip() if ANTI_BLEND_POSITIVE not in caption else caption
+    new_cap = caption if ANTI_BLEND_POSITIVE in caption else f"{caption}, {ANTI_BLEND_POSITIVE}".strip()
     new_neg = f"{negative_prompt}, {ANTI_BLEND_NEGATIVE}".strip() if negative_prompt else ANTI_BLEND_NEGATIVE
     return new_cap, new_neg
+
+
+def truncate_caption_at_comma_boundary(caption: str, max_len: int) -> str:
+    """Keep whole comma-separated tags from the start while the caption fits ``max_len`` characters.
+
+    A single first tag longer than ``max_len`` is hard-cut; ``max_len <= 0`` disables truncation.
+    """
+    text = (caption or "").strip()
+    if max_len <= 0 or len(text) <= max_len:
+        return text
+    parts = [p.strip() for p in text.split(",") if p.strip()]
+    if not parts:
+        return text[:max_len]
+    kept: list[str] = []
+    length = 0
+    for part in parts:
+        add = len(part) + (2 if kept else 0)
+        if length + add > max_len:
+            break
+        kept.append(part)
+        length += add
+    return ", ".join(kept) if kept else parts[0][:max_len]

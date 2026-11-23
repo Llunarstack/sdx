@@ -8,6 +8,7 @@ Prefer calling ``train.py`` directly with the same presets (one unified model pa
       --book-train-preset balanced --book-ar-profile comic_snake
 
 This wrapper adds native manifest preflight and manifest_gate before spawning train.py.
+Extra ``train.py`` args go after ``--``.
 """
 
 from __future__ import annotations
@@ -16,16 +17,85 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipelines.book_comic.book_training_helpers import (  # noqa: E402
+from pipelines.book_comic.training import (  # noqa: E402
     build_train_command,
     resolve_book_train_settings,
     run_native_manifest_preflight,
 )
+
+AR_PROFILES = (
+    "auto",
+    "none",
+    "layout",
+    "strong",
+    "zorder",
+    "vit_layout",
+    "vit_strong",
+    "comic_snake",
+    "cinema_spiral",
+)
+
+
+def split_passthrough(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Split *argv* at the first ``--`` into (wrapper args, raw ``train.py`` args)."""
+    if "--" not in argv:
+        return argv, []
+    i = argv.index("--")
+    return argv[:i], argv[i + 1 :]
+
+
+def add_manifest_gate_args(p: argparse.ArgumentParser) -> None:
+    """The ``--manifest-gate-*`` tuning options, shared with ``prepare_and_train_book.py``."""
+    p.add_argument("--manifest-gate-image-qc", action="store_true", help="Include image sharpness/contrast QC in gate.")
+    p.add_argument(
+        "--manifest-gate-image-root", type=str, default="", help="Optional base dir for image paths during QC."
+    )
+    p.add_argument("--manifest-gate-sample", type=int, default=0, help="Image QC sample size (0=all).")
+    p.add_argument("--manifest-gate-min-sharpness", type=float, default=0.0)
+    p.add_argument("--manifest-gate-min-contrast", type=float, default=0.0)
+    p.add_argument("--manifest-gate-max-caption-tokens", type=int, default=0)
+    p.add_argument("--manifest-gate-fail-on-overlap", action="store_true")
+    p.add_argument("--manifest-gate-report-dups", action="store_true")
+    p.add_argument("--manifest-gate-fail-on-dup-groups", type=int, default=0)
+
+
+def manifest_gate_command(args: argparse.Namespace, manifest: Path) -> list[str]:
+    """``python -m scripts.tools manifest_gate`` command for *manifest* built from the gate options in *args*."""
+    cmd = [
+        sys.executable,
+        "-m",
+        "scripts.tools",
+        "manifest_gate",
+        str(manifest),
+        "--min-caption-len-chars",
+        str(args.manifest_min_caption_len),
+        "--max-caption-tokens",
+        str(args.manifest_gate_max_caption_tokens),
+    ]
+    if args.manifest_gate_fail_on_overlap:
+        cmd.append("--fail-on-overlap")
+    if args.manifest_gate_report_dups:
+        cmd.append("--report-dups")
+    if args.manifest_gate_fail_on_dup_groups > 0:
+        cmd += ["--fail-on-dup-groups", str(args.manifest_gate_fail_on_dup_groups)]
+    if args.manifest_gate_image_qc:
+        cmd.append("--image-qc")
+        image_root = args.manifest_gate_image_root.strip()
+        if image_root:
+            cmd += ["--image-root", image_root]
+        if args.manifest_gate_sample > 0:
+            cmd += ["--sample", str(args.manifest_gate_sample)]
+        if args.manifest_gate_min_sharpness > 0:
+            cmd += ["--min-sharpness", str(args.manifest_gate_min_sharpness)]
+        if args.manifest_gate_min_contrast > 0:
+            cmd += ["--min-contrast", str(args.manifest_gate_min_contrast)]
+    return cmd
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -45,18 +115,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ar-profile",
         type=str,
         default="auto",
-        choices=[
-            "auto",
-            "none",
-            "layout",
-            "strong",
-            "zorder",
-            "vit_layout",
-            "vit_strong",
-            "comic_snake",
-            "cinema_spiral",
-        ],
-        help="One-flag AR setup: classic (layout/strong/zorder) or upgraded (vit_layout/vit_strong/comic_snake/cinema_spiral).",
+        choices=AR_PROFILES,
+        help="One-flag AR setup: classic (layout/strong/zorder) or ViT-aligned (vit_layout/vit_strong/comic_snake/cinema_spiral).",
     )
     p.add_argument("--num-ar-blocks", type=int, default=-1, choices=[-1, 0, 2, 4], help="Explicit AR blocks override.")
     p.add_argument(
@@ -108,23 +168,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run manifest_gate (prompt lint + hygiene + optional image QC) before training.",
     )
-    p.add_argument("--manifest-gate-image-qc", action="store_true", help="Include image sharpness/contrast QC in gate.")
-    p.add_argument(
-        "--manifest-gate-image-root", type=str, default="", help="Optional base dir for image paths during QC."
-    )
-    p.add_argument("--manifest-gate-sample", type=int, default=0, help="Image QC sample size (0=all).")
-    p.add_argument("--manifest-gate-min-sharpness", type=float, default=0.0)
-    p.add_argument("--manifest-gate-min-contrast", type=float, default=0.0)
-    p.add_argument("--manifest-gate-max-caption-tokens", type=int, default=0)
-    p.add_argument("--manifest-gate-fail-on-overlap", action="store_true")
-    p.add_argument("--manifest-gate-report-dups", action="store_true")
-    p.add_argument("--manifest-gate-fail-on-dup-groups", type=int, default=0)
-    p.add_argument(
-        "--resume",
-        type=str,
-        default="",
-        help="Forward to train.py --resume (optimizer + step counter).",
-    )
+    add_manifest_gate_args(p)
+    p.add_argument("--resume", type=str, default="", help="Forward to train.py --resume (optimizer + step counter).")
     p.add_argument(
         "--init-from",
         type=str,
@@ -135,88 +180,56 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main() -> int:
-    raw = sys.argv[1:]
-    if "--" in raw:
-        i = raw.index("--")
-        own_argv = raw[:i]
-        passthrough_train_args = raw[i + 1 :]
-    else:
-        own_argv = raw
-        passthrough_train_args = []
+def _print_preflight(info: dict[str, Any]) -> None:
+    print("[book_train] Native preflight")
+    print(f"  manifest: {info['manifest']}")
+    print(f"  exists: {info['exists']}")
+    if info["fingerprint"]:
+        print(f"  fingerprint: {info['fingerprint']}")
+    print(f"  rust_validate_ok: {info['rust_validate_ok']}")
+    if info["rust_validate_stderr"]:
+        print(f"  rust_validate_stderr: {info['rust_validate_stderr']}")
+    print(f"  rust_stats_ok: {info['rust_stats_ok']}")
+    if info["rust_stats_stdout"]:
+        print("  rust_stats_stdout:")
+        print(info["rust_stats_stdout"])
 
+
+def main() -> int:
+    own_argv, passthrough_train_args = split_passthrough(sys.argv[1:])
     parser = _build_parser()
     args = parser.parse_args(own_argv)
 
-    if not str(args.data_path).strip() and not str(args.manifest_jsonl).strip():
+    manifest_arg = args.manifest_jsonl.strip()
+    if not args.data_path.strip() and not manifest_arg:
         parser.error("Provide at least one of --data-path or --manifest-jsonl.")
+    if args.resume.strip() and args.init_from.strip():
+        parser.error("Use either --resume or --init-from for book training, not both.")
 
-    if args.native_preflight and str(args.manifest_jsonl).strip():
-        manifest = Path(args.manifest_jsonl)
+    if args.native_preflight and manifest_arg:
         info = run_native_manifest_preflight(
-            manifest,
-            min_caption_len=int(args.manifest_min_caption_len),
-            max_caption_len=int(args.manifest_max_caption_len),
+            Path(manifest_arg),
+            min_caption_len=args.manifest_min_caption_len,
+            max_caption_len=args.manifest_max_caption_len,
         )
-        print("[book_train] Native preflight")
-        print(f"  manifest: {info['manifest']}")
-        print(f"  exists: {info['exists']}")
-        if info["fingerprint"]:
-            print(f"  fingerprint: {info['fingerprint']}")
-        print(f"  rust_validate_ok: {info['rust_validate_ok']}")
-        if info["rust_validate_stderr"]:
-            print(f"  rust_validate_stderr: {info['rust_validate_stderr']}")
-        print(f"  rust_stats_ok: {info['rust_stats_ok']}")
-        if info["rust_stats_stdout"]:
-            print("  rust_stats_stdout:")
-            print(info["rust_stats_stdout"])
+        _print_preflight(info)
         if args.strict_native and info["rust_validate_ok"] is False:
             print("[book_train] strict-native enabled: aborting due to failed Rust manifest validate.")
             return 2
 
-    if args.manifest_gate and str(args.manifest_jsonl).strip():
-        manifest = Path(args.manifest_jsonl)
-        gate_cmd = [
-            sys.executable,
-            "-m",
-            "scripts.tools",
-            "manifest_gate",
-            str(manifest),
-            "--min-caption-len-chars",
-            str(int(args.manifest_min_caption_len)),
-            "--max-caption-tokens",
-            str(int(args.manifest_gate_max_caption_tokens)),
-        ]
-        if bool(args.manifest_gate_fail_on_overlap):
-            gate_cmd.append("--fail-on-overlap")
-        if bool(args.manifest_gate_report_dups):
-            gate_cmd.append("--report-dups")
-        if int(args.manifest_gate_fail_on_dup_groups) > 0:
-            gate_cmd.extend(["--fail-on-dup-groups", str(int(args.manifest_gate_fail_on_dup_groups))])
-        if bool(args.manifest_gate_image_qc):
-            gate_cmd.append("--image-qc")
-            if str(args.manifest_gate_image_root).strip():
-                gate_cmd.extend(["--image-root", str(args.manifest_gate_image_root).strip()])
-            if int(args.manifest_gate_sample) > 0:
-                gate_cmd.extend(["--sample", str(int(args.manifest_gate_sample))])
-            if float(args.manifest_gate_min_sharpness) > 0.0:
-                gate_cmd.extend(["--min-sharpness", str(float(args.manifest_gate_min_sharpness))])
-            if float(args.manifest_gate_min_contrast) > 0.0:
-                gate_cmd.extend(["--min-contrast", str(float(args.manifest_gate_min_contrast))])
-
+    if args.manifest_gate and manifest_arg:
+        gate_cmd = manifest_gate_command(args, Path(manifest_arg))
         print("[book_train] Manifest gate")
         print(" ", " ".join(gate_cmd))
-        rc = subprocess.run(gate_cmd, cwd=ROOT).returncode
-        if rc != 0:
+        if subprocess.run(gate_cmd, cwd=ROOT).returncode != 0:
             print("[book_train] manifest_gate failed; aborting.")
             return 2
 
-    settings = resolve_book_train_settings(args)
     cmd = build_train_command(
         root=ROOT,
         python_exe=sys.executable,
         args=args,
-        settings=settings,
+        settings=resolve_book_train_settings(args),
         passthrough_train_args=passthrough_train_args,
     )
     print("[book_train] Running:", " ".join(cmd))

@@ -9,7 +9,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
-source "$HERE/lib/hf_sites.sh"
+source "$HERE/lib.sh"
 # shellcheck source=/dev/null
 source "$HERE/env.defaults"
 sdx_export_hf_sites
@@ -119,7 +119,7 @@ _render() {
 
   printf '── Active processes ──────────────────────────────────────────────────\n'
   local any=0
-  for pat in download_hf_datasets hf_export_to_sdx_manifest tag_manifest_wd enrich_manifest_captions precompute_latents 'train.py' train_lora_bank ultimate.sh download.sh; do
+  for pat in 'download.py hf-datasets' hf_export_to_sdx_manifest 'manifests.py wd-tag' 'manifests.py enrich' precompute_latents 'train.py' train_lora_bank ultimate.sh download.sh; do
     local hits
     hits="$(_procs "$pat")"
     if [ -n "$hits" ]; then

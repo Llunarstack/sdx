@@ -38,7 +38,7 @@ Alternatively use a manifest (one JSON object per line) anywhere under `datasets
 python train.py --manifest-jsonl datasets/my_manifest.jsonl --results-dir results
 ```
 
-See **[Data format](../README.md#data-format)** in the main README and **[docs/DANBOORU_HF.md](../docs/DANBOORU_HF.md)** for larger-scale prep.
+See **[Data format](../README.md#data-format)** in the main README and **[docs/GUIDES.md](../docs/GUIDES.md#training-on-danbooru-style-data-from-hugging-face)** for larger-scale prep.
 
 ## Notes
 

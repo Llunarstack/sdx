@@ -1,7 +1,7 @@
 """Dataset loaders for text-to-image training.
 
-Torch-backed exports (``Text2ImageDataset``, etc.) are **lazy** so ``import data.caption_utils``
-does not load PyTorch. This avoids heavy native init during tests and lightweight scripts.
+The torch-backed exports are imported lazily, so ``import data.caption_utils`` (and other torch-free helpers)
+never loads PyTorch.
 """
 
 from __future__ import annotations
@@ -12,23 +12,22 @@ from typing import Any
 
 _HAS_TORCH = find_spec("torch") is not None
 
-__all__ = ["Text2ImageDataset", "collate_t2i", "ResolutionBucketBatchSampler"]
+_LAZY_EXPORTS = {
+    "Text2ImageDataset": ".t2i_dataset",
+    "collate_t2i": ".t2i_dataset",
+    "ResolutionBucketBatchSampler": ".t2i_dataset",
+}
+
+__all__ = list(_LAZY_EXPORTS)
 
 
 def __getattr__(name: str) -> Any:
-    if name == "Text2ImageDataset" or name == "collate_t2i":
-        if not _HAS_TORCH:
-            raise RuntimeError(f"sdx.data.{name} requires PyTorch; install torch or import caption utilities only.")
-        mod = import_module(".t2i_dataset", __package__)
-        return getattr(mod, name)
-    if name == "ResolutionBucketBatchSampler":
-        if not _HAS_TORCH:
-            raise RuntimeError(
-                "sdx.data.ResolutionBucketBatchSampler requires PyTorch; install torch or avoid this import."
-            )
-        mod = import_module(".bucket_batch_sampler", __package__)
-        return getattr(mod, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if not _HAS_TORCH:
+        raise RuntimeError(f"{__name__}.{name} requires PyTorch; install torch or import the torch-free helpers only.")
+    return getattr(import_module(module, __package__), name)
 
 
 def __dir__() -> list[str]:
